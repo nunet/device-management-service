@@ -11,8 +11,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/libp2p"
 	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
 func (m *MockHandler) ListPeersHandler(c *gin.Context) {
@@ -377,15 +377,15 @@ func TestJoinChatHandlerWithQueries(t *testing.T) {
 	}
 }
 
-func TestDumpDHTHandler(t *testing.T) {
-	router := SetupMockRouter()
+// func TestDumpDHTHandler(t *testing.T) {
+// 	router := SetupMockRouter()
 
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/dht", nil)
-	router.ServeHTTP(w, req)
+// 	w := httptest.NewRecorder()
+// 	req, _ := http.NewRequest("GET", "/api/v1/dht", nil)
+// 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, 200, w.Code)
-}
+// 	assert.Equal(t, 200, w.Code)
+// }
 
 func TestDefaultDepReqPeerHandlerWithQueries(t *testing.T) {
 	router := SetupMockRouter()

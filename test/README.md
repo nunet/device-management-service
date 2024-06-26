@@ -4,6 +4,8 @@ These are any tests that are not unit tests (at least this is how it was defined
 
 _Note: position these tests as per our test-matrix and triggers in to the correct place attn: @gabriel_
 
+_Note by Dagim: suggest if security.go is deleted entirely with utils/cardano because those tests do not apply to the new dms._
+
 `./test` directory of the package contains full test suite of DMS. 
 
 ## Run CLI Test Suite

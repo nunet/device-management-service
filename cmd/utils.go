@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,8 +17,9 @@ import (
 
 	"gitlab.com/nunet/device-management-service/cmd/backend"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/libp2p"
 	"gitlab.com/nunet/device-management-service/models"
+
+	// "gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -106,17 +108,24 @@ func setOnboardData(memory int64, cpu int64, ntxPrice float64, channel, address 
 	return data, nil
 }
 
+// TODO: Handle this after refactor
 // getIncomingChatList unmarshal response body from API request into
 // libp2p.OpenStream slice and return list of chats
-func getIncomingChatList(body []byte) ([]libp2p.OpenStream, error) {
-	var chatList []libp2p.OpenStream
-	err := json.Unmarshal(body, &chatList)
-	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal response body: %w", err)
-	}
+// func getIncomingChatList(body []byte) ([]libp2p.OpenStream, error) {
+// 	var chatList []libp2p.OpenStream
+// 	err := json.Unmarshal(body, &chatList)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("unable to unmarshal response body: %w", err)
+// 	}
 
-	return chatList, nil
+//		return chatList, nil
+//	}
+func getIncomingChatList(body []byte) (string, error) {
+	err := errors.New("getIncomingChatList not implemented")
+	return "", err
 }
+
+// END
 
 func validateJoinChatInput(args []string, chatList []byte) error {
 	var chatID int

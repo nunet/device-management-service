@@ -1,11 +1,12 @@
 package s3
 
 import (
-	"gitlab.com/nunet/device-management-service/internal/logger"
+	"github.com/uptrace/opentelemetry-go-extra/otelzap"
+	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
 
-var zlog *logger.Logger
+var zlog otelzap.Logger
 
 func init() {
-	zlog = logger.New("s3")
+	zlog = logger.OtelZapLogger("s3")
 }

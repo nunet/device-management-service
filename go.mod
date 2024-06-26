@@ -245,14 +245,13 @@ require (
 require (
 	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
 	github.com/iancoleman/strcase v0.3.0
-	github.com/ostafen/clover/v2 v2.0.0-alpha.3
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/ostafen/clover/v2 v2.0.0-alpha.3
 )
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
-	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.11 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.1 // indirect
@@ -268,6 +267,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.6 // indirect
 	github.com/aws/smithy-go v1.20.2 // indirect
+	github.com/boumenot/gocover-cobertura v1.2.0 // indirect
+	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containernetworking/cni v1.0.1 // indirect
 	github.com/containernetworking/plugins v1.0.1 // indirect

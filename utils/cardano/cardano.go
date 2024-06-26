@@ -11,18 +11,15 @@ package cardano
 import (
 	"bufio"
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
-
-	"gitlab.com/nunet/device-management-service/integrations/oracle"
+	// "gitlab.com/nunet/device-management-service/integrations/oracle"
 )
 
 // NOTE: This corresponds to
@@ -210,45 +207,45 @@ func FindOutput(inputs []Input, tx_hash string, index int) (Input, bool) {
 	return Input{}, false
 }
 
-func getSignaturesFromOracle(redeemer Redeemer) (oracleResp *oracle.RewardResponse, err error) {
+// func getSignaturesFromOracle(redeemer Redeemer) (oracleResp *oracle.RewardResponse, err error) {
 
-	logWithError := "https://log.nunet.io/api/v1/logbin/01472e48-c430-46f1-8b8a-40c6d1e5cfd1/raw"
-	logWithoutErrors := "https://log.nunet.io/api/v1/logbin/13d26b81-4324-402b-9f7f-cbd05afafb67/raw"
-	// For successful job
-	jobStatus := "finished without errors"
-	logPath := logWithoutErrors
-	jobDuration := int64(55)
+// 	logWithError := "https://log.nunet.io/api/v1/logbin/01472e48-c430-46f1-8b8a-40c6d1e5cfd1/raw"
+// 	logWithoutErrors := "https://log.nunet.io/api/v1/logbin/13d26b81-4324-402b-9f7f-cbd05afafb67/raw"
+// 	// For successful job
+// 	jobStatus := "finished without errors"
+// 	logPath := logWithoutErrors
+// 	jobDuration := int64(55)
 
-	switch redeemer {
-	case Refund:
-		logPath = logWithError
-		jobStatus = "finished with errors"
-		jobDuration = 1
-	case Distribute:
-		logPath = logWithError
-		jobStatus = "finished with errors"
-		jobDuration = 45
-	case Withdraw: // noop
-	}
+// 	switch redeemer {
+// 	case Refund:
+// 		logPath = logWithError
+// 		jobStatus = "finished with errors"
+// 		jobDuration = 1
+// 	case Distribute:
+// 		logPath = logWithError
+// 		jobStatus = "finished with errors"
+// 		jobDuration = 45
+// 	case Withdraw: // noop
+// 	}
 
-	oracleResp, err = oracle.Oracle.WithdrawTokenRequest(&oracle.RewardRequest{
-		JobStatus:            jobStatus,
-		JobDuration:          jobDuration,
-		EstimatedJobDuration: 60,
-		LogPath:              logPath,
-		MetadataHash:         PreGenMetaDataHash,
-		WithdrawHash:         PreGenWithdrawHash,
-		RefundHash:           PreGenRefundHash,
-		Distribute_50Hash:    PreGenDistribute50Hash,
-		Distribute_75Hash:    PreGenDistribute75Hash,
-	})
+// 	oracleResp, err = oracle.Oracle.WithdrawTokenRequest(&oracle.RewardRequest{
+// 		JobStatus:            jobStatus,
+// 		JobDuration:          jobDuration,
+// 		EstimatedJobDuration: 60,
+// 		LogPath:              logPath,
+// 		MetadataHash:         PreGenMetaDataHash,
+// 		WithdrawHash:         PreGenWithdrawHash,
+// 		RefundHash:           PreGenRefundHash,
+// 		Distribute_50Hash:    PreGenDistribute50Hash,
+// 		Distribute_75Hash:    PreGenDistribute75Hash,
+// 	})
 
-	if err != nil {
-		return &oracle.RewardResponse{}, fmt.Errorf("Connection to oracle failed : %v", err)
-	}
+// 	if err != nil {
+// 		return &oracle.RewardResponse{}, fmt.Errorf("Connection to oracle failed : %v", err)
+// 	}
 
-	return oracleResp, nil
-}
+// 	return oracleResp, nil
+// }
 
 func BuildPaymentScriptAddress() (address string, err error) {
 	cmd := exec.Command("cardano-cli",
@@ -268,82 +265,82 @@ func BuildPaymentScriptAddress() (address string, err error) {
 }
 
 // Take money from script
-func SpendFromScript(tx_hash string, index int, redeemer Redeemer) error {
-	currentContract, err := BuildPaymentScriptAddress()
-	if err != nil {
-		return err
-	}
+// func SpendFromScript(tx_hash string, index int, redeemer Redeemer) error {
+// 	currentContract, err := BuildPaymentScriptAddress()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	scriptOutputs, err := GetUTXOs(currentContract)
-	if err != nil {
-		return err
-	}
+// 	scriptOutputs, err := GetUTXOs(currentContract)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	scriptInput, success := FindOutput(scriptOutputs, tx_hash, index)
-	scriptInput.ScriptFile = "script.json"
-	scriptInput.DatumFile = "datum.json"
-	scriptInput.RedeemerFile = "redeemer.json"
+// 	scriptInput, success := FindOutput(scriptOutputs, tx_hash, index)
+// 	scriptInput.ScriptFile = "script.json"
+// 	scriptInput.DatumFile = "datum.json"
+// 	scriptInput.RedeemerFile = "redeemer.json"
 
-	if !success {
-		panic("Failed to find the script output")
-	}
+// 	if !success {
+// 		panic("Failed to find the script output")
+// 	}
 
-	resp, err := getSignaturesFromOracle(redeemer)
-	if err != nil {
-		panic("Failed to contact oracle")
-	}
+// 	resp, err := getSignaturesFromOracle(redeemer)
+// 	if err != nil {
+// 		panic("Failed to contact oracle")
+// 	}
 
-	WriteRedeemerFile("redeemer.json", resp, redeemer)
+// 	WriteRedeemerFile("redeemer.json", resp, redeemer)
 
-	var collateral string
-	var account string
-	var address string
-	if redeemer == Refund {
-		address = SPAddress
-		account = SPAccount
-		collateral = SPCollateral
-	} else {
-		address = CPAddress
-		account = CPAccount
-		collateral = CPCollateral
-	}
+// 	var collateral string
+// 	var account string
+// 	var address string
+// 	if redeemer == Refund {
+// 		address = SPAddress
+// 		account = SPAccount
+// 		collateral = SPCollateral
+// 	} else {
+// 		address = CPAddress
+// 		account = CPAccount
+// 		collateral = CPCollateral
+// 	}
 
-	outputs, err := GetUTXOs(address)
-	if err != nil {
-		return err
-	}
+// 	outputs, err := GetUTXOs(address)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	outputs = append(outputs, scriptInput)
+// 	outputs = append(outputs, scriptInput)
 
-	transaction := Transaction{
-		Inputs:        outputs,
-		Outputs:       make(map[string]Output),
-		ChangeAddress: address,
-		Collateral:    collateral,
-	}
+// 	transaction := Transaction{
+// 		Inputs:        outputs,
+// 		Outputs:       make(map[string]Output),
+// 		ChangeAddress: address,
+// 		Collateral:    collateral,
+// 	}
 
-	transaction.Outputs[address] = Output{
-		To:    address,
-		Value: make(map[string]int64),
-	}
+// 	transaction.Outputs[address] = Output{
+// 		To:    address,
+// 		Value: make(map[string]int64),
+// 	}
 
-	transaction.Outputs[address].Value[mNTX] = scriptInput.Value[mNTX]
-	transaction.Outputs[address].Value["lovelace"] = minOutputLovelace
+// 	transaction.Outputs[address].Value[mNTX] = scriptInput.Value[mNTX]
+// 	transaction.Outputs[address].Value["lovelace"] = minOutputLovelace
 
-	var txFees = int64(2200000)
-	BuildTransaction(transaction, txFees)
-	SignTransaction(account)
-	hash, err := GetTransactionHash()
-	if err != nil {
-		return err
-	}
-	err = SubmitTransaction()
-	if err != nil {
-		return err
-	}
-	log.Printf("Transaction Hash %s", hash)
-	return err
-}
+// 	var txFees = int64(2200000)
+// 	BuildTransaction(transaction, txFees)
+// 	SignTransaction(account)
+// 	hash, err := GetTransactionHash()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = SubmitTransaction()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	log.Printf("Transaction Hash %s", hash)
+// 	return err
+// }
 
 func WaitForTransaction(tx_hash string, max_timeout_minutes int) error {
 
@@ -748,27 +745,27 @@ func ValueStr(value map[string]int64) (str string) {
 	return builder.String()
 }
 
-func WriteRedeemerFile(path string, response *oracle.RewardResponse, redeemer Redeemer) {
-	r, _ := regexp.Compile(`\\\"(.*?)\\\"`)
-	// NOTE: The submatch or capture group is the second argument, the first is the whole matched expression
-	action_capture := r.FindStringSubmatch(response.Action)[1]
-	datum_capture := r.FindStringSubmatch(response.Datum)[1]
+// func WriteRedeemerFile(path string, response *oracle.RewardResponse, redeemer Redeemer) {
+// 	r, _ := regexp.Compile(`\\\"(.*?)\\\"`)
+// 	// NOTE: The submatch or capture group is the second argument, the first is the whole matched expression
+// 	action_capture := r.FindStringSubmatch(response.Action)[1]
+// 	datum_capture := r.FindStringSubmatch(response.Datum)[1]
 
-	var action_hex = hex.EncodeToString([]byte(action_capture))
-	var datum_hex = hex.EncodeToString([]byte(datum_capture))
+// 	var action_hex = hex.EncodeToString([]byte(action_capture))
+// 	var datum_hex = hex.EncodeToString([]byte(datum_capture))
 
-	if err := os.WriteFile(path, []byte(fmt.Sprintf(
-		REDEEMER_FORMAT_STRING,
-		redeemer,
-		response.SignatureDatum,
-		response.MessageHashDatum,
-		datum_hex,
-		response.SignatureAction,
-		response.MessageHashAction,
-		action_hex)), 0666); err != nil {
-		log.Fatal(err)
-	}
-}
+// 	if err := os.WriteFile(path, []byte(fmt.Sprintf(
+// 		REDEEMER_FORMAT_STRING,
+// 		redeemer,
+// 		response.SignatureDatum,
+// 		response.MessageHashDatum,
+// 		datum_hex,
+// 		response.SignatureAction,
+// 		response.MessageHashAction,
+// 		action_hex)), 0666); err != nil {
+// 		log.Fatal(err)
+// 	}
+// }
 
 func WriteDatumFile(path string, ntx int64, spPubKeyHash string, cpPubKeyHash string) {
 	if err := os.WriteFile(path, []byte(fmt.Sprintf(DATUM_FORMAT_STRING, spPubKeyHash, cpPubKeyHash, ntx, PreGenMetaDataHash, PreGenWithdrawHash, PreGenRefundHash, PreGenDistribute75Hash, PreGenDistribute50Hash)), 0666); err != nil {

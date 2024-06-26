@@ -1,15 +1,19 @@
 package backend
 
 import (
-	"github.com/libp2p/go-libp2p/core/peer"
+	"log"
 
-	"gitlab.com/nunet/device-management-service/libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type P2P struct{}
 
 func (p *P2P) ClearIncomingChatRequests() error {
-	return libp2p.ClearIncomingChatRequests()
+	log.Println("WARNING: Bypassing ClearIncomingChatRequests() in libp2p.go")
+	// TODO: Uncomment after refactoring
+	// return libp2p.ClearIncomingChatRequests()
+	// END
+	return nil
 }
 
 func (p *P2P) Decode(id string) (peer.ID, error) {

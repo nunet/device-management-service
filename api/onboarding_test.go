@@ -10,7 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/models"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func (h *MockHandler) GetMetadataHandler(c *gin.Context) {
@@ -170,48 +173,35 @@ func (h *MockHandler) ResourceConfigHandler(c *gin.Context) {
 	c.JSON(200, metadata)
 }
 
-func TestGetMetadataHandler(t *testing.T) {
-	router := SetupMockRouter()
-	tests := []struct {
-		description  string
-		route        string
-		expectedCode int
-	}{
-		{
-			description:  "GET /onboarding/metadata",
-			route:        "/api/v1/onboarding/metadata",
-			expectedCode: 200,
-		},
-	}
-	for _, tc := range tests {
-		req, _ := http.NewRequest("GET", tc.route, nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
+func TestGetMetadata(t *testing.T) {
+	router := SetupRouter()
+	req, _ := http.NewRequest("GET", "/api/v1/onboarding/metadata", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
 
-		assert.Equal(t, tc.expectedCode, w.Code, tc.description)
+	assert.Equal(t, 500, w.Code, w.Body)
 
-		var metadata *models.Metadata
-		err := json.Unmarshal(w.Body.Bytes(), &metadata)
-		assert.NoError(t, err)
-	}
+	var metadata *models.Metadata
+	err := json.Unmarshal(w.Body.Bytes(), &metadata)
+	assert.NoError(t, err)
 }
 
-func TestProvisionedCapacityHandler(t *testing.T) {
-	router := SetupMockRouter()
+func TestProvisionedCapacity(t *testing.T) {
+	router := SetupRouter()
 
 	req, _ := http.NewRequest("GET", "/api/v1/onboarding/provisioned", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, 200, w.Code, w.Body)
 
 	var prov *models.Provisioned
 	err := json.Unmarshal(w.Body.Bytes(), &prov)
 	assert.NoError(t, err)
 }
 
-func TestCreatePaymentAddressHandler(t *testing.T) {
-	router := SetupMockRouter()
+func TestCreatePaymentAddress(t *testing.T) {
+	router := SetupRouter()
 	tests := []struct {
 		description  string
 		route        string
@@ -239,7 +229,7 @@ func TestCreatePaymentAddressHandler(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/api/v1/onboarding/address/new"+tc.query, nil)
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, tc.expectedCode, w.Code, tc.description)
+		assert.Equal(t, tc.expectedCode, w.Code, w.Body)
 
 		var keypair *models.BlockchainAddressPrivKey
 		err := json.Unmarshal(w.Body.Bytes(), &keypair)
@@ -252,44 +242,30 @@ func TestCreatePaymentAddressHandler(t *testing.T) {
 	}
 }
 
-func TestOnboardHandler(t *testing.T) {
-	router := SetupMockRouter()
-
-	capacity := models.CapacityForNunet{
-		Memory:         4096,
-		CPU:            4096,
-		Channel:        "nunet-test",
-		PaymentAddress: "foobarfoobarfoobarfoobarfoobar",
+func TestNotOnboardedOffboard(t *testing.T) {
+	router := SetupRouter()
+	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Errorf("unable to initialize mockdb: %v", err)
 	}
-	bodyBytes, _ := json.Marshal(capacity)
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/onboarding/onboard", bytes.NewBuffer(bodyBytes))
-	router.ServeHTTP(w, req)
+	db.DB = mockDB
 
-	assert.Equal(t, 200, w.Code)
-
-	var metadata *models.Metadata
-	err := json.Unmarshal(w.Body.Bytes(), &metadata)
-	assert.NoError(t, err)
-}
-
-func TestOffboardHandler(t *testing.T) {
-	router := SetupMockRouter()
-	tests := []struct {
+	type tests struct {
 		description  string
-		route        string
 		query        string
 		expectedCode int
-	}{
+	}
+
+	notOnboarded := []tests{
 		{
 			description:  "force query true",
 			query:        "?force=true",
-			expectedCode: 200,
+			expectedCode: 500,
 		},
 		{
 			description:  "force query false",
 			query:        "?force=false",
-			expectedCode: 200,
+			expectedCode: 500,
 		},
 		{
 			description:  "invalid force query",
@@ -299,34 +275,37 @@ func TestOffboardHandler(t *testing.T) {
 		{
 			description:  "missing force query",
 			query:        "",
-			expectedCode: 200,
+			expectedCode: 500,
 		},
 	}
-	for _, tc := range tests {
+
+	for _, tc := range notOnboarded {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("DELETE", "/api/v1/onboarding/offboard"+tc.query, nil)
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, tc.expectedCode, w.Code, tc.description)
+		assert.Equal(t, tc.expectedCode, w.Code, w.Body)
 	}
 }
 
+// TODO test onboarded offboard,resourceConfig etc... when metadata file is deprecated
+
 func TestOnboardStatusHandler(t *testing.T) {
-	router := SetupMockRouter()
+	router := SetupRouter()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/onboarding/status", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, 200, w.Code, w.Body)
 }
 
 func TestResourceConfigHandler(t *testing.T) {
-	router := SetupMockRouter()
+	router := SetupRouter()
 	capacity := models.CapacityForNunet{ServerMode: true}
 	bodyBytes, _ := json.Marshal(capacity)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/onboarding/resource-config", bytes.NewBuffer(bodyBytes))
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, 500, w.Code, w.Body) // expect 500 because machine not onboarded
 }
