@@ -16,6 +16,10 @@ type SpecConfig struct {
 	Params map[string]interface{} `json:"params,omitempty"`
 }
 
+type Config interface {
+	GetNetworkConfig() *SpecConfig
+}
+
 // NewSpecConfig creates a new SpecConfig with the given type
 func NewSpecConfig(t string) *SpecConfig {
 	return &SpecConfig{

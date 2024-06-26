@@ -1,8 +1,9 @@
 package dms
 
 import (
-	"context"
+	// "context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -10,9 +11,10 @@ import (
 	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/internal/messaging"
-	"gitlab.com/nunet/device-management-service/libp2p"
+
+	// "gitlab.com/nunet/device-management-service/internal/messaging"
 	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/utils"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -20,17 +22,24 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// NewP2P is stub, real implementation is needed in order to pass it to
+// routers which access them in some handlers.
+func NewP2P() libp2p.Libp2p {
+	return libp2p.Libp2p{}
+}
+
 func Run() {
-	ctx := context.Background()
+	// ctx := context.Background()
+	log.Println("WARNING: Most parts commented out in dms.Run()")
 	config.LoadConfig()
 
 	db.ConnectDatabase()
 
 	go startServer()
 
-	go messaging.DeploymentWorker()
+	// go messaging.DeploymentWorker()
 
-	go messaging.FileTransferWorker(ctx)
+	// go messaging.FileTransferWorker(ctx)
 
 	// wait for server to start properly before sending requests below
 	time.Sleep(time.Second * 5)
@@ -45,15 +54,15 @@ func Run() {
 		ValidateOnboarding(metadata)
 
 		p2pParams := GetP2PParams()
-		priv, err := crypto.UnmarshalPrivateKey(p2pParams.PrivateKey)
+		_, err = crypto.UnmarshalPrivateKey(p2pParams.PrivateKey)
 		if err != nil {
 			zlog.Sugar().Fatalf("unable to unmarshal private key: %v", err)
 		}
 
-		libp2p.RunNode(priv, p2pParams.ServerMode, p2pParams.Available)
-		if libp2p.GetP2P().Host != nil {
-			SanityCheck(db.DB)
-		}
+		// libp2p.RunNode(priv, p2pParams.ServerMode, p2pParams.Available)
+		// if libp2p.GetP2P().Host != nil {
+		// 	SanityCheck(db.DB)
+		// }
 	}
 
 	// wait for SIGINT or SIGTERM

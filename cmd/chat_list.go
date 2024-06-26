@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/buger/jsonparser"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/cmd/backend"
 )
@@ -27,16 +27,17 @@ func NewChatListCmd(utilsService backend.Utility) *cobra.Command {
 				return fmt.Errorf(errMsg)
 			}
 
-			chatList, err := getIncomingChatList(chatBody)
-			if err != nil {
-				return fmt.Errorf("could not get incoming chat list: %w", err)
-			}
+			// chatList, err := getIncomingChatList(chatBody)
+			// if err != nil {
+			// 	return fmt.Errorf("could not get incoming chat list: %w", err)
+			// }
 
 			table := setupChatTable(cmd.OutOrStdout())
 
-			for _, chat := range chatList {
-				table.Append([]string{strconv.Itoa(chat.ID), chat.StreamID, chat.FromPeer, chat.TimeOpened})
-			}
+			// for _, chat := range chatList {
+			// 	table.Append([]string{strconv.Itoa(chat.ID), chat.StreamID, chat.FromPeer, chat.TimeOpened})
+			// }
+			log.Warn("chat list has incomplete implementation")
 
 			table.Render()
 			return nil

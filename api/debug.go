@@ -5,13 +5,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"gitlab.com/nunet/device-management-service/libp2p"
+	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
 // DEBUG
-func ManualDHTUpdateHandler(c *gin.Context) {
-	go libp2p.UpdateKadDHT()
-	libp2p.GetDHTUpdates(c)
+func ManualDHTUpdateHandler(c *gin.Context, p2p libp2p.Libp2p) {
+	go p2p.UpdateKadDHT()
+	p2p.GetDHTUpdates(c)
 	c.JSON(200, gin.H{"message": "DHT update initiated"})
 }
 
@@ -33,14 +33,14 @@ func CleanupPeerHandler(c *gin.Context) {
 }
 
 // DEBUG
-func PingPeerHandler(c *gin.Context) {
+func PingPeerHandler(c *gin.Context, p2p libp2p.Libp2p) {
 	reqCtx := c.Request.Context()
 	id := c.Query("peerID")
 	if id == "" {
 		c.AbortWithStatusJSON(400, gin.H{"error": "peerID not provided"})
 		return
 	}
-	if id == libp2p.GetP2P().Host.ID().String() {
+	if id == p2p.Host.ID().String() {
 		c.AbortWithStatusJSON(400, gin.H{"error": "peerID can not be self peerID"})
 		return
 	}
@@ -59,13 +59,13 @@ func PingPeerHandler(c *gin.Context) {
 }
 
 // DEBUG ONLY
-func OldPingPeerHandler(c *gin.Context) {
+func OldPingPeerHandler(c *gin.Context, p2p libp2p.Libp2p) {
 	id := c.Query("peerID")
 	if id == "" {
 		c.AbortWithStatusJSON(400, gin.H{"error": "peer ID not provided"})
 		return
 	}
-	if id == libp2p.GetP2P().Host.ID().String() {
+	if id == p2p.Host.ID().String() {
 		c.AbortWithStatusJSON(400, gin.H{"error": "peer ID cannot be self peer ID"})
 		return
 	}

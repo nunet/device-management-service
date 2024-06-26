@@ -1,9 +1,9 @@
 package api
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
-	"gitlab.com/nunet/device-management-service/libp2p"
-	"gitlab.com/nunet/device-management-service/libp2p/machines"
 	"gitlab.com/nunet/device-management-service/models"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -34,11 +34,14 @@ type checkpoint struct {
 //	@Failure		500					{object}	object	"cannot write to database"
 //	@Router			/run/request-service [post]
 func RequestServiceHandler(c *gin.Context) {
-	reqCtx := c.Request.Context()
+	// reqCtx := c.Request.Context()
 
 	span := trace.SpanFromContext(c.Request.Context())
 	span.SetAttributes(attribute.String("URL", "/run/request-service"))
-	kLogger.Info("Handle request service", span)
+
+	// TODO: Uncomment after refactor.
+	// kLogger.Info("Handle request service", span)
+	// END
 
 	var depReq models.DeploymentRequest
 	err := c.BindJSON(&depReq)
@@ -46,12 +49,14 @@ func RequestServiceHandler(c *gin.Context) {
 		c.AbortWithStatusJSON(400, gin.H{"error": "invalid payload data"})
 		return
 	}
-	resp, err := machines.RequestService(reqCtx, depReq)
-	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(200, resp)
+	// resp, err := machines.RequestService(reqCtx, depReq)
+	// if err != nil {
+	// 	c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	c.AbortWithStatusJSON(500, gin.H{"error": "RequestServiceHandler not implemented"})
+
+	// c.JSON(200, resp)
 }
 
 // DeploymentRequestHandler  godoc
@@ -68,11 +73,12 @@ func DeploymentRequestHandler(c *gin.Context) {
 	span := trace.SpanFromContext(reqCtx)
 	span.SetAttributes(attribute.String("URL", "/run/deploy"))
 
-	err := machines.DeploymentRequest(c, reqCtx, c.Writer, c.Request)
-	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
-		return
-	}
+	// err := machines.DeploymentRequest(c, reqCtx, c.Writer, c.Request)
+	// if err != nil {
+	// 	c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	c.AbortWithStatusJSON(500, gin.H{"error": "DeploymentRequestHandler not implemented"})
 	// TODO: Original func did not return a success response. Should we return it?
 }
 
@@ -85,9 +91,15 @@ func DeploymentRequestHandler(c *gin.Context) {
 //	@Failure		500	{object}	object	"failed to get checkpoint list"
 //	@Router			/run/checkpoints [get]
 func ListCheckpointHandler(c *gin.Context) {
-	checkpoints, err := libp2p.ListCheckpoints()
+	// TODO: Remove this section after refactor.
+	checkpoints := checkpoint{}
+	err := errors.New("non existant import path")
+	// END
+
+	// checkpoints, err := libp2p.ListCheckpoints()
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": "failed to get checkpoint list"})
+		// c.AbortWithStatusJSON(500, gin.H{"error": "failed to get checkpoint list"})
+		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(200, checkpoints)

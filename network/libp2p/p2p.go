@@ -3,7 +3,9 @@ package libp2p
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -165,6 +167,89 @@ func (p *Libp2p) Subscribe(topic string, handler func(data []byte)) error {
 
 func (p *Libp2p) Stop() error {
 	return nil
+}
+
+// ListPeers is a stub.
+func (p *Libp2p) ListPeers() ([]peer.AddrInfo, error) {
+	zlog.Warn("ListPeers: Stub")
+	return nil, nil
+}
+
+// ListDHTPeers is a stub.
+func (p *Libp2p) ListDHTPeers(ctx context.Context) ([]models.PeerData, error) {
+	zlog.Warn("ListDHTPeers: Stub")
+	return nil, nil
+}
+
+type OpenStream struct {
+	ID         int    `json:"id"`
+	StreamID   string `json:"stream_id"`
+	FromPeer   string `json:"from_peer"`
+	TimeOpened string `json:"time_opened"`
+}
+
+// IncomingChatRequests is a stub.
+func (p *Libp2p) IncomingChatRequests() ([]OpenStream, error) {
+	zlog.Warn("IncomingChatRequests: Stub")
+	return nil, errors.New("not implemented")
+}
+
+// ClearIncomingChatRequests is a stub.
+func (p *Libp2p) ClearIncomingChatRequests() error {
+	zlog.Warn("ClearIncomingChatRequests: Stub")
+	return errors.New("not implemented")
+}
+
+// CreateChatStream is a stub.
+func (p *Libp2p) CreateChatStream(ctx context.Context, id peer.ID) (network.Stream, error) {
+	zlog.Warn("CreateChatStream: Stub")
+	return nil, errors.New("not implemented")
+}
+
+// StartChat is a stub.
+func (p *Libp2p) StartChat(w http.ResponseWriter, r *http.Request, s network.Stream, id string) error {
+	zlog.Warn("StartChat: Stub")
+	return errors.New("not implemented")
+}
+
+// JoinChat is a stub.
+func (p *Libp2p) JoinChat(w http.ResponseWriter, r *http.Request, id int) error {
+	zlog.Warn("JoinChat: Stub")
+	return errors.New("not implemented")
+}
+
+// DumpDHT is a stub.
+func (p *Libp2p) DumpDHT(ctx context.Context) ([]models.PeerData, error) {
+	zlog.Warn("DumpDHT: Stub")
+	return nil, errors.New("not implemented")
+}
+
+// DefaultDepReqPeer is a stub.
+func (p *Libp2p) DefaultDepReqPeer(ctx context.Context, id string) (string, error) {
+	zlog.Warn("DefaultDepReqPeer: Stub")
+	return "", errors.New("not implemented")
+}
+
+// ClearIncomingFileRequests is a stub.
+func (p *Libp2p) ClearIncomingFileRequests() error {
+	zlog.Warn("ClearIncomingFileRequests: Stub")
+	return errors.New("not implemented")
+}
+
+// IncomingFileTransferRequests is a stub.
+func (p *Libp2p) IncomingFileTransferRequests() ([]OpenStream, error) {
+	zlog.Warn("IncomingFileTransferRequests: Stub")
+	return nil, errors.New("not implemented")
+}
+
+func (p *Libp2p) InitiateTransferFile(ctx context.Context, w http.ResponseWriter, r *http.Request, id peer.ID, path string) error {
+	zlog.Warn("InitiateTransferFile: Stub")
+	return errors.New("not implemented")
+}
+
+func (p *Libp2p) AcceptPeerFileTransfer(ctx context.Context, w http.ResponseWriter, r *http.Request, id int) (string, error) {
+	zlog.Warn("AcceptTransferFile: Stub")
+	return "", errors.New("not implemented")
 }
 
 func PingHandler(s network.Stream) {

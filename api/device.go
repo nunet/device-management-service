@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"gitlab.com/nunet/device-management-service/libp2p"
 	"gitlab.com/nunet/device-management-service/utils"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -20,12 +19,15 @@ import (
 //	@Failure		500	{object}	object	"failed to type assert peer data for peer ID"
 //	@Router			/device/status [get]
 func DeviceStatusHandler(c *gin.Context) {
-	status, err := libp2p.DeviceStatus()
-	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": "could not retrieve device status"})
-		return
-	}
-	c.JSON(200, gin.H{"online": status})
+	// TODO: handle this after refactor
+	// status, err := libp2p.DeviceStatus()
+	// if err != nil {
+	// 	c.AbortWithStatusJSON(500, gin.H{"error": "could not retrieve device status"})
+	// 	return
+	// }
+	// c.JSON(200, gin.H{"online": status})
+	c.AbortWithStatusJSON(500, gin.H{"error": "device status not implemented"})
+
 }
 
 // ChangeDeviceStatusHandler  godoc
@@ -65,11 +67,14 @@ func ChangeDeviceStatusHandler(c *gin.Context) {
 		return
 	}
 
-	err = libp2p.ChangeDeviceStatus(status.IsAvailable)
-	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
-		return
-	}
+	// TODO: handle this after refactor
+	// err = libp2p.ChangeDeviceStatus(status.IsAvailable)
+	// if err != nil {
+	// 	c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	c.AbortWithStatusJSON(500, gin.H{"error": "change device status not implemented"})
+	// END
 
 	var msg string
 	if status.IsAvailable {
