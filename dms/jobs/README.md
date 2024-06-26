@@ -1,6 +1,6 @@
 # Introduction
 
-Jobs package will manage local jobs and their allocation, including relation to execution environments, etc. It will manage jobs through whatever executor it's running (Vontainer, VM, Direct_exe, Java etc).
+Jobs package will manage local jobs and their allocation, including relation to execution environments, etc. It will manage jobs running with whatever executor (container, VM, Direct_exe, Java etc). It's responsible for parsing job specs, comparison and overall local job management.
 
 ## Types and data models
 
