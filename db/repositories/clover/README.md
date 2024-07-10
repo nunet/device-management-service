@@ -1,8 +1,31 @@
-# Introduction
+# clover
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Functionality](#3-functionality)
+4. [Data Types](#4-data-types)
+5. [Testing](#5-testing)
+6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
+7. [References](#7-references)
+
+
+## Specification
+
+### 1. Description
 
 This sub package contains CloverDB implementation of the database interfaces.
 
-# Stucture and organisation
+### 2. Structure and organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -26,34 +49,12 @@ Here is quick overview of the contents of this pacakge:
 
 All files with `*_test.go` naming convention contain unit tests with respect to the specific implementation.
 
-# Contributing
 
-For guidelines of how to contribute, install and test the `device-management-service` component which contains `db` package, please refer to package level documentation:
+### 3. Functionality
 
-* Package level [../README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md)
-* DMS component level [../../README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
-* Contribution guidelines [../../CONTRIBUTING.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-* Code of conduct [../../CODE_OF_CONDUCT.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-* [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+#### GenericRepository
 
-# Specifications overview
-
-* The specification of package functionality is described as test case definitions, maintained in repository [test-suite](https://gitlab.com/nunet/test-suite).
-* The associated data models are specified and maintained in repository [open-api/platform-data-model/device-management-service/](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/develop/device-management-service/). 
-
-Versioning and lifecycle of above mentioned specifications is aligned to the lifecycle and branching of the platform code (see [branching strategy](https://gitlab.com/nunet/documentation/-/wikis/GIT-Workflows#git-workflow-branching-strategy)):
-
-* `develop` branches contain specifications of the functionality of current unstable branch of development at any given moment;
-* `main` branches contain specifications of the current production version of the platform at any given moment in time;
-* `proposed` branches contain new functionality and data model specifications, accepted for development, but not yet implemented.
-
-The procedure to update the specifications is described in [Specification And Documentation Procedure](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/specification_and_documentation/README.md).
-
-# Functions
-
-## GenericRepository
-
-### NewGenericRepository
+##### NewGenericRepository
 
 * signature: `NewGenericRepository[T repositories.ModelType](db *clover.DB) -> repositories.GenericRepository[T]` <br/>
 
@@ -63,91 +64,11 @@ The procedure to update the specifications is described in [Specification And Do
 
 `NewGenericRepository` function creates a new instance of `GenericRepositoryclover` struct. It initializes and returns a repository with the provided clover database. 
 
-### Create
+##### Interface Methods
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#create) 
+See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/db/repositories?ref_type=heads#genericrepository-interface) for methods of `GenericRepository` interface
 
-`Create` function adds a new record to the database and returns the created data. It returns an error message in case of any error during the operation.
-
-See [Feature: Creating a record in the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Create.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/create.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/create.sequence.svg)
-
-### Get
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#get) 
-
-`Get` function retrieves a record from the database based on the identifier provided. It returns an error message in case of any error during the operation.
-
-See [Feature: Retrieving a record from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Get.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/get.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/get.sequence.svg)
-
-### Update
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#update) 
-
-`Update` function modifies an existing record in the database using its identifier. It returns an error message in case of any error during the operation.
-
-See [Feature: Updating a record in the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Update.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/update.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/update.sequence.svg)
-
-### Delete
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#delete) 
-
-`Delete` function deletes an existing record in the database using its identifier. It returns an error message in case of any error during the operation.
-
-See [Feature: Deleting a record from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Delete.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/delete.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/delete.sequence.svg)
-
-### Find
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#find) 
-
-`Find` function retrieves a single record from the database based on a query. It returns an error message in case of any error during the operation.
-
-See [Feature: Retrieving a single record based on a query from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Find.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/find.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/find.sequence.svg)
-
-### FindAll
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#findall) 
-
-`FindAll` function retrieves multiple records from the database based on a query. It returns an error message in case of any error during the operation.
-
-See [Feature: Retrieving multiple records based on a query from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Find_All.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/findAll.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/findAll.sequence.svg)
-
-### GetQuery
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#getquery) 
-
-`GetQuery` function returns a clean query instance for the repository's type.
-
-See [Feature: Getting a clean Query instance of repository's type](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Get_Query.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/getQuery.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/getQuery.sequence.svg)
-
-### query
+##### query
 
 * signature: `query(includeDeleted bool) -> *clover_q.Query` <br/>
 
@@ -157,13 +78,7 @@ For list of steps during execution, refer to the sequence diagram files:
 
 `query` function creates and returns a new CloverDB [Query](https://pkg.go.dev/github.com/ostafen/clover/v2/query#Query) object. Input value of `False` will add a condition to exclude the deleted records.
 
-See [Feature: Create a CloverDB Query object](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Query.feature) for test cases.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/query.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/query.sequence.svg)
-
-### queryWithID
+##### queryWithID
 
 * signature: `queryWithID(id interface{}, includeDeleted bool) -> *clover_q.Query` <br/>
 
@@ -177,15 +92,9 @@ For list of steps during execution, refer to the sequence diagram files:
 
 Providing `includeDeleted` as `False` will add a condition to exclude the deleted records.
 
-See [Feature: Create a CloverDB Query object with identifier](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Query_WithID.feature) for test cases.
+#### GenericEntityRepository
 
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/queryWithID.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/queryWithID.sequence.svg)
-
-## GenericEntityRepository
-
-### NewGenericEntityRepository
+##### NewGenericEntityRepository
 
 * signature: `NewGenericEntityRepository[T repositories.ModelType](db *clover.DB) repositories.GenericEntityRepository[T]` 
 
@@ -195,67 +104,11 @@ For list of steps during execution, refer to the sequence diagram files:
 
 `NewGenericEntityRepository` creates a new instance of `GenericEntityRepositoryclover` struct. It initializes and returns a repository with the provided clover database instance and name of the collection in the database.
 
-### Save
+##### Interface Methods
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#save) 
+See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/db/repositories?ref_type=heads#genericentityrepository-interface) for methods of `GenericEntityRepository` interface.
 
-`Save` creates or updates the record in the repository and returns the new/updated data. It returns an error message in case of any error during the operation.
-
-See [Feature: Saving a record in the entity repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Save_Entity.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/saveEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/saveEntity.sequence.svg)
-
-### Get
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/developdb/repositories/README.md#get-1) 
-
-`Get` function retrieves the single record from the database. It returns an error message in case of any error during the operation.
-
-See [Feature: Retrieving a record from the entity repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Get_Entity.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/getEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/getEntity.sequence.svg)
-
-### Clear
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#clear) 
-
-`Clear` function removes the record with its history from the repository. It returns an error in case of any error during the operation.
-
-See [Feature: Clear record from the entity repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Clear_Entity.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/clearEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/clearEntity.sequence.svg)
-
-### History
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#history) 
-
-`History` function retrieves previous records from the repository constrained by the query. It returns an error in case of any error during the operation.
-
-See [Feature: Retrieving History from Entity Repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/History_Entity.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/historyEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/historyEntity.sequence.svg)
-
-### GetQuery
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#getquery-1) 
-
-`GetQuery` function returns a clean Query instance. 
-
-See [Feature: Getting a clean Query instance of repository's type](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Get_Query_Entity.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/getQueryEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/getQueryEntity.sequence.svg)
-
-### query
+##### query
 
 * signature: `query() -> *clover_q.Query` <br/>
 
@@ -265,14 +118,42 @@ For list of steps during execution, refer to the sequence diagram files:
 
 `query` function creates and returns a new CloverDB [Query](https://pkg.go.dev/github.com/ostafen/clover/v2/query#Query) object. 
 
-See [Feature: Create a CloverDB Query object](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/clover/Query_Entity.feature) for test cases including error scenarios.
+### 4. Data Types
 
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/queryEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/sequences/rendered/queryEntity.sequence.svg)
+- `GenericRepositoryClover`: This is a generic repository implementation using clover as an ORM
 
-## List of Data Types
+```
+type GenericRepositoryClover[T repositories.ModelType] struct {
+	db         *clover.DB // db is the Clover database instance.
+	collection string     // collection is the name of the collection in the database.
+}
+```
 
-`dms.database.genericRepositoryclover`: This is a generic repository implementation using clover as an ORM. See [genericRepositoryclover.data.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/data/genericRepositoryclover.data.go) for reference data model.
+- `GenericEntityRepositoryClover`: This is a generic single entity repository implementation using clover as an ORM
 
-`dms.database.genericEntityRepositoryclover`: This is a generic single entity repository implementation using clover as an ORM. See [genericEntityRepositoryclover.data.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/clover/data/genericEntityRepositoryclover.data.go) for reference data model.
+```
+type GenericEntityRepositoryClover[T repositories.ModelType] struct {
+	db         *clover.DB // db is the Clover database instance.
+	collection string     // collection is the name of the collection in the database.
+}
+```
+
+For other data types refer to `db` package readme. 
+
+### 5. Testing
+
+Refer to `*_test.go` files for unit tests of different functionalities.
+
+### 6. Proposed Functionality / Requirements 
+
+#### List of issues
+
+All issues that are related to the implementation of `db` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
+
+- [db package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A36&first_page_size=20)
+
+### 7. References
+
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)

@@ -1,8 +1,31 @@
-# Introduction
+# gorm
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Functionality](#3-functionality)
+4. [Data Types](#4-data-types)
+5. [Testing](#5-testing)
+6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
+7. [References](#7-references)
+
+
+## Specification
+
+### 1. Description
 
 This sub package contains Gorm implementation of the database interfaces.
 
-# Stucture and organisation
+### 2. Structure and organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -26,34 +49,11 @@ Here is quick overview of the contents of this pacakge:
 
 All files with `*_test.go` naming convention contain unit tests with respect to the specific implementation.
 
-# Contributing
+### 3. Functionality
 
-For guidelines of how to contribute, install and test the `device-management-service` component which contains `database` package, please refer to package level documentation:
+#### GenericRepository
 
-* Database package level [../README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md)
-* DMS component level [../../README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
-* Contribution guidelines [../../CONTRIBUTING.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-* Code of conduct [../../CODE_OF_CONDUCT.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-* [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
-
-# Specifications overview
-
-* The specification of package functionality is described as test case definitions, maintained in repository [test-suite](https://gitlab.com/nunet/test-suite).
-* The associated data models are specified and maintained in repository [open-api/platform-data-model/device-management-service/](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/develop/device-management-service/). 
-
-Versioning and lifecycle of above mentioned specifications is aligned to the lifecycle and branching of the platform code (see [branching strategy](https://gitlab.com/nunet/documentation/-/wikis/GIT-Workflows#git-workflow-branching-strategy)):
-
-* `develop` branches contain specifications of the functionality of current unstable branch of development at any given moment;
-* `main` branches contain specifications of the current production version of the platform at any given moment in time;
-* `proposed` branches contain new functionality and data model specifications, accepted for development, but not yet implemented.
-
-The procedure to update the specifications is described in [Specification And Documentation Procedure](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/specification_and_documentation/README.md).
-
-# Functions
-
-## GenericRepository
-
-### NewGenericRepository
+##### NewGenericRepository
 
 * signature: `NewGenericRepository[T repositories.ModelType](db *gorm.DB) -> repositories.GenericRepository[T]` <br/>
 
@@ -63,93 +63,13 @@ The procedure to update the specifications is described in [Specification And Do
 
 `NewGenericRepository` function creates a new instance of `GenericRepositoryGORM` struct. It initializes and returns a repository with the provided GORM database. 
 
-### Create
+##### Interface Methods
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#create) 
+See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/db/repositories?ref_type=heads#genericrepository-interface) for methods of `GenericRepository` interface.
 
-`Create` function adds a new record to the database and returns the created data. It returns an error message in case of any error during the operation.
+#### GenericEntityRepository
 
-See [Feature: Creating a record in the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Create.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/create.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/create.sequence.svg)
-
-### Get
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#get) 
-
-`Get` function retrieves a record from the database based on the identifier provided. It returns an error message in case of any error during the operation.
-
-See [Feature: Retrieving a record from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Get.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/get.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/get.sequence.svg)
-
-### Update
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#update) 
-
-`Update` function modifies an existing record in the database using its identifier. It returns an error message in case of any error during the operation.
-
-See [Feature: Updating a record in the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Update.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/update.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/update.sequence.svg)
-
-### Delete
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#delete) 
-
-`Delete` function deletes an existing record in the database using its identifier. It returns an error message in case of any error during the operation.
-
-See [Feature: Deleting a record from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Delete.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/delete.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/delete.sequence.svg)
-
-### Find
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#find) 
-
-`Find` function retrieves a single record from the database based on a query. It returns an error message in case of any error during the operation.
-
-See [Feature: Retrieving a single record based on a query from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Find.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/find.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/find.sequence.svg)
-
-### FindAll
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#findall) 
-
-`FindAll` function retrieves multiple records from the database based on a query. It returns an error message in case of any error during the operation.
-
-See [Feature: Retrieving multiple records based on a query from the repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Find_All.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/findAll.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/findAll.sequence.svg)
-
-### GetQuery
-
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#getquery) 
-
-`GetQuery` function returns a clean query instance for the repository's type.
-
-See [Feature: Getting a clean Query instance of repository's type](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Get_Query.feature) for test cases.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/getQuery.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/getQuery.sequence.svg)
-
-## GenericEntityRepository
-
-### NewGenericEntityRepository
+##### NewGenericEntityRepository
 
 * signature: `NewGenericEntityRepository[T repositories.ModelType](db *gorm.DB) -> repositories.GenericEntityRepository[T]` 
 
@@ -159,56 +79,45 @@ For list of steps during execution, refer to the sequence diagram files:
 
 `NewGenericEntityRepository` creates a new instance of `GenericEntityRepositoryGORM` struct. It initializes and returns a repository with the provided GORM database.
 
-### Save
+##### Interface Methods
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#save) 
+See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/db/repositories?ref_type=heads#genericentityrepository-interface) for methods of `GenericEntityRepository` interface.
 
-`Save` creates or updates the record in the repository and returns the new/updated data. It returns an error message in case of any error during the operation.
 
-See [Feature: Saving a record in the entity repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Save_Entity.feature) for test cases including error scenarios.
+### 4. Data Types
 
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/saveEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/saveEntity.sequence.svg)
+- `GenericRepositoryGORM`: This is a generic repository implementation using GORM as an ORM.
 
-### Get
+```
+type GenericRepositoryGORM[T repositories.ModelType] struct {
+	db *gorm.DB
+}
+```
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#get-1) 
+- `GenericEntityRepositoryGORM`: This is a generic single entity repository implementation using GORM as an ORM
 
-`Get` function retrieves the single record from the database. It returns an error message in case of any error during the operation.
+```
+type GenericEntityRepositoryGORM[T repositories.ModelType] struct {
+	db *gorm.DB // db is the GORM database instance.
+}
+```
 
-See [Feature: Retrieving a record from the entity repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Get_Entity.feature) for test cases including error scenarios.
+For other data types refer to `db` package readme. 
 
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/getEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/getEntity.sequence.svg)
+### 5. Testing
 
-### Clear
+Refer to `*_test.go` files for unit tests of different functionalities.
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#clear) 
+### 6. Proposed Functionality / Requirements 
 
-`Clear` function removes the record with its history from the repository. It returns an error in case of any error during the operation.
+#### List of issues
 
-See [Feature: Removing record from the entity repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Clear_Entity.feature) for test cases including error scenarios.
+All issues that are related to the implementation of `db` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/clearEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/clearEntity.sequence.svg)
+- [db package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A36&first_page_size=20)
 
-### History
+### 7. References
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md#history) 
-
-`History` function retrieves previous versions of the record from the repository which meet the provided query conditions. It returns an error in case of any error during the operation.
-
-See [Feature: Retrieving History from Entity Repository](https://gitlab.com/nunet/test-suite/-/blob/database-spec/stages/functional_tests/features/device-management-service/database/gorm/Clear_Entity.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/historyEntity.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/sequences/rendered/historyEntity.sequence.svg)
-
-## List of Data Types
-
-`dms.database.genericRepositoryGORM`: This is a generic repository implementation using GORM as an ORM. See [genericRepositoryGORM.data.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/data/genericRepositoryGORM.data.go) for reference data model.
-
-`dms.database.genericEntityRepositoryGORM`: This is a generic single entity repository implementation using GORM as an ORM. See [genericEntityRepositoryGORM.data.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/database-spec/device-management-service/database/gorm/data/genericEntityRepositoryGORM.data.go) for reference data model.
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)

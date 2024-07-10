@@ -1,12 +1,198 @@
-# Introduction
+# dms
 
-This package is responsible for starting the whole application while being dependent on other packages for most functionality. It also implements some global models.
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
 
-## Node
+## Table of Contents
 
-_proposed by @kabir.kbr; date: 2024-04-17_
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Functionality](#3-functionality)
+4. [Data Types](#4-data-types)
+5. [Testing](#5-testing)
+6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
+7. [References](#7-references)
 
-A `Node` is the implementation of [`models.Actor` interface](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/models/actor.go). It exposes each machine connected to NuNet network as an actor with all related functionalities as per the Actor model of computation (see  [models package specification](../models/README.md#actor)). 
+
+## Specification
+
+### 1. Description
+
+This package is responsible for starting the whole application. It also contains various core functionality of DMS:
+- Onboarding compute provider devices
+- Job orchestration and management
+- Resource management
+- Actor implementation for each node 
+
+### 2. Structure and organisation
+
+Here is quick overview of the contents of this pacakge:
+
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/README.md): Current file which is aimed towards developers who wish to use and modify the dms functionality. 
+
+* [dms](dms.go): This file contains code to initialize the DMS by loading configuration, starting REST API server etc
+
+* [init](init.go): This file creates a new logger instance.
+
+* [sanity_check](sanity_check.go): This file defines a method for performing consistency check before starting the DMS. `proposed` _Note that the functionality of this method needs to be developed as per refactored DMS design._
+
+_Subpackages_
+
+* [jobs](jobs): Deals with the management of local jobs on the machine.
+
+* [node](node): Contains implementation of `Node` as an actor.
+
+* [onboarding](onboarding): Code related to onboarding of compute provider machines to the network.
+
+* [orchestrator](orchestrator): Contains job orchestration logic.
+
+* [resources](resources): Deals with the management of resources on the machine.
+
+`proposed`: All files with `*_test.go` naming convention contain unit tests with respect to the specific implementation.
+
+### 3. Functionality
+
+`TBD`
+
+**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
+
+
+### 4. Data Types
+
+`TBD`
+
+**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
+
+
+### 5. Testing
+
+`proposed` Refer to `*_test.go` files for unit tests of different functionalities.
+
+### 6. Proposed Functionality / Requirements 
+
+#### List of issues
+
+All issues that are related to the implementation of `dms` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
+
+- [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
+
+
+#### Interfaces & Methods
+
+##### `proposed` Capability_interface
+
+```
+type Capability_interface interface {
+	add()
+	subtract()
+}
+```
+
+`add` method will combine capabilities of two nodes. Example usage - When two jobs have to be run on a single machine, the capability requirements of each will need to be combined.
+
+`subtract` method will subtract two capabilities. Example usage - When resources are locked for a job, the available capability of a machine will need to be reduced.
+
+
+#### Data types
+
+##### `proposed` Capability
+
+The `Capability` struct will capture all the relevant data that defines the capability of a node to perform the job. At the same time this will be used to define capability requirements that a job requires from a node.
+
+An initial data model for `Capability` is defined below.
+
+```
+type Capability struct {
+	// Executor is the type of executor available on the machine or the executor 
+    // required for the job (example - Docker, VM, WASM etc)
+    Executor    string           
+	
+    // Type specifies the details of type of job (One time, batch, recurring,
+    // long running)
+    Type        dms.jobs.JobType        
+	
+    // Resources specifies the description of the resources required
+    Resources   dms.resources.Resource
+
+    // Libraries specifies the libraries needed for the job        
+	Libraries   []string         
+	
+    // Locality contains preferred localities of the machine for execution
+    Locality    []string         
+	
+    // Storage specifies the preferred storage options that the machine should have
+    Storage         []string         
+	
+    // Connectivity specifies the network configuration required
+    Connectivity    Connectivity          
+	
+    // Price specifies the price information of the job / machine
+    Price           PriceInformation 
+	
+    // Time specifies the time information of the job / machine
+	Time            TimeInformation 
+	
+    // KYC specifies the KYC requirements or KYC status of the machine 
+    KYC  []string        
+}
+```
+
+##### `proposed` Connectivity
+
+type Connectivity struct {
+
+    // Ports contains the ports that need to be open for the job to run
+	Ports []int
+	
+    // VPN specifies whether VPN is required
+    VPN       bool  
+}
+
+##### `proposed` PriceInformation
+
+```
+type PriceInformation struct {
+	// Currency holds which currency is used for pricing ex - NTX
+	Currency   string 
+	
+    // CurrencyPerHour is the price of the machine per hour
+    CurrencyPerHour int   
+	
+    // TotalPerJob is the maximum total price or budget of the job
+	TotalPerJob   int 
+	
+    // Preference is Pricing preference as compared to time
+    Preference int 
+}
+```
+
+##### `proposed` TimeInformation
+
+type TimeInformation struct {
+	// Units holds the units of time ex - hours, days, weeks
+    Units      string 
+	
+    // MaxTime holds the maximum time that the job should run
+    MaxTime    int
+
+    // Preference holds the time preference as compared to price
+	Preference int    
+}
+
+
+### 7. References
+
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+
+
+
 
 
 
