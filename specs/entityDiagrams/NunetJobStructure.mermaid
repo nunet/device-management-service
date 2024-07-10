@@ -1,0 +1,138 @@
+erDiagram
+
+    Invocation ||--|| Job1 : "If Origin = Kubernetes"
+    Invocation ||--|| Job2 : "If origin != Kubernetes"
+    Job1 ||--|| Job2 : ""
+    Job2 ||--|| Job3 : "Container"
+    Job2 ||--|| Job4 : "Container"
+    Job2 ||--|| Job5 : "Container"
+    Job2 ||--|| Job6: "Storage"
+    Job2 ||--|| Job7 : "subnet"
+    Job2 ||--|| Job9 : "Adapter"
+    Job7 ||--|| Job8 : "API"
+    Invocation {
+
+    }
+
+    Job6 {
+         string JobType "Volumes"
+        uuid jobId
+        uuid parentId
+        string Name
+        string MountPath
+        bool persistent
+        string location
+    }
+    
+    Job3 {
+        string JobType "Container"
+        uuid jobId
+        uuid parentId
+        int ExecutionOrder  "1 init container"
+        string Name
+        string Image
+        list~string~ Command
+        list~string~ Args
+        ResourceRequirements Resources
+        string ImagePullPolicy
+        list~VolumeMount~ VolumeMounts
+    }
+
+    Job4 {
+        string JobType "Container"
+        uuid jobId
+        uuid parentId
+        int ExecutionOrder "2 Parallel"
+        string Name
+        string Image
+        list~string~ Command
+        list~string~ Args
+        ResourceRequirements Resources
+        string ImagePullPolicy
+        list~VolumeMount~ VolumeMounts
+    }
+
+    Job5 {
+        string JobType "Container"
+        uuid JobId
+        uuid parentId
+        int ExecutionOrder "2 parallel"
+        string Name
+        string Image
+        list~string~ Command
+        list~string~ Args
+        ResourceRequirements Resources
+        string ImagePullPolicy
+        list~VolumeMount~ VolumeMounts
+    }
+
+    Job2 {
+        string JobType "Group"
+        uuid JobId
+        uuid parentId
+        string Name
+        list~Container~Jobs[]
+        list~Volume~Jobs[]
+        list~Network~Jobs[]
+        string RestartPolicy
+        int TerminationGracePeriodSeconds
+        int ActiveDeadlineSeconds
+        string ImagePullSecrets
+        string DNSConfig
+        string ReadinessGates
+    }
+
+    Job1 {
+        string JobType "Pod"
+        uuid JobId
+        uuid parentId
+        string APIVersion
+        string Kind
+        PodSpec Spec
+        PodStatus Status
+        string MetaDataName
+        string MetadataNamespace
+        string MetadataUID
+        string MetadataResourceVersion
+        string MetadataCreationTimestamp
+        map~string, string~ Labels
+    }
+
+    Job7  {
+        string JobType "Subnet"
+        uuid JobId
+        uuid parentId
+	    Name           string "Name of Subnet"
+        NetworkId      string "UUID assigned to Subnet"
+	    PeerMaxLatency int    "Maximum allowable latency in milliseconds"
+	    CidrRange      string "IPv4 subnet expressed as CIDR address e.g. 10.n.n.n/n"
+	    Gateway        string "IP Address of gateway (egress)"
+	    Ingress        bool   "Requires proxy for external access"
+	    Egress         bool   "Should egress / internet access be controlled via Gateway / Firewall"
+	    VpnAccess      bool   "Requires VPN Endpoint for remote access"
+	    VpnType        string "VPN Protocol e.g. Wireguard / OpenVPN etc"
+	    VpnEndpointIp  string "IP Address to assign to VPN Gateway"
+	    VpnCredentials string "Credentials required for VPN Access"
+    }
+
+    Job8 {
+        string JobType "Proxy"
+        uuid JobId
+        uuid parentId
+    }
+
+    Job9 {
+        string JobType "Adapter"  
+    }
+    allocation {
+
+
+    }
+
+
+
+    
+
+
+
+ 

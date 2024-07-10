@@ -1,310 +1,381 @@
-# Introduction
-This package takes care of job scheduling and management (manages jobs on other DMSs)
+# orchestrator
 
-# Job Orchestration
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
 
-The lifecyle of a job on Nunet platform consists of various operations from job posting to settlement of the contract. A key distinction to note is the option of two types of orchestration mechanisms: `push` and `pull`. Broadly speaking `pull` orchestration works on the premise that resource providers bid for jobs available in the network, while `push` orchestration works when a job is `push`ed directly to a known resource provider -- constituting to a more centralized orchestration. `push` orchestration develops on the idea that users choose from the available providers and their resources. However, given the decentralized and open nature of the platform, it may be required to engage the providers to get their current (latest) state and preferences. This leads to an overlap with the `pull` orchestration approach.
+## Table of Contents
 
-The default setting is to use `pull` based orchestration, which is mostly developed in the present proposed specification. However, the user can choose to use `push` based orchestration to suit their needs.
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Functionality](#3-functionality)
+4. [Data Types](#4-data-types)
+5. [Testing](#5-testing)
+6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
+7. [References](#7-references)
 
-A design involving both mechanisms allows us to cover continuum between radically decentralized and centralized orchestration styles in the same system. The details of all the operations involved in the job orchestration are described in the following sections.
 
-Job orchestration mechanism spans across many dms packages, including `orchestrator` itself, but also `jobs`, `network`, `executor`, etc. This specification aims at describing the whole process which will be then split into different packages for implementation.
+## Specification
 
-## Related interfaces and types
+### 1. Description
 
-* `dms.orchestrator.Orchestrator` is the interface combining methods that are needed for orchestration and do not fit into other packages or interfaces;
+The orchestrator is responsible for job scheduling and management (manages jobs on other DMSs). 
 
-## Related functions / methods
+A key distinction to note is the option of two types of orchestration mechanisms: `push` and `pull`. Broadly speaking `pull` orchestration works on the premise that resource providers bid for jobs available in the network, while `push` orchestration works when a job is `push`ed directly to a known resource provider -- constituting to a more centralized orchestration. `push` orchestration develops on the idea that users choose from the available providers and their resources. However, given the decentralized and open nature of the platform, it may be required to engage the providers to get their current (latest) state and preferences. This leads to an overlap with the `pull` orchestration approach.
 
-This is a list of function proposed for implementation in `Orchestrator` interface. The list as well as a description is not complete nor they are completely defined. But these functions are the main to implement orchestrator functionality. It may be, that some of them will move to other packages during consolidation.
+The default setting is to use `pull` based orchestration, which is developed in the present proposed specification.
 
-* `dms.orchestrator.orchestrateJob` is called whenever a dms receives a `jobPosting`;
-* `dms.orchestrator.jobRequest`;
-* `dms.orchestrator.jobInvocation`;
-* `dms.orchestrator.publishBidRequest`;
-* `dms.orchestrator.compare`;
-* `dms.orchestrator.acceptJob`
-* `dms.orchestrator.bid` -- resource provider function to bid for a requeted job;
-* `dms.orchestrator.registerBid`
-* `dms.orchestrator.selectBestBid`
-* `dms.orchestrator.invokeAllocation` -- invoke an allocation of a job on a machine with which a contract was signed;
+#### `proposed` Job Orchestration
 
-## 1. Job Posting
+The proposed lifecyle of a job on Nunet platform consists of various operations from job posting to settlement of the contract. Below is a brief explanation of the steps involved in the job orchestration:
 
-* _proposed 2024-03-21; last updated 2024-05-07; by: @kabir.kbr; @janaina.senna; @0xPravar_
+1. **Job Posting**: The user posts a job request to the DMS. The job request is validated and a Nunet job is created in the DMS.
 
-This is based on preliminary design, please refer to [research/blog/jobposting](https://nunet.gitlab.io/research/blog/posts/job-orchestration-details/#1-job-posting).
+2. **Search and Match**: 
 
-The first step is when a user posts a request to run a computing job. This should define various job requirements and preferences.
+    a. The Service provider DMS requests for bids from other nodes in the network.  
 
-**endpoint**: `/orchestrator/postJob`<br/>
-**method**: `HTTP POST`<br/>
-**output**: `None`
+    b. DMS on compute provider compares the capability of the available resources against job requirements. If all the requirements are met, it then decides whether to submit a bid.
 
-Please see below for relevant specification and data models.
+    c. The received bids are assessed and the best bid is selected.
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Job_Posting.feature))   |
-| Request payload       | [jobDescription](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/jobs/data/jobDescription.payload.go)|
-| Return payload       | None |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/jobPosting.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/rendered/jobPosting.sequence.svg)) | 
+3. **Job Request**: In case the shortlisted compute provider has not locked the resources while submitting the bid, the job request workflow is executed. This requires the compute provider DMS to lock the necessary resources required for the job and re-submit the bid. Note that at this stage compute provider can still decline the job request.
 
-### List of relevant functions
+4. **Contract Closure**: The service provider and the shortlisted compute provider verify that the counterparty is a verified entity and approved by Nunet Solutions to participate in the network. This in an important step to establish trust before any work is performed.
+    
+    If job does not require any payment (Volunteer Compute), contract is generated by both Service Provider and Compute Provider DMS. This is then verified by `Contract-Database`. Otherwise, proof of contract needs to be received from the `Contract-Database` before start of work.
 
-* `dms.orchestrator.processJob(JobDescription) -> Job` - This function will validate the job received, add metadata (if needed) and save the job to the local database.
-_notes: most probably this functionality will have to move to api/cmd package, as job posting will happen via these interfaces; the processing of the messages received via these interfaces may be done in general RPC-style, as proposed in Node and Allocation interfaces_
+5. **Invocation and Allocation**: When the contract closure workflow is completed, both the service provider and compute provider DMS have an agreement and proof of contract with them. Then the service provider DMS will send an invocation to the compute provider DMS which results in job allocation being created. Allocation can be understood as an execution space / environment on actual hardware that enables a Job to be executed.
 
-### List of relevant data types
+6. **Job Execution**: Once allocation is created, the job execution starts on the compute provider machine. 
 
-_note: related to the dms.jobs package; will need to be moved there;_
+7. **Contract Settlement**: After job is completed, service provider DMS verifies the work done. If the work is correct, the `Contract-Database` makes the necessary transactions to settle the the contract.
 
-* `dms.jobs.Job` -- a type containing all information about a requested job; Note, that `Job` is defined as a recursive structure, allowing any job to have child jobs;
+See [References](#7-references) section for research blogs with more details on this topic.
 
-* `dms.jobs.JobLink` -- expresses links between `Jobs` in a parent-child structure;
+### 2. Structure and organisation
 
-* `dms.jobs.Pod` --  a collection of jobs that need to be deployed on a single machine and therefore should be provided by amount of resources that are needed for all these jobs;
+Here is quick overview of the contents of this directory:
 
-* `dms.jobs.Allocation` -- an interface and type, encapsulating each job that has been allocated and executed on a specific resource provider;
+`TBD`
 
-## 2. Search and Match
+### 3. Functionality
 
-* _proposed 2024-03-27; by: @kabir.kbr; @janaina.senna; @0xPravar_
+`TBD`
 
-Once the DMS received a job posting, it will look to find nodes that can service the request. This is done by matching the job requirements with the available resources.
+**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
 
-### Configuration
+### 4. Data Types
 
-`dms.dms.config.defaultOrchestrationType`: The default setting of the network is use `pull` search and match operation. This value is stored in `defaultOrchestrationType` parameter saved in the [config](https://gitlab.com/nunet/device-management-service/-/tree/proposed/dms/config) folder under `dms` package. The user can change this value to `push` if needed via CLI (Command Line Interface) or API. This functionality is covered in the [dms](https://gitlab.com/nunet/device-management-service/-/tree/proposed/dms) folder.
+`TBD`
 
-`dms.dms.config.defaultSearchTimeout`: Each DMS will have default timeout value for the search operation. This value is stored in `defaultSearchTimeout` parameter saved in the [config](https://gitlab.com/nunet/device-management-service/-/tree/proposed/dms/config) folder under `dms` package. This can be overridden by the owner of the DMS via CLI (Command Line Interface) or API. This functionality is covered in the [dms](https://gitlab.com/nunet/device-management-service/-/tree/proposed/dms) folder.
+**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
 
-### Pull Based
+### 5. Testing
 
-The first step is that service provider DMS requests bids from the compute providers in the network. DMS on compute provider compares the capability of the available resources against soft and hard constraints specified in the job requirements. If all the requirements are met, it then decides whether to submit a bid. The final outcome is that service provider DMS has a list of eligible compute providers with their bids.
+`TBD`
 
-Please see below for relevant specification and data models.
+### 6. Proposed Functionality / Requirements 
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Pull_Search_And_Match.feature))   |
-| Request payload       | [BidRequest](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/bidRequest.payload.go)|
-| Data at rest (CP DMS)      | [AvailableCapability](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/dms/data/availableCapability.payload.go) |
-| Data at rest (CP DMS)      | [CapabilityComparison](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/capabilityComparison.payload.go) |
-| Return payload       | [Bid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/bid.payload.go) |
-| Data at rest (SP DMS)       | [EligibleComputeProvidersIndex](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/computeProviderIndex.payload.go) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/pullSearchAndMatch.sequence.mermaid),[.svg]()) |
+#### List of issues
 
-The second step is to shortlist the preferred compute provider peer based on some selection criteria. Please see below for relevant specification and data models.
+All issues that are related to the implementation of `dms` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Select_Preferred_Node.feature))   |
-| Request payload       | [EligibleComputeProvidersIndex](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/computeProviderIndex.payload.go) |
-| Return payload       | [EligibleComputeProviderData](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/computeProviderIndex.payload.go) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/selectPreferredNode.sequence.mermaid),[.svg]()) |
+- [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
 
-#### List of relevant functions
 
-* `dms.orchestrator.publishBidRequest(dms.orchestrator.BidRequest, ...topic)`: the function for publishing the bidRequest (formerly publishJob function) to the network via gossipsub protocol implementation, which allows us to broadcast messages to several nodes (selected by a topic simultaneously); the `topic` parameter for this function is optional. See more detailed proposal of the function in [open-api/platform-data-model/orchestrator/orchestrator.go](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/proposed/device-management-service/orchestrator/orchestrator.go). 
+#### Interfaces & Methods
 
-`dms.dms.availableResources()` - This function will return `dms.dms.availableCapability` which is the available resources/capability of the machine to perform a job.
+##### `proposed` Orchestrator interface
 
-`dms.orchestrator.compare()` - This function takes `dms.jobs.jobDescription.requiredCapability` and `dms.dms.availableCapability` as input and returns `dms.orchestrator.capabilityComparison`.
+```
+type Orchestrator_interface interface {
 
-`dms.orchestrator.accept()` - This function takes `dms.orchestrator.capabilityComparison` and `dms.dms.config.capabilityComparator` as inputs and returns a `bool` which indicates whether the job can be accepted or not.
+	publishBidRequest(dms.node.Node, dms.orchestrator.BidRequest, dms.node.NodeID, ..String)
 
-`dms.orchestrator.createBid()` - This function returns `dms.orchestrator.bid` which is to be sent to service provider DMS.
+	compareCapability(dms.Capability, dms.Capability) dms.orchestrator.CapabilityComparison
+	
+    acceptJob(dms.orchestrator.CapabilityComparison, dms.orchestrator.CapabilityComparator) bool
+	
+    sendBid(dms.node.Node, dms.orchestrator.BidRequest)
 
-`dms.orchestrator.registerComputeBid()` - This function takes `dms.orchestrator.bid` as inputs and saves it to a table in the local database as `dms.orchestrator.computeProvidersIndex`.
+    selectBestBid(dms.node.Node, dms.orchestrator.BidRequest) dms.orchestrator.Bid
 
-#### List of relevant data types
+    sendJobRequest(dms.node.Node, dms.jobs.Pod, dms.node.NodeID)
 
-`dms.orchestrator.bidRequest` - This is sent to the compute providers based on which they can submit a bid.
+    sendInvocation(dms.node.Node, dms.jobs.Invocation, dms.node.NodeId)
+    
+	orchestrateJob(dms.node.Node, dms.jobs.Job)
 
-`dms.orchestrator.bid` - This is the bid that is submitted by the compute provider.
+	// considering that for workflows involving more than one job connected
+	// via different levels of connections between nodes
+	// an orchestrator needs to be able to calculate network configurations
+	// that involve estimation or connections between candidate nodes
+	// in the whole workflow. Two next methods are proposed for that purpose.
+	
+    // takes BidRequest and all bids received as a result of it
+	// and calculates all possible network configurations for it
+	// and outputting graph structures having all relevant information
+	// MOST PROBABLY WILL NOT IMPLEMENT IN dms 0.5.x 
+	constructConfigurations(dms.orchestrator.BidRequest, []dms.orchestrator.Bid) []NetworkConfiguration
+	
+    // takes a set of Network Configurations and Comparator variable and selects best configuration
+	based on the comparator supplied
+	// MOST PROBABLY WILL NOT IMPLEMENT IN dms 0.5.x 
+	selectBestNetworkConfiguration([]NetworkConfiguration, ConfigurationComparator) NetworkConfigurationComparison
+}
+```
 
-`dms.dms.availableCapability` - This contains the available resources/capability of the machine to perform a job.
+`publishBidRequest`: sends a request for bid to the network for a particular job. This will depend on the `network` package for propagation of the request to other nodes in the network. 
 
-`dms.orchestrator.capabilityComparison` - This contains the comparison of the job requirements with the available resources.
+`compareCapability`: compares two capabilities and returns a `CapabilityComparison` object. Expected usage is to compare capability required in a job with the available capability of a node.
 
-`dms.orchestrator.computeProvidersIndex` - This contains the data of compute providers whose bids have been received. 
+`acceptJob`: looks at the comparison between capabilities and preferences of a node in the form of `CapabilityComparator` object and decides whether to accept a job or not.
 
-## 3. Job Request
+`sendBid`: sends a bid to the node that propagated the `BidRequest`.
 
-* _proposed 2024-03-27; by: @kabir.kbr; @janaina.senna; @0xPravar_
+`selectBestBid`: looks at all the bids received and selects the best one.
 
-DMS on service provider side checks whether the resources are locked by the preferred compute provider peer.
+`sendJobRequest`: sends a job request to the shortlisted node whose bid was selected. The compute provider node needs to accept the job request and lock its resources for the job. In case resources are already locked while submitting the bid, this step may be skipped.
 
-In case the shortlisted compute provider has not locked the resources while submitting the bid, the job request workflow is executed. This requires the compute provider DMS to lock the necessary resources required for the job and re-submit the bid. Note that at this stage compute provider can still decline the job request.
+`sendInvocation`: sends an invocation request (as a message) to the node that accepted the job. This message should have all the necessary information to start an `Allocation` for the job. 
 
-Please see below for relevant specification and data models.
+`orchestrateJob`: this will be called when a job is received via postJob endpoint. It will start the orchestration process. It is also possible that this method could be called via a timer for jobs scheduled in the future.
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Job_Request.feature))   |
-| Request payload       | [BidRequest](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/bidRequest.payload.go) |
-| Return payload - request acceptance      | [Bid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/bid.payload.go) |
-| Return payload - request denied      | [DeclineMessage](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/declineJobRequest.payload.go) |
-| Return payload - timeout      | [TimeoutResponse](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/timeoutJobRequest.payload.go) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/jobRequest.sequence.mermaid),[.svg]()) |
+##### `proposed` Actor interface
 
-### List of relevant functions
+```
+type Actor_interface interface {
+	// commented as it not shown in the class diagram
+	// getMailbox() dms.orchestrator.Mailbox
 
-`dms.orchestrator.checkResourceLock()` - This function takes a value from `dms.orchestrator.computeProvidersIndex` as input and checks if the resources required for the job are locked by the compute provider. It returns a `bool` value as output.
+	sendMessage(message telemetry.Message, ...target any)
 
-`dms.network.queryPeer()` - This function sends the request to lock resources to the the compute provider DMS. It takes `peerID` of the compute provider and `dms.orchestrator.bidRequest` as inputs.
+    processMessage() telemetry.Message
 
-`dms.orchestrator.accept()` - This function decides whether to accept the job request. It takes `dms.orchestrator.bidRequest` as input and returns a `bool` value.
+	// as per actor model, each actor can create another actor and it makes sense to identify this method here 
+	// However, this method does not need to be implemented separately 
+    // commented as it is not shown in the class diagram
+	//createActor()
+}
+```
 
-`dms.orchestrator.lockResources()` - This function locks the necessary resources required for the job. It takes `dms.jobs.jobDescription` as input and returns `dms.orchestrator.bid`.
+`sendMessage`: sends a message to another actor (Node / Allocation).
 
-`dms.database.saveEvent()` - This function saves the event to the local database. Input value is TBD.
+`processMessage`: processes the message received and decides on what action to take.
 
-### List of relevant data types
 
-`dms.orchestrator.computeProvidersIndex` - This contains the data of compute providers whose bids have been received. 
+##### `proposed` Mailbox interface
 
-`dms.orchestrator.bidRequest` - This is sent to the chosen compute provider as part of job request.
+```
+type Mailbox_interface interface {
+	// in order for this to work, we need to have message in the format of telemetry.Message from 
+	// coming from the network by implementing 'processMessage()' methods network.P2P and network.Gossipsub  
+	// alternatively, we can implement `receiveMessage(payload any)` method here and process both in mailbox interface
+	// providing here the proposal for the second option
+	
+	receiveMessage(payload any) telemetry.Message
+	
+    handleMessage(telemetry.Message)
 
-`dms.orchestrator.bid` - This is the bid that is returned by the compute provider after locking of resources for the job.
+	triggerBehavior()
 
-`dms.orchestrator.declineJobRequest` - Message sent to the service provider if compute provider declines the job request.
+    getKnownTopics()
 
-`dms.orchestrator.timeoutJobRequest` - Message sent to the service provider if timeout happens.
+    getSubscribedTopics()
 
-`dms.database.declineJobEvent` - TBD
+    subscribeToTopic()
 
+    unsubscribeFromTopic()
+}
+```
 
-## 4. Contract Closure
+`receiveMessage`: receives a message from another Node and converts it into a `telemetry.Message` object.
 
-* _proposed 2024-03-27; by: @kabir.kbr; @janaina.senna; @0xPravar_
+`handleMessage`: processes the message received.
 
-The service provider and the shortlisted compute provider verify that the counterparty is a verified entity and approved by Nunet Solutions to participate in the network. This in an important step to establish trust before any work is performed.
+`triggerBehavior`: this is where actions taken by the actor based on the message received will be defined.
 
-If job does not require any payment (Volunteer Compute), contract is generated by both Service Provider and Compute Provider DMS. This is then verified by `Contract-Database`. 
+`getKnownTopics`: retrieves the gossip sub topics known to the node.
 
-Otherwise, proof of contract needs to be received from the `Contract-Database` before start of work
+`getSubscribedTopics`: retrieves the gossip sub topics subscribed by the node.
 
-Please see below for relevant specification and data models.
+`subscribeToTopic`: subscribes to a gossip sub topic.
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Contract_Closure.feature))   |
-| Request payload - payment included      | [ID](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/dms/config/data/id.payload.go) |
-| Request payload - payment not included      | [Contract](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/tokenomics/data/contract.payload.go) |
-| Return payload - Contract Exists      | [Contract](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/tokenomics/data/contract.payload.go) |
-| Return payload - No Contract      | [ErrorMessage](TBD) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/contractClosure.sequence.mermaid),[.svg]()) |
+`unsubscribeFromTopic`: un-subscribes from a gossip sub topic.
 
-### List of relevant functions
-`dms.orchestrator.checkPaymentInfo()` - This function takes `dms.orchestrator.bidRequest` as input and checks if payment is included. It returns a bool value.
+##### `proposed` Other methods
 
-`dms.orchestrator.generateJobContract()` - This function takes `dms.orchestrator.bidRequest` as input and creates a contract on Service Provider DMS. It returns `dms.tokenomics.contract`.
+- Methods for job request functionality
+    a. check whether resources are locked
+    b. lock resources
+    c. accept job request
 
-`dms.orchestrator.generateJobAgreement()` - This function takes `dms.orchestrator.bidRequest` as input and creates a agreement on Compute Provider DMS. It returns `dms.tokenomics.contract`.
+- Methods for contract closure
+    a. validate other node as a registered entity
+    b. generate contract
+    c. kyc validation
 
-`dms.network.validateProvider()` - This function takes the ID of DMS (`dms.dms.config.ID`) as input and sends it to the `Contract-Database` to check whether this DMS has a valid contract. 
+- Methods for job exeuction
+    a. handle job updates
 
-`contract-database.checkKYC()` - This function checks whether the DMS had done KYC and is a verified entity with a valid ID. It takes `dms.dms.config.ID` as input and returns `bool`.
+- Methods for contract settlement
+    a. job verification
 
-`contract-database.checkContract()` - This functions takes `dms.dms.config.ID` as input and checks if the DMS whose ID has been provided has a valid contract. It returns `dms.tokenomics.contract` as proof of contract or an error message if contract does not exist.
+Note that the above methods not an exhaustive list. These are to be considered as suggestions. The developer implementing the orchestrator functionality is free to make modifications as necessary.
 
-`dms.database.saveEvent()` - This function saves the event to the local database when contract does not exist. Input value is TBD.
 
-### List of relevant data types
+#### Data types
 
-`dms.orchestrator.bidRequest` - This is the bid request sent propagated in the network or sent to the chosen compute provider as part of job request.
+- `proposed` `Actor`: Actor has a identifier and a mailbox to send/receive messages.
 
-`dms.tokenomics.contract` - This contains the contract data as well as proof of contract which will mention the entity that provides trust. 
+```
+type Actor struct {
+	id models.ID
+	mailbox dms.orchestrator.Mailbox
+}
+```
 
-`dms.dms.config.ID` - This contains identifiers like UUID, Peer ID and DID for the DMS.
+- `proposed` `Bid`: Consists of information sent by the compute provider node to the requestor node as a bid for the job broadcasted to the network.
 
-## 5. Invocation and Allocation
+```
+// Bid represents a bid made by the compute provider DMS
+type Bid struct {
+	// BidRequest is the request for bid against which this bid is made
+    BidRequest                  dms.orchestrator.BidRequest
+	
+    // JobID is ID of the job
+    JobID                       int 
+	
+    // Bidder is the identifier of the node sending the bid
+    Bidder                      dms.node.nodeID
+	
+    // PriceBid is the price information of the bid
+    PriceBid                    dms.orchestrator.PriceBid 
+	
+    // TimeBid is the time information of the bid
+    TimeBid                     dms.orchestrator.TimeBid  
+	
+    // Timeout is the timestamp until which compute provider will be waiting for the job request
+    Timeout                     int64    
 
-* _proposed 2024-03-29; by: @kabir.kbr; @janaina.senna; @0xPravar_
+    // ValidOffer is a flag to indicate whether the bid offer is valid
+	ValidOffer                  bool     
+	
+    // ResourcesLockedUntilTimeout is whether the resources are locked until timeout
+    ResourcesLockedUntilTimeout     bool     
+}
 
-When the contract closure workflow is completed, both the service provider and compute provider DMS have an agreement and proof of contract with them. Then the service provider DMS will send an invocation to the compute provider DMS which results in job allocation being created. Allocation can be understood as an execution space / environment on actual hardware that enables a Job to be executed.
+```
 
-Please see below for relevant specification and data models.
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Invocation_And_Allocation.feature))   |
-| Request payload     | [Invocation](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/invocation.payload.go) |
-| Data at rest       | [Allocation](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/executor/data/allocation.payload.go) |
-| Return payload      | [AllocationStartSuccess](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/allocationStartSuccess.payload.go) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/invocationAndAllocation.sequence.mermaid),[.svg]()) |
+- `proposed` `BidRequest`: A bid request is a message sent by a node to the network to request for bids.
 
-### List of relevant functions
+```
+type BidRequest struct {
 
-`dms.network.sendInvocation()` - This function sends the invocation to the compute provider DMS. It takes `dms.orchestrator.invocation` as input.
+    // id is unique identifier for this bid request
+	ID models.ID
+	
+	// request for bids are done with Pods, as pods combine capacities, required from a single machine
+	Pod dms.jobs.Pod
 
-`dms.executor.createAllocation()` - This function creates an allocation on the compute provider DMS. It takes `dms.orchestrator.invocation` as input and returns `dms.executor.Allocation`.
+	// a requestor could be dms or an allocation; both types are accepted;
+	Requestor models.ID
 
-### List of relevant data types
+	ResourceRequirements dms.resource.ResourceRequirements
 
-`dms.orchestrator.invocation` - Invocation which is sent to the compute provider DMS. This contains job description and contract data.
+	// comparator specifies the type of constraints and preferences to be used while making a bid
+	Comparator dms.orchestrator.CapabilityComparator
+}
 
-`dms.executor.Allocation` - This contains identifier of the allocation being created along with its status and errors (if any).
+```
 
-`dms.orchestrator.allocationStartSuccess` - This is the response from the compute provider DMS to Service Provider once allocation has been created.
+- `proposed` `PriceBid`: Contains price related information of the bid.
 
-## 6. Job Execution
+```
+// PriceBid represents the pricing parameters of the bid
+type PriceBid struct {
+	priceBidType string // perResult or perTimeUnit
+	currency     string
+	perTimeUnit  string  // if the bid is per time unit, what is unit of time?
+	perResult    bool    // if the bid is for the result of computation this is true, default is false
+	amount       float64 // the amount in selected currency
+}
+```
 
-* _proposed 2024-03-29; by: @kabir.kbr; @janaina.senna; @0xPravar_
 
-Once allocation is created, the job execution starts on the compute provider machine. 
+- `proposed` `TimeBid`: Contains time related information of the bid.
 
-Please see below for relevant specification and data models.
+```
+// TimeBid represents time parameters of the bid
+type TimeBid struct {
+	timeBidType string // duration or fixed time (or other?)
+	units       string // units of time
+	duration    int
+	timeStart   int // or timestamp or whatever
+	timeFinish  int // or timestamp or unix time
+}
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Job_Execution.feature))   |
-| Request payload     | None |
-| Return payload - success     | [Result](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/jobs/data/result.payload.go) |
-| Return payload - error     | [Result](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/executor/data/error.payload.go) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/jobExecution.sequence.mermaid),[.svg]()) |
+```
 
-### List of relevant functions
+- `proposed` `CapabilityComparator`: Preferences of the node which has an influence on the comparison operation. 
 
-`dms.executor.jobUpdate()` - This function sends job updates to the service provider while execution. It takes `dms.executor.allocation.AllocationID` as input and returns `dms.executor.jobStatusUpdate`.
+`TBD`
 
-### List of relevant data types
+- `proposed` `CapabilityComparison`: Result of the comparison operation.
 
-`dms.executor.jobStatusUpdate` - This is the status update sent by the compute provider DMS to the service provider DMS during job execution.
+`TBD`
 
-`dms.jobs.result` - This includes the outcome of the work done by the compute provider along with proof.
+- `proposed` `Invocation`: An invocation is a message sent by the orchestrator to the node that accepted the job. It contains the job details and the contract.
 
-`dms.jobs.jobCompleted` - This is sent to Oracle after job is completed.
+```
+type Invocation struct {
+	// Pod is a cluster of jobs which are to be run on the same machine
+	pod dms.jobs.Pod
 
-`dms.executor.error` - This is an error response sent to Service Provider DMS in case of errors during job execution.
+	// Contract contains jobID, IDs of both DMS and proof of contract
+	contract      tokenomics.Contract
+	source        models.ID // since an invocation can in principe be done by any Actor (node or an allocation)
+}
 
-## 7. Contract Settlement
+```
 
-* _proposed 2024-03-29; by: @kabir.kbr; @janaina.senna; @0xPravar_
+- `proposed` Mailbox: A mailbox is a communication channel between two actors. It uses `network` package functionality to send and receive messages.
 
-After job is completed, service provider verifies the work done using `Oracle`. If the work is correct, the `Contract-Database` makes the necessary transactions to settle the the contract.
+```
+type Mailbox struct {
+	// Access to NuNet p2p network implemented via the network package
+	// Whether we need these or not depends on how we implement the send/receive Message methods here;
+	// it would be better not to implement them here
+	// for proper architectural separation;
+	p2p network.P2P	
+	gossipsub network.Gossipsub // Access to NuNet gossip network -- same comment as above
+}
+```
 
-Please see below for relevant specification and data models.
+##### `proposed` Other data types
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/orchestrator/Contract_Settlement.feature))   |
-| Request payload     | [JobVerification](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/jobVerification.payload.go) |
-| Return payload      | [Message](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/data/message.payload.go) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/orchestrator/sequences/contractSettlement.sequence.mermaid),[.svg]()) |
+Data types related to allocation, contract settlement, job updates etc are currently omitted. These should be added as applicable while implementation.
 
-### List of relevant functions
+### 7. References
 
-`oracle.verifyJob()` - This function sends the job and contract data to the Oracle for verification. It takes `dms.orchestrator.jobVerification` as input and returns `dms.orchestrator.jobVerificationResult`.
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
 
-### List of relevant data types
+#### Orchestration steps research blogs
 
-`dms.orchestrator.jobVerification` - This contains job description and contract data along with job result. This is the data that is processed by Oracle to verify the job.
+The orchestrator functionality of DMS is being developed based on the research done in the following blogs:
 
-`dms.orchestrator.jobVerificationResult` - This contains the result of the job verification done by Oracle.
+- [Detailed Job Orchestration Sequences I](https://nunet.gitlab.io/research/blog/posts/job-orchestration-details/)
 
-`dms.orchestrator.message` - This is the message that is sent to the other DMS after contract is settled and business ends.
+- [Detailed job orchestration sequences II](https://nunet.gitlab.io/research/blog/posts/orchestration-discussion/)
+
+
+
 

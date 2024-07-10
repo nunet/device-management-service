@@ -1,8 +1,31 @@
-## Introduction
+# onboarding
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Functionality](#3-functionality)
+4. [Data Types](#4-data-types)
+5. [Testing](#5-testing)
+6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
+7. [References](#7-references)
+
+
+## Specification
+
+### 1. Description
 
 This file explains the onboarding functionality of Device Management Service (DMS). This functionality is catered towards compute providers who wish provide their hardware resources to Nunet for running computational tasks as well as developers who are contributing to platform development.
 
-### Stucture and organisation
+### 2. Structure and organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -18,154 +41,122 @@ Here is quick overview of the contents of this directory:
 
 * [init](init.go): This files initializes the loggers associated with onboarding package.
 
-## Contributing
+### 3. Functionality
 
-For guidelines of how to contribute, install and test the `device-management-service` component which contains `onboarding` package, please refer to package level documentation:
 
-* Top level [../README.md](../README.md)
-* Contribution guidelines [../CONTRIBUTING.md](../CONTRIBUTING.md);
-* Code of conduct [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)
-* [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+#### Onboard Compute Provider
 
-## Specifications and functionality
+- signature: `Onboard(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error)`
 
-* The specification of package functionality is described as test case definitions, maintained in repository [test-suite/device-management-service/](https://gitlab.com/nunet/test-suite).
-* The associated data models are are specified and maintained in repository [open-api/platform-data-model/device-management-service/onboarding](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/develop/device-management-service/onboarding). 
+- input #1: `Context object`
 
-Versioning and lifecycle of above mentioned specifications is aligned to the lifecycle and branching of the platform code (see [branching strategy](https://gitlab.com/nunet/documentation/-/wikis/GIT-Workflows#git-workflow-branching-strategy)):
+- input #2: `models.CapacityForNunet`
 
-* `develop` branches contain specifications of the functionality of current unstable branch of development at any given moment;
-* `main` branches contain specifications of the current production version of the platform at any given moment in time;
-* `proposed` branches are reserved only for test-suite and platform-data-model repositories which and contain new functionality and data model specifications, accepted for development, but not yet implemented and merged to any above branch.
+- output: `models.Metadata`
 
-Links to these two branches are provided with each interface endpoint description as applicable.
+- output (error): Error message
 
-## Interface endpoints
+`Onboard` function executes the onboarding process for a compute provider. 
 
-### Onboard Compute Provider
 
-**endpoint**: `/onboarding/onboard`<br/>
-**methosd**: `HTTP POST`<br/>
-**output**: `Machine Metadata`
+#### Get Metadata 
 
-This endpoint executes the onboarding process for a compute provider device. See table below for links to the onboarding specification and data models. 
+- signature: `GetMetadata(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error)`
 
-| Spec type              | this branch     | proposed  |
----|---|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/device-management-service/features/Onboard_Compute_Provider.feature))   | n.a. |
-| Data (at rest)       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/data/),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/data/rendered/)) | n.a. | 
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/onboardingProcess.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/rendered/onboardingProcess.sequence.svg)) | n.a. | 
+- input #1: `Context object`
 
-> **_Note:_**  Indicated data models and structures should be understood as the result of the process. The onboarding process contains subprocesses which are reponsible for constructing the indicated data structures specifically.
+- input #2: `models.CapacityForNunet`
 
-DMS communicates to two external components during the onboarding process
+- output: `models.Metadata`
 
-* **Elasticsearch**: Currently used to log status updates. It is proposed that benchmarking data to be stored here
+- output (error): Error message
 
-* **Logbin**: During onboarding, the device is only registered with this component. The main usage of Logbin is to monitor and record logs generated during execution of jobs.
-
-### Get Device Info 
-
-**endpoint**: `/onboarding/metadata`<br/>
-**methods**: `HTTP GET`<br/>
-**output**: `Machine Metadata`
-
-This endpoint fetches the current metadata of the onboarded device.  
-
-> **_Note:_** This endpoint is not being utilised at present. Instead this functionality is executed directly through a `ReadMetadataFile` method implementation in `device-management-service/utils/utils.go`
-
-See table below for links to the specification and data models.
+`GetMetadata` function retrieves and returns the machine metadata stored by the DMS.
  
-| Spec type              | this branch     | proposed  |
----|---|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/device-management-service/features/Get_Device_Info.feature))   | n.a. | 
-| Return payload       | entityDiagrams (TBD) | n.a. | 
-| Request payload      | entityDiagrams (TBD) | n.a. | 
-| Processes / Functions | sequenceDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/getMetadata.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/rendered/getMetadata.sequence.svg)) | n.a. | 
+ #### CreatePaymentAddress
 
-### Get Provisioned Capacity
+- signature: `CreatePaymentAddress(wallet string) (*models.BlockchainAddressPrivKey, error)`
 
-**endpoint**: `/onboarding/provisioned`<br/>
-**methods**: `HTTP GET`<br/>
-**output**: `Provisioned Capacity`
+- input: `Blockchain name`
 
-This endpoint fetches the total capacity of the machine that is onboarded to Nunet.
+- output: `models.BlockchainAddressPrivKey`
 
-See table below for links to the specification and data models.
- 
-| Spec type              | this branch     | proposed  |  
----|---|---|
-| Features / test case specifications | Senarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/device-management-service/features/Get_Provisioned_Capacity.feature))   | n.a. | 
-| Return payload       | entityDiagrams (TBD) | n.a. | 
-| Request payload      | entityDiagrams (TBD) | n.a. | 
-| Processes / Functions | sequenceDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/getProvisionedCapacity.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/rendered/getProvisionedCapacity.sequence.svg)) | n.a. | 
+- output (error): Error message
 
-### Create Payment Address
+`CreatePaymentAddress` function creates a wallet for the user on the specified blockchain. 
 
-**endpoint**: `/onboarding/address/new`<br/>
-**methods**: `HTTP GET`<br/>
-**output**: `Public-Private key pair & Mnemonic`
+#### Onboarding status
 
-This endpoint creates a new blockchain payment address for the user.
+- signature: `Status() (*models.OnboardingStatus, error)`
 
-See table below for links to the specification and data models.
- 
-| Spec type              | `develop`     | `proposed`  |   
----|---|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/device-management-service/features/Create_Payment_Address.feature))   | n.a. | 
-| Return payload       | entityDiagrams (TBD) | n.a. | 
-| Request payload      | entityDiagrams (TBD) | n.a. | 
-| Processes / Functions | sequenceDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/createPaymentAddress.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/rendered/createPaymentAddress.sequence.svg)) | n.a. | 
+- input: None
 
-### Get Onboarding Status
+- output: `models.OnboardingStatus`
 
-**endpoint**: `/onboarding/status`<br/>
-**method**: `HTTP GET`<br/>
-**output**: `models.OnboardingStatus`
+- output (error): Error message
 
-This endpoint returns onboarding status of the machine along with some metadata.
+`Status` function returns the onboarding status of the machine along with some metadata. 
 
-See table below for links to the specification and data models.
- 
-| Spec type              | this branch     | proposed  |
----|---|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/device-management-service/features/Get_Onboarding_Status.feature))   | n.a. |
-| Return payload       | entityDiagrams (TBD) | n.a. | 
-| Request payload      | entityDiagrams (TBD) | n.a. | 
-| Processes / Functions | sequenceDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/onboardingStatus.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/rendered/onboardingStatus.sequence.svg)) | n.a. |
 
-### Change ResourceConfig
+### Change Resource Configuration
 
-**endpoint**: `/onboarding/resource-config`<br/>
-**methods**: `HTTP POST`<br/>
-**output**: `Metadata`
+- signature: `ResourceConfig(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error)`
 
-This endpoint allows the user to change the configuration of the resources onboarded to Nunet.
+- input #1: `Context object`
 
-See table below for links to the specification and data models.
- 
-| Spec type              | this branch     | proposed  | 
----|---|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/device-management-service/features/Change_Resource_Config.feature))   | n.a. |
-| Return payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/successfulResourceChange.message.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/rendered/successfulResourceChange.message.svg))* | n.a. |
-| Request payload      | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/resourceChangeStart.message.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/rendered/resourceChangeStart.message.svg))* | n.a. |
-| Processes / Functions | sequenceDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/changeResource.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/rendered/changeResource.sequence.svg)) | n.a. | 
+- input #2: `models.CapacityForNunet`
+
+- output: `models.Metadata`
+
+- output (error): Error message
+
+`ResourceConfig` changes the configuration of the resources onboarded to Nunet. 
 
 
 ### Offboard
 
-**endpoint**: `/onboarding/offboard`<br/>
-**methods**: `HTTP DELETE`<br/>
-**output**: `Success Message & Forced parameter`
+- signature: `Offboard(ctx context.Context, force bool) error`
 
-This endpoint allows the user to remove the resources onboarded to Nunet. It provides flexibility by allowing a forced offboarding even in the presence of errors. The force parameter helps handle situations where it might be necessary to proceed with offboarding despite encountering issues.
+- input #1: `Context object`
 
-See table below for links to the specification and data models.
- 
-| Spec type              | this branch     | proposed  | 
----|---|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/device-management-service/features/Offboard.feature))   | n.a. | 
-| Return payload (error)      | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/offboardingError.message.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/rendered/offboardingError.message.svg)) | n.a. |
-| Return payload (success)      | entityDiagrams (TBD) | n.a. |
-| Request payload      | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/offboardingStart.message.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/messages/rendered/offboardingStart.message.svg)) | n.a. |
-| Processes / Functions | sequenceDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/offboard.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/onboarding/sequences/rendered/offboard.sequence.svg)) | n.a. |
+- input #2: `force parameter`
+
+- output: None
+
+- output (error): Error message
+
+`Offboard` removes the resources onboarded to Nunet. If the `force` parameter is `True`, then offboarding process will continue even in the presence of errors. 
+
+
+### 4. Data Types
+
+- `models.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
+
+- `models.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
+
+- `models.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
+
+- `models.Provisioned`: This has total capacity of the machine onboarded by the user.
+
+- `models.OnboardingStatus`: This is returned while retrieving the onboarding status.
+
+- `models.AvailableResources`: This has the available capacity that has been onboarded to Nunet.
+
+### 5. Testing
+
+`TBD`
+
+### 6. Proposed Functionality / Requirements 
+
+#### List of issues
+
+All issues that are related to the implementation of `dms` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
+
+- [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
+
+
+### 7. References
+
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
