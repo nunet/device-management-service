@@ -174,10 +174,13 @@ func (h *MockHandler) ResourceConfigHandler(c *gin.Context) {
 }
 
 func TestGetMetadata(t *testing.T) {
-	router := SetupRouter()
+	rServer := NewRestServer(nil, nil, nil, 0)
+	onboarding := rServer.router.Group("/api/v1/onboarding")
+	onboarding.GET("/metadata", GetMetadataHandler)
+
 	req, _ := http.NewRequest("GET", "/api/v1/onboarding/metadata", nil)
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	rServer.router.ServeHTTP(w, req)
 
 	assert.Equal(t, 500, w.Code, w.Body)
 
@@ -187,11 +190,13 @@ func TestGetMetadata(t *testing.T) {
 }
 
 func TestProvisionedCapacity(t *testing.T) {
-	router := SetupRouter()
+	rServer := NewRestServer(nil, nil, nil, 0)
+	onboarding := rServer.router.Group("/api/v1/onboarding")
+	onboarding.GET("/provisioned", ProvisionedCapacityHandler)
 
 	req, _ := http.NewRequest("GET", "/api/v1/onboarding/provisioned", nil)
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	rServer.router.ServeHTTP(w, req)
 
 	assert.Equal(t, 200, w.Code, w.Body)
 
@@ -201,7 +206,10 @@ func TestProvisionedCapacity(t *testing.T) {
 }
 
 func TestCreatePaymentAddress(t *testing.T) {
-	router := SetupRouter()
+	rServer := NewRestServer(nil, nil, nil, 0)
+	onboarding := rServer.router.Group("/api/v1/onboarding")
+	onboarding.GET("/address/new", CreatePaymentAddressHandler)
+
 	tests := []struct {
 		description  string
 		route        string
@@ -227,7 +235,7 @@ func TestCreatePaymentAddress(t *testing.T) {
 	for _, tc := range tests {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/api/v1/onboarding/address/new"+tc.query, nil)
-		router.ServeHTTP(w, req)
+		rServer.router.ServeHTTP(w, req)
 
 		assert.Equal(t, tc.expectedCode, w.Code, w.Body)
 
@@ -243,7 +251,10 @@ func TestCreatePaymentAddress(t *testing.T) {
 }
 
 func TestNotOnboardedOffboard(t *testing.T) {
-	router := SetupRouter()
+	rServer := NewRestServer(nil, nil, nil, 0)
+	onboarding := rServer.router.Group("/api/v1/onboarding")
+	onboarding.DELETE("/offboard", OffboardHandler)
+
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	if err != nil {
 		t.Errorf("unable to initialize mockdb: %v", err)
@@ -282,7 +293,7 @@ func TestNotOnboardedOffboard(t *testing.T) {
 	for _, tc := range notOnboarded {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("DELETE", "/api/v1/onboarding/offboard"+tc.query, nil)
-		router.ServeHTTP(w, req)
+		rServer.router.ServeHTTP(w, req)
 
 		assert.Equal(t, tc.expectedCode, w.Code, w.Body)
 	}
@@ -291,21 +302,27 @@ func TestNotOnboardedOffboard(t *testing.T) {
 // TODO test onboarded offboard,resourceConfig etc... when metadata file is deprecated
 
 func TestOnboardStatusHandler(t *testing.T) {
-	router := SetupRouter()
+	rServer := NewRestServer(nil, nil, nil, 0)
+	onboarding := rServer.router.Group("/api/v1/onboarding")
+	onboarding.GET("/status", OnboardStatusHandler)
+
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/onboarding/status", nil)
-	router.ServeHTTP(w, req)
+	rServer.router.ServeHTTP(w, req)
 
 	assert.Equal(t, 200, w.Code, w.Body)
 }
 
 func TestResourceConfigHandler(t *testing.T) {
-	router := SetupRouter()
+	rServer := NewRestServer(nil, nil, nil, 0)
+	onboarding := rServer.router.Group("/api/v1/onboarding")
+	onboarding.POST("/resource-config", ResourceConfigHandler)
+
 	capacity := models.CapacityForNunet{ServerMode: true}
 	bodyBytes, _ := json.Marshal(capacity)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/onboarding/resource-config", bytes.NewBuffer(bodyBytes))
-	router.ServeHTTP(w, req)
+	rServer.router.ServeHTTP(w, req)
 
 	assert.Equal(t, 500, w.Code, w.Body) // expect 500 because machine not onboarded
 }
