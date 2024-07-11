@@ -1,5 +1,11 @@
 package models
 
+type Executor struct {
+	ExecutorType ExecutorType `json:"executor_type"`
+}
+
+type ExecutorType string
+
 const (
 	ExecutorTypeDocker      = "docker"
 	ExecutorTypeFirecracker = "firecracker"

@@ -16,3 +16,13 @@ func IsBlank(s string) bool {
 func IsNotBlank(s string) bool {
 	return !IsBlank(s)
 }
+
+// Just checks if a variable is a string
+func IsLiteral(s interface{}) bool {
+	switch s.(type) {
+	case string:
+		return true
+	default:
+		return false
+	}
+}
