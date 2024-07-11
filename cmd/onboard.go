@@ -31,8 +31,20 @@ func NewOnboardCmd(net backend.NetworkManager, utilsService backend.Utility) *co
 			cardano, _ := cmd.Flags().GetBool("cardano")
 			isUnavailable, _ := cmd.Flags().GetBool("unavailable")
 
-			if memory == 0 || cpu == 0 || channel == "" || address == "" {
-				return fmt.Errorf("missing at least one required flag")
+			if memory == 0 {
+				return fmt.Errorf("memory must be provided and greater than 0")
+			}
+
+			if cpu == 0 {
+				return fmt.Errorf("cpu must be provided and greater than 0")
+			}
+
+			if channel == "" {
+				return fmt.Errorf("nunet-channel must be provided and non-empty")
+			}
+
+			if address == "" {
+				return fmt.Errorf("address must be provided and non-empty")
 			}
 
 			if ntxPrice < 0 {
