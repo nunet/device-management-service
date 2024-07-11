@@ -22,6 +22,9 @@ import (
 	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/models"
+	"golang.org/x/exp/slices"
+
+	"reflect"
 )
 
 var KernelFileURL = "https://d.nunet.io/fc/vmlinux"
@@ -442,4 +445,100 @@ func SaveServiceInfo(cpService models.Services) error {
 func RandomBool() bool {
 	rand.Seed(time.Now().UnixNano())
 	return rand.Intn(2) == 1
+}
+
+func IsExecutorType(v interface{}) bool {
+	_, ok := v.(models.ExecutorType)
+	return ok
+}
+
+func IsGPUVendor(v interface{}) bool {
+	_, ok := v.(models.GPUVendor)
+	return ok
+}
+
+func IsJobType(v interface{}) bool {
+	_, ok := v.(models.JobType)
+	return ok
+}
+
+func IsJobTypes(v interface{}) bool {
+	_, ok := v.(models.JobTypes)
+	return ok
+}
+
+func IsExecutor(v interface{}) bool {
+	_, ok := v.(models.Executor)
+	return ok
+}
+
+// IsStrictlyContained checks if all elements of rightSlice are contained in leftSlice
+func IsStrictlyContained(leftSlice, rightSlice []interface{}) bool {
+	result := false // the default result is false
+	for _, subElement := range rightSlice {
+		if !slices.Contains(leftSlice, subElement) {
+			result = false
+			break
+		} else {
+			result = true
+		}
+	}
+	return result
+}
+
+func NoIntersectionSlices(slice1, slice2 []interface{}) bool {
+	result := false // the default result is false
+	for _, subElement := range slice1 {
+		if slices.Contains(slice2, subElement) {
+			result = false
+		} else {	
+			result = true
+		}
+	}
+	return result
+}
+
+// IntersectionStringSlices returns the intersection of two slices of strings.
+func IntersectionSlices(slice1, slice2 []interface{}) []interface{} {
+	// Create a map to store strings from the first slice.
+	executorMap := make(map[interface{}]bool)
+
+	// Iterate through the first slice and add elements to the map.
+	for _, str := range slice1 {
+		executorMap[str] = true
+	}
+
+	// Create a slice to store the intersection of the strings.
+	intersectionSlice := []interface{}{}
+
+	// Iterate through the second slice and check for common elements.
+	for _, str := range slice2 {
+		if executorMap[str] {
+			// If the string is found in the map, add to the intersection slice.
+			intersectionSlice = append(intersectionSlice, str)
+			// Remove the string from the map to avoid duplicates in the result.
+			delete(executorMap, str)
+		}
+	}
+
+	return intersectionSlice
+}
+
+func IsSameShallowType(a, b interface{}) bool {
+	aType := reflect.TypeOf(a)
+	bType := reflect.TypeOf(b)
+	result := aType == bType
+	return result
+}
+
+func ConvertTypedSliceToUntypedSlice(typedSlice interface{}) []interface{} {
+	s := reflect.ValueOf(typedSlice)
+	if s.Kind() != reflect.Slice {
+		return nil
+	}
+	result := make([]interface{}, s.Len())
+	for i := 0; i < s.Len(); i++ {
+		result[i] = s.Index(i).Interface()
+	}
+	return result
 }

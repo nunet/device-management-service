@@ -1,0 +1,155 @@
+' classes and variables defined in other packages (to be moved there)
+enum models.Comparison <<comparison.go>>{
+   Worse
+   Better
+   Equal
+   Error
+ }
+class models.Capability <<capability.go>> {
+   Executors : Executors
+   JobTypes : JobTypes
+   Resources : ExecutionResources
+   Libraries : []Library
+   Localities : []Locality
+   Storage : []Storage
+   Connectivity : Connectivity
+   Price : []PriceInformation
+   Time : []TimeInformation
+   KYCs : []KYC
+}
+
+models.Capability::Executors o-- models.Executors
+models.Capability::JobTypes o-- models.JobTypes
+models.Capability::Resources o-- models.ExecutionResources
+models.Capability::Libraries o-- models.Library
+models.Capability::Localities o-- models.Locality
+models.Capability::Storage o-- models.Storage
+models.Capability::Connectivity o-- models.Connectivity
+models.Capability::Price o-- models.PriceInformation
+models.Capability::Time o-- models.TimeInformation
+models.Capability::KYCs o-- models.KYC
+
+class models.Connectivity <<capability.go>> {
+   Ports : []int
+   VPN : bool
+}
+
+class models.PriceInformation <<capability.go>> {
+   Currency : string
+   CurrencyPerHour : int
+   TotalPerJob : int
+   Preference : int
+}
+
+class models.TimeInformation  <<capability.go>> {
+    - Units: string
+    - MaxTime: int
+    - Preference: int
+}
+
+class models.Library  <<capability.go>> {
+    - Name: string
+    - Constraint: string
+    - Version: string
+}
+
+class models.Locality  <<capability.go>> {
+    - Kind: string
+    - Name: string
+}
+
+class models.Storage  <<capability.go>> {
+    - Type: string
+    - Size: int
+    - Amount: int
+}
+
+class models.KYC  <<capability.go>> {
+    - Type: string
+    - Data: string
+}
+
+enum models.JobType  <<capability.go>> {
+    BATCH
+    SINGLERUN
+    RECURRING
+    LONGRUNNING
+}
+
+class models.JobTypes <<capability.go>> {
+    - jobTypes: JobType[]
+}
+
+class models.Executors <<capability.go>> {
+    - executors: Executor[]
+}
+
+' classes and types defined in this module
+
+class dms.orchestrator.matching.Preference <<comparator.go>> {
+   proposed
+   ..
+   +TypeName : string
+   +Strength : PreferenceStrength
+   +DefaultComparatorOverride : SimpleComparator
+}
+
+enum dms.orchestrator.matching.PreferenceStrength {
+   proposed
+   ..   
+   Hard
+   Soft
+}
+
+metaclass dms.orchestrator.matching.SimpleComparator <<comparator.go>>{
+    + Compare(l: interface{}, r: interface{}): models.Comparison
+}
+
+' implementations 
+
+class dms.orchestrator.matching.ExecutionResourcesComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.ExecutorComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.ExecutorsComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.ExecutorTypeComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.GPUComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.GPUsComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.GPUVendorComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.JobTypeComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.JobTypesComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.LibrariesComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.LibraryComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.LiteralComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.LocalitiesComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.LocalityComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+class dms.orchestrator.matching.NumericComparator <<func>> implements dms.orchestrator.matching.SimpleComparator
+
+' associations
+dms.orchestrator.matching.ExecutionResourcesComparator .. dms.orchestrator.matching.ExecutorsComparator #Gray
+
+dms.orchestrator.matching.ExecutorsComparator  .. dms.orchestrator.matching.ExecutorComparator #Gray
+dms.orchestrator.matching.ExecutorsComparator -- models.Executors #Blue
+dms.orchestrator.matching.ExecutorTypeComparator .. dms.orchestrator.matching.LiteralComparator #Gray
+dms.orchestrator.matching.ExecutorTypeComparator -- models.ExecutorType #Blue
+
+dms.orchestrator.matching.GPUsComparator .. dms.orchestrator.matching.GPUComparator #Gray
+dms.orchestrator.matching.GPUsComparator -- models.GPUs #Blue
+dms.orchestrator.matching.GPUComparator .. dms.orchestrator.matching.GPUVendorComparator #Gray
+dms.orchestrator.matching.GPUVendorComparator -- models.GPUVendor #Blue
+dms.orchestrator.matching.GPUComparator .. dms.orchestrator.matching.NumericComparator #Gray
+dms.orchestrator.matching.GPUComparator -- models.GPU #Blue
+
+dms.orchestrator.matching.JobTypeComparator .. dms.orchestrator.matching.JobTypesComparator #Gray
+dms.orchestrator.matching.JobTypesComparator -- models.JobTypes #Blue
+
+dms.orchestrator.matching.LibrariesComparator .. dms.orchestrator.matching.LibraryComparator #Gray
+dms.orchestrator.matching.LibraryComparator -- models.Library #Blue
+
+dms.orchestrator.matching.LocalitiesComparator .. dms.orchestrator.matching.LocalityComparator #Gray
+dms.orchestrator.matching.LocalityComparator -- models.Locality #Blue
+
+' relations:
+
+dms.orchestrator.matching.Preference::Strength <|-- dms.orchestrator.matching.PreferenceStrength 
+dms.orchestrator.matching.SimpleComparator::Compare <|-- models.Comparison 
+
+ 

@@ -286,6 +286,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v2.0.6+incompatible // indirect
 	github.com/google/orderedcode v0.0.1 // indirect
+	github.com/hashicorp/go-version v1.7.0
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5 // indirect
