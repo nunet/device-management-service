@@ -93,7 +93,7 @@ type NtxPayment struct {
 //
 // Deprecated: Should be removed soon since its use has run out when statsdb was deprecated.
 type RequestTracker struct {
-	ID          uint
+	BaseDBModel
 	ServiceType string
 	NodeID      string
 	CallID      int64

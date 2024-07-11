@@ -86,7 +86,7 @@ func calcUsedResourcesVMs(vms []models.VirtualMachine, cpuInfo []cpu.InfoStat) m
 // calcUsedResourcesConts returns the sum of resource usage between all running Docker
 // containers started by DMS.
 func calcUsedResourcesConts(
-	services []models.Services, requirements map[int]models.ServiceResourceRequirements,
+	services []models.Services, requirements map[string]models.ServiceResourceRequirements,
 ) models.FreeResources {
 
 	var resourcesUsage models.FreeResources
@@ -94,13 +94,16 @@ func calcUsedResourcesConts(
 		return resourcesUsage
 	}
 
-	for i := 0; i < len(services); i++ {
-		idx := services[i].ResourceRequirements
+	for _, service := range services {
+		idx := fmt.Sprint(service.ResourceRequirements)
 		resourcesReq := requirements[idx]
 
 		resourcesUsage.TotCpuHz += resourcesReq.CPU
 		resourcesUsage.Ram += resourcesReq.RAM
 	}
+
+	resourcesUsage.TotCpuHz += 1
+	resourcesUsage.Ram += 1
 
 	return resourcesUsage
 }

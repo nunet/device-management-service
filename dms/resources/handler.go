@@ -31,7 +31,7 @@ func GetFreeResource(ctx context.Context) (*models.FreeResources, error) {
 }
 
 func updateDBFreeResources(freeRes models.FreeResources) error {
-	freeRes.ID = 1 // Enforce unique record for a given machine
+	freeRes.ID = "1" // Enforce unique record for a given machine
 
 	var freeResourcesModel models.FreeResources
 	if res := db.DB.Find(&freeResourcesModel); res.RowsAffected == 0 {
@@ -48,16 +48,16 @@ func updateDBFreeResources(freeRes models.FreeResources) error {
 	return nil
 }
 
-func getServiceResourcesRequirements(gormDB *gorm.DB) (map[int]models.ServiceResourceRequirements, error) {
+func getServiceResourcesRequirements(gormDB *gorm.DB) (map[string]models.ServiceResourceRequirements, error) {
 	var serviceResRequirements []models.ServiceResourceRequirements
 	result := gormDB.Find(&serviceResRequirements)
 	if result.Error != nil {
 		return nil, fmt.Errorf("unable to query resource requirements - %v", result.Error)
 	}
 
-	mappedServicesResRequirements := make(map[int]models.ServiceResourceRequirements)
+	mappedServicesResRequirements := make(map[string]models.ServiceResourceRequirements)
 	for _, rr := range serviceResRequirements {
-		mappedServicesResRequirements[int(rr.ID)] = rr
+		mappedServicesResRequirements[rr.ID] = rr
 	}
 
 	return mappedServicesResRequirements, nil

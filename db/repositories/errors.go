@@ -12,3 +12,6 @@ var NotFoundError = errors.New("Record not found")
 
 // DatabaseError represents a general error related to database operations.
 var DatabaseError = errors.New("Database error")
+
+// ErrParsingModel represents an error indicating that there was an issue parsing the model.
+var ErrParsingModel = errors.New("Error parsing model")

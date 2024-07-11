@@ -116,7 +116,6 @@ func Test_CapacityCmdAvailable(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -191,7 +190,6 @@ func Test_CapacityCmdOnboarded(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 

@@ -2,6 +2,7 @@ package repositories_clover
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -56,6 +57,8 @@ func (repo *GenericRepositoryClover[T]) queryWithID(
 
 // Create adds a new record to the repository and returns the created data.
 func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, error) {
+	var model T
+
 	doc := toCloverDoc(data)
 	doc.Set("CreatedAt", time.Now())
 
@@ -64,17 +67,28 @@ func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, 
 		return data, handleDBError(err)
 	}
 
-	return toModel[T](doc), handleDBError(err)
+	model, err = toModel[T](doc, false)
+	if err != nil {
+		return data, handleDBError(fmt.Errorf("%v: %v", repositories.ErrParsingModel, err))
+	}
+
+	return model, nil
 }
 
 // Get retrieves a record by its identifier.
 func (repo *GenericRepositoryClover[T]) Get(ctx context.Context, id interface{}) (T, error) {
-	var result T
+	var model T
 	doc, err := repo.db.FindFirst(repo.queryWithID(id, false))
 	if err != nil || doc == nil {
-		return result, handleDBError(err)
+		return model, handleDBError(err)
 	}
-	return toModel[T](doc), handleDBError(err)
+
+	model, err = toModel[T](doc, false)
+	if err != nil {
+		return model, handleDBError(fmt.Errorf("%v: %v", repositories.ErrParsingModel, err))
+	}
+
+	return model, nil
 }
 
 // Update modifies a record by its identifier.
@@ -109,15 +123,20 @@ func (repo *GenericRepositoryClover[T]) Find(
 	ctx context.Context,
 	query repositories.Query[T],
 ) (T, error) {
-	var result T
+	var model T
 	q := repo.query(false)
 	q = applyConditions(q, query)
 	doc, err := repo.db.FindFirst(q)
 	if err != nil || doc == nil {
-		return result, handleDBError(err)
+		return model, handleDBError(err)
 	}
 
-	return toModel[T](doc), handleDBError(err)
+	model, err = toModel[T](doc, false)
+	if err != nil {
+		return model, fmt.Errorf("Failed to convert document to model: %v", err)
+	}
+
+	return model, nil
 }
 
 // FindAll retrieves multiple records based on a query.
@@ -125,16 +144,32 @@ func (repo *GenericRepositoryClover[T]) FindAll(
 	ctx context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
-	var results []T
+	var models []T
+	var modelParsingErr error
+
 	q := repo.query(false)
 	q = applyConditions(q, query)
 
 	err := repo.db.ForEach(q, func(doc *clover_d.Document) bool {
-		results = append(results, toModel[T](doc))
+		model, internalErr := toModel[T](doc, false)
+		if internalErr != nil {
+			modelParsingErr = handleDBError(fmt.Errorf("%v: %v", repositories.ErrParsingModel, internalErr))
+			return false
+		}
+
+		models = append(models, model)
 		return true
 	})
 
-	return results, handleDBError(err)
+	if err != nil {
+		return models, handleDBError(err)
+	}
+
+	if modelParsingErr != nil {
+		return models, modelParsingErr
+	}
+
+	return models, nil
 }
 
 // applyConditions applies conditions, sorting, limiting, and offsetting to a Clover database query.

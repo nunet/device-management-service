@@ -62,7 +62,6 @@ func setupMockDB() error {
 	}
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 

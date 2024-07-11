@@ -36,7 +36,10 @@ func UpdateField[T interface{}](input T, fieldName string, newValue interface{})
 
 	// Check if types are compatible
 	if !reflect.TypeOf(newValue).ConvertibleTo(field.Type()) {
-		return input, fmt.Errorf("Incompatible value: %v", newValue)
+		return input, fmt.Errorf(
+			"Incompatible conversion: %v -> %v; value: %v",
+			field.Type(), reflect.TypeOf(newValue), newValue,
+		)
 	}
 
 	// Convert the new value to the field type

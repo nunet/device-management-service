@@ -39,7 +39,9 @@ var s1 = models.Services{
 }
 
 var serviceResReqs1 = models.ServiceResourceRequirements{
-	ID:  1,
+	BaseDBModel: models.BaseDBModel{
+		ID: "1",
+	},
 	CPU: 3000,
 	RAM: 1000,
 	HDD: 500,
@@ -51,7 +53,9 @@ var s2 = models.Services{
 }
 
 var serviceResReqs2 = models.ServiceResourceRequirements{
-	ID:  2,
+	BaseDBModel: models.BaseDBModel{
+		ID: "2",
+	},
 	CPU: 4000,
 	RAM: 2000,
 }
@@ -96,9 +100,9 @@ func TestCalcFreeResources(t *testing.T) {
 // with []models.Services and models.ServiceResourceRequirements being mocked structs
 func TestCalcUsedResourcesConts(t *testing.T) {
 	services := []models.Services{s1, s2}
-	requirements := map[int]models.ServiceResourceRequirements{
-		1: serviceResReqs1,
-		2: serviceResReqs2,
+	requirements := map[string]models.ServiceResourceRequirements{
+		"1": serviceResReqs1,
+		"2": serviceResReqs2,
 	}
 
 	result := calcUsedResourcesConts(services, requirements)

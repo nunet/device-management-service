@@ -2,6 +2,7 @@ package repositories_clover
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 
@@ -14,14 +15,13 @@ func handleDBError(err error) error {
 	if err != nil {
 		switch err {
 		case clover.ErrDocumentNotExist:
-			// Return NotFoundError for record not found errors
 			return repositories.NotFoundError
 		case clover.ErrDuplicateKey:
-			// Return InvalidDataError for various invalid data errors
 			return repositories.InvalidDataError
+		case repositories.ErrParsingModel:
+			return err
 		default:
-			// Return DatabaseError for other unspecified database errors
-			return repositories.DatabaseError
+			return errors.Join(repositories.DatabaseError, err)
 		}
 	}
 	return nil
@@ -42,14 +42,23 @@ func toCloverDoc[T repositories.ModelType](data T) *clover_d.Document {
 	return doc
 }
 
-func toModel[T repositories.ModelType](doc *clover_d.Document) T {
+func toModel[T repositories.ModelType](doc *clover_d.Document, isEntityRepo bool) (T, error) {
 	var model T
 	err := doc.Unmarshal(&model)
-	model, err = repositories.UpdateField(model, "ID", doc.ObjectId())
 	if err != nil {
-		return model
+		return model, err
 	}
-	return model
+
+	if !isEntityRepo {
+		// we shouldn't try to update IDs of entity repositories as they might not
+		// even have an ID at all
+		model, err = repositories.UpdateField(model, "ID", doc.ObjectId())
+		if err != nil {
+			return model, err
+		}
+	}
+
+	return model, nil
 }
 
 func fieldJSONTag[T repositories.ModelType](field string) string {

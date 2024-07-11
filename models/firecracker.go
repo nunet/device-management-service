@@ -44,7 +44,7 @@ type Actions struct {
 	ActionType string `json:"action_type"`
 }
 type VirtualMachine struct {
-	ID         uint   `json:"id"`
+	BaseDBModel
 	SocketFile string `json:"socket_file"`
 	BootSource string `json:"boot_source"`
 	Filesystem string `json:"filesystem"`

@@ -1,6 +1,7 @@
 package repositories_gorm
 
 import (
+	"errors"
 	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
@@ -14,14 +15,13 @@ func handleDBError(err error) error {
 	if err != nil {
 		switch err {
 		case gorm.ErrRecordNotFound:
-			// Return NotFoundError for record not found errors
 			return repositories.NotFoundError
 		case gorm.ErrInvalidData, gorm.ErrInvalidField, gorm.ErrInvalidValue:
-			// Return InvalidDataError for various invalid data errors
 			return repositories.InvalidDataError
+		case repositories.ErrParsingModel:
+			return err
 		default:
-			// Return DatabaseError for other unspecified database errors
-			return repositories.DatabaseError
+			return errors.Join(repositories.DatabaseError, err)
 		}
 	}
 	return nil
