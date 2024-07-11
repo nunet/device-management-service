@@ -11,6 +11,7 @@ import (
 	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/telemetry/logger"
 
 	// "gitlab.com/nunet/device-management-service/internal/messaging"
 	"gitlab.com/nunet/device-management-service/models"
@@ -18,8 +19,6 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // NewP2P is stub, real implementation is needed in order to pass it to
@@ -35,13 +34,8 @@ func Run() {
 
 	db.ConnectDatabase()
 
-	go startServer()
-
-	// go messaging.DeploymentWorker()
-
-	// go messaging.FileTransferWorker(ctx)
-
-	// wait for server to start properly before sending requests below
+	// XXX: wait for server to start properly before sending requests below
+	// TODO: should be removed
 	time.Sleep(time.Second * 5)
 
 	// check if onboarded
@@ -58,18 +52,18 @@ func Run() {
 		if err != nil {
 			zlog.Sugar().Fatalf("unable to unmarshal private key: %v", err)
 		}
-
-		// libp2p.RunNode(priv, p2pParams.ServerMode, p2pParams.Available)
-		// if libp2p.GetP2P().Host != nil {
-		// 	SanityCheck(db.DB)
-		// }
 	}
+
+	// initialize rest pi server
+	rServer := api.NewRestServer(logger.New("rest-server"), nil, nil, config.GetConfig().Rest.Port)
+	rServer.InitializeRoutes()
+	rServer.Run()
 
 	// wait for SIGINT or SIGTERM
 	sig := <-internal.ShutdownChan
 	fmt.Printf("Shutting down after receiving %v...\n", sig)
 
-	// add actual cleanup code here
+	// add cleanup code here
 	fmt.Println("Cleaning up before shutting down")
 
 	// exit
@@ -92,14 +86,4 @@ func ValidateOnboarding(metadata *models.Metadata) {
 		zlog.Sugar().Error("exiting DMS")
 		os.Exit(1)
 	}
-}
-
-func startServer() {
-	router := api.SetupRouter()
-	// router.Use(otelgin.Middleware(tracing.MachineName))
-
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
-	router.Run(fmt.Sprintf(":%d", config.GetConfig().Rest.Port))
-
 }

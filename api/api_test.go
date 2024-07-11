@@ -115,17 +115,7 @@ func SetupMockRouter() *gin.Engine {
 	{
 		p2p.GET("", m.ListPeersHandler)
 		p2p.GET("/dht", m.ListDHTPeersHandler)
-		p2p.GET("/kad-dht", m.ListKadDHTPeersHandler)
 		p2p.GET("/self", m.SelfPeerInfoHandler)
-		p2p.GET("/chat", m.ListChatHandler)
-		p2p.GET("/depreq", m.DefaultDepReqPeerHandler)
-		p2p.GET("/chat/start", m.StartChatHandler)
-		p2p.GET("/chat/join", m.JoinChatHandler)
-		p2p.GET("/chat/clear", m.ClearChatHandler)
-		p2p.GET("/file", m.ListFileTransferRequestsHandler)
-		p2p.GET("/file/send", m.SendFileTransferHandler)
-		p2p.GET("/file/accept", m.AcceptFileTransferHandler)
-		p2p.GET("/file/clear", m.ClearFileTransferRequestsHandler)
 	}
 	return router
 }
@@ -233,10 +223,14 @@ func TestProvisionedRoute(t *testing.T) {
 
 func TestOnboardEmptyRequest(t *testing.T) {
 	expectedResponse := `{"error":"invalid request data"}`
-	router := SetupRouter()
+
+	rServer := NewRestServer(nil, nil, nil, 0)
+	onboarding := rServer.router.Group("/api/v1/onboarding")
+	onboarding.POST("/onboard", OnboardHandler)
+
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/onboarding/onboard", nil)
-	router.ServeHTTP(w, req)
+	rServer.router.ServeHTTP(w, req)
 
 	assert.Equal(t, 400, w.Code)
 	assert.Equal(t, expectedResponse, w.Body.String())
