@@ -2,6 +2,7 @@ package repositories_clover
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -44,6 +45,7 @@ func (repo *GenericEntityRepositoryClover[T]) query() *clover_q.Query {
 
 // Save creates or updates the record to the repository and returns the new/updated data.
 func (repo *GenericEntityRepositoryClover[T]) Save(ctx context.Context, data T) (T, error) {
+	var model T
 	doc := toCloverDoc(data)
 	doc.Set("CreatedAt", time.Now())
 
@@ -52,12 +54,17 @@ func (repo *GenericEntityRepositoryClover[T]) Save(ctx context.Context, data T) 
 		return data, handleDBError(err)
 	}
 
-	return toModel[T](doc), handleDBError(err)
+	model, err = toModel[T](doc, true)
+	if err != nil {
+		return model, handleDBError(fmt.Errorf("%v: %v", repositories.ErrParsingModel, err))
+	}
+
+	return model, nil
 }
 
 // Get retrieves the record from the repository.
 func (repo *GenericEntityRepositoryClover[T]) Get(ctx context.Context) (T, error) {
-	var result T
+	var model T
 	q := repo.query().Sort(clover_q.SortOption{
 		Field:     "CreatedAt",
 		Direction: -1,
@@ -65,9 +72,15 @@ func (repo *GenericEntityRepositoryClover[T]) Get(ctx context.Context) (T, error
 	doc, err := repo.db.FindFirst(q)
 
 	if err != nil || doc == nil {
-		return result, handleDBError(err)
+		return model, handleDBError(err)
 	}
-	return toModel[T](doc), handleDBError(err)
+
+	model, err = toModel[T](doc, true)
+	if err != nil {
+		return model, fmt.Errorf("Failed to convert document to model: %v", err)
+	}
+
+	return model, nil
 }
 
 // Clear removes the record with its history from the repository.
@@ -80,19 +93,19 @@ func (repo *GenericEntityRepositoryClover[T]) History(
 	ctx context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
-	var results []T
+	var models []T
 	q := repo.query()
 	q = applyConditions(q, query)
 
 	err := repo.db.ForEach(q, func(doc *clover_d.Document) bool {
-		var result T
-		err := doc.Unmarshal(&result)
+		var model T
+		err := doc.Unmarshal(&model)
 		if err != nil {
 			return false
 		}
-		results = append(results, result)
+		models = append(models, model)
 		return true
 	})
 
-	return results, handleDBError(err)
+	return models, handleDBError(err)
 }

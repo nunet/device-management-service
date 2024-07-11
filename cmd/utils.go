@@ -61,7 +61,10 @@ func isDMSRunning(net backend.NetworkManager) func(*cobra.Command, []string) err
 func checkOnboarded(utilsService backend.Utility) error {
 	onboarded, err := utilsService.IsOnboarded()
 	if err != nil {
-		return fmt.Errorf("could not check onboard status: %w", err)
+		return fmt.Errorf(
+			"could not check onboard status. It may be an internal error or user is not onboarded: %w",
+			err,
+		)
 	}
 
 	if !onboarded {

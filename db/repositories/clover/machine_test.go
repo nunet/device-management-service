@@ -155,15 +155,16 @@ func TestFreeResourcesRepository(t *testing.T) {
 	// Test Save method
 	createdFreeResources, err := freeResourcesRepo.Save(
 		context.Background(),
-		models.FreeResources{},
+		models.FreeResources{
+			Vcpu: 2,
+		},
 	)
 	assert.NoError(t, err)
-	assert.NotZero(t, createdFreeResources.ID)
 
 	// Test Get method
 	retrievedFreeResources, err := freeResourcesRepo.Get(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, createdFreeResources.ID, retrievedFreeResources.ID)
+	assert.Equal(t, createdFreeResources.Vcpu, retrievedFreeResources.Vcpu)
 
 	// Test Save (update) method
 	updatedFreeResources := retrievedFreeResources
@@ -203,15 +204,16 @@ func TestAvailableResourcesRepository(t *testing.T) {
 	// Test Save method
 	createdAvailableResources, err := availableResourcesRepo.Save(
 		context.Background(),
-		models.AvailableResources{},
+		models.AvailableResources{
+			Vcpu: 2,
+		},
 	)
 	assert.NoError(t, err)
-	assert.NotZero(t, createdAvailableResources.ID)
 
 	// Test Get method
 	retrievedAvailableResources, err := availableResourcesRepo.Get(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, createdAvailableResources.ID, retrievedAvailableResources.ID)
+	assert.Equal(t, createdAvailableResources.Vcpu, retrievedAvailableResources.Vcpu)
 
 	// Test Save (update) method
 	updatedAvailableResources := retrievedAvailableResources
@@ -418,17 +420,15 @@ func TestLibp2pInfoRepository(t *testing.T) {
 	libp2pInfoRepo := NewLibp2pInfoRepository(db)
 
 	// Test Save method
-	createdLibp2pInfo, err := libp2pInfoRepo.Save(
+	_, err := libp2pInfoRepo.Save(
 		context.Background(),
 		models.Libp2pInfo{ServerMode: false},
 	)
 	assert.NoError(t, err)
-	assert.NotZero(t, createdLibp2pInfo.ID)
 
 	// Test Get method
 	retrievedLibp2pInfo, err := libp2pInfoRepo.Get(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, createdLibp2pInfo.ID, retrievedLibp2pInfo.ID)
 
 	// Test Save (update) method
 	updatedLibp2pInfo := retrievedLibp2pInfo

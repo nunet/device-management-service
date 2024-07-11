@@ -9,7 +9,7 @@ import (
 type IP []any
 
 type PeerInfo struct {
-	ID        uint   `json:"id"`
+	BaseDBModel
 	NodeID    string `json:"nodeID,omitempty"`
 	Key       string `json:"key,omitempty"`
 	Mid       string `json:"mid,omitempty"`
@@ -18,7 +18,7 @@ type PeerInfo struct {
 }
 
 type Machine struct {
-	ID                   uint
+	BaseDBModel
 	NodeId               string
 	PeerInfo             int
 	IpAddr               string
@@ -33,7 +33,7 @@ type Machine struct {
 // the subtraction between AvailableResources and the amount of resources
 // already used by DMS and its processes (mostly services)
 type FreeResources struct {
-	ID                uint    `json:"id"`
+	BaseDBModel
 	TotCpuHz          int     `json:"tot_cpu_hz"`
 	PriceCpu          float64 `json:"price_cpu"`
 	Ram               int     `json:"ram"`
@@ -47,7 +47,7 @@ type FreeResources struct {
 // AvailableResources are the amount of resources onboarded which
 // can be used by NuNet
 type AvailableResources struct {
-	ID                uint
+	BaseDBModel
 	TotCpuHz          int
 	CpuNo             int
 	CpuHz             float64
@@ -61,7 +61,7 @@ type AvailableResources struct {
 }
 
 type Services struct {
-	gorm.Model
+	BaseDBModel
 	TxHash               string
 	TransactionType      string // transaction type can be running, done, withdraw, refund and distribute
 	JobStatus            string // whether job is running or exited; one of these 'running', 'finished without errors', 'finished with errors'
@@ -69,7 +69,7 @@ type Services struct {
 	EstimatedJobDuration int64  // job duration in minutes
 	ServiceName          string
 	ContainerID          string
-	ResourceRequirements int
+	ResourceRequirements int // ID of ServiceResourceRequirements record
 	ImageID              string
 	LogURL               string
 	LastLogFetch         time.Time
@@ -91,7 +91,7 @@ type Services struct {
 }
 
 type ServiceResourceRequirements struct {
-	ID   uint
+	BaseDBModel
 	CPU  int
 	RAM  int
 	VCPU int
@@ -106,7 +106,7 @@ type ContainerImages struct {
 }
 
 type Libp2pInfo struct {
-	ID         uint   `json:"id"`
+	BaseDBModel
 	PrivateKey []byte `json:"private_key"`
 	PublicKey  []byte `json:"public_key"`
 	ServerMode bool   `json:"server_mode"`
@@ -114,6 +114,7 @@ type Libp2pInfo struct {
 }
 
 type MachineUUID struct {
+	BaseDBModel
 	UUID string `json:"uuid"`
 }
 
@@ -147,7 +148,7 @@ type PeerData struct {
 }
 
 type Connection struct {
-	gorm.Model
+	BaseDBModel
 	PeerID     string `json:"peer_id"`
 	Multiaddrs string `json:"multiaddrs"`
 }
@@ -167,7 +168,7 @@ type KadDHTMachineUpdate struct {
 }
 
 type ElasticToken struct {
-	gorm.Model
+	BaseDBModel
 	NodeId      string
 	Token       string
 	ChannelName string

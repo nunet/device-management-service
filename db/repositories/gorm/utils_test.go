@@ -1,6 +1,7 @@
 package repositories_gorm
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,6 +22,15 @@ func TestHandleDBError(t *testing.T) {
 	assert.Equal(t, repositories.InvalidDataError, err)
 
 	// Test case: GORM ErrInvalidDB should result in DatabaseError
+	// We should check if error HAS a DatabaseError as it may be wrapped with other errors
 	err = handleDBError(gorm.ErrInvalidDB)
-	assert.Equal(t, repositories.DatabaseError, err)
+	assert.ErrorAs(t, err, &repositories.DatabaseError)
+
+	// Test case: custom ErrParsingModel should result in ErrParsingModel
+	// ErrParsingModel is a wrapped error
+	err = handleDBError(
+		fmt.Errorf("%v: %v", repositories.ErrParsingModel,
+			fmt.Errorf("some error"),
+		))
+	assert.ErrorAs(t, err, &repositories.ErrParsingModel)
 }

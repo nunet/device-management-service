@@ -45,7 +45,6 @@ func Test_PeerListCmdNoFlag(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -142,7 +141,6 @@ func Test_PeerListCmdWithFlags(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -225,7 +223,6 @@ func Test_PeerListCmdWithMessage(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -293,7 +290,6 @@ func Test_PeerListCmdEmptyDHTArray(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 

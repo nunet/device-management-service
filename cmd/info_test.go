@@ -55,13 +55,22 @@ func (mu *MockUtilsService) IsOnboarded() (bool, error) {
 		return false, err
 	}
 
-	_ = mockDB.Where("id = ?", 1).Find(&libp2pInfo)
+	// instead of getting the record with id=1, simply get the first record.
+	// why? we were having problems with the new embedded model BaseDBModel.
+	// TODO: anyway, it would be better to use the new DB version
+	result := mockDB.Order("created_at asc").First(&libp2pInfo)
+	if result.Error != nil {
+		return false, fmt.Errorf("Error fetching the first record: %w\n", result.Error)
+	}
+
 	_, err = mu.ReadMetadataFile()
 
-	if err == nil && libp2pInfo.PrivateKey != nil {
-		return true, nil
-	} else if err != nil && libp2pInfo.PrivateKey == nil {
-		return false, nil
+	if err == nil {
+		if libp2pInfo.PrivateKey != nil {
+			return true, nil
+		} else {
+			return false, fmt.Errorf("libp2p private key is nil")
+		}
 	} else {
 		return false, fmt.Errorf("error reading metadata file: %w", err)
 	}
@@ -130,7 +139,6 @@ func Test_InfoCmd(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -275,7 +283,6 @@ func Test_InfoCmdInvalidMetadata(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -321,7 +328,6 @@ func Test_InfoCmdDMSNotRunning(t *testing.T) {
 	assert.NoError(err)
 
 	mockP2PInfo := models.Libp2pInfo{
-		ID:         1,
 		PrivateKey: []byte("secretkey"),
 	}
 

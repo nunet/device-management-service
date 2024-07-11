@@ -63,6 +63,7 @@ type OnboardingStatus struct {
 }
 
 type LogBinAuth struct {
+    BaseDBModel
 	PeerID      string `json:"peer_id"`
 	MachineUUID string `json:"machine_uuid"`
 	Token       string `json:"token"`

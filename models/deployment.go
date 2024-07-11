@@ -2,8 +2,6 @@ package models
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type DeploymentRequest struct {
@@ -59,7 +57,7 @@ type DeploymentUpdate struct {
 }
 
 type DeploymentRequestFlat struct {
-	gorm.Model
+	BaseDBModel
 	DeploymentRequest string `json:"deployment_request"`
 	// represents job status from services table; goal is to keep then in sync (both tables are on different DMSes).
 	JobStatus string `json:"job_status"`

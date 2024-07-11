@@ -13,7 +13,9 @@ import (
 
 func (h *MockHandler) GetFreeResourcesHandler(c *gin.Context) {
 	free := models.FreeResources{
-		ID:                1,
+		BaseDBModel: models.BaseDBModel{
+			ID: "1",
+		},
 		TotCpuHz:          3400000000,
 		PriceCpu:          0.0005,
 		Ram:               16384,
