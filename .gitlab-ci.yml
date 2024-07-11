@@ -3,6 +3,15 @@ variables:
   GIT_VERSION: v2.30.1
   BUILD_DISABLED: "yes"
   DMS_BUILDER_VERSION: "0.4"
+  # CODE_QUALITY_DISABLED: true
+  # SKIP_UNIT_TESTS: true
+  # DEFECTDOJO_DISABLED: true
+  # CONTAINER_SCANNIG_DISABLED: true
+  # SAST_DISABLED: true
+  # SECRET_DETECTION_DISABLED: true
+  # SEMVER_DISABLED: true
+  # SONARQUBE_DISABLED: true
+  # FEATURE_ENVIRONMENT_DISABLED: true
 
 include:
   project: nunet/test-suite
@@ -16,18 +25,20 @@ Build:
   script:
     - echo "Building debian archives..."
     - bash maint-scripts/build.sh
-  only:
-    refs:
-      - $CI_DEFAULT_BRANCH
-      - main
-      - staging
-      - develop
   artifacts:
     untracked: false
     when: on_success
     expire_in: "30 days"
     paths:
       - dist/
+  rules:
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
+      when: never
+    - if:  $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(develop|staging|main)$/
+    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(develop|staging|main)$/
+      when: manual
+    - when: never
+
 
 Build DMS Builder:
   stage: build
