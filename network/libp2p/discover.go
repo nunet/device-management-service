@@ -8,37 +8,56 @@ import (
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 )
 
-var err error
-
-func (p *Libp2p) DiscoverDialPeers(ctx context.Context) error {
-	p.peers, err = p.findPeers(ctx)
+// DiscoverDialPeers discovers peers using randevouz point
+func (l *Libp2p) DiscoverDialPeers(ctx context.Context) error {
+	foundPeers, err := l.findPeersFromRendezvousDiscovery(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(foundPeers) > 0 {
+		l.discoveredPeers = foundPeers
 	}
 
 	// filter out peers with no listening addresses and self host
-	filterSpec := NoAddrIDFilter{ID: p.Host.ID()}
-	p.peers = PeerPassFilter(p.peers, filterSpec)
+	filterSpec := NoAddrIDFilter{ID: l.Host.ID()}
+	l.discoveredPeers = PeerPassFilter(l.discoveredPeers, filterSpec)
 
-	err = p.dialPeers(ctx)
-	if err != nil {
-		return err
-	}
+	l.dialPeers(ctx)
 
 	return nil
 }
 
-func (p2p Libp2p) dialPeers(ctx context.Context) error {
-	for _, p := range p2p.peers {
-		if p.ID == p2p.Host.ID() {
+// advertiseForRendezvousDiscovery is used to advertise node using the dht by giving it the randevouz point.
+func (l *Libp2p) advertiseForRendezvousDiscovery(context context.Context) error {
+	_, err := l.discovery.Advertise(context, l.config.Rendezvous)
+	return err
+}
+
+// findPeersFromRendezvousDiscovery uses the randevouz point to discover other peers.
+func (l *Libp2p) findPeersFromRendezvousDiscovery(ctx context.Context) ([]peer.AddrInfo, error) {
+	peers, err := dutil.FindPeers(
+		ctx,
+		l.discovery,
+		l.config.Rendezvous,
+		discovery.Limit(l.config.PeerCountDiscoveryLimit),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover peers: %w", err)
+	}
+	return peers, nil
+}
+
+func (l *Libp2p) dialPeers(ctx context.Context) {
+	for _, p := range l.discoveredPeers {
+		if p.ID == l.Host.ID() {
 			continue
 		}
-		if p2p.Host.Network().Connectedness(p.ID) != network.Connected {
-			_, err := p2p.Host.Network().DialPeer(ctx, p.ID)
+		if l.Host.Network().Connectedness(p.ID) != network.Connected {
+			_, err := l.Host.Network().DialPeer(ctx, p.ID)
 			if err != nil {
 				if _, debugMode := os.LookupEnv("NUNET_DEBUG_VERBOSE"); debugMode {
 					zlog.Sugar().Debugf("couldn't establish connection with: %s - error: %v", p.ID.String(), err)
@@ -48,26 +67,6 @@ func (p2p Libp2p) dialPeers(ctx context.Context) error {
 			if _, debugMode := os.LookupEnv("NUNET_DEBUG_VERBOSE"); debugMode {
 				zlog.Sugar().Debugf("connected with: %s", p.ID.String())
 			}
-
 		}
 	}
-	return nil
-}
-
-func (p Libp2p) findPeers(ctx context.Context) ([]peer.AddrInfo, error) {
-	var routingDiscovery = drouting.NewRoutingDiscovery(p.DHT)
-	dutil.Advertise(ctx, routingDiscovery, p.config.Rendezvous)
-
-	zlog.Debug("Discover - searching for peers")
-	peers, err := dutil.FindPeers(
-		ctx,
-		routingDiscovery,
-		p.config.Rendezvous,
-		discovery.Limit(40),
-	)
-	if err != nil {
-		return []peer.AddrInfo{}, fmt.Errorf("failed to discover peers: %v", err)
-	}
-	zlog.Sugar().Debugf("Discover - found peers: %v", peers)
-	return peers, nil
 }

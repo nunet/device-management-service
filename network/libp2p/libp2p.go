@@ -3,32 +3,643 @@ package libp2p
 import (
 	"context"
 
+	"bufio"
+	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ipfs/go-cid"
+	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"gitlab.com/nunet/device-management-service/models"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/multiformats/go-multiaddr"
+	"github.com/multiformats/go-multihash"
+	"github.com/spf13/afero"
+	"google.golang.org/protobuf/proto"
+
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+
+	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/protocol"
+
+	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+
+	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+
+	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 )
 
-type Libp2pPeer struct {
+const (
+	MB                 = 1024 * 1024
+	MaxMessageLengthMB = 10
+)
+
+// Libp2p contains the configuration for a Libp2p instance.
+//
+// TODO-suggestion: maybe we should call it something else like Libp2pPeer,
+// Libp2pHost or just Peer (callers would use libp2p.Peer...)
+type Libp2p struct {
+	Host              host.Host
+	DHT               *dht.IpfsDHT
+	PS                peerstore.Peerstore
+	pubsub            *pubsub.PubSub
+	pubsubTopics      map[string]*pubsub.Topic
+	topicSubscription map[string]*pubsub.Subscription
+	topicMux          sync.RWMutex
+
+	// a list of peers discovered by discovery
+	discoveredPeers []peer.AddrInfo
+	discovery       libp2pdiscovery.Discovery
+
+	// services
+	pingService *ping.PingService
+
+	// tasks
+	discoveryTask *bt.Task
+
+	handlerRegistry *HandlerRegistry
+
+	config *models.Libp2pConfig
+
+	// dependencies (db, filesystem...)
+	fs afero.Fs
 }
 
-func (p *Libp2pPeer) Config() error {
+// New creates a libp2p instance.
+//
+// TODO-Suggestion: move models.Libp2pConfig to here for better readability.
+// Unless there is a reason to keep within models.
+func New(config *models.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
+	if config == nil {
+		return nil, errors.New("config is nil")
+	}
+
+	if config.Scheduler == nil {
+		return nil, errors.New("scheduler is nil")
+	}
+
+	return &Libp2p{
+		config:            config,
+		discoveredPeers:   make([]peer.AddrInfo, 0),
+		pubsubTopics:      make(map[string]*pubsub.Topic),
+		topicSubscription: make(map[string]*pubsub.Subscription),
+		fs:                fs,
+	}, nil
+}
+
+// Init initializes a libp2p host with its dependencies.
+func (l *Libp2p) Init(context context.Context) error {
+	host, dht, pubsub, err := NewHost(context, l.config, l.fs)
+	if err != nil {
+		zlog.Sugar().Error(err)
+		return err
+	}
+
+	l.Host = host
+	l.DHT = dht
+	l.PS = host.Peerstore()
+	l.discovery = drouting.NewRoutingDiscovery(dht)
+	l.pubsub = pubsub
+	l.handlerRegistry = NewHandlerRegistry(host)
+
 	return nil
 }
 
-func (p *Libp2pPeer) Init() error {
+// Start performs network bootstrapping, peer discovery and protocols handling.
+func (l *Libp2p) Start(context context.Context) error {
+	// set stream handlers
+	l.registerStreamHandlers()
+
+	// bootstrap should return error if it had an error
+	err := l.Bootstrap(context, l.config.BootstrapPeers)
+	if err != nil {
+		zlog.Sugar().Errorf("failed to start network: %v", err)
+		return err
+	}
+
+	// advertise randevouz discovery
+	err = l.advertiseForRendezvousDiscovery(context)
+	if err != nil {
+		// TODO: the error might be misleading as a peer can normally work well if an error
+		// is returned here (e.g.: the error is yielded in tests even though all tests pass).
+		zlog.Sugar().Errorf("failed to start network with randevouz discovery: %v", err)
+	}
+
+	// discover
+	err = l.DiscoverDialPeers(context)
+	if err != nil {
+		zlog.Sugar().Errorf("failed to discover peers: %v", err)
+	}
+
+	// register period peer discoveryTask task
+	discoveryTask := &bt.Task{
+		Name:        "Peer Discovery",
+		Description: "Periodic task to discover new peers every 15 minutes",
+		Function: func(args interface{}) error {
+			return l.DiscoverDialPeers(context)
+		},
+		Triggers: []bt.Trigger{&bt.PeriodicTrigger{Interval: 15 * time.Minute}},
+	}
+
+	l.discoveryTask = l.config.Scheduler.AddTask(discoveryTask)
+
 	return nil
 }
 
-func (p *Libp2pPeer) EventRegister() error {
+// RegisterStreamMessageHandler registers a stream handler for a specific protocol.
+func (l *Libp2p) RegisterStreamMessageHandler(messageType models.MessageType, handler StreamHandler) error {
+	if messageType == "" {
+		return errors.New("message type is empty")
+	}
+
+	if err := l.handlerRegistry.RegisterHandlerWithStreamCallback(messageType, handler); err != nil {
+		return fmt.Errorf("failed to register handler %s: %w", messageType, err)
+	}
+
 	return nil
 }
 
-func (p *Libp2pPeer) Status() error {
+// RegisterBytesMessageHandler registers a stream handler for a specific protocol and sends bytes to handler func.
+func (l *Libp2p) RegisterBytesMessageHandler(messageType models.MessageType, handler BytesHandler) error {
+	if messageType == "" {
+		return errors.New("message type is empty")
+	}
+
+	if err := l.handlerRegistry.RegisterHandlerWithBytesCallback(messageType, l.handleReadBytesFromStream, handler); err != nil {
+		return fmt.Errorf("failed to register handler %s: %w", messageType, err)
+	}
+
 	return nil
 }
 
-func (p *Libp2pPeer) Stop() error {
+func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
+	callback, ok := l.handlerRegistry.bytesHandlers[s.Protocol()]
+	if !ok {
+		s.Close()
+		return
+	}
+
+	c := bufio.NewReader(s)
+	defer s.Close()
+
+	// read the first 8 bytes to determine the size of the message
+	msgLengthBuffer := make([]byte, 8)
+	_, err := c.Read(msgLengthBuffer)
+	if err != nil {
+		return
+	}
+
+	// create a buffer with the size of the message and then read until its full
+	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	buf := make([]byte, lengthPrefix)
+
+	// read the full message
+	_, err = io.ReadFull(c, buf)
+	if err != nil {
+		return
+	}
+
+	callback(buf)
+}
+
+// SendMessage sends a message to a list of peers.
+func (l *Libp2p) SendMessage(ctx context.Context, addrs []string, msg models.MessageEnvelope) error {
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(addrs))
+
+	for _, addr := range addrs {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			err := l.sendMessage(ctx, addr, msg)
+			if err != nil {
+				errCh <- err
+			}
+
+		}(addr)
+	}
+	wg.Wait()
+	close(errCh)
+
+	var result error
+	for err := range errCh {
+		if result == nil {
+			result = err
+		} else {
+			result = fmt.Errorf("%v; %v", result, err)
+		}
+	}
+
+	return result
+}
+
+// OpenStream opens a stream to a remote address and returns the stream for the caller to handle.
+func (l *Libp2p) OpenStream(ctx context.Context, addr string, messageType models.MessageType) (network.Stream, error) {
+	maddr, err := multiaddr.NewMultiaddr(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid multiaddress: %w", err)
+	}
+
+	peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve peer info: %w", err)
+	}
+
+	if err := l.Host.Connect(ctx, *peerInfo); err != nil {
+		return nil, fmt.Errorf("failed to connect to peer: %w", err)
+	}
+
+	stream, err := l.Host.NewStream(ctx, peerInfo.ID, protocol.ID(messageType))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open stream: %w", err)
+	}
+
+	return stream, nil
+}
+
+// GetMultiaddr returns the peer's multiaddr.
+func (l *Libp2p) GetMultiaddr() ([]multiaddr.Multiaddr, error) {
+	peerInfo := peer.AddrInfo{
+		ID:    l.Host.ID(),
+		Addrs: l.Host.Addrs(),
+	}
+	return peer.AddrInfoToP2pAddrs(&peerInfo)
+}
+
+// Stop performs a cleanup of any resources used in this package.
+func (l *Libp2p) Stop() error {
+	var errorMessages []string
+
+	l.config.Scheduler.RemoveTask(l.discoveryTask.ID)
+
+	if err := l.DHT.Close(); err != nil {
+		errorMessages = append(errorMessages, err.Error())
+	}
+	if err := l.Host.Close(); err != nil {
+		errorMessages = append(errorMessages, err.Error())
+	}
+
+	if len(errorMessages) > 0 {
+		return errors.New(strings.Join(errorMessages, "; "))
+	}
+
 	return nil
+}
+
+// Stat returns the status about the libp2p network.
+func (l *Libp2p) Stat() models.NetworkStats {
+	var lAddrs []string
+	for _, addr := range l.Host.Addrs() {
+		lAddrs = append(lAddrs, addr.String())
+	}
+	return models.NetworkStats{
+		ID:         l.Host.ID().String(),
+		ListenAddr: strings.Join(lAddrs, ", "),
+	}
+}
+
+// Ping the remote address. The remote address is the encoded peer id which will be decoded and used here.
+//
+// TODO (Return error once): something that was confusing me when using this method is that the error is
+// returned twice if any. Once as a field of PingResult and one as a return value.
+func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Duration) (models.PingResult, error) {
+	// avoid dial to self attempt
+	if peerIDAddress == l.Host.ID().String() {
+		err := errors.New("can't ping self")
+		return models.PingResult{Success: false, Error: err}, err
+	}
+
+	pingCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	remotePeer, err := peer.Decode(peerIDAddress)
+	if err != nil {
+		return models.PingResult{}, err
+	}
+
+	pingChan := ping.Ping(pingCtx, l.Host, remotePeer)
+
+	select {
+	case res := <-pingChan:
+		if res.Error != nil {
+			zlog.Sugar().Errorf("failed to ping peer %s: %v", peerIDAddress, res.Error)
+			return models.PingResult{
+				Success: false,
+				RTT:     res.RTT,
+				Error:   res.Error,
+			}, res.Error
+		}
+
+		return models.PingResult{
+			RTT:     res.RTT,
+			Success: true,
+		}, nil
+	case <-pingCtx.Done():
+		return models.PingResult{
+			Error: pingCtx.Err(),
+		}, pingCtx.Err()
+	}
+}
+
+// Query return all the advertisements in the network related to a key.
+// The network is queried to find providers for the given key, and peers which we aren't connected to can be retrieved.
+func (l *Libp2p) Query(ctx context.Context, key string) ([]*commonproto.Advertisement, error) {
+	if key == "" {
+		return nil, errors.New("advertisement key is empty")
+	}
+
+	customCID, err := createCIDFromKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cid for key %s: %w", key, err)
+	}
+
+	addrInfo, err := l.DHT.FindProviders(ctx, customCID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find providers for key %s: %w", key, err)
+	}
+	var advertisements []*commonproto.Advertisement
+	for _, v := range addrInfo {
+		// TODO: use go routines to get the values in parallel.
+		bytesAdvertisement, err := l.DHT.GetValue(ctx, l.getCustomNamespace(key, v.ID.String()))
+		if err != nil {
+			continue
+		}
+		var ad commonproto.Advertisement
+		if err := proto.Unmarshal(bytesAdvertisement, &ad); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal advertisement payload: %w", err)
+		}
+		advertisements = append(advertisements, &ad)
+	}
+
+	return advertisements, nil
+}
+
+// Advertise given data and a key pushes the data to the dht.
+func (l *Libp2p) Advertise(ctx context.Context, key string, data []byte) error {
+	if key == "" {
+		return errors.New("advertisement key is empty")
+	}
+
+	pubKeyBytes, err := l.getPublicKey()
+	if err != nil {
+		return fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	envelope := &commonproto.Advertisement{
+		PeerId:    l.Host.ID().String(),
+		Timestamp: time.Now().Unix(),
+		Data:      data,
+		PublicKey: pubKeyBytes,
+	}
+
+	concatenatedBytes := bytes.Join([][]byte{
+		[]byte(envelope.PeerId),
+		{byte(envelope.Timestamp)},
+		envelope.Data,
+		pubKeyBytes,
+	}, nil)
+
+	sig, err := l.sign(concatenatedBytes)
+	if err != nil {
+		return fmt.Errorf("failed to sign advertisement envelope content: %w", err)
+	}
+
+	envelope.Signature = sig
+
+	envelopeBytes, err := proto.Marshal(envelope)
+	if err != nil {
+		return fmt.Errorf("failed to marshal advertise envelope: %w", err)
+	}
+
+	customCID, err := createCIDFromKey(key)
+	if err != nil {
+		return fmt.Errorf("failed to create cid for key %s: %w", key, err)
+	}
+
+	err = l.DHT.PutValue(ctx, l.getCustomNamespace(key, l.DHT.PeerID().String()), envelopeBytes)
+	if err != nil {
+		return fmt.Errorf("failed to put key %s into the dht: %w", key, err)
+	}
+
+	err = l.DHT.Provide(ctx, customCID, true)
+	if err != nil {
+		return fmt.Errorf("failed to provide key %s into the dht: %w", key, err)
+	}
+
+	return nil
+}
+
+// Unadvertise removes the data from the dht.
+func (l *Libp2p) Unadvertise(ctx context.Context, key string) error {
+	err := l.DHT.PutValue(ctx, l.getCustomNamespace(key, l.DHT.PeerID().String()), nil)
+	if err != nil {
+		return fmt.Errorf("failed to remove key %s from the DHT: %w", key, err)
+	}
+
+	return nil
+}
+
+// Publish publishes data to a topic.
+// The requirements are that only one topic handler should exist per topic.
+func (l *Libp2p) Publish(ctx context.Context, topic string, data []byte) error {
+	topicHandler, err := l.getOrJoinTopicHandler(topic)
+	if err != nil {
+		return fmt.Errorf("failed to publish: %w", err)
+	}
+
+	err = topicHandler.Publish(ctx, data)
+	if err != nil {
+		return fmt.Errorf("failed to publish to topic %s: %w", topic, err)
+	}
+
+	return nil
+}
+
+// Subscribe subscribes to a topic and sends the messages to the handler.
+func (l *Libp2p) Subscribe(ctx context.Context, topic string, handler func(data []byte)) error {
+	topicHandler, err := l.getOrJoinTopicHandler(topic)
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to topic: %w", err)
+	}
+
+	sub, err := topicHandler.Subscribe()
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to topic %s: %w", topic, err)
+	}
+
+	l.topicMux.Lock()
+	l.topicSubscription[topic] = sub
+	l.topicMux.Unlock()
+
+	go func() {
+		for {
+			msg, err := sub.Next(ctx)
+			if err != nil {
+				continue
+			}
+			handler(msg.Data)
+		}
+	}()
+
+	return nil
+}
+
+func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg models.MessageEnvelope) error {
+	peerAddr, err := multiaddr.NewMultiaddr(addr)
+	if err != nil {
+		return fmt.Errorf("invalid multiaddr: %v", err)
+
+	}
+
+	peerInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
+	if err != nil {
+		return fmt.Errorf("failed to get peer info: %v", err)
+
+	}
+
+	if err := l.Host.Connect(ctx, *peerInfo); err != nil {
+		return fmt.Errorf("failed to connect to peer %v: %v", peerInfo.ID, err)
+
+	}
+
+	stream, err := l.Host.NewStream(ctx, peerInfo.ID, protocol.ID(msg.Type))
+	if err != nil {
+		return fmt.Errorf("failed to open stream to peer %v: %v", peerInfo.ID, err)
+
+	}
+	defer stream.Close()
+
+	requestBufferSize := 8 + len(msg.Data)
+	if requestBufferSize > MaxMessageLengthMB*MB {
+		return fmt.Errorf("message size %d is greater than limit %d bytes", requestBufferSize, MaxMessageLengthMB*MB)
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(msg.Data)))
+	copy(requestPayloadWithLength[8:], msg.Data)
+
+	_, err = stream.Write(requestPayloadWithLength)
+	if err != nil {
+		return fmt.Errorf("failed to send message to peer %v: %v", peerInfo.ID, err)
+	}
+
+	return nil
+}
+
+// getOrJoinTopicHandler gets the topic handler, it will be created if it doesn't exist.
+// for publishing and subscribing its needed therefore its implemented in this function.
+func (l *Libp2p) getOrJoinTopicHandler(topic string) (*pubsub.Topic, error) {
+	l.topicMux.Lock()
+	defer l.topicMux.Unlock()
+	topicHandler, ok := l.pubsubTopics[topic]
+	if !ok {
+		t, err := l.pubsub.Join(topic)
+		if err != nil {
+			return nil, fmt.Errorf("failed to join topic %s: %w", topic, err)
+		}
+		topicHandler = t
+		l.pubsubTopics[topic] = t
+	}
+
+	return topicHandler, nil
+}
+
+// Unsubscribe cancels the subscription to a topic
+func (l *Libp2p) Unsubscribe(topic string) error {
+	l.topicMux.Lock()
+	defer l.topicMux.Unlock()
+
+	topicHandler, ok := l.pubsubTopics[topic]
+	if !ok {
+		return fmt.Errorf("not subscribed to topic: %s", topic)
+	}
+
+	// delete subscription handler and subscription
+	sub, ok := l.topicSubscription[topic]
+	if ok {
+		sub.Cancel()
+		delete(l.topicSubscription, topic)
+	}
+
+	if err := topicHandler.Close(); err != nil {
+		return fmt.Errorf("failed to close topic handler: %w", err)
+	}
+
+	delete(l.pubsubTopics, topic)
+
+	return nil
+}
+
+func (l *Libp2p) VisiblePeers() []peer.AddrInfo {
+	return l.discoveredPeers
+}
+
+func (l *Libp2p) KnownPeers() ([]peer.AddrInfo, error) {
+	knownPeers := l.Host.Peerstore().Peers()
+	peers := make([]peer.AddrInfo, 0, len(knownPeers))
+	for _, p := range knownPeers {
+		peers = append(peers, peer.AddrInfo{ID: p})
+	}
+	return peers, nil
+}
+
+func (l *Libp2p) DumpDHTRoutingTable() ([]kbucket.PeerInfo, error) {
+	rt := l.DHT.RoutingTable()
+	return rt.GetPeerInfos(), nil
+}
+
+func (l *Libp2p) registerStreamHandlers() {
+	l.pingService = ping.NewPingService(l.Host)
+	l.Host.SetStreamHandler(protocol.ID("/ipfs/ping/1.0.0"), l.pingService.PingHandler)
+}
+
+func (l *Libp2p) sign(data []byte) ([]byte, error) {
+	privKey := l.Host.Peerstore().PrivKey(l.Host.ID())
+	if privKey == nil {
+		return nil, errors.New("private key not found for the host")
+	}
+
+	signature, err := privKey.Sign(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign data: %w", err)
+	}
+
+	return signature, nil
+}
+
+func (l *Libp2p) getPublicKey() ([]byte, error) {
+	privKey := l.Host.Peerstore().PrivKey(l.Host.ID())
+	if privKey == nil {
+		return nil, errors.New("private key not found for the host")
+	}
+
+	pubKey := privKey.GetPublic()
+	return pubKey.Raw()
+}
+
+func (l *Libp2p) getCustomNamespace(key, peerID string) string {
+	return fmt.Sprintf("%s-%s-%s", l.config.CustomNamespace, key, peerID)
+}
+
+func createCIDFromKey(key string) (cid.Cid, error) {
+	hash := sha256.Sum256([]byte(key))
+	mh, err := multihash.Encode(hash[:], multihash.SHA2_256)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+	return cid.NewCidV1(cid.Raw, mh), nil
 }
 
 func CleanupPeer(id peer.ID) error {

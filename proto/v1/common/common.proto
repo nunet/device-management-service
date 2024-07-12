@@ -1,0 +1,11 @@
+syntax = "proto3";
+package common;
+
+// Advertisement is the envelope to advertise peers payload.
+message Advertisement {
+    string peer_id = 1;
+    int64 timestamp = 2;
+    bytes data = 3;
+    bytes signature = 4;
+    bytes public_key = 5;
+}

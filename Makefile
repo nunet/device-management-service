@@ -1,3 +1,13 @@
+PROTO_DIR := proto/v1/common
+GO_OUT_DIR := proto/generated/v1/common
+
+PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
+
+PROTOC := protoc
+
+generate:
+	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
+
 .PHONY: all clean linux_amd64 darwin_arm64
 
 all: linux_amd64 darwin_arm64
