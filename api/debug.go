@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -27,12 +28,10 @@ func (p *P2pHandler) PingPeerHandler(c *gin.Context) {
 		return
 	}
 
-	// res, err := p.p2p.Ping(reqCtx, target.String(), time.Second*5)
-	res, _ := p.p2p.Ping(reqCtx, target)
-	result := <-res
-	if result.Error != nil {
+	res, err := p.p2p.Ping(reqCtx, target.String(), time.Second*5)
+	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": fmt.Sprintf("could not ping peer %s: %v", id, err)})
 		return
 	}
-	c.JSON(200, gin.H{"message": fmt.Sprintf("ping peer %s, success=%t, RTT=%d", id, result.Error == nil, result.RTT)})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("ping peer %s, success=%t, RTT=%d", id, res.Success, res.RTT)})
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/models"
-	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
 func (m *MockHandler) ListPeersHandler(c *gin.Context) {
@@ -36,9 +35,9 @@ func (m *MockHandler) SelfPeerInfoHandler(c *gin.Context) {
 		c.AbortWithStatusJSON(400, gin.H{"error": "host node has not yet been initialized"})
 		return
 	}
-	self := libp2p.SelfPeer{
-		ID:    mockHostID,
-		Addrs: mockMaddrs(),
+	self := models.NetworkStats{
+		ID:         mockHostID,
+		ListenAddr: mockAddr,
 	}
 	c.JSON(200, self)
 }
@@ -136,21 +135,4 @@ func mockKadDHTPeers() []string {
 		return []string{}
 	}
 	return []string{"Qm0xfoobar", "Qm1xfoobarbarbar", "Qm2xbazbazfoo", "Qm3xfoobarbarfoo"}
-}
-
-func mockMaddrs() []multiaddr.Multiaddr {
-	var multiaddrs []multiaddr.Multiaddr
-	maddrStrings := []string{
-		"/ip4/127.0.0.1/tcp/8080",
-		"/ip6/::1/udp/3000",
-		"/dns4/example.com/tcp/443/https",
-	}
-	for _, maddrString := range maddrStrings {
-		maddr, err := multiaddr.NewMultiaddr(maddrString)
-		if err != nil {
-			continue
-		}
-		multiaddrs = append(multiaddrs, maddr)
-	}
-	return multiaddrs
 }

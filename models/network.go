@@ -17,10 +17,12 @@ func (nc *NetConfig) GetNetworkConfig() *SpecConfig {
 	return &nc.NetworkSpec
 }
 
-// NetStat is a stub. Please expand it or completely change it based on requirements.
-type NetStat struct {
-	Status string `json:"status"` // Network status
-	Info   string `json:"info"`   // Network information
+// NetworkStats should contain all network info the user is interested in.
+// for now there's only peerID and listening address but reachability, local and remote addr etc...
+// can be added when necessary.
+type NetworkStats struct {
+	ID         string `json:"id"`
+	ListenAddr string `json:"listen_addr"`
 }
 
 // MessageInfo is a stub. Please expand it or completely change it based on requirements.

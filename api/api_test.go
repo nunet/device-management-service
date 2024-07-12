@@ -27,6 +27,7 @@ var (
 	debug       bool
 	defaultPeer string
 	mockHostID  = "Qm01testabcdefghjiklgfoobar123"
+	mockAddr    = "/ip4/127.0.0.1/tcp/8080, /ip6/::1/udp/3000, /dns4/example.com/tcp/443/https"
 	// DumpKademliaDHTHandler
 	dumpKadDHTPeers int
 	// ListDHTPeersHandler
