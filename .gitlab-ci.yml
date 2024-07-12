@@ -2,7 +2,7 @@ variables:
   # https://hub.docker.com/r/alpine/git/tags
   GIT_VERSION: v2.30.1
   BUILD_DISABLED: "yes"
-  DMS_BUILDER_VERSION: "0.4"
+  DMS_BUILDER_VERSION: "0.5"
   # CODE_QUALITY_DISABLED: true
   # SKIP_UNIT_TESTS: true
   # DEFECTDOJO_DISABLED: true
@@ -18,7 +18,7 @@ include:
   file: cicd/Auto-DevOps.gitlab-ci.yml
   ref: develop
 
-image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:0.3
+image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:0.4
 
 Build:
   stage: build
