@@ -34,7 +34,7 @@ func (l *Logger) init() error {
 	return err
 }
 
-// New takes in a package to initlialize the new Logger in.
+// New takes in a package to initialize the new Logger in.
 func New(pkg string) *Logger {
 	Log := &Logger{}
 	err = Log.init()
@@ -49,10 +49,10 @@ func New(pkg string) *Logger {
 	return Log
 }
 
-func OtelZapLogger(pkg string) otelzap.Logger {
+func OtelZapLogger(pkg string) *otelzap.Logger {
 	once.Do(func() {
 		l := New(pkg)
 		logger = otelzap.New(l.Logger)
 	})
-	return *logger
+	return logger
 }

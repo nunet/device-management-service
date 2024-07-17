@@ -13,7 +13,7 @@ const (
 
 // TODO: pass the logger to the constructor and remove from here
 var (
-	zlog    otelzap.Logger
+	zlog    *otelzap.Logger
 	newPeer = make(chan peer.AddrInfo)
 )
 

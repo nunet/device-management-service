@@ -5,7 +5,7 @@ import (
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
 
-var zlog otelzap.Logger
+var zlog *otelzap.Logger
 
 func init() {
 	zlog = logger.OtelZapLogger("onboarding")

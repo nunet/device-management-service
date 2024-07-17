@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/models"
 	"gorm.io/driver/sqlite"
@@ -36,7 +35,4 @@ func ConnectDatabase() {
 	database.AutoMigrate(&models.LogBinAuth{})
 
 	DB = database
-	if err := DB.Use(otelgorm.NewPlugin()); err != nil {
-		panic(err)
-	}
 }
