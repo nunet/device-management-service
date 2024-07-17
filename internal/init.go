@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	zlog         otelzap.Logger
+	zlog         *otelzap.Logger
 	ShutdownChan chan os.Signal
 )
 

@@ -1,97 +1,403 @@
-# Introduction
+# Telemetry Package
 
-This package contains logs, tracers and everything related to telemetry. The design and implementation of this package has been initiated within milesotne []In order to implement all functions below, we first define a few datatypes and interfaces.
+## Overview
 
-## Interfaces and types
+The Telemetry package is designed to handle and manage telemetry data collection within the Device Management Service (DMS). It supports a variety of observables and collectors to provide a flexible and extensible telemetry system. This package is built to cater to different requirements and separate indices for various packages within DMS.
 
-* _proposed 2024-04-02; by: @kabir.kbr;_
+## Features
 
-### Collector
+- **Modular Collectors**: Easily configure and extend collectors.
+- **Dynamic Observables**: Create and manage observables dynamically.
+- **Separate Indices**: Support separate indices for different types of metrics and traces.
+- **Configuration Management**: Handle multiple configurations for different parts of the application.
 
-A collector is a data sink that collects data about observed events. Which events it is ovserving and what does it do to process data that it collects is entirely upon the logic of the collector. Here we just define the interface for any collector to be able to registered on any `dms`.
+## Installation
 
-The goal is to allow third parties to propose their collectors and for `dms` to be able to register them and observe required events via implementation of `Observable` interface. For now, we consider three types of `Collector`s: 
+To use the Telemetry package, import it as follows:
 
-* `FileCollector`, collecting events into local file;
-* `DatabaseCollector`, collecting events into local database;
-* `OpenTelemetryCollector`, sending telemetry events to the registered open telemetry collector using open-telemetry format;
-* `ReputationCollector` is not scheduled for the implementation now, but is considered for the future to be able to register reputation systems that will collect events for providing reputation services on the platform; 
-* `HeartbeatCollector` is a special collector for sending periodic heartbeats to a registered sink collector. A `HeartbeatCollector` can be anything, including another device-management-service or an `Allocation`.
+```go
+import "gitlab.com/nunet/device-management-service/telemetry"
+```
 
-See current reference model [collector.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/telemetry/data/collector.go).
+## Configuration
 
-### Observable
+### TelemetryConfig
 
-The `Observable` interface determines how and which events happening in the system are to be observed by collectors. Any events that are eligible for observation at any `ObservabilityLevel` shall implement the interface. 
+The `TelemetryConfig` struct holds the configuration for the telemetry system. Configuration can be loaded from environment variables:
 
-`ObservabilityLevel` is a constructed similarly to log levels concept in many programming languages and frameworks. We currently define six observability levels -- `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR` and `FATAL`.
+```go
+package models
 
-Any event that implements `Observable` interface can be observed by the collectors that are determined to be activated as a result of matching `ObservabilityLevel` declared by an event and the `ObservabilityLevel` environment variable.
+type TelemetryConfig struct {
+    ServiceName        string
+    GlobalEndpoint     string
+    ObservabilityLevel int
+    CollectorConfigs   map[string]CollectorConfig
+}
+```
 
-See current reference model [observable.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/telemetry/data/observable.go).
+Example of loading configuration from environment variables:
 
+```go
+config, err := models.LoadConfigFromEnv()
+if err != nil {
+    log.Fatalf("Failed to load configuration: %v", err)
+}
+```
 
-### Event
+## Usage
 
-`Event` is an interface which defines methods to be implemented by a generic event of type `gEvent` and by that determines data that need to be included in each event for it be eligible to observation.
+### Initializing Telemetry
 
-`EventCategory` is needed in order to account for the reasons for why we are doing observation of certain events and these are different from `ObservabilityLevel`s. Currently we are having the following event categories: `ACCOUNTING`, `LOGGING`, `TRACING`, `HEARTBEAT`. Note that there is clear relation between `EventCategory` and `Collector` types.
+Initialize the telemetry system with the loaded configuration:
 
-#### Generic Event `gEvent`
+```go
+telemetryInstance := telemetry.NewTelemetry(config)
+```
 
-A generic event data type `gEvent` is then a type which joins together two interfaces -- `Event` and `Observable` -- and by that allows to a) gather all information needed to observe an event and b) direct the collection of that information to all registered collectors.
+## Creating Collectors
 
-Developers are expected to choose to choose actions of the code to be considered events and observed at different levels by using `gEvent` implementations.
+Use the `CollectorFactory` to create and register collectors:
 
-See current reference model [event.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/telemetry/data/event.go).
+```go
+collectorFactory := telemetry.NewCollectorFactory(config)
 
-### Message
+collectorFactory.RegisterCollector(telemetry.Log, telemetry.NewLogCollector)
+collectorFactory.RegisterCollector(telemetry.OpenTelemetry, otel.NewOpenTelemetryCollector)
+```
 
-_proposed by @kabir.kbr; 2024-04-16;_
+Create and initialize collectors:
 
-`Message` is one of the key primitives of the NuNet platform -- the angle of the the architecture mostly influenced by the Actor model. This package defines `Message` interface and related data structures, but the transport-layer implementation of the interface is done in the [`network` package](../network/README.md). 
+```go
+logCollector, err := collectorFactory.CreateCollector(telemetry.Log)
+if err != nil {
+    log.Fatalf("Failed to create Log collector: %v", err)
+}
+if err := logCollector.Initialize(); err != nil {
+    log.Fatalf("Failed to initialize Log collector: %v", err)
+}
+telemetryInstance.AddCollector("log", logCollector)
 
-A `Message` interface defines two methods: `send()` and `receive()`. A generic type `gMessage` implements `Message` interface and requires necessary fields `sender`, `receiver`, `header` and `payload`.
+otelCollector, err := collectorFactory.CreateCollector(telemetry.OpenTelemetry)
+if err != nil {
+    log.Fatalf("Failed to create OpenTelemetry collector: %v", err)
+}
+if err := otelCollector.Initialize(); err != nil {
+    log.Fatalf("Failed to initialize OpenTelemetry collector: %v", err)
+}
+telemetryInstance.AddCollector("otel", otelCollector)
+```
 
-See current reference model [message.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/proposed/device-management-service/telemetry/data/message.go).
+## Creating Observables
 
+Use the `ObservableFactory` to create observables and add them to the telemetry instance:
 
-### Heartbeat 
+```go
+observableFactory := telemetry.NewObservableFactory()
 
-We define `Heartbeat` as a regularly send messages from the observed `Actor` entity in NuNet network (so `Node` or `Allocation`) to another entity, which can be another `Actor` or an external. This is done by registering a background process for all heartbeats of `Actor` associated with the same `Node` and triggering them per defined characteristics. A heartbeat is an `gEvent` of `HEARTBEAT` category which is being triggered periodically by a background process. It shall be implemented in `background_task` package which actually registering, maintain and stop heartbeat processes.
+heartbeatObservable := observableFactory.CreateObservable()
+telemetryInstance.AddObservable(telemetry.Heartbeat, "heartbeat_index", heartbeatObservable, []string{"log"})
 
-See the current reference model [heartbeat.go]()
+metricObservable := observableFactory.CreateObservable()
+telemetryInstance.AddObservable(telemetry.Metric, "metrics_index", metricObservable, []string{"otel"})
+```
 
-#### Related functionalities
+## Handling Events
 
-* [Request for heartbeat](#3-request-for-heartbeat) defined in this package;
-* [Register heartbeat](../background_tasks/README.md#register-heartbeat) defined in `background_tasks` package;
+Create an event and handle it through the telemetry instance:
 
+```go
+event := telemetry.Event{
+    Type:    telemetry.Heartbeat,
+    Payload: map[string]interface{}{"status": "alive"},
+    Index:   "heartbeat_index",
+}
+telemetryInstance.HandleEvent(event)
 
-## Functions
+metricEvent := telemetry.Event{
+    Type:    telemetry.Metric,
+    Payload: map[string]interface{}{"cpu_usage": 70.5, "memory_usage": 512},
+    Index:   "metrics_index",
+}
+telemetryInstance.HandleEvent(metricEvent)
+```
 
-## 1. Register Collector(s)
+## Manually Flushing Collectors
 
-_proposed 2024-04-08; by: @kabir.kbr;_
+You can manually flush the collectors if needed:
 
-* signature: `dms.telemetry.registerCollector(gEvent gEvent, collector Collector) -> gEvent`;
-* input #1: a variable of an generic event `dms.telemetry.gEvent` which will enable observation via registered `Collector`s.
-* input #2: a variable describing collector to be registered `dms.telemetry.Collector` ([link](#collector));
-* output type `dms.telemetry.gEvent` ([link](#event));
+```go
+if err := telemetryInstance.Flush(); err != nil {
+    log.Fatalf("Failed to flush telemetry: %v", err)
+}
+```
 
-`registerCollector` function takes two parameters of type `gEvent` and `Collector` and outputs  `gEvent` type variable with the `Collector` registered in it.
+## Shutting Down
 
-* the main functionality of registering collectors is to automatically read default configuration of collectors and register them all into the generic event, which shall be used for instrumenting all events in the program -- see [Scenario: Register default collectors automatically](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/telemetry/registerCollector.feature);
-* We also need to ensure that we could register collectors on demand, when they supplied in any manner (possibly also including via cli in the future) -- see: [Scenario: Register custom collectors manually](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/telemetry/registerCollector.feature)
-   * The most important is the `OpenTelemetryCollector`, which will be used to collect data about all instrumented events;
+Ensure proper shutdown of the telemetry system to flush and close all collectors:
 
-## 2. Observe events
+```go
+defer func() {
+    if err := telemetryInstance.Shutdown(); err != nil {
+        log.Fatalf("Failed to shutdown telemetry: %v", err)
+    }
+}()
+```
 
-_proposed 2024-04-09; by: @kabir.kbr;_
+## Extending the Telemetry Package
 
-The `gEvent` implements both `Event` and `Observable` interfaces which enables to mark each event in the program (chosen by a programmer) as an observable event and, provided the combination of `EventCategory` and `ObservabilityLevel` send telemetry information to registered collectors (e.g. `OpenTelemetryCollector`). 
+### Adding New Collectors
 
-* A correctly constructed event of `gEvent` type is observed by calling the `observeEvent()` method defined in `Observable` interface -- see [Feature: Observe gEvent](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/telemetry/observeEvent.feature).
+To add a new collector, implement the `Collector` interface:
 
-## 3. Request for heartbeat
+```go
+type Collector interface {
+    Initialize() error
+    HandleEvent(event Event) error
+    Shutdown() error
+    Flush() error
+    GetObservedLevel() models.ObservabilityLevel
+    GetEndpoint() string
+}
+```
 
+Register the new collector with the `CollectorFactory`:
+
+```go
+collectorFactory.RegisterCollector("newCollectorType", NewNewCollector)
+```
+
+### Adding New Observables
+
+To add a new observable, implement the `Observable` interface:
+
+```go
+type Observable interface {
+    Observe(event Event)
+    AddCollector(c Collector)
+    GetCollectors() []Collector
+}
+```
+
+Create the observable using the `ObservableFactory`:
+
+```go
+observableFactory := telemetry.NewObservableFactory()
+observable := observableFactory.CreateObservable()
+```
+
+## Different Collector Sets and Endpoints
+
+You can configure different sets of collectors for different observables. For example, you may want heartbeat events to be handled by a log collector and metric events to be handled by an OpenTelemetry collector.
+
+To specify different endpoints and collector sets, configure your `TelemetryConfig` with specific collector endpoints:
+
+```go
+config, err := models.LoadConfigFromEnv()
+if err != nil {
+    log.Fatalf("Failed to load configuration: %v", err)
+}
+
+// Example configuration:
+config.CollectorConfigs = map[string]models.CollectorConfig{
+    "OPENTELEMETRY": {
+        CollectorType:     "OPENTELEMETRY",
+        CollectorEndpoint: "otel-collector.telemetry.nunet.io:4318",
+    },
+    "LOG": {
+        CollectorType:     "LOG",
+        CollectorEndpoint: "log-collector.endpoint:1234",
+    },
+}
+```
+
+When adding observables, specify which collectors should handle each type of event:
+
+```go
+heartbeatObservable := observableFactory.CreateObservable()
+telemetryInstance.AddObservable(telemetry.Heartbeat, "heartbeat_index", heartbeatObservable, []string{"log"})
+
+metricObservable := observableFactory.CreateObservable()
+telemetryInstance.AddObservable(telemetry.Metric, "metrics_index", metricObservable, []string{"otel"})
+```
+
+## Why This Design?
+
+This design ensures a modular and flexible approach to telemetry data collection, catering to various requirements and indices across different packages. It provides a robust configuration management system and supports dynamic creation and management of observables and collectors, making it easy to extend and integrate into different parts of the application.
+
+## Conclusion
+
+The Telemetry package is a powerful tool for managing telemetry data in a device management service. By following the detailed guide provided, developers can easily integrate and extend this package to meet their specific needs, ensuring efficient and effective telemetry data collection and management.
+
+## Demo Implementation in Main
+
+Below is a demo implementation in `main.go`. This is just for showcasing and will be removed later on:
+
+```go
+package main
+
+import (
+	"time"
+
+	"github.com/joho/godotenv"
+	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/telemetry"
+	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/telemetry/otel"
+	"go.uber.org/zap"
+)
+
+var log *zap.SugaredLogger
+
+func init() {
+	l := logger.New("main")
+	log = l.Sugar()
+}
+
+func main() {
+	// Load environment variables from .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
+
+	// Load configuration
+	config, err := models.LoadConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Debug: Log loaded configuration
+	log.Infof("Loaded Configuration: %+v", config)
+
+	// Initialize telemetry instance for global endpoint
+	globalTelemetry := telemetry.NewTelemetry(config)
+
+	// Create the collector factory for global telemetry
+	globalCollectorFactory := telemetry.NewCollectorFactory(config)
+
+	// Register the Log and OpenTelemetry collectors
+	globalCollectorFactory.RegisterCollector(telemetry.Log, telemetry.NewLogCollector)
+	globalCollectorFactory.RegisterCollector(telemetry.OpenTelemetry, otel.NewOpenTelemetryCollector)
+
+	// Create and add log collector for global telemetry
+	globalLogCollector, err := globalCollectorFactory.CreateCollector(telemetry.Log)
+	if err != nil {
+		log.Fatalf("Failed to create Log collector: %v", err)
+	}
+	if err := globalLogCollector.Initialize(); err != nil {
+		log.Fatalf("Failed to initialize Log collector: %v", err)
+	}
+	globalTelemetry.AddCollector("log", globalLogCollector)
+
+	// Create and add OpenTelemetry collector for global telemetry
+	globalOtelCollector, err := globalCollectorFactory.CreateCollector(telemetry.OpenTelemetry)
+	if err != nil {
+		log.Fatalf("Failed to create OpenTelemetry collector: %v", err)
+	}
+	if err := globalOtelCollector.Initialize(); err != nil {
+		log.Fatalf("Failed to initialize OpenTelemetry collector: %v", err)
+	}
+	globalTelemetry.AddCollector("otel", globalOtelCollector)
+
+	// Create a separate config for specific telemetry
+	specificConfig := *config
+	specificConfig.GlobalEndpoint = config.CollectorConfigs["OPENTELEMETRY"].CollectorEndpoint
+
+	// Initialize telemetry instance for specific endpoint
+	specificTelemetry := telemetry.NewTelemetry(&specificConfig)
+
+	// Create the collector factory for specific telemetry
+	specificCollectorFactory := telemetry.NewCollectorFactory(&specificConfig)
+	specificCollectorFactory.RegisterCollector(telemetry.Log, telemetry.NewLogCollector)
+	specificCollectorFactory.RegisterCollector(telemetry.OpenTelemetry, otel.NewOpenTelemetryCollector)
+
+	// Create and add log collector for specific telemetry
+	specificLogCollector, err := specificCollectorFactory.CreateCollector(telemetry.Log)
+	if err != nil {
+		log.Fatalf("Failed to create Log collector: %v", err)
+	}
+	if err := specificLogCollector.Initialize(); err != nil {
+		log.Fatalf("Failed to initialize Log collector: %v", err)
+	}
+	specificTelemetry.AddCollector("log", specificLogCollector)
+
+	// Create and add OpenTelemetry collector for specific telemetry
+	specificOtelCollector, err := specificCollectorFactory.CreateCollector(telemetry.OpenTelemetry)
+	if err != nil {
+		log.Fatalf("Failed to create OpenTelemetry collector: %v", err)
+	}
+	if err := specificOtelCollector.Initialize(); err != nil {
+		log.Fatalf("Failed to initialize OpenTelemetry collector: %v", err)
+	}
+	specificTelemetry.AddCollector("otel", specificOtelCollector)
+
+	// Create an observable factory
+	observableFactory := telemetry.NewObservableFactory()
+
+	// Create observables and add them to global telemetry with specific collectors
+	heartbeatObservableGlobal := observableFactory.CreateObservable()
+	globalTelemetry.AddObservable(telemetry.Heartbeat, "heartbeat_global", heartbeatObservableGlobal, []string{"log"})
+
+	metricObservableGlobal := observableFactory.CreateObservable()
+	globalTelemetry.AddObservable(telemetry.Metric, "metrics_global", metricObservableGlobal, []string{"otel"})
+
+	// Create observables and add them to specific telemetry with specific collectors
+	heartbeatObservableSpecific := observableFactory.CreateObservable()
+	specificTelemetry.AddObservable(telemetry.Heartbeat, "heartbeat_specific", heartbeatObservableSpecific, []string{"log"})
+
+	metricObservableSpecific := observableFactory.CreateObservable()
+	specificTelemetry.AddObservable(telemetry.Metric, "metrics_specific", metricObservableSpecific, []string{"otel"})
+
+	// Send events to global telemetry
+	heartbeatEventGlobal := telemetry.Event{
+		Type:    telemetry.Heartbeat,
+		Payload: map[string]interface{}{"status": "global"},
+		Index:   "heartbeat_global",
+	}
+	globalTelemetry.HandleEvent(heartbeatEventGlobal)
+
+	metricEventGlobal := telemetry.Event{
+		Type:    telemetry.Metric,
+		Payload: map[string]interface{}{"cpu_usage": 55.5, "memory_usage": 1024},
+		Index:   "metrics_global",
+	}
+	globalTelemetry.HandleEvent(metricEventGlobal)
+
+	// Send events to specific telemetry
+	heartbeatEventSpecific := telemetry.Event{
+		Type:    telemetry.Heartbeat,
+		Payload: map[string]interface{}{"status": "specific"},
+		Index:   "heartbeat_specific",
+	}
+	specificTelemetry.HandleEvent(heartbeatEventSpecific)
+
+	metricEventSpecific := telemetry.Event{
+		Type:    telemetry.Metric,
+		Payload: map[string]interface{}{"cpu_usage": 75.3, "memory_usage": 2048},
+		Index:   "metrics_specific",
+	}
+	specificTelemetry.HandleEvent(metricEventSpecific)
+
+	// Manually flush telemetry instances
+	if err := globalTelemetry.Flush(); err != nil {
+		log.Fatalf("Failed to flush global telemetry: %v", err)
+	}
+	if err := specificTelemetry.Flush(); err != nil {
+		log.Fatalf("Failed to flush specific telemetry: %v", err)
+	}
+
+	// Allow some time for events to be sent before shutting down
+	time.Sleep(5 * time.Second)
+
+	// Handle shutdown
+	defer func() {
+		if err := globalTelemetry.Shutdown(); err != nil {
+			log.Fatalf("Failed to shutdown global telemetry: %v", err)
+		}
+		if err := specificTelemetry.Shutdown(); err != nil {
+			log.Fatalf("Failed to shutdown specific telemetry: %v", err)
+		}
+	}()
+}
+```
