@@ -251,13 +251,83 @@ Check if both can discover each other.
 
 ### 4. Tests
 
-TBD by Abhishek
+**Running Functional Tests with Python-Behave Framework**
+
+**Pre-requisites**
+
+- **Python Installation:** Ensure Python 3.8 or higher is installed on your system.
+
+- **Environment Variable:** Confirm that the Python path is included in the system's PATH environment variable.
+
+**Steps to Run Functional Tests**
+
+**1. Clone the Test-Suite Repository**
+
+- Open your terminal and execute the following command to clone the repository from GitLab:
+
+  `git clone git@gitlab.com:nunet/test-suite.git
+`
+
+**2. Install the Dependencies**
+
+- Navigate to the cloned test-suite directory:
+
+  `cd test-suite
+`
 
 
+- Install the necessary dependencies by running:
+
+  `pip install -r requirements.txt
+`
+
+**3. Executing the Tests**
+
+- Navigate to the functional tests directory:
+
+  `cd /test-suite/stages/functional_tests
+`
+- Run the tests using the behave command:
+
+  `behave features/<dir or feature file path>
+`
+- Example
+
+  `behave features/device-management-service/api-tests/p2p_api.feature
+`
+- Note: This command will execute all Gherkin feature files or scenarios under the specified directory. Standard output logs will be displayed in the terminal.
+
+**4. Generate Allure Report (Optional)**
+
+[Allure](https://allurereport.org/docs/behave/) is a HTML-based reporting framework. If you want to generate the report in a fancy way,Follow these steps to generate and view the report:
+
+**Pre-requisites for Allure**
+- Install Allure from [Allure Releases](https://github.com/allure-framework/allure2/releases).
+
+**Steps to Generate and View Allure Report**
+
+- Run the Tests with Allure Formatter:
+
+  `behave features/device-management-service/<feature files to run> --junit -f allure_behave.formatter:AllureFormatter -o allure-results
+`
+
+- Example:
+
+  `behave features/device-management-service/api-tests/p2p_api.feature --junit -f allure_behave.formatter:AllureFormatter -o allure-results
+`
+- Generate the HTML Report:
+
+  `allure generate allure-results -o allure-report
+`
+
+- View the Report:
+
+  `allure open allure-report
+`
+- Zip the Report for Sharing:
+
+  `zip -r allure-report.zip allure-report
+`
 
 
-
-
-
-
-
+By following these steps, you can effectively run functional tests using the Python-Behave framework and generate comprehensive reports using Allure.
