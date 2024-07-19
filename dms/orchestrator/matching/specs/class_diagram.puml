@@ -1,0 +1,46 @@
+class dms.orchestrator.matching.Preference <<comparator.go>> {
+   proposed
+   ..
+   +TypeName : string
+   +Strength : PreferenceStrength
+   +DefaultComparatorOverride : Comparator
+}
+
+enum dms.orchestrator.matching.PreferenceStrength {
+   proposed
+   ..   
+   Hard
+   Soft
+}
+
+metaclass dms.orchestrator.matching.Comparator <<comparator.go>>{
+    + Compare(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+}
+
+class dms.orchestrator.matching.ComparatorMap <<comparator.go>> {
+   ExecutionResourcesComparator(): models.Comparison
+   ExecutorComparator(): models.Comparison
+   ExecutorsComparator(): models.Comparison
+   ExecutorTypeComparator(): models.Comparison
+   GPUComparator(): models.Comparison
+   GPUsComparator(): models.Comparison
+   GPUVendorComparator(): models.Comparison
+   JobTypeComparator(): models.Comparison
+   JobTypesComparator(): models.Comparison
+   LibrariesComparator(): models.Comparison
+   LibraryComparator(): models.Comparison
+   LiteralComparator(): models.Comparison
+   LocalitiesComparator(): models.Comparison
+   LocalityComparator(): models.Comparison
+   NumericComparator(): models.Comparison
+}
+
+
+' relations:
+
+dms.orchestrator.matching.Preference::Strength <|-- dms.orchestrator.matching.PreferenceStrength 
+dms.orchestrator.matching.Comparator <|-- dms.orchestrator.matching.ComparatorMap
+dms.orchestrator.matching.Preference --> dms.orchestrator.matching.Comparator::Compare
+
+
+ 

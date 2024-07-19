@@ -18,7 +18,7 @@ type GPU struct {
 	// PCI address of the device, in the format AAAA:BB:CC.C
 	// Used to discover the correct device rendering cards
 	PCIAddress string
-	// added from the proposed specifications
+	// Model is GPU model as determined by a vendor, ex A100
 	Model  string `json:"model" description:"GPU model, ex A100"`
 	VRAM   int    `json:"vram" description:"GPU VRAM size in MB"`	
 }
@@ -30,7 +30,7 @@ type ExecutionResources struct {
 	Memory uint64 `json:"memory,omitempty"`
 	// Disk in bytes
 	Disk uint64 `json:"disk,omitempty"`
-	// GPU configurations
+	// GPUs GPU configurations
 	GPUs []GPU `json:"gpus,omitempty"`
 }
 

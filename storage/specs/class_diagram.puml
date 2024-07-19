@@ -1,0 +1,11 @@
+    class storage.StorageProvider
+    class storage.StorageVolume
+    class storage.VolumeController
+
+'package basic_controller {
+    !include ../basic_controller/specs/class_diagram.puml
+'}
+
+'package s3 {
+    !include ../s3/specs/class_diagram.puml
+'}

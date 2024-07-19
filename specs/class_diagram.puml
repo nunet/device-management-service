@@ -1,0 +1,75 @@
+left to right direction
+'top to bottom direction
+
+' package api {
+ !include ../api/specs/class_diagram.puml
+' }
+
+package cmd {
+    !include ../cmd/specs/class_diagram.puml
+}
+
+package db {
+    !include ../db/specs/class_diagram.puml
+}
+
+package dms {
+    !include ../dms/specs/class_diagram.puml
+}
+
+package executor {
+    !include ../executor/specs/class_diagram.puml
+}
+
+package internal {
+    !include ../internal/specs/class_diagram.puml
+}
+
+package models {
+    !include ../models/specs/class_diagram.puml
+}
+
+package network {
+    !include ../network/specs/class_diagram.puml
+}
+
+package plugins {
+    !include ../plugins/specs/class_diagram.puml
+}
+
+package storage {
+    !include ../storage/specs/class_diagram.puml
+}
+
+package telemetry {
+    !include ../telemetry/specs/class_diagram.puml
+}
+
+package tokenomics {
+    !include ../tokenomics/specs/class_diagram.puml
+}
+
+package utils {
+    !include ../utils/specs/class_diagram.puml
+}
+
+' inter-package relationships
+models.ID ..|> dms.jobs.AllocationID
+
+dms.orchestrator.matching.ComparatorMap::ExecutorsComparator <|-- models.Executors 
+dms.orchestrator.matching.ComparatorMap::ExecutorTypeComparator <|-- models.ExecutorType
+dms.orchestrator.matching.ComparatorMap::GPUsComparator <|-- models.GPUs
+dms.orchestrator.matching.ComparatorMap::GPUVendorComparator <|-- models.GPUVendor
+dms.orchestrator.matching.ComparatorMap::GPUComparator <|-- models.GPU
+dms.orchestrator.matching.ComparatorMap::JobTypesComparator <|-- models.JobTypes
+dms.orchestrator.matching.ComparatorMap::LibraryComparator <|-- models.Library
+dms.orchestrator.matching.ComparatorMap::LocalityComparator <|-- models.Locality
+
+
+dms.orchestrator.matching.Comparator::Compare <|-- models.Comparison 
+
+models.ID ..|> dms.node.NodeID
+
+db.repositories.GenericRepository <|.. telemetry.DatabaseCollector
+
+dms.node.Actor -- network.libp2p.P2P

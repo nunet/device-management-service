@@ -1,0 +1,9 @@
+    class internal.InternalClassesTBD
+
+    'package internal.background_tasks {
+        !include ../background_tasks/specs/class_diagram.puml
+    '}
+
+    'package internal.config {
+        !include ../config/specs/class_diagram.puml
+    '}

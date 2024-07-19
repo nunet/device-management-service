@@ -1,0 +1,19 @@
+    interface executor.Executor {
+        +IsInstalled() bool
+        +Start(*ExecutionRequest) error
+        +Run(*ExecutionRequest) *ExecutionResult, error
+        +Wait(executionID) <-chan *ExecutionResult, <-chan error
+        +Cancel(executionID)
+        +GetLogStream(executionID) Reader, error
+    }
+
+'package executor.docker {
+    !include ../docker/specs/class_diagram.puml
+'}
+
+'package executorlfirecracker {
+    !include ../firecracker/specs/class_diagram.puml
+'}
+
+executor.firecracker.Firecracker <|.. executor.Executor
+executor.docker.Docker <|.. executor.Executor

@@ -10,6 +10,9 @@ const (
 
 )
 
+// TODO: Consider comments in this thread: https://gitlab.com/nunet/device-management-service/-/merge_requests/356#note_1997854443
+// TODO: Consider comments in this thread: https://gitlab.com/nunet/device-management-service/-/merge_requests/356#note_1997875361
+
 // 'left' means 'this object' and 'right' means 'the supplied other object'; 
 // it makes sense when using the type in functions like Compare(left, right)
 

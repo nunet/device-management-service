@@ -1,0 +1,45 @@
+    class db.repositories.QueryConditions {
+        Field string
+        Operator string
+        Value interface
+    }
+
+    class db.repositories.Query {
+        +Instance T
+        +Conditions []QueryConditions
+        +SortBy string
+        +Limit int
+        +Offset int
+    }
+
+    interface db.repositories.GenericRepository {
+        +Create(data T) T, error
+        +Get() T, error
+        +Update(id interface, data T) T, error
+        +Delete(id interface) error
+        +Find(query Query) T, error
+        +FindAll(query Query) []T, error
+        +GetQuery() Query
+    }
+
+    interface db.repositories.GenericEntityRepository {
+        +Save(data T) T, error
+        +Get() T, error
+        +Clear() error
+        +History(query Query) []T, error
+        +GetQuery() Query
+    }
+
+package db.repositories.repositories_clover {
+    !include ../clover/specs/class_diagram.puml
+}
+
+package db.repositories.repositories_gorm {
+    !include ../gorm/specs/class_diagram.puml
+}
+
+
+db.repositories.repositories_gorm.GenericEntityRepositoryGorm <|.. db.repositories.GenericEntityRepository
+db.repositories.repositories_gorm.GenericRepositoryGorm <|.. db.repositories.GenericRepository
+db.repositories.repositories_clover.GenericEntityRepositoryClover <|.. db.repositories.GenericEntityRepository
+db.repositories.repositories_clover.GenericRepositoryClover <|.. db.repositories.GenericRepository

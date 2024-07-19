@@ -1,0 +1,46 @@
+    interface cmd.GPU {
+        -name() string
+        -utilizationRate() uint32
+        -memory() memoryInfo
+        -temperature() float64
+        -powerUsage() uint32
+    }
+
+    class cmd.ContainerOptions {
+        +UseGPUs bool
+        +Devices []string
+        +Groups []string
+        +Image string
+        +Command []string
+        +Entrypoint []string
+    }
+
+    class cmd.amdGPU {
+        -index int
+        -name() string
+        -utilizationRate() uint32
+        -memory() memoryInfo
+        -temperature() float64
+        -powerUsage() uint32
+    }
+
+    class cmd.memoryInfo {
+        -used uint64
+        -free uint64
+        -total uint64
+    }
+
+    class cmd.nvidiaGPU {
+        -index int
+        -getDevice() (nvml.Device, error)
+        -name() string
+        -utilizationRate() uint32
+        -memory() memoryInfo
+        -temperature() float64
+        -powerUsage() uint32
+    }
+
+    amdGPU <|.. GPU
+    nvidiaGPU <|.. GPU
+
+!include ../backend/specs/class_diagram.puml
