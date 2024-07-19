@@ -1,0 +1,31 @@
+    class dms.node.NodeID {
+        +models.ID.UUID id
+        +models.ID.CID cid
+        +String peerID
+        +String DID
+    }
+
+    class dms.node.Node {
+        +NodeID id
+        +models.Mailbox mailbox
+        +db.LocalDatabaseCollector db
+        +dms.Capability registeredCapability
+        +dms.Capability availableCapability
+        +Map[dms.Job.JobID]dms.Capability lockedCapabilities
+        +dms.CapabilityComparator preferences
+        +Slice[jobs.AllocationID] allocations
+        +Actor.sendMessage(String, telemetry.Message)
+        +getAllocations() Slice[jobs.AllocationID]
+        +getAllocationStatus(jobs.AllocationID) String
+        +routeToAllocation(jobs.AllocationID)
+        +benchmarkCapability() dms.Capability
+        +lockCapability(jobs.Pod, dms.Capability)
+        +startAllocation(orchestrator.Invocation)
+    }
+
+        class dms.node.Actor {
+        +models.ID id
+        +models.Mailbox mailbox
+        +processMessage() telemetry.Message
+        +sendMessage(String, telemetry.Message)
+    }

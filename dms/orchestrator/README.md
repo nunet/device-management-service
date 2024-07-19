@@ -61,7 +61,15 @@ See [References](#7-references) section for research blogs with more details on 
 
 Here is quick overview of the contents of this directory:
 
-`TBD`
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality. 
+
+* [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/develop/orchestrator/specs): Directory containing package specifications, including package class diagram.
+
+_Subpackages_
+
+* [graph](graph): Defines and implements interfaces of Graph logic for network topology awareness (_proposed_).
+
+* [matching](matching): Defines and implements `Comparator` logic for compute capabilities and by that the *Search and Match* operation.
 
 ### 3. Functionality
 

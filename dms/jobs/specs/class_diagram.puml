@@ -1,0 +1,46 @@
+    class dms.jobs.AllocationID {
+        +models.ID.UUID UUID
+        +String CID
+    }
+
+    class dms.jobs.Allocation {
+        +AllocationID id
+        +jobs.Job.JobID jobID
+        +nodeID nodeID
+        +models.ID source
+        +models.Mailbox mailbox
+        +start()
+        +sendMessage(telemetry.Message)
+        +register()
+    }
+
+    class dms.jobs.Job {
+        +models.ID id
+        +Slice[models.SpecConfig] inputs
+        +Slice[models.SpecConfig] outputs
+        +dms.Capability requiredCapability
+        +Slice[jobs.jobLink] children
+        getPods() Slice[jobs.Pod]
+    }
+
+    class dms.jobs.JobLink {
+        +models.SpecConfig relationProperties
+        +jobs.Job relatedJob
+        +validateRelations()
+    }
+
+    class dms.jobs.Pod {
+        +models.ID id
+        +dms.Capabililty podCapabilitly
+        +Slice[jobs.Job] jobs
+        +combineCapabilities() dms.Capability
+    }
+
+ 
+    dms.orchestrator.graph.Vertex ..|> dms.jobs.Allocation
+    dms.jobs.Allocation <|.. dms.jobs.AllocationID
+    dms.jobs.Job <|.. dms.jobs.JobLink
+    dms.jobs.JobLink <|.. dms.jobs.Job
+    dms.jobs.Allocation -- dms.jobs.Job
+    dms.jobs.Pod <|-- dms.jobs.Job
+    dms.jobs.Allocation -- dms.jobs.Executor

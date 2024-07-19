@@ -1,0 +1,59 @@
+    class executor.firecracker.Firecracker {
+        -handlers
+        -client
+        +ID
+        -doWait(er <-chan *ExecutionResult, e <-chan error, eh *executionHandler)
+        -newFirecrackerExecutionVM(er *ExecutionRequest) *firecracker.Machine, error
+        -generateSocketPath(jobID string, executionID string) string
+        +IsInstalled() bool
+        +Start(*ExecutionRequest) error
+        +Run(*ExecutionRequest) *ExecutionResult, error
+        +Wait(executionID) <-chan *ExecutionResult, <-chan error
+        +Cancel(executionID)
+        +Cleanup() error
+        +FindRunningVM(jobID string, executionID string) *firecracker.Machine, error
+    }
+
+    class  executor.firecracker.EngineSpec-F {
+        +KernelImage string
+        +Initrd string
+        +KernelArgs string
+        +RootFileSystem string
+        +MMDSMessage string
+        +Validate() error
+    }
+
+    class executor.firecracker.Client-F {
+        +IsInstalled() bool
+        +CreateVM(cfg firecracker.Config) *firecracker.Machine, error
+        +StartVM(m *firecracker.Machine) error
+        +ShutdownVM(m *firecracker.Machine) error
+        +Destroy(m *firecracker.Machine, timeout time.Duration) error
+        +FindVM(socketPath string) *firecracker.Machine, error
+    }
+
+    class executor.firecracker.FirecrackerEngineBuilder {
+        -eb *SpecConfig
+        +WithRootFileSystem(e string) *FirecrackerEngineBuilder
+        +WithKernelImage(e string) *FirecrackerEngineBuilder
+        +WithKernelArgs(e string) *FirecrackerEngineBuilder
+        +WithMMDSMessage(e string) *FirecrackerEngineBuilder
+        +Build() *SpecConfig
+    }
+
+    class executor.firecracker.executionHandler-F {
+        -client *Client
+        -executionID string
+        -machine *firecracker.Machine
+        -resultsDir string
+        -activeCh <-chan bool
+        -waitCh <-chan bool
+        -running *atomic.bool
+        -result *models.ExecutionResult
+        +ID string
+        +jobID string
+        -active() bool
+        -run()
+        -kill() error
+        -destroy(timeout time.Duration) error
+    }

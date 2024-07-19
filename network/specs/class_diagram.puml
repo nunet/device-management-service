@@ -1,0 +1,49 @@
+    interface network.Network {
+        +Init()
+        +Start()
+        +Stop()
+        +Ping()
+        +Advertise()
+        +Unadvertise()
+        +Publish()
+        +Subscribe()
+        +Stat()
+    }
+
+    class network.P2P {
+        +Host host.Host
+        +DHT *dht.IpfsDHT
+        +PS peerstore.Peerstore
+        -peers []peer.AddrInfo
+        -config Libp2pConfig
+        +Init()
+        +Start()
+        +Stop()
+        +Ping()
+        +Stat()
+    }
+
+    class network.DHT {
+        +Advertise()
+        +Unadvertise()
+    }
+
+    class network.Gossipsub {
+        +Publish()
+        +Subscribe()
+    }
+
+    interface network.Messaging {
+        +New()
+        +Send()
+        +ReceiveHandler()
+        +Close()
+    }
+
+'package network.libp2p {
+    !include ../libp2p/specs/class_diagram.puml
+'}
+network.P2P <|.. network.Network
+network.DHT <|.. network.P2P
+network.Gossipsub <|.. network.P2P
+network.P2P <|.. network.Messaging

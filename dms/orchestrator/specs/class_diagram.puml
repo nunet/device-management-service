@@ -1,0 +1,84 @@
+
+
+    class dms.orchestrator.Mailbox {
+        +network.p2p p2p
+        +network.gossipsub gossibsub
+        +receiveMessage()
+        +handleMessage()
+        +triggerBehaviour()
+        +getKnownTopics()
+        +getSubscribedTopics()
+        +subscribeToTopic()
+        +unsubscribeFromTopic()
+    }
+
+    class dms.orchestrator.Bid {
+        +BidRequest BidRequest
+        +jobs.JobID jobID
+        +models.ID bidder
+        +PriceBid priceBid
+        +TimeBid timeBid
+        +int timeout
+        +bool validOffer
+        +bool resourcesLockedUntilTimeout
+    }
+
+    class dms.orchestrator.PriceBid {
+        +String priceBidType
+        +String currency
+        +String perTimeUnit
+        +bool perResult
+        +Float amount
+    }
+
+    class dms.orchestrator.TimeBid {
+        +String timeBidType
+        +String units
+        +int duration
+        +int timeStart
+        +int timeFinish
+    }
+
+    class dms.orchestrator.BidRequest {
+        +models.ID id
+        +jobs.Pod pod
+        +models.ID requestor
+        +models.ResourceRequirements resourceRequirements
+        +models.CapabilityComparator comparator
+    }
+
+    class dms.orchestrator.Invocation {
+        +models.ID source
+        +jobs.Pod pod
+        +tokenomics.Contract contract
+    }
+
+    interface dms.orchestrator.Orchestrator {
+        +publishBidRequest(dms.Node, orchestrator.BidRequest, dms.NodeID, ..String)
+        +compare(dms.Capability, dms.Capability) orchestrator.CapabilitlyComparison
+        +acceptJob(dms.CapabilityComparison, dms.CapabilityComparator) bool
+        +sendBid(dms.Node, orchestrator.BidRequest)
+        +selectBestBid(dms.Node, orchestrator.BidRequest) orchestrator.Bid
+        +sendJobRequest(dms.Node, jobs.Pod, dms.NodeID)
+        +sendInvocation(dms.Node, jobs.Invocation, dms.NodeId)
+       
+
+ +orchestrateJob(dms.Node, jobs.Job)
+        +Slice[Graph] networkConfigurations
+    }
+
+
+'package dms.orchestrator.matching {
+    !include ../matching/specs/class_diagram.puml
+'}
+
+'package dms.orchestrator.graph {
+    !include ../graph/specs/class_diagram.puml
+'}
+
+ 
+    dms.node.Actor -- dms.orchestrator.Messaging
+    dms.orchestrator.Bid <.. dms.orchestrator.PriceBid
+    dms.orchestrator.Bid <.. dms.orchestrator.TimeBid
+    dms.orchestrator.Bid -- dms.orchestrator.BidRequest
+    dms.orchestrator.Orchestrator <|-- dms.orchestrator.graph.Graph

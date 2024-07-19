@@ -1,0 +1,84 @@
+    interface telemetry.Collector {
+        +initialize()
+        +handleEvent()
+        +shutdown()
+        +getObserverdLevel()
+        +getEndpoint()
+    }
+
+    class telemetry.FileCollector {
+        +String logFile
+    }
+
+    class telemetry.DatabaseCollector {
+        +String databaseEndpoint
+    }
+
+    class telemetry.OpenTelemetryCollector {
+        +*.traceTracerProvider TracerProvider
+        +String otEndpoint
+    }
+
+    class telemetry.ReputationCollector
+    class telemetry.ActorCollector
+
+    class telemetry.Event {
+        +observeEvent()
+        +Time timestamp
+        +Context context
+        +EventCategory category
+        +String message
+        +Slice[Collector] collectors
+    }
+
+    class telemetry.EventCategory {
+        +ACCOUNTING
+        +LOGGING
+        +TRACING
+        +HEARTBEAT
+    }
+
+    class telemetry.Observable {
+        +getObservabilityLevel() ObservabilityLevel
+        +getCollectors() Slice[Collector]
+        +registerCollector(Collector)
+    }
+
+    class telemetry.ObservabilityLevel {
+        +TRACE
+        +DEBUG
+        +INFO
+        +WARN
+        +ERROR
+        +FATAL
+    }
+
+    class telemetry.Message {
+        +models.ID sender
+        +models.ID receiver
+        +MessageHeaders headers
+        +models.SpecConfig payload
+    }
+
+    class telemetry.Heartbeat {
+        +models.SpecConfig config
+        +Time frequency
+        +Time duration
+        +register()
+        +start()
+        +trigger()
+        +stop()
+        +validateConfig()
+    }
+
+    telemetry.Observable .. telemetry.Collector
+    telemetry.Collector ..|> telemetry.FileCollector
+    telemetry.Collector ..|> telemetry.DatabaseCollector
+    telemetry.Collector ..|> telemetry.OpenTelemetryCollector
+    telemetry.Collector ..|> telemetry.ReputationCollector
+    telemetry.Collector ..|> telemetry.ActorCollector
+    telemetry.Event <.. telemetry.EventCategory
+    telemetry.Event --|> telemetry.Heartbeat
+    telemetry.Event --|> telemetry.Message
+    telemetry.Observable ..|> telemetry.Event
+    telemetry.Observable <.. telemetry.ObservabilityLevel
