@@ -68,10 +68,8 @@ Here is quick overview of the contents of this directory:
 
 #### Package class diagram
 
-**(needs to be updated when merged to `develop`)**
-
 ```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/499-describe-capability-model-logic-in-readme-md-with-class-diagram/dms/orchestrator/matching/specs/class_diagram.puml
+!include https://gitlab.com/nunet/device-management-service/-/raw/develop/dms/orchestrator/matching/specs/class_diagram.puml
 ```
 
 ### 3. Functionality
