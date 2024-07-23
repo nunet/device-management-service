@@ -31,7 +31,11 @@ type Network interface {
 	Stat() models.NetworkStats
 	// Ping pings the given address and returns the PingResult
 	Ping(ctx context.Context, address string, timeout time.Duration) (models.PingResult, error)
-
+	// HandleMessage is responsible for registering a message type and its handler.
+	HandleMessage(messageType string, handler func(data []byte)) error
+	// ResolveAddress given an id it retruns the address of the peer.
+	// In libp2p, id represents the peerID and the response is the addrinfo
+	ResolveAddress(ctx context.Context, id string) ([]string, error)
 	// Advertise advertises the given data with the given adId
 	// such as advertising device capabilities on the DHT
 	Advertise(ctx context.Context, key string, data []byte) error
