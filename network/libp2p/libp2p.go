@@ -172,7 +172,7 @@ func (l *Libp2p) RegisterStreamMessageHandler(messageType models.MessageType, ha
 }
 
 // RegisterBytesMessageHandler registers a stream handler for a specific protocol and sends bytes to handler func.
-func (l *Libp2p) RegisterBytesMessageHandler(messageType models.MessageType, handler BytesHandler) error {
+func (l *Libp2p) RegisterBytesMessageHandler(messageType models.MessageType, handler func(data []byte)) error {
 	if messageType == "" {
 		return errors.New("message type is empty")
 	}
@@ -182,6 +182,11 @@ func (l *Libp2p) RegisterBytesMessageHandler(messageType models.MessageType, han
 	}
 
 	return nil
+}
+
+// HandleMessage registers a stream handler for a specific protocol and sends bytes to handler func.
+func (l *Libp2p) HandleMessage(messageType string, handler func(data []byte)) error {
+	return l.RegisterBytesMessageHandler(models.MessageType(messageType), handler)
 }
 
 func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
@@ -353,6 +358,52 @@ func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Du
 	}
 }
 
+// ResolveAddress resolves the address by given a peer id.
+func (l *Libp2p) ResolveAddress(ctx context.Context, id string) ([]string, error) {
+	pid, err := peer.Decode(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve invalid peer: %w", err)
+	}
+
+	// resolve ourself
+	if l.Host.ID().String() == id {
+		multiAddrs, err := l.GetMultiaddr()
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve self: %w", err)
+		}
+		resolved := make([]string, len(multiAddrs))
+		for i, v := range multiAddrs {
+			resolved[i] = v.String()
+		}
+
+		return resolved, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	pi, err := l.DHT.FindPeer(ctx, pid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve address %s: %w", id, err)
+	}
+
+	peerInfo := peer.AddrInfo{
+		ID:    pi.ID,
+		Addrs: pi.Addrs,
+	}
+
+	multiAddrs, err := peer.AddrInfoToP2pAddrs(&peerInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to p2p address: %w", err)
+	}
+
+	resolved := make([]string, len(multiAddrs))
+	for i, v := range multiAddrs {
+		resolved[i] = v.String()
+	}
+
+	return resolved, nil
+}
+
 // Query return all the advertisements in the network related to a key.
 // The network is queried to find providers for the given key, and peers which we aren't connected to can be retrieved.
 func (l *Libp2p) Query(ctx context.Context, key string) ([]*commonproto.Advertisement, error) {
@@ -499,14 +550,19 @@ func (l *Libp2p) Subscribe(ctx context.Context, topic string, handler func(data 
 func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg models.MessageEnvelope) error {
 	peerAddr, err := multiaddr.NewMultiaddr(addr)
 	if err != nil {
-		return fmt.Errorf("invalid multiaddr: %v", err)
-
+		return fmt.Errorf("invalid multiaddr %s: %v", addr, err)
 	}
 
 	peerInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
 	if err != nil {
-		return fmt.Errorf("failed to get peer info: %v", err)
+		return fmt.Errorf("failed to get peer info %s: %v", addr, err)
+	}
 
+	// we are delivering a message to ourself
+	// we should use the handler to send the message to the handler directly which has been previously registered.
+	if peerInfo.ID.String() == l.Host.ID().String() {
+		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data)
+		return nil
 	}
 
 	if err := l.Host.Connect(ctx, *peerInfo); err != nil {

@@ -21,6 +21,12 @@ Types of changes
 
 -->
 
+## [0.4.171](#473)
+
+### Added
+- Actor Module (#473)
+- Network Module (#445)
+
 ## [0.4.170](#386)
 
 ### Added

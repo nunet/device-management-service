@@ -73,7 +73,7 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestPing(t *testing.T) {
+func TestPingResolveAddress(t *testing.T) {
 	peer1, peer2, _ := createPeers(t, 65512, 65513, 65514)
 	pingResult, err := peer1.Ping(context.TODO(), peer2.Host.ID().String(), 100*time.Millisecond)
 	assert.NoError(t, err)
@@ -81,6 +81,11 @@ func TestPing(t *testing.T) {
 	zeroMicro, err := time.ParseDuration("0µs")
 	assert.NoError(t, err)
 	assert.Greater(t, pingResult.RTT, zeroMicro)
+
+	addresses, err := peer1.ResolveAddress(context.Background(), peer2.Host.ID().String())
+	assert.NoError(t, err)
+	assert.Greater(t, len(addresses), 0)
+	assert.Contains(t, addresses[0], peer2.Host.ID().String())
 }
 
 func TestAdvertiseUnadvertiseQuery(t *testing.T) {
@@ -158,6 +163,28 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	// unsubscribe
 	err = peer1.Unsubscribe("blocks")
 	assert.NoError(t, err)
+}
+
+// if we connect to ourselves we deliver the message properlly to the right handler.
+func TestSelfDial(t *testing.T) {
+	peer1, _, _ := createPeers(t, 65524, 65525, 65526)
+	messageType := models.MessageType("/custom_bytes_callback/1.1.4")
+	messageChannel := make(chan string)
+
+	err := peer1.RegisterBytesMessageHandler(messageType, func(dt []byte) {
+		messageChannel <- string(dt)
+	})
+	assert.NoError(t, err)
+	peer1p2pAddrs, err := peer1.GetMultiaddr()
+	assert.NoError(t, err)
+	err = peer1.SendMessage(context.Background(), []string{peer1p2pAddrs[0].String()}, models.MessageEnvelope{
+		Type: messageType,
+		Data: []byte("testing 123"),
+	})
+	assert.NoError(t, err)
+	// check if we received the data properlly
+	received := <-messageChannel
+	assert.Equal(t, "testing 123", received)
 }
 
 func TestSendMessageAndHandlers(t *testing.T) {

@@ -13,14 +13,11 @@ import (
 // StreamHandler is a function type that processes data from a stream.
 type StreamHandler func(stream network.Stream)
 
-// BytesHandler is a function type that process data and puts them into a byte array.
-type BytesHandler func(data []byte)
-
 // HandlerRegistry manages the registration of stream handlers for different protocols.
 type HandlerRegistry struct {
 	host          host.Host
 	handlers      map[protocol.ID]StreamHandler
-	bytesHandlers map[protocol.ID]BytesHandler
+	bytesHandlers map[protocol.ID]func(data []byte)
 	mu            sync.RWMutex
 }
 
@@ -29,7 +26,7 @@ func NewHandlerRegistry(host host.Host) *HandlerRegistry {
 	return &HandlerRegistry{
 		host:          host,
 		handlers:      make(map[protocol.ID]StreamHandler),
-		bytesHandlers: make(map[protocol.ID]BytesHandler),
+		bytesHandlers: make(map[protocol.ID]func(data []byte)),
 	}
 }
 
@@ -50,7 +47,7 @@ func (r *HandlerRegistry) RegisterHandlerWithStreamCallback(messageType models.M
 }
 
 // RegisterHandlerWithBytesCallback registers a stream handler for a specific protocol and sends the bytes back to callback.
-func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType models.MessageType, s StreamHandler, handler BytesHandler) error {
+func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType models.MessageType, s StreamHandler, handler func(data []byte)) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -63,4 +60,19 @@ func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType models.Me
 	r.bytesHandlers[protoID] = handler
 	r.host.SetStreamHandler(protoID, network.StreamHandler(s))
 	return nil
+}
+
+// SendMessageToLocalHandler given the message type it sends data to the local handler found.
+func (r *HandlerRegistry) SendMessageToLocalHandler(messageType models.MessageType, data []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	protoID := protocol.ID(messageType)
+	h, ok := r.bytesHandlers[protoID]
+	if !ok {
+		return
+	}
+
+	// we need this goroutine to avoid blocking the caller goroutine
+	go h(data)
 }
