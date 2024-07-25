@@ -114,14 +114,7 @@ TBD
 
 ### 4. Data Types
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
-
-The proposed structure of a sample job in Nunet can be found here:
-- [Entity Diagram - Job Structure - source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/entityDiagrams/NunetJobStructure.mermaid)
-- [Entity Diagram - Job Structure - rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/entityDiagrams/NunetJobStructure.svg)
-
+Refer to DMS global class diagram in [this](#7-class-diagram) section and various packages for data models.
 
 ### 5. Testing
 Some packages contain tests and it's always best to run them and make sure there are no broken tests before submitting any changes. Before running the tests, the firecracker executor requires some test data such as a kernel file which can be downloaded with:
@@ -139,7 +132,19 @@ go test ./...
 ### 6. References
 In addition to the relevant links added in the sections above, you can also find useful links here: https://www.nunet.io/links
 
+### 7. Class Diagram
 
+The global class diagram for the DMS is show below.
+
+#### Source file
+
+[Global Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/class_diagram.puml?ref_type=heads)
+
+#### Rendered from source file
+
+```plantuml
+!include https://gitlab.com/nunet/device-management-service/-/raw/develop/api/specs/class_diagram.puml
+```
 
 ## Getting Started
 
@@ -333,8 +338,4 @@ Check if both can discover each other.
 
 By following these steps, you can effectively run functional tests using the Python-Behave framework and generate comprehensive reports using Allure.
 
-### 7. Class Diagram
 
-```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/develop/api/specs/class_diagram.puml
-```
