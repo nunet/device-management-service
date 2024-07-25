@@ -17,6 +17,7 @@
 5. [Testing](#5-testing)
 6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
 7. [References](#7-references)
+8. [Class Diagram](#8-class-diagram)
 
 
 ## Specification
@@ -50,6 +51,8 @@ Here is quick overview of the contents of this directory:
 * [vm](vm.go): This file contains the endpoints related to starting a [firecracker VM](https://firecracker-microvm.github.io/) with custom or default configuration.
 
 * [docs](docs): This directory contains the swagger documentation of the API.
+
+* [specs](./specs): This directory contains specifications of the package
 
 All of these files have a counterpart named as `*_test.go` which contains the unit tests for the corresponding endpoints.
 
@@ -510,6 +513,8 @@ All issues that are related to the design of API package can be found below. The
 
 ### 7. References
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. Class Diagram
+
+```plantuml
+!include https://gitlab.com/nunet/device-management-service/-/raw/develop/api/specs/class_diagram.puml
+```

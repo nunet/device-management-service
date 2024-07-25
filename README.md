@@ -17,6 +17,7 @@ Specification
 4. [Data Types](#4-data-types)
 5. [Testing](#5-testing)
 6. [References](#6-references)
+7. [Class Diagram](#7-class-diagram)
 
 Getting Started
 1. [Installation](#1-installation)
@@ -331,3 +332,9 @@ Check if both can discover each other.
 
 
 By following these steps, you can effectively run functional tests using the Python-Behave framework and generate comprehensive reports using Allure.
+
+### 7. Class Diagram
+
+```plantuml
+!include https://gitlab.com/nunet/device-management-service/-/raw/develop/api/specs/class_diagram.puml
+```
