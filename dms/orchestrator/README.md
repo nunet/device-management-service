@@ -384,6 +384,18 @@ The orchestrator functionality of DMS is being developed based on the research d
 
 - [Detailed job orchestration sequences II](https://nunet.gitlab.io/research/blog/posts/orchestration-discussion/)
 
+### 8. Class class
+
+#### Source file
+
+https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/specs/class_diagram.puml?ref_type=heads
+
+#### Rendered from source file
+
+```plantuml
+!include https://gitlab.com/nunet/device-management-service/-/raw/develop/dms/orchestrator/specs/class_diagram.puml
+```
+
 
 
 
