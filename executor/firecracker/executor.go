@@ -3,6 +3,7 @@ package firecracker
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -183,6 +184,16 @@ func (e *Executor) Run(
 	case err := <-errCh:
 		return nil, err
 	}
+}
+
+// GetLogStream is not implemented for Firecracker.
+// It is defined to satisfy the Executor interface.
+// This method will return an error if called.
+func (e *Executor) GetLogStream(
+	ctx context.Context,
+	request models.LogStreamRequest,
+) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("GetLogStream is not implemented for Firecracker")
 }
 
 // Cleanup removes all resources associated with the executor.
