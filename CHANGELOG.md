@@ -21,6 +21,13 @@ Types of changes
 
 -->
 
+## [0.4.173](#489)
+
+### Changed
+- changed Basic Controller and its tests accordingly to DB repositories for StorageVolumes
+- minor change on pkg to align with changes on VolController test suite
+- improved error handling in clover generic repo methods
+
 ## [0.4.172](#502)
 
 ### Fixed

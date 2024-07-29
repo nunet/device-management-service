@@ -1,15 +1,16 @@
 package basic_controller
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/models"
 	"gitlab.com/nunet/device-management-service/storage"
 )
@@ -26,14 +27,12 @@ func TestVolumeControllerTestSuite(t *testing.T) {
 func (s *VolumeControllerTestSuite) SetupTest() {
 	basePath := "/home/.nunet/volumes/"
 
-	volumes := map[string]*storage.StorageVolume{
+	volumes := map[string]*models.StorageVolume{
 		"volume1": {
 			Path:           basePath + "volume1",
 			ReadOnly:       false,
 			Private:        false,
 			EncryptionType: models.EncryptionTypeNull,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
 		},
 		"volume2": {
 			CID:            "baf222",
@@ -41,13 +40,11 @@ func (s *VolumeControllerTestSuite) SetupTest() {
 			ReadOnly:       false,
 			Private:        false,
 			EncryptionType: models.EncryptionTypeNull,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
 		},
 	}
 
 	var err error
-	s.vcHelper, err = SetupVolControllerTestSuite(basePath, volumes)
+	s.vcHelper, err = SetupVolControllerTestSuite(s.T(), basePath, volumes)
 	assert.NoError(s.T(), err)
 
 	// Write a file in volume2
@@ -57,11 +54,8 @@ func (s *VolumeControllerTestSuite) SetupTest() {
 
 func (s *VolumeControllerTestSuite) TearDownTest() {
 	// Clean up the test environment
-	err := s.vcHelper.BasicVolController.db.Exec("DELETE FROM storage_volumes").Error
-	assert.NoError(s.T(), err)
-	s.vcHelper.BasicVolController.db = nil
-	s.vcHelper.BasicVolController = nil
-	s.vcHelper.Fs = nil
+	TearDownVolControllerTestSuite(s.vcHelper)
+	s.vcHelper = nil
 }
 
 func (s *VolumeControllerTestSuite) TestCreateVolume() {
@@ -88,8 +82,10 @@ func (s *VolumeControllerTestSuite) TestCreateVolume() {
 	assert.Equal(s.T(), models.EncryptionTypeNull, vol2.EncryptionType)
 
 	// Verify that the volumes are stored in the database
-	var volumes []storage.StorageVolume
-	err = s.vcHelper.BasicVolController.db.Find(&volumes).Error
+	volumes, err := s.vcHelper.BasicVolController.repo.FindAll(
+		context.Background(),
+		s.vcHelper.BasicVolController.repo.GetQuery(),
+	)
 	assert.NoError(s.T(), err)
 	assert.Len(s.T(), volumes, 4) // there are already 2 volumes created in the suite
 	// TODO-maybe: should we also check the DB content for each volume?
@@ -152,8 +148,9 @@ func (s *VolumeControllerTestSuite) TestLockVolume() {
 				assert.NoError(t, err)
 
 				// verify database fields (readOnly must be true)
-				var vol storage.StorageVolume
-				err = s.vcHelper.BasicVolController.db.Where("path = ?", tc.volumePath).First(&vol).Error
+				query := s.vcHelper.BasicVolController.repo.GetQuery()
+				query.Conditions = append(query.Conditions, repositories.EQ("Path", tc.volumePath))
+				vol, err := s.vcHelper.BasicVolController.repo.Find(context.Background(), query)
 				assert.NoError(t, err)
 				assert.True(t, vol.ReadOnly)
 				// checking CID and Private as some test cases inputed them
@@ -212,8 +209,7 @@ func (s *VolumeControllerTestSuite) TestDeleteVolume() {
 	}
 
 	// Verify that the volumes are deleted from the database
-	var volumes []storage.StorageVolume
-	err := s.vcHelper.BasicVolController.db.Find(&volumes).Error
+	volumes, err := s.vcHelper.BasicVolController.repo.FindAll(context.Background(), s.vcHelper.BasicVolController.repo.GetQuery())
 	assert.NoError(s.T(), err)
 	assert.Len(s.T(), volumes, 0)
 }
@@ -236,8 +232,6 @@ func (s *VolumeControllerTestSuite) TestListVolumes() {
 		assert.Equal(s.T(), expectedVol.ReadOnly, retVol.ReadOnly)
 		assert.Equal(s.T(), expectedVol.Private, retVol.Private)
 		assert.Equal(s.T(), expectedVol.EncryptionType, retVol.EncryptionType)
-		assert.True(s.T(), expectedVol.CreatedAt.Equal(retVol.CreatedAt))
-		assert.True(s.T(), expectedVol.UpdatedAt.Equal(retVol.UpdatedAt))
 	}
 }
 

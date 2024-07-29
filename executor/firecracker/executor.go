@@ -274,8 +274,8 @@ func (e *Executor) newFirecrackerExecutionVM(
 // process fails.
 func makeVMMounts(
 	rootFileSystem string,
-	inputs []*models.StorageVolume,
-	outputs []*models.StorageVolume,
+	inputs []*models.StorageVolumeExecutor,
+	outputs []*models.StorageVolumeExecutor,
 	resultsDir string,
 ) ([]fcModels.Drive, error) {
 	var drives []fcModels.Drive

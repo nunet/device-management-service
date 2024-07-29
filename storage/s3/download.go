@@ -24,35 +24,35 @@ import (
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
 func (s *S3Storage) Download(ctx context.Context, sourceSpecs *models.SpecConfig) (
-	storage.StorageVolume, error) {
-	var storageVol storage.StorageVolume
+	models.StorageVolume, error) {
+	var storageVol models.StorageVolume
 
 	source, err := DecodeInputSpec(sourceSpecs)
 	if err != nil {
-		return storage.StorageVolume{}, err
+		return models.StorageVolume{}, err
 	}
 
 	storageVol, err = s.volController.CreateVolume(storage.VolumeSourceS3)
 	if err != nil {
-		return storage.StorageVolume{}, fmt.Errorf("failed to create storage volume: %v", err)
+		return models.StorageVolume{}, fmt.Errorf("failed to create storage volume: %v", err)
 	}
 
 	resolvedObjects, err := resolveStorageKey(ctx, s.Client, &source)
 	if err != nil {
-		return storage.StorageVolume{}, fmt.Errorf("failed to resolve storage key: %v", err)
+		return models.StorageVolume{}, fmt.Errorf("failed to resolve storage key: %v", err)
 	}
 
 	for _, resolvedObject := range resolvedObjects {
 		err = s.downloadObject(ctx, &source, resolvedObject, storageVol.Path)
 		if err != nil {
-			return storage.StorageVolume{}, fmt.Errorf("failed to download s3 object: %v", err)
+			return models.StorageVolume{}, fmt.Errorf("failed to download s3 object: %v", err)
 		}
 	}
 
 	// after data is filled within the volume, we have to lock it
 	err = s.volController.LockVolume(storageVol.Path)
 	if err != nil {
-		return storage.StorageVolume{}, fmt.Errorf("failed to lock storage volume: %v", err)
+		return models.StorageVolume{}, fmt.Errorf("failed to lock storage volume: %v", err)
 	}
 	return storageVol, nil
 }
