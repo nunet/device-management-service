@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.172](#502)
+
+### Fixed
+- unavailable log stream implementation for firecracker executor
+
 ## [0.4.171](#473)
 
 ### Added
