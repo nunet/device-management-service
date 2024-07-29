@@ -386,8 +386,8 @@ func configureDevices(
 // does not exist. The function returns a list of mounts and an error if any part of the
 // process fails.
 func makeContainerMounts(
-	inputs []*models.StorageVolume,
-	outputs []*models.StorageVolume,
+	inputs []*models.StorageVolumeExecutor,
+	outputs []*models.StorageVolumeExecutor,
 	resultsDir string,
 ) ([]mount.Mount, error) {
 	// the actual mounts we will give to the container

@@ -16,13 +16,13 @@ const (
 
 // ExecutionRequest is the request object for executing a job
 type ExecutionRequest struct {
-	JobID       string              // ID of the job to execute
-	ExecutionID string              // ID of the execution
-	EngineSpec  *SpecConfig         // Engine spec for the execution
-	Resources   *ExecutionResources // Resources for the execution
-	Inputs      []*StorageVolume    // Input volumes for the execution
-	Outputs     []*StorageVolume    // Output volumes for the results
-	ResultsDir  string              // Directory to store the results
+	JobID       string                   // ID of the job to execute
+	ExecutionID string                   // ID of the execution
+	EngineSpec  *SpecConfig              // Engine spec for the execution
+	Resources   *ExecutionResources      // Resources for the execution
+	Inputs      []*StorageVolumeExecutor // Input volumes for the execution
+	Outputs     []*StorageVolumeExecutor // Output volumes for the results
+	ResultsDir  string                   // Directory to store the results
 }
 
 // ExecutionResult is the result of an execution

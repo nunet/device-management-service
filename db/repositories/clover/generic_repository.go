@@ -127,8 +127,11 @@ func (repo *GenericRepositoryClover[T]) Find(
 	q := repo.query(false)
 	q = applyConditions(q, query)
 	doc, err := repo.db.FindFirst(q)
-	if err != nil || doc == nil {
+
+	if err != nil {
 		return model, handleDBError(err)
+	} else if doc == nil {
+		return model, handleDBError(clover.ErrDocumentNotExist)
 	}
 
 	model, err = toModel[T](doc, false)

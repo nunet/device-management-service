@@ -1,28 +1,22 @@
 package basic_controller
 
 import (
+	"context"
 	"fmt"
-	"time"
 
 	"github.com/spf13/afero"
-	"gorm.io/gorm"
 
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/models"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
 // BasicVolumeController is the default implementation of the VolumeController.
-// It persists storage volumes information in the local database.
-//
-// TODO: rename to BasicVolumeController
-//
-// TODO [Remove gormDB]: *gorm.DB shouldn't be coupled with this struct.
-// We should otherwise depend on a DB general interface
-// which we may probably have with the DB refactoring
+// It persists storage volumes information using the StorageVolumeRepository.
 type BasicVolumeController struct {
-	// db is where all volumes information is stored.
-	db *gorm.DB
+	// repo is the repository for storage volume operations
+	repo repositories.StorageVolumeRepository
 
 	// basePath is the base path where volumes are stored under
 	basePath string
@@ -35,16 +29,9 @@ type BasicVolumeController struct {
 //
 // TODO-BugFix [path]: volBasePath might not end with `/`, causing errors when calling methods.
 // We need to validate it using the `path` library or just verifying the string.
-func NewDefaultVolumeController(db *gorm.DB, volBasePath string, fs afero.Fs) (*BasicVolumeController, error) {
-	// TODO: I'm not sure how the automigration will be placed on the new refactoring.
-	// Let's keep here until the database refactoring is done
-	err := db.AutoMigrate(&storage.StorageVolume{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to auto-migrate storage volumes: %w", err)
-	}
-
+func NewDefaultVolumeController(repo repositories.StorageVolumeRepository, volBasePath string, fs afero.Fs) (*BasicVolumeController, error) {
 	return &BasicVolumeController{
-		db:       db,
+		repo:     repo,
 		basePath: volBasePath,
 		FS:       fs,
 	}, nil
@@ -58,30 +45,29 @@ func NewDefaultVolumeController(db *gorm.DB, volBasePath string, fs afero.Fs) (*
 // where `name` is random.
 //
 // TODO-maybe [withName]: allow callers to specify custom name for path
-func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, opts ...storage.CreateVolOpt) (storage.StorageVolume, error) {
-	vol := &storage.StorageVolume{
+func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, opts ...storage.CreateVolOpt) (models.StorageVolume, error) {
+	vol := models.StorageVolume{
 		Private:        false,
 		ReadOnly:       false,
 		EncryptionType: models.EncryptionTypeNull,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
 	}
 
 	for _, opt := range opts {
-		opt(vol)
+		opt(&vol)
 	}
 
 	vol.Path = vc.basePath + string(volSource) + "-" + utils.RandomString(16)
 
 	if err := vc.FS.Mkdir(vol.Path, 0770); err != nil {
-		return storage.StorageVolume{}, fmt.Errorf("failed to create storage volume: %w", err)
+		return models.StorageVolume{}, fmt.Errorf("failed to create storage volume: %w", err)
 	}
 
-	if err := vc.db.Create(vol).Error; err != nil {
-		return storage.StorageVolume{}, err
+	createdVol, err := vc.repo.Create(context.Background(), vol)
+	if err != nil {
+		return models.StorageVolume{}, fmt.Errorf("failed to create storage volume in repository: %w", err)
 	}
 
-	return *vol, nil
+	return createdVol, nil
 }
 
 // LockVolume makes the volume read-only, not only changing the field value but also changing file permissions.
@@ -90,8 +76,10 @@ func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, op
 //
 // TODO-maybe [CID]: maybe calculate CID of every volume in case WithCID opt is not provided
 func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.LockVolOpt) error {
-	var vol storage.StorageVolume
-	if err := vc.db.Where("path = ?", pathToVol).First(&vol).Error; err != nil {
+	query := vc.repo.GetQuery()
+	query.Conditions = append(query.Conditions, repositories.EQ("Path", pathToVol))
+	vol, err := vc.repo.Find(context.Background(), query)
+	if err != nil {
 		return fmt.Errorf("failed to find storage volume with path %s - Error: %w", pathToVol, err)
 	}
 
@@ -101,14 +89,14 @@ func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.Lo
 
 	// update records
 	vol.ReadOnly = true
-	vol.UpdatedAt = time.Now()
-	if err := vc.db.Where("path = ?", pathToVol).Save(&vol).Error; err != nil {
+	updatedVol, err := vc.repo.Update(context.Background(), vol.ID, vol)
+	if err != nil {
 		return fmt.Errorf("failed to update storage volume with path %s - Error: %w", pathToVol, err)
 	}
 
 	// change file permissions
-	if err := vc.FS.Chmod(vol.Path, 0400); err != nil {
-		return fmt.Errorf("failed to make storage volume read-only (path: %s): %w", vol.Path, err)
+	if err := vc.FS.Chmod(updatedVol.Path, 0400); err != nil {
+		return fmt.Errorf("failed to make storage volume read-only (path: %s): %w", updatedVol.Path, err)
 	}
 
 	return nil
@@ -117,7 +105,7 @@ func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.Lo
 // WithPrivate designates a given volume as private. It can be used both
 // when creating or locking a volume.
 func WithPrivate[T storage.CreateVolOpt | storage.LockVolOpt]() T {
-	return func(v *storage.StorageVolume) {
+	return func(v *models.StorageVolume) {
 		v.Private = true
 	}
 }
@@ -126,7 +114,7 @@ func WithPrivate[T storage.CreateVolOpt | storage.LockVolOpt]() T {
 //
 // TODO [validate]: check if CID provided is valid
 func WithCID(cid string) storage.LockVolOpt {
-	return func(v *storage.StorageVolume) {
+	return func(v *models.StorageVolume) {
 		v.CID = cid
 	}
 }
@@ -138,26 +126,28 @@ func WithCID(cid string) storage.LockVolOpt {
 // Note [CID]: if we start to type CID as cid.CID, we may have to use generics here
 // as in `[T string | cid.CID]`
 func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.IDType) error {
-
-	var result *gorm.DB
+	query := vc.repo.GetQuery()
 
 	switch idType {
 	case storage.IDTypePath:
-		result = vc.db.Where("path = ?", identifier).Delete(&storage.StorageVolume{})
+		query.Conditions = append(query.Conditions, repositories.EQ("Path", identifier))
 	case storage.IDTypeCID:
-		// TODO: c_id because gorm automatically does the transformation. I didn't put gorm tags
-		// because I think it's better to wait for DB refactoring
-		result = vc.db.Where("c_id = ?", identifier).Delete(&storage.StorageVolume{})
+		query.Conditions = append(query.Conditions, repositories.EQ("CID", identifier))
 	default:
 		return fmt.Errorf("identifier type not supported")
 	}
 
-	if result.Error != nil {
-		return fmt.Errorf("failed to delete volume: %w", result.Error)
+	vol, err := vc.repo.Find(context.Background(), query)
+	if err != nil {
+		if err == repositories.NotFoundError {
+			return fmt.Errorf("volume not found: %w", err)
+		}
+		return fmt.Errorf("failed to find volume: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("volume not found")
+	err = vc.repo.Delete(context.Background(), vol.ID)
+	if err != nil {
+		return fmt.Errorf("failed to delete volume: %w", err)
 	}
 
 	return nil
@@ -166,11 +156,10 @@ func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.
 // ListVolumes returns a list of all storage volumes stored on the database
 //
 // TODO [filter]: maybe add opts to filter results by certain values
-func (vc *BasicVolumeController) ListVolumes() ([]storage.StorageVolume, error) {
-	var volumes []storage.StorageVolume
-	err := vc.db.Find(&volumes).Error
+func (vc *BasicVolumeController) ListVolumes() ([]models.StorageVolume, error) {
+	volumes, err := vc.repo.FindAll(context.Background(), vc.repo.GetQuery())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list volumes: %w", err)
 	}
 	return volumes, nil
 }
@@ -178,25 +167,23 @@ func (vc *BasicVolumeController) ListVolumes() ([]storage.StorageVolume, error) 
 // GetSize returns the size of a volume
 // TODO-minor: identify which measurement type will be used
 func (vc *BasicVolumeController) GetSize(identifier string, idType storage.IDType) (int64, error) {
-	var path string
+	query := vc.repo.GetQuery()
 
 	switch idType {
 	case storage.IDTypePath:
-		path = identifier
+		query.Conditions = append(query.Conditions, repositories.EQ("Path", identifier))
 	case storage.IDTypeCID:
-		var vol storage.StorageVolume
-		if err := vc.db.Where("cid = ?", identifier).First(&vol).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return 0, fmt.Errorf("volume with CID %s not found", identifier)
-			}
-			return 0, fmt.Errorf("failed to query volume by CID: %w", err)
-		}
-		path = vol.Path
+		query.Conditions = append(query.Conditions, repositories.EQ("CID", identifier))
 	default:
 		return 0, fmt.Errorf("unsupported ID type: %d", idType)
 	}
 
-	size, err := utils.GetDirectorySize(vc.FS, path)
+	vol, err := vc.repo.Find(context.Background(), query)
+	if err != nil {
+		return 0, fmt.Errorf("failed to find volume: %w", err)
+	}
+
+	size, err := utils.GetDirectorySize(vc.FS, vol.Path)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get directory size: %w", err)
 	}

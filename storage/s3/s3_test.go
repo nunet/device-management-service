@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -17,7 +16,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/models"
-	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/basic_controller"
 )
 
@@ -61,18 +59,16 @@ type S3ProviderTestSuite struct {
 // SetupTest is mainly setting up a volume controller based on its test suite and a S3 client.
 func (s *S3ProviderTestSuite) SetupTest() {
 
-	volumes := map[string]*storage.StorageVolume{
+	volumes := map[string]*models.StorageVolume{
 		"volume1": {
 			Path:           filepath.Join(basePath, "volume1"),
 			ReadOnly:       false,
 			Private:        false,
 			EncryptionType: models.EncryptionTypeNull,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
 		},
 	}
 
-	vcHelper, err := basic_controller.SetupVolControllerTestSuite(basePath, volumes)
+	vcHelper, err := basic_controller.SetupVolControllerTestSuite(s.T(), basePath, volumes)
 	s.NoError(err)
 
 	// Write a file in volume1 to be later used to upload
