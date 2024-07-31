@@ -32,7 +32,6 @@ func ConnectDatabase() {
 	database.AutoMigrate(&models.DeploymentRequestFlat{})
 	database.AutoMigrate(&models.MachineUUID{})
 	database.AutoMigrate(&models.Connection{})
-	database.AutoMigrate(&models.LogBinAuth{})
 
 	DB = database
 }

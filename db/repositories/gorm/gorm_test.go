@@ -30,7 +30,6 @@ func setup() {
 		&models.MachineUUID{},
 		&models.Connection{},
 		&models.ElasticToken{},
-		&models.LogBinAuth{},
 		&models.DeploymentRequestFlat{},
 		&models.RequestTracker{},
 		&models.VirtualMachine{},

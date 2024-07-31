@@ -47,8 +47,6 @@ _Files_
 
 * [machine](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/machine.go): This file defines database interfaces of various data types. 
 
-* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/onboarding.go): This file specifies a database interface having `models.LogBinAuth` data type.
-
 * [utils](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils.go): This file contains some utility functions with respect to database operations.
 
 * [utils_test](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils_test.go): This file contains unit tests for functions defined in [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils.go) file 
@@ -283,7 +281,6 @@ type QueryCondition struct {
 - `models.AvailableResources`
 - `models.Libp2pInfo`
 - `models.MachineUUID`
-- `models.LogBinAuth`
 
 
 ### 5. Testing
