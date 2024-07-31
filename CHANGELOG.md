@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.174](#481)
+
+### Deprecated
+- deprecated logbin
+
 ## [0.4.173](#489)
 
 ### Changed

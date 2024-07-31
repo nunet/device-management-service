@@ -43,8 +43,6 @@ Here is quick overview of the contents of this pacakge:
 
 * [machine](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/machine.go): This file contains implementation of interfaces defined in [machine.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/machine.go).  
 
-* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/onboarding.go): This file contains implementation of `LogBinAuthRepository` interface.
-
 * [utils](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/utils.go): This file contains utility functions with respect to Gorm implementation.
 
 All files with `*_test.go` naming convention contain unit tests with respect to the specific implementation.

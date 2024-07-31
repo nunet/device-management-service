@@ -3,7 +3,6 @@ package utils
 import (
 	"archive/tar"
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -138,77 +137,6 @@ func SliceContains(s []string, str string) bool {
 		}
 	}
 	return false
-}
-
-// RegisterLogbin registers the device with logbin
-func RegisterLogbin(uuid string, peer_id string) (string, error) {
-	logbinAuthReq := struct {
-		PeerID      string `json:"peer_id"`
-		MachineUUID string `json:"machine_uuid"`
-	}{
-		PeerID:      peer_id,
-		MachineUUID: uuid,
-	}
-
-	jsonAuth, err := json.Marshal(logbinAuthReq)
-	if err != nil {
-		zlog.Sugar().Errorf("unable to marshal logbin auth request: %v", err)
-		return "", err
-	}
-	req, err := http.NewRequest(http.MethodPost, "https://log.nunet.io/api/v1/auth/register", bytes.NewBuffer(jsonAuth))
-
-	if err != nil {
-		zlog.Sugar().Errorf("unable to create http request: %v", err)
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("Accept", "application/json")
-	client := http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		zlog.Sugar().Errorf("unable to register with logbin: %v", err)
-		return "", err
-	}
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zlog.Sugar().Errorf("unable to read response body from logbin: %v", err)
-		return "", err
-	}
-
-	tokenResp := struct {
-		Token string `json:"token"`
-	}{}
-
-	err = json.Unmarshal(respBody, &tokenResp)
-	if err != nil {
-		zlog.Sugar().Errorf("unable to unmarshal token response: %v", err)
-		return "", err
-	}
-
-	logbinAuth := models.LogBinAuth{
-		Token:       tokenResp.Token,
-		PeerID:      peer_id,
-		MachineUUID: uuid,
-	}
-	result := db.DB.FirstOrCreate(&logbinAuth)
-	if result.Error != nil {
-		zlog.Sugar().Errorf("unable to create logbin auth record in DB: %v", result.Error)
-		return "", result.Error
-	}
-	return logbinAuth.Token, nil
-}
-
-// GetLogbinToken returns the logbin token from the DB
-func GetLogbinToken() (string, error) {
-	var logbinAuth models.LogBinAuth
-	result := db.DB.Find(&logbinAuth)
-	if result.Error != nil {
-		zlog.Sugar().Errorf("unable to find logbin auth record in DB: %v", result.Error)
-		return "", result.Error
-	}
-	return logbinAuth.Token, nil
 }
 
 // GetMetadataFilePath Returns metadata file path
@@ -491,7 +419,7 @@ func NoIntersectionSlices(slice1, slice2 []interface{}) bool {
 	for _, subElement := range slice1 {
 		if slices.Contains(slice2, subElement) {
 			result = false
-		} else {	
+		} else {
 			result = true
 		}
 	}
@@ -542,3 +470,4 @@ func ConvertTypedSliceToUntypedSlice(typedSlice interface{}) []interface{} {
 	}
 	return result
 }
+
