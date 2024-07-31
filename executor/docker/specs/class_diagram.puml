@@ -1,3 +1,5 @@
+ ' START DIAGRAM
+
     class executor.docker.Docker {
         -handlers
         -client *Client
@@ -68,3 +70,5 @@
         -destroy(timeout time.Duration) error
         -outputStream(request LogStreamRequest) ReadCloser, error
     }
+
+' END DIAGRAM

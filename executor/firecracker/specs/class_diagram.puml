@@ -1,3 +1,4 @@
+' START DIAGRAM
     class executor.firecracker.Firecracker {
         -handlers
         -client
@@ -57,3 +58,4 @@
         -kill() error
         -destroy(timeout time.Duration) error
     }
+' END DIAGRAM

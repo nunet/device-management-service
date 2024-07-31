@@ -1,4 +1,5 @@
-    class dms.node.NodeID {
+' START DIAGRAM   
+  class dms.node.NodeID {
         +models.ID.UUID id
         +models.ID.CID cid
         +String peerID
@@ -29,3 +30,8 @@
         +processMessage() telemetry.Message
         +sendMessage(String, telemetry.Message)
     }
+' END DIAGRAM
+
+' START IN-PACKAGE RELATIONS
+    dms.node.Actor ..|> dms.node.Node
+' END IN-PACKAGE RELATIONS

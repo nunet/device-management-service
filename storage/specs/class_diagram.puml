@@ -1,11 +1,34 @@
+ ' START PREAMBLE
+
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+
+' package relative path: change this for each package
+!$packageRelativePath = "/storage"
+
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+
+' uncomment the following line to render all locally
+' !$rootUrl = $rootUrlLocal
+' uncomment the following line to render all from gitlab
+!$rootUrl = $packageUrlGitlab
+
+' END PREAMBLE
+
+' START DIAGRAM
     class storage.StorageProvider
     class storage.StorageVolume
     class storage.VolumeController
+' END DIAGRAM
+
+' START SUBPACKAGES
 
 'package basic_controller {
-    !include ../basic_controller/specs/class_diagram.puml
+    !include $rootUrl/basic_controller/specs/class_diagram.puml
 '}
 
 'package s3 {
-    !include ../s3/specs/class_diagram.puml
+    !include $rootUrl/s3/specs/class_diagram.puml
 '}
+
+' END SUBPACKAGES

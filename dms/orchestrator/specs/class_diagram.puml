@@ -1,4 +1,21 @@
+' START PREAMBLE
 
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+
+' package relative path: change this for each package
+!$packageRelativePath = "/dms/orchestrator"
+
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+
+' uncomment the following line to render all locally
+' !$rootUrl = $rootUrlLocal
+' uncomment the following line to render all from gitlab
+!$rootUrl = $packageUrlGitlab
+
+' END PREAMBLE
+
+' START DIAGRAM
 
     class dms.orchestrator.Mailbox {
         +network.p2p p2p
@@ -67,18 +84,23 @@
         +Slice[Graph] networkConfigurations
     }
 
+' END DIAGRAM
+
+' START SUBPACKAGES
 
 'package dms.orchestrator.matching {
-    !include ../matching/specs/class_diagram.puml
+   !include $rootUrl/matching/specs/class_diagram.puml
 '}
 
 'package dms.orchestrator.graph {
-    !include ../graph/specs/class_diagram.puml
+    !include $rootUrl/graph/specs/class_diagram.puml
 '}
 
+' END SUBPACKAGES
  
-    dms.node.Actor -- dms.orchestrator.Messaging
+' START IN-PACKAGE RELATIONS
     dms.orchestrator.Bid <.. dms.orchestrator.PriceBid
     dms.orchestrator.Bid <.. dms.orchestrator.TimeBid
     dms.orchestrator.Bid -- dms.orchestrator.BidRequest
     dms.orchestrator.Orchestrator <|-- dms.orchestrator.graph.Graph
+' END IN-PACKAGE RELATIONS

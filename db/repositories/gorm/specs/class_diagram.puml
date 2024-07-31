@@ -1,3 +1,4 @@
+  ' START DIAGRAM
     class db.repositories.repositories_gorm.GenericEntityRepositoryGorm {
         -db *gorm.DB
         +GetQuery() repositories.Query
@@ -17,3 +18,4 @@
         +Find(query repositories.Query) T, error
         +FindAll(query repositories.Query) []T, error
     }
+' END DIAGRAM

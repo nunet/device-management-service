@@ -17,7 +17,7 @@
 5. [Testing](#5-testing)
 6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
 7. [References](#7-references)
-
+8. [Class Diagram](#8-class-diagram)
 
 ## Specification
 
@@ -384,18 +384,17 @@ The orchestrator functionality of DMS is being developed based on the research d
 
 - [Detailed job orchestration sequences II](https://nunet.gitlab.io/research/blog/posts/orchestration-discussion/)
 
-### 8. Class class
+### 8. Class Diagram
 
-#### Source file
+#### Source
 
-https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/specs/class_diagram.puml?ref_type=heads
+[Package source](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/specs/class_diagram.puml?ref_type=heads)
 
 #### Rendered from source file
 
 ```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/develop/dms/orchestrator/specs/class_diagram.puml
+!$rootUrl = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!include $rootUrl/dms/orchestrator/specs/class_diagram.puml
 ```
-
-
 
 

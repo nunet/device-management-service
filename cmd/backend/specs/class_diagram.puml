@@ -1,4 +1,4 @@
-package backend {
+' START DIAGRAM
     interface cmd.backend.FileHandler {
         +Stat() os.FileInfo, error
         +WriteString(data string) int, error
@@ -103,7 +103,10 @@ package backend {
         +WriteMessage(ctx context.Context, r io.Reader) error
         +Ping(ctx context.Context, w io.Writer) error
     }
-}
+
+' END DIAGRAM
+
+' START IN-PACKAGE RELATIONS
     cmd.backend.OS <|.. cmd.backend.FileSystem
     cmd.backend.Journal <|.. cmd.backend.Logger
     cmd.backend.Network <|.. cmd.backend.NetworkManager
@@ -112,3 +115,4 @@ package backend {
     cmd.backend.Utils <|.. cmd.backend.Utility
     cmd.backend.Wallet <|.. cmd.backend.WalletManager
     cmd.backend.WebSocket <|.. cmd.backend.WebSocketClient
+' END IN-PACKAGE RELATIONS

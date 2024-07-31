@@ -17,7 +17,7 @@
 5. [Testing](#5-testing)
 6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
 7. [References](#7-references)
-
+8. [Class Diagram](#8-class-diagram)
 
 ## Specification
 
@@ -240,4 +240,16 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 
 `TBD`
 
+### 8. Class Diagram
+
+#### Source
+
+[Package source](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/specs/class_diagram.puml?ref_type=heads)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrl = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!include $rootUrl/dms/orchestrator/matching/specs/class_diagram.puml
+```
 

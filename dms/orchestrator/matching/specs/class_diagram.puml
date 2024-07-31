@@ -1,3 +1,5 @@
+' START DIAGRAM
+
 class dms.orchestrator.matching.Preference <<comparator.go>> {
    proposed
    ..
@@ -35,12 +37,12 @@ class dms.orchestrator.matching.ComparatorMap <<comparator.go>> {
    NumericComparator(): models.Comparison
 }
 
+' END DIAGRAM
 
-' relations:
-
+' START IN-PACKAGE RELATIONS
 dms.orchestrator.matching.Preference::Strength <|-- dms.orchestrator.matching.PreferenceStrength 
 dms.orchestrator.matching.Comparator <|-- dms.orchestrator.matching.ComparatorMap
 dms.orchestrator.matching.Preference --> dms.orchestrator.matching.Comparator::Compare
-
+' END IN-PACKAGE RELATIONS
 
  
