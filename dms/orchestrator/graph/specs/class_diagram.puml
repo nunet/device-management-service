@@ -1,4 +1,6 @@
 
+' START DIAGRAM
+
     class dms.orchestrator.graph.Graph {
         <<proposed>>
         +Slice[Vertex] vertices
@@ -34,8 +36,11 @@
         +String key
         +String value
     }
+' END DIAGRAM
 
+' START IN-PACKAGE RELATIONS
     dms.orchestrator.graph.Graph <|-- dms.orchestrator.graph.Vertex
     dms.orchestrator.graph.Graph <|-- dms.orchestrator.graph.Edge
     dms.orchestrator.graph.Edge <|.. dms.orchestrator.graph.Property
     dms.orchestrator.graph.Vertex <|.. dms.orchestrator.graph.Property
+' END IN-PACKAGE RELATIONS

@@ -1,3 +1,4 @@
+' START DIAGRAM
     class models.ID {
         +String UUID
         +String CID
@@ -13,6 +14,7 @@
    Equal
    Error
  }
+ 
 class models.Capability <<capability.go>> {
    Executors : Executors
    JobTypes : JobTypes
@@ -25,17 +27,6 @@ class models.Capability <<capability.go>> {
    Time : []TimeInformation
    KYCs : []KYC
 }
-
-models.Capability::Executors o-- models.Executors
-models.Capability::JobTypes o-- models.JobTypes
-models.Capability::Resources o-- models.ExecutionResources
-models.Capability::Libraries o-- models.Library
-models.Capability::Localities o-- models.Locality
-models.Capability::Storage o-- models.Storage
-models.Capability::Connectivity o-- models.Connectivity
-models.Capability::Price o-- models.PriceInformation
-models.Capability::Time o-- models.TimeInformation
-models.Capability::KYCs o-- models.KYC
 
 class models.Connectivity <<capability.go>> {
    Ports : []int
@@ -91,3 +82,18 @@ class models.JobTypes <<capability.go>> {
 class models.Executors <<capability.go>> {
     - executors: Executor[]
 }
+
+' END DIAGRAM
+
+' START IN-PACKAGE RELATIONS
+models.Capability::Executors o-- models.Executors
+models.Capability::JobTypes o-- models.JobTypes
+models.Capability::Resources o-- models.ExecutionResources
+models.Capability::Libraries o-- models.Library
+models.Capability::Localities o-- models.Locality
+models.Capability::Storage o-- models.Storage
+models.Capability::Connectivity o-- models.Connectivity
+models.Capability::Price o-- models.PriceInformation
+models.Capability::Time o-- models.TimeInformation
+models.Capability::KYCs o-- models.KYC
+' END IN-PACKAGE RELATIONS

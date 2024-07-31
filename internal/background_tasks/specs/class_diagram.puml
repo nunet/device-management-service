@@ -1,1 +1,3 @@
-class internal.background_tasks.ToBeDone
+' START DIAGRAM
+class internal.background_tasks.TBD <<hide>>
+' END DIAGRAM

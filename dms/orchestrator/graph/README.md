@@ -12,13 +12,24 @@ This whole package is `proposed` status and therefore documentation is missing, 
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+
+- [graph](#graph)
+  - [Table of Contents](#table-of-contents)
+  - [Specification](#specification)
+    - [1. Description](#1-description)
+    - [2. Structure and organisation](#2-structure-and-organisation)
+    - [3. Functionality](#3-functionality)
+    - [4. Types](#4-types)
+    - [5. Testing](#5-testing)
+    - [6. Proposed Functionality / Requirements](#6-proposed-functionality--requirements)
+      - [List of issues](#list-of-issues)
+      - [Proposed functionalities](#proposed-functionalities)
+      - [Data types](#data-types)
+    - [7. References](#7-references)
+      - [Related research blogs](#related-research-blogs)
+    - [8. Class Diagram](#8-class-diagram)
+      - [Source](#source)
+      - [Rendered from source file](#rendered-from-source-file)
 
 
 ## Specification
@@ -28,10 +39,6 @@ This whole package is `proposed` status and therefore documentation is missing, 
 `TBD`
 
 ### 2. Structure and organisation
-`TBD`
-
-#### Package class diagram
-
 `TBD`
 
 ### 3. Functionality
@@ -70,5 +77,18 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 #### Related research blogs 
 
 `TBD`
+
+### 8. Class Diagram
+
+#### Source
+
+[Package source](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/graph/specs/class_diagram.puml?ref_type=heads)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrl = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!include $rootUrl/dms/orchestrator/graph/specs/class_diagram.puml
+```
 
 

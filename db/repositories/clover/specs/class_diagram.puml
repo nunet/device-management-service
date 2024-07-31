@@ -1,3 +1,4 @@
+ ' START DIAGRAM
    class db.repositories.repositories_clover.GenericEntityRepositoryClover {
         -db *v2.DB
         -collection string
@@ -22,3 +23,4 @@
         +Find(query repositories.Query) T, error
         +FindAll(query repositories.Query) []T, error
     }
+' END DIAGRAM

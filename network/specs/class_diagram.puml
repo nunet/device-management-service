@@ -1,3 +1,21 @@
+ ' START PREAMBLE
+
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+
+' package relative path: change this for each package
+!$packageRelativePath = "/network"
+
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+
+' uncomment the following line to render all locally
+' !$rootUrl = $rootUrlLocal
+' uncomment the following line to render all from gitlab
+!$rootUrl = $packageUrlGitlab
+
+' END PREAMBLE
+ 
+ ' START DIAGRAM
     interface network.Network {
         +Init()
         +Start()
@@ -40,10 +58,17 @@
         +Close()
     }
 
+' END DIAGRAM
+
+' START SUBPACKAGES
 'package network.libp2p {
-    !include ../libp2p/specs/class_diagram.puml
+    !include $rootUrl/libp2p/specs/class_diagram.puml
 '}
+' END SUBPACKAGES
+
+' START IN-PACKAGE RELATIONS
 network.P2P <|.. network.Network
 network.DHT <|.. network.P2P
 network.Gossipsub <|.. network.P2P
 network.P2P <|.. network.Messaging
+' END IN-PACKAGE RELATIONS
