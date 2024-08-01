@@ -1,118 +1,121 @@
-# Introduction
+# Tokenomics
+
+
+## Table of Contents
+
+1. Description
+2. Structure and Organisation
+3. Functionality
+4. Data Types
+5. Testing
+6. Proposed Functionality/Requirements
+7. References
+8. Class Diagram
+
+## 1. Description
 
 This repository contains implementations for managing contracts, proofs, and payments in tokenomics. Initiated within milestone [], it offers a comprehensive set of interfaces and methods. To implement these functions, we first define key datatypes and interfaces.
 
-## Interfaces and Types
+## 2. Structure and Organisation
 
-### Contract
+Here is quick overview of the contents of this directory:
 
-The Contract manages the lifecycle of contracts between nodes, including the initiation, signing, notarization, and settlement of contracts. It integrates with other components such as DMS, orchestrators, and payments. It has the following features:
+- [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality.
+- [**Contract.go**:](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/tokenomics-proposed/device-management-service/tokenomics/Contract.go?ref_type=heads) Defines the main interface for managing and executing contracts within the tokenomics system.
+- [**Proofs.go**:](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/tokenomics-proposed/device-management-service/tokenomics/Proofs.go?ref_type=heads) Implements the interface and logic for proof handling within the tokenomics framework.
+- [**payments.go**:](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/tokenomics-proposed/device-management-service/tokenomics/payments.go?ref_type=heads) Contains the main interface and functions for processing payments in the tokenomics system.
+- [**tokenomics.go**](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/tokenomics-proposed/device-management-service/tokenomics/tokenomics.go?ref_type=heads): Defines the core functionalities and main interface for the tokenomics package, integrating contracts, proofs, and payments.
 
-## Features:
+*Subpackages*
 
-- **Contract Management**: Create, sign, notarize, and settle contracts between nodes.
-- **Payment Handling**: Manage payment details within contracts.
-- **Job Verification**: Integrate job verification results into contract settlement.
-- **Database Integration**: Save and update contracts in the central database.
+- [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/develop/orchestrator/specs): Directory containing package specifications, including package class diagram.
+- .[/Sequences/:](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/tokenomics-proposed/device-management-service/tokenomics/sequences?ref_type=heads) Contains the sequence diagram for the tokenomics package
 
-### Proof
+## 3. Functionality
 
-The Proof interface defines the methods for proof-based operations. This package includes methods for authentication, contract proof creation, and verification. It has two main components: Authentication and Proof Interface.
+### Note: the functionality of Tokenomics is being currently developed. See the [proposed](https://www.notion.so/Tokenomics-2e3696cde66a4179b96e9a3a9daeaa10?pvs=21) section for the suggested design of interfaces and methods.
 
-### **Authentication**
+## 4. Data Types
 
-The Authentication struct offers methods for various authentication mechanisms to ensure secure access control and data validation within the application:
+Note: the functionality of DMS is being currently developed. See the [proposed](https://www.notion.so/Tokenomics-2e3696cde66a4179b96e9a3a9daeaa10?pvs=21) section for the suggested data types.
 
-- **tokenBasedEncryption**: Validates credentials using token-based encryption.
-- **ZKProof**: Implements zero-knowledge proof for secure authentication.
-- **OffChainData**: Handles authentication using off-chain data verification.
+## 5. Testing
 
-### **ProofInterface**
+### Unit Tests
 
-The ProofInterface interface defines essential operations for managing contract proofs:
+TBD.
 
-- **InitiateContractApproval()**: Initiates the contract approval process, starting necessary workflows.
-- **CreateContractProof()**: Generates a cryptographic proof for a contract, ensuring transaction integrity.
-- **SaveProof(contractID, proof string) error**: Stores the contract proof in a simulated database, maintaining audit trails and historical records.
-- **VerifyProof(contractID, proof string) (bool, error)**: Verifies the authenticity of a contract proof, ensuring its validity before further processing.
+### Functional Tests
 
-**Payment**
+To be determined (TBD).
 
-The Payment interface defines the operations for managing payments and settlements related to contracts. It facilitates payment and pricing functionalities within a blockchain-based payment gateway system. The details of this interface component is given below:
+## 6. Proposed Functionality / Requirements
 
-**PaymentChannel**: Defines the types of supported payment methods:
+List of issues related to the design of the tokenomics package can be found below. These include proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
-- FiatPayment: Transactions in traditional currencies (e.g., USD, EUR).
-- BlockchainPayment: Transactions using blockchain-based cryptocurrencies.
+- [Tokenomics Package Issues](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&search=tokenomics&first_page_size=20)
 
-**PricingMethod**: Interface supporting different pricing models:
+## Interfaces and Methods:
 
-- FixedJobPricing: Specifies fixed costs for specific tasks, including base price and platform fees.
-- PeriodicPricing: Defines recurring pricing details such as price per cycle, duration, usage limits (e.g., CPU hours, memory, storage, bandwidth), and platform fees.
+### Proposed Contract Interface
 
-**UsageLimits**: Constraints for periodic pricing models:
+```go
+// Contract defines the methods for contract operations
+type contract interface {
+	NewContract() Contract
+	InitiateContractClosure(n1 dms.NodeID, n2 dms.NodeID, bid orchestrator.Bid)
+	InitiateContractSettlement(n1 dms.NodeID, n2 dms.NodeID, contractID int, verificationResult orchestrator.JobVerificationResult)
+}
+```
 
-- Specifies MaxCPUHours, MaxMemoryUsage, MaxStorageUsage, and MaxNetworkBandwidth allowable within each billing period.
-
-**Functions**
-
-1. **initiateContractClosure():**
-
-**Inputs**:
-
-- **n1**: Node ID (dms.nodeID) representing the first node.
-- **n2**: Node ID (dms.nodeID) representing the second node.
-- **bid**: Object (orchestrator.Bid) containing job and pricing details for the bestBidSelected.
-
-**Functionality**:
-
-The initiateContractClosure function initializes and closes a contract between two nodes within the system. It follows the sequence:
+**NewContract()**: Creates new contract
+**initiateContractClosure:** function initializes and closes a contract between two nodes within the system. It follows the sequence:
 
 1. Creates a new contract instance.
 2. Populates the contract with job ID and payment details extracted from the provided bid.
 3. Signs and notarizes the contract.
 4. Persists the contract in the contract lists of both nodes (n1 and n2) and the central database.
-5. **initiateContractSettlement():**
 
-**Inputs**:
-
-- **n1**: Node ID (dms.nodeID) representing the first node.
-- **n2**: Node ID (dms.nodeID) representing the second node.
-- **contract**: Contract ID representing the contract to be settled.
-- **verificationResult**: Object (orchestrator.JobVerificationResult) containing the result of job verification.
-
-**Functionality**:
-
-The initiateContractSettlement function initiates the settlement process for a specified contract between two nodes (n1 and n2). It executes the following steps:
+ i**nitiateContractSettlement:** function initiates the settlement process for a specified contract between two nodes (n1 and n2). It executes the following steps:
 
 1. Updates the contract with the provided verification result.
 2. Executes settlement procedures.
 3. Marks the contract as settled.
 4. Notifies both nodes (n1 and n2) about the settlement.
 5. Updates the contract details in the central database.
-6. **Authentication()**
 
-**Description**: Contains authentication methods and data related to different authentication techniques given below:
+### Proposed Proof Interface
 
-- encryption: Type of encryption used for authentication.
-- ZKProof: Details related to Zero-Knowledge Proof authentication.
-- OffChain: Data related to off-chain authentication.
+```go
 
-### More techniques can be added
+type proofs interface {
+	InitiateContractApproval() error
+	CreateContractProof() (string, error)
+	SaveProof(contractID, proof string) error
+	VerifyProof(contractID, proof string) (bool, error)
+}
+```
 
-**Parameters**:
+**The InitiateContractApproval(): i**nitiates the contract approval process, starting necessary workflows.
 
-- nodeID: A variable representing the node being authenticated (dms.node).
-- method: The authentication method ("tokenBasedEncryption", "ZKProof", "OffChainData").
-- credentials: The credentials required for authentication.
+**The CreateContractProof():** generates a cryptographic proof for a contract, ensuring transaction integrity.
 
-**Functionality:**
+**The SaveProof(contractID, proof string) error:**  stores the contract proof in a simulated database, maintaining audit trails and historical records.
 
-The Authenticate method checks the authentication method specified (tokenBasedEncryption, ZKProof, OffChainData) and calls the corresponding authentication function (tokenBasedEncryptionAuthentication, zkProofAuthentication, offChainDataAuthentication). It returns true if authentication is successful based on the provided credentials and false otherwise.
+**The VerifyProof(contractID, proof string) (bool, error):** verifies the authenticity of a contract proof, ensuring its validity before further processing.
 
-1. **Deposit():**
+### **Proposed Payment Interface**
 
-**Purpose**: The Deposit function manages the deposit logic for payments, distinguishing between direct and escrow methods. It ensures that only valid payment types (fiat or crypto) are accepted for escrow payments. This function is crucial for initiating the payment process based on the specified method and type.
+```go
+// Payment defines the operations for managing payments and settlements
+type payments interface {
+	Deposit(contractID int, payment Payment, pricing PricingMethod) error
+	SettleContract(contractID int, verificationResult jobs.JobVerificationResult) error
+}
+
+```
+
+**Deposit:**  manages the deposit logic for payments, distinguishing between direct and escrow methods. It ensures that only valid payment types (fiat or crypto) are accepted for escrow payments. This function is crucial for initiating the payment process based on the specified method and type.
 
 **Parameters**:
 
@@ -120,15 +123,132 @@ The Authenticate method checks the authentication method specified (tokenBasedEn
 - payment (Payment): Struct containing details of the payment, including its method (direct or escrow) and payment type (fiat or crypto).
 - pricing (PricingMethod): Defines the method used to determine the pricing for the deposit (not fully implemented in this function).
 
-**Returns**: Returns an error if there are issues with the payment method or type, ensuring that only valid configurations proceed with deposit processing.
+  **SettleContract:**  manages the settlement process for contracts based on job verification results. It calculates the payment amount based on the job's completion percentage and processes payments either directly or via escrow, depending on the contract's payment method (direct or escrow). It also handles scenarios where job verification fails and ensures appropriate actions such as refunds for escrow payments.
 
-1. **SettleContract ():**
+### **Data types**
 
-**Purpose**: The SettleContract function manages the settlement process for contracts based on job verification results. It calculates the payment amount based on the job's completion percentage and processes payments either directly or via escrow, depending on the contract's payment method (direct or escrow). It also handles scenarios where job verification fails and ensures appropriate actions such as refunds for escrow payments.
+**proposed tokenomics.Contract:** Consists of detailed information regarding an agreement between a requestor and a provider within the network. This data type includes the following fields:
 
-**Parameters**:
+```go
+// Contract represents the contract details between nodes
+type Contract struct {
+	ContractID     int //A unique identifier for the contract.
+	JobID          int  //The identifier of the job associated with the contract.
+	Requestor      string  //The entity requesting the service.
+	Provider       string  //  The entity providing the service.
+	PaymentDetails payments.Payment  //An instance of the payments.Payment type, detailing the payment arrangements for the contract.
+	Signatures     []dms.nodeID     //A slice of dms.nodeID values, representing the digital signatures of involved parties.
+	Settled        bool       //A boolean indicating whether the contract has been settled.
+	Verification   orchestrator.JobVerificationResult  //An instance of the orchestrator.JobVerificationResult type, containing the result of the job verification process.
+	ContractProof  orchestrator.ContractProof    // An instance of the orchestrator.ContractProof type, providing proof of the contract's terms and conditions.
 
-- contractID (int): Identifier of the contract to be settled.
-- verificationResult (jobs.JobVerificationResult): Contains the result of job verification, including success status (verificationResult.Success) and completion percentage (verificationResult.Percentage).
+}
+```
 
-**Returns**: Returns an error if there are issues processing payments or refunds, ensuring that settlement operations are executed accurately based on job outcomes.
+**tokenomics.payments.Payment**: Consists of details related to a payment transaction between a requestor and a provider, specifying the type, channel, currency, pricing method, and timestamp of the transaction.
+
+---
+
+```go
+
+type Payment struct {
+    Requestor      string        // The entity initiating the payment
+    Provider       string        // The entity receiving the payment
+    Currency       string        // The currency in which the payment is made
+    Timestamp      time.Time     // The time when the payment was made
+    PaymentType    string        // The type of payment (e.g., escrow, direct)
+    PaymentChannel PaymentChannel // The channel through which the payment is processed
+    Pricing        PricingMethod  // The method used for pricing the payment
+}
+
+```
+
+**tokenomics.payments.FixedJobPricing:** Consists of information related to the fixed pricing for a job, detailing the cost and platform fee involved.
+
+```go
+goCopy code
+// FixedJobPricing represents the details for fixed job pricing
+type FixedJobPricing struct {
+    // Price is the total cost for the fixed job.
+    Price int
+    // PlatformFee is the fee charged by the platform for the fixed job.
+    PlatformFee int
+}
+
+```
+
+---
+
+**tokenomics.payments.PeriodicPricing:** Consists of information related to the periodic pricing model, including the cost, period, usage limits, and platform fee.
+
+```go
+goCopy code
+// PeriodicPricing represents the details for periodic pricing
+type PeriodicPricing struct {
+    // Price is the cost for the periodic service.
+    Price int
+    // Period is the duration of the pricing period (e.g., monthly, yearly).
+    Period string
+    // UsageLimits defines the maximum allowed usage for resources within the pricing period.
+    UsageLimits UsageLimits
+    // PlatformFee is the fee charged by the platform for the periodic service.
+    PlatformFee int
+}
+
+```
+
+---
+
+**tokenomics.payments.UsageLimits:** Consists of information regarding the resource usage limits or quotas associated with periodic pricing, specifying the maximum allowable usage for various resources.
+
+```go
+goCopy code
+// UsageLimits represents the usage limits or quotas for periodic pricing
+type UsageLimits struct {
+    // MaxCPUHours is the maximum number of CPU hours allowed within the pricing period.
+    MaxCPUHours int
+    // MaxMemoryUsage is the maximum amount of memory usage allowed within the pricing period.
+    MaxMemoryUsage int
+    // MaxStorageUsage is the maximum amount of storage usage allowed within the pricing period.
+    MaxStorageUsage int
+    // MaxNetworkBandwidth is the maximum network bandwidth usage allowed within the pricing period.
+    MaxNetworkBandwidth int
+}
+
+```
+
+---
+
+**tokenomics.Proofs.Authentication:** type is designed to handle the authentication details necessary for secure transaction processing within the payment gateway system. This type includes:
+
+- **Encryption**: Specifies the encryption method or protocol used to protect the data involved in the authentication process, ensuring that data is transmitted securely and is kept confidential from unauthorized parties.
+- **ZKProof**: Contains the zero-knowledge proof (ZKProof) which allows the verification of the transaction's authenticity without exposing sensitive information. This proof ensures that the transaction is valid while preserving privacy.
+- **OffChain**: Represents off-chain data that supports the authentication process. This data includes information not stored directly on the blockchain but is essential for validating and processing transactions securely.
+
+```go
+type Authentication struct {
+    // encryption: Defines the encryption protocol used to protect data integrity and confidentiality during the authentication process.
+    encryption string
+
+    // ZKProof: Contains the zero-knowledge proof that allows verification of the authentication without disclosing sensitive information.
+    ZKProof string
+
+    // OffChain: Holds off-chain data that is essential for the authentication process but not stored on the blockchain.
+    OffChain OffChainData
+}
+
+```
+
+**Note that the above methods not an exhaustive list. These are to be considered as suggestions. The developer implementing the tokenomics functionality is free to make modifications as necessary.**
+
+## 7. References
+
+The Tokenomics is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/tokenomics/specs/class_diagram.puml): It is proposed and under review.
+
+## 8. Class Diagram
+
+**Source File:** 
+
+[https://gitlab.com/nunet/device-management service/-/blob/develop/tokenomics/specs/class_diagram.puml](https://gitlab.com/nunet/device-management-service/-/blob/develop/tokenomics/specs/class_diagram.puml)
