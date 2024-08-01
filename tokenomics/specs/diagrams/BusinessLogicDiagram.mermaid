@@ -1,0 +1,34 @@
+flowchart TD;
+    Start(Start)
+    DMS("Service provider requests to run a job")
+    compute_provider("Compute Provider accept job")
+    InvokeNextStep("Initiate Contract Creation")
+    ProofsExist(Contract Closure)
+    jobdeployed("Job deployed on compute provider machine")
+    joballocation("Job Execution Started")
+    jobTimeout("Job time runout")
+    jobStatus("Job Completed")
+    JobProof(Validate job using proof)
+    jobSuccess("Job Status")
+    jobisverified("Direct payment to respective party as per protocol")
+    Paymentchannel("Payment Channel")
+    terminate("Process Terminate")
+
+
+
+
+    Start --> DMS
+    DMS--> InvokeNextStep
+    DMS --> compute_provider
+    compute_provider --> InvokeNextStep
+    InvokeNextStep --> ProofsExist
+    ProofsExist --> jobdeployed
+    jobdeployed -->  joballocation
+    joballocation --> jobTimeout
+    jobTimeout --> JobProof
+    joballocation -->  jobStatus
+    jobStatus --> JobProof
+    JobProof --> jobSuccess
+    jobSuccess --> Paymentchannel
+    Paymentchannel --> jobisverified
+    jobisverified --> terminate

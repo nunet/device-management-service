@@ -1,0 +1,43 @@
+sequenceDiagram
+    title: Contract Settlement Sequence Diagram
+    participant Node1 as dms.NodeID (n1)
+    participant Node2 as dms.NodeID (n2)
+    participant DB as Central Database
+    participant JobsDB as Jobs Database
+
+    Node1->>DB: Retrieve Contract Details (contractID)
+    DB-->>Node1: Return Contract Details
+
+    Node1->>JobsDB: Fetch Job Results (contract.JobID)
+    JobsDB-->>Node1: Return Job Results
+
+    Node1->>JobsDB: Check Job Validation
+    DB-->>Node1: Return Job Validation Result
+
+    Note over Node1,Node2: Contract settlement initiated by Node1
+
+    Node1->>DB: Check Contract Proof Exists
+    DB-->>Node1: Confirm Contract Proof
+
+    Node1->>Node2: Notify Contract Settlement
+    Node2-->>Node1: Acknowledge Notification
+
+    alt Job Verification Failed
+        Node1->>Node2: Notify Job Failed
+        Node1->>Node2: Proceed to Payment Back to Requestor
+        Node2-->>Node1: Acknowledge Payment
+    else Job Successfully Executed with Proof
+        Node1->>Node2: Notify Job Success
+        Node1->>Node2: Proceed to Payment Withdrawal by System
+        Node2-->>Node1: Acknowledge Payment
+    else Partial Success
+        Node1->>Node2: Notify Partial Success
+        Node1->>Node2: Proceed to Partial Payment to Both Parties
+        Node2-->>Node1: Acknowledge Payment
+    end
+
+    Note over Node1: Contract settlement process completed
+    Node1->>DB: Update Contract Status
+    DB-->>Node1: Acknowledge Status Update
+
+    Note over Node1,DB: Contract status updated in the database
