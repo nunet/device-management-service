@@ -1,0 +1,27 @@
+@startuml
+start
+
+:Service provider requests to run a job;
+fork
+    :Compute Provider accept job;
+fork again
+end fork
+:Initiate Contract Creation;
+:Contract Closure;
+:Job deployed on compute provider machine;
+:Job Execution Started;
+
+fork
+    :Job time runout;
+fork again
+    :Job Completed;
+end fork
+
+:Validate job using proof;
+:Job Status;
+:Payment Channel;
+:Direct payment to respective party as per protocol;
+:Process Terminate;
+
+stop
+@enduml

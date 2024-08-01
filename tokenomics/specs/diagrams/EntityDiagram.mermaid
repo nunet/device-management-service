@@ -1,0 +1,44 @@
+flowchart LR
+  user1((Service provider user))
+  user2((Compute provider user))
+
+
+  subgraph Service Provider's machine
+     dms1[DMS\non Service Provider]
+     webapp[ML WebApp]
+
+
+  end
+
+  subgraph Compute Provider's machine
+     dms2[DMS\non Compute Provider]
+     service[ML service container\non Compute Provider]
+     dashboard[Management Dashboard]
+
+
+  end
+
+
+  subgraph Job Validation
+       proof[Proof]
+  end
+
+
+  subgraph Tokenomics Module
+       payment[Payment Module]
+  end
+
+
+  user1-->webapp
+  webapp-->dms1
+  dms1-->proof
+  dms1<-->dms2
+  dms2-->service
+  user2-->dashboard
+  dashboard-->dms2
+  dms2-->proof
+  dms1 --> payment
+  dms2 --> payment
+
+
+
