@@ -1,138 +1,172 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
-func (m *MockHandler) ListPeersHandler(c *gin.Context) {
-	peers, err := mockPeerAddrInfos()
+// setupTestP2P creates a new P2PHandler with a mock Libp2p instance
+func setupTestP2P() (*P2PHandler, error) {
+	ctx := context.Background()
+	priv, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": "could not get peer list"})
+		return nil, fmt.Errorf("unable to generate key")
 	}
-	c.JSON(200, peers)
-}
+	bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
+	for i, addr := range config.GetConfig().P2P.BootstrapPeers {
+		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
+	}
 
-func (m *MockHandler) ListDHTPeersHandler(c *gin.Context) {
-	if mockHostID == "" {
-		c.AbortWithStatusJSON(400, gin.H{"error": "host node has not yet been initialized"})
-		return
-	}
-	peers := mockDHTPeers()
-	c.JSON(200, peers)
-}
-
-func (m *MockHandler) SelfPeerInfoHandler(c *gin.Context) {
-	if mockHostID == "" {
-		c.AbortWithStatusJSON(400, gin.H{"error": "host node has not yet been initialized"})
-		return
-	}
-	self := models.NetworkStats{
-		ID:         mockHostID,
-		ListenAddr: mockAddr,
-	}
-	c.JSON(200, self)
-}
-
-func (m *MockHandler) DumpDHTHandler(c *gin.Context) {
-	if mockHostID == "" {
-		c.AbortWithStatusJSON(400, gin.H{"error": "host node has not yet been initialized"})
-		return
-	}
-	peers := []models.PeerData{
-		{
-			PeerID:      "foobarfoobarfoobar",
-			IsAvailable: false,
+	cfg := &models.Libp2pConfig{
+		PrivateKey:      priv,
+		BootstrapPeers:  bootstrapPeers,
+		Rendezvous:      "nunet-test",
+		Server:          true,
+		Scheduler:       background_tasks.NewScheduler(5),
+		CustomNamespace: "/nunet-dht-1/",
+		DHTPrefix:       "/nunet",
+		ListenAddress: []string{
+			"/ip4/0.0.0.0/tcp/0",
+			"/ip4/0.0.0.0/udp/0/quic",
 		},
-		{
-			PeerID:      "foobazfoobazfoobaz",
-			IsAvailable: true,
-		},
-		{
-			PeerID:      "bazbazbazbazbazbaz",
-			IsAvailable: false,
+		PeerCountDiscoveryLimit: 5,
+		PrivateNetwork: models.PrivateNetworkConfig{
+			WithSwarmKey: false,
 		},
 	}
-	c.JSON(200, peers)
+
+	p2p, err := libp2p.New(cfg, afero.NewMemMapFs())
+	if err != nil {
+		return nil, fmt.Errorf("unable to create libp2p host")
+	}
+
+	if err = p2p.Init(ctx); err != nil {
+		return nil, fmt.Errorf("unable to initialise libp2p host")
+	}
+
+	return &P2PHandler{p2p: p2p}, nil
 }
 
-func TestListPeersHandler(t *testing.T) {
-	router := SetupMockRouter()
+func TestListPeers(t *testing.T) {
+	ctx := context.Background()
+	router := setupTestRouter()
 
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/peers", nil)
-	router.ServeHTTP(w, req)
+	p2p := &P2PHandler{p2p: nil}
+	var err error
+	router.GET("/peers", p2p.ListPeers)
 
+	// host not initialised
+	w := performRequest(router, "GET", "/peers")
+	assert.Equal(t, 500, w.Code)
+	assert.Contains(t, w.Body.String(), "host node hasn't yet been initialized")
+
+	np2p, err := setupTestP2P()
+	assert.NoError(t, err)
+	p2p.p2p = np2p.p2p
+
+	// test no peers - host not started
+	w = performRequest(router, "GET", "/peers")
+	assert.Equal(t, 500, w.Code)
+	assert.Contains(t, w.Body.String(), "no peers yet")
+
+	// start host - discover peers
+	err = p2p.p2p.Start(ctx)
+	assert.NoError(t, err)
+	w = performRequest(router, "GET", "/peers")
 	assert.Equal(t, 200, w.Code)
+
+	// check fomat is in {ID: ..., Addr: ...}
+	data := []peer.AddrInfo{}
+	err = json.Unmarshal(w.Body.Bytes(), &data)
+	assert.NoError(t, err)
 }
 
-func TestListDHTPeersHandler(t *testing.T) {
-	router := SetupMockRouter()
+func TestKnownPeers(t *testing.T) {
+	router := setupTestRouter()
 
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/peers/dht", nil)
-	router.ServeHTTP(w, req)
+	p2p := &P2PHandler{p2p: nil}
+	var err error
+	router.GET("/peers/dht", p2p.KnownPeers)
 
+	// host not initialised
+	w := performRequest(router, "GET", "/peers/dht")
+	assert.Equal(t, 500, w.Code)
+	assert.Contains(t, w.Body.String(), "host node hasn't yet been initialized")
+
+	np2p, err := setupTestP2P()
+	assert.NoError(t, err)
+	p2p.p2p = np2p.p2p
+
+	// test peers - host not started but should at least have it's own id
+	w = performRequest(router, "GET", "/peers/dht")
 	assert.Equal(t, 200, w.Code)
+
+	// check fomat and self id
+	data := []peer.AddrInfo{}
+	err = json.Unmarshal(w.Body.Bytes(), &data)
+	assert.NoError(t, err)
+	assert.Equal(t, p2p.p2p.Host.ID().String(), data[0].ID.String())
 }
 
-func TestSelfPeerInfoHandler(t *testing.T) {
-	router := SetupMockRouter()
+func TestSelfPeerInfo(t *testing.T) {
+	p2p := &P2PHandler{p2p: nil}
+	var err error
+	router := setupTestRouter()
+	router.GET("/peers/self", p2p.SelfPeerInfo)
 
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/peers/self", nil)
-	router.ServeHTTP(w, req)
+	// host not initialised
+	w := performRequest(router, "GET", "/peers/self")
+	assert.Equal(t, 500, w.Code)
+	assert.Contains(t, w.Body.String(), "host node hasn't yet been initialized")
 
+	np2p, err := setupTestP2P()
+	assert.NoError(t, err)
+	p2p.p2p = np2p.p2p
+
+	w = performRequest(router, "GET", "/peers/self")
 	assert.Equal(t, 200, w.Code)
+	assert.Contains(t, w.Body.String(), p2p.p2p.Host.ID().String())
+
 }
 
-func mockPeerAddrInfos() ([]peer.AddrInfo, error) {
-	var addrInfos []peer.AddrInfo
-	peerData := []struct {
-		ID   string
-		Addr string
-	}{
-		{"12D3KooWEgUjXjxGnZL7DwExVnEz5pcL5U3jxKpB3o6XJgXrMuXz", "/ip4/127.0.0.1/tcp/13001"},
-		{"12D3KooWLrudbCjki3qfQpY8ghy7MbpHLWGvQYqXBL8Xs3ss2yLH", "/ip4/127.0.0.1/tcp/13002"},
-	}
+func TestDumpDHT(t *testing.T) {
+	ctx := context.Background()
+	p2p := &P2PHandler{p2p: nil}
+	var err error
+	router := setupTestRouter()
+	router.GET("/peers/dht/dump", p2p.DumpDHT)
 
-	for _, pd := range peerData {
-		pid, err := peer.Decode(pd.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode peer ID: %w", err)
-		}
+	// host not initialised
+	w := performRequest(router, "GET", "/peers/dht/dump")
+	assert.Equal(t, 500, w.Code)
+	assert.Contains(t, w.Body.String(), "host node hasn't yet been initialized")
 
-		maddr, err := multiaddr.NewMultiaddr(pd.Addr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create multiaddr: %w", err)
-		}
+	np2p, err := setupTestP2P()
+	assert.NoError(t, err)
+	p2p.p2p = np2p.p2p
 
-		addrInfos = append(addrInfos, peer.AddrInfo{
-			ID:    pid,
-			Addrs: []multiaddr.Multiaddr{maddr},
-		})
-	}
-	return addrInfos, nil
-}
+	// test no peers - host not started
+	w = performRequest(router, "GET", "/peers/dht/dump")
+	assert.Equal(t, 500, w.Code)
+	assert.Contains(t, w.Body.String(), "empty DHT")
 
-func mockDHTPeers() []peer.ID {
-	if dhtPeers == 0 {
-		return []peer.ID{}
-	}
-	return []peer.ID{"Qm0xbarbarbar", "Qm1xbazbazbaz", "Qm2xfoobarfoobar", "Qm3xfoobazfoobaz", "Qm4xfoofoofoo"}
-}
+	// start host - discover peers
+	err = p2p.p2p.Start(ctx)
+	assert.NoError(t, err)
+	w = performRequest(router, "GET", "/peers/dht/dump")
+	assert.Equal(t, 200, w.Code)
+	assert.Contains(t, w.Body.String(), "LastSuccessfulOutboundQueryAt")
 
-func mockKadDHTPeers() []string {
-	if kadDHTPeers == 0 {
-		return []string{}
-	}
-	return []string{"Qm0xfoobar", "Qm1xfoobarbarbar", "Qm2xbazbazfoo", "Qm3xfoobarbarfoo"}
 }

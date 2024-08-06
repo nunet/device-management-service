@@ -11,23 +11,31 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/swaggo/gin-swagger/swaggerFiles"
 
+	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
 
-type RESTServer struct {
-	router *gin.Engine
-	logger *logger.Logger
-	p2p    *libp2p.Libp2p
-	port   int
+type RESTServerConfig struct {
+	P2p        *libp2p.Libp2p
+	Onboarding *onboarding.Onboarding
+	Logger     *logger.Logger
+	MidW       []gin.HandlerFunc
+	Port       int
 }
 
-func NewRestServer(logger *logger.Logger, p2p *libp2p.Libp2p, mid []gin.HandlerFunc, port int) *RESTServer {
+// RESTServer represents a HTTP server
+type RESTServer struct {
+	router *gin.Engine
+	config RESTServerConfig
+}
+
+// NewRESTServer is a constructor function for RESTServer
+// It returns a pointer to RESTServer
+func NewRESTServer(config RESTServerConfig) *RESTServer {
 	return &RESTServer{
-		router: setupRouter(mid),
-		logger: logger,
-		p2p:    p2p,
-		port:   port,
+		router: setupRouter(config.MidW),
+		config: config,
 	}
 }
 
@@ -38,62 +46,46 @@ func setupRouter(mid []gin.HandlerFunc) *gin.Engine {
 	return router
 }
 
+// InitializeRoutes sets up all the endpoint routes
 func (s *RESTServer) InitializeRoutes() {
 	v1 := s.router.Group("/api/v1")
 
+	onboardHandler := NewOnboardingHandler(s.config.Onboarding)
 	onboarding := v1.Group("/onboarding")
 	{
-		onboarding.GET("/metadata", GetMetadataHandler)
-		onboarding.GET("/provisioned", ProvisionedCapacityHandler)
-		onboarding.GET("/address/new", CreatePaymentAddressHandler)
-		onboarding.GET("/status", OnboardStatusHandler)
-		onboarding.POST("/onboard", OnboardHandler)
-		onboarding.POST("/resource-config", ResourceConfigHandler)
-		onboarding.DELETE("/offboard", OffboardHandler)
+		onboarding.GET("/metadata", onboardHandler.GetMetadata)
+		onboarding.GET("/provisioned", onboardHandler.ProvisionedCapacity)
+		onboarding.GET("/address/new", onboardHandler.CreatePaymentAddress)
+		onboarding.GET("/status", onboardHandler.OnboardStatus)
+		onboarding.POST("/onboard", onboardHandler.Onboard)
+		onboarding.POST("/resource-config", onboardHandler.ResourceConfig)
+		onboarding.DELETE("/offboard", onboardHandler.Offboard)
 	}
 
+	deviceHandler := DeviceHandler{}
 	device := v1.Group("/device")
 	{
-		device.GET("/status", DeviceStatusHandler)
-		device.POST("/status", ChangeDeviceStatusHandler)
+		device.GET("/status", deviceHandler.DeviceStatus)
+		device.POST("/status", deviceHandler.UpdateDeviceStatus)
 	}
 
+	vmHandler := VMHandler{}
 	vm := v1.Group("/vm")
 	{
-		vm.POST("/start-default", StartDefaultHandler)
-		vm.POST("/start-custom", StartCustomHandler)
+		vm.POST("/start-default", vmHandler.StartDefault)
+		vm.POST("/start-custom", vmHandler.StartCustom)
 	}
 
-	run := v1.Group("/run")
-	{
-		run.GET("/deploy", DeploymentRequestHandler) // websocket
-		run.GET("/checkpoints", ListCheckpointHandler)
-		run.POST("/request-service", RequestServiceHandler)
-	}
-
-	tx := v1.Group("/transactions")
-	{
-		tx.GET("", GetJobTxHashesHandler)
-		tx.POST("/request-reward", RequestRewardHandler)
-		tx.POST("/send-status", SendTxStatusHandler)
-		tx.POST("/update-status", UpdateTxStatusHandler)
-	}
-
-	tele := v1.Group("/telemetry")
-	{
-		tele.GET("/free", GetFreeResourcesHandler)
-	}
-
-	ph := P2pHandler{p2p: s.p2p}
+	ph := P2PHandler{p2p: s.config.P2p}
 	p2p := v1.Group("/peers")
 	{
-		p2p.GET("", ph.ListPeersHandler)
-		p2p.GET("/self", ph.SelfPeerInfoHandler)
+		p2p.GET("", ph.ListPeers)
+		p2p.GET("/self", ph.SelfPeerInfo)
 
 		// DEBUGGING ONLY
 		if _, debugMode := os.LookupEnv("NUNET_DEBUG"); debugMode {
-			p2p.GET("/ping", ph.PingPeerHandler)
-			p2p.GET("/dht", ph.KnownPeersHandler)
+			p2p.GET("/ping", ph.PingPeer)
+			p2p.GET("/dht", ph.KnownPeers)
 			// p2p.GET("/dht/dump", ph.DumpDHTHandler)
 		}
 	}
@@ -102,8 +94,9 @@ func (s *RESTServer) InitializeRoutes() {
 	s.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
 
+// Run starts the server on the specified port
 func (s *RESTServer) Run() {
-	s.router.Run(fmt.Sprintf(":%d", s.port))
+	s.router.Run(fmt.Sprintf(":%d", s.config.Port))
 }
 
 func getCustomCorsConfig() cors.Config {

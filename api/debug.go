@@ -9,7 +9,7 @@ import (
 )
 
 // DEBUG
-func (p *P2pHandler) PingPeerHandler(c *gin.Context) {
+func (p *P2PHandler) PingPeer(c *gin.Context) {
 	reqCtx := c.Request.Context()
 	id := c.Query("peerID")
 	if id == "" {

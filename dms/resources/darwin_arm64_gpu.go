@@ -6,7 +6,7 @@ import (
 	"gitlab.com/nunet/device-management-service/models"
 )
 
-func Check_gpu() ([]models.Gpu, error) {
+func CheckGPU() ([]models.Gpu, error) {
 	// GPU Detection not supported on Darwin
 	// Currently using github.com/jaypipes/ghw for GPU info
 	// See:

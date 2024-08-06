@@ -3,201 +3,243 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"net/http"
+	"fmt"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/db"
+	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-func (h *MockHandler) GetMetadataHandler(c *gin.Context) {
-	metadata := models.Metadata{
-		Name:            "metadata",
-		UpdateTimestamp: 1633036800,
-		Resource: struct {
-			MemoryMax int64 `json:"memory_max,omitempty"`
-			TotalCore int64 `json:"total_core,omitempty"`
-			CPUMax    int64 `json:"cpu_max,omitempty"`
-		}{
-			MemoryMax: 16000,
-			TotalCore: 8,
-			CPUMax:    8,
-		},
-		Available: struct {
-			CPU    int64 `json:"cpu,omitempty"`
-			Memory int64 `json:"memory,omitempty"`
-		}{
-			CPU:    4,
-			Memory: 8000,
-		},
-		Reserved: struct {
-			CPU    int64 `json:"cpu,omitempty"`
-			Memory int64 `json:"memory,omitempty"`
-		}{
-			CPU:    4,
-			Memory: 8000,
-		},
-		Network:           "mainnet",
-		PublicKey:         "abc123xyz",
-		NodeID:            "node-001",
-		AllowCardano:      true,
-		NTXPricePerMinute: 0.1,
-	}
-	c.JSON(200, metadata)
+var mockMetadataBytes = []byte(`{
+"name": "Test Node",
+"update_timestamp": 1625097600,
+"resource": {
+	"memory_max": 16000000000,
+	"total_core": 8,
+	"cpu_max": 100
+},
+"available": {
+	"cpu": 80,
+	"memory": 12000000000
+},
+"reserved": {
+	"cpu": 20,
+	"memory": 4000000000
+},
+"network": "testnet",
+"public_key": "test_public_key",
+"node_id": "test_node_id",
+"allow_cardano": true
+}`)
+
+type TestSuite struct {
+	afs          afero.Afero
+	db           *gorm.DB
+	metadataPath string
+	dbPath       string
+	channels     []string
 }
 
-func (h *MockHandler) ProvisionedCapacityHandler(c *gin.Context) {
-	prov := models.Provisioned{
-		CPU:      3.5,
-		Memory:   16384,
-		NumCores: 4,
-	}
-	c.JSON(200, prov)
-}
+func NewTestSuite(t *testing.T) *TestSuite {
+	t.Helper()
 
-func (h *MockHandler) CreatePaymentAddressHandler(c *gin.Context) {
-	wallet := c.DefaultQuery("blockchain", "cardano")
-	if wallet != "cardano" && wallet != "ethereum" {
-		c.JSON(400, gin.H{"error": "invalid query data"})
-		return
+	afs := afero.Afero{
+		Fs: afero.NewMemMapFs(),
 	}
-	var addr, phrase string
-	var resp models.BlockchainAddressPrivKey
-	if wallet == "cardano" {
-		addr = "abc123xyz"
-		phrase = "barbarbarbar"
-		resp = models.BlockchainAddressPrivKey{
-			Address:  addr,
-			Mnemonic: phrase,
-		}
-	} else {
-		addr = "foobar123baz"
-		phrase = "bazbazbazbaz"
-		resp = models.BlockchainAddressPrivKey{
-			Address:    addr,
-			PrivateKey: phrase,
-		}
-	}
-	c.JSON(200, resp)
-}
 
-func (h *MockHandler) OnboardHandler(c *gin.Context) {
-	capacity := models.CapacityForNunet{
-		ServerMode: true,
-	}
-	err := c.BindJSON(&capacity)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
-		c.JSON(400, gin.H{"error": "invalid request data"})
-		return
+		t.Errorf("could not open database: %v", err)
 	}
-	metadata := models.Metadata{
-		Name:            "foobar",
-		UpdateTimestamp: 1625097600,
-		Reserved: struct {
-			CPU    int64 `json:"cpu,omitempty"`
-			Memory int64 `json:"memory,omitempty"`
-		}{
-			CPU:    capacity.CPU,
-			Memory: capacity.Memory,
-		},
-		Network:           capacity.Channel,
-		PublicKey:         "bazbazbaz",
-		NodeID:            "foo123bar",
-		AllowCardano:      capacity.Cardano,
-		NTXPricePerMinute: capacity.NTXPricePerMinute,
+
+	metadataPath := "/test/metadata.json"
+	dbPath := "/test/db.db"
+
+	channels := []string{"test1", "test2", "test3"}
+
+	return &TestSuite{
+		afs:          afs,
+		db:           db,
+		metadataPath: metadataPath,
+		dbPath:       dbPath,
+		channels:     channels,
 	}
-	c.JSON(200, metadata)
 }
 
-func (h *MockHandler) OnboardStatusHandler(c *gin.Context) {
-	status := models.OnboardingStatus{
-		Onboarded:    true,
-		Error:        nil,
-		MachineUUID:  "foo",
-		MetadataPath: "/.nunet/metadataV2.json",
-		DatabasePath: "/.nunet/nunet.db",
+func (s *TestSuite) newTestOnboardingHandler() *OnboardingHandler {
+
+	oConfig := onboarding.OnboardingConfig{
+		Filesystem:     s.afs,
+		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(s.db),
+		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(s.db),
+		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(s.db),
+		MetadataPath:   s.metadataPath,
+		DatabasePath:   s.dbPath,
+		Channels:       s.channels,
 	}
-	c.JSON(200, status)
+	service := onboarding.New(oConfig)
+	return &OnboardingHandler{service: service}
 }
 
-func (h *MockHandler) OffboardHandler(c *gin.Context) {
-	query := c.DefaultQuery("force", "false")
-	force, err := strconv.ParseBool(query)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "invalid query data"})
-		return
+func (s *TestSuite) setupDB() error {
+	if s.db == nil {
+		return fmt.Errorf("db not set")
 	}
-	var msg string
-	if force {
-		msg = "forced offboard successfull"
-	} else {
-		msg = "offboard successfull"
-	}
-	c.JSON(200, gin.H{"message": msg})
+	s.db.AutoMigrate(&models.Libp2pInfo{})
+	s.db.AutoMigrate(&models.AvailableResources{})
+	s.db.AutoMigrate(&models.MachineUUID{})
+	return nil
 }
 
-func (h *MockHandler) ResourceConfigHandler(c *gin.Context) {
-	if c.Request.ContentLength == 0 {
-		c.JSON(400, gin.H{"error": "request body is empty"})
-		return
-	}
+func (s *TestSuite) setupMetadata() error {
+	return s.afs.WriteFile(s.metadataPath, mockMetadataBytes, 0644)
+}
 
-	var capacity models.CapacityForNunet
-	err := c.BindJSON(&capacity)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "invalid request data"})
-		return
+func (s *TestSuite) setupPrivateKey(key string) error {
+	p2pInfo := &models.Libp2pInfo{
+		PrivateKey: []byte(key),
 	}
-	metadata := models.Metadata{
-		Name:            "foobar",
-		UpdateTimestamp: 1625097600,
-		Reserved: struct {
-			CPU    int64 `json:"cpu,omitempty"`
-			Memory int64 `json:"memory,omitempty"`
-		}{
-			CPU:    capacity.CPU,
-			Memory: capacity.Memory,
-		},
-		Network:           capacity.Channel,
-		PublicKey:         "bazbazbaz",
-		NodeID:            "foo123bar",
-		AllowCardano:      capacity.Cardano,
-		NTXPricePerMinute: capacity.NTXPricePerMinute,
+	return s.db.Create(&p2pInfo).Error
+}
+
+func (s *TestSuite) setupMachineUUID(uuid string) error {
+	machine := models.MachineUUID{
+		UUID: uuid,
 	}
-	c.JSON(200, metadata)
+	return s.db.Create(&machine).Error
 }
 
 func TestGetMetadata(t *testing.T) {
-	rServer := NewRestServer(nil, nil, nil, 0)
-	onboarding := rServer.router.Group("/api/v1/onboarding")
-	onboarding.GET("/metadata", GetMetadataHandler)
+	tests := []struct {
+		name           string
+		setupMock      func(*TestSuite)
+		expectedStatus int
+		expectedBody   []byte
+		wantErr        bool
+	}{
+		{
+			name: "success",
+			setupMock: func(ts *TestSuite) {
+				ts.setupDB()
+				ts.setupMetadata()
+			},
+			expectedStatus: 200,
+			wantErr:        false,
+		},
+		{
+			name:           "fail",
+			expectedStatus: 500,
+			wantErr:        true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestSuite(t)
+			handler := ts.newTestOnboardingHandler()
 
-	req, _ := http.NewRequest("GET", "/api/v1/onboarding/metadata", nil)
-	w := httptest.NewRecorder()
-	rServer.router.ServeHTTP(w, req)
+			router := gin.New()
+			endpoint := "/api/v1/onboarding/metadata"
+			router.GET(endpoint, handler.GetMetadata)
 
-	assert.Equal(t, 500, w.Code, w.Body)
+			if tt.setupMock != nil {
+				tt.setupMock(ts)
+			}
+			w := performRequest(router, "GET", endpoint)
 
-	var metadata *models.Metadata
-	err := json.Unmarshal(w.Body.Bytes(), &metadata)
-	assert.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			if len(tt.expectedBody) > 0 {
+				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
+			}
+			if tt.wantErr {
+				var response map[string]any
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
+	}
+}
+
+func TestOnboardStatus(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupMock    func(*TestSuite)
+		expectedCode int
+		expectedBody []byte
+		wantErr      bool
+	}{
+		{
+			name: "success",
+			setupMock: func(ts *TestSuite) {
+				ts.setupDB()
+				ts.setupPrivateKey("abc123")
+				ts.setupMachineUUID("12345")
+				ts.setupMetadata()
+			},
+			expectedCode: 200,
+		},
+		{
+			name: "fail",
+			setupMock: func(ts *TestSuite) {
+				ts.setupDB()
+			},
+			expectedCode: 500,
+			wantErr:      true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestSuite(t)
+			handler := ts.newTestOnboardingHandler()
+
+			if tt.setupMock != nil {
+				tt.setupMock(ts)
+			}
+
+			router := gin.New()
+			endpoint := "/api/v1/onboarding/status"
+			router.GET(endpoint, handler.OnboardStatus)
+
+			req := httptest.NewRequest("GET", endpoint, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedCode, w.Code)
+
+			if tt.expectedBody != nil {
+				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
+			}
+
+			if tt.wantErr {
+				var response map[string]any
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
+	}
 }
 
 func TestProvisionedCapacity(t *testing.T) {
-	rServer := NewRestServer(nil, nil, nil, 0)
-	onboarding := rServer.router.Group("/api/v1/onboarding")
-	onboarding.GET("/provisioned", ProvisionedCapacityHandler)
+	router := gin.New()
+	ts := NewTestSuite(t)
 
-	req, _ := http.NewRequest("GET", "/api/v1/onboarding/provisioned", nil)
+	handler := ts.newTestOnboardingHandler()
+	endpoint := "/api/v1/onboarding/provisioned"
+
+	router.GET(endpoint, handler.ProvisionedCapacity)
+	req := httptest.NewRequest("GET", endpoint, nil)
 	w := httptest.NewRecorder()
-	rServer.router.ServeHTTP(w, req)
 
+	router.ServeHTTP(w, req)
 	assert.Equal(t, 200, w.Code, w.Body)
 
 	var prov *models.Provisioned
@@ -206,123 +248,244 @@ func TestProvisionedCapacity(t *testing.T) {
 }
 
 func TestCreatePaymentAddress(t *testing.T) {
-	rServer := NewRestServer(nil, nil, nil, 0)
-	onboarding := rServer.router.Group("/api/v1/onboarding")
-	onboarding.GET("/address/new", CreatePaymentAddressHandler)
+	router := gin.New()
+	ts := NewTestSuite(t)
+
+	handler := ts.newTestOnboardingHandler()
+	endpoint := "/api/v1/onboarding/address/new"
+
+	router.GET(endpoint, handler.CreatePaymentAddress)
 
 	tests := []struct {
-		description  string
-		route        string
+		name         string
 		query        string
 		expectedCode int
+		expectedBody []byte
+		wantErr      bool
 	}{
 		{
-			description:  "cardano",
+			name:         "cardano",
 			query:        "?blockchain=cardano",
 			expectedCode: 200,
 		},
 		{
-			description:  "ethereum",
+			name:         "ethereum",
 			query:        "?blockchain=ethereum",
 			expectedCode: 200,
 		},
 		{
-			description:  "empty blockchain query",
+			name:         "empty blockchain query",
 			query:        "",
 			expectedCode: 200,
 		},
+		{
+			name:         "invalid wallet",
+			query:        "?blockchain=test",
+			expectedCode: 500,
+			wantErr:      true,
+		},
 	}
-	for _, tc := range tests {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/api/v1/onboarding/address/new"+tc.query, nil)
-		rServer.router.ServeHTTP(w, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", endpoint+tt.query, nil)
+			router.ServeHTTP(w, req)
 
-		assert.Equal(t, tc.expectedCode, w.Code, w.Body)
+			assert.Equal(t, tt.expectedCode, w.Code)
 
-		var keypair *models.BlockchainAddressPrivKey
-		err := json.Unmarshal(w.Body.Bytes(), &keypair)
-		assert.NoError(t, err)
-		if tc.description == "cardano" && tc.query == "" {
-			assert.True(t, keypair.Mnemonic != "")
-		} else if tc.description == "ethereum" {
-			assert.True(t, keypair.PrivateKey != "")
-		}
+			if len(tt.expectedBody) > 0 {
+				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
+			}
+			if tt.wantErr {
+				var response map[string]any
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
 	}
 }
 
-func TestNotOnboardedOffboard(t *testing.T) {
-	rServer := NewRestServer(nil, nil, nil, 0)
-	onboarding := rServer.router.Group("/api/v1/onboarding")
-	onboarding.DELETE("/offboard", OffboardHandler)
-
-	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Errorf("unable to initialize mockdb: %v", err)
+func TestOnboard(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupMock    func(*TestSuite)
+		reqBody      []byte
+		expectedCode int
+		expectedBody []byte
+		wantErr      bool
+	}{
+		{
+			name:         "invalid request data",
+			reqBody:      []byte("invalid data"),
+			expectedCode: 400,
+			wantErr:      true,
+		},
+		{
+			name:         "valid request data, internal error",
+			reqBody:      []byte(`{"memory":1000,"cpu":1000,"channel":"test","payment_addr":"abc123"}`),
+			expectedCode: 500,
+			wantErr:      true,
+		},
+		// TODO: Add more error test cases
+		// TODO: Check response body
+		// TODO: Add success cases when ResourcesManager is done
 	}
-	db.DB = mockDB
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestSuite(t)
+			if tt.setupMock != nil {
+				tt.setupMock(ts)
+			}
 
-	type tests struct {
-		description  string
+			handler := ts.newTestOnboardingHandler()
+
+			router := gin.New()
+			endpoint := "/api/v1/onboarding/onboard"
+			router.POST(endpoint, handler.Onboard)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", endpoint, bytes.NewBuffer(tt.reqBody))
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedCode, w.Code)
+
+			if len(tt.expectedBody) > 0 {
+				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
+			}
+			if tt.wantErr {
+				var response map[string]any
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
+	}
+}
+
+func TestOffboard(t *testing.T) {
+	ts := NewTestSuite(t)
+	handler := ts.newTestOnboardingHandler()
+
+	router := gin.New()
+	endpoint := "/api/v1/onboarding/offboard"
+	router.DELETE(endpoint, handler.Offboard)
+
+	tests := []struct {
+		name         string
+		setupMock    func(*TestSuite)
 		query        string
 		expectedCode int
-	}
-
-	notOnboarded := []tests{
+		expectedBody []byte
+		wantErr      bool
+	}{
 		{
-			description:  "force query true",
-			query:        "?force=true",
-			expectedCode: 500,
-		},
-		{
-			description:  "force query false",
+			name: "internal error",
+			setupMock: func(ts *TestSuite) {
+				ts.setupDB()
+				ts.setupMetadata()
+				ts.setupPrivateKey("1234")
+			},
 			query:        "?force=false",
 			expectedCode: 500,
+			wantErr:      true,
 		},
 		{
-			description:  "invalid force query",
-			query:        "?force=foobar",
+			name:         "invalid request data",
+			query:        "?force=12345",
 			expectedCode: 400,
+			wantErr:      true,
+		},
+		// TODO: Add more error test cases
+		// TODO: Check response body
+		// TODO: Add test case for code 200 when offboard is working
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupMock != nil {
+				tt.setupMock(ts)
+			}
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("DELETE", endpoint+tt.query, nil)
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedCode, w.Code)
+
+			if len(tt.expectedBody) > 0 {
+				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
+			}
+			if tt.wantErr {
+				var response map[string]any
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
+	}
+}
+
+func TestResourceConfig(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupMock    func(*TestSuite)
+		reqBody      []byte
+		expectedCode int
+		expectedBody []byte
+		wantErr      bool
+	}{
+		{
+			name:         "invalid request data",
+			reqBody:      []byte("1234"),
+			expectedCode: 400,
+			wantErr:      true,
 		},
 		{
-			description:  "missing force query",
-			query:        "",
-			expectedCode: 500,
+			name:         "empty request data",
+			reqBody:      nil,
+			expectedCode: 400,
+			wantErr:      true,
 		},
+		{
+			name:    "valid request data, not onboarded",
+			reqBody: []byte(`{"memory":1000,"cpu":1000,"channel":"test","payment_addr":"abc123"}`),
+			setupMock: func(ts *TestSuite) {
+				ts.setupDB()
+			},
+			expectedCode: 500,
+			wantErr:      true,
+		},
+		// TODO: Add more error cases
+		// TODO: Check response body
+		// TODO: Add cases for success when ResourcesManager is done
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestSuite(t)
+			handler := ts.newTestOnboardingHandler()
 
-	for _, tc := range notOnboarded {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("DELETE", "/api/v1/onboarding/offboard"+tc.query, nil)
-		rServer.router.ServeHTTP(w, req)
+			router := gin.New()
+			endpoint := "/api/v1/onboarding/resource-config"
+			router.POST(endpoint, handler.ResourceConfig)
 
-		assert.Equal(t, tc.expectedCode, w.Code, w.Body)
+			if tt.setupMock != nil {
+				tt.setupMock(ts)
+			}
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", endpoint, bytes.NewBuffer(tt.reqBody))
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedCode, w.Code)
+
+			if len(tt.expectedBody) > 0 {
+				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
+			}
+			if tt.wantErr {
+				var response map[string]any
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Contains(t, response, "error")
+			}
+		})
 	}
-}
-
-// TODO test onboarded offboard,resourceConfig etc... when metadata file is deprecated
-
-func TestOnboardStatusHandler(t *testing.T) {
-	rServer := NewRestServer(nil, nil, nil, 0)
-	onboarding := rServer.router.Group("/api/v1/onboarding")
-	onboarding.GET("/status", OnboardStatusHandler)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/onboarding/status", nil)
-	rServer.router.ServeHTTP(w, req)
-
-	assert.Equal(t, 200, w.Code, w.Body)
-}
-
-func TestResourceConfigHandler(t *testing.T) {
-	rServer := NewRestServer(nil, nil, nil, 0)
-	onboarding := rServer.router.Group("/api/v1/onboarding")
-	onboarding.POST("/resource-config", ResourceConfigHandler)
-
-	capacity := models.CapacityForNunet{ServerMode: true}
-	bodyBytes, _ := json.Marshal(capacity)
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/onboarding/resource-config", bytes.NewBuffer(bodyBytes))
-	rServer.router.ServeHTTP(w, req)
-
-	assert.Equal(t, 500, w.Code, w.Body) // expect 500 because machine not onboarded
 }

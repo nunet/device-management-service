@@ -15,3 +15,4 @@ maint-scripts/inventory.yaml
 Dockerfile
 docker-compose.yml
 .DS_Store
+.aider*

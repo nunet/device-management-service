@@ -10,8 +10,8 @@ import (
 	// "gitlab.com/nunet/device-management-service/dms/onboarding/gpuinfo"
 )
 
-func Check_gpu() ([]models.Gpu, error) {
-	var gpu_info []models.Gpu
+func CheckGPU() ([]models.Gpu, error) {
+	var gpuInfo []models.Gpu
 	vendors, err := DetectGPUVendors()
 	if err != nil {
 		return nil, fmt.Errorf("unable to detect GPU Vendor: %v", err)
@@ -30,7 +30,7 @@ func Check_gpu() ([]models.Gpu, error) {
 					gpu.Name = i.GPUName
 					gpu.FreeVram = i.FreeMemory
 					gpu.TotVram = i.TotalMemory
-					gpu_info = append(gpu_info, gpu)
+					gpuInfo = append(gpuInfo, gpu)
 				}
 				foundNVIDIA = true
 			}
@@ -45,7 +45,7 @@ func Check_gpu() ([]models.Gpu, error) {
 					gpu.Name = i.GPUName
 					gpu.FreeVram = i.FreeMemory
 					gpu.TotVram = i.TotalMemory
-					gpu_info = append(gpu_info, gpu)
+					gpuInfo = append(gpuInfo, gpu)
 				}
 				foundAMD = true
 			}
@@ -53,5 +53,5 @@ func Check_gpu() ([]models.Gpu, error) {
 			fmt.Println("Unknown GPU(s) detected")
 		}
 	}
-	return gpu_info, nil
+	return gpuInfo, nil
 }
