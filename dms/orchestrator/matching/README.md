@@ -12,12 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
-8. [Class Diagram](#8-class-diagram)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -66,13 +66,23 @@ Here is quick overview of the contents of this directory:
 
 * [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/utils.go): Utility methods specific to this package only.
 
-#### Package class diagram
+### 3. Class Diagram
+
+#### Source
+
+[matching class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/specs/class_diagram.puml)
+
+#### Rendered from source file
 
 ```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/develop/dms/orchestrator/matching/specs/class_diagram.puml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/dms/orchestrator/matching"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 3. Functionality
+### 4. Functionality
 
 #### Generic type comparison
 
@@ -188,7 +198,7 @@ It is not yet clear how are we will be defining localities in our model therefor
 
 **Note: the functionality of the package is currently being developed; please see description for details and developed / proposed aspects.**
 
-### 4. Types
+### 5. Data Types
 
 Most of the data types used by this package are defined in other packages. Here is the list of important types used by this package, indicating whether or not they are defined here or elsewhere. Note that the `matching` package potentially will deal with comparison of most of the complex types defined within the whole `dms`, therefore it does not make sense to list them all here, but they are mentioned / explained as needed in functionality description of each type comparator (see above).
 
@@ -202,11 +212,11 @@ Most of the data types used by this package are defined in other packages. Here 
 
 * `matching.ComparatorMap` is used for registering (and then retrieving by type name) each type comparator. `Compare()` operator of `matching.Comparator` is currently constructed in a way that it detects input type and then pulls the required type comparator from the comparatorMap by name.
 
-### 5. Testing
+### 6. Testing
 
 All unit tests for the package are implemented in `comparator_test.go`. This file includes at least one test for each type comparator. Currently unit tests are implemented using assertions on manually constructed types. This approach allows to check the logic of comparison, but also limits the input domain of tests. In the future these manually constructed tests maybe augmented by a more elaborate complex type mocking code.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -231,25 +241,10 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 
 - `proposed` `LocalNetworkTopology` more complex deployments may need a data structure, which considers local network topology of a node / dms -- i.e. for reasoning about speed of connection (as well as capabilities) between neighbors.
 
-### 7. References
-
-* Class diagram (source): [./specs/class_diagram.puml](https://gitlab.com/nunet/device-management-service/-/tree/develop/orchestrator/matching/specs/class_diagram.puml); If this document is viewed via GitLab interface, this diagram should be rendered directly and seen in section [Structure and organisation/Package class diagram](#package-class-diagram). Otherwise, until we implement automatic PlantUML to svg/png conversion and build it into our pipeline, the rendering should be done manually or via IDE plugins
+### 8. References
 
 
 #### Related research blogs 
 
 `TBD`
-
-### 8. Class Diagram
-
-#### Source
-
-[Package source](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/specs/class_diagram.puml?ref_type=heads)
-
-#### Rendered from source file
-
-```plantuml
-!$rootUrl = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
-!include $rootUrl/dms/orchestrator/matching/specs/class_diagram.puml
-```
 

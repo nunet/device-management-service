@@ -12,11 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -28,24 +29,40 @@ This package contains all code that is very specific to the whole of the dms, wh
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](README.md): Current file which is aimed towards developers who wish to use and modify the package functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality. 
 
-* [init](init.go): This file handles controlled shutdown and initializes OpenTelemetry-based Zap logger.
+* [init](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/init.go): This file handles controlled shutdown and initializes OpenTelemetry-based Zap logger.
 
-* [websocket](websocket.go): This file contains communication protocols for a websocket server including message handling and command execution.
+* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/websocket.go): This file contains communication protocols for a websocket server including message handling and command execution.
 
 _subpackages_
-* [config](config): This sub-package contains the configuration related data for the whole dms.
+* [config](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/config): This sub-package contains the configuration related data for the whole dms.
 
-* [background_tasks](background_tasks): This sub-package contains functionality that runs in the background.
+* [background_tasks](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks): This sub-package contains functionality that runs in the background.
 
-### 3. Functionality
+### 3. Class Diagram
+
+#### Source
+
+[internal class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/internal/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/internal"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 `TBD`
 
-### 4. Data Types
+### 5. Data Types
 
-- `WebSocketConnection`
+- `internal.WebSocketConnection`
 
 ```
 // WebSocketConnection is pointer to gorilla/websocket.Conn
@@ -54,7 +71,7 @@ type WebSocketConnection struct {
 }
 ```
 
-- `Command`
+- `internal.Command`
 
 ```
 // Command represents a command to be executed
@@ -68,11 +85,11 @@ type Command struct {
 
 **Note: The data types are expected to change during refactoring of DMS**
 
-### 5. Testing
+### 6. Testing
 
 `TBD`
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -81,8 +98,5 @@ All issues that are related to the implementation of `internal` package can be f
 - [internal package implementation]() `TBD`
 
 
-### 7. References
+### 8. References
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)

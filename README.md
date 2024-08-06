@@ -109,7 +109,7 @@ Relevent research work that has informed the design of DMS can be found below:
 
 ### 3. Functionality
 
-TBD
+`TBD`
 
 
 ### 4. Data Types
@@ -134,7 +134,7 @@ In addition to the relevant links added in the sections above, you can also find
 
 ### 7. Class Diagram
 
-The global class diagram for the DMS is show below.
+The global class diagram for the DMS is shown below.
 
 #### Source file
 
@@ -143,7 +143,11 @@ The global class diagram for the DMS is show below.
 #### Rendered from source file
 
 ```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/develop/api/specs/class_diagram.puml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = ""
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
 ## Getting Started

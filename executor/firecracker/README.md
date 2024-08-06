@@ -12,11 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -27,22 +28,37 @@ This sub-package contains functionality including drivers and api for the Firecr
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](README.md): Current file which is aimed towards developers who wish to use and modify the Firecracker functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/firecracker/README.md): Current file which is aimed towards developers who wish to use and modify the Firecracker functionality. 
 
-* [client](client.go): This file provides a high level wrapper around the [Firecracker](github.com/firecracker-microvm/firecracker-go-sdk) library.
+* [client](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/firecracker/client.go): This file provides a high level wrapper around the [Firecracker](github.com/firecracker-microvm/firecracker-go-sdk) library.
 
-* [executor](executor.go): This is the main implementation of the executor interface for Firecracker. It is the entry point of the sub-package. It is intended to be used as a singleton.
+* [executor]https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/firecracker/(executor.go): This is the main implementation of the executor interface for Firecracker. It is the entry point of the sub-package. It is intended to be used as a singleton.
 
-* [handler](handler.go): This file contains a handler implementation to manage the lifecycle of a single job.
+* [handler](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/firecracker/handler.go): This file contains a handler implementation to manage the lifecycle of a single job.
 
-* [init](init.go): This file is responsible for initialization of the package. Currently it only initializes a logger to be used through out the sub-package.
+* [init](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/firecracker/init.go): This file is responsible for initialization of the package. Currently it only initializes a logger to be used through out the sub-package.
 
-* [types](types.go): This file contains Models that are specifically related to the Firecracker executor. Mainly it contains the engine spec model that describes a Firecracker job.
+* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/firecracker/types.go): This file contains Models that are specifically related to the Firecracker executor. Mainly it contains the engine spec model that describes a Firecracker job.
 
 Files with `*_test.go` suffix contain unit tests for the functionality in corresponding file.
 
+### 3. Class Diagram
 
-### 3. Functionality
+#### Source
+
+[firecracker class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/executor/firecracker/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/executor/firecracker"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 Below methods have been implemented in this package:
 
@@ -116,7 +132,7 @@ It returns an error in case of:
 
 `Cleanup` removes all firecracker resources associated with the executor. This includes stopping and removing all running VMs and deleting their socket paths. It returns an error it it is unable to remove the containers.
 
-### 4. Data Types
+### 5. Data Types
 
 `executor.firecracker.Executor`: This is the instance of the executor created by `NewExecutor` function. It contains the firecracker client and other resources required to execute requests.
 
@@ -179,11 +195,11 @@ type executionHandler struct {
 
 Refer to package [readme](../README.md#4-data-types) for other data types.
 
-### 5. Testing
+### 6. Testing
 
 Unit tests for each functionality are defined in files with `*_test.go` naming convention.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -192,8 +208,4 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 7. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. References

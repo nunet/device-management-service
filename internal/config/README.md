@@ -12,11 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -42,13 +43,29 @@ The mechanism of dynamic configuration will enable to override or change default
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/config/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [config](config.go): This file contains data structures for this package.
+* [config](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/config/config.go): This file contains data structures for this package.
 
-* [load](load.go): This file establishes a configuration loader using `Viper`, supports loading JSON files from various locations, applies defaults, and exposes functions to manage and obtain the loaded configuration.
+* [load](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/config/load.go): This file establishes a configuration loader using `Viper`, supports loading JSON files from various locations, applies defaults, and exposes functions to manage and obtain the loaded configuration.
 
-### 3. Functionality
+### 3. Class Diagram
+
+#### Source
+
+[config class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/internal/config/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/internal/config"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 The methods of this package are explained below:
 
@@ -129,9 +146,9 @@ Sets default values for various configuration options in a `viper.Viper` instanc
 
 `removeComments` Removes comments from the configuration file content using a regular expression.
 
-### 4. Data Types
+### 5. Data Types
 
-- `Config`: holds the overall configuration with nested structs for specific sections
+- `internal.config.Config`: holds the overall configuration with nested structs for specific sections
 
 ```
 type Config struct {
@@ -142,7 +159,7 @@ type Config struct {
 }
 ```
 
-- `General`: Configuration related to general application behavior (data paths, debug mode)
+- `internal.config.General`: Configuration related to general application behavior (data paths, debug mode)
 
 ```
 type General struct {
@@ -152,7 +169,7 @@ type General struct {
 }
 ```
 
-- `Rest`: Configuration for the REST API (port number)
+- `internal.config.Rest`: Configuration for the REST API (port number)
 
 ```
 type Rest struct {
@@ -160,7 +177,7 @@ type Rest struct {
 }
 ```
 
-- `P2P`: Configuration for the P2P network
+- `internal.config.P2P`: Configuration for the P2P network
 
 ```
 type P2P struct {
@@ -169,7 +186,7 @@ type P2P struct {
 }
 ```
 
-- `Job`: Configuration for background tasks (log update interval, target peer for deployments, container cleanup interval)
+- `internal.config.Job`: Configuration for background tasks (log update interval, target peer for deployments, container cleanup interval)
 
 ```
 type Job struct {
@@ -179,11 +196,11 @@ type Job struct {
 }
 ```
 
-### 5. Testing
+### 6. Testing
 
 `proposed` Unit tests for each functionality are defined in files with `*_test.go` naming convention.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -201,11 +218,8 @@ Following Gherkin feature files describe the proposed functionality for `config`
 
 3. **Load existing DMS configuration**: see [scenario definition](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/internal/config/configurationManagement.feature?ref_type=heads#L28)
 
-### 7. References
+### 8. References
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
 
 
 

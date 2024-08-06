@@ -12,11 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 
 ## Specification
@@ -35,45 +36,63 @@ Here is quick overview of the contents of this pacakge:
 
 * [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/README.md): Current file which is aimed towards developers who wish to use and modify the dms functionality. 
 
-* [dms](dms.go): This file contains code to initialize the DMS by loading configuration, starting REST API server etc
+* [dms](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/dms.go): This file contains code to initialize the DMS by loading configuration, starting REST API server etc
 
-* [init](init.go): This file creates a new logger instance.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/init.go): This file creates a new logger instance.
 
-* [sanity_check](sanity_check.go): This file defines a method for performing consistency check before starting the DMS. `proposed` _Note that the functionality of this method needs to be developed as per refactored DMS design._
+* [sanity_check](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/sanity_check.go): This file defines a method for performing consistency check before starting the DMS. `proposed` _Note that the functionality of this method needs to be developed as per refactored DMS design._
 
 _Subpackages_
 
-* [jobs](jobs): Deals with the management of local jobs on the machine.
+* [jobs](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/jobs): Deals with the management of local jobs on the machine.
 
-* [node](node): Contains implementation of `Node` as an actor.
+* [node](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/node): Contains implementation of `Node` as an actor.
 
-* [onboarding](onboarding): Code related to onboarding of compute provider machines to the network.
+* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/onboarding): Code related to onboarding of compute provider machines to the network.
 
-* [orchestrator](orchestrator): Contains job orchestration logic.
+* [orchestrator](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator): Contains job orchestration logic.
 
-* [resources](resources): Deals with the management of resources on the machine.
+* [resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources): Deals with the management of resources on the machine.
 
 `proposed`: All files with `*_test.go` naming convention contain unit tests with respect to the specific implementation.
 
-### 3. Functionality
+### 3. Class Diagram
+
+The class diagram for the `dms` package is shown below.
+
+#### Source file
+
+[dms Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/dms"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 `TBD`
 
-**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
+**Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
 
 
-### 4. Data Types
+### 5. Data Types
 
 `TBD`
 
-**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
+**Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.**
 
 
-### 5. Testing
+### 6. Testing
 
 `proposed` Refer to `*_test.go` files for unit tests of different functionalities.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -185,11 +204,7 @@ type TimeInformation struct {
 }
 
 
-### 7. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. References
 
 
 

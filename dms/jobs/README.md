@@ -1,4 +1,4 @@
-# orchestrator
+# jobs
 
 - [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
@@ -12,12 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
-
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -31,23 +31,41 @@ Here is quick overview of the contents of this directory:
 
 `TBD`
 
-### 3. Functionality
+### 3. Class Diagram
+
+The class diagram for the `jobs` package is shown below.
+
+#### Source file
+
+[jobs Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/jobs/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/dms/jobs"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 `TBD`
 
-**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
+**Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
 
-### 4. Data Types
-
-`TBD`
-
-**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
-
-### 5. Testing
+### 5. Data Types
 
 `TBD`
 
-### 6. Proposed Functionality / Requirements 
+**Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.**
+
+### 6. Testing
+
+`TBD`
+
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -120,7 +138,7 @@ type Allocation_interface interface {
 
 #### Data types
 
-- `proposed` `Job`: Nunet job which will be sent to the network wrapped as a `BidRequest`. If needed it will have child jobs to be executed. The relation between parent and child job needs to be specified. 
+- `proposed` `dms.jobs.Job`: Nunet job which will be sent to the network wrapped as a `BidRequest`. If needed it will have child jobs to be executed. The relation between parent and child job needs to be specified. 
 
 ```
 type Job struct {
@@ -151,7 +169,7 @@ type Job struct {
 
 ```
 
-- `proposed` `JobLink`: specifies the properties that relate parent and child job.
+- `proposed` `dms.jobs.JobLink`: specifies the properties that relate parent and child job.
 
 ```
 type JobLink struct {
@@ -167,7 +185,7 @@ type JobLink struct {
 }
 ```
 
-- `proposed` `Pod`: collection of jobs that need to be executed on the same machine.
+- `proposed` `dms.jobs.Pod`: collection of jobs that need to be executed on the same machine.
 
 ```
 type Pod struct {
@@ -182,7 +200,7 @@ type Pod struct {
 }
 ```
 
-- `proposed` `Allocation`: maps the job to the process on a executor. Each Allocation is an Actor.
+- `proposed` `dms.jobs.Allocation`: maps the job to the process on a executor. Each Allocation is an Actor.
 
 ```
 type Allocation struct {
@@ -208,7 +226,7 @@ type Allocation struct {
 
 ```
 
-- `proposed` `AllocationID`: identifier for Allocation objects.
+- `proposed` `dms.jobs.AllocationID`: identifier for Allocation objects.
 
 ```
 type AllocationID struct {
@@ -223,11 +241,7 @@ type AllocationID struct {
 
 ```
 
-### 7. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. References
 
 **Allocation as an Actor**: As per initial [specification of NuNet ontology / nomenclature](https://nunet.gitlab.io/research/blog/posts/ontology-and-nomenclature/#actors), `Allocation` is considered as an Actor. That makes a running job a first class citizen of NuNet's Actor model, so being able to send and receive messages and maintain state.
 

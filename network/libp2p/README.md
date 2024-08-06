@@ -1,22 +1,45 @@
-# Introduction
+# libp2p
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
+
+## Specification
+
+### 1. Description
 
 This package implements `Network` interface defined in root level network dir.
 
-## Requirements
+#### `proposed` Requirements
 
 proposed: @sam
 
-### Peer discovery and handshake
+##### Peer discovery and handshake
 
 Instead of keeping track of all the peers. Peers should only in touch with peers of their types in terms of network latency, resources, or uptime.
 
 A reason for this is, if some low performing peer is with some high performing peers, and job is distributed among them, it can slow others peers as well overall. 
 
-#### Max number of handshake peers
+##### Max number of handshake peers
 
 Different nodes will have different requirements regarding the number of peers that they should remain handshaking with. e.g. a small node on a mobile network will not need to maintain a large list of peers. But, a node acting as network load balancer in a data center might need to maintain a large list of peers.
 
-#### Filter list
+##### Filter list
 
 We can have filters that ensures that the only peers that are handshaked with are ones that meet certain criteria. The following list is not exhaustive:
 
@@ -24,7 +47,7 @@ We can have filters that ensures that the only peers that are handshaked with ar
 2. Resource. Relates to job types.
 3. Uptime. Connect to peers who are online for certain period of time.
 
-#### Network latency
+##### Network latency
 
 For the network latency part, DMS should also be able to keep latency table between ongoing jobs on different CPs. The network package should be able to report it to the master node (SP). Orchestrator can then make decision on whether to replace workers or not.
 
@@ -35,20 +58,45 @@ For the network latency part, DMS should also be able to keep latency table betw
 * CP connects to same kind of CP.
 * Can use gossipsub.
 
-## libp2p package as it is now
+### 2. Structure and organisation
 
-Note: The section will be deprecated after refactor. We may update the section, or remove it completely if it does not adds any value.
+Here is quick overview of the contents of this pacakge:
 
-### Current (sub)packages:
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-- `libp2p` - the core of DMS to DMS communication, more on this later
-- `libp2p/machines` - mostly job handling on the SP side e.g. filtering, job request handler
-- `libp2p/pubsub` - current pubsub implementation
-- `firecracker/networking` - creates and configures tap device
-- `internal` - deals with websocket client
-- `internal/messaging`? - workers working on job queues
+* [conn](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/conn.go): This file defines the method to ping a peer.
 
-### Functionalities
+* [dht](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/dht.go): This file contains functionalities of a libp2p node. It includes functionalities for setting up libp2p hosts, performing pings between peers, fetching DHT content, checking the status of a peer and validating data against their signatures.
+
+* [discover](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/discover.go): This file contains methods for peer discovery in a libp2p node. 
+
+* [filter](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/filter.go): This file defines functionalities for peer filtering and connection management in a libp2p node. 
+
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/init.go): This file defines configurations and initialization logic for a libp2p node.
+
+* [libp2p](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/libp2p.go): This file defines stubs for Libp2p peer management functionalities, including configuration, initialization, events, status, stopping, cleanup, ping, and DHT dump.
+
+* [p2p](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/p2p.go): This file defines a Libp2p node with core functionalities including discovery, peer management, DHT interaction, and communication channels, with several stub implementations.
+
+### 3. Class Diagram
+
+The class diagram for the libp2p sub-package is shown below.
+
+#### Source file
+
+[libp2p Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/network/libp2p"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 As soon as DMS starts, and if it is onboarded to the network, `libp2p.RunNode` is executed. This gets up entire thing related to libp2p. Let's run down through it to see what it does.
 
@@ -68,7 +116,6 @@ host.SetStreamHandler(protocol.ID(DepReqProtocolID), depReqStreamHandler)
 
 4. After that, we have `discoverPeers`, 
 
-
 ```go
 go p2p.StartDiscovery(ctx, utils.GetChannelName())
 ```
@@ -76,7 +123,7 @@ go p2p.StartDiscovery(ctx, utils.GetChannelName())
 5. After that, we have DHT update and get functions to store information about peer in peerstore.
 
 
-## Streams
+#### Streams
 
 Communication between libp2p peers, or more generally DMS happens using libp2p streams. A DMS can have one or many stream with one or more peer. We currently we have adopted following streams for our usecases.
 
@@ -100,8 +147,7 @@ File transfer is generally used to carry files from one DMS to another. Most not
 
 Used for deployment of a job and for getting their progress.
 
-
-### Current DepReq Stream Handler
+##### Current DepReq Stream Handler
 
 Each stream need to have a handler attached to it. Let's get to know more about **deployment request** stream handler. Deployment request handler handles incoming deployment request from the service provider side. Similarly, some function has to listen for update from the service provider side as well. More on that in the next in a minute.
 
@@ -114,7 +160,7 @@ Following is a sequence of event happening on compute provider side:
 5. Otherwise, if everything is going well till now, we check the `txHash` value from the depReq. And make sure it exist on the blockchain before proceeding. If the txHash is not valid, or it timed out while waiting for validation, we let the other side know.
 6. Final thing we do it to put the depReq inside the `DepReqQueue`.
 
-After this step, the command is handed over to executor module. Please refer to [Relation between libp2p and docker modules](#relation-between-libp2p-and-docker-modules-now-executor).
+After this step, the command is handed over to `executor` module. Please refer to [Relation between libp2p and docker modules](#relation-between-libp2p-and-docker-modules).
 
 Deployment Request stream handler can further be segmented into different message types:
 
@@ -125,21 +171,128 @@ MsgJobStatus = "JobStatus"
 MsgLogStderr = "LogStderr"
 MsgLogStdout = "LogStdout"
 ```
-Above message types are used by various functions inside the stream. Last 4 or above is handled on the SP side. Further by the websocket server which started the deployment request. This does not means CP does not deals with them. Keep reading.
+Above message types are used by various functions inside the stream. Last 4 or above is handled on the SP side. Further by the websocket server which started the deployment request. This does not means CP does not deals with them.
 
-Actual data model is described in current data models section below.
-
-1. **DeploymentResponse**: DeploymentResponse is initial response from the CP to SP. It tells the SP that if deployment was successful or was declined due to operational or validational reasons. Most of the validation is just error check at stream handling or executor level.
-2. **DeploymentUpdate**: DeploymentUpdate update is used to inform SP about the state of the job. Most of the update is handled using libp2p stream on network level and websocket on the user level. There is no REST API defined. This should change in next iteration. See the proposed section for this.
-
-On the service provider side, we have `DeploymentUpdateListener` listening to the stream for any activity from the computer provider for update on the job. 
-
-Based on the message types, it does specific actions, which is more or less sending it to websocket client. These message types are `MsgJobStatus`, `MsgDepResp`, `MsgLogStdout` and `MsgLogStderr`
-
-## Relation between libp2p and docker modules
+##### Relation between libp2p and docker modules
 
 When DepReq streams receives a deployment request on the stream, it does some json validation, and pushes it to `DepReqQueue`. This extra step instead of directly passing the command to docker package was for decoupling and scalibility.
 
 There is a `messaging.DeploymentWorker()` goroutine which is launched at DMS startup in `dms.Run()`.
 
 This `messaging.DeploymentWorker()` is the crux of the job deployment, as what is done in current proposed version of DMS. Based on executor type (currently firecracker and docker), it was passed to specific functions on different modules.
+
+#### PeerFilter Interface
+`PeerFilter` is an interface for filtering peers based on a specified criteria.
+
+```
+type PeerFilter interface {
+	satisfies(p peer.AddrInfo) bool
+}
+```
+
+
+### 5. Data Types
+
+- `models.DeploymentResponse`: DeploymentResponse is initial response from the Compute Provider (CP) to Service Provider (SP). It tells the SP that if deployment was successful or was declined due to operational or validational reasons. Most of the validation is just error check at stream handling or executor level.
+
+
+- `models.DeploymentUpdate`: DeploymentUpdate update is used to inform SP about the state of the job. Most of the update is handled using libp2p stream on network level and websocket on the user level. There is no REST API defined. This should change in next iteration. See the proposed section for this.
+
+On the service provider side, we have `DeploymentUpdateListener` listening to the stream for any activity from the computer provider for update on the job. 
+
+Based on the message types, it does specific actions, which is more or less sending it to websocket client. These message types are `MsgJobStatus`, `MsgDepResp`, `MsgLogStdout` and `MsgLogStderr`
+
+- `DHTValidator`: `TBD`
+
+```
+type DHTValidator struct {
+	PS peerstore.Peerstore
+}
+```
+
+- `SelfPeer`: `TBD`
+
+```
+type SelfPeer struct {
+	ID    string
+	Addrs []multiaddr.Multiaddr
+}
+```
+
+- `NoAddrIDFilter`: filters out peers with no listening addresses
+// and a peer with a specific ID
+
+```
+type NoAddrIDFilter struct {
+	ID peer.ID
+}
+```
+
+- `Libp2p`: contains the configuration for a Libp2p instance
+
+```
+type Libp2p struct {
+	Host   host.Host
+	DHT    *dht.IpfsDHT
+	PS     peerstore.Peerstore
+	peers  []peer.AddrInfo
+	config Libp2pConfig
+}
+
+type Libp2pConfig struct {
+	PrivateKey     crypto.PrivKey
+	ListenAddr     []string
+	BootstrapPeers []multiaddr.Multiaddr
+	Rendezvous     string
+	Server         bool
+	Scheduler      *bt.Scheduler
+}
+```
+
+- `Advertisement`: `TBD`
+
+type Advertisement struct {
+	PeerID    string `json:"peer_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Data      []byte `json:"data"`
+}
+
+- `OpenStream`: `TBD`
+
+```
+type OpenStream struct {
+	ID         int    `json:"id"`
+	StreamID   string `json:"stream_id"`
+	FromPeer   string `json:"from_peer"`
+	TimeOpened string `json:"time_opened"`
+}
+```
+
+**Note: Data types are expected to change due to DMS refactoring**
+
+### 6. Testing
+
+`TBD`
+
+### 7. Proposed Functionality / Requirements 
+
+#### List of issues
+
+All issues that are related to the implementation of `network` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
+
+- [network package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A39&first_page_size=20)
+
+
+#### `proposed` Description of packages
+
+- `libp2p` - the core of DMS to DMS communication, more on this later
+- `libp2p/machines` - mostly job handling on the SP side e.g. filtering, job request handler
+- `libp2p/pubsub` - current pubsub implementation
+- `firecracker/networking` - creates and configures tap device
+- `internal` - deals with websocket client
+- `internal/messaging`? - workers working on job queues
+
+### 8. References
+
+
+

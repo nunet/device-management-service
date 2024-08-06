@@ -12,11 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -39,19 +40,35 @@ It contains a scheduler that registers tasks and run them according to the sched
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [init](init.go): This file initializes OpenTelemetry-based Zap logger.
+* [init](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/init.go): This file initializes OpenTelemetry-based Zap logger.
 
-* [scheduler](scheduler.go): This file This file defines a background task scheduler that manages task execution based on triggers, priority, and retry policies.
+* [scheduler](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/scheduler.go): This file This file defines a background task scheduler that manages task execution based on triggers, priority, and retry policies.
 
-* [task](task.go): This file contains background task structs and their properties.
+* [task](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/task.go): This file contains background task structs and their properties.
 
-* [trigger](trigger.go): This file defines various trigger types (PeriodicTrigger, EventTrigger, OneTimeTrigger) for background tasks, allowing execution based on time intervals, cron expressions, or external events
+* [trigger](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/trigger.go): This file defines various trigger types (PeriodicTrigger, EventTrigger, OneTimeTrigger) for background tasks, allowing execution based on time intervals, cron expressions, or external events
 
 Files with `*_test.go` naming convention contain unit tests of the functionality in corresponding file.
 
-### 3. Functionality
+### 3. Class Diagram
+
+#### Source
+
+[background_tasks class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/internal/background_tasks/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/internal/background_tasks"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 #### NewScheduler
 
@@ -181,9 +198,9 @@ There are different implementations for the `Trigger` interface.
 * `OneTimeTrigger`: A trigger that is only triggered once after a set delay.
 
 
-### 4. Data Types
+### 5. Data Types
 
-- `Scheduler`
+- `internal.background_tasks.Scheduler`
 
 ```
 // Scheduler orchestrates the execution of tasks based on their triggers and priority.
@@ -198,7 +215,7 @@ type Scheduler struct {
 }
 ```
 
-- `RetryPolicy`
+- `internal.background_tasks.RetryPolicy`
 
 ```
 // RetryPolicy defines the policy for retrying tasks on failure.
@@ -208,7 +225,7 @@ type RetryPolicy struct {
 }
 ```
 
-- `Execution`
+- `internal.background_tasks.Execution`
 
 ```
 // Execution records the execution details of a task.
@@ -222,7 +239,7 @@ type Execution struct {
 }
 ```
 
-- `Task`
+- `internal.background_tasks.Task`
 
 Task is a struct that defines a job. It includes the task's ID, Name, the function that is going to be run, the arguments for the function, the triggers that trigger the task to run, retry policy, etc.
 
@@ -242,7 +259,7 @@ type Task struct {
 }
 ```
 
-- `PeriodicTrigger`
+- `internal.background_tasks.PeriodicTrigger`
 
 ```
 // PeriodicTrigger triggers at regular intervals or based on a cron expression.
@@ -253,7 +270,7 @@ type PeriodicTrigger struct {
 }
 ```
 
-- `EventTrigger`
+- `internal.background_tasks.EventTrigger`
 
 ```
 // EventTrigger triggers based on an external event signaled through a channel
@@ -262,7 +279,7 @@ type EventTrigger struct {
 }
 ```
 
-- `OneTimeTrigger`
+- `internal.background_tasks.OneTimeTrigger`
 
 ```
 // OneTimeTrigger triggers once after a specified delay.
@@ -272,11 +289,11 @@ type OneTimeTrigger struct {
 }
 ```
 
-### 5. Testing
+### 6. Testing
 
 Unit tests for each functionality are defined in files with `*_test.go` naming convention.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -284,11 +301,7 @@ All issues that are related to the implementation of `internal` package can be f
 
 - [internal package implementation]() `TBD`
 
-### 7. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. References
 
 
 

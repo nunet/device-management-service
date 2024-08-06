@@ -1,4 +1,4 @@
- ' START PREAMBLE
+' START PREAMBLE
 
 !$rootUrlLocal = ".."
 !$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
@@ -23,12 +23,13 @@ hide <<hide>>
 
 
 ' START DIAGRAM
+
 ' END DIAGRAM
 
 ' START SUBPACKAGES
 
-' package api {
- !include $rootUrl/api/specs/class_diagram.puml
+'package api {
+    !include $rootUrl/api/specs/class_diagram.puml
 ' }
 
 'package cmd {
@@ -78,6 +79,8 @@ hide <<hide>>
 'package utils {
     !include $rootUrl/utils/specs/class_diagram.puml
 '}
+
+' END SUBPACKAGES
 
 ' START INTER-PACKAGE RELATIONS
 models.ID ..|> dms.jobs.AllocationID

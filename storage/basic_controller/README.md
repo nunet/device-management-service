@@ -1,8 +1,32 @@
-# Introduction
+# basic_controller
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
+
+
+## Specification
+
+### 1. Description
 
 This sub package offers a default implementation of the volume controller.
 
-# Stucture and organisation
+### 2. Structure and organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -12,23 +36,28 @@ Here is quick overview of the contents of this pacakge:
 
 * [basic_controller_test](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/basic_controller/basic_controller_test.go): This file contains the unit tests for the methods of `VolumeController` interface.
 
-# Contributing
+### 3. Class Diagram
 
-For guidelines of how to contribute, install and test the `device-management-service` component which contains `storage` package, please refer to package level documentation:
+The class diagram for the `basic_controller` sub-package is shown below.
 
-* Storage package level [../README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md)
-* DMS component level [../../README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
-* Contribution guidelines [../../CONTRIBUTING.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-* Code of conduct [../../CODE_OF_CONDUCT.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-* [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+#### Source file
 
-# Specifications overview
+[basic_controller Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/basic_controller/specs/class_diagram.puml?ref_type=heads)
 
-Refer to the [specifications overview](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#specifications-overview) in the package readme.
+#### Rendered from source file
 
-# Functions
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/storage/basic_controller"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
 
-### NewDefaultVolumeController
+
+### 4. Functionality
+
+#### NewDefaultVolumeController
 
 * signature: `NewDefaultVolumeController(db *gorm.DB, volBasePath string, fs afero.Fs) -> (storage.basic_controller.BasicVolumeController, error)` <br/>
 * input #1: local database instance of type `*gorm.DB` <br/>
@@ -41,7 +70,7 @@ Refer to the [specifications overview](https://gitlab.com/nunet/device-managemen
 
 `BasicVolumeController` is the default implementation of the `VolumeController` interface. It persists storage volumes information in the local database.
 
-### CreateVolume
+#### CreateVolume
 
 For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#createvolume)
 
@@ -53,13 +82,7 @@ The directory name follows the format: `<volSource> + "-" + <name>`  where `name
 * creation of new directory
 * creating a database entry
 
-See [Feature: Creating a storage volume](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/features/device-management-service/storage/basic_controller/Create_Volume.feature) for test cases including error scenarios.
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/createVolume.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/rendered/createVolume.sequence.svg)
-
-### LockVolume
+#### LockVolume
 
 For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#lockvolume)
 
@@ -70,13 +93,7 @@ For function signature refer to the package [readme](https://gitlab.com/nunet/de
 * There is error in saving the updated volume in the database
 * There is error in updating file persmissions
 
-See [Feature: Locking a storage volume](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/features/device-management-service/storage/basic_controller/Lock_Volume.feature)
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/lockVolume.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/rendered/lockVolume.sequence.svg)
-
-### DeleteVolume
+#### DeleteVolume
 
 For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#deletevolume)
 
@@ -87,13 +104,7 @@ It will return an error when
 * There is failure in deleting the volume
 * No volume is found
 
-See [Feature: Deleting a storage volume](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/features/device-management-service/storage/basic_controller/Delete_Volume.feature)
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/deleteVolume.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/rendered/deleteVolume.sequence.svg)
-
-### ListVolumes
+#### ListVolumes
 
 For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#listvolumes)
 
@@ -101,13 +112,7 @@ For function signature refer to the package [readme](https://gitlab.com/nunet/de
 
 It will return an error when no storage volumes exist.
 
-See [Feature: Listing storage volumes](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/features/device-management-service/storage/basic_controller/List_Volumes.feature)
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/listVolumes.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/rendered/listVolumes.sequence.svg)
-
-### GetSize
+#### GetSize
 
 For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#getsize)
 
@@ -119,13 +124,7 @@ It will return an error if the operation fails due to:
 * unsupported identifed provided as input
 * error while caculating size of directory
 
-See [Feature: Getting the size of a storage volume](https://gitlab.com/nunet/test-suite/-/blob/develop/stages/functional_tests/features/device-management-service/storage/basic_controller/Get_Size.feature)
-
-For list of steps during execution, refer to the sequence diagram files:
-* [mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/getSize.sequence.mermaid)
-* [svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/sequences/rendered/getSize.sequence.svg)
-
-# Custom configuration Parameters
+#### Custom configuration Parameters
 
 Both `CreateVolume` and `LockVolume` allow for custom configuration of storage volumes via optional parameters. Below is the list of available parameters that can be used:
 
@@ -133,11 +132,44 @@ Both `CreateVolume` and `LockVolume` allow for custom configuration of storage v
 
 `WithCID(cid string)` - This can be used as an input parameter to set the CID of a given volume during the lock volume operation.
 
-# List of Data Types
+### 5. Data Types
 
-`dms.storage.basic_controller.BasicVolumeController`: This struct manages implementation of `VolumeController` interface methods. See [basicVolumeController.data.go](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/develop/device-management-service/storage/basic_controller/data/basicVolumeController.data.go) for reference data model.
+`storage.basic_controller.BasicVolumeController`: This struct manages implementation of `VolumeController` interface methods. 
+
+```
+// BasicVolumeController is the default implementation of the VolumeController.
+// It persists storage volumes information in the local database.
+type BasicVolumeController struct {
+	// db is where all volumes information is stored.
+	db *gorm.DB
+
+	// basePath is the base path where volumes are stored under
+	basePath string
+
+	// file system to act upon
+	fs afero.Fs
+}
+```
 
 Refer to package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#list-of-data-types) for other data types.
+
+
+### 6. Testing
+The unit tests for the package functionality are defined in `*_test.go` file.
+
+### 7. Proposed Functionality / Requirements 
+
+#### List of issues
+
+All issues that are related to the implementation of `storage` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
+
+- [storage package implementation]() `TBD`
+
+
+### 8. References
+
+
+
 
 
 

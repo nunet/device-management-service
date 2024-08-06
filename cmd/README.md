@@ -13,12 +13,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
-
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -30,81 +30,99 @@ The cmd package contains all functionality of Device Management Service (DMS) av
 
 Here is quick overview of the contents of this directory:
 
-* [README](README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
 
-* [amd](amd.go): This file contains methods to collect information about AMD GPUs.
+* [amd](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/amd.go): This file contains methods to collect information about AMD GPUs.
 
-* [autocomplete](autocomplete.go): This file defines a command that allows users to generate shell autocompletion scripts for the Nunet CLI tool. It supports generating scripts for both Bash and Zsh shells.
+* [autocomplete](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/autocomplete.go): This file defines a command that allows users to generate shell autocompletion scripts for the Nunet CLI tool. It supports generating scripts for both Bash and Zsh shells.
 
-* [capacity](capacity.go): This file defines the `capacity` command for the nunet CLI tool.
+* [capacity](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/capacity.go): This file defines the `capacity` command for the nunet CLI tool.
 
-* [chat](chat.go): This file contains implementation of `chat` functionality.
+* [chat](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat.go): This file contains implementation of `chat` functionality.
 
-* [chat_clear](chat_clear.go): This file contains implementation of clear chat functionality.
+* [chat_clear](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_clear.go): This file contains implementation of clear chat functionality.
 
-* [chat_join](chat_join.go): This file contains implementation of join chat functionality.
+* [chat_join](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_join.go): This file contains implementation of join chat functionality.
 
-* [chat_list](chat_list.go): This file contains implementation of list chat functionality.
+* [chat_list](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_list.go): This file contains implementation of list chat functionality.
 
-* [chat_start](chat_start.go): This file contains implementation of start chat functionality.
+* [chat_start](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_start.go): This file contains implementation of start chat functionality.
 
-* [device](device.go): This file contains implementation of device related operations.
+* [device](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/device.go): This file contains implementation of device related operations.
 
-* [gpu](gpu.go): This file defines the `gpu` command.
+* [gpu](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/gpu.go): This file defines the `gpu` command.
 
-* [gpu_capacity](gpu_capacity.go): This file defines the `gpu capacity` command and its flags.
+* [gpu_capacity](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/gpu_capacity.go): This file defines the `gpu capacity` command and its flags.
 
-* [gpu_interface](gpu_interface.go): This file defines GPU interface for accessing information about GPUs.
+* [gpu_interface](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/gpu_interface.go): This file defines GPU interface for accessing information about GPUs.
 
-* [gpu_onboard](gpu_onboard.go): This file defines the `gpu onboard` command.
+* [gpu_onboard](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/gpu_onboard.go): This file defines the `gpu onboard` command.
 
-* [gpu_status](gpu_status.go): This file defines the `gpu status` command.
+* [gpu_status](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/gpu_status.go): This file defines the `gpu status` command.
 
-* [info](info.go): This file defines the `info` command which displays the information about onboarded device
+* [info](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/info.go): This file defines the `info` command which displays the information about onboarded device
 
-* [init](init.go): This file initializes services for the nunet CLI tool and defines top-level commands and sub-commands. It also sets flags for some commands.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/init.go): This file initializes services for the nunet CLI tool and defines top-level commands and sub-commands. It also sets flags for some commands.
 
-* [log_darwin](log_darwin.go): This file defines `log` command for MacOS.
+* [log_darwin](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/log_darwin.go): This file defines `log` command for MacOS.
 
-* [log_linux](log_linux.go): This file defines `log` command for Linux.
+* [log_linux](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/log_linux.go): This file defines `log` command for Linux.
 
-* [nvidia](nvidia.go): This file contains implementation of `GPU` interface for NVIDIA GPUs.
+* [nvidia](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/nvidia.go): This file contains implementation of `GPU` interface for NVIDIA GPUs.
 
-* [offboard](offboard.go): This file defines the `offboard` command. 
+* [offboard](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/offboard.go): This file defines the `offboard` command. 
 
-* [onboard-ml](onboard-ml.go): This file defines the `onboard-ml` command.
+* [onboard-ml](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/onboard-ml.go): This file defines the `onboard-ml` command.
 
-* [onboard](onboard.go): This file defines the `onboard` command.
+* [onboard](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/onboard.go): This file defines the `onboard` command.
 
-* [peer](peer.go): This file defines the `peer` command.
+* [peer](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/peer.go): This file defines the `peer` command.
 
-* [peer_default](peer_default.go): This file defines command to set a default peer for job deployment. Note that this is expected to be deprecated.
+* [peer_default](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/peer_default.go): This file defines command to set a default peer for job deployment. Note that this is expected to be deprecated.
 
-* [peer_list](peer_list.go): This file defines the list sub-command for `peer` command.
+* [peer_list](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/peer_list.go): This file defines the list sub-command for `peer` command.
 
-* [peer_self](peer_self.go): This file defines the self sub-command for `peer` command.
+* [peer_self](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/peer_self.go): This file defines the self sub-command for `peer` command.
 
-* [resource-config](resource-config.go): This file defines the `resource-config` command.
+* [resource-config](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/resource-config.go): This file defines the `resource-config` command.
 
-* [root](root.go): This file defines the root command `nunet`.
+* [root](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/root.go): This file defines the root command `nunet`.
 
-* [run](run.go): This file defines the `run` command.
+* [run](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/run.go): This file defines the `run` command.
 
-* [shell](shell.go): This file defines the `shell` command
+* [shell](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/shell.go): This file defines the `shell` command
 
-* [utils](utils.go): This file contains utility functions for the CLI functionality.
+* [utils](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/utils.go): This file contains utility functions for the CLI functionality.
 
-* [version](version.go): This file defines the `version` command.
+* [version](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/version.go): This file defines the `version` command.
 
-* [wallet](wallet.go): This file defines the `wallet` command.
+* [wallet](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/wallet.go): This file defines the `wallet` command.
 
-* [wallet_new](wallet_new.go): This file defines the subcommand `new` for the `wallet` command.
+* [wallet_new](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/wallet_new.go): This file defines the subcommand `new` for the `wallet` command.
 
-* [backend](backend): This directory contains 
+* [backend](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/backend): This directory contains 
 
 All of the files named as `*_test.go` contains the unit tests for the corresponding functionality.
 
-### 3. Functionality
+### 3. Class Diagram
+
+The class diagram for the `cmd` package is shown below.
+
+#### Source file
+
+[cmd Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/cmd"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 The following sections describe the command line options that can be used with the CLI.
 
@@ -385,11 +403,11 @@ nunet wallet new --cardano
 nunet wallet new --ethereum
 ```
 
-### 4. Data Types
+### 5. Data Types
 
 Refer to `api` package for all the data types applicable for the `cmd` package functionality. 
 
-### 5. Testing
+### 6. Testing
 
 #### Unit Tests
 
@@ -399,7 +417,7 @@ All unit tests for various functionalities can be found in files with `_test` in
 
 - **TBD with Abhishek**
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -407,8 +425,6 @@ All issues that are related to the design of `cmd` package can be found below. T
 
 - [cmd package design]() `TBD`
 
-### 7. References
+### 8. References
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+
