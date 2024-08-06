@@ -12,12 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
-8. [Class Diagram](#8-class-diagram)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 
 ## Specification
@@ -30,33 +30,51 @@ The api package contains all API functionality of Device Management Service (DMS
 
 Here is quick overview of the contents of this directory:
 
-* [README](README.md): Current file which is aimed towards developers who wish to use and modify the api functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/README.md?ref_type=heads): Current file which is aimed towards developers who wish to use and modify the api functionality. 
 
-* [api](api.go): This file contains router setup using Gin framework. It also applies Cross-Origin Resource Sharing (CORS) middleware and OpenTelemetry middleware for tracing. Further it lists down the endpoint URLs and the associated handler functions.
+* [api](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/api.go): This file contains router setup using Gin framework. It also applies Cross-Origin Resource Sharing (CORS) middleware and OpenTelemetry middleware for tracing. Further it lists down the endpoint URLs and the associated handler functions.
 
-* [debug](debug.go): This file contains endpoints which are only available when `DEBUG` mode is enabled.
+* [debug](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/debug.go): This file contains endpoints which are only available when `DEBUG` mode is enabled.
 
-* [device](device.go): This file contains endpoints to retrieve and modify the device status.
+* [device](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/device.go): This file contains endpoints to retrieve and modify the device status.
 
-* [onboarding](onboarding.go): This file contains endpoints related to the onboarding functionality catered towards compute providers.
+* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/onboarding.go): This file contains endpoints related to the onboarding functionality catered towards compute providers.
 
-* [peers](peers.go): This file contains various endpoints related to the p2p functionality of DMS. 
+* [peers](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/peers.go): This file contains various endpoints related to the p2p functionality of DMS. 
 
-* [run](run.go): This file contains various endpoints related to the deployment and execution of jobs.
+* [run](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/run.go): This file contains various endpoints related to the deployment and execution of jobs.
 
-* [telemetry](telemetry.go): This file contains the endpoint to calculate available free resources in a machine.
+* [telemetry](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/telemetry.go): This file contains the endpoint to calculate available free resources in a machine.
 
-* [transactions](transactions.go): This file contains the endpoints related to blockchain transactions.
+* [transactions](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/transactions.go): This file contains the endpoints related to blockchain transactions.
 
-* [vm](vm.go): This file contains the endpoints related to starting a [firecracker VM](https://firecracker-microvm.github.io/) with custom or default configuration.
+* [vm](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/vm.go): This file contains the endpoints related to starting a [firecracker VM](https://firecracker-microvm.github.io/) with custom or default configuration.
 
-* [docs](docs): This directory contains the swagger documentation of the API.
+* [docs](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/docs): This directory contains the swagger documentation of the API.
 
-* [specs](./specs): This directory contains specifications of the package
+* [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/specs): This directory contains specifications of the package
 
 All of these files have a counterpart named as `*_test.go` which contains the unit tests for the corresponding endpoints.
 
-### 3. Functionality
+### 3. Class Diagram
+
+The class diagram for the `api` package is shown below.
+
+#### Source file
+
+[api Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/api"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 The following sections describe the different functionality of the DMS covered in the `api` package.
 
@@ -477,15 +495,15 @@ This endpoint returns the DHT contents.
 
 The API functionality of DMS consists of following data types:
 
-- `models.onboarding.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
+- `models.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
 
-- `models.onboarding.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
+- `models.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
 
-- `models.onboarding.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
+- `models.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
 
-- `models.onboarding.Provisioned`: This has total capacity of the machine onboarded by the user.
+- `models.Provisioned`: This has total capacity of the machine onboarded by the user.
 
-- `models.onboarding.OnboardingStatus`: This is returned while retrieving the onboarding status.
+- `models.OnboardingStatus`: This is returned while retrieving the onboarding status.
 
 - `Available Resources (TBD)`: This will have the available capacity of the machine that can be considered for running a job.
 
@@ -493,7 +511,7 @@ The API functionality of DMS consists of following data types:
 
 **Note: More data types are expected to be added as per DMS refactoring**
 
-### 5. Testing
+### 6. Testing
 
 #### Unit Tests
 
@@ -503,7 +521,7 @@ All unit tests for various functionalities can be found in files with `_test` in
 
 - **TBD with Abhishek**
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -511,10 +529,5 @@ All issues that are related to the design of API package can be found below. The
 
 - [API package design](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A12&first_page_size=20)
 
-### 7. References
+### 8. References
 
-### 8. Class Diagram
-
-```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/develop/api/specs/class_diagram.puml
-```

@@ -18,18 +18,19 @@ This whole package is `proposed` status and therefore documentation is missing, 
   - [Specification](#specification)
     - [1. Description](#1-description)
     - [2. Structure and organisation](#2-structure-and-organisation)
-    - [3. Functionality](#3-functionality)
-    - [4. Types](#4-types)
-    - [5. Testing](#5-testing)
-    - [6. Proposed Functionality / Requirements](#6-proposed-functionality--requirements)
+    - [3. Class Diagram](#3-class-diagram)
+      - [Source](#source)
+      - [Rendered from source file](#rendered-from-source-file)
+    - [4. Functionality](#4-functionality)
+    - [5. Types](#5-types)
+    - [6. Testing](#6-testing)
+    - [7. Proposed Functionality / Requirements](#7-proposed-functionality--requirements)
       - [List of issues](#list-of-issues)
       - [Proposed functionalities](#proposed-functionalities)
       - [Data types](#data-types)
-    - [7. References](#7-references)
+    - [8. References](#8-references)
       - [Related research blogs](#related-research-blogs)
-    - [8. Class Diagram](#8-class-diagram)
-      - [Source](#source)
-      - [Rendered from source file](#rendered-from-source-file)
+      
 
 
 ## Specification
@@ -41,20 +42,36 @@ This whole package is `proposed` status and therefore documentation is missing, 
 ### 2. Structure and organisation
 `TBD`
 
-### 3. Functionality
+### 3. Class Diagram
+
+#### Source
+
+[graph class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/graph/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/dms/orchestrator/graph"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+````
+
+### 4. Functionality
 
 `TBD`
 
-### 4. Types
+### 5. Types
 
 `TBD`
 
-### 5. Testing
+### 6. Testing
 
 `TBD`
 
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -71,24 +88,13 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 
 - `proposed` `LocalNetworkTopology` more complex deployments may need a data structure, which considers local network topology of a node / dms -- i.e. for reasoning about speed of connection (as well as capabilities) between neighbors.
 
-### 7. References
+### 8. References
 
 
 #### Related research blogs 
 
 `TBD`
 
-### 8. Class Diagram
 
-#### Source
-
-[Package source](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/graph/specs/class_diagram.puml?ref_type=heads)
-
-#### Rendered from source file
-
-```plantuml
-!$rootUrl = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
-!include $rootUrl/dms/orchestrator/graph/specs/class_diagram.puml
-```
 
 

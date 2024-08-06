@@ -1,27 +1,89 @@
-# Introduction
+# network
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
+
+## Specification
+
+### 1. Description
 
 This package contains all network related code such as p2p communication, ip over libp2p and other networks that might be needed in the future.
 
-## Interfaces and types
+### 2. Structure and organisation
 
-_proposed 2025-05-10 by @kabir.kbr_
+Here is quick overview of the contents of this pacakge:
 
-## Functions
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-### sendLibP2PMessage
+* [network](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/network.go): This file defines Network and Messenger interfaces and a method to create a new network.
 
-`sendLibP2PMessage` shall be called by `models.Mailbox.sendMessage()` function in order to send the `tokenomics.Message` object via libP2P interface defined in `network` package. It is a low level implementation of sending messages in NuNet network via libp2p. 
+* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/types.go): This file defines the VPN interface. 
 
-### receiveLibP2PMessage
+* [libp2p](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/libp2p): This contains code related to libp2p functionality.
 
+* [specs](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/specs): This contains class diagram of the package built in plantuml.
 
-### processMessage
+### 3. Class Diagram
 
-_proposed by @sntshk 2025-05_
+The class diagram for the network package is shown below.
 
-### Interfaces
+#### Source file
 
-**Network**:
+[network Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/network"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
+
+`TBD`
+
+**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
+
+### 5. Data Types
+
+`TBD`
+
+**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
+
+### 6. Testing
+
+`TBD`
+
+### 7. Proposed Functionality / Requirements 
+
+#### List of issues
+
+All issues that are related to the implementation of `network` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
+
+- [network package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A39&first_page_size=20)
+
+#### Interfaces and methods
+
+##### `proposed` Network interface
 
 ```go
 // Network defines an interface provided by DMS to be implemented by various
@@ -75,7 +137,7 @@ In libp2p, we can listen to specific events. `EventRegister` is to set handler t
 - EvtNATDeviceTypeChanged
 - EvtPeerConnectednessChanged
 
-More can be found at: <https://github.com/libp2p/go-libp2p/tree/master/core/event>
+More events can be found [here](https://github.com/libp2p/go-libp2p/tree/master/core/event)
 
 4. `Dial()`:
 
@@ -83,11 +145,11 @@ More can be found at: <https://github.com/libp2p/go-libp2p/tree/master/core/even
 
 5. `Listen()`: 
 
-`Listen` is counterpart to `Dial`. Read more about listening and dialing here: <https://docs.libp2p.io/concepts/transports/listen-and-dial/>
+`Listen` is the counterpart to `Dial`. Read more about listening and dialing [here](https://docs.libp2p.io/concepts/transports/listen-and-dial/)
 
 6. `Status()`:
 
-TBD
+`TBD`
 
 - All peers we are corrently connected to.
 - ??
@@ -96,7 +158,7 @@ TBD
 
 Basically it's like shutting down the peer. It is opposite of `Init` or `Start`.
 
-**VPN**
+##### `proposed` VPN interface
 
 ```go
 type VPN interface {
@@ -117,7 +179,7 @@ type VPN interface {
 
 Let's have a look at the methods and background behind them:
 
-TBD: Parameter are still to be defined. Should we pass the peer ID? Or make it more generic to have IP addresses?
+`TBD`: Parameter are still to be defined. Should we pass the peer ID? Or make it more generic to have IP addresses?
 
 1. `Start()`:
 
@@ -133,117 +195,184 @@ TBD: Parameter are still to be defined. Should we pass the peer ID? Or make it m
 
 4. `Stop()`:
 
-TBD: What should be done when the VPN is stopped? Should all the peers be removed from the network?
+`TBD`: What should be done when the VPN is stopped? Should all the peers be removed from the network?
 
-## Proposed Internal APIs
+##### `proposed` Internal APIs
 
-1. 
-```
-dms.network.queryPeer(dms.dms.config.peerId, dms.jobs.jobDescription) -> dms.orchestrator.computeProvidersIndex.data
-```
+1. `publishJob`
 
-2. 
-```
-dms.network.publishJob(dms.orchestrator.bidRequest(dms.jobs.jobDescription))
-```
+* signature: `publishJob(dms.orchestrator.BidRequest)` <br/>
 
-3. There should be a top level package for set of functions/initlializers for management of:
+* input: `Bid request` <br/>
+
+* output: None
+
+`publishJob` is responsible for publishing a request for bid to the network for a job received by the DMS. 
+
+2. There should be a top level package for set of functions/initlializers for management of:
 
 - TUN/TAP device
 - Virtual ethernet
 - Virtual switch
 - Firewall management
 
-## Flow of job between DMSes
+##### `proposed` sendLibP2PMessage
 
-Note: To be updated.
+`sendLibP2PMessage` shall be called by `dms.orchestrator.sendMessage()` function ito send the `telemetry.Message` object via libP2P interface defined in `network` package. It is a low level implementation of sending messages in NuNet network via libp2p. 
 
-<!-- Create a sequence diagram in respective repo and link here -->
+##### `proposed` receiveLibP2PMessage
 
-Rest API > Orchestrator > Network > Libp2p > Network > Orchestrator > Executor
+`TBD`
+
+##### `proposed` processMessage
+
+`TBD`
 
 
-## Private Network
-The private network functionality allows users to create and join a private network with some authorised peers. Note that these peers need to be identified beforehand to use this feature. It is also required that all peers have onboarded to the Nunet network and are using the same channel. It is because the identification of peers is done using libp2p public key generated during the onboarding process.
+#### `proposed` Private Swarm
+**Note: Private Swarm functionality is expected to be moved to libp2p sub-package once specific methods and interfaces have been defined**
+
+The private swarm functionality allows users to create and join a private network with some authorised peers. Note that these peers need to be identified beforehand to use this feature. It is also required that all peers have onboarded to the Nunet network and are using the same channel. It is because the identification of peers is done using libp2p public key generated during the onboarding process.
 
 The creation of private network consists of the following operations.
 
-### Configure Private Network
+##### Configure Private Network
+
 The user who wants to create the private network should have a list of `peer ids` it wants to authorise to join the private network. This process configures the network by creating a swarm key and a bootstrap node.
 
-Please see below for relevant specification and data models.
+```mermaid
+sequenceDiagram
+  autonumber
+  actor sp-user as Service Provider User
+  participant asset as Service Provider Machine
+  participant dmssp as DMS <br> on Service Provider
+  participant dmscp as DMS <br> on Compute Provider
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/private-network/stages/functional_tests/device-management-service/features/Configure_Private_Network.feature))   |
-| Request payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/authorisedMachines.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/authorisedMachines.payload.svg)) |
-| Return payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/configurationStatus.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/configurationStatus.payload.svg)) |
-| Data at rest       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/privateNetworkData.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/privateNetworkData.payload.svg)) | 
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/configurePrivateNetwork.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/rendered/configurePrivateNetwork.sequence.svg)) | 
+rect rgb(252, 242, 232)
+    loop Configuration of private network
+      sp-user -->> dmssp: Request to configure a private network for authorised peer ids
+      dmssp ->> asset: Save the peer ids to database
+      
+      loop retrieve public keys for all peer ids
+      dmssp ->> dmscp: Read the public key 
+      dmssp ->> asset: Save the public key to database
+      end 
 
+      dmssp ->> dmssp: Create a swarm key
+      dmssp ->> dmssp: Create a bootstrap node
+      dmssp ->> asset: Save swarm key and bootstrap node id to database
+      dmssp ->> sp-user: Status of private network configuration
+    end
+  end
+```
 
-### Swarm Key Request
-The authorised user who wants to connect to the private network will request for a swarm key from the node that has configured the private network.
+##### Exchange Swarm Key 
+The authorised user who wants to connect to the private network will request for a swarm key from the node that has configured the private network. The node which has created the swarm key shares it with the authorised user when requested. The authentication of the user is based on its public key.
 
-Please see below for relevant specification and data models.
+```mermaid
+sequenceDiagram
+  autonumber
+  actor sp-user as Service Provider User
+  participant dmssp as DMS <br> on Service Provider
+  participant dmscp as DMS <br> on Compute Provider
+  actor cp-user as Compute Provider User
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/private-network/stages/functional_tests/device-management-service/features/Request_Swarm_Key.feature))   |
-| Request payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/requestSwarmKey.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/requestSwarmKey.payload.svg)) |
-| Return payload       | entityDiagrams ([.mermaid](),[.svg]()) |
-| Other Data - p2p request  | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/swarmKeyRequest.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/swarmKeyRequest.payload.svg)) |
-| Other Data - p2p response  | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/shareSwarmKey.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/shareSwarmKey.payload.svg)) |
-| Data at rest       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/privateNetworkInfo.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/privateNetworkInfo.payload.svg)) | 
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/exchangeSwarmKey.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/rendered/exchangeSwarmKey.sequence.svg)) | 
+rect rgb(252, 242, 232)
+    loop Swarm key exchange
+      cp-user -->> dmscp: Request to retrieve private network swarm key from a peer
+      dmscp ->> dmscp: Creates a request message and signs it using its private key
+      dmscp ->> dmssp: Sends the signed request message for swarm key to SP DMS
+      loop Share swarm key
+      dmssp ->> dmssp: Checks if received message is signed by a authorised peer
+      dmssp ->> dmssp: Encrypts the swarm key with public key of CP DMS
+      dmssp ->> dmssp: Creates a response message and signs it with its private key
+      dmssp ->> dmscp: Shares the encrypted swarm key and signed message 
+      dmssp ->> sp-user: Notifies user about swarm key sharing to CP DMS
+      end 
+      dmscp ->> dmscp: Validates that message is signed by the correct SP DMS
+      dmscp ->> dmscp: Decrypts the swarm key using its private key
+      dmscp ->> dmscp: Saves the swarm key to the database
+    end
+  end
+```
 
-### Share Swarm Key
-The node which has created the swarm key shares it with the authorised user when requested. The authentication of the user is based on its public key.
-
-Please see below for relevant specification and data models.
-
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/private-network/stages/functional_tests/device-management-service/features/Share_Swarm_Key.feature))   |
-| Request payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/swarmKeyRequest.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/swarmKeyRequest.payload.svg)) |
-| Return payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/shareSwarmKey.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/shareSwarmKey.payload.svg)) |
-| Other Data - user notification     | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/shareSwarmKeySucess.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/shareSwarmKeySucess.payload.svg)) | 
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/private-network/device-management-service/network/sequences),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/private-network/device-management-service/network/sequences/rendered)) | 
-
-### Join Private Network
+##### Join Private Network
 The DMS will disconnect from the public network and join the private network using the shared swarm key.
 
-Please see below for relevant specification and data models.
+```mermaid
+sequenceDiagram
+  autonumber
+  actor sp-user as Service Provider User
+  participant dmssp as DMS <br> on Service Provider
+  participant dmscp as DMS <br> on Compute Provider
+  actor cp-user as Compute Provider User
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/private-network/stages/functional_tests/device-management-service/features/Join_Private_Network.feature))   |
-| Request payload       | None |
-| Return payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/joinPrivateNetworkSucess.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/joinPrivateNetworkSucess.payload.svg)) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/joinPrivateNetwork.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/rendered/joinPrivateNetwork.sequence.svg)) | 
+rect rgb(252, 242, 232)
+    loop Join private network
+      sp-user -->> dmscp: Request to join private network
+      dmssp ->> dmssp: Disconnect from public network
+      dmssp ->> dmssp: Read the swarm key from database
+      dmssp ->> dmssp: Configure the swarm key at the required path
+      dmssp ->> dmssp: Start the network as bootstrap node
+      dmssp ->> sp-user: Notify user  
+    end
+    loop Join private network
+      cp-user -->> dmscp: Request to join private network
+      dmscp ->> dmscp: Disconnect from public network
+      dmscp ->> dmscp: Read the swarm key from database
+      dmscp ->> dmscp: Configure the swarm key at the required path
+      dmscp ->> dmscp: Connect to the private network
+      dmscp ->> cp-user: Notify user
+      end
+  end
+```
 
-### Disconnect Private Network
+##### Disconnect Private Network
 The DMS will disconnect from the private network and join the public network the user onboarded on to.
 
-Please see below for relevant specification and data models.
+```mermaid
+sequenceDiagram
+  autonumber
+  actor sp-user as Service Provider User
+  participant dmssp as DMS <br> on Service Provider
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/private-network/stages/functional_tests/device-management-service/features/Disconnect_Private_Network.feature))   |
-| Request payload       | None |
-| Return payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/disconnectSucess.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/disconnectSucess.payload.svg)) |
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/disconnectPrivateNetwork.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/rendered/disconnectPrivateNetwork.sequence.svg)) |
+rect rgb(252, 242, 232)
+    loop Disconnect from private network and connect to public network
+      sp-user -->> dmssp: Request to disconnect from private network
+      dmssp ->> dmssp: Removes the swarm key from the configuration
+      dmssp ->> dmssp: Read the public channel from the database
+      dmssp ->> dmssp: Connect to the channel identified in the previous step
+      dmssp ->> sp-user: Confirmation of change in network
+    end
 
-### Rotate Swarm Key
+  end
+```
+
+##### Rotate Swarm Key
 The DMS will generate a new swarm key for the private network and notify the authorised users.
 
-Please see below for relevant specification and data models.
+```mermaid
+sequenceDiagram
+  autonumber
+  actor sp-user as Service Provider User
+  participant dmssp as DMS <br> on Service Provider
 
-| Spec type              | Location |
----|---|
-| Features / test case specifications | Scenarios ([.gherkin](https://gitlab.com/nunet/test-suite/-/blob/private-network/stages/functional_tests/device-management-service/features/Rotate_Swarm_Key.feature))   |
-| Request payload       | None |
-| Return payload       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rotateSwarmKeySuccess.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/rotateSwarmKeySuccess.payload.svg)) |
-| Data at rest       | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/privateNetworkData.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/privateNetworkData.payload.svg)) | 
-| Other Data - peer notification   | entityDiagrams ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/swarmKeyChanged.payload.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/data/rendered/swarmKeyChanged.payload.svg)) | 
-| Processes / Functions | sequenceDiagram ([.mermaid](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/rotateSwarmKey.sequence.mermaid),[.svg](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/private-network/device-management-service/network/sequences/rendered/rotateSwarmKey.sequence.svg)) |
+rect rgb(252, 242, 232)
+    loop Rotate Swarm Key
+      sp-user -->> dmssp: Request to rotate swarm key
+      dmssp ->> dmssp: Generate a new swarm key
+      dmssp ->> dmssp: Save the new swarm key to the database
+      loop Notify authorised peers
+      dmssp ->> dmscp: Swarm key changed message
+      end 
+      dmssp ->> sp-user: Success message
+    end
+
+  end
+```
+
+### 8. References
+
+- https://github.com/libp2p/go-libp2p/tree/master/core/event 
+- https://docs.libp2p.io/concepts/transports/listen-and-dial/ 
+

@@ -13,11 +13,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 
 ## Specification
@@ -30,28 +31,45 @@ The backend sub package contains the actual implementation of the Nunet CLI comm
 
 Here is quick overview of the contents of this directory:
 
-* [README](README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
 
-* [backend](backend.go): This file defines various interfaces DMS backend service. These interfaces provide abstractions for functionalities like resource management, peer management, network management, logging, and file system access.
+* [backend](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/backend.go): This file defines various interfaces DMS backend service. These interfaces provide abstractions for functionalities like resource management, peer management, network management, logging, and file system access.
 
-* [filesystem](filesystem.go): This file implements FileSystem functionality using the standard `os` package. It provides functions for basic file operations like creating, opening, reading, writing, and deleting files and directories. 
+* [filesystem](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/filesystem.go): This file implements FileSystem functionality using the standard `os` package. It provides functions for basic file operations like creating, opening, reading, writing, and deleting files and directories. 
 
-* [journal](journal.go): This file implements a wrapper to `go-systemd/sdjournal` functionality. It wraps the `sdjournal` functionality providing access to systemd journal entries like adding filters, retrieving entries, and iterating through them.
+* [journal](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/journal.go): This file implements a wrapper to `go-systemd/sdjournal` functionality. It wraps the `sdjournal` functionality providing access to systemd journal entries like adding filters, retrieving entries, and iterating through them.
 
-* [libp2p](libp2p.go): This file implements functionalites to clear incoming chat requests and decode a peer id.
+* [libp2p](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/libp2p.go): This file implements functionalites to clear incoming chat requests and decode a peer id.
 
-* [network](network.go): This file implements a method to get network connections data.
+* [network](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/network.go): This file implements a method to get network connections data.
 
-* [resources](resources.go): This file implements a method to get total capacity of the machine. 
+* [resources](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/resources.go): This file implements a method to get total capacity of the machine. 
 
-* [utils](utils.go): This file implements utitlity functions for backend functionality. 
+* [utils](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/utils.go): This file implements utitlity functions for backend functionality. 
 
-* [wallet](wallet.go): This file contains methods to get wallet address for the user. 
+* [wallet](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/wallet.go): This file contains methods to get wallet address for the user. 
 
-* [websocket](websocket.go): This file implements a WebSocket Client for establishing and managing WebSocket connections. It provides functions to initialize the connection, send/receive messages, and handle pings for maintaining the connection. 
+* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/websocket.go): This file implements a WebSocket Client for establishing and managing WebSocket connections. It provides functions to initialize the connection, send/receive messages, and handle pings for maintaining the connection. 
 
+### 3. Class Diagram
 
-### 3. Functionality
+The class diagram for the `backend` package is shown below.
+
+#### Source file
+
+[backend Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/backend/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/cmd/backend"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 #### ResourceManager interface
 
@@ -433,7 +451,7 @@ Here is quick overview of the contents of this directory:
 
 `WriteString` writes the content of the provided string to the file.
 
-### 4. Data Types
+### 5. Data Types
 
 `ConnectionStat`: This is a data type defined in `Go` `net` package. It consists of network connection data. See [here](https://pkg.go.dev/github.com/shirou/gopsutil/net#ConnectionStat) for more details.
 
@@ -466,11 +484,11 @@ type FileInfo interface {
 
 Refer to `cmd` package for all other data types applicable.
 
-### 5. Testing
+### 6. Testing
 
 The methods and interfaces in the `backend` subpacakge can be used to test the functionality of the `cmd` pacakge commands. Currently no unit test are defined since the implementaton is mostly wrappers around functions that should be tested somewhere else.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -478,10 +496,7 @@ All issues that are related to the design of `cmd` package can be found below. T
 
 - [cmd package design]() `TBD`
 
-### 7. References
+### 8. References
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
 
 

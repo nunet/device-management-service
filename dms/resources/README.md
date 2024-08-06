@@ -12,12 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
-
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -31,31 +31,47 @@ Here is quick overview of the contents of this pacakge:
 
 * [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/README.md): Current file which is aimed towards developers who wish to use and modify the DMS functionality.
 
-* [calc_resources](calc_resources.go): This contains methods to calculate and update free resources.
+* [calc_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/calc_resources.go): This contains methods to calculate and update free resources.
 
-* [darwin_amd64_resources](darwin_amd64_resources.go): This contains methods to calculate machine resources.
+* [darwin_amd64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_amd64_resources.go): This contains methods to calculate machine resources.
 
-* [darwin_arm64_gpu](darwin_arm64_gpu.go): This contains placeholder method to detect GPU on machine. 
+* [darwin_arm64_gpu](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_arm64_gpu.go): This contains placeholder method to detect GPU on machine. 
 
-* [darwin_arm64_resources](darwin_arm64_resources.go): This contains methods to calculate machine resources.
+* [darwin_arm64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_arm64_resources.go): This contains methods to calculate machine resources.
 
-* [gpudetect](gpudetect.go): This contains methods to collect GPU info.
+* [gpudetect](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/gpudetect.go): This contains methods to collect GPU info.
 
-* [handler](handler.go): This contains methods related to resources management on a machine.
+* [handler](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/handler.go): This contains methods related to resources management on a machine.
 
-* [init](init.go): This initializes a logger instance.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/init.go): This initializes a logger instance.
 
-* [linux_amd64_gpu](linux_amd64_gpu.go): This contains method to detect GPU on a linux machine. 
+* [linux_amd64_gpu](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/linux_amd64_gpu.go): This contains method to detect GPU on a linux machine. 
 
-* [linux_amd64_gpuinfo](linux_amd64_gpu.go): This contains methods to collect GPU info.
+* [linux_amd64_gpuinfo](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/linux_amd64_gpu.go): This contains methods to collect GPU info.
 
-* [linux_amd64_resources](linux_amd64_resources.go): This contains methods to calculate machine resources.
+* [linux_amd64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/linux_amd64_resources.go): This contains methods to calculate machine resources.
 
-* [res_operations](res_operations.go): This contains methods to perform various operations (addition, subtraction etc) on machine resources.
+* [res_operations](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/res_operations.go): This contains methods to perform various operations (addition, subtraction etc) on machine resources.
 
 All files with `*_test.go` contains unit tests for the corresponding functionality.
 
-### 3. Functionality
+### 3. Class Diagram
+
+#### Source
+
+[resources class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/dms/resources"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 #### `GetFreeResource`
 
@@ -156,11 +172,11 @@ type negativeValueError struct {
 **Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
 
 
-### 5. Testing
+### 6. Testing
 
 `proposed` Refer to `*_test.go` files for unit tests of different functionalities.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -299,11 +315,7 @@ type OnboardedResources struct {
 
 
 
-### 7. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. References
 
 
 

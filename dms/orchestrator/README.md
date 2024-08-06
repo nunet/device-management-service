@@ -12,12 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
-8. [Class Diagram](#8-class-diagram)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
@@ -71,23 +71,39 @@ _Subpackages_
 
 * [matching](matching): Defines and implements `Comparator` logic for compute capabilities and by that the *Search and Match* operation.
 
-### 3. Functionality
+### 3. Class Diagram
+
+#### Source
+
+[orchestrator class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/dms/orchestrator"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 `TBD`
 
-**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
+**Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
 
-### 4. Data Types
-
-`TBD`
-
-**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
-
-### 5. Testing
+### 5. Data Types
 
 `TBD`
 
-### 6. Proposed Functionality / Requirements 
+**Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.**
+
+### 6. Testing
+
+`TBD`
+
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -370,11 +386,7 @@ type Mailbox struct {
 
 Data types related to allocation, contract settlement, job updates etc are currently omitted. These should be added as applicable while implementation.
 
-### 7. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. References
 
 #### Orchestration steps research blogs
 
@@ -384,17 +396,6 @@ The orchestrator functionality of DMS is being developed based on the research d
 
 - [Detailed job orchestration sequences II](https://nunet.gitlab.io/research/blog/posts/orchestration-discussion/)
 
-### 8. Class Diagram
 
-#### Source
-
-[Package source](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/specs/class_diagram.puml?ref_type=heads)
-
-#### Rendered from source file
-
-```plantuml
-!$rootUrl = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
-!include $rootUrl/dms/orchestrator/specs/class_diagram.puml
-```
 
 

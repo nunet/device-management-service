@@ -12,11 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 
 ## Specification
@@ -57,8 +58,25 @@ _Subpackages_
 
 * [clover](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/clover): This folder contains CloverDB database implementation.
 
+### 3. Class Diagram
 
-### 3. Functionality
+The class diagram for the `db` package is shown below.
+
+#### Source file
+
+[db Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/db/repositories"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 5. Functionality
 
 There are two types of interfaces defined to cover database operations:
 
@@ -283,11 +301,11 @@ type QueryCondition struct {
 - `models.MachineUUID`
 
 
-### 5. Testing
+### 6. Testing
 
 The unit tests for utility functions are defined in `utils_test.go`. Refer to `*_test.go` files for unit tests of various implementations covered in subpackages.
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -295,7 +313,7 @@ All issues that are related to the implementation of `db` package can be found b
 
 - [db package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A36&first_page_size=20)
 
-### 7. References
+### 8. References
 
 The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
 - [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)

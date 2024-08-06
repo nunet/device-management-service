@@ -1,3 +1,75 @@
-# Summary
+# validate
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and organisation](#2-structure-and-organisation)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
+
+## Specification
+
+### 1. Description `TBD`
 
 Utils specifically used for the validation of different types.
+
+### 2. Structure and Organisation
+
+Here is quick overview of the contents of this directory:
+
+- [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+
+- [numerics](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/numerics.go): This file contains method for conversion of numerical data to `float64` type.
+
+- [strings](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/strings.go): This file contains method for validation check of data types.
+
+- [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/specs): This folder contains the class diagram of the package.
+
+
+### 3. Class Diagram
+
+#### Source File
+
+[cardano Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/utils/validate"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
+
+This package contains helper methods that perform validation check for different data types. Refer to `strings.go` file for more details.
+
+### 5. Data Types
+
+This package does not define any new data types.
+
+### 6. Testing
+
+Unit tests for the functionality are defined in files with `*_test.go` in their names.
+
+### 7. Proposed Functionality / Requirements
+
+List of issues related to the implementation of the `utils` package can be found below. These include proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
+
+- [utils Package Issues]() `TBD`
+
+### 8. References

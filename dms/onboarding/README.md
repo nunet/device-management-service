@@ -12,11 +12,12 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [Proposed Functionality/Requirements](#6-proposed-functionality--requirements)
-7. [References](#7-references)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 
 ## Specification
@@ -29,20 +30,37 @@ This file explains the onboarding functionality of Device Management Service (DM
 
 Here is quick overview of the contents of this directory:
 
-* [README](README.md): Current file which is aimed towards developers who wish to modify the onboarding functionality and build on top of it. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/README.md): Current file which is aimed towards developers who wish to modify the onboarding functionality and build on top of it. 
 
-* [handler](handler.go): This is main file where the code for onboarding functionality exists.
+* [handler](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/handler.go): This is main file where the code for onboarding functionality exists.
 
-* [addresses](addresses.go): This file houses functions to generate Ethereum and Cardano wallet addresses along with its private key. 
+* [addresses](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/addresses.go): This file houses functions to generate Ethereum and Cardano wallet addresses along with its private key. 
 
-* [addresses_test](addresses_test.go): This file houses functions to test the address generation functions defined in [addresses](addresses.go).
+* [addresses_test](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/addresses_test.go): This file houses functions to test the address generation functions defined in [addresses](addresses.go).
 
-* [available_resources](available_resources.go): This file houses functions to get the total capacity of the machine being onboarded. 
+* [available_resources](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/available_resources.go): This file houses functions to get the total capacity of the machine being onboarded. 
 
-* [init](init.go): This files initializes the loggers associated with onboarding package.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/init.go): This files initializes the loggers associated with onboarding package.
 
-### 3. Functionality
+### 3. Class Diagram
 
+The class diagram for the `onboarding` package is shown below.
+
+#### Source file
+
+[onboarding Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/onboarding/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/dms/onboarding"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
 
 #### Onboard Compute Provider
 
@@ -128,7 +146,7 @@ Here is quick overview of the contents of this directory:
 `Offboard` removes the resources onboarded to Nunet. If the `force` parameter is `True`, then offboarding process will continue even in the presence of errors. 
 
 
-### 4. Data Types
+### 5. Data Types
 
 - `models.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
 
@@ -142,11 +160,11 @@ Here is quick overview of the contents of this directory:
 
 - `models.AvailableResources`: This has the available capacity that has been onboarded to Nunet.
 
-### 5. Testing
+### 6. Testing
 
 `TBD`
 
-### 6. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -155,8 +173,5 @@ All issues that are related to the implementation of `dms` package can be found 
 - [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
 
 
-### 7. References
+### 8. References
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
