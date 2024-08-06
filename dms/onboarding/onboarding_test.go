@@ -1,0 +1,317 @@
+package onboarding
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
+	"gitlab.com/nunet/device-management-service/db"
+	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/utils"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+type TestSuite struct {
+	service *Onboarding
+	db      *gorm.DB
+	fs      afero.Fs
+}
+
+func NewTestSuite(t *testing.T) *TestSuite {
+	t.Helper()
+
+	fs := afero.NewMemMapFs()
+
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+
+	service := NewTestService(db, fs)
+
+	return &TestSuite{
+		service: service,
+		db:      db,
+		fs:      fs,
+	}
+}
+
+func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
+	oConfig := OnboardingConfig{
+		Filesystem:     afero.Afero{Fs: fs},
+		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(db),
+		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(db),
+		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(db),
+		MetadataPath:   "/test/metadata.json",
+		DatabasePath:   "/test/db.sqlite",
+		Channels:       []string{"test1", "test2", "test3"},
+	}
+	o := New(oConfig)
+	return o
+}
+
+func (ts *TestSuite) setupDB() {
+	ts.db.AutoMigrate(&models.AvailableResources{})
+	ts.db.AutoMigrate(&models.Libp2pInfo{})
+	ts.db.AutoMigrate(&models.MachineUUID{})
+}
+
+func (ts *TestSuite) writeMetadata() error {
+	total := struct {
+		MemoryMax int64 `json:"memory_max,omitempty"`
+		TotalCore int64 `json:"total_core,omitempty"`
+		CPUMax    int64 `json:"cpu_max,omitempty"`
+	}{
+		MemoryMax: 2000,
+		TotalCore: 8,
+		CPUMax:    1000,
+	}
+
+	reserved := struct {
+		CPU    int64 `json:"cpu,omitempty"`
+		Memory int64 `json:"memory,omitempty"`
+	}{
+		Memory: 1500,
+		CPU:    500,
+	}
+
+	available := struct {
+		CPU    int64 `json:"cpu,omitempty"`
+		Memory int64 `json:"memory,omitempty"`
+	}{
+		Memory: 1500,
+		CPU:    500,
+	}
+
+	metadata := &models.Metadata{
+		Resource:  total,
+		Reserved:  reserved,
+		Available: available,
+	}
+	content, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	err = ts.service.config.Filesystem.WriteFile(ts.service.config.MetadataPath, content, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (ts *TestSuite) savePrivateKey(ctx context.Context) error {
+	p2p := models.Libp2pInfo{
+		PrivateKey: []byte("1234"),
+	}
+	_, err := ts.service.config.P2PRepo.Save(ctx, p2p)
+	return err
+}
+
+func (ts *TestSuite) saveMachineUUID(ctx context.Context) error {
+	uuid, err := utils.GenerateMachineUUID()
+	if err != nil {
+		return err
+	}
+	mUUID := models.MachineUUID{
+		UUID: uuid,
+	}
+	_, err = ts.service.config.UUIDRepo.Save(ctx, mUUID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func TestIsOnboarded(t *testing.T) {
+	ts := NewTestSuite(t)
+
+	ts.setupDB()
+
+	if err := ts.writeMetadata(); err != nil {
+		t.Errorf("unable to write metadata file: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := ts.savePrivateKey(ctx); err != nil {
+		t.Errorf("unable to save private key: %v", err)
+	}
+
+	// TODO: Add more test cases
+	t.Run("happy case", func(t *testing.T) {
+		onboarded, err := ts.service.IsOnboarded(ctx)
+		assert.NoError(t, err)
+		assert.True(t, onboarded)
+	})
+}
+
+func TestStatus(t *testing.T) {
+	ts := NewTestSuite(t)
+
+	ts.setupDB()
+
+	if err := ts.writeMetadata(); err != nil {
+		t.Errorf("unable to write metadata file: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := ts.savePrivateKey(ctx); err != nil {
+		t.Errorf("unable to save private key: %v", err)
+	}
+	if err := ts.saveMachineUUID(ctx); err != nil {
+		t.Errorf("unable to save machine UUID: %v", err)
+	}
+
+	// TODO: Add more test cases
+	t.Run("happy case", func(t *testing.T) {
+		status, err := ts.service.Status(ctx)
+		assert.NoError(t, err)
+		assert.NotNil(t, status)
+	})
+}
+
+// // TODO: It needs ResourceManager in order to fully test it
+// func TestOnboard(t *testing.T) {}
+
+// // TODO: It needs ResourceManager in order to fully test it
+// func TestResourceConfig(t *testing.T) {}
+func TestOnboard(t *testing.T) {
+	ctx := context.Background()
+	capacity := models.CapacityForNunet{
+		CPU:               8000,
+		Memory:            16000,
+		Channel:           "test",
+		PaymentAddress:    "0x1234567890abcdef",
+		NTXPricePerMinute: 10,
+		Cardano:           false,
+	}
+
+	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
+
+	// Create a temporary directory for the metadata file
+	tmpDir := "/tmp/test"
+	testFS.MkdirAll(tmpDir, 0755)
+
+	// Create a new Onboarding instance with the test options
+	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+
+	// XXX: only after we get rid of the global db usage everywhere
+	db.DB = mockDB
+
+	mockDB.AutoMigrate(&models.AvailableResources{})
+
+	oConfig := OnboardingConfig{
+		Filesystem:     testFS,
+		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
+		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
+		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
+		MetadataPath:   tmpDir,
+		DatabasePath:   tmpDir,
+		Channels:       []string{"test"},
+	}
+	service := New(oConfig)
+
+	t.Run("unhappy case - invalid cardano wallet", func(t *testing.T) {
+		// Call the Onboard method
+		_, err := service.Onboard(ctx, capacity)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid cardano wallet address")
+	})
+
+	t.Run("happy case", func(t *testing.T) {
+		// correct the cardano wallet address
+		capacity.PaymentAddress = "addr_test1vzgxkngaw5dayp8xqzpmajrkm7f7fleyzqrjj8l8fp5e8jcc2p2dk"
+
+		// TODO: update after onbaording implementation
+		_, err := service.Onboard(ctx, capacity)
+		assert.Error(t, err)
+		assert.Equal(t, "NOT YET IMPLEMENTED", err.Error())
+	})
+
+	// TODO: more test cases once resource manager is fixed
+	//       currently there're problems with gpu detection during onboard
+}
+func TestResourceConfig(t *testing.T) {
+	ctx := context.Background()
+	capacity := models.CapacityForNunet{
+		CPU:               8000,
+		Memory:            16000,
+		Channel:           "test",
+		PaymentAddress:    "0x1234567890abcdef",
+		NTXPricePerMinute: 10,
+		Cardano:           false,
+	}
+
+	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
+
+	// Create a temporary directory for the metadata file
+	tmpDir := "/tmp/test"
+	testFS.MkdirAll(tmpDir, 0755)
+
+	// Create a new Onboarding instance with the test options
+	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+
+	// XXX: only after we get rid of the global db usage everywhere
+	db.DB = mockDB
+
+	mockDB.AutoMigrate(&models.AvailableResources{})
+
+	oConfig := OnboardingConfig{
+		Filesystem:     testFS,
+		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
+		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
+		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
+		MetadataPath:   tmpDir,
+		DatabasePath:   tmpDir,
+		Channels:       []string{"test"},
+	}
+	service := New(oConfig)
+
+	t.Run("unhappy case - not onboarded", func(t *testing.T) {
+		// Call the ResourceConfig method
+		_, err := service.ResourceConfig(ctx, capacity)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "could not check onboard status")
+	})
+
+	// TODO: Add more test cases when onboarding is implemented after resource manager
+}
+func TestOffboard(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.Afero{Fs: afero.NewMemMapFs()}
+	tmpDir := "/tmp/test"
+	fs.MkdirAll(tmpDir, 0755)
+
+	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	oConfig := OnboardingConfig{
+		Filesystem:     fs,
+		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
+		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
+		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
+		MetadataPath:   tmpDir,
+		DatabasePath:   tmpDir,
+		Channels:       []string{"test"},
+	}
+	service := New(oConfig)
+
+	t.Run("unhappy case - not onboarded", func(t *testing.T) {
+		err := service.Offboard(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "could not retrieve onboard status")
+		// assert.Contains(t, err.Error(), "machine is not onboarded")
+	})
+
+	// TODO: Add more test cases when onboarding is implemented after resource manager
+}

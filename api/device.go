@@ -2,10 +2,14 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"gitlab.com/nunet/device-management-service/utils"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// DeviceHandler is a controller for /device endpoint functionalities
+// TODO: Create a service type for these functionalities
+// and embed inside the handler
+type DeviceHandler struct{}
 
 // DeviceStatusHandler  godoc
 //
@@ -18,7 +22,7 @@ import (
 //	@Failure		500	{object}	object	"could not retrieve data from peer"
 //	@Failure		500	{object}	object	"failed to type assert peer data for peer ID"
 //	@Router			/device/status [get]
-func DeviceStatusHandler(c *gin.Context) {
+func (h *DeviceHandler) DeviceStatus(c *gin.Context) {
 	// TODO: handle this after refactor
 	// status, err := libp2p.DeviceStatus()
 	// if err != nil {
@@ -27,13 +31,12 @@ func DeviceStatusHandler(c *gin.Context) {
 	// }
 	// c.JSON(200, gin.H{"online": status})
 	c.AbortWithStatusJSON(500, gin.H{"error": "device status not implemented"})
-
 }
 
-// ChangeDeviceStatusHandler  godoc
+// UpdateDeviceStatus  godoc
 //
-//	@Summary		Change device status between online/offline
-//	@Description	Change device status to online (able to receive jobs) or offline (unable to receive jobs).
+//	@Summary		Update device status between online/offline
+//	@Description	Update device status to online (able to receive jobs) or offline (unable to receive jobs).
 //	@Tags			device
 //	@Produce		json
 //	@Failure		400	{object}	object	"empty content data"
@@ -48,10 +51,9 @@ func DeviceStatusHandler(c *gin.Context) {
 //	@Success		200	{object}	object	"Device status successfully changed to offline"
 //	@Success		200	{object}	object	"no change in device status"
 //	@Router			/device/status [post]
-func ChangeDeviceStatusHandler(c *gin.Context) {
+func (h *DeviceHandler) UpdateDeviceStatus(c *gin.Context) {
 	span := trace.SpanFromContext(c.Request.Context())
 	span.SetAttributes(attribute.String("URL", "/device/status"))
-	span.SetAttributes(attribute.String("MachineUUID", utils.GetMachineUUID()))
 
 	var status struct {
 		IsAvailable bool `json:"is_available"`

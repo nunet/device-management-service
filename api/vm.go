@@ -24,7 +24,12 @@ type DefaultVM struct {
 	NodeID          string `json:"node_id"`
 }
 
-//	StartCustomHandler godoc
+// VMHandler is a controller for /vm endpoint functionalities
+// TODO: Create a service type for these functionalities
+// and embed inside the handler
+type VMHandler struct{}
+
+// StartCustom godoc
 //
 // @Summary		Start a VM with custom configuration.
 // @Description	This endpoint is an abstraction of all primitive endpoints. When invokend, it calls all primitive endpoints in a sequence.
@@ -42,7 +47,7 @@ type DefaultVM struct {
 // @Failure		500		{object}	string					"failed to pass MMDS message"
 // @Failure		500		{object}	string					"unable to start virtual machine"
 // @Router			/vm/start-custom [post]
-func StartCustomHandler(c *gin.Context) {
+func (h *VMHandler) StartCustom(c *gin.Context) {
 	reqCtx := c.Request.Context()
 	span := trace.SpanFromContext(reqCtx)
 	span.SetAttributes(attribute.String("URL", "/vm/start-custom"))
@@ -83,7 +88,7 @@ func StartCustomHandler(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "VM started successfully"})
 }
 
-// StartDefaultHandler godoc
+// StartDefault godoc
 //
 //	@Summary		Start a VM with default configuration.
 //	@Description	Kernel file and filesystem file needs to be passed in body. This endpoint is an abstraction of all primitive endpoints.
@@ -101,7 +106,7 @@ func StartCustomHandler(c *gin.Context) {
 //	@Failure		500		{object}	string					"failed to pass MMDS message"
 //	@Failure		500		{object}	string					"unable to start virtual machine"
 //	@Router			/vm/start-default [post]
-func StartDefaultHandler(c *gin.Context) {
+func (h *VMHandler) StartDefault(c *gin.Context) {
 	reqCtx := c.Request.Context()
 	span := trace.SpanFromContext(reqCtx)
 	span.SetAttributes(attribute.String("URL", "/vm/start-default"))

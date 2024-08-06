@@ -9,7 +9,17 @@ import (
 	"gitlab.com/nunet/device-management-service/models"
 )
 
-// ProvisionedCapacityHandler      godoc
+// OnboardingHandler is a controller for /onboarding endpoint functionalities
+type OnboardingHandler struct {
+	service *onboarding.Onboarding
+}
+
+// NewOnboardingHandler is a constructor for OnboardingHandler
+func NewOnboardingHandler(s *onboarding.Onboarding) OnboardingHandler {
+	return OnboardingHandler{service: s}
+}
+
+// ProvisionedCapacity      godoc
 //
 //	@Summary		Returns provisioned capacity on host.
 //	@Description	Get total memory capacity in MB and CPU capacity in MHz.
@@ -17,11 +27,12 @@ import (
 //	@Produce		json
 //	@Success		200	{object}	models.Provisioned
 //	@Router			/onboarding/provisioned [get]
-func ProvisionedCapacityHandler(c *gin.Context) {
+func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
+	// TODO: Waiting on MR for resource manager
 	c.JSON(200, resources.GetTotalProvisioned())
 }
 
-// GetMetadataHandler      godoc
+// GetMetadata      godoc
 //
 //	@Summary		Get current device info.
 //	@Description	Responds with metadata of current provideer
@@ -29,8 +40,8 @@ func ProvisionedCapacityHandler(c *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	models.Metadata
 //	@Router			/onboarding/metadata [get]
-func GetMetadataHandler(c *gin.Context) {
-	metadata, err := onboarding.GetMetadata()
+func (h OnboardingHandler) GetMetadata(c *gin.Context) {
+	metadata, err := h.service.Metadata()
 	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
@@ -38,7 +49,7 @@ func GetMetadataHandler(c *gin.Context) {
 	c.JSON(200, metadata)
 }
 
-// CreatePaymentAddressHandler      godoc
+// CreatePaymentAddress      godoc
 //
 //	@Summary		Create a new payment address.
 //	@Description	Create a payment address from public key. Return payment address and private key.
@@ -46,7 +57,7 @@ func GetMetadataHandler(c *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	models.BlockchainAddressPrivKey
 //	@Router			/onboarding/address/new [get]
-func CreatePaymentAddressHandler(c *gin.Context) {
+func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 	wallet := c.DefaultQuery("blockchain", "cardano")
 	pair, err := onboarding.CreatePaymentAddress(wallet)
 	if err != nil {
@@ -56,7 +67,7 @@ func CreatePaymentAddressHandler(c *gin.Context) {
 	c.JSON(200, pair)
 }
 
-// OnboardHandler      godoc
+// Onboard      godoc
 //
 //	@Summary		Runs the onboarding process.
 //	@Description	Onboard runs onboarding script given the amount of resources to onboard.
@@ -77,19 +88,19 @@ func CreatePaymentAddressHandler(c *gin.Context) {
 //	@Failure		500			{object}	object	"could not calculate free resources and update database"
 //	@Failure		500			{object}	object	"could not register and run new node"
 //	@Router			/onboarding/onboard [post]
-func OnboardHandler(c *gin.Context) {
+func (h OnboardingHandler) Onboard(c *gin.Context) {
 	capacity := models.CapacityForNunet{
 		ServerMode:  true,
 		IsAvailable: true,
 	}
-	err := c.BindJSON(&capacity)
-	if err != nil {
+
+	if err := c.BindJSON(&capacity); err != nil {
 		c.AbortWithStatusJSON(400, gin.H{"error": "invalid request data"})
 		return
+
 	}
 
-	reqCtx := c.Request.Context()
-	metadata, err := onboarding.Onboard(reqCtx, capacity)
+	metadata, err := h.service.Onboard(c.Request.Context(), capacity)
 	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
@@ -97,7 +108,7 @@ func OnboardHandler(c *gin.Context) {
 	c.JSON(200, metadata)
 }
 
-// OffboardHandler      godoc
+// Offboard      godoc
 //
 //	@Summary		Runs the offboarding process.
 //	@Description	Offboard runs offboarding process to remove the machine from the NuNet network.
@@ -112,7 +123,7 @@ func OnboardHandler(c *gin.Context) {
 //	@Failure		500		{object}	object	"unable to delete available resources on database"
 //	@Failure		500		{object}	object	"could not remove payment address"
 //	@Router			/onboarding/offboard [post]
-func OffboardHandler(c *gin.Context) {
+func (h OnboardingHandler) Offboard(c *gin.Context) {
 	query := c.DefaultQuery("force", "false")
 	force, err := strconv.ParseBool(query)
 	if err != nil {
@@ -120,16 +131,16 @@ func OffboardHandler(c *gin.Context) {
 		return
 	}
 
-	reqCtx := c.Request.Context()
-	err = onboarding.Offboard(reqCtx, force)
+	err = h.service.Offboard(c.Request.Context(), force)
 	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(200, gin.H{"message": "device successfully offboarded"})
 }
 
-// OnboardStatusHandler      godoc
+// OnboardStatus      godoc
 //
 //	@Summary		Onboarding status and other metadata.
 //	@Description	Returns json with 5 parameters: onboarded, error, machine_uuid, metadata_path, database_path.
@@ -142,8 +153,8 @@ func OffboardHandler(c *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	models.OnboardingStatus
 //	@Router			/onboarding/status [get]
-func OnboardStatusHandler(c *gin.Context) {
-	status, err := onboarding.Status()
+func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
+	status, err := h.service.Status(c.Request.Context())
 	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
@@ -151,14 +162,14 @@ func OnboardStatusHandler(c *gin.Context) {
 	c.JSON(200, status)
 }
 
-// ResourceConfigHandler        godoc
+// ResourceConfig        godoc
 //
 //	@Summary	changes the amount of resources of onboarded device .
 //	@Tags		onboarding
 //	@Produce	json
 //	@Success	200	{object}	models.Metadata
 //	@Router		/onboarding/resource-config [post]
-func ResourceConfigHandler(c *gin.Context) {
+func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
 	if c.Request.ContentLength == 0 {
 		c.AbortWithStatusJSON(400, gin.H{"error": "request body is empty"})
 		return
@@ -171,8 +182,7 @@ func ResourceConfigHandler(c *gin.Context) {
 		return
 	}
 
-	reqCtx := c.Request.Context()
-	metadata, err := onboarding.ResourceConfig(reqCtx, capacity)
+	metadata, err := h.service.ResourceConfig(c.Request.Context(), capacity)
 	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return

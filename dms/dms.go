@@ -55,9 +55,16 @@ func Run() {
 	}
 
 	// initialize rest pi server
-	rServer := api.NewRestServer(logger.New("rest-server"), nil, nil, config.GetConfig().Rest.Port)
+	restConfig := api.RESTServerConfig{
+		P2p:        nil,
+		Onboarding: nil,
+		Logger:     logger.New("rest-server"),
+		MidW:       nil,
+		Port:       config.GetConfig().Rest.Port,
+	}
+	rServer := api.NewRESTServer(restConfig)
 	rServer.InitializeRoutes()
-	rServer.Run()
+	go rServer.Run()
 
 	// wait for SIGINT or SIGTERM
 	sig := <-internal.ShutdownChan

@@ -7,11 +7,14 @@ import (
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
-type P2pHandler struct {
+// P2PHandler is a controller for /peers endpoint functionalities
+// TODO: Create a service type for these functionalities
+// and embed inside the handler
+type P2PHandler struct {
 	p2p *libp2p.Libp2p
 }
 
-// ListPeersHandler  godoc
+// ListPeers  godoc
 //
 //		@Summary		Return list of peers currently connected to
 //		@Description	Gets a list of peers the libp2p node can see within the network and return a list of peers
@@ -21,7 +24,7 @@ type P2pHandler struct {
 //	    @Failure		500	{object}	object	"host node hasn't yet been initialized"
 //		@Success		200	{object}	object	"list of peers"
 //		@Router			/peers [get]
-func (p *P2pHandler) ListPeersHandler(c *gin.Context) {
+func (p *P2PHandler) ListPeers(c *gin.Context) {
 	if p.p2p == nil {
 		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
 		return
@@ -34,25 +37,17 @@ func (p *P2pHandler) ListPeersHandler(c *gin.Context) {
 	c.JSON(200, peers)
 }
 
-// KnownPeersHandler  godoc
+// KnownPeers  godoc
 //
-//		@Summary		Return list of peers which have sent a dht update
-//		@Description	Gets a list of peers the libp2p node has received a dht update from
-//		@Tags			p2p
-//		@Produce		jsonfunc (m *MockHandler) ListChatHandler(c *gin.Context) {
-//		chats, err := mockListChat()
-//		if err != nil {
-//			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
-//		}
-//		c.JSON(200, chats)
-//	}
-//
-//	@Success		200	{object}	object	"List of peers"
-//	@Failure		404	{object}	object	"No peers found"
-//	@Failure		500	{object}	object	"Host Node hasn't yet been initialized"
-//
-//	@Router			/peers/dht [get]
-func (p *P2pHandler) KnownPeersHandler(c *gin.Context) {
+//	@Summary	Return list of peers which have sent a dht update
+//	@Description	Gets a list of peers the libp2p node has received a dht update from
+//	@Tags		p2p
+//	@Produce	json
+//	@Success	200	{object}	object	"List of peers"
+//	@Failure	404	{object}	object	"No peers found"
+//	@Failure	500	{object}	object	"Host Node hasn't yet been initialized"
+//	@Router		/peers/dht [get]
+func (p *P2PHandler) KnownPeers(c *gin.Context) {
 	if p.p2p == nil {
 		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
 		return
@@ -69,7 +64,7 @@ func (p *P2pHandler) KnownPeersHandler(c *gin.Context) {
 	c.JSON(200, peers)
 }
 
-// SelfPeerInfoHandler  godoc
+// SelfPeerInfo  godoc
 //
 //	@Summary		Return self peer info
 //	@Description	Gets self peer info of libp2p node
@@ -78,7 +73,7 @@ func (p *P2pHandler) KnownPeersHandler(c *gin.Context) {
 //	@Success		200	{object}	object	"Self Peer Info"
 //	@Failure		500	{object}	object	"host node hasn't yet been initialized"
 //	@Router			/peers/self [get]
-func (p *P2pHandler) SelfPeerInfoHandler(c *gin.Context) {
+func (p *P2PHandler) SelfPeerInfo(c *gin.Context) {
 	if p.p2p == nil {
 		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
 		return
@@ -87,7 +82,7 @@ func (p *P2pHandler) SelfPeerInfoHandler(c *gin.Context) {
 	c.JSON(200, self)
 }
 
-// DumpDHTHandler  godoc
+// DumpDHT  godoc
 //
 //	@Summary		Return a dump of the dht
 //	@Description	Returns entire DHT content
@@ -95,9 +90,9 @@ func (p *P2pHandler) SelfPeerInfoHandler(c *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	object	"List of DHT peers"
 //	@Failure		500	{object}	object	"host node hasn't yet been initialized"
-//	@Failure		404	{object}	object	"no content in DHT"
+//	@Failure		500	{object}	object	"no content in DHT"
 //	@Router			/peers/dht/dump [get]
-func (p *P2pHandler) DumpDHTHandler(c *gin.Context) {
+func (p *P2PHandler) DumpDHT(c *gin.Context) {
 	if p.p2p == nil {
 		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
 		return
@@ -108,9 +103,8 @@ func (p *P2pHandler) DumpDHTHandler(c *gin.Context) {
 		return
 	}
 	if len(dht) == 0 {
-		c.JSON(200, gin.H{"message": "empty DHT"})
+		c.JSON(500, gin.H{"message": "empty DHT"})
 		return
 	}
 	c.JSON(200, dht)
-
 }
