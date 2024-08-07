@@ -2,14 +2,11 @@ package cmd
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
-	"github.com/spf13/afero"
 	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/models"
 )
 
@@ -122,32 +119,6 @@ func Test_CapacityCmdAvailable(t *testing.T) {
 	// insert mocked data inside db
 	result := mockDB.Create(&mockP2PInfo)
 	assert.NoError(result.Error)
-
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
-
-	// write mock content inside metadata
-	err = afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	assert.NoError(err)
 
 	conns := GetMockConn(true)
 	mockConn := &MockConnection{conns: conns}

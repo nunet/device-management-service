@@ -17,34 +17,12 @@ import (
 	"gorm.io/gorm"
 )
 
-var mockMetadataBytes = []byte(`{
-"name": "Test Node",
-"update_timestamp": 1625097600,
-"resource": {
-	"memory_max": 16000000000,
-	"total_core": 8,
-	"cpu_max": 100
-},
-"available": {
-	"cpu": 80,
-	"memory": 12000000000
-},
-"reserved": {
-	"cpu": 20,
-	"memory": 4000000000
-},
-"network": "testnet",
-"public_key": "test_public_key",
-"node_id": "test_node_id",
-"allow_cardano": true
-}`)
-
 type TestSuite struct {
-	afs          afero.Afero
-	db           *gorm.DB
-	metadataPath string
-	dbPath       string
-	channels     []string
+	afs      afero.Afero
+	db       *gorm.DB
+	WorkDir  string
+	dbPath   string
+	channels []string
 }
 
 func NewTestSuite(t *testing.T) *TestSuite {
@@ -59,28 +37,28 @@ func NewTestSuite(t *testing.T) *TestSuite {
 		t.Errorf("could not open database: %v", err)
 	}
 
-	metadataPath := "/test/metadata.json"
+	workDir := "/test"
 	dbPath := "/test/db.db"
 
 	channels := []string{"test1", "test2", "test3"}
 
 	return &TestSuite{
-		afs:          afs,
-		db:           db,
-		metadataPath: metadataPath,
-		dbPath:       dbPath,
-		channels:     channels,
+		afs:      afs,
+		db:       db,
+		WorkDir:  workDir,
+		dbPath:   dbPath,
+		channels: channels,
 	}
 }
 
 func (s *TestSuite) newTestOnboardingHandler() *OnboardingHandler {
 
 	oConfig := onboarding.OnboardingConfig{
-		Filesystem:     s.afs,
+		Fs:             s.afs,
 		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(s.db),
 		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(s.db),
 		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(s.db),
-		MetadataPath:   s.metadataPath,
+		WorkDir:        s.WorkDir,
 		DatabasePath:   s.dbPath,
 		Channels:       s.channels,
 	}
@@ -98,10 +76,6 @@ func (s *TestSuite) setupDB() error {
 	return nil
 }
 
-func (s *TestSuite) setupMetadata() error {
-	return s.afs.WriteFile(s.metadataPath, mockMetadataBytes, 0644)
-}
-
 func (s *TestSuite) setupPrivateKey(key string) error {
 	p2pInfo := &models.Libp2pInfo{
 		PrivateKey: []byte(key),
@@ -114,58 +88,6 @@ func (s *TestSuite) setupMachineUUID(uuid string) error {
 		UUID: uuid,
 	}
 	return s.db.Create(&machine).Error
-}
-
-func TestGetMetadata(t *testing.T) {
-	tests := []struct {
-		name           string
-		setupMock      func(*TestSuite)
-		expectedStatus int
-		expectedBody   []byte
-		wantErr        bool
-	}{
-		{
-			name: "success",
-			setupMock: func(ts *TestSuite) {
-				ts.setupDB()
-				ts.setupMetadata()
-			},
-			expectedStatus: 200,
-			wantErr:        false,
-		},
-		{
-			name:           "fail",
-			expectedStatus: 500,
-			wantErr:        true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ts := NewTestSuite(t)
-			handler := ts.newTestOnboardingHandler()
-
-			router := gin.New()
-			endpoint := "/api/v1/onboarding/metadata"
-			router.GET(endpoint, handler.GetMetadata)
-
-			if tt.setupMock != nil {
-				tt.setupMock(ts)
-			}
-			w := performRequest(router, "GET", endpoint)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			if len(tt.expectedBody) > 0 {
-				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
-			}
-			if tt.wantErr {
-				var response map[string]any
-				err := json.Unmarshal(w.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				assert.Contains(t, response, "error")
-			}
-		})
-	}
 }
 
 func TestOnboardStatus(t *testing.T) {
@@ -182,7 +104,6 @@ func TestOnboardStatus(t *testing.T) {
 				ts.setupDB()
 				ts.setupPrivateKey("abc123")
 				ts.setupMachineUUID("12345")
-				ts.setupMetadata()
 			},
 			expectedCode: 200,
 		},
@@ -383,7 +304,6 @@ func TestOffboard(t *testing.T) {
 			name: "internal error",
 			setupMock: func(ts *TestSuite) {
 				ts.setupDB()
-				ts.setupMetadata()
 				ts.setupPrivateKey("1234")
 			},
 			query:        "?force=false",

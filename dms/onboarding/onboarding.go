@@ -2,14 +2,13 @@ package onboarding
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"os"
 	"slices"
+	"time"
 
-	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/models"
@@ -19,9 +18,10 @@ import (
 )
 
 type OnboardingConfig struct {
-	Filesystem     afero.Afero
-	MetadataPath   string
+	Fs             afero.Afero
+	WorkDir        string
 	DatabasePath   string
+	OnboardingRepo repositories.OnboardingParamsRepository
 	P2PRepo        repositories.Libp2pInfoRepository
 	AvResourceRepo repositories.AvailableResourcesRepository
 	UUIDRepo       repositories.MachineUUIDRepository
@@ -36,40 +36,17 @@ func New(config OnboardingConfig) *Onboarding {
 	return &Onboarding{config: config}
 }
 
-// Metadata reads metadata file
-// It returns a models.Metadata struct and any error if encountered
-func (o *Onboarding) Metadata() (*models.Metadata, error) {
-	content, err := o.config.Filesystem.ReadFile(o.config.MetadataPath)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read metadata file: %w", err)
-	}
-	var metadata models.Metadata
-	err = json.Unmarshal(content, &metadata)
-	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal metadata: %w", err)
-	}
-	return &metadata, nil
-}
-
-// IsOnboarded checks libp2p and metadata related information
-// It returns whether the machine is onboarded or not and any error if encountered
+// IsOnboarded checks whether the machine is onboarded or not
 func (o *Onboarding) IsOnboarded(ctx context.Context) (bool, error) {
-	p2p, err := o.config.P2PRepo.Get(ctx)
+	_, err := o.config.OnboardingRepo.Get(context.Background())
 	if err != nil {
-		return false, fmt.Errorf("could not get libp2p info: %w", err)
+		return false, nil
 	}
-	if p2p.PrivateKey == nil {
-		return false, fmt.Errorf("private key is not set")
-	}
-	_, err = o.Metadata()
-	if err != nil {
-		return false, fmt.Errorf("could not read metadata: %w", err)
-	}
+	// TODO: validate onbaording params
 	return true, nil
 }
 
-// Status return additional information about onboarding status
-// It returns a *models.OnboardingStatus and any error if encountered
+// Status returns onbaording status and any error if encountered
 func (o *Onboarding) Status(ctx context.Context) (*models.OnboardingStatus, error) {
 	onboarded, err := o.IsOnboarded(ctx)
 	if err != nil {
@@ -83,26 +60,59 @@ func (o *Onboarding) Status(ctx context.Context) (*models.OnboardingStatus, erro
 		Onboarded:    onboarded,
 		Error:        err,
 		MachineUUID:  machine.UUID,
-		MetadataPath: o.config.DatabasePath,
-		DatabasePath: o.config.MetadataPath,
+		DatabasePath: o.config.WorkDir,
 	}
 	return &resp, nil
 }
 
-// Onboard validates host information, creates metadata file and update reserved resources for the network
-// It returns a *models.Metadata and any error if encountered
-func (o *Onboarding) Onboard(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error) {
+// Onboard validates the onboarding params and onboards the machine to the network
+// It returns a *models.OnboardingConfig and any error if encountered
+func (o *Onboarding) Onboard(ctx context.Context, capacity models.CapacityForNunet) (*models.OnboardingConfig, error) {
 	if err := o.validateOnboardingPrerequisites(capacity); err != nil {
 		return nil, err
 	}
 
-	metadata, err := o.createMetadata(capacity)
+	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create metadata: %w", err)
+		return nil, fmt.Errorf("unable to get hostname: %v", err)
 	}
 
-	if err := o.saveMetadata(metadata); err != nil {
-		return nil, fmt.Errorf("failed to save metadata: %w", err)
+	totalCpu := resources.GetTotalProvisioned().CPU
+	totalMem := resources.GetTotalProvisioned().Memory
+	numCores := resources.GetTotalProvisioned().NumCores
+
+	var oConf models.OnboardingConfig
+	oConf.Name = hostname
+	oConf.UpdateTimestamp = time.Now().Unix()
+	oConf.Resource.MemoryMax = int64(totalMem)
+	oConf.Resource.TotalCore = int64(numCores)
+	oConf.Resource.CPUMax = int64(totalCpu)
+
+	oConf.AllowCardano = false
+	if capacity.Cardano {
+		if capacity.Memory < 10000 || capacity.CPU < 6000 {
+			return nil, fmt.Errorf("cardano node requires 10000MB of RAM and 6000MHz CPU")
+		}
+		oConf.AllowCardano = true
+	}
+
+	gpuInfo, err := resources.CheckGPU()
+	if err != nil {
+		zlog.Sugar().Errorf("unable to detect GPU: %v ", err.Error())
+	}
+	oConf.GpuInfo = gpuInfo
+
+	oConf.Reserved.Memory = capacity.Memory
+	oConf.Reserved.CPU = capacity.CPU
+	oConf.Available.Memory = int64(totalMem) - capacity.Memory
+	oConf.Available.CPU = int64(totalCpu) - capacity.CPU
+	oConf.Network = capacity.Channel
+	oConf.PublicKey = capacity.PaymentAddress
+	oConf.NTXPricePerMinute = capacity.NTXPricePerMinute
+
+	savedOConf, err := o.config.OnboardingRepo.Save(context.Background(), oConf)
+	if err != nil {
+		return nil, fmt.Errorf("could not save onboarding params: %w", err)
 	}
 
 	if err := o.updateAvailableResources(ctx, capacity); err != nil {
@@ -110,12 +120,11 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity models.CapacityForNun
 	}
 
 	// TODO: START NETWORKING AND OTHER WORKERS FOR THE NODE
-	return nil, errors.New("NOT YET IMPLEMENTED")
+	return &savedOConf, errors.New("NOT YET IMPLEMENTED")
 }
 
-// ResourceConfig checks if user is onboarded and updates onboarding information
-// It returns a *models.Metadata and any error if encountered
-func (o *Onboarding) ResourceConfig(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error) {
+// ResourceConfig allows changing onboarding parameters
+func (o *Onboarding) ResourceConfig(ctx context.Context, capacity models.CapacityForNunet) (*models.OnboardingConfig, error) {
 	onboarded, err := o.IsOnboarded(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not check onboard status: %w", err)
@@ -128,14 +137,14 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity models.Capacit
 		return nil, fmt.Errorf("could not validate capacity data: %w", err)
 	}
 
-	metadata, err := o.Metadata()
+	oParams, err := o.config.OnboardingRepo.Get(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("could not read metadata file: %w", err)
+		return nil, fmt.Errorf("could not read onboarding params from db: %w", err)
 	}
 
-	metadata.Reserved.CPU = capacity.CPU
-	metadata.Reserved.Memory = capacity.Memory
-	metadata.NTXPricePerMinute = capacity.NTXPricePerMinute
+	oParams.Reserved.CPU = capacity.CPU
+	oParams.Reserved.Memory = capacity.Memory
+	oParams.NTXPricePerMinute = capacity.NTXPricePerMinute
 
 	available, err := o.config.AvResourceRepo.Get(ctx)
 	if err != nil {
@@ -150,8 +159,8 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity models.Capacit
 		return nil, fmt.Errorf("could not save available resources info: %w", err)
 	}
 
-	if err := o.saveMetadata(metadata); err != nil {
-		return nil, fmt.Errorf("could not save metadata: %w", err)
+	if _, err := o.config.OnboardingRepo.Save(ctx, oParams); err != nil {
+		return nil, fmt.Errorf("could not save onboarding params in db: %w", err)
 	}
 
 	// TODO: Replace with ResourceManager and Repository
@@ -160,7 +169,7 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity models.Capacit
 		return nil, fmt.Errorf("could not calculate free resources and update database: %w", err)
 	}
 
-	return metadata, nil
+	return &oParams, nil
 }
 
 // Offboard deletes all onboarding information if already set
@@ -170,7 +179,7 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 	if err != nil && !force {
 		return fmt.Errorf("could not retrieve onboard status: %w", err)
 	} else if err != nil && force {
-		zlog.Sugar().Errorf("problem with onboarding state: %v", err)
+		zlog.Sugar().Errorf("problem with onboarding state: %w", err)
 		zlog.Info("continuing with offboarding because forced")
 	}
 
@@ -178,29 +187,23 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 		return fmt.Errorf("machine is not onboarded")
 	}
 
-	// err = libp2p.ShutdownNode()
-	// if err != nil {
-	// 	return fmt.Errorf("unable to shutdown node: %w", err)
-	// }
-	return errors.New("ShutdownNode is not implemented")
+	// TODO: shutdown routine to stop networking etc... here
 
-	metadataPath := utils.GetMetadataFilePath()
-	err = os.Remove(metadataPath)
+	err = o.config.OnboardingRepo.Clear(ctx)
 	if err != nil && !force {
-		return fmt.Errorf("failed to remove metadata file: %w", err)
+		return fmt.Errorf("failed to remove onboarding params from db: %w", err)
 	} else if err != nil && force {
-		zlog.Sugar().Errorf("failed to delete metadata file - problem with onboarding state: %v", err)
+		zlog.Sugar().Errorf("failed to delete onboarding params from db - problem with onboarding state: %w", err)
 		zlog.Info("continuing with offboarding because forced")
 	}
 
 	// delete the available resources from database
-	var aval models.AvailableResources
-	res := db.DB.WithContext(ctx).Where("id = ?", 1).Delete(&aval)
-	if res.Error != nil {
-		zlog.Error(res.Error.Error())
-	} else if res.RowsAffected == 0 && !force {
-		zlog.Error("no rows were affected while deleting available resources")
-		return fmt.Errorf("unable to delete available resources on database: %w", err)
+	err = o.config.AvResourceRepo.Clear(ctx)
+	if err != nil && !force {
+		return fmt.Errorf("failed to remove reserved resource from db: %w", err)
+	} else if err != nil && force {
+		zlog.Sugar().Errorf("failed to delete reserved resource from db - problem with onboarding state: %w", err)
+		zlog.Info("continuing with offboarding because forced")
 	}
 
 	return nil
@@ -223,7 +226,7 @@ func validateCapacityForNunet(capacity models.CapacityForNunet) error {
 }
 
 func (o *Onboarding) validateOnboardingPrerequisites(capacity models.CapacityForNunet) error {
-	ok, err := o.config.Filesystem.DirExists(o.config.MetadataPath)
+	ok, err := o.config.Fs.DirExists(o.config.WorkDir)
 	if err != nil {
 		return fmt.Errorf("could not check if config directory exists: %w", err)
 	}
@@ -243,64 +246,6 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity models.CapacityFor
 		return fmt.Errorf("invalid channel data: '%s' channel does not exist", capacity.Channel)
 	}
 
-	return nil
-}
-
-func (o *Onboarding) createMetadata(capacity models.CapacityForNunet) (*models.Metadata, error) {
-	// TODO: Replace with ResourceManager
-	totalProvisioned := resources.GetTotalProvisioned()
-
-	metadata := &models.Metadata{
-		Resource: struct {
-			MemoryMax int64 `json:"memory_max,omitempty"`
-			TotalCore int64 `json:"total_core,omitempty"`
-			CPUMax    int64 `json:"cpu_max,omitempty"`
-		}{
-			MemoryMax: int64(totalProvisioned.Memory),
-			TotalCore: int64(totalProvisioned.NumCores),
-			CPUMax:    int64(totalProvisioned.CPU),
-		},
-		Reserved: struct {
-			CPU    int64 `json:"cpu,omitempty"`
-			Memory int64 `json:"memory,omitempty"`
-		}{
-			Memory: int64(capacity.Memory),
-			CPU:    int64(capacity.CPU),
-		},
-		Available: struct {
-			CPU    int64 `json:"cpu,omitempty"`
-			Memory int64 `json:"memory,omitempty"`
-		}{
-			Memory: int64(totalProvisioned.Memory) - capacity.Memory,
-			CPU:    int64(totalProvisioned.CPU) - capacity.CPU,
-		},
-		Network:           capacity.Channel,
-		PublicKey:         capacity.PaymentAddress,
-		NTXPricePerMinute: capacity.NTXPricePerMinute,
-		AllowCardano:      capacity.Cardano,
-	}
-
-	if capacity.Cardano && capacity.Memory < 10000 || capacity.CPU < 6000 {
-		return nil, fmt.Errorf("cardano node requires 10000MB of RAM and 6000MHz CPU")
-	}
-
-	gpuInfo, err := resources.CheckGPU()
-	if err != nil {
-		zlog.Sugar().Errorf("unable to detect GPU: %v", err)
-	}
-	metadata.GpuInfo = gpuInfo
-
-	return metadata, nil
-}
-
-func (o *Onboarding) saveMetadata(metadata *models.Metadata) error {
-	file, err := json.MarshalIndent(metadata, "", " ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
-	}
-	if err := o.config.Filesystem.WriteFile(o.config.MetadataPath, file, 0644); err != nil {
-		return fmt.Errorf("could not write to metadata file: %w", err)
-	}
 	return nil
 }
 

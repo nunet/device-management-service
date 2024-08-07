@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/spf13/afero"
 	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/backend"
 	"gitlab.com/nunet/device-management-service/models"
 )
 
@@ -17,9 +16,7 @@ import (
 func Test_PeerListCmdHasFlags(t *testing.T) {
 	assert := assert.New(t)
 
-	mockUtils := &MockUtilsService{}
-
-	cmd := NewPeerListCmd(mockUtils)
+	cmd := NewPeerListCmd(&backend.Utils{})
 
 	assert.True(cmd.HasAvailableFlags())
 
@@ -52,35 +49,6 @@ func Test_PeerListCmdNoFlag(t *testing.T) {
 	result := mockDB.Create(&mockP2PInfo)
 	assert.NoError(result.Error)
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
-
-	// write mock content inside metadata
-	err = afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	if err != nil {
-		t.Fatalf("error writing mock content to file: %v", err)
-	}
-
 	responseBootstrap := []byte(`[
     {"ID": "fjaldkfjaslkfals", "Addrs": ["/ip4/v1/2000", "ip6/v2/3000"]},
     {"ID": "vncjnvxmcvvca", "Addrs": ["/ip4/v2/7888", "ip6/10000"]},
@@ -99,7 +67,7 @@ func Test_PeerListCmdNoFlag(t *testing.T) {
 	mockUtils.SetResponseFor("GET", "/api/v1/peers/dht", responseDHT)
 
 	buf := new(bytes.Buffer)
-	cmd := NewPeerListCmd(mockUtils)
+	cmd := NewPeerListCmd(&backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
@@ -107,9 +75,9 @@ func Test_PeerListCmdNoFlag(t *testing.T) {
 	assert.NoError(err)
 
 	buf2 := new(bytes.Buffer)
-	peersBoot, err := getBootstrapPeers(buf2, mockUtils)
+	peersBoot, err := getBootstrapPeers(buf2, &backend.Utils{})
 	assert.NoError(err)
-	peersDHT, err := getDHTPeers(mockUtils)
+	peersDHT, err := getDHTPeers(&backend.Utils{})
 	assert.NoError(err)
 
 	fmt.Fprintf(buf2, "Bootstrap peers (%d)\n", len(peersBoot))
@@ -148,35 +116,6 @@ func Test_PeerListCmdWithFlags(t *testing.T) {
 	result := mockDB.Create(&mockP2PInfo)
 	assert.NoError(result.Error)
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
-
-	// write mock content inside metadata
-	err = afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	if err != nil {
-		t.Fatalf("error writing mock content to file: %v", err)
-	}
-
 	responseDHT := []byte(`[
     "jfalksdfjalsdkn",
     "q4uriq9e859349e",
@@ -189,7 +128,7 @@ func Test_PeerListCmdWithFlags(t *testing.T) {
 	mockUtils.SetResponseFor("GET", "/api/v1/peers/dht", responseDHT)
 
 	buf := new(bytes.Buffer)
-	cmd := NewPeerListCmd(mockUtils)
+	cmd := NewPeerListCmd(&backend.Utils{})
 	cmd.SetArgs([]string{"--dht"})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -197,7 +136,7 @@ func Test_PeerListCmdWithFlags(t *testing.T) {
 	err = cmd.Execute()
 	assert.NoError(err)
 
-	peersDHT, err := getDHTPeers(mockUtils)
+	peersDHT, err := getDHTPeers(&backend.Utils{})
 	assert.NoError(err)
 
 	buf2 := new(bytes.Buffer)
@@ -230,44 +169,8 @@ func Test_PeerListCmdWithMessage(t *testing.T) {
 	result := mockDB.Create(&mockP2PInfo)
 	assert.NoError(result.Error)
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
-
-	// write mock content inside metadata
-	err = afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	if err != nil {
-		t.Fatalf("error writing mock content to file: %v", err)
-	}
-
-	// empty array
-	responseDHT := []byte(`{"message": "No peers found"}`)
-
-	mockUtils := &MockUtilsService{}
-
-	mockUtils.SetResponseFor("GET", "/api/v1/peers/dht", responseDHT)
-
 	buf := new(bytes.Buffer)
-	cmd := NewPeerListCmd(mockUtils)
+	cmd := NewPeerListCmd(&backend.Utils{})
 	cmd.SetArgs([]string{"--dht"})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
@@ -297,35 +200,6 @@ func Test_PeerListCmdEmptyDHTArray(t *testing.T) {
 	result := mockDB.Create(&mockP2PInfo)
 	assert.NoError(result.Error)
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
-
-	// write mock content inside metadata
-	err = afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	if err != nil {
-		t.Fatalf("error writing mock content to file: %v", err)
-	}
-
 	// empty array
 	responseDHT := []byte(`[]`)
 
@@ -334,7 +208,7 @@ func Test_PeerListCmdEmptyDHTArray(t *testing.T) {
 	mockUtils.SetResponseFor("GET", "/api/v1/peers/dht", responseDHT)
 
 	buf := new(bytes.Buffer)
-	cmd := NewPeerListCmd(mockUtils)
+	cmd := NewPeerListCmd(&backend.Utils{})
 	cmd.SetArgs([]string{"--dht"})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)

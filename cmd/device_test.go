@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/nunet/device-management-service/cmd/backend"
 )
 
 func Test_DeviceCmdSubCommands(t *testing.T) {
@@ -37,16 +38,13 @@ func Test_DeviceStatusCmd(t *testing.T) {
 	err := setupMockDB()
 	assert.NoError(err)
 
-	err = setMockMetadata()
-	assert.NoError(err)
-
 	mockUtils := &MockUtilsService{}
 
 	selfResponse := []byte(`{"online":false}`)
 	mockUtils.SetResponseFor("GET", "/api/v1/device/status", selfResponse)
 
 	buf := new(bytes.Buffer)
-	cmd := NewDeviceStatusCmd(mockUtils)
+	cmd := NewDeviceStatusCmd(&backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
@@ -62,9 +60,6 @@ func Test_DeviceSetCmd(t *testing.T) {
 	err := setupMockDB()
 	assert.NoError(err)
 
-	err = setMockMetadata()
-	assert.NoError(err)
-
 	mockUtils := &MockUtilsService{}
 
 	postResponse := []byte(`{"message":"Device status successfully changed to online"}`)
@@ -72,7 +67,7 @@ func Test_DeviceSetCmd(t *testing.T) {
 
 	// no argument
 	buf := new(bytes.Buffer)
-	cmd := NewDeviceSetCmd(mockUtils)
+	cmd := NewDeviceSetCmd(&backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	err = cmd.Execute()
@@ -81,7 +76,7 @@ func Test_DeviceSetCmd(t *testing.T) {
 
 	// with argument
 	buf = new(bytes.Buffer)
-	cmd = NewDeviceSetCmd(mockUtils)
+	cmd = NewDeviceSetCmd(&backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"online"})

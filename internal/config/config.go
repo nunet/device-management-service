@@ -8,9 +8,9 @@ type Config struct {
 }
 
 type General struct {
-	MetadataPath string `mapstructure:"metadata_path"`
-	DataDir      string `mapstructure:"data_dir"`
-	Debug        bool   `mapstructure:"debug"`
+	WorkDir string `mapstructure:"work_dir"`
+	DataDir string `mapstructure:"data_dir"`
+	Debug   bool   `mapstructure:"debug"`
 }
 
 type Rest struct {

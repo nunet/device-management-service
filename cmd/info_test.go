@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/backend"
 	"gitlab.com/nunet/device-management-service/models"
 
 	"gorm.io/driver/sqlite"
@@ -45,52 +44,6 @@ func (mu *MockUtilsService) ResponseBody(c *gin.Context, method, endpoint, query
 	}
 
 	return response, nil
-}
-
-func (mu *MockUtilsService) IsOnboarded() (bool, error) {
-	var libp2pInfo models.Libp2pInfo
-
-	mockDB, err := initMockDB()
-	if err != nil {
-		return false, err
-	}
-
-	// instead of getting the record with id=1, simply get the first record.
-	// why? we were having problems with the new embedded model BaseDBModel.
-	// TODO: anyway, it would be better to use the new DB version
-	result := mockDB.Order("created_at asc").First(&libp2pInfo)
-	if result.Error != nil {
-		return false, fmt.Errorf("Error fetching the first record: %w\n", result.Error)
-	}
-
-	_, err = mu.ReadMetadataFile()
-
-	if err == nil {
-		if libp2pInfo.PrivateKey != nil {
-			return true, nil
-		} else {
-			return false, fmt.Errorf("libp2p private key is nil")
-		}
-	} else {
-		return false, fmt.Errorf("error reading metadata file: %w", err)
-	}
-}
-
-func (mu *MockUtilsService) ReadMetadataFile() (*models.Metadata, error) {
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	metadataFile, err := afero.ReadFile(mockFS, metadataFullPath)
-	if err != nil {
-		return &models.Metadata{}, fmt.Errorf("cannot read file: %w", err)
-	}
-	var metadata models.Metadata
-	err = json.Unmarshal(metadataFile, &metadata)
-	if err != nil {
-		return &models.Metadata{}, fmt.Errorf("could not unmarshal metadata: %w", err)
-	}
-
-	return &metadata, nil
 }
 
 type MockConnection struct {
@@ -146,28 +99,7 @@ func Test_InfoCmd(t *testing.T) {
 	result := mockDB.Create(&mockP2PInfo)
 	assert.NoError(result.Error)
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
+	// TODO: get info from onboarding db repo
 
 	expectedResponse := "+----------------------+----------+\n"
 	expectedResponse += "|         INFO         |  VALUE   |\n"
@@ -189,18 +121,11 @@ func Test_InfoCmd(t *testing.T) {
 	expectedResponse += "| NTX Price Per Minute | 0.000000 |\n"
 	expectedResponse += "+----------------------+----------+\n"
 
-	// write mock content inside metadata
-	err = afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	if err != nil {
-		t.Fatalf("error writing mock content to file: %v", err)
-	}
-
 	conns := GetMockConn(true)
 
 	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
 
-	cmd := NewInfoCmd(mockConn, mockUtils)
+	cmd := NewInfoCmd(mockConn, &backend.Utils{})
 
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
@@ -211,14 +136,7 @@ func Test_InfoCmd(t *testing.T) {
 		t.Fatalf("error executing command: %v", err)
 	}
 
-	var metadata models.Metadata
-	err = json.Unmarshal(mockMetadataJSON, &metadata)
-	if err != nil {
-		t.Fatalf("error unmarshaling metadata JSON: %v", err)
-	}
-
 	expected := new(bytes.Buffer)
-	printMetadata(expected, &metadata)
 
 	assert.Equal(expectedResponse, buf.String())
 
@@ -247,20 +165,12 @@ func Test_InfoCmdNotOnboarded(t *testing.T) {
 	result := mockDB.Create(&emptyP2PInfo)
 	assert.NoError(result.Error)
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	// remove metadata file so that it's unable to read it
-	err = mockFS.Remove(metadataFullPath)
-
 	conns := GetMockConn(true)
 
 	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
 
 	buf := new(bytes.Buffer)
-	cmd := NewInfoCmd(mockConn, mockUtils)
+	cmd := NewInfoCmd(mockConn, &backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
@@ -292,20 +202,12 @@ func Test_InfoCmdInvalidMetadata(t *testing.T) {
 		t.Fatalf("could not add mocked data inside db: %v", err)
 	}
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	// remove metadata file so that it's unable to read it
-	err = mockFS.Remove(metadataFullPath)
-
 	conns := GetMockConn(true)
 
 	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
 
 	buf := new(bytes.Buffer)
-	cmd := NewInfoCmd(mockConn, mockUtils)
+	cmd := NewInfoCmd(mockConn, &backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
@@ -337,42 +239,12 @@ func Test_InfoCmdDMSNotRunning(t *testing.T) {
 		t.Fatalf("could not add mocked data inside db: %v", err)
 	}
 
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
-
-	// write mock content inside metadata
-	err = afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	if err != nil {
-		t.Fatalf("error writing mock content to file: %v", err)
-	}
-
 	conns := GetMockConn(false)
 
 	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
 
 	buf := new(bytes.Buffer)
-	cmd := NewInfoCmd(mockConn, mockUtils)
+	cmd := NewInfoCmd(mockConn, &backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 

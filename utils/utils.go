@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/db"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/models"
 	"golang.org/x/exp/slices"
 
@@ -81,23 +79,6 @@ func RandomString(n int) string {
 	return sb.String()
 }
 
-// GetChannelName returns the channel name from the metadata file
-func GetChannelName() string {
-	metadata, err := ReadMetadataFile()
-	if err != nil || metadata.Network == "" {
-		return "" // nunet not onboarded or something wrong with metadata file
-	}
-	return metadata.Network
-}
-
-func GetDashboard() string {
-	metadata, err := ReadMetadataFile()
-	if err != nil || metadata.Dashboard == "" {
-		return ""
-	}
-	return metadata.Dashboard
-}
-
 // GenerateMachineUUID generates a machine uuid
 func GenerateMachineUUID() (string, error) {
 	var machine models.MachineUUID
@@ -139,25 +120,6 @@ func SliceContains(s []string, str string) bool {
 	return false
 }
 
-// GetMetadataFilePath Returns metadata file path
-func GetMetadataFilePath() string {
-	return filepath.Join(config.GetConfig().General.MetadataPath, "metadataV2.json")
-}
-
-// ReadMetadata returns metadata from metadataV2.json file
-func ReadMetadataFile() (*models.Metadata, error) {
-	metadataF, err := os.ReadFile(GetMetadataFilePath())
-	if err != nil {
-		return &models.Metadata{}, err
-	}
-	var metadata models.Metadata
-	err = json.Unmarshal(metadataF, &metadata)
-	if err != nil {
-		return &models.Metadata{}, err
-	}
-	return &metadata, nil
-}
-
 // DeleteFile deletes a file, with or without a backup
 func DeleteFile(path string, backup bool) (err error) {
 	if backup {
@@ -166,21 +128,6 @@ func DeleteFile(path string, backup bool) (err error) {
 		err = os.Remove(path)
 	}
 	return
-}
-
-// IsOnboarded checks if the device is onboarded
-func IsOnboarded() (bool, error) {
-	var libp2pInfo models.Libp2pInfo
-	_ = db.DB.Where("id = ?", 1).Find(&libp2pInfo)
-	_, err := ReadMetadataFile()
-
-	if err == nil && libp2pInfo.PrivateKey != nil {
-		return true, nil
-	} else if err != nil && libp2pInfo.PrivateKey == nil {
-		return false, nil
-	} else {
-		return false, err
-	}
 }
 
 // ReadyForElastic checks if the device is ready to send logs to elastic
@@ -470,4 +417,3 @@ func ConvertTypedSliceToUntypedSlice(typedSlice interface{}) []interface{} {
 	}
 	return result
 }
-

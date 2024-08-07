@@ -6,7 +6,6 @@ import (
 	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 
-	"gitlab.com/nunet/device-management-service/models"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -23,10 +22,6 @@ func (u *Utils) IsOnboarded() (bool, error) {
 	}
 
 	return onboarded, nil
-}
-
-func (u *Utils) ReadMetadataFile() (*models.Metadata, error) {
-	return utils.ReadMetadataFile()
 }
 
 func (u *Utils) ResponseBody(c *gin.Context, method, endpoint, query string, body []byte) ([]byte, error) {
