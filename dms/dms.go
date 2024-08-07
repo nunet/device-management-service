@@ -2,16 +2,20 @@ package dms
 
 import (
 	// "context"
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/api"
-	"gitlab.com/nunet/device-management-service/db"
+	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
 	// "gitlab.com/nunet/device-management-service/internal/messaging"
 	"gitlab.com/nunet/device-management-service/models"
@@ -19,6 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/spf13/afero"
 )
 
 // NewP2P is stub, real implementation is needed in order to pass it to
@@ -27,27 +32,50 @@ func NewP2P() libp2p.Libp2p {
 	return libp2p.Libp2p{}
 }
 
+// QUESTION(dms-initialization): should the db instance be constructed here?
 func Run() {
-	// ctx := context.Background()
+	ctx := context.Background()
 	log.Println("WARNING: Most parts commented out in dms.Run()")
 	config.LoadConfig()
-
-	db.ConnectDatabase()
 
 	// XXX: wait for server to start properly before sending requests below
 	// TODO: should be removed
 	time.Sleep(time.Second * 5)
 
 	// check if onboarded
-	if onboarded, _ := utils.IsOnboarded(); onboarded {
-		metadata, err := utils.ReadMetadataFile()
-		if err != nil {
-			zlog.Sugar().Errorf("unable to read metadata.json: %v", err)
-			os.Exit(1)
-		}
-		ValidateOnboarding(metadata)
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir)), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
 
-		p2pParams := GetP2PParams()
+	onboardR := gdb.NewOnboardingParamsRepository(db)
+	p2pR := gdb.NewLibp2pInfoRepository(db)
+	uuidR := gdb.NewMachineUUIDRepository(db)
+	avResR := gdb.NewAvailableResourcesRepository(db)
+
+	oConf, err := onboardR.Get(ctx)
+	if err != nil {
+		log.Fatalf("Failed to get onboarding config: %v", err)
+	}
+
+	onboard := onboarding.New(onboarding.OnboardingConfig{
+		Fs:             afero.Afero{Fs: afero.NewOsFs()},
+		P2PRepo:        p2pR,
+		UUIDRepo:       uuidR,
+		AvResourceRepo: avResR,
+		WorkDir:        config.GetConfig().WorkDir,
+		DatabasePath:   fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir),
+		Channels:       []string{"nunet", "nunet-test", "nunet-team", "nunet-edge"},
+	})
+
+	if onboarded, _ := onboard.IsOnboarded(ctx); onboarded {
+		ValidateOnboarding(&oConf)
+
+		p2pParams, err := p2pR.Get(ctx)
+		if err != nil {
+			log.Fatalf("Failed to get libp2p info: %v", err)
+		}
+
 		_, err = crypto.UnmarshalPrivateKey(p2pParams.PrivateKey)
 		if err != nil {
 			zlog.Sugar().Fatalf("unable to unmarshal private key: %v", err)
@@ -73,23 +101,14 @@ func Run() {
 	// add cleanup code here
 	fmt.Println("Cleaning up before shutting down")
 
-	// exit
 	os.Exit(0)
 }
 
-func GetP2PParams() (libp2pInfo models.Libp2pInfo) {
-	result := db.DB.Where("id = ?", 1).Find(&libp2pInfo)
-	if result.Error == nil && libp2pInfo.PrivateKey != nil {
-		return
-	}
-	return
-}
-
-func ValidateOnboarding(metadata *models.Metadata) {
+func ValidateOnboarding(oConf *models.OnboardingConfig) {
 	// Check 1: Check if payment address is valid
-	err := utils.ValidateAddress(metadata.PublicKey)
+	err := utils.ValidateAddress(oConf.PublicKey)
 	if err != nil {
-		zlog.Sugar().Errorf("the payment address %s is not valid", metadata.PublicKey)
+		zlog.Sugar().Errorf("the payment address %s is not valid", oConf.PublicKey)
 		zlog.Sugar().Error("exiting DMS")
 		os.Exit(1)
 	}

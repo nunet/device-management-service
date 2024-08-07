@@ -53,7 +53,6 @@ func (s *RESTServer) InitializeRoutes() {
 	onboardHandler := NewOnboardingHandler(s.config.Onboarding)
 	onboarding := v1.Group("/onboarding")
 	{
-		onboarding.GET("/metadata", onboardHandler.GetMetadata)
 		onboarding.GET("/provisioned", onboardHandler.ProvisionedCapacity)
 		onboarding.GET("/address/new", onboardHandler.CreatePaymentAddress)
 		onboarding.GET("/status", onboardHandler.OnboardStatus)

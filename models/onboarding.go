@@ -28,8 +28,9 @@ type Provisioned struct {
 	NumCores uint64  `json:"total_cores,omitempty"`
 }
 
-// Metadata - machine metadata of onboarding parameters
-type Metadata struct {
+// OnboardingConfig - parameters to configure onboarding
+type OnboardingConfig struct {
+	BaseDBModel
 	Name            string `json:"name,omitempty"`
 	UpdateTimestamp int64  `json:"update_timestamp,omitempty"`
 	Resource        struct {
@@ -55,9 +56,10 @@ type Metadata struct {
 }
 
 type OnboardingStatus struct {
-	Onboarded    bool   `json:"onboarded"`
-	Error        error  `json:"error"`
-	MachineUUID  string `json:"machine_uuid"`
-	MetadataPath string `json:"metadata_path"`
-	DatabasePath string `json:"database_path"`
+	Onboarded        bool             `json:"onboarded"`
+	Error            error            `json:"error"`
+	MachineUUID      string           `json:"machine_uuid"`
+	WorkDir          string           `json:"work_dir"`
+	DatabasePath     string           `json:"database_path"`
+	OnboardingConfig OnboardingConfig `json:"onboarding_config"`
 }

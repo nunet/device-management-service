@@ -40,11 +40,11 @@ func TestInitializeRoutes(t *testing.T) {
 	mockDB.AutoMigrate(&models.Libp2pInfo{})
 
 	oConf := onboarding.OnboardingConfig{
-		Filesystem:     afero.Afero{Fs: afero.NewMemMapFs()},
+		Fs:             afero.Afero{Fs: afero.NewMemMapFs()},
 		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
 		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
-		MetadataPath:   "/test/metadata.json",
+		WorkDir:        "/test",
 		DatabasePath:   "/test/db.sqlite",
 		Channels:       []string{"test1", "test2", "test3"},
 	}

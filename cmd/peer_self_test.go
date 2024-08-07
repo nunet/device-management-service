@@ -5,45 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/backend"
 	"gitlab.com/nunet/device-management-service/models"
 )
-
-func setMockMetadata() error {
-	// set metadata path
-	metadataPath := config.GetConfig().MetadataPath
-	metadataFullPath := fmt.Sprintf("%s/metadataV2.json", metadataPath)
-
-	mockMetadataJSON := []byte(`{
-        "name": "metadata",
-        "resource": {
-            "memory_max": 256,
-            "total_core": 4,
-            "cpu_max": 700
-        },
-        "available": {
-            "cpu": 690,
-            "memory": 246
-        },
-        "reserved": {
-            "cpu": 10,
-            "memory": 10
-        },
-        "network": "tcp",
-        "public_key": "abc123"
-    }`)
-
-	// write mock content inside metadata
-	err := afero.WriteFile(mockFS, metadataFullPath, mockMetadataJSON, 0644)
-	if err != nil {
-		return fmt.Errorf("error writing mock content to file: %v", err)
-	}
-
-	return nil
-}
 
 func setupMockDB() error {
 	mockDB, err := initMockDB()
@@ -80,9 +46,6 @@ func Test_SelfPeerCmd(t *testing.T) {
 	err := setupMockDB()
 	assert.NoError(err)
 
-	err = setMockMetadata()
-	assert.NoError(err)
-
 	mockUtils := &MockUtilsService{}
 
 	selfResponse := []byte(`{
@@ -92,7 +55,7 @@ func Test_SelfPeerCmd(t *testing.T) {
 	mockUtils.SetResponseFor("GET", "/api/v1/peers/self", selfResponse)
 
 	buf := new(bytes.Buffer)
-	cmd := NewPeerSelfCmd(mockUtils)
+	cmd := NewPeerSelfCmd(&backend.Utils{})
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 

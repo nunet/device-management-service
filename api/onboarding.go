@@ -32,24 +32,7 @@ func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
 	c.JSON(200, resources.GetTotalProvisioned())
 }
 
-// GetMetadata      godoc
-//
-//	@Summary		Get current device info.
-//	@Description	Responds with metadata of current provideer
-//	@Tags			onboarding
-//	@Produce		json
-//	@Success		200	{object}	models.Metadata
-//	@Router			/onboarding/metadata [get]
-func (h OnboardingHandler) GetMetadata(c *gin.Context) {
-	metadata, err := h.service.Metadata()
-	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(200, metadata)
-}
-
-// CreatePaymentAddress      godoc
+// CreatePaymentAddressHandler      godoc
 //
 //	@Summary		Create a new payment address.
 //	@Description	Create a payment address from public key. Return payment address and private key.
@@ -74,7 +57,7 @@ func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 //	@Tags			onboarding
 //	@Produce		json
 //	@Param			capacity	body		models.CapacityForNunet	true	"Capacity for NuNet"
-//	@Success		200			{object}	models.Metadata
+//	@Success		200			{object}	models.OnboardingConfig
 //	@Failure		400			{object}	object	"invalid request data"
 //	@Failure		500			{object}	object	"could not check if config directory exists"
 //	@Failure		500			{object}	object	"config directory does not exist"
@@ -82,7 +65,6 @@ func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 //	@Failure		500			{object}	object	"could not validate capacity data"
 //	@Failure		500			{object}	object	"cardano node requires 10000MB of RAM and 6000MHz CPU"
 //	@Failure		500			{object}	object	"invalid channel data, channel does not exist"
-//	@Failure		500			{object}	object	"could not write to metadata file"
 //	@Failure		500			{object}	object	"unable to create available resources table"
 //	@Failure		500			{object}	object	"unable to update available resources table"
 //	@Failure		500			{object}	object	"could not calculate free resources and update database"
@@ -100,12 +82,12 @@ func (h OnboardingHandler) Onboard(c *gin.Context) {
 
 	}
 
-	metadata, err := h.service.Onboard(c.Request.Context(), capacity)
+	oConfig, err := h.service.Onboard(c.Request.Context(), capacity)
 	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, metadata)
+	c.JSON(200, oConfig)
 }
 
 // Offboard      godoc
@@ -142,12 +124,12 @@ func (h OnboardingHandler) Offboard(c *gin.Context) {
 
 // OnboardStatus      godoc
 //
-//	@Summary		Onboarding status and other metadata.
-//	@Description	Returns json with 5 parameters: onboarded, error, machine_uuid, metadata_path, database_path.
+//	@Summary		Onboarding status and additional info.
+//	@Description	Returns json with 5 parameters: onboarded, error, machine_uuid, work_dir, database_path.
 //	@Description	`onboarded` is true if the device is onboarded, false otherwise.
 //	@Description	`error` is the error message if any related to onboarding status check
 //	@Description	`machine_uuid` is the UUID of the machine
-//	@Description	`metadata_path` is the path to metadataV2.json only if it exists
+//	@Description	`work_dir` is the path to DMS's working directory
 //	@Description	`database_path` is the path to nunet.db only if it exists
 //	@Tags			onboarding
 //	@Produce		json
@@ -167,7 +149,7 @@ func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
 //	@Summary	changes the amount of resources of onboarded device .
 //	@Tags		onboarding
 //	@Produce	json
-//	@Success	200	{object}	models.Metadata
+//	@Success	200	{object}	models.OnboardingConfig
 //	@Router		/onboarding/resource-config [post]
 func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
 	if c.Request.ContentLength == 0 {
@@ -182,10 +164,10 @@ func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
 		return
 	}
 
-	metadata, err := h.service.ResourceConfig(c.Request.Context(), capacity)
+	oConfig, err := h.service.ResourceConfig(c.Request.Context(), capacity)
 	if err != nil {
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, metadata)
+	c.JSON(200, oConfig)
 }

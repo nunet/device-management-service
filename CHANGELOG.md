@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.175](#377)
+
+### Deprecated
+- deprecated metadata file
+
 ## [0.4.174](#481)
 
 ### Deprecated

@@ -37,7 +37,6 @@ type NetworkManager interface {
 // Utility abstracts helper functions under utils package
 type Utility interface {
 	IsOnboarded() (bool, error)
-	ReadMetadataFile() (*models.Metadata, error)
 	ResponseBody(c *gin.Context, method, endpoint, query string, body []byte) ([]byte, error)
 }
 

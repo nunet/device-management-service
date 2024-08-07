@@ -6,7 +6,12 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
 	"gitlab.com/nunet/device-management-service/cmd/backend"
+	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/models"
 )
 
@@ -16,7 +21,7 @@ func NewInfoCmd(net backend.NetworkManager, utilsService backend.Utility) *cobra
 	return &cobra.Command{
 		Use:     "info",
 		Short:   "Display information about onboarded device",
-		Long:    "Display metadata of onboarded device on Nunet Device Management Service",
+		Long:    "Display onboarding config of onboarded device on Nunet Device Management Service",
 		PreRunE: isDMSRunning(net),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := checkOnboarded(utilsService)
@@ -24,37 +29,44 @@ func NewInfoCmd(net backend.NetworkManager, utilsService backend.Utility) *cobra
 				return err
 			}
 
-			metadata, err := utilsService.ReadMetadataFile()
+			// XXX: don't leave me like this
+			db, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir)), &gorm.Config{})
 			if err != nil {
-				return fmt.Errorf("cannot fetch machine metadata: %w", err)
+				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 
-			displayMetadataInTable(cmd.OutOrStdout(), metadata)
+			onboardR := gdb.NewOnboardingParamsRepository(db)
+			oConf, err := onboardR.Get(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("failed to get onboarding config: %w", err)
+			}
+
+			displayInTable(cmd.OutOrStdout(), &oConf)
 
 			return nil
 		},
 	}
 }
 
-func displayMetadataInTable(w io.Writer, metadata *models.Metadata) {
+func displayInTable(w io.Writer, oConf *models.OnboardingConfig) {
 	table := tablewriter.NewWriter(w)
 	table.SetHeader([]string{"Info", "Value"})
 
-	table.Append([]string{"Name", metadata.Name})
-	table.Append([]string{"Update Timestamp", fmt.Sprintf("%d", metadata.UpdateTimestamp)})
-	table.Append([]string{"Memory Max", fmt.Sprintf("%d", metadata.Resource.MemoryMax)})
-	table.Append([]string{"Total Core", fmt.Sprintf("%d", metadata.Resource.TotalCore)})
-	table.Append([]string{"CPU Max", fmt.Sprintf("%d", metadata.Resource.CPUMax)})
-	table.Append([]string{"Available CPU", fmt.Sprintf("%d", metadata.Available.CPU)})
-	table.Append([]string{"Available Memory", fmt.Sprintf("%d", metadata.Available.Memory)})
-	table.Append([]string{"Reserved CPU", fmt.Sprintf("%d", metadata.Reserved.CPU)})
-	table.Append([]string{"Reserved Memory", fmt.Sprintf("%d", metadata.Reserved.Memory)})
-	table.Append([]string{"Network", metadata.Network})
-	table.Append([]string{"Public Key", metadata.PublicKey})
-	table.Append([]string{"Node ID", metadata.NodeID})
-	table.Append([]string{"Allow Cardano", fmt.Sprintf("%t", metadata.AllowCardano)})
-	table.Append([]string{"Dashboard", metadata.Dashboard})
-	table.Append([]string{"NTX Price Per Minute", fmt.Sprintf("%f", metadata.NTXPricePerMinute)})
+	table.Append([]string{"Name", oConf.Name})
+	table.Append([]string{"Update Timestamp", fmt.Sprintf("%d", oConf.UpdateTimestamp)})
+	table.Append([]string{"Memory Max", fmt.Sprintf("%d", oConf.Resource.MemoryMax)})
+	table.Append([]string{"Total Core", fmt.Sprintf("%d", oConf.Resource.TotalCore)})
+	table.Append([]string{"CPU Max", fmt.Sprintf("%d", oConf.Resource.CPUMax)})
+	table.Append([]string{"Available CPU", fmt.Sprintf("%d", oConf.Available.CPU)})
+	table.Append([]string{"Available Memory", fmt.Sprintf("%d", oConf.Available.Memory)})
+	table.Append([]string{"Reserved CPU", fmt.Sprintf("%d", oConf.Reserved.CPU)})
+	table.Append([]string{"Reserved Memory", fmt.Sprintf("%d", oConf.Reserved.Memory)})
+	table.Append([]string{"Network", oConf.Network})
+	table.Append([]string{"Public Key", oConf.PublicKey})
+	table.Append([]string{"Node ID", oConf.NodeID})
+	table.Append([]string{"Allow Cardano", fmt.Sprintf("%t", oConf.AllowCardano)})
+	table.Append([]string{"Dashboard", oConf.Dashboard})
+	table.Append([]string{"NTX Price Per Minute", fmt.Sprintf("%f", oConf.NTXPricePerMinute)})
 
 	table.Render()
 }

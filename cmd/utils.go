@@ -3,6 +3,7 @@ package cmd
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,8 +15,11 @@ import (
 	"github.com/buger/jsonparser"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/cmd/backend"
+	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/models"
 
@@ -276,95 +280,6 @@ func selfPeerAddrs(body []byte) (addrsByte []byte, err error) {
 	return addrsByte, nil
 }
 
-// printMetadata takes models.Metadata struct as input and display it in YAML-like format for better readability
-func printMetadata(w io.Writer, metadata *models.Metadata) {
-	fmt.Fprintln(w, "metadata:")
-
-	if metadata.Name != "" {
-		fmt.Fprintf(w, "  name: %s\n", metadata.Name)
-	}
-
-	if metadata.UpdateTimestamp != 0 {
-		fmt.Fprintf(w, "  update_timestamp: %d\n", metadata.UpdateTimestamp)
-	}
-
-	if metadata.Resource.MemoryMax != 0 || metadata.Resource.TotalCore != 0 || metadata.Resource.CPUMax != 0 {
-		fmt.Fprintln(w, "  resource:")
-
-		if metadata.Resource.MemoryMax != 0 {
-			fmt.Fprintf(w, "    memory_max: %d\n", metadata.Resource.MemoryMax)
-		}
-
-		if metadata.Resource.TotalCore != 0 {
-			fmt.Fprintf(w, "    total_core: %d\n", metadata.Resource.TotalCore)
-		}
-
-		if metadata.Resource.CPUMax != 0 {
-			fmt.Fprintf(w, "    cpu_max: %d\n", metadata.Resource.CPUMax)
-		}
-	}
-
-	if metadata.Available.CPU != 0 || metadata.Available.Memory != 0 {
-		fmt.Fprintln(w, "  available:")
-
-		if metadata.Available.CPU != 0 {
-			fmt.Fprintf(w, "    cpu: %d\n", metadata.Available.CPU)
-		}
-
-		if metadata.Available.Memory != 0 {
-			fmt.Fprintf(w, "    memory: %d\n", metadata.Available.Memory)
-		}
-	}
-
-	if metadata.Reserved.CPU != 0 || metadata.Reserved.Memory != 0 {
-		fmt.Fprintln(w, "  reserved:")
-
-		if metadata.Reserved.CPU != 0 {
-			fmt.Fprintf(w, "    cpu: %d\n", metadata.Reserved.CPU)
-		}
-
-		if metadata.Reserved.Memory != 0 {
-			fmt.Fprintf(w, "    memory: %d\n", metadata.Reserved.Memory)
-		}
-	}
-
-	if metadata.Network != "" {
-		fmt.Fprintf(w, "  network: %s\n", metadata.Network)
-	}
-
-	if metadata.PublicKey != "" {
-		fmt.Fprintf(w, "  public_key: %s\n", metadata.PublicKey)
-	}
-
-	if metadata.NodeID != "" {
-		fmt.Fprintf(w, "  node_id: %s\n", metadata.NodeID)
-	}
-
-	if metadata.AllowCardano {
-		fmt.Fprintf(w, "  allow_cardano: %v\n", metadata.AllowCardano)
-	}
-
-	if len(metadata.GpuInfo) > 0 {
-		fmt.Fprintln(w, "  gpu_info:")
-		for i, gpu := range metadata.GpuInfo {
-			fmt.Fprintf(w, "    - gpu %d:\n", i+1)
-			if gpu.Name != "" {
-				fmt.Fprintf(w, "      name: %s\n", gpu.Name)
-			}
-			if gpu.TotVram != 0 {
-				fmt.Fprintf(w, "      tot_vram: %d\n", gpu.TotVram)
-			}
-			if gpu.FreeVram != 0 {
-				fmt.Fprintf(w, "      free_vram: %d\n", gpu.FreeVram)
-			}
-		}
-	}
-
-	if metadata.Dashboard != "" {
-		fmt.Fprintf(w, "  dashboard: %s\n", metadata.Dashboard)
-	}
-}
-
 // printWallet takes models.BlockchainAddressPrivKey struct as input and display it in YAML-like format for better readability
 func printWallet(w io.Writer, pair *models.BlockchainAddressPrivKey) {
 	if pair.Address != "" {
@@ -389,20 +304,20 @@ func setFullData(provisioned *models.Provisioned) []string {
 	}
 }
 
-func setAvailableData(metadata *models.Metadata) []string {
+func setAvailableData(oConf *models.OnboardingConfig) []string {
 	return []string{
 		"Available",
-		fmt.Sprintf("%d", metadata.Available.Memory),
-		fmt.Sprintf("%d", metadata.Available.CPU),
+		fmt.Sprintf("%d", oConf.Available.Memory),
+		fmt.Sprintf("%d", oConf.Available.CPU),
 		"",
 	}
 }
 
-func setOnboardedData(metadata *models.Metadata) []string {
+func setOnboardedData(oConf *models.OnboardingConfig) []string {
 	return []string{
 		"Onboarded",
-		fmt.Sprintf("%d", metadata.Reserved.Memory),
-		fmt.Sprintf("%d", metadata.Reserved.CPU),
+		fmt.Sprintf("%d", oConf.Reserved.Memory),
+		fmt.Sprintf("%d", oConf.Reserved.CPU),
 		"",
 	}
 }
@@ -430,12 +345,19 @@ func handleAvailable(table *tablewriter.Table, utilsService backend.Utility) err
 		return err
 	}
 
-	metadata, err := utilsService.ReadMetadataFile()
+	// XXX: don't leave me like this
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir)), &gorm.Config{})
 	if err != nil {
-		return fmt.Errorf("cannot read metadata file: %w", err)
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	availableData := setAvailableData(metadata)
+	onboardR := gdb.NewOnboardingParamsRepository(db)
+	oConf, err := onboardR.Get(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get onboarding config: %w", err)
+	}
+
+	availableData := setAvailableData(&oConf)
 	table.Append(availableData)
 
 	return nil
@@ -447,12 +369,19 @@ func handleOnboarded(table *tablewriter.Table, utilsService backend.Utility) err
 		return err
 	}
 
-	metadata, err := utilsService.ReadMetadataFile()
+	// XXX: don't leave me like this
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir)), &gorm.Config{})
 	if err != nil {
-		return fmt.Errorf("cannot read metadata file: %w", err)
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	onboardedData := setOnboardedData(metadata)
+	onboardR := gdb.NewOnboardingParamsRepository(db)
+	oConf, err := onboardR.Get(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get onboarding config: %w", err)
+	}
+
+	onboardedData := setOnboardedData(&oConf)
 	table.Append(onboardedData)
 
 	return nil

@@ -26,7 +26,7 @@ func getViper() *viper.Viper {
 
 func setDefaultConfig() *viper.Viper {
 	v := getViper()
-	v.SetDefault("general.metadata_path", "/etc/nunet")
+	v.SetDefault("general.work_dir", "/etc/nunet")
 	v.SetDefault("general.data_dir", "/var/nunet")
 	v.SetDefault("general.debug", false)
 	v.SetDefault("rest.port", 9999)

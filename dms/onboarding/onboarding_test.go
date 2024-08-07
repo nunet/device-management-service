@@ -2,7 +2,6 @@ package onboarding
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -42,11 +41,11 @@ func NewTestSuite(t *testing.T) *TestSuite {
 
 func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
 	oConfig := OnboardingConfig{
-		Filesystem:     afero.Afero{Fs: fs},
+		Fs:             afero.Afero{Fs: fs},
 		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(db),
 		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(db),
 		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(db),
-		MetadataPath:   "/test/metadata.json",
+		WorkDir:        "/test",
 		DatabasePath:   "/test/db.sqlite",
 		Channels:       []string{"test1", "test2", "test3"},
 	}
@@ -58,49 +57,6 @@ func (ts *TestSuite) setupDB() {
 	ts.db.AutoMigrate(&models.AvailableResources{})
 	ts.db.AutoMigrate(&models.Libp2pInfo{})
 	ts.db.AutoMigrate(&models.MachineUUID{})
-}
-
-func (ts *TestSuite) writeMetadata() error {
-	total := struct {
-		MemoryMax int64 `json:"memory_max,omitempty"`
-		TotalCore int64 `json:"total_core,omitempty"`
-		CPUMax    int64 `json:"cpu_max,omitempty"`
-	}{
-		MemoryMax: 2000,
-		TotalCore: 8,
-		CPUMax:    1000,
-	}
-
-	reserved := struct {
-		CPU    int64 `json:"cpu,omitempty"`
-		Memory int64 `json:"memory,omitempty"`
-	}{
-		Memory: 1500,
-		CPU:    500,
-	}
-
-	available := struct {
-		CPU    int64 `json:"cpu,omitempty"`
-		Memory int64 `json:"memory,omitempty"`
-	}{
-		Memory: 1500,
-		CPU:    500,
-	}
-
-	metadata := &models.Metadata{
-		Resource:  total,
-		Reserved:  reserved,
-		Available: available,
-	}
-	content, err := json.Marshal(metadata)
-	if err != nil {
-		return err
-	}
-	err = ts.service.config.Filesystem.WriteFile(ts.service.config.MetadataPath, content, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (ts *TestSuite) savePrivateKey(ctx context.Context) error {
@@ -132,10 +88,6 @@ func TestIsOnboarded(t *testing.T) {
 
 	ts.setupDB()
 
-	if err := ts.writeMetadata(); err != nil {
-		t.Errorf("unable to write metadata file: %v", err)
-	}
-
 	ctx := context.Background()
 	if err := ts.savePrivateKey(ctx); err != nil {
 		t.Errorf("unable to save private key: %v", err)
@@ -153,10 +105,6 @@ func TestStatus(t *testing.T) {
 	ts := NewTestSuite(t)
 
 	ts.setupDB()
-
-	if err := ts.writeMetadata(); err != nil {
-		t.Errorf("unable to write metadata file: %v", err)
-	}
 
 	ctx := context.Background()
 	if err := ts.savePrivateKey(ctx); err != nil {
@@ -192,7 +140,7 @@ func TestOnboard(t *testing.T) {
 
 	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
 
-	// Create a temporary directory for the metadata file
+	// Create a temporary working directory
 	tmpDir := "/tmp/test"
 	testFS.MkdirAll(tmpDir, 0755)
 
@@ -208,11 +156,11 @@ func TestOnboard(t *testing.T) {
 	mockDB.AutoMigrate(&models.AvailableResources{})
 
 	oConfig := OnboardingConfig{
-		Filesystem:     testFS,
+		Fs:             testFS,
 		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
 		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
-		MetadataPath:   tmpDir,
+		WorkDir:        tmpDir,
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
 	}
@@ -251,7 +199,7 @@ func TestResourceConfig(t *testing.T) {
 
 	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
 
-	// Create a temporary directory for the metadata file
+	// Create a temporary working directory
 	tmpDir := "/tmp/test"
 	testFS.MkdirAll(tmpDir, 0755)
 
@@ -267,11 +215,11 @@ func TestResourceConfig(t *testing.T) {
 	mockDB.AutoMigrate(&models.AvailableResources{})
 
 	oConfig := OnboardingConfig{
-		Filesystem:     testFS,
+		Fs:             testFS,
 		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
 		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
-		MetadataPath:   tmpDir,
+		WorkDir:        tmpDir,
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
 	}
@@ -296,11 +244,11 @@ func TestOffboard(t *testing.T) {
 	assert.NoError(t, err)
 
 	oConfig := OnboardingConfig{
-		Filesystem:     fs,
+		Fs:             fs,
 		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
 		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
-		MetadataPath:   tmpDir,
+		WorkDir:        tmpDir,
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
 	}
