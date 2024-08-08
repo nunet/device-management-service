@@ -29,6 +29,7 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("general.work_dir", "/etc/nunet")
 	v.SetDefault("general.data_dir", "/var/nunet")
 	v.SetDefault("general.debug", false)
+	v.SetDefault("rest.addr", "127.0.0.1")
 	v.SetDefault("rest.port", 9999)
 	v.SetDefault("p2p.listen_address", []string{
 		"/ip4/0.0.0.0/tcp/9000",
