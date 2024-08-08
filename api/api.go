@@ -22,6 +22,7 @@ type RESTServerConfig struct {
 	Logger     *logger.Logger
 	MidW       []gin.HandlerFunc
 	Port       int
+	Addr       string
 }
 
 // RESTServer represents a HTTP server
@@ -95,7 +96,7 @@ func (s *RESTServer) InitializeRoutes() {
 
 // Run starts the server on the specified port
 func (s *RESTServer) Run() {
-	s.router.Run(fmt.Sprintf(":%d", s.config.Port))
+	s.router.Run(fmt.Sprintf("%s:%d", s.config.Addr, s.config.Port))
 }
 
 func getCustomCorsConfig() cors.Config {

@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.176](#518)
+
+### Added
+- Allow setting rest server bind addr with config and default to localhost
+
 ## [0.4.175](#377)
 
 ### Deprecated

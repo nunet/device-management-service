@@ -82,13 +82,14 @@ func Run() {
 		}
 	}
 
-	// initialize rest pi server
+	// initialize rest api server
 	restConfig := api.RESTServerConfig{
 		P2p:        nil,
 		Onboarding: nil,
 		Logger:     logger.New("rest-server"),
 		MidW:       nil,
 		Port:       config.GetConfig().Rest.Port,
+		Addr:       config.GetConfig().Rest.Addr,
 	}
 	rServer := api.NewRESTServer(restConfig)
 	rServer.InitializeRoutes()
