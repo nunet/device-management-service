@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
-	"github.com/pkg/errors"
 
+	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/models"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -87,6 +86,7 @@ func (e *Executor) Start(ctx context.Context, request *models.ExecutionRequest) 
 		waitCh:      make(chan bool),
 		activeCh:    make(chan bool),
 		running:     &atomic.Bool{},
+		TTYEnabled:  true,
 	}
 
 	// register the handler for this executionID
@@ -145,7 +145,7 @@ func (e *Executor) doWait(
 	case <-handler.waitCh:
 		if handler.result != nil {
 			zlog.Sugar().
-				Infof("executionID %s recieved results from execution", handler.executionID)
+				Infof("executionID %s received results from execution", handler.executionID)
 			out <- handler.result
 		} else {
 			errCh <- fmt.Errorf("execution (%s) result is nil", handler.executionID)
@@ -259,9 +259,21 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to decode docker engine spec: %w", err)
 	}
 
+	// TODO: Move this code block ( L263-272) to the allocator in future
+	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
+	gpus, err := resources.GetGPUInfo()
+	maxFreeVRAMGpu, err := resources.GPUList(gpus).GetGPUWithHighestFreeVRAM()
+	if err != nil {
+		return "", fmt.Errorf("failed to get GPU with highest free VRAM: %w", err)
+	}
+	// Essential for multi-vendor GPU nodes. For example,
+	// if a machine has an 8 GB NVIDIA and a 16 GB Intel GPU, the latter should be used first.
+	// Even for machines with a single GPU, this is important as integrated GPUs would also be commonly detected.
+	chosenGPUVendor := maxFreeVRAMGpu.Vendor
+
 	containerConfig := container.Config{
 		Image:      dockerArgs.Image,
-		Tty:        false,
+		Tty:        true, // Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
 		Env:        dockerArgs.Environment,
 		Entrypoint: dockerArgs.Entrypoint,
 		Cmd:        dockerArgs.Cmd,
@@ -275,20 +287,7 @@ func (e *Executor) newDockerExecutionContainer(
 	}
 
 	zlog.Sugar().Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
-	deviceRequests, deviceMappings, err := configureDevices(params.Resources)
-	if err != nil {
-		return "", fmt.Errorf("creating container devices: %w", err)
-	}
-
-	hostConfig := container.HostConfig{
-		Mounts: mounts,
-		Resources: container.Resources{
-			NanoCPUs:       int64(params.Resources.CPU.Freq),
-			CPUCount:       int64(params.Resources.CPU.Cores),
-			DeviceRequests: deviceRequests,
-			Devices:        deviceMappings,
-		},
-	}
+	hostConfig := configureHostConfig(chosenGPUVendor, params, mounts)
 
 	if _, err = e.client.PullImage(ctx, dockerArgs.Image); err != nil {
 		return "", fmt.Errorf("failed to pull docker image: %w", err)
@@ -308,77 +307,88 @@ func (e *Executor) newDockerExecutionContainer(
 	return executionContainer, nil
 }
 
-// configureDevices sets up the device requests and mappings for the container based on the
-// resources requested by the execution. Currently, only GPUs are supported.
-func configureDevices(
-	resources *models.ExecutionResources,
-) ([]container.DeviceRequest, []container.DeviceMapping, error) {
-	requests := []container.DeviceRequest{}
-	mappings := []container.DeviceMapping{}
-
-	vendorGroups := make(map[models.GPUVendor][]models.GPU)
-	for _, gpu := range resources.GPUs {
-		vendorGroups[gpu.Vendor] = append(vendorGroups[gpu.Vendor], gpu)
-	}
-
-	for vendor, gpus := range vendorGroups {
-		switch vendor {
-		case models.GPUVendorNvidia:
-			deviceIDs := make([]string, len(gpus))
-			for i, gpu := range gpus {
-				deviceIDs[i] = fmt.Sprint(gpu.Index)
-			}
-			requests = append(requests, container.DeviceRequest{
-				DeviceIDs:    deviceIDs,
-				Capabilities: [][]string{{"gpu"}},
-			})
-		case models.GPUVendorAMDATI:
-			// https://docs.amd.com/en/latest/deploy/docker.html
-			mappings = append(mappings, container.DeviceMapping{
-				PathOnHost:        "/dev/kfd",
-				PathInContainer:   "/dev/kfd",
-				CgroupPermissions: "rwm",
-			})
-			fallthrough
-		case models.GPUVendorIntel:
-			// https://github.com/openvinotoolkit/docker_ci/blob/master/docs/accelerators.md
-			var paths []string
-			for _, gpu := range gpus {
-				paths = append(
-					paths,
-					filepath.Join("/dev/dri/by-path/", fmt.Sprintf("pci-%s-card", gpu.PCIAddress)),
-				)
-				paths = append(
-					paths,
-					filepath.Join(
-						"/dev/dri/by-path/",
-						fmt.Sprintf("pci-%s-render", gpu.PCIAddress),
-					),
-				)
-			}
-
-			for _, path := range paths {
-				// We need to use the PCI address of the GPU to look up the correct devices to expose
-				absPath, err := filepath.EvalSymlinks(path)
-				if err != nil {
-					return nil, nil, errors.Wrapf(
-						err,
-						"could not find attached device for GPU at %q",
-						path,
-					)
-				}
-
-				mappings = append(mappings, container.DeviceMapping{
-					PathOnHost:        absPath,
-					PathInContainer:   absPath,
-					CgroupPermissions: "rwm",
-				})
-			}
-		default:
-			return nil, nil, fmt.Errorf("job requires GPU from unsupported vendor %q", vendor)
+// configureHostConfig sets up the host configuration for the container based on the
+// GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
+func configureHostConfig(vendor models.GPUVendor, params *models.ExecutionRequest, mounts []mount.Mount) container.HostConfig {
+	var hostConfig container.HostConfig
+	switch vendor {
+	case models.GPUVendorNvidia:
+		deviceIDs := make([]string, len(params.Resources.GPUs))
+		for i, gpu := range params.Resources.GPUs {
+			deviceIDs[i] = fmt.Sprint(gpu.Index)
+		}
+		hostConfig = container.HostConfig{
+			Mounts: mounts,
+			Resources: container.Resources{
+				NanoCPUs: int64(params.Resources.CPU.Freq),
+				CPUCount: int64(params.Resources.CPU.Cores),
+				DeviceRequests: []container.DeviceRequest{
+					{
+						DeviceIDs:    deviceIDs,
+						Capabilities: [][]string{{"gpu"}},
+					},
+				},
+			},
+		}
+	case models.GPUVendorAMDATI:
+		hostConfig = container.HostConfig{
+			Mounts: mounts,
+			Binds: []string{
+				"/dev/kfd:/dev/kfd",
+				"/dev/dri:/dev/dri",
+			},
+			Resources: container.Resources{
+				NanoCPUs: int64(params.Resources.CPU.Freq),
+				CPUCount: int64(params.Resources.CPU.Cores),
+				Devices: []container.DeviceMapping{
+					{
+						PathOnHost:        "/dev/kfd",
+						PathInContainer:   "/dev/kfd",
+						CgroupPermissions: "rwm",
+					},
+					{
+						PathOnHost:        "/dev/dri",
+						PathInContainer:   "/dev/dri",
+						CgroupPermissions: "rwm",
+					},
+				},
+			},
+			GroupAdd: []string{"video"},
+		}
+	// Updated the device handling for Intel GPUs.
+	// Previously, specific device paths were determined using PCI addresses and symlinks.
+	// Now, the approach has been simplified by directly binding the entire /dev/dri directory.
+	// This change exposes all Intel GPUs to the container, which may be preferable for
+	// environments with multiple Intel GPUs. It reduces complexity as granular control
+	// is not required if all GPUs need to be accessible.
+	case models.GPUVendorIntel:
+		hostConfig = container.HostConfig{
+			Mounts: mounts,
+			Binds: []string{
+				"/dev/dri:/dev/dri",
+			},
+			Resources: container.Resources{
+				NanoCPUs: int64(params.Resources.CPU.Freq),
+				CPUCount: int64(params.Resources.CPU.Cores),
+				Devices: []container.DeviceMapping{
+					{
+						PathOnHost:        "/dev/dri",
+						PathInContainer:   "/dev/dri",
+						CgroupPermissions: "rwm",
+					},
+				},
+			},
+		}
+	default:
+		hostConfig = container.HostConfig{
+			Mounts: mounts,
+			Resources: container.Resources{
+				NanoCPUs: int64(params.Resources.CPU.Freq),
+				CPUCount: int64(params.Resources.CPU.Cores),
+			},
 		}
 	}
-	return requests, mappings, nil
+	return hostConfig
 }
 
 // makeContainerMounts creates the mounts for the container based on the input and output

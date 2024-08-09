@@ -29,11 +29,14 @@ type executionHandler struct {
 
 	// synchronization
 	activeCh chan bool    // Blocks until the container starts running.
-	waitCh   chan bool    // BLocks until execution completes or fails.
+	waitCh   chan bool    // Blocks until execution completes or fails.
 	running  *atomic.Bool // Indicates if the container is currently running.
 
 	// result of the execution
 	result *models.ExecutionResult
+
+	// TTY setting
+	TTYEnabled bool // Indicates if TTY is enabled for the container.
 }
 
 // active checks if the execution handler's container is running.
@@ -98,9 +101,9 @@ func (h *executionHandler) run(ctx context.Context) {
 	}
 
 	// Follow container logs to capture stdout and stderr.
-	stdoutPipe, stderrPipe, err := h.client.FollowLogs(ctx, h.containerID)
-	if err != nil {
-		followError := fmt.Errorf("failed to follow container logs: %w", err)
+	stdoutPipe, stderrPipe, logsErr := h.client.FollowLogs(ctx, h.containerID)
+	if logsErr != nil {
+		followError := fmt.Errorf("failed to follow container logs: %w", logsErr)
 		if containerError != nil {
 			h.result = &models.ExecutionResult{
 				ExitCode: int(containerExitStatusCode),
@@ -119,10 +122,18 @@ func (h *executionHandler) run(ctx context.Context) {
 		return
 	}
 
-	// Capture the logs from the stdout and stderr pipes.
+	// Initialize the result with the exit status code.
 	h.result = models.NewExecutionResult(int(containerExitStatusCode))
-	h.result.STDOUT, _ = bufio.NewReader(stdoutPipe).ReadString('\x00') // EOF delimiter
-	h.result.STDERR, _ = bufio.NewReader(stderrPipe).ReadString('\x00')
+
+	// Capture the logs based on the TTY setting.
+	if h.TTYEnabled {
+		// TTY combines stdout and stderr, read from stdoutPipe only.
+		h.result.STDOUT, _ = bufio.NewReader(stdoutPipe).ReadString('\x00') // EOF delimiter
+	} else {
+		// Read from stdout and stderr separately.
+		h.result.STDOUT, _ = bufio.NewReader(stdoutPipe).ReadString('\x00') // EOF delimiter
+		h.result.STDERR, _ = bufio.NewReader(stderrPipe).ReadString('\x00')
+	}
 }
 
 // kill sends a stop signal to the container.

@@ -10,6 +10,10 @@ const (
 	sensorNVML nvml.TemperatureSensors = iota
 )
 
+type nvidiaGPU struct {
+	index int
+}
+
 // helper function
 func (n *nvidiaGPU) getDevice() (nvml.Device, error) {
 	device, ret := nvml.DeviceGetHandleByIndex(n.index)

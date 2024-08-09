@@ -21,6 +21,14 @@ Types of changes
 
 -->
 
+## [0.4.178](#466)
+
+### Changed
+- refactoring and improvement on gpu detection and management
+
+### Added
+- add support for intel gpu
+
 ## [0.4.177](#460)
 
 ### Added

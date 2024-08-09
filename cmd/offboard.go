@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"os"
 
 	"github.com/buger/jsonparser"
 	"github.com/spf13/cobra"
@@ -28,12 +27,12 @@ var offboardCmd = &cobra.Command{
 		answer, err := utils.PromptYesNo(cmd.InOrStdin(), cmd.OutOrStdout(), "Are you sure you want to offboard?")
 		if err != nil {
 			fmt.Println("Error reading answer for onboard prompt:", err)
-			os.Exit(1)
+			return
 		}
 
 		if !answer {
 			fmt.Println("Exiting...")
-			os.Exit(1)
+			return
 		} else {
 			force, _ := cmd.Flags().GetBool("force")
 			query := bytes.NewBufferString(fmt.Sprintf(`{"force": %t}`, force))
@@ -41,21 +40,21 @@ var offboardCmd = &cobra.Command{
 			body, err := utils.ResponseBody(nil, "POST", "/api/v1/onboarding/offboard", "", query.Bytes())
 			if err != nil {
 				fmt.Println("Error getting response body:", err)
-				os.Exit(1)
+				return
 			}
 
 			if errMsg, err := jsonparser.GetString(body, "error"); err == nil { // if field "error" IS found
 				fmt.Println("Error:", errMsg)
-				os.Exit(1)
+				return
 			} else if err == jsonparser.KeyPathNotFoundError { // if field "error" is NOT found
 				msg, _ := jsonparser.GetString(body, "message")
 				fmt.Println(msg)
 			} else { // if another error occurred
 				fmt.Println("Error parsing response:", err)
-				os.Exit(1)
+				return
 			}
 
-			os.Exit(0)
+			return
 
 		}
 	},

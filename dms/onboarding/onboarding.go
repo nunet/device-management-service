@@ -96,7 +96,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity models.CapacityForNun
 		oConf.AllowCardano = true
 	}
 
-	gpuInfo, err := resources.CheckGPU()
+	gpuInfo, err := resources.GetGPUInfo()
 	if err != nil {
 		zlog.Sugar().Errorf("unable to detect GPU: %v ", err.Error())
 	}

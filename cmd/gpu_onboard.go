@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/models"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -27,21 +28,22 @@ var gpuOnboardCmd = &cobra.Command{
 		wsl, err := utils.CheckWSL()
 		if err != nil {
 			fmt.Println("Error checking WSL:", err)
-			os.Exit(1)
+			return
 		}
 
 		vendors, err := resources.DetectGPUVendors()
 		if err != nil {
 			fmt.Println("Error detecting GPUs:", err)
-			os.Exit(1)
+			return
 		}
 
-		hasAMD := containsVendor(vendors, resources.AMD)
-		hasNVIDIA := containsVendor(vendors, resources.NVIDIA)
+		hasAMD := containsVendor(vendors, models.GPUVendorAMDATI)
+		hasNVIDIA := containsVendor(vendors, models.GPUVendorNvidia)
+		hasIntel := containsVendor(vendors, models.GPUVendorIntel)
 
-		if !hasAMD && !hasNVIDIA {
-			fmt.Println(`No AMD or NVIDIA GPU(s) detected...`)
-			os.Exit(1)
+		if !hasAMD && !hasNVIDIA && !hasIntel {
+			fmt.Println(`No NVIDIA/AMD/Intel GPU(s) detected...`)
+			return
 		}
 
 		if wsl {
@@ -51,17 +53,17 @@ var gpuOnboardCmd = &cobra.Command{
 				err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath)
 				if err != nil {
 					fmt.Println("Error during Container Runtime installation:", err)
-					os.Exit(1)
+					return
 				}
 			} else {
 				fmt.Println("No NVIDIA GPU(s) detected...")
-				os.Exit(1)
+				return
 			}
 		} else {
 			mining, err := checkMiningOS()
 			if err != nil {
 				fmt.Println("Error checking Mining OS:", err)
-				os.Exit(1)
+				return
 			}
 
 			if mining {
@@ -70,17 +72,17 @@ var gpuOnboardCmd = &cobra.Command{
 				err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath)
 				if err != nil {
 					fmt.Println("Error during Container Runtime installation:", err)
-					os.Exit(1)
+					return
 				}
 
-				os.Exit(0)
+				return
 			}
 
 			if hasNVIDIA {
 				NVIDIAGPUs, err := resources.GetNVIDIAGPUInfo()
 				if err != nil {
 					fmt.Println("Error while fetching NVIDIA info:", err)
-					os.Exit(1)
+					return
 				}
 
 				printGPUs(NVIDIAGPUs)
@@ -88,13 +90,13 @@ var gpuOnboardCmd = &cobra.Command{
 				err = promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath)
 				if err != nil {
 					fmt.Println("Error during Container Runtime installation:", err)
-					os.Exit(1)
+					return
 				}
 
-				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), resources.NVIDIA, nvidiaDriverPath)
+				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), models.GPUVendorNvidia, nvidiaDriverPath)
 				if err != nil {
 					fmt.Println("Error during NVIDIA drivers installation:", err)
-					os.Exit(1)
+					return
 				}
 			}
 
@@ -102,26 +104,26 @@ var gpuOnboardCmd = &cobra.Command{
 				AMDGPUs, err := resources.GetAMDGPUInfo()
 				if err != nil {
 					fmt.Println("Error while fetching AMD info:", err)
-					os.Exit(1)
+					return
 				}
 
 				printGPUs(AMDGPUs)
 
-				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), resources.AMD, amdDriverPath)
+				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), models.GPUVendorAMDATI, amdDriverPath)
 				if err != nil {
 					fmt.Println("Error during AMD drivers installation:", err)
-					os.Exit(1)
+					return
 				}
 			}
 
-			os.Exit(0)
+			return
 		}
 	},
 }
 
 // containsVendor takes a slice of GPUVendor structs that were detected in the system
 // and look for a specific vendor, returning true if it is found.
-func containsVendor(vendors []resources.GPUVendor, target resources.GPUVendor) bool {
+func containsVendor(vendors []models.GPUVendor, target models.GPUVendor) bool {
 	for _, v := range vendors {
 		if v == target {
 			return true
@@ -166,8 +168,8 @@ func promptContainer(in io.Reader, out io.Writer, containerPath string) error {
 
 // promptDriverInstallation takes GPUVendor (for printing) and the installation script as inputs.
 // It prompts the user for confirmation and if confirmed it runs the script.
-func promptDriverInstallation(in io.Reader, out io.Writer, vendor resources.GPUVendor, scriptPath string) error {
-	prompt := fmt.Sprintf("Do you want to proceed with %s driver installation? (y/N)", vendor.String())
+func promptDriverInstallation(in io.Reader, out io.Writer, vendor models.GPUVendor, scriptPath string) error {
+	prompt := fmt.Sprintf("Do you want to proceed with %s driver installation? (y/N)", vendor)
 
 	proceed, err := utils.PromptYesNo(in, out, prompt)
 	if err != nil {
@@ -187,19 +189,19 @@ func promptDriverInstallation(in io.Reader, out io.Writer, vendor resources.GPUV
 // printGPUs display a list of detected GPUs in the machine.
 // It takes a slice of GPUInfo structs as input, get the vendor from the first element
 // and then iterate over each element to display the GPU card series.
-func printGPUs(gpus []resources.GPUInfo) {
+func printGPUs(gpus []models.GPU) {
 	var vendor string
 
 	if len(gpus) == 0 {
 		return
 	}
 
-	vendor = gpus[0].Vendor.String()
+	vendor = string(gpus[0].Vendor)
 
 	fmt.Printf("Available %s GPU(s):", vendor)
 
 	for _, gpu := range gpus {
-		fmt.Printf("- %s\n", gpu.GPUName)
+		fmt.Printf("- %s\n", gpu.Model)
 	}
 }
 

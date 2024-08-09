@@ -118,12 +118,6 @@ type MachineUUID struct {
 	UUID string `json:"uuid"`
 }
 
-type Gpu struct {
-	Name     string `json:"name"`
-	TotVram  uint64 `json:"tot_vram"`
-	FreeVram uint64 `json:"free_vram"`
-}
-
 type resources struct {
 	TotCpuHz  float64
 	PriceCpu  float64
@@ -139,7 +133,7 @@ type PeerData struct {
 	IsAvailable          bool          `json:"is_available"`
 	HasGpu               bool          `json:"has_gpu"`
 	AllowCardano         bool          `json:"allow_cardano"`
-	GpuInfo              []Gpu         `json:"gpu_info"`
+	GpuInfo              []GPU         `json:"gpu_info"`
 	TokenomicsAddress    string        `json:"tokenomics_addrs"`
 	TokenomicsBlockchain string        `json:"tokenomics_blockchain"`
 	AvailableResources   FreeResources `json:"available_resources"`

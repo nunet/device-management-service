@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/coreos/go-systemd/sdjournal"
 	"gitlab.com/nunet/device-management-service/cmd/backend"
@@ -23,7 +22,7 @@ func init() {
 	j, err := sdjournal.NewJournal()
 	if err != nil {
 		fmt.Printf("Error: could not initialize sdjournal: %v\n", err)
-		os.Exit(1)
+		return
 	}
 
 	journalService = backend.SetRealJournal(j)
@@ -32,6 +31,7 @@ func init() {
 	logCmd = NewLogCmd(networkService, fileSystemService, journalService)
 	gpuCapacityCmd.Flags().BoolVarP(&flagCudaTensor, "cuda-tensor", "c", false, "check CUDA Tensor")
 	gpuCapacityCmd.Flags().BoolVarP(&flagRocmHip, "rocm-hip", "r", false, "check ROCM-HIP")
+	gpuCapacityCmd.Flags().BoolVarP(&flagIntelXPU, "intel-xpu", "i", false, "check Intel XPU")
 	gpuCmd.AddCommand(gpuCapacityCmd)
 	gpuCmd.AddCommand(gpuStatusCmd)
 	gpuCmd.AddCommand(gpuOnboardCmd)

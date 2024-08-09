@@ -50,7 +50,7 @@ type OnboardingConfig struct {
 	PublicKey         string  `json:"public_key,omitempty"`
 	NodeID            string  `json:"node_id,omitempty"`
 	AllowCardano      bool    `json:"allow_cardano,omitempty"`
-	GpuInfo           []Gpu   `json:"gpu_info,omitempty"`
+	GpuInfo           []GPU   `json:"gpu_info,omitempty"`
 	Dashboard         string  `json:"dashboard,omitempty"`
 	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
 }

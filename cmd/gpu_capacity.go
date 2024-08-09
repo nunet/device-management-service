@@ -14,9 +14,10 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/models"
 )
 
-// ContainerOptions set parameters for running a Docker container (NVIDIA/AMD)
+// ContainerOptions set parameters for running a Docker container (NVIDIA/AMD/Intel)
 type ContainerOptions struct {
 	UseGPUs    bool
 	Devices    []string
@@ -26,35 +27,37 @@ type ContainerOptions struct {
 	Entrypoint []string
 }
 
-var flagCudaTensor, flagRocmHip bool
+var flagCudaTensor, flagRocmHip, flagIntelXPU bool
 
 var gpuCapacityCmd = &cobra.Command{
 	Use:     "capacity",
-	Short:   "Check availability of NVIDIA/AMD GPUs",
+	Short:   "Check availability of NVIDIA/AMD/Intel GPUs",
 	Long:    ``,
 	PreRunE: isDMSRunning(networkService),
 	Run: func(cmd *cobra.Command, args []string) {
 		cuda, _ := cmd.Flags().GetBool("cuda-tensor")
 		rocm, _ := cmd.Flags().GetBool("rocm-hip")
+		intelXPU, _ := cmd.Flags().GetBool("intel-xpu")
 
-		if !cuda && !rocm {
+		if !cuda && !rocm && !intelXPU {
 			fmt.Println(`Error: no flags specified`)
 			cmd.Help()
-			os.Exit(1)
+			return
 		}
 
 		vendors, err := resources.DetectGPUVendors()
 		if err != nil {
 			fmt.Println("Error detecting GPU vendors:", err)
-			os.Exit(1)
+			return
 		}
 
-		hasAMD := containsVendor(vendors, resources.AMD)
-		hasNVIDIA := containsVendor(vendors, resources.NVIDIA)
+		hasAMD := containsVendor(vendors, models.GPUVendorAMDATI)
+		hasNVIDIA := containsVendor(vendors, models.GPUVendorNvidia)
+		hasIntel := containsVendor(vendors, models.GPUVendorIntel)
 
-		if !hasAMD && !hasNVIDIA {
-			fmt.Println("No AMD or NVIDIA GPU(s) detected...")
-			os.Exit(1)
+		if !hasAMD && !hasNVIDIA && !hasIntel {
+			fmt.Println("No NVIDIA/AMD/Intel GPU(s) detected...")
+			return
 		}
 
 		ctx := context.Background()
@@ -62,7 +65,7 @@ var gpuCapacityCmd = &cobra.Command{
 		if cuda {
 			if !hasNVIDIA {
 				fmt.Println("No NVIDIA GPU(s) detected...")
-				os.Exit(1)
+				return
 			}
 
 			cudaOpts := ContainerOptions{
@@ -75,39 +78,39 @@ var gpuCapacityCmd = &cobra.Command{
 			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 			if err != nil {
 				fmt.Println("Error creating Docker client:", err)
-				os.Exit(1)
+				return
 			}
 
 			images, err := cli.ImageList(ctx, types.ImageListOptions{})
 			if err != nil {
 				fmt.Println("Error listing Docker images:", err)
-				os.Exit(1)
+				return
 			}
 
 			if !imageExists(images, cudaOpts.Image) {
 				err := pullImage(cli, ctx, cudaOpts.Image)
 				if err != nil {
 					fmt.Println("Error pulling CUDA image:", err)
-					os.Exit(1)
+					return
 				}
 			}
 
 			err = runDockerContainer(cli, ctx, cudaOpts)
 			if err != nil {
 				fmt.Println("Error running CUDA container:", err)
-				os.Exit(1)
+				return
 			}
 		}
 
 		if rocm {
 			if !hasAMD {
 				fmt.Println("No AMD GPU(s) detected...")
-				os.Exit(1)
+				return
 			}
 
 			rocmOpts := ContainerOptions{
 				Devices:    []string{"/dev/kfd", "/dev/dri"},
-				Groups:     []string{"video", "render"},
+				Groups:     []string{"video"},
 				Image:      "registry.gitlab.com/nunet/ml-on-gpu/ml-on-gpu-service/develop/pytorch-amd",
 				Command:    []string{"python", "check-rocm-and-hip-availability.py"},
 				Entrypoint: []string{""},
@@ -116,27 +119,67 @@ var gpuCapacityCmd = &cobra.Command{
 			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 			if err != nil {
 				fmt.Println("Error creating Docker client:", err)
-				os.Exit(1)
+				return
 			}
 
 			images, err := cli.ImageList(ctx, types.ImageListOptions{})
 			if err != nil {
 				fmt.Println("Error listing images:", err)
-				os.Exit(1)
+				return
 			}
 
 			if !imageExists(images, rocmOpts.Image) {
 				err := pullImage(cli, ctx, rocmOpts.Image)
 				if err != nil {
 					fmt.Println("Error pulling ROCm-HIP image:", err)
-					os.Exit(1)
+					return
 				}
 			}
 
 			err = runDockerContainer(cli, ctx, rocmOpts)
 			if err != nil {
 				fmt.Println("Error running ROCm-HIP container:", err)
-				os.Exit(1)
+				return
+			}
+		}
+
+		if intelXPU {
+			if !hasIntel {
+				fmt.Println("No Intel GPU(s) detected...")
+				return
+			}
+
+			intelXPUOpts := ContainerOptions{
+				Devices:    []string{"/dev/dri"},
+				Image:      "registry.gitlab.com/nunet/ml-on-gpu/ml-on-gpu-service/develop/pytorch-intel",
+				Command:    []string{"python", "check-intel-xpu-availability.py"},
+				Entrypoint: []string{""},
+			}
+
+			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+			if err != nil {
+				fmt.Println("Error creating Docker client:", err)
+				return
+			}
+
+			images, err := cli.ImageList(ctx, types.ImageListOptions{})
+			if err != nil {
+				fmt.Println("Error listing images:", err)
+				return
+			}
+
+			if !imageExists(images, intelXPUOpts.Image) {
+				err := pullImage(cli, ctx, intelXPUOpts.Image)
+				if err != nil {
+					fmt.Println("Error pulling Intel XPU image:", err)
+					return
+				}
+			}
+
+			err = runDockerContainer(cli, ctx, intelXPUOpts)
+			if err != nil {
+				fmt.Println("Error running Intel XPU container:", err)
+				return
 			}
 		}
 	},

@@ -8,14 +8,6 @@ type GPU interface {
 	powerUsage() uint32
 }
 
-type nvidiaGPU struct {
-	index int
-}
-
-type amdGPU struct {
-	index int
-}
-
 type memoryInfo struct {
 	used  uint64
 	free  uint64
