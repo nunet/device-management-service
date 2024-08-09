@@ -18,16 +18,14 @@ func TestLiteral(t *testing.T) {
 
 func TestGpuCompare(t *testing.T) {
 	gpu1 := models.GPU{Index: 0,
-		Name:       "Tesla T4",
 		Vendor:     models.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "A100",
+		Model:      "Tesla T4 A100",
 		VRAM:       16384}
 	gpu2 := models.GPU{Index: 1,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 	expectedValue := models.Better
 	actualValue := Compare(gpu1, gpu2)
@@ -169,28 +167,24 @@ func TestJobTypeComparator(t *testing.T) {
 
 func TestGpuComparator(t *testing.T) {
 	gpu1 := models.GPU{Index: 0,
-		Name:       "Tesla T4",
 		Vendor:     models.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "A100",
+		Model:      "Tesla T4 A100",
 		VRAM:       16384}
 	gpu2 := models.GPU{Index: 1,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 	gpu3 := models.GPU{Index: 2,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 	gpu4 := models.GPU{Index: 0,
-		Name:       "Tesla T4",
 		Vendor:     models.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "A100",
+		Model:      "Tesla T4 A100",
 		VRAM:       16384}
 
 	// positive examples
@@ -215,48 +209,42 @@ func TestGpuComparator(t *testing.T) {
 func TestGPUsComparator(t *testing.T) {
 	var gpus1 []models.GPU
 	gpu1 := models.GPU{Index: 0,
-		Name:       "Tesla T4",
 		Vendor:     models.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "A100",
+		Model:      "Tesla T4 A100",
 		VRAM:       16384}
 	gpu2 := models.GPU{Index: 1,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 	gpus1 = append(gpus1, gpu1)
 	gpus1 = append(gpus1, gpu2)
 
 	var gpus2 []models.GPU
 	gpu3 := models.GPU{Index: 2,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 	gpu4 := models.GPU{Index: 0,
-		Name:       "Tesla T4",
 		Vendor:     models.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "A100",
+		Model:      "Tesla T4 A100",
 		VRAM:       16384}
 	gpus2 = append(gpus2, gpu3)
 	gpus2 = append(gpus2, gpu4)
 
 	var gpus3 []models.GPU
 	gpu5 := models.GPU{Index: 2,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 	gpu6 := models.GPU{Index: 1,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 	gpus3 = append(gpus3, gpu5)
 	gpus3 = append(gpus3, gpu6)
@@ -287,16 +275,14 @@ func TestExecutionResourcesComparator(t *testing.T) {
 	disk1 := models.Disk{Size: 1024}
 	disk2 := models.Disk{Size: 512}
 	gpu1 := models.GPU{Index: 0,
-		Name:       "Tesla T4",
 		Vendor:     models.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "A100",
+		Model:      "Tesla T4 A100",
 		VRAM:       16384}
 	gpu2 := models.GPU{Index: 1,
-		Name:       "Intel A770",
 		Vendor:     models.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "A770",
+		Model:      "Intel A770",
 		VRAM:       8192}
 
 	executionResources1 := models.ExecutionResources{

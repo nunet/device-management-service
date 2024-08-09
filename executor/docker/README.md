@@ -130,6 +130,40 @@ It returns an error in case of:
 * failure in waiting 
 * context is cancelled
 
+#### ConfigureHostConfig
+
+* signature: configureHostConfig(vendor models.GPUVendor, params *models.ExecutionRequest, mounts []mount.Mount) container.HostConfig <br/>
+
+* input #1: GPU vendor (models.GPUVendor) <br/>
+
+* input #2: Execution request parameters (models.ExecutionRequest) <br/>
+
+* input #3: List of container mounts ([]mount.Mount) <br/>
+
+* output: Host configuration for the Docker container (container.HostConfig) <br/>
+
+The `configureHostConfig` function sets up the host configuration for the container based on the GPU vendor and resources requested by the execution. It supports configurations for different types of GPUs and CPUs.
+
+The function performs the following steps:
+
+1. **NVIDIA GPUs**:
+    - Configures the `DeviceRequests` to include all GPUs specified in the execution request.
+    - Sets the memory and CPU resources according to the request parameters.
+
+2. **AMD GPUs**:
+    - Binds the necessary device paths (`/dev/kfd` and `/dev/dri`) to the container.
+    - Adds the `video` group to the container.
+    - Sets the memory and CPU resources according to the request parameters.
+
+3. **Intel GPUs**:
+    - Binds the `/dev/dri` directory to the container, exposing all Intel GPUs.
+    - Sets the memory and CPU resources according to the request parameters.
+
+4. **Default (CPU-only)**:
+    - Configures the container with memory and CPU resources only, without any GPU-specific settings.
+
+The function ensures that the appropriate resources and device paths are allocated to the container based on the available and requested GPU resources.
+
 ### Cleanup
 
 * signature: `Cleanup(ctx context.Context) -> error` <br/>

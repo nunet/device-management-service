@@ -3,13 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/models"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -34,34 +34,35 @@ var onboardMLCmd = &cobra.Command{
 		wsl, err := utils.CheckWSL()
 		if err != nil {
 			fmt.Println("Error checking WSL:", err)
-			os.Exit(1)
+			return
 		}
 
 		vendors, err := resources.DetectGPUVendors()
 		if err != nil {
 			fmt.Println("Error detecting GPUs:", err)
-			os.Exit(1)
+			return
 		}
 
 		// check for GPU vendors
-		hasAMD := containsVendor(vendors, resources.AMD)
-		hasNVIDIA := containsVendor(vendors, resources.NVIDIA)
+		hasAMD := containsVendor(vendors, models.GPUVendorAMDATI)
+		hasNVIDIA := containsVendor(vendors, models.GPUVendorNvidia)
+		hasIntel := containsVendor(vendors, models.GPUVendorIntel)
 
-		if !hasAMD && !hasNVIDIA {
-			fmt.Println(`No AMD or NVIDIA GPU(s) detected...`)
-			os.Exit(1)
+		if !hasAMD && !hasNVIDIA && !hasIntel {
+			fmt.Println(`No NVIDIA/AMD/Intel GPU(s) detected...`)
+			return
 		}
 
 		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 		if err != nil {
 			fmt.Println("Error creating Docker client:", err)
-			os.Exit(1)
+			return
 		}
 
 		imageList, err := cli.ImageList(ctx, types.ImageListOptions{})
 		if err != nil {
 			fmt.Println("Error listing Docker images:", err)
-			os.Exit(1)
+			return
 		}
 
 		if wsl {
@@ -72,7 +73,7 @@ var onboardMLCmd = &cobra.Command{
 			err = pullMultipleImages(cli, ctx, imageList, imagesNVIDIA)
 			if err != nil {
 				fmt.Println("Error pulling NVIDIA images:", err)
-				os.Exit(1)
+				return
 			}
 		}
 
@@ -80,7 +81,7 @@ var onboardMLCmd = &cobra.Command{
 			err = pullMultipleImages(cli, ctx, imageList, imagesAMD)
 			if err != nil {
 				fmt.Println("Error pulling AMD images:", err)
-				os.Exit(1)
+				return
 			}
 		}
 	},

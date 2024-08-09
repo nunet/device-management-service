@@ -39,15 +39,11 @@ Here is quick overview of the contents of this pacakge:
 
 * [darwin_arm64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_arm64_resources.go): This contains methods to calculate machine resources.
 
-* [gpudetect](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/gpudetect.go): This contains methods to collect GPU info.
-
-* [handler](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/handler.go): This contains methods related to resources management on a machine.
+* [handler](handler.go): This contains methods related to resources management on a machine.
 
 * [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/init.go): This initializes a logger instance.
 
-* [linux_amd64_gpu](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/linux_amd64_gpu.go): This contains method to detect GPU on a linux machine. 
-
-* [linux_amd64_gpuinfo](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/linux_amd64_gpu.go): This contains methods to collect GPU info.
+* [linux_amd64_gpuinfo](linux_amd64_gpuinfo.go): This contains methods to collect GPU info.
 
 * [linux_amd64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/linux_amd64_resources.go): This contains methods to calculate machine resources.
 
@@ -135,6 +131,90 @@ All files with `*_test.go` contains unit tests for the corresponding functionali
 
 `GetAvailableResources` retrieves and returns the available resources onboarded to Nunet.
 
+#### `GetGPUInfo`
+
+- signature: `GetGPUInfo() ([]models.GPU, error)`
+
+- input: None
+
+- output: `[]models.GPU`
+
+- output (error): Error message
+
+`GetGPUInfo` detects the presence of GPUs, fetches detailed information for NVIDIA, AMD, and Intel GPUs, and returns this information in a list of `models.GPU`. It includes checks for GPU vendors, handles cases where vendor-specific tools (like `rocm-smi` for AMD or `xpu-smi` for Intel) are not installed, and retrieves the PCI address and index for each detected GPU.
+
+#### `GetGPUWithHighestFreeVRAM`
+
+- signature: `GetGPUWithHighestFreeVRAM() (models.GPU, error)`
+
+- input: None
+
+- output: `models.GPU`
+
+- output (error): Error message
+
+`GetGPUWithHighestFreeVRAM` determines the GPU vendor with the highest free VRAM from the available GPUs and returns the corresponding `models.GPU` structure.
+
+#### `FetchGPUPCIAddressandIndex`
+
+- signature: `FetchGPUPCIAddressandIndex() (map[uint64]models.GPU, error)`
+
+- input: None
+
+- output: `map[uint64]models.GPU`
+
+- output (error): Error message
+
+`FetchGPUPCIAddressandIndex` fetches the PCI address and index details for detected GPUs and returns a map of these details.
+
+#### `GetNVIDIAGPUInfo`
+
+- signature: `GetNVIDIAGPUInfo() ([]models.GPU, error)`
+
+- input: None
+
+- output: `[]models.GPU`
+
+- output (error): Error message
+
+`GetNVIDIAGPUInfo` fetches detailed information about NVIDIA GPUs using NVML and returns this information in a list of `models.GPU`.
+
+#### `GetAMDGPUInfo`
+
+- signature: `GetAMDGPUInfo() ([]models.GPU, error)`
+
+- input: None
+
+- output: `[]models.GPU`
+
+- output (error): Error message
+
+`GetAMDGPUInfo` fetches detailed information about AMD GPUs using `rocm-smi` and returns this information in a list of `models.GPU`.  CLI based information retrieval will be stopped in future and made programmatic like NVML.
+
+#### `GetIntelGPUInfo`
+
+- signature: `GetIntelGPUInfo() ([]models.GPU, error)`
+
+- input: None
+
+- output: `[]models.GPU`
+
+- output (error): Error message
+
+`GetIntelGPUInfo` fetches detailed information about Intel GPUs using `xpu-smi` and returns this information in a list of `models.GPU`. CLI based information retrieval will be stopped in future and made programmatic like NVML.
+
+#### `DetectGPUVendors`
+
+- signature: `DetectGPUVendors() ([]models.GPUVendor, error)`
+
+- input: None
+
+- output: `[]models.GPUVendor`
+
+- output (error): Error message
+
+`DetectGPUVendors` detects the GPU vendors present in the system and returns a list of detected `models.GPUVendor`.
+
 **Note: the functionality of DMS is being currently developed. The above methods are expected to be modified. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design.**
 
 
@@ -146,15 +226,27 @@ All files with `*_test.go` contains unit tests for the corresponding functionali
 
 - `models.Provisioned`: total capacity of the machine
 
-- `GPUInfo`: contains GPU related parameters.
+- `models.GPU`: contains GPU related parameters.
 
 ```
-type GPUInfo struct {
-	GPUName     string
-	TotalMemory uint64
-	UsedMemory  uint64
-	FreeMemory  uint64
-	Vendor      GPUVendor
+// Currently functional version (check below for future version with todos)
+type GPU struct {
+	// added from the proposed specifications
+	// Model name of the GPU e.g. Tesla T4 A100
+	Model string `json:"model" description:"GPU model, ex Tesla T4 A100"`
+	// Total VRAM in MB
+	VRAM uint64 `json:"vram" description:"GPU VRAM size in MB"`
+	// Used VRAM in MB
+	UsedVram uint64 `json:"used_vram" description:"Used GPU VRAM size in MB"`
+	// Free VRAM in MB
+	FreeVram uint64 `json:"free_vram" description:"Free GPU VRAM size in MB"`
+	// Self-reported index of the device in the system
+	Index uint64
+	// Maker of the GPU, e.g. NVIDIA, AMD, Intel
+	Vendor GPUVendor
+	// PCI address of the device, in the format AAAA:BB:CC.C
+	// Used to discover the correct device rendering cards
+	PCIAddress string
 }
 ```
 
@@ -234,22 +326,25 @@ type GPU struct {
 	// Used to discover the correct device rendering cards
 	PCIAddress string
 
-	// Memory size in bytes
+	// Memory size in bytes - currently functional as VRAM
 	MemorySize uint64
 
 	// MemoryType represents the type of GPU memory, e.g., "GDDR6", "HBM2"
 	// TODO: may be removed as it may be too specific for our case
 	MemoryType string
 
-	// ClockSpeedHz in Hz
+	// TODO: ClockSpeedHz in Hz
 	ClockSpeedHz uint64
 
-	// ComputeUnits represents the number of compute units (e.g., CUDA cores for NVIDIA, Stream Processors for AMD)
+	// TODO: ComputeUnits represents the number of compute units (e.g., CUDA cores for NVIDIA, Stream Processors for AMD)
 	ComputeUnits int
 
-	CUDASupport    bool
-	OpenCLSupport  bool
-	DirectXSupport bool
+	// TODO
+	CUDASupport    bool //Specific only to NVIDIA GPUs and depends on the results of the `nunet capacity --cuda-tensor` command
+	HIPSupport	   bool //Specific to AMD GPUs but not restricted to other vendors. Depends on the results of the `nunet capacity --rocm-hip` command
+	XPUSupport	   bool //Specific only to Intel GPUs. Depends on the results of the `nunet capacity --intel-xpu` command
+	OpenCLSupport  bool //Device independent and not restricted to GPUs alone.
+	DirectXSupport bool //Specific only to Windows Operating System.
 }
 
 type RAM struct {

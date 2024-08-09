@@ -2,15 +2,38 @@
 
 package resources
 
-type GPUInfo struct {
-	GPUName     string
-	TotalMemory uint64
-	UsedMemory  uint64
-	FreeMemory  uint64
-	Vendor      GPUVendor
+import (
+	"fmt"
+
+	"gitlab.com/nunet/device-management-service/models"
+)
+
+func GetGPUInfo() ([]models.GPU, error) {
+	// GPU Detection not supported on Darwin
+	// Currently using github.com/jaypipes/ghw for GPU info
+	// See:
+	//      https://github.com/jaypipes/ghw/blob/v0.12.0/pkg/gpu/gpu_stub.go
+	//      https://github.com/jaypipes/ghw/issues/199#issuecomment-946701616
+	zlog.Warn("GPU Detection not supported on Darwin")
+	return []models.GPU, nil
 }
 
-func GetGPUInfo() ([][]GPUInfo, error) {
-	var gpu_infos [][]GPUInfo
-	return gpu_infos, nil
+func GetGPUWithHighestFreeVRAM() (models.GPU, error) {
+	// GPU detection not supported on Darwin
+	return models.GPU{}, fmt.Errorf("GetGPUWithHighestFreeVRAM not supported on Darwin")
+}
+
+func GetNVIDIAGPUInfo() ([]models.GPU, error) {
+	// NVIDIA GPU detection not supported on Darwin
+	return nil, fmt.Errorf("GetNVIDIAGPUInfo not supported on Darwin")
+}
+
+func GetAMDGPUInfo() ([]models.GPU, error) {
+	// AMD GPU detection not supported on Darwin
+	return nil, fmt.Errorf("GetAMDGPUInfo not supported on Darwin")
+}
+
+func GetIntelGPUInfo() ([]models.GPU, error) {
+	// Intel GPU detection not supported on Darwin
+	return nil, fmt.Errorf("GetIntelGPUInfo not supported on Darwin")
 }

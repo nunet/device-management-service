@@ -217,7 +217,7 @@ These commands allows users to perform GPU related operations. The usage is expl
 nunet gpu capacity
 ```
 
-The gpu capacity command has two flags:
+The gpu capacity command has three flags:
 
 1. `cuda-tensor`: check the availability of CUDA and Tensor Cores 
 
@@ -237,6 +237,17 @@ nunet gpu capacity --rocm-hip
 or 
 
 nunet gpu capacity -r
+
+```
+
+3. `intel-xpu`: check the availability of Intel XPU
+
+``` 
+nunet gpu capacity --intel-xpu
+
+or
+
+nunet gpu capacity -i
 
 ```
 

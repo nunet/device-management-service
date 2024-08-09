@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/api"
@@ -102,7 +101,7 @@ func Run() {
 	// add cleanup code here
 	fmt.Println("Cleaning up before shutting down")
 
-	os.Exit(0)
+	return
 }
 
 func ValidateOnboarding(oConf *models.OnboardingConfig) {
@@ -111,6 +110,6 @@ func ValidateOnboarding(oConf *models.OnboardingConfig) {
 	if err != nil {
 		zlog.Sugar().Errorf("the payment address %s is not valid", oConf.PublicKey)
 		zlog.Sugar().Error("exiting DMS")
-		os.Exit(1)
+		return
 	}
 }

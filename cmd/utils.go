@@ -242,7 +242,7 @@ func getBootstrapPeers(writer io.Writer, utilsService backend.Utility) ([]string
 		id, err := jsonparser.GetString(value, "ID")
 		if err != nil {
 			fmt.Fprintln(writer, "Error getting bootstrap peer ID string:", err)
-			os.Exit(1)
+			return
 		}
 
 		bootSlice = append(bootSlice, id)

@@ -52,7 +52,7 @@ definitions:
         type: string
       gpu_info:
         items:
-          $ref: '#/definitions/models.Gpu'
+          $ref: '#/definitions/models.GPU'
         type: array
       name:
         type: string

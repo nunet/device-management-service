@@ -7,6 +7,10 @@ import (
 	"strconv"
 )
 
+type amdGPU struct {
+	index int
+}
+
 func (a *amdGPU) name() string {
 	pattern := fmt.Sprintf(`GPU\[%d\]\s+: Card series:\s+(.+)`, a.index)
 	re := regexp.MustCompile(pattern)
