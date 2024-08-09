@@ -76,6 +76,9 @@ func initComparatorMap() ComparatorMap {
 	comparatorMap["GPU"] = GpuComparator
 	comparatorMap["Executor"] = ExecutorComparator
 	comparatorMap["ExecutionResources"] = ExecutionResourcesComparator	
+	comparatorMap["CPU"] = CpuComparator	
+	comparatorMap["Memory"] = MemoryComparator	
+	comparatorMap["Disk"] = DiskComparator	
 	comparatorMap["Library"] = LibraryComparator
 	comparatorMap["Libraries"] = LibrariesComparator
 	comparatorMap["Locality"] = LocalityComparator

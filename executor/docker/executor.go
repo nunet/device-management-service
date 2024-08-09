@@ -283,8 +283,8 @@ func (e *Executor) newDockerExecutionContainer(
 	hostConfig := container.HostConfig{
 		Mounts: mounts,
 		Resources: container.Resources{
-			Memory:         int64(params.Resources.Memory),
-			NanoCPUs:       int64(params.Resources.CPU),
+			NanoCPUs:       int64(params.Resources.CPU.Freq),
+			CPUCount:       int64(params.Resources.CPU.Cores),
 			DeviceRequests: deviceRequests,
 			Devices:        deviceMappings,
 		},

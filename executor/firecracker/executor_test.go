@@ -52,8 +52,8 @@ func (s *ExecutorTestSuite) newJobRequest(executionID string) *models.ExecutionR
 		ExecutionID: executionID,
 		EngineSpec:  engine,
 		Resources: &models.ExecutionResources{
-			CPU:    1,
-			Memory: 1024,
+			CPU:    models.CPU{Cores: 1},
+			Memory: models.Memory{Size: 1024},
 		},
 	}
 }

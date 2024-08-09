@@ -1,0 +1,41 @@
+package matching
+
+import (
+	"gitlab.com/nunet/device-management-service/models"
+)
+
+func CpuComparator(l, r interface{}, preference ...Preference) models.Comparison {
+	// comparator for CPU type
+
+	// we want to reason about the inner fields of the CPU type and how they compare between left and right
+
+	// validate input type
+	lCpu, lok := l.(models.CPU)
+	rCpu, rok := r.(models.CPU)
+	if !lok || !rok {
+		return models.Error
+	}
+
+	perf_comparison := NumericComparator(
+		(lCpu.Cores * lCpu.Freq),
+		(rCpu.Cores * rCpu.Freq),
+	)
+
+	arch_comparision := LiteralComparator(lCpu.Arch, rCpu.Arch)
+
+	if arch_comparision == models.Error {
+		return models.Error
+	} 
+	if arch_comparision != models.Equal {
+		return models.Worse
+	}
+
+	return perf_comparison
+
+	// currently this is a very simple comparison, based on the assumption
+	// that more cores / or equal amount of cores and frequency is acceptable, but nothing less;
+	// for more complex comparisons we would need to encode the very specific hardware knowledge;
+	// it could be, that we want to compare models of CPUs and rank them in some way;
+	// using e.g. benchmarking data from Tom's Hardware or some other source;
+}
+
