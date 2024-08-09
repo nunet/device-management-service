@@ -243,8 +243,8 @@ func (e *Executor) newFirecrackerExecutionVM(
 		InitrdPath:      fcArgs.Initrd,
 		KernelArgs:      fcArgs.KernelArgs,
 		MachineCfg: fcModels.MachineConfiguration{
-			VcpuCount:  firecracker.Int64(int64(params.Resources.CPU)),
-			MemSizeMib: firecracker.Int64(int64(params.Resources.Memory)),
+			VcpuCount:  firecracker.Int64(int64(params.Resources.CPU.Cores)),
+			MemSizeMib: firecracker.Int64(int64(params.Resources.Memory.Size)),
 		},
 	}
 

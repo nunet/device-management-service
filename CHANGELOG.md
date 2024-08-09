@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.177](#460)
+
+### Added
+- Added Job spec parser
+
 ## [0.4.176](#518)
 
 ### Added
