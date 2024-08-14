@@ -1,4 +1,4 @@
-package models
+package types
 
 type BootSource struct {
 	KernelImagePath string `json:"kernel_image_path"`

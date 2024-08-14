@@ -25,7 +25,7 @@ package main
 // 	"gitlab.com/nunet/device-management-service/internal/heartbeat"
 // 	"gitlab.com/nunet/device-management-service/internal/messaging"
 // 	"gitlab.com/nunet/device-management-service/internal/tracing"
-// 	"gitlab.com/nunet/device-management-service/models"
+// 	"gitlab.com/nunet/device-management-service/types"
 // 	"gitlab.com/nunet/device-management-service/network/libp2p"
 // 	"gitlab.com/nunet/device-management-service/utils"
 // 	"gitlab.com/nunet/device-management-service/utils/cardano"
@@ -68,8 +68,8 @@ package main
 // 	os.RemoveAll("/tmp/nunet-client")
 // }
 
-// func (spClient *SPTestClient) DefaultDeploymentRequest(tx_hash string) models.DeploymentRequest {
-// 	var req models.DeploymentRequest
+// func (spClient *SPTestClient) DefaultDeploymentRequest(tx_hash string) types.DeploymentRequest {
+// 	var req types.DeploymentRequest
 // 	// Hash of a valid job that has a valid datum and payment, but that doesn't list this CP DMS's address as the chosen CP
 // 	req.TxHash = tx_hash
 // 	req.RequesterWalletAddress = RequesterAddress
@@ -666,7 +666,7 @@ package main
 // 	LogURL               string
 // }
 
-// func (spClient *SPTestClient) getSignaturesFromOracle(req models.DeploymentRequest, payload OracleRewardReqPayload) (oracleResp *oracle.RewardResponse) {
+// func (spClient *SPTestClient) getSignaturesFromOracle(req types.DeploymentRequest, payload OracleRewardReqPayload) (oracleResp *oracle.RewardResponse) {
 // 	oracleResp, err := oracle.Oracle.WithdrawTokenRequest(&oracle.RewardRequest{
 // 		JobStatus:            payload.JobStatus,
 // 		JobDuration:          payload.JobDuration,
@@ -706,7 +706,7 @@ package main
 // func OnboardTestComputeProvider() {
 // 	db.ConnectDatabase()
 
-// 	availableResources := models.AvailableResources{
+// 	availableResources := types.AvailableResources{
 // 		TotCpuHz:  int(2000000),
 // 		CpuNo:     int(32),
 // 		CpuHz:     2000,
@@ -718,7 +718,7 @@ package main
 // 		PriceDisk: 0,
 // 	}
 
-// 	freeResources := models.FreeResources{
+// 	freeResources := types.FreeResources{
 // 		ID:        1,
 // 		TotCpuHz:  availableResources.TotCpuHz,
 // 		PriceCpu:  0,
@@ -763,8 +763,8 @@ package main
 // // Convenience type for DeploymentUpdate with unmarshalled data
 // type CPUpdate struct {
 // 	MsgType  string
-// 	Response models.DeploymentResponse
-// 	Services models.Services
+// 	Response types.DeploymentResponse
+// 	Services types.Services
 // }
 
 // func CreateServiceProviderTestingClient(s *TestHarness) (SPTestClient, error) {
@@ -820,7 +820,7 @@ package main
 // 	return p2p.Host.ID()
 // }
 
-// func (client *SPTestClient) SendDeploymentRequest(request models.DeploymentRequest) error {
+// func (client *SPTestClient) SendDeploymentRequest(request types.DeploymentRequest) error {
 // 	msg, json_err := json.Marshal(request)
 // 	if json_err != nil {
 // 		return json_err
@@ -868,7 +868,7 @@ package main
 // 		msg = result.Message
 // 	}
 
-// 	depUpdate := models.DeploymentUpdate{}
+// 	depUpdate := types.DeploymentUpdate{}
 // 	err := json.Unmarshal([]byte(msg), &depUpdate)
 // 	if err != nil {
 // 		return update, err

@@ -11,11 +11,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	gonet "github.com/shirou/gopsutil/net"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type ResourceManager interface {
-	GetTotalProvisioned() *models.Provisioned
+	GetTotalProvisioned() *types.Provisioned
 }
 
 // PeerManager abstracts libp2p functionality
@@ -25,8 +25,8 @@ type PeerManager interface {
 }
 
 type WalletManager interface {
-	GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error)
-	GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error)
+	GetCardanoAddressAndMnemonic() (*types.BlockchainAddressPrivKey, error)
+	GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error)
 }
 
 // NetworkManager abstracts connection on ports

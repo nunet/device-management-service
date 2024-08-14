@@ -3,21 +3,21 @@ package matching
 import (
 	"reflect"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func JobTypeComparator(l, r interface{}, preference ...Preference) models.Comparison {
+func JobTypeComparator(l, r interface{}, preference ...Preference) types.Comparison {
 
 	// validate input type
-	_, lok := l.(models.JobType)
-	_, rok := r.(models.JobType)
+	_, lok := l.(types.JobType)
+	_, rok := r.(types.JobType)
 	if !lok || !rok {
-		return models.Error
+		return types.Error
 	}
 
-	result := models.Error // default answer is error
+	result := types.Error // default answer is error
 	if reflect.DeepEqual(l, r) {
-		result = models.Equal
+		result = types.Equal
 	}
 	return result
 }

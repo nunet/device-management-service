@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/cmd/backend"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var (
@@ -21,7 +21,7 @@ func NewWalletNewCmd(wallet backend.WalletManager) *cobra.Command {
 			eth, _ := cmd.Flags().GetBool("ethereum")
 			ada, _ := cmd.Flags().GetBool("cardano")
 
-			var pair *models.BlockchainAddressPrivKey
+			var pair *types.BlockchainAddressPrivKey
 			var err error
 
 			// limit wallet creation to one at a time

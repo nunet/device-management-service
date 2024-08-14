@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestCreateTestNetwork(t *testing.T) {
@@ -131,10 +131,10 @@ func createTestNetwork(t *testing.T, n int, withSwarmKey bool) []*Libp2p {
 }
 
 func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr,
-	withSwarmKey bool) *models.Libp2pConfig {
+	withSwarmKey bool) *types.Libp2pConfig {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
 	assert.NoError(t, err)
-	return &models.Libp2pConfig{
+	return &types.Libp2pConfig{
 		PrivateKey:              priv,
 		BootstrapPeers:          bootstrapPeers,
 		Rendezvous:              "nunet-randevouz",
@@ -143,7 +143,7 @@ func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Mu
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           []string{fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", libp2pPort)},
 		PeerCountDiscoveryLimit: 40,
-		PrivateNetwork: models.PrivateNetworkConfig{
+		PrivateNetwork: types.PrivateNetworkConfig{
 			WithSwarmKey: withSwarmKey,
 		},
 	}

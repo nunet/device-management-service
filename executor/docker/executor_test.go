@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // ExecutorTestSuite is the test suite for the Docker executor.
@@ -36,15 +36,15 @@ func TestExecutorTestSuite(t *testing.T) {
 }
 
 // newJobRequest creates a new job request for testing.
-func (s *ExecutorTestSuite) newJobRequest() *models.ExecutionRequest {
+func (s *ExecutorTestSuite) newJobRequest() *types.ExecutionRequest {
 	engine := docker.NewDockerEngineBuilder(defaultImage).WithCmd(defaultCmd...).Build()
-	return &models.ExecutionRequest{
+	return &types.ExecutionRequest{
 		JobID:       "test_job",
 		ExecutionID: "test_execution",
 		EngineSpec:  engine,
-		Resources: &models.ExecutionResources{
-			CPU:    models.CPU{Freq: 1024, Cores: 1},
-			Memory: models.Memory{Size: 1024},
+		Resources: &types.ExecutionResources{
+			CPU:    types.CPU{Freq: 1024, Cores: 1},
+			Memory: types.Memory{Size: 1024},
 		},
 	}
 }
@@ -62,7 +62,7 @@ func (s *ExecutorTestSuite) TestRunJob() {
 	result, err := s.executor.Run(context.Background(), request)
 	require.NoError(s.T(), err)
 	require.NotNil(s.T(), result)
-	require.Equal(s.T(), models.ExecutionStatusCodeSuccess, result.ExitCode)
+	require.Equal(s.T(), types.ExecutionStatusCodeSuccess, result.ExitCode)
 	require.NotNil(s.T(), result.STDOUT)
 }
 
@@ -76,7 +76,7 @@ func (s *ExecutorTestSuite) TestWaitJob() {
 	select {
 	case result := <-resultCh:
 		require.NotNil(s.T(), result)
-		require.Equal(s.T(), models.ExecutionStatusCodeSuccess, result.ExitCode)
+		require.Equal(s.T(), types.ExecutionStatusCodeSuccess, result.ExitCode)
 	case err := <-errCh:
 		require.NoError(s.T(), err)
 	}

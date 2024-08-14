@@ -10,10 +10,10 @@ import (
 	"github.com/fivebinaries/go-cardano-serialization/bip32"
 	"github.com/fivebinaries/go-cardano-serialization/network"
 	"github.com/tyler-smith/go-bip39"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error) {
+func GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error) {
 	privateKey, err := crypto.GenerateKey()
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error)
 		return nil, errors.New("publicKey is not of type *ecdsa.PublicKey")
 	}
 	address := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
-	var pair models.BlockchainAddressPrivKey
+	var pair types.BlockchainAddressPrivKey
 
 	pair.Address = address
 	pair.PrivateKey = privateKeyString
@@ -37,8 +37,8 @@ func harden(num uint) uint32 {
 	return uint32(0x80000000 + num)
 }
 
-func GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error) {
-	var pair models.BlockchainAddressPrivKey
+func GetCardanoAddressAndMnemonic() (*types.BlockchainAddressPrivKey, error) {
+	var pair types.BlockchainAddressPrivKey
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
 	pair.Mnemonic = mnemonic

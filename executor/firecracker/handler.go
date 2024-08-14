@@ -8,7 +8,7 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // executionHandler is a struct that holds the necessary information to manage the execution of a firecracker VM.
@@ -31,7 +31,7 @@ type executionHandler struct {
 	running  *atomic.Bool // Indicates if the container is currently running.
 
 	// result of the execution
-	result *models.ExecutionResult
+	result *types.ExecutionResult
 }
 
 // active returns true if the firecracker VM is running.
@@ -55,7 +55,7 @@ func (h *executionHandler) run(ctx context.Context) {
 	// start the VM
 	zlog.Sugar().Info("starting firecracker execution")
 	if err := h.client.StartVM(ctx, h.machine); err != nil {
-		h.result = models.NewFailedExecutionResult(fmt.Errorf("failed to start VM: %v", err))
+		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start VM: %v", err))
 		return
 	}
 
@@ -64,16 +64,16 @@ func (h *executionHandler) run(ctx context.Context) {
 	err := h.machine.Wait(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			h.result = models.NewFailedExecutionResult(
+			h.result = types.NewFailedExecutionResult(
 				fmt.Errorf("context closed while waiting on VM: %v", err),
 			)
 			return
 		}
-		h.result = models.NewFailedExecutionResult(fmt.Errorf("failed to wait on VM: %v", err))
+		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to wait on VM: %v", err))
 		return
 	}
 
-	h.result = models.NewExecutionResult(models.ExecutionStatusCodeSuccess)
+	h.result = types.NewExecutionResult(types.ExecutionStatusCodeSuccess)
 }
 
 // kill stops the firecracker VM.

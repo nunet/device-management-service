@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils/validate"
 )
 
@@ -42,11 +42,11 @@ func (c EngineSpec) Validate() error {
 
 // DecodeSpec decodes a spec config into a firecracker engine spec
 // It converts the params into a firecracker EngineSpec struct and validates it
-func DecodeSpec(spec *models.SpecConfig) (EngineSpec, error) {
-	if !spec.IsType(models.ExecutorTypeFirecracker) {
+func DecodeSpec(spec *types.SpecConfig) (EngineSpec, error) {
+	if !spec.IsType(types.ExecutorTypeFirecracker) {
 		return EngineSpec{}, fmt.Errorf(
 			"invalid firecracker engine type. expected %s, but recieved: %s",
-			models.ExecutorTypeFirecracker,
+			types.ExecutorTypeFirecracker,
 			spec.Type,
 		)
 	}
@@ -74,13 +74,13 @@ func DecodeSpec(spec *models.SpecConfig) (EngineSpec, error) {
 // specifically for Firecracker engines using the Builder pattern.
 // It embeds an EngineBuilder object for handling the common builder methods.
 type FirecrackerEngineBuilder struct {
-	eb *models.SpecConfig
+	eb *types.SpecConfig
 }
 
 // NewFirecrackerEngineBuilder function initializes a new FirecrackerEngineBuilder instance.
 // It sets the engine type to EngineFirecracker.String() and kernel image path as per the input argument.
 func NewFirecrackerEngineBuilder(rootFileSystem string) *FirecrackerEngineBuilder {
-	eb := models.NewSpecConfig(models.ExecutorTypeFirecracker)
+	eb := types.NewSpecConfig(types.ExecutorTypeFirecracker)
 	eb.WithParam(EngineKeyRootFileSystem, rootFileSystem)
 	return &FirecrackerEngineBuilder{eb: eb}
 }
@@ -114,6 +114,6 @@ func (b *FirecrackerEngineBuilder) WithMMDSMessage(e string) *FirecrackerEngineB
 }
 
 // Build method constructs the final SpecConfig object by calling the embedded EngineBuilder's Build method.
-func (b *FirecrackerEngineBuilder) Build() *models.SpecConfig {
+func (b *FirecrackerEngineBuilder) Build() *types.SpecConfig {
 	return b.eb
 }

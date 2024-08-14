@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // TestVirtualMachineRepository is a test suite for the VirtualMachineRepository.
@@ -24,7 +24,7 @@ func TestVirtualMachineRepository(t *testing.T) {
 	// Test Create method
 	createdVirtualMachine, err := virtualMachineRepo.Create(
 		context.Background(),
-		models.VirtualMachine{},
+		types.VirtualMachine{},
 	)
 	assert.NoError(t, err)
 	assert.NotZero(t, createdVirtualMachine.ID)
@@ -65,7 +65,7 @@ func TestVirtualMachineRepository(t *testing.T) {
 	// Test Find method
 	virtualMachine1, err := virtualMachineRepo.Create(
 		context.Background(),
-		models.VirtualMachine{State: "running"},
+		types.VirtualMachine{State: "running"},
 	)
 	assert.NoError(t, err)
 
@@ -78,7 +78,7 @@ func TestVirtualMachineRepository(t *testing.T) {
 	// Test FindAll method
 	virtualMachine2, err := virtualMachineRepo.Create(
 		context.Background(),
-		models.VirtualMachine{State: "stopped"},
+		types.VirtualMachine{State: "stopped"},
 	)
 	assert.NoError(t, err)
 

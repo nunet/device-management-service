@@ -1,29 +1,29 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func MemoryComparator(l, r interface{}, preference ...Preference) models.Comparison {
+func MemoryComparator(l, r interface{}, preference ...Preference) types.Comparison {
 	// comparator for Memory type
 
 	// we want to reason about the inner fields of the Memory type and how they compare between left and right
 
 	// validate input type
-	_, lok := l.(models.Memory)
-	_, rok := r.(models.Memory)
+	_, lok := l.(types.Memory)
+	_, rok := r.(types.Memory)
 	if !lok || !rok {
-		return models.Error
+		return types.Error
 	}
 
 	comparison := ReturnComplexComparison(l, r)
 
 
-	if comparison["Size"] == models.Error {
-		return models.Error
+	if comparison["Size"] == types.Error {
+		return types.Error
 	} 
-	if comparison["Size"] == models.Worse {
-		return models.Worse
+	if comparison["Size"] == types.Worse {
+		return types.Worse
 	}
 
 	return comparison["Speed"]

@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
@@ -16,24 +16,24 @@ func TestNewNetwork(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		config *models.NetworkConfig
+		config *types.NetworkConfig
 		expErr string
 	}{
 		"no config given": {
 			expErr: "network configuration is nil",
 		},
 		"invalid network": {
-			config: &models.NetworkConfig{Type: "invalid-type"},
+			config: &types.NetworkConfig{Type: "invalid-type"},
 			expErr: "unsupported network type: invalid-type",
 		},
 		"nats network": {
-			config: &models.NetworkConfig{Type: models.NATSNetwork},
+			config: &types.NetworkConfig{Type: types.NATSNetwork},
 			expErr: "not implemented",
 		},
 		"libp2p network": {
-			config: &models.NetworkConfig{
-				Type: models.Libp2pNetwork,
-				Libp2pConfig: models.Libp2pConfig{
+			config: &types.NetworkConfig{
+				Type: types.Libp2pNetwork,
+				Libp2pConfig: types.Libp2pConfig{
 					PrivateKey:              &crypto.Secp256k1PrivateKey{},
 					BootstrapPeers:          []multiaddr.Multiaddr{},
 					Rendezvous:              "nunet-randevouz",
@@ -42,7 +42,7 @@ func TestNewNetwork(t *testing.T) {
 					CustomNamespace:         "/nunet-dht-1/",
 					ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 					PeerCountDiscoveryLimit: 40,
-					PrivateNetwork: models.PrivateNetworkConfig{
+					PrivateNetwork: types.PrivateNetworkConfig{
 						WithSwarmKey: false,
 					},
 				},
@@ -66,9 +66,9 @@ func TestNewNetwork(t *testing.T) {
 }
 
 func TestLibp2pNetwork(t *testing.T) {
-	config := &models.NetworkConfig{
-		Type: models.Libp2pNetwork,
-		Libp2pConfig: models.Libp2pConfig{
+	config := &types.NetworkConfig{
+		Type: types.Libp2pNetwork,
+		Libp2pConfig: types.Libp2pConfig{
 			PrivateKey:              &crypto.Secp256k1PrivateKey{},
 			BootstrapPeers:          []multiaddr.Multiaddr{},
 			Rendezvous:              "nunet-randevouz",
@@ -77,7 +77,7 @@ func TestLibp2pNetwork(t *testing.T) {
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/localhost/tcp/10219"},
 			PeerCountDiscoveryLimit: 40,
-			PrivateNetwork: models.PrivateNetworkConfig{
+			PrivateNetwork: types.PrivateNetworkConfig{
 				WithSwarmKey: false,
 			},
 		},

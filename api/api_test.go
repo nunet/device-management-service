@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 	"gorm.io/driver/sqlite"
@@ -37,7 +37,7 @@ func TestInitializeRoutes(t *testing.T) {
 	p2p := &libp2p.Libp2p{}
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	assert.NoError(t, err)
-	mockDB.AutoMigrate(&models.Libp2pInfo{})
+	mockDB.AutoMigrate(&types.Libp2pInfo{})
 
 	oConf := onboarding.OnboardingConfig{
 		Fs:             afero.Afero{Fs: afero.NewMemMapFs()},

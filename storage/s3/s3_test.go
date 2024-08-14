@@ -11,12 +11,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	s3_types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 
-	"gitlab.com/nunet/device-management-service/models"
 	"gitlab.com/nunet/device-management-service/storage/basic_controller"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 /*
@@ -59,12 +59,12 @@ type S3ProviderTestSuite struct {
 // SetupTest is mainly setting up a volume controller based on its test suite and a S3 client.
 func (s *S3ProviderTestSuite) SetupTest() {
 
-	volumes := map[string]*models.StorageVolume{
+	volumes := map[string]*types.StorageVolume{
 		"volume1": {
 			Path:           filepath.Join(basePath, "volume1"),
 			ReadOnly:       false,
 			Private:        false,
-			EncryptionType: models.EncryptionTypeNull,
+			EncryptionType: types.EncryptionTypeNull,
 		},
 	}
 
@@ -123,8 +123,8 @@ func (s *S3ProviderTestSuite) TestDownload() {
 
 	for _, tc := range testCases {
 		s.Run(fmt.Sprintf("Bucket=%s,Key=%s", tc.bucket, tc.key), func() {
-			source := &models.SpecConfig{
-				Type: models.StorageProviderS3,
+			source := &types.SpecConfig{
+				Type: types.StorageProviderS3,
 				Params: map[string]interface{}{
 					"Bucket": tc.bucket,
 					"Key":    tc.key,
@@ -165,15 +165,15 @@ func (s *S3ProviderTestSuite) TestUpload() {
 		Key:    aws.String(keyUploadedAs),
 	})
 	if err != nil {
-		if s3Err, ok := err.(*types.NoSuchKey); ok && s3Err.ErrorCode() == "NoSuchKey" {
+		if s3Err, ok := err.(*s3_types.NoSuchKey); ok && s3Err.ErrorCode() == "NoSuchKey" {
 			// File does not exist, ignore the error
 		} else {
 			s.NoError(err)
 		}
 	}
 
-	destination := &models.SpecConfig{
-		Type: models.StorageProviderS3,
+	destination := &types.SpecConfig{
+		Type: types.StorageProviderS3,
 		Params: map[string]interface{}{
 			"Bucket": bucketTest,
 			"Key":    inputKey,
@@ -192,8 +192,8 @@ func (s *S3ProviderTestSuite) TestUpload() {
 }
 
 func (s *S3ProviderTestSuite) TestSize() {
-	source := &models.SpecConfig{
-		Type: models.StorageProviderS3,
+	source := &types.SpecConfig{
+		Type: types.StorageProviderS3,
 		Params: map[string]interface{}{
 			"Bucket": bucketTest,
 			"Key":    helloObjectKey,

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/cmd/backend"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // checks if command has expected flags
@@ -35,13 +35,13 @@ func Test_PeerListCmdNoFlag(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -102,13 +102,13 @@ func Test_PeerListCmdWithFlags(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -155,13 +155,13 @@ func Test_PeerListCmdWithMessage(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -186,13 +186,13 @@ func Test_PeerListCmdEmptyDHTArray(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 

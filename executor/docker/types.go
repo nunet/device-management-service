@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils/validate"
 )
 
@@ -40,11 +40,11 @@ func (c EngineSpec) Validate() error {
 
 // DecodeSpec decodes a spec config into a docker engine spec
 // It converts the params into a docker EngineSpec struct and validates it
-func DecodeSpec(spec *models.SpecConfig) (EngineSpec, error) {
-	if !spec.IsType(models.ExecutorTypeDocker) {
+func DecodeSpec(spec *types.SpecConfig) (EngineSpec, error) {
+	if !spec.IsType(types.ExecutorTypeDocker) {
 		return EngineSpec{}, fmt.Errorf(
 			"invalid docker engine type. expected %s, but recieved: %s",
-			models.ExecutorTypeDocker,
+			types.ExecutorTypeDocker,
 			spec.Type,
 		)
 	}
@@ -71,13 +71,13 @@ func DecodeSpec(spec *models.SpecConfig) (EngineSpec, error) {
 // specifically for Docker engines using the Builder pattern.
 // It embeds an EngineBuilder object for handling the common builder methods.
 type DockerEngineBuilder struct {
-	eb *models.SpecConfig
+	eb *types.SpecConfig
 }
 
 // NewDockerEngineBuilder function initializes a new DockerEngineBuilder instance.
 // It sets the engine type to model.EngineDocker.String() and image as per the input argument.
 func NewDockerEngineBuilder(image string) *DockerEngineBuilder {
-	eb := models.NewSpecConfig(models.ExecutorTypeDocker)
+	eb := types.NewSpecConfig(types.ExecutorTypeDocker)
 	eb.WithParam(EngineKeyImage, image)
 	return &DockerEngineBuilder{eb: eb}
 }
@@ -111,6 +111,6 @@ func (b *DockerEngineBuilder) WithWorkingDirectory(w string) *DockerEngineBuilde
 }
 
 // Build method constructs the final SpecConfig object by calling the embedded EngineBuilder's Build method.
-func (b *DockerEngineBuilder) Build() *models.SpecConfig {
+func (b *DockerEngineBuilder) Build() *types.SpecConfig {
 	return b.eb
 }

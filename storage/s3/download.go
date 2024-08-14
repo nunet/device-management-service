@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/afero"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/basic_controller"
 )
@@ -23,36 +23,36 @@ import (
 // Warning: the implementation should rely on the FS provided by the volume controller,
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
-func (s *S3Storage) Download(ctx context.Context, sourceSpecs *models.SpecConfig) (
-	models.StorageVolume, error) {
-	var storageVol models.StorageVolume
+func (s *S3Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig) (
+	types.StorageVolume, error) {
+	var storageVol types.StorageVolume
 
 	source, err := DecodeInputSpec(sourceSpecs)
 	if err != nil {
-		return models.StorageVolume{}, err
+		return types.StorageVolume{}, err
 	}
 
 	storageVol, err = s.volController.CreateVolume(storage.VolumeSourceS3)
 	if err != nil {
-		return models.StorageVolume{}, fmt.Errorf("failed to create storage volume: %v", err)
+		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume: %v", err)
 	}
 
 	resolvedObjects, err := resolveStorageKey(ctx, s.Client, &source)
 	if err != nil {
-		return models.StorageVolume{}, fmt.Errorf("failed to resolve storage key: %v", err)
+		return types.StorageVolume{}, fmt.Errorf("failed to resolve storage key: %v", err)
 	}
 
 	for _, resolvedObject := range resolvedObjects {
 		err = s.downloadObject(ctx, &source, resolvedObject, storageVol.Path)
 		if err != nil {
-			return models.StorageVolume{}, fmt.Errorf("failed to download s3 object: %v", err)
+			return types.StorageVolume{}, fmt.Errorf("failed to download s3 object: %v", err)
 		}
 	}
 
 	// after data is filled within the volume, we have to lock it
 	err = s.volController.LockVolume(storageVol.Path)
 	if err != nil {
-		return models.StorageVolume{}, fmt.Errorf("failed to lock storage volume: %v", err)
+		return types.StorageVolume{}, fmt.Errorf("failed to lock storage volume: %v", err)
 	}
 	return storageVol, nil
 }

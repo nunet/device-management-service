@@ -13,7 +13,7 @@ import (
 	fcModels "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"go.uber.org/multierr"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -55,7 +55,7 @@ func (e *Executor) IsInstalled(ctx context.Context) bool {
 }
 
 // start begins the execution of a request by starting a new Firecracker VM.
-func (e *Executor) Start(ctx context.Context, request *models.ExecutionRequest) error {
+func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
 	zlog.Sugar().
 		Infof("Starting execution for job %s, execution %s", request.JobID, request.ExecutionID)
 
@@ -108,9 +108,9 @@ func (e *Executor) Start(ctx context.Context, request *models.ExecutionRequest) 
 func (e *Executor) Wait(
 	ctx context.Context,
 	executionID string,
-) (<-chan *models.ExecutionResult, <-chan error) {
+) (<-chan *types.ExecutionResult, <-chan error) {
 	handler, found := e.handlers.Get(executionID)
-	resultCh := make(chan *models.ExecutionResult, 1)
+	resultCh := make(chan *types.ExecutionResult, 1)
 	errCh := make(chan error, 1)
 
 	if !found {
@@ -130,7 +130,7 @@ func (e *Executor) Wait(
 // flaw in the executor logic.
 func (e *Executor) doWait(
 	ctx context.Context,
-	out chan *models.ExecutionResult,
+	out chan *types.ExecutionResult,
 	errCh chan error,
 	handler *executionHandler,
 ) {
@@ -170,8 +170,8 @@ func (e *Executor) Cancel(ctx context.Context, executionID string) error {
 // or waiting fails, or if the context is canceled.
 func (e *Executor) Run(
 	ctx context.Context,
-	request *models.ExecutionRequest,
-) (*models.ExecutionResult, error) {
+	request *types.ExecutionRequest,
+) (*types.ExecutionResult, error) {
 	if err := e.Start(ctx, request); err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (e *Executor) Run(
 // This method will return an error if called.
 func (e *Executor) GetLogStream(
 	ctx context.Context,
-	request models.LogStreamRequest,
+	request types.LogStreamRequest,
 ) (io.ReadCloser, error) {
 	return nil, fmt.Errorf("GetLogStream is not implemented for Firecracker")
 }
@@ -229,7 +229,7 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 // and an error if any part of the setup fails.
 func (e *Executor) newFirecrackerExecutionVM(
 	ctx context.Context,
-	params *models.ExecutionRequest,
+	params *types.ExecutionRequest,
 ) (*firecracker.Machine, error) {
 	fcArgs, err := DecodeSpec(params.EngineSpec)
 	if err != nil {
@@ -274,8 +274,8 @@ func (e *Executor) newFirecrackerExecutionVM(
 // process fails.
 func makeVMMounts(
 	rootFileSystem string,
-	inputs []*models.StorageVolumeExecutor,
-	outputs []*models.StorageVolumeExecutor,
+	inputs []*types.StorageVolumeExecutor,
+	outputs []*types.StorageVolumeExecutor,
 	resultsDir string,
 ) ([]fcModels.Drive, error) {
 	var drives []fcModels.Drive

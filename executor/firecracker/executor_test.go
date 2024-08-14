@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // ExecutorTestSuite is the test suite for the Firecracker executor.
@@ -37,7 +37,7 @@ func TestExecutorTestSuite(t *testing.T) {
 }
 
 // newJobRequest creates a new job request for testing.
-func (s *ExecutorTestSuite) newJobRequest(executionID string) *models.ExecutionRequest {
+func (s *ExecutorTestSuite) newJobRequest(executionID string) *types.ExecutionRequest {
 	engine := firecracker.NewFirecrackerEngineBuilder(rootDrivePath).
 		WithKernelImage(kernelImagePath).
 		Build()
@@ -47,13 +47,13 @@ func (s *ExecutorTestSuite) newJobRequest(executionID string) *models.ExecutionR
 		_ = s.executor.Cancel(context.Background(), executionID)
 	}()
 
-	return &models.ExecutionRequest{
+	return &types.ExecutionRequest{
 		JobID:       "test_job",
 		ExecutionID: executionID,
 		EngineSpec:  engine,
-		Resources: &models.ExecutionResources{
-			CPU:    models.CPU{Cores: 1},
-			Memory: models.Memory{Size: 1024},
+		Resources: &types.ExecutionResources{
+			CPU:    types.CPU{Cores: 1},
+			Memory: types.Memory{Size: 1024},
 		},
 	}
 }
@@ -71,7 +71,7 @@ func (s *ExecutorTestSuite) TestRunJob() {
 	result, err := s.executor.Run(context.Background(), request)
 	require.NoError(s.T(), err)
 	require.NotNil(s.T(), result)
-	require.Equal(s.T(), models.ExecutionStatusCodeSuccess, result.ExitCode)
+	require.Equal(s.T(), types.ExecutionStatusCodeSuccess, result.ExitCode)
 }
 
 // Test WaitJob tests the Wait method of the Firecracker executor.
@@ -84,7 +84,7 @@ func (s *ExecutorTestSuite) TestWaitJob() {
 	select {
 	case result := <-resultCh:
 		require.NotNil(s.T(), result)
-		require.Equal(s.T(), models.ExecutionStatusCodeSuccess, result.ExitCode)
+		require.Equal(s.T(), types.ExecutionStatusCodeSuccess, result.ExitCode)
 	case err := <-errCh:
 		require.NoError(s.T(), err)
 	}

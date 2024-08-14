@@ -1,4 +1,4 @@
-package models
+package types
 
 const (
 	StorageProviderS3   = "s3"

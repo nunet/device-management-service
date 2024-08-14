@@ -6,7 +6,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/mitchellh/mapstructure"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type S3InputSource struct {
@@ -28,9 +28,9 @@ func (s S3InputSource) ToMap() map[string]interface{} {
 	return structs.Map(s)
 }
 
-func DecodeInputSpec(spec *models.SpecConfig) (S3InputSource, error) {
-	if !spec.IsType(models.StorageProviderS3) {
-		return S3InputSource{}, fmt.Errorf("invalid storage source type. Expected %s but received %s", models.StorageProviderS3, spec.Type)
+func DecodeInputSpec(spec *types.SpecConfig) (S3InputSource, error) {
+	if !spec.IsType(types.StorageProviderS3) {
+		return S3InputSource{}, fmt.Errorf("invalid storage source type. Expected %s but received %s", types.StorageProviderS3, spec.Type)
 	}
 
 	inputParams := spec.Params

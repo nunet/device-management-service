@@ -1,46 +1,46 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func ExecutionResourcesComparator(l, r interface{}, preference ...Preference) models.Comparison {
-	// comparator for models.ExecutionResources type
+func ExecutionResourcesComparator(l, r interface{}, preference ...Preference) types.Comparison {
+	// comparator for types.ExecutionResources type
 	// Current implementation of the type has four fields: CPU, Memory, Disk, GPUs
 	// we consider that all fields have to be 'Better' or 'Equal' 
 	// for the comparison to be 'Better' or 'Equal'
 	// else we return 'Worse'
 
 	// validate input type
-	_, lok := l.(models.ExecutionResources)
-	_, rok := r.(models.ExecutionResources)
+	_, lok := l.(types.ExecutionResources)
+	_, rok := r.(types.ExecutionResources)
 	if !lok || !rok {
-		return models.Error
+		return types.Error
 	}
 
 	comparison := ReturnComplexComparison(l, r)
 	
-	if comparison["CPU"] == models.Error || 
-		comparison["Memory"] == models.Error ||
-		comparison["Disk"] == models.Error || 
-		comparison["GPUs"] == models.Error {
-			return models.Error
+	if comparison["CPU"] == types.Error || 
+		comparison["Memory"] == types.Error ||
+		comparison["Disk"] == types.Error || 
+		comparison["GPUs"] == types.Error {
+			return types.Error
 	}
 
-	if comparison["CPU"] == models.Worse || 
-		comparison["Memory"] == models.Worse ||
-		comparison["Disk"] == models.Worse || 
-		comparison["GPUs"] == models.Worse {
-			return models.Worse
+	if comparison["CPU"] == types.Worse || 
+		comparison["Memory"] == types.Worse ||
+		comparison["Disk"] == types.Worse || 
+		comparison["GPUs"] == types.Worse {
+			return types.Worse
 }
 
-	if comparison["CPU"] == models.Equal && 
-		comparison["Memory"] == models.Equal &&
-		comparison["Disk"] == models.Equal && 
-		comparison["GPUs"] == models.Equal {
-			return models.Equal
+	if comparison["CPU"] == types.Equal && 
+		comparison["Memory"] == types.Equal &&
+		comparison["Disk"] == types.Equal && 
+		comparison["GPUs"] == types.Equal {
+			return types.Equal
 	}
 
-	return models.Better // if non above returns, then the result is better
+	return types.Better // if non above returns, then the result is better
 
 }

@@ -4,15 +4,15 @@ import (
 	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type OnboardingParamsRepositoryGORM struct {
-	repositories.GenericEntityRepository[models.OnboardingConfig]
+	repositories.GenericEntityRepository[types.OnboardingConfig]
 }
 
 func NewOnboardingParamsRepository(db *gorm.DB) repositories.OnboardingParamsRepository {
 	return &OnboardingParamsRepositoryGORM{
-		NewGenericEntityRepository[models.OnboardingConfig](db),
+		NewGenericEntityRepository[types.OnboardingConfig](db),
 	}
 }

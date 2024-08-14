@@ -9,12 +9,12 @@ import (
 	"syscall"
 
 	"github.com/docker/cli/opts"
-	"github.com/docker/docker/api/types"
+	docker_types "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // ContainerOptions set parameters for running a Docker container (NVIDIA/AMD/Intel)
@@ -51,9 +51,9 @@ var gpuCapacityCmd = &cobra.Command{
 			return
 		}
 
-		hasAMD := containsVendor(vendors, models.GPUVendorAMDATI)
-		hasNVIDIA := containsVendor(vendors, models.GPUVendorNvidia)
-		hasIntel := containsVendor(vendors, models.GPUVendorIntel)
+		hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
+		hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
+		hasIntel := containsVendor(vendors, types.GPUVendorIntel)
 
 		if !hasAMD && !hasNVIDIA && !hasIntel {
 			fmt.Println("No NVIDIA/AMD/Intel GPU(s) detected...")
@@ -81,7 +81,7 @@ var gpuCapacityCmd = &cobra.Command{
 				return
 			}
 
-			images, err := cli.ImageList(ctx, types.ImageListOptions{})
+			images, err := cli.ImageList(ctx, docker_types.ImageListOptions{})
 			if err != nil {
 				fmt.Println("Error listing Docker images:", err)
 				return
@@ -122,7 +122,7 @@ var gpuCapacityCmd = &cobra.Command{
 				return
 			}
 
-			images, err := cli.ImageList(ctx, types.ImageListOptions{})
+			images, err := cli.ImageList(ctx, docker_types.ImageListOptions{})
 			if err != nil {
 				fmt.Println("Error listing images:", err)
 				return
@@ -162,7 +162,7 @@ var gpuCapacityCmd = &cobra.Command{
 				return
 			}
 
-			images, err := cli.ImageList(ctx, types.ImageListOptions{})
+			images, err := cli.ImageList(ctx, docker_types.ImageListOptions{})
 			if err != nil {
 				fmt.Println("Error listing images:", err)
 				return
@@ -223,16 +223,16 @@ func runDockerContainer(cli *client.Client, ctx context.Context, options Contain
 	}
 
 	defer func() {
-		if err := cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{}); err != nil {
+		if err := cli.ContainerRemove(ctx, resp.ID, docker_types.ContainerRemoveOptions{}); err != nil {
 			fmt.Printf("WARNING: could not remove container: %v\n", err)
 		}
 	}()
 
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if err := cli.ContainerStart(ctx, resp.ID, docker_types.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("cannot start container: %v", err)
 	}
 
-	out, err := cli.ContainerAttach(ctx, resp.ID, types.ContainerAttachOptions{
+	out, err := cli.ContainerAttach(ctx, resp.ID, docker_types.ContainerAttachOptions{
 		Stream: true,
 		Stdout: true,
 		Stderr: true,
@@ -256,7 +256,7 @@ func runDockerContainer(cli *client.Client, ctx context.Context, options Contain
 	return nil
 }
 
-func imageExists(images []types.ImageSummary, imageName string) bool {
+func imageExists(images []docker_types.ImageSummary, imageName string) bool {
 	for _, image := range images {
 		for _, tag := range image.RepoTags {
 			if tag == imageName {
@@ -270,7 +270,7 @@ func imageExists(images []types.ImageSummary, imageName string) bool {
 func pullImage(cli *client.Client, ctx context.Context, imageName string) error {
 	ctxCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
-	out, err := cli.ImagePull(ctxCancel, imageName, types.ImagePullOptions{})
+	out, err := cli.ImagePull(ctxCancel, imageName, docker_types.ImagePullOptions{})
 	if err != nil {
 		return fmt.Errorf("unable to pull image %s: %v", imageName, err)
 	}

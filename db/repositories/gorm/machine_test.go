@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // TestPeerInfoRepository is a test suite for the PeerInfoRepository.
@@ -23,7 +23,7 @@ func TestPeerInfoRepository(t *testing.T) {
 	peerInfoRepo := NewPeerInfoRepository(db)
 
 	// Test Create method
-	createdPeerInfo, err := peerInfoRepo.Create(context.Background(), models.PeerInfo{})
+	createdPeerInfo, err := peerInfoRepo.Create(context.Background(), types.PeerInfo{})
 	assert.NoError(t, err)
 	assert.NotZero(t, createdPeerInfo.ID)
 
@@ -53,7 +53,7 @@ func TestPeerInfoRepository(t *testing.T) {
 	// Test Find method
 	peerInfo1, err := peerInfoRepo.Create(
 		context.Background(),
-		models.PeerInfo{Address: "127.0.0.1"},
+		types.PeerInfo{Address: "127.0.0.1"},
 	)
 	assert.NoError(t, err)
 
@@ -66,7 +66,7 @@ func TestPeerInfoRepository(t *testing.T) {
 	// Test FindAll method
 	peerInfo2, err := peerInfoRepo.Create(
 		context.Background(),
-		models.PeerInfo{Address: "127.0.0.2"},
+		types.PeerInfo{Address: "127.0.0.2"},
 	)
 	assert.NoError(t, err)
 
@@ -91,7 +91,7 @@ func TestMachineRepository(t *testing.T) {
 	machineRepo := NewMachineRepository(db)
 
 	// Test Create method
-	createdMachine, err := machineRepo.Create(context.Background(), models.Machine{})
+	createdMachine, err := machineRepo.Create(context.Background(), types.Machine{})
 	assert.NoError(t, err)
 	assert.NotZero(t, createdMachine.ID)
 
@@ -119,7 +119,7 @@ func TestMachineRepository(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test Find method
-	machine1, err := machineRepo.Create(context.Background(), models.Machine{IpAddr: "127.0.0.1"})
+	machine1, err := machineRepo.Create(context.Background(), types.Machine{IpAddr: "127.0.0.1"})
 	assert.NoError(t, err)
 
 	query := machineRepo.GetQuery()
@@ -129,7 +129,7 @@ func TestMachineRepository(t *testing.T) {
 	assert.Equal(t, machine1.IpAddr, foundMachine.IpAddr)
 
 	// Test FindAll method
-	machine2, err := machineRepo.Create(context.Background(), models.Machine{IpAddr: "127.0.0.2"})
+	machine2, err := machineRepo.Create(context.Background(), types.Machine{IpAddr: "127.0.0.2"})
 	assert.NoError(t, err)
 
 	allMachines, err := machineRepo.FindAll(context.Background(), machineRepo.GetQuery())
@@ -155,7 +155,7 @@ func TestFreeResourcesRepository(t *testing.T) {
 	// Test Save method
 	createdFreeResources, err := freeResourcesRepo.Save(
 		context.Background(),
-		models.FreeResources{},
+		types.FreeResources{},
 	)
 	assert.NoError(t, err)
 	assert.NotZero(t, createdFreeResources.ID)
@@ -203,7 +203,7 @@ func TestAvailableResourcesRepository(t *testing.T) {
 	// Test Save method
 	createdAvailableResources, err := availableResourcesRepo.Save(
 		context.Background(),
-		models.AvailableResources{},
+		types.AvailableResources{},
 	)
 	assert.NoError(t, err)
 	assert.NotZero(t, createdAvailableResources.ID)
@@ -249,7 +249,7 @@ func TestServicesRepository(t *testing.T) {
 	servicesRepo := NewServicesRepository(db)
 
 	// Test Create method
-	createdServices, err := servicesRepo.Create(context.Background(), models.Services{})
+	createdServices, err := servicesRepo.Create(context.Background(), types.Services{})
 	assert.NoError(t, err)
 	assert.NotZero(t, createdServices.ID)
 
@@ -279,7 +279,7 @@ func TestServicesRepository(t *testing.T) {
 	// Test Find method
 	service1, err := servicesRepo.Create(
 		context.Background(),
-		models.Services{JobStatus: "finished without errors"},
+		types.Services{JobStatus: "finished without errors"},
 	)
 	assert.NoError(t, err)
 
@@ -292,7 +292,7 @@ func TestServicesRepository(t *testing.T) {
 	// Test FindAll method
 	service2, err := servicesRepo.Create(
 		context.Background(),
-		models.Services{JobStatus: "finished with errors"},
+		types.Services{JobStatus: "finished with errors"},
 	)
 	assert.NoError(t, err)
 
@@ -321,7 +321,7 @@ func TestServiceResourceRequirementsRepository(t *testing.T) {
 	// Test Create method
 	createdServiceResourceRequirements, err := serviceResourceRequirementsRepo.Create(
 		context.Background(),
-		models.ServiceResourceRequirements{},
+		types.ServiceResourceRequirements{},
 	)
 	assert.NoError(t, err)
 	assert.NotZero(t, createdServiceResourceRequirements.ID)
@@ -365,7 +365,7 @@ func TestServiceResourceRequirementsRepository(t *testing.T) {
 	// Test Find method
 	serviceResourceRequirements1, err := serviceResourceRequirementsRepo.Create(
 		context.Background(),
-		models.ServiceResourceRequirements{VCPU: 4},
+		types.ServiceResourceRequirements{VCPU: 4},
 	)
 	assert.NoError(t, err)
 
@@ -384,7 +384,7 @@ func TestServiceResourceRequirementsRepository(t *testing.T) {
 	// Test FindAll method
 	serviceResourceRequirements2, err := serviceResourceRequirementsRepo.Create(
 		context.Background(),
-		models.ServiceResourceRequirements{VCPU: 4},
+		types.ServiceResourceRequirements{VCPU: 4},
 	)
 	assert.NoError(t, err)
 
@@ -420,7 +420,7 @@ func TestLibp2pInfoRepository(t *testing.T) {
 	// Test Save method
 	createdLibp2pInfo, err := libp2pInfoRepo.Save(
 		context.Background(),
-		models.Libp2pInfo{ServerMode: false},
+		types.Libp2pInfo{ServerMode: false},
 	)
 	assert.NoError(t, err)
 	assert.NotZero(t, createdLibp2pInfo.ID)
@@ -468,7 +468,7 @@ func TestMachineUUIDRepository(t *testing.T) {
 	// Test Save method
 	createdMachineUUID, err := machineUUIDRepo.Save(
 		context.Background(),
-		models.MachineUUID{UUID: uuid.New().String()},
+		types.MachineUUID{UUID: uuid.New().String()},
 	)
 	assert.NoError(t, err)
 	assert.NotZero(t, createdMachineUUID.UUID)
@@ -518,7 +518,7 @@ func TestConnectionRepository(t *testing.T) {
 	connectionRepo := NewConnectionRepository(db)
 
 	// Test Create method
-	createdConnection, err := connectionRepo.Create(context.Background(), models.Connection{})
+	createdConnection, err := connectionRepo.Create(context.Background(), types.Connection{})
 	assert.NoError(t, err)
 	assert.NotZero(t, createdConnection.ID)
 
@@ -548,7 +548,7 @@ func TestConnectionRepository(t *testing.T) {
 	// Test Find method
 	connection1, err := connectionRepo.Create(
 		context.Background(),
-		models.Connection{PeerID: uuid.New().String()},
+		types.Connection{PeerID: uuid.New().String()},
 	)
 	assert.NoError(t, err)
 
@@ -561,7 +561,7 @@ func TestConnectionRepository(t *testing.T) {
 	// Test FindAll method
 	connection2, err := connectionRepo.Create(
 		context.Background(),
-		models.Connection{PeerID: uuid.New().String()},
+		types.Connection{PeerID: uuid.New().String()},
 	)
 	assert.NoError(t, err)
 
@@ -586,7 +586,7 @@ func TestElasticTokenRepository(t *testing.T) {
 	elasticTokenRepo := NewElasticTokenRepository(db)
 
 	// Test Create method
-	createdElasticToken, err := elasticTokenRepo.Create(context.Background(), models.ElasticToken{})
+	createdElasticToken, err := elasticTokenRepo.Create(context.Background(), types.ElasticToken{})
 	assert.NoError(t, err)
 	assert.NotZero(t, createdElasticToken.ID)
 
@@ -616,7 +616,7 @@ func TestElasticTokenRepository(t *testing.T) {
 	// Test Find method
 	elasticToken1, err := elasticTokenRepo.Create(
 		context.Background(),
-		models.ElasticToken{Token: uuid.New().String()},
+		types.ElasticToken{Token: uuid.New().String()},
 	)
 	assert.NoError(t, err)
 
@@ -629,7 +629,7 @@ func TestElasticTokenRepository(t *testing.T) {
 	// Test FindAll method
 	elasticToken2, err := elasticTokenRepo.Create(
 		context.Background(),
-		models.ElasticToken{Token: uuid.New().String()},
+		types.ElasticToken{Token: uuid.New().String()},
 	)
 	assert.NoError(t, err)
 

@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage/basic_controller"
 )
 
@@ -21,8 +21,8 @@ import (
 // Warning: the implementation should rely on the FS provided by the volume controller,
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
-func (s *S3Storage) Upload(ctx context.Context, vol models.StorageVolume,
-	destinationSpecs *models.SpecConfig) error {
+func (s *S3Storage) Upload(ctx context.Context, vol types.StorageVolume,
+	destinationSpecs *types.SpecConfig) error {
 
 	target, err := DecodeInputSpec(destinationSpecs)
 	if err != nil {

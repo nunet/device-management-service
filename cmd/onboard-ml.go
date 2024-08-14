@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/docker/docker/api/types"
+	docker_types "github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -44,9 +44,9 @@ var onboardMLCmd = &cobra.Command{
 		}
 
 		// check for GPU vendors
-		hasAMD := containsVendor(vendors, models.GPUVendorAMDATI)
-		hasNVIDIA := containsVendor(vendors, models.GPUVendorNvidia)
-		hasIntel := containsVendor(vendors, models.GPUVendorIntel)
+		hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
+		hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
+		hasIntel := containsVendor(vendors, types.GPUVendorIntel)
 
 		if !hasAMD && !hasNVIDIA && !hasIntel {
 			fmt.Println(`No NVIDIA/AMD/Intel GPU(s) detected...`)
@@ -59,7 +59,7 @@ var onboardMLCmd = &cobra.Command{
 			return
 		}
 
-		imageList, err := cli.ImageList(ctx, types.ImageListOptions{})
+		imageList, err := cli.ImageList(ctx, docker_types.ImageListOptions{})
 		if err != nil {
 			fmt.Println("Error listing Docker images:", err)
 			return
@@ -87,7 +87,7 @@ var onboardMLCmd = &cobra.Command{
 	},
 }
 
-func pullMultipleImages(cli *client.Client, ctx context.Context, imageList []types.ImageSummary, images []string) error {
+func pullMultipleImages(cli *client.Client, ctx context.Context, imageList []docker_types.ImageSummary, images []string) error {
 	for i := 0; i < len(images); i++ {
 		if !imageExists(imageList, images[i]) {
 			err := pullImage(cli, ctx, images[i])

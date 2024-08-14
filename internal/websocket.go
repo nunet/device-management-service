@@ -1,5 +1,5 @@
 // Package internal is a work in progress. It is planned to accomodate
-// modules such as db and models.
+// modules such as db and types.
 package internal
 
 import (

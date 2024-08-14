@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 
 	// "gitlab.com/nunet/device-management-service/internal/messaging"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/utils"
 
@@ -104,7 +104,7 @@ func Run() {
 	return
 }
 
-func ValidateOnboarding(oConf *models.OnboardingConfig) {
+func ValidateOnboarding(oConf *types.OnboardingConfig) {
 	// Check 1: Check if payment address is valid
 	err := utils.ValidateAddress(oConf.PublicKey)
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // TestStorageVolumeRepository is a test suite for the StorageVolumeRepository.
@@ -24,10 +24,10 @@ func TestStorageVolumeRepository(t *testing.T) {
 	// Test Create method
 	createdStorageVol, err := storageVolRepo.Create(
 		context.Background(),
-		models.StorageVolume{
+		types.StorageVolume{
 			Path:           "/test",
 			ReadOnly:       true,
-			EncryptionType: models.EncryptionTypeNull,
+			EncryptionType: types.EncryptionTypeNull,
 		},
 	)
 	assert.NoError(t, err)
@@ -70,10 +70,10 @@ func TestStorageVolumeRepository(t *testing.T) {
 	// Test Find method
 	storageVol2, err := storageVolRepo.Create(
 		context.Background(),
-		models.StorageVolume{
+		types.StorageVolume{
 			Path:           "/job123",
 			ReadOnly:       false,
-			EncryptionType: models.EncryptionTypeNull,
+			EncryptionType: types.EncryptionTypeNull,
 		},
 	)
 	assert.NoError(t, err)
@@ -90,10 +90,10 @@ func TestStorageVolumeRepository(t *testing.T) {
 	// Test FindAll method
 	storageVol3, err := storageVolRepo.Create(
 		context.Background(),
-		models.StorageVolume{
+		types.StorageVolume{
 			Path:           "/gpt4-data",
 			ReadOnly:       true,
-			EncryptionType: models.EncryptionTypeNull,
+			EncryptionType: types.EncryptionTypeNull,
 		},
 	)
 	assert.NoError(t, err)

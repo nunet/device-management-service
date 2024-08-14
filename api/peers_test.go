@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
@@ -29,7 +29,7 @@ func setupTestP2P() (*P2PHandler, error) {
 		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
 	}
 
-	cfg := &models.Libp2pConfig{
+	cfg := &types.Libp2pConfig{
 		PrivateKey:      priv,
 		BootstrapPeers:  bootstrapPeers,
 		Rendezvous:      "nunet-test",
@@ -42,7 +42,7 @@ func setupTestP2P() (*P2PHandler, error) {
 			"/ip4/0.0.0.0/udp/0/quic",
 		},
 		PeerCountDiscoveryLimit: 5,
-		PrivateNetwork: models.PrivateNetworkConfig{
+		PrivateNetwork: types.PrivateNetworkConfig{
 			WithSwarmKey: false,
 		},
 	}

@@ -1,10 +1,10 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func LiteralComparator(l, r interface{}, preference ...Preference) models.Comparison {
+func LiteralComparator(l, r interface{}, preference ...Preference) types.Comparison {
 	// comparator for literal (basically string) types:
 	// left represent machine capabilities;
 	// right represent required capabilities;
@@ -15,15 +15,15 @@ func LiteralComparator(l, r interface{}, preference ...Preference) models.Compar
 	_, lok := l.(string)
 	_, rok := r.(string)
 	if !lok || !rok {
-		return models.Error
+		return types.Error
 	}
 
-	var result models.Comparison
-	result = models.Error // error is the default value
+	var result types.Comparison
+	result = types.Error // error is the default value
 	switch l.(type) {
 	case string:
 		if l == r {
-			result = models.Equal
+			result = types.Equal
 		} 
 	}
 	return result

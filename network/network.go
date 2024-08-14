@@ -9,14 +9,14 @@ import (
 	"github.com/spf13/afero"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
 // Messenger defines the interface for sending messages.
 type Messenger interface {
 	// SendMessage sends a message to the given address.
-	SendMessage(ctx context.Context, addrs []string, msg models.MessageEnvelope) error
+	SendMessage(ctx context.Context, addrs []string, msg types.MessageEnvelope) error
 }
 
 type Network interface {
@@ -28,9 +28,9 @@ type Network interface {
 	// Start starts the network
 	Start(context context.Context) error
 	// Stat returns the network information
-	Stat() models.NetworkStats
+	Stat() types.NetworkStats
 	// Ping pings the given address and returns the PingResult
-	Ping(ctx context.Context, address string, timeout time.Duration) (models.PingResult, error)
+	Ping(ctx context.Context, address string, timeout time.Duration) (types.PingResult, error)
 	// HandleMessage is responsible for registering a message type and its handler.
 	HandleMessage(messageType string, handler func(data []byte)) error
 	// ResolveAddress given an id it retruns the address of the peer.
@@ -56,16 +56,16 @@ type Network interface {
 }
 
 // NewNetwork returns a new network given the configuration.
-func NewNetwork(netConfig *models.NetworkConfig, fs afero.Fs) (Network, error) {
+func NewNetwork(netConfig *types.NetworkConfig, fs afero.Fs) (Network, error) {
 	// TODO: probable additional params to receive: DB, FileSystem
 	if netConfig == nil {
 		return nil, errors.New("network configuration is nil")
 	}
 	switch netConfig.Type {
-	case models.Libp2pNetwork:
+	case types.Libp2pNetwork:
 		ln, err := libp2p.New(&netConfig.Libp2pConfig, fs)
 		return ln, err
-	case models.NATSNetwork:
+	case types.NATSNetwork:
 		return nil, errors.New("not implemented")
 	default:
 		return nil, fmt.Errorf("unsupported network type: %s", netConfig.Type)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 	"go.opentelemetry.io/otel"
@@ -24,10 +24,10 @@ type OpenTelemetryCollector struct {
 
 type CollectorImpl struct {
 	OpenTelemetryCollector
-	config *models.TelemetryConfig
+	config *types.TelemetryConfig
 }
 
-func NewOpenTelemetryCollector(config *models.TelemetryConfig) (telemetry.Collector, error) {
+func NewOpenTelemetryCollector(config *types.TelemetryConfig) (telemetry.Collector, error) {
 	// Determine the endpoint for this collector
 	endpoint := config.GlobalEndpoint
 	if collectorConfig, exists := config.CollectorConfigs["OPENTELEMETRY"]; exists && collectorConfig.CollectorEndpoint != "" {
@@ -123,8 +123,8 @@ func (c *CollectorImpl) Flush() error {
 	return nil
 }
 
-func (c *CollectorImpl) GetObservedLevel() models.ObservabilityLevel {
-	return models.ObservabilityLevel(c.config.ObservabilityLevel)
+func (c *CollectorImpl) GetObservedLevel() types.ObservabilityLevel {
+	return types.ObservabilityLevel(c.config.ObservabilityLevel)
 }
 
 func (c *CollectorImpl) GetEndpoint() string {

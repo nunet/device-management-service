@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
@@ -68,7 +68,7 @@ func TestNewActor(t *testing.T) {
 
 func TestCreateActor(t *testing.T) {
 	actorRegistry := NewActorRegistry()
-	net, err := libp2p.New(&models.Libp2pConfig{
+	net, err := libp2p.New(&types.Libp2pConfig{
 		Scheduler: &background_tasks.Scheduler{},
 	}, nil)
 	assert.NoError(t, err)
@@ -147,9 +147,9 @@ func newActorFactory(t *testing.T, port string, bootstrap []multiaddr.Multiaddr)
 	actorRegistry := NewActorRegistry()
 	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
 	assert.NoError(t, err)
-	net, err := network.NewNetwork(&models.NetworkConfig{
-		Type: models.Libp2pNetwork,
-		Libp2pConfig: models.Libp2pConfig{
+	net, err := network.NewNetwork(&types.NetworkConfig{
+		Type: types.Libp2pNetwork,
+		Libp2pConfig: types.Libp2pConfig{
 			PrivateKey:              priv,
 			BootstrapPeers:          bootstrap,
 			Rendezvous:              "nunet-randevouz",
@@ -158,7 +158,7 @@ func newActorFactory(t *testing.T, port string, bootstrap []multiaddr.Multiaddr)
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/127.0.0.1/tcp/" + port},
 			PeerCountDiscoveryLimit: 40,
-			PrivateNetwork: models.PrivateNetworkConfig{
+			PrivateNetwork: types.PrivateNetworkConfig{
 				WithSwarmKey: false,
 			},
 		},

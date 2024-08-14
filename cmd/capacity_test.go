@@ -7,14 +7,14 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type MockResources struct {
-	provisioned *models.Provisioned
+	provisioned *types.Provisioned
 }
 
-func (mr *MockResources) GetTotalProvisioned() *models.Provisioned {
+func (mr *MockResources) GetTotalProvisioned() *types.Provisioned {
 	return mr.provisioned
 }
 
@@ -69,7 +69,7 @@ func Test_CapacityCmdFull(t *testing.T) {
 
 	conns := GetMockConn(true)
 	mockConn := &MockConnection{conns: conns}
-	resources := &models.Provisioned{
+	resources := &types.Provisioned{
 		CPU:      10000,
 		Memory:   10000,
 		NumCores: 10,
@@ -105,14 +105,14 @@ func Test_CapacityCmdAvailable(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -153,14 +153,14 @@ func Test_CapacityCmdOnboarded(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 

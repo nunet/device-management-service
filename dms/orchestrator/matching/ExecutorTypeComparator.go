@@ -3,19 +3,19 @@ package matching
 import (
 	"reflect"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func ExecutorTypeComparator(l, r interface{}, preference ...Preference) models.Comparison {
+func ExecutorTypeComparator(l, r interface{}, preference ...Preference) types.Comparison {
 
-	_, lok := l.(models.ExecutorType)
-	_, rok := r.(models.ExecutorType)
+	_, lok := l.(types.ExecutorType)
+	_, rok := r.(types.ExecutorType)
 	if !lok || !rok {
-		return models.Error
+		return types.Error
 	}	
-	result := models.Error // default answer is error
+	result := types.Error // default answer is error
 	if reflect.DeepEqual(l, r) {
-		result = models.Equal
+		result = types.Equal
 	}
 	return result
 }

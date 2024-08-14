@@ -11,7 +11,7 @@ import (
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/jaypipes/ghw"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 /*
@@ -49,8 +49,8 @@ GetGPUInfo Function Explanation:
    - It gracefully skips over GPUs that cannot be processed due to missing tools, logging appropriate messages.
 */
 
-func GetGPUInfo() ([]models.GPU, error) {
-	var gpuInfo []models.GPU
+func GetGPUInfo() ([]types.GPU, error) {
+	var gpuInfo []types.GPU
 	vendors, err := DetectGPUVendors()
 	if err != nil {
 		return nil, fmt.Errorf("unable to detect GPU Vendor: %v", err)
@@ -74,7 +74,7 @@ func GetGPUInfo() ([]models.GPU, error) {
 	foundNVIDIA, foundAMD, foundIntel := false, false, false
 	for _, vendor := range vendors {
 		switch vendor {
-		case models.GPUVendorNvidia:
+		case types.GPUVendorNvidia:
 			if !foundNVIDIA {
 				info, err := GetNVIDIAGPUInfo()
 				if err != nil {
@@ -85,11 +85,11 @@ func GetGPUInfo() ([]models.GPU, error) {
 					fmt.Printf("NVIDIA GPU Model: %s\n", gpu.Model)
 					// Use the correct PCI address and index from gpuDetails
 					for idx, detail := range gpuDetails {
-						if detail.Vendor == models.GPUVendorNvidia {
+						if detail.Vendor == types.GPUVendorNvidia {
 							gpu.PCIAddress = detail.PCIAddress
 							gpu.Index = detail.Index
 							// Mark as assigned by updating the map
-							detail.Vendor = models.Unknown
+							detail.Vendor = types.Unknown
 							gpuDetails[idx] = detail
 							break
 						}
@@ -98,7 +98,7 @@ func GetGPUInfo() ([]models.GPU, error) {
 				}
 				foundNVIDIA = true
 			}
-		case models.GPUVendorAMDATI:
+		case types.GPUVendorAMDATI:
 			if !foundAMD {
 				if _, err := exec.LookPath("rocm-smi"); err != nil {
 					fmt.Println("Skipping AMD GPU info: rocm-smi not installed")
@@ -113,11 +113,11 @@ func GetGPUInfo() ([]models.GPU, error) {
 					fmt.Printf("AMD GPU Model: %s\n", gpu.Model)
 					// Use the correct PCI address and index from gpuDetails
 					for idx, detail := range gpuDetails {
-						if detail.Vendor == models.GPUVendorAMDATI {
+						if detail.Vendor == types.GPUVendorAMDATI {
 							gpu.PCIAddress = detail.PCIAddress
 							gpu.Index = detail.Index
 							// Mark as assigned by updating the map
-							detail.Vendor = models.Unknown
+							detail.Vendor = types.Unknown
 							gpuDetails[idx] = detail
 							break
 						}
@@ -126,7 +126,7 @@ func GetGPUInfo() ([]models.GPU, error) {
 				}
 				foundAMD = true
 			}
-		case models.GPUVendorIntel:
+		case types.GPUVendorIntel:
 			if !foundIntel {
 				if _, err := exec.LookPath("xpu-smi"); err != nil {
 					fmt.Println("Skipping Intel GPU info: xpu-smi not installed")
@@ -141,11 +141,11 @@ func GetGPUInfo() ([]models.GPU, error) {
 					fmt.Printf("Intel GPU Model: %s\n", gpu.Model)
 					// Use the correct PCI address and index from gpuDetails
 					for idx, detail := range gpuDetails {
-						if detail.Vendor == models.GPUVendorIntel {
+						if detail.Vendor == types.GPUVendorIntel {
 							gpu.PCIAddress = detail.PCIAddress
 							gpu.Index = detail.Index
 							// Mark as assigned by updating the map
-							detail.Vendor = models.Unknown
+							detail.Vendor = types.Unknown
 							gpuDetails[idx] = detail
 							break
 						}
@@ -154,7 +154,7 @@ func GetGPUInfo() ([]models.GPU, error) {
 				}
 				foundIntel = true
 			}
-		case models.Unknown:
+		case types.Unknown:
 			fmt.Println("Unknown GPU(s) detected")
 		}
 	}
@@ -166,18 +166,18 @@ func GetGPUInfo() ([]models.GPU, error) {
 	return gpuInfo, nil
 }
 
-type GPUList []models.GPU
+type GPUList []types.GPU
 
 // Determine the GPU vendor with the highest free VRAM: NVIDIA, AMD, or Intel.
 // Useful for selecting the best GPU if multiple vendors are available,
 // especially in multi-GPU systems or mining rigs.
-func (gpus GPUList) GetGPUWithHighestFreeVRAM() (models.GPU, error) {
+func (gpus GPUList) GetGPUWithHighestFreeVRAM() (types.GPU, error) {
 	if len(gpus) == 0 {
 		// Return a GPU with Vendor set to None if no GPUs are detected - Useful for launching CPU-only containers
-		return models.GPU{Vendor: models.None}, nil
+		return types.GPU{Vendor: types.None}, nil
 	}
 
-	var maxFreeVRAMGpu models.GPU
+	var maxFreeVRAMGpu types.GPU
 	maxFreeVRAM := uint64(0)
 	for _, gpu := range gpus {
 		if gpu.FreeVram > maxFreeVRAM {
@@ -189,17 +189,17 @@ func (gpus GPUList) GetGPUWithHighestFreeVRAM() (models.GPU, error) {
 	return maxFreeVRAMGpu, nil
 }
 
-func FetchGPUPCIAddressandIndex() (map[uint64]models.GPU, error) {
+func FetchGPUPCIAddressandIndex() (map[uint64]types.GPU, error) {
 	gpuInfo, err := ghw.GPU()
 	if err != nil {
 		return nil, err
 	}
 
-	gpuDetails := make(map[uint64]models.GPU)
+	gpuDetails := make(map[uint64]types.GPU)
 	for index, card := range gpuInfo.GraphicsCards {
 		pciAddress := card.Address
 		vendor := identifyVendor(card.DeviceInfo.Vendor.Name)
-		gpuDetails[uint64(index)] = models.GPU{
+		gpuDetails[uint64(index)] = types.GPU{
 			PCIAddress: pciAddress,
 			Index:      uint64(index),
 			Vendor:     vendor,
@@ -209,20 +209,20 @@ func FetchGPUPCIAddressandIndex() (map[uint64]models.GPU, error) {
 	return gpuDetails, nil
 }
 
-func identifyVendor(vendor string) models.GPUVendor {
+func identifyVendor(vendor string) types.GPUVendor {
 	switch {
 	case strings.Contains(vendor, "NVIDIA"):
-		return models.GPUVendorNvidia
+		return types.GPUVendorNvidia
 	case strings.Contains(vendor, "AMD"):
-		return models.GPUVendorAMDATI
+		return types.GPUVendorAMDATI
 	case strings.Contains(vendor, "Intel"):
-		return models.GPUVendorIntel
+		return types.GPUVendorIntel
 	default:
-		return models.Unknown
+		return types.Unknown
 	}
 }
 
-func GetNVIDIAGPUInfo() ([]models.GPU, error) {
+func GetNVIDIAGPUInfo() ([]types.GPU, error) {
 	// Initialize NVML
 	ret := nvml.Init()
 	if ret != nvml.SUCCESS {
@@ -236,7 +236,7 @@ func GetNVIDIAGPUInfo() ([]models.GPU, error) {
 		return nil, fmt.Errorf("failed to get device count: %s", nvml.ErrorString(ret))
 	}
 
-	var gpuInfos []models.GPU
+	var gpuInfos []types.GPU
 
 	// Iterate over each device
 	for i := uint32(0); i < uint32(deviceCount); i++ {
@@ -258,12 +258,12 @@ func GetNVIDIAGPUInfo() ([]models.GPU, error) {
 			return nil, fmt.Errorf("failed to get nvidiagpu vram info for device %d: %s", i, nvml.ErrorString(ret))
 		}
 
-		gpuInfo := models.GPU{
+		gpuInfo := types.GPU{
 			Model:    name,
 			VRAM:     memory.Total / 1024 / 1024,
 			UsedVram: memory.Used / 1024 / 1024,
 			FreeVram: memory.Free / 1024 / 1024,
-			Vendor:   models.GPUVendorNvidia,
+			Vendor:   types.GPUVendorNvidia,
 		}
 
 		gpuInfos = append(gpuInfos, gpuInfo)
@@ -272,7 +272,7 @@ func GetNVIDIAGPUInfo() ([]models.GPU, error) {
 	return gpuInfos, nil
 }
 
-func GetAMDGPUInfo() ([]models.GPU, error) {
+func GetAMDGPUInfo() ([]types.GPU, error) {
 	cmd := exec.Command("rocm-smi", "--showid", "--showproductname", "--showmeminfo", "vram")
 
 	output, err := cmd.CombinedOutput()
@@ -299,7 +299,7 @@ func GetAMDGPUInfo() ([]models.GPU, error) {
 		return nil, fmt.Errorf("inconsistent AMD GPU information detected")
 	}
 
-	var gpuInfos []models.GPU
+	var gpuInfos []types.GPU
 	for i := range gpuNameMatches {
 		gpuName := gpuNameMatches[i][1]
 		totalMemoryBytes, err := strconv.ParseInt(totalMatches[i][1], 10, 64)
@@ -316,12 +316,12 @@ func GetAMDGPUInfo() ([]models.GPU, error) {
 		usedMemoryMiB := usedMemoryBytes / 1024 / 1024
 		freeMemoryMiB := totalMemoryMiB - usedMemoryMiB
 
-		gpuInfo := models.GPU{
+		gpuInfo := types.GPU{
 			Model:    gpuName,
 			VRAM:     uint64(totalMemoryMiB),
 			UsedVram: uint64(usedMemoryMiB),
 			FreeVram: uint64(freeMemoryMiB),
-			Vendor:   models.GPUVendorAMDATI,
+			Vendor:   types.GPUVendorAMDATI,
 		}
 
 		gpuInfos = append(gpuInfos, gpuInfo)
@@ -330,7 +330,7 @@ func GetAMDGPUInfo() ([]models.GPU, error) {
 	return gpuInfos, nil
 }
 
-func GetIntelGPUInfo() ([]models.GPU, error) {
+func GetIntelGPUInfo() ([]types.GPU, error) {
 	// Determine the number of discrete Intel GPUs
 	cmd := exec.Command("xpu-smi", "health", "-l")
 	output, err := cmd.CombinedOutput()
@@ -350,7 +350,7 @@ func GetIntelGPUInfo() ([]models.GPU, error) {
 		return nil, fmt.Errorf("failed to find any Intel GPUs")
 	}
 
-	var gpuInfos []models.GPU
+	var gpuInfos []types.GPU
 	for _, match := range deviceIDMatches {
 		deviceID := match[1]
 
@@ -404,12 +404,12 @@ func GetIntelGPUInfo() ([]models.GPU, error) {
 
 		freeMemoryMiB := totalMemoryMiB - usedMemoryMiB
 
-		gpuInfo := models.GPU{
+		gpuInfo := types.GPU{
 			Model:    gpuName,
 			VRAM:     uint64(totalMemoryMiB),
 			UsedVram: uint64(usedMemoryMiB),
 			FreeVram: uint64(freeMemoryMiB),
-			Vendor:   models.GPUVendorIntel,
+			Vendor:   types.GPUVendorIntel,
 		}
 
 		gpuInfos = append(gpuInfos, gpuInfo)
@@ -418,8 +418,8 @@ func GetIntelGPUInfo() ([]models.GPU, error) {
 	return gpuInfos, nil
 }
 
-func DetectGPUVendors() ([]models.GPUVendor, error) {
-	var vendors []models.GPUVendor
+func DetectGPUVendors() ([]types.GPUVendor, error) {
+	var vendors []types.GPUVendor
 	gpu, err := ghw.GPU()
 	if err != nil {
 		return nil, err
@@ -438,13 +438,13 @@ func DetectGPUVendors() ([]models.GPUVendor, error) {
 					vendor := card.DeviceInfo.Vendor
 					if vendor != nil {
 						if strings.Contains(strings.ToLower(vendor.Name), "nvidia") {
-							vendors = append(vendors, models.GPUVendorNvidia)
+							vendors = append(vendors, types.GPUVendorNvidia)
 						}
 						if strings.Contains(strings.ToLower(vendor.Name), "amd") {
-							vendors = append(vendors, models.GPUVendorAMDATI)
+							vendors = append(vendors, types.GPUVendorAMDATI)
 						}
 						if strings.Contains(strings.ToLower(vendor.Name), "intel") {
-							vendors = append(vendors, models.GPUVendorIntel)
+							vendors = append(vendors, types.GPUVendorIntel)
 						}
 					}
 				}
@@ -453,7 +453,7 @@ func DetectGPUVendors() ([]models.GPUVendor, error) {
 	}
 
 	if len(vendors) == 0 {
-		return []models.GPUVendor{models.Unknown}, nil
+		return []types.GPUVendor{types.Unknown}, nil
 	}
 
 	return vendors, nil

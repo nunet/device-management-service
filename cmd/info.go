@@ -12,7 +12,7 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/backend"
 	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var infoCmd = NewInfoCmd(networkService, utilsService)
@@ -48,7 +48,7 @@ func NewInfoCmd(net backend.NetworkManager, utilsService backend.Utility) *cobra
 	}
 }
 
-func displayInTable(w io.Writer, oConf *models.OnboardingConfig) {
+func displayInTable(w io.Writer, oConf *types.OnboardingConfig) {
 	table := tablewriter.NewWriter(w)
 	table.SetHeader([]string{"Info", "Value"})
 

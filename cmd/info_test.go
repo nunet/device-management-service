@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/cmd/backend"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -66,7 +66,7 @@ func initMockDB() (*gorm.DB, error) {
 	return mockDB, nil
 }
 
-func resetMockDB(mockDB *gorm.DB, schema models.Libp2pInfo) error {
+func resetMockDB(mockDB *gorm.DB, schema types.Libp2pInfo) error {
 	err := mockDB.Migrator().DropTable(schema)
 	if err != nil {
 		return fmt.Errorf("failed to drop tables: %v", err)
@@ -84,14 +84,14 @@ func Test_InfoCmd(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -151,15 +151,15 @@ func Test_InfoCmdNotOnboarded(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
 	// initialize empty data
-	emptyP2PInfo := models.Libp2pInfo{}
+	emptyP2PInfo := types.Libp2pInfo{}
 
 	// insert empty data inside db
 	result := mockDB.Create(&emptyP2PInfo)
@@ -185,14 +185,14 @@ func Test_InfoCmdInvalidMetadata(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 
@@ -222,14 +222,14 @@ func Test_InfoCmdDMSNotRunning(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	assert.NoError(err)
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 

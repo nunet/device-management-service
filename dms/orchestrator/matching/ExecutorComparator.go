@@ -1,25 +1,25 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func ExecutorComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison {
+func ExecutorComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
 	// comparator for  Executor types
-	// it is needed because executor type is defined as enum of ExecutorType's in models/execution.go
+	// it is needed because executor type is defined as enum of ExecutorType's in types.execution.go
 	// left represent machine capabilities
 	// right represent required capabilities
 	// it is not so complex as the type has only one field
 	// therefore this method just passes it through...
 
 	// validate input type
-	_, lrawok := lraw.(models.Executor)
-	_, rrawok := rraw.(models.Executor)
+	_, lrawok := lraw.(types.Executor)
+	_, rrawok := rraw.(types.Executor)
 	if !lrawok || !rrawok {
-		return models.Error
+		return types.Error
 	}
-	l := lraw.(models.Executor)
-	r := rraw.(models.Executor)
+	l := lraw.(types.Executor)
+	r := rraw.(types.Executor)
 
 	leftExecutorType := l.ExecutorType
 	rightExecutorType := r.ExecutorType

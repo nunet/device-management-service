@@ -18,7 +18,7 @@ import (
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/multiformats/go-multiaddr"
@@ -71,7 +71,7 @@ type Libp2p struct {
 
 	handlerRegistry *HandlerRegistry
 
-	config *models.Libp2pConfig
+	config *types.Libp2pConfig
 
 	// dependencies (db, filesystem...)
 	fs afero.Fs
@@ -79,9 +79,9 @@ type Libp2p struct {
 
 // New creates a libp2p instance.
 //
-// TODO-Suggestion: move models.Libp2pConfig to here for better readability.
-// Unless there is a reason to keep within models.
-func New(config *models.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
+// TODO-Suggestion: move types.Libp2pConfig to here for better readability.
+// Unless there is a reason to keep within types.
+func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 	if config == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -160,7 +160,7 @@ func (l *Libp2p) Start(context context.Context) error {
 }
 
 // RegisterStreamMessageHandler registers a stream handler for a specific protocol.
-func (l *Libp2p) RegisterStreamMessageHandler(messageType models.MessageType, handler StreamHandler) error {
+func (l *Libp2p) RegisterStreamMessageHandler(messageType types.MessageType, handler StreamHandler) error {
 	if messageType == "" {
 		return errors.New("message type is empty")
 	}
@@ -173,7 +173,7 @@ func (l *Libp2p) RegisterStreamMessageHandler(messageType models.MessageType, ha
 }
 
 // RegisterBytesMessageHandler registers a stream handler for a specific protocol and sends bytes to handler func.
-func (l *Libp2p) RegisterBytesMessageHandler(messageType models.MessageType, handler func(data []byte)) error {
+func (l *Libp2p) RegisterBytesMessageHandler(messageType types.MessageType, handler func(data []byte)) error {
 	if messageType == "" {
 		return errors.New("message type is empty")
 	}
@@ -187,7 +187,7 @@ func (l *Libp2p) RegisterBytesMessageHandler(messageType models.MessageType, han
 
 // HandleMessage registers a stream handler for a specific protocol and sends bytes to handler func.
 func (l *Libp2p) HandleMessage(messageType string, handler func(data []byte)) error {
-	return l.RegisterBytesMessageHandler(models.MessageType(messageType), handler)
+	return l.RegisterBytesMessageHandler(types.MessageType(messageType), handler)
 }
 
 func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
@@ -221,7 +221,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 }
 
 // SendMessage sends a message to a list of peers.
-func (l *Libp2p) SendMessage(ctx context.Context, addrs []string, msg models.MessageEnvelope) error {
+func (l *Libp2p) SendMessage(ctx context.Context, addrs []string, msg types.MessageEnvelope) error {
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(addrs))
 
@@ -252,7 +252,7 @@ func (l *Libp2p) SendMessage(ctx context.Context, addrs []string, msg models.Mes
 }
 
 // OpenStream opens a stream to a remote address and returns the stream for the caller to handle.
-func (l *Libp2p) OpenStream(ctx context.Context, addr string, messageType models.MessageType) (network.Stream, error) {
+func (l *Libp2p) OpenStream(ctx context.Context, addr string, messageType types.MessageType) (network.Stream, error) {
 	maddr, err := multiaddr.NewMultiaddr(addr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid multiaddress: %w", err)
@@ -305,12 +305,12 @@ func (l *Libp2p) Stop() error {
 }
 
 // Stat returns the status about the libp2p network.
-func (l *Libp2p) Stat() models.NetworkStats {
+func (l *Libp2p) Stat() types.NetworkStats {
 	var lAddrs []string
 	for _, addr := range l.Host.Addrs() {
 		lAddrs = append(lAddrs, addr.String())
 	}
-	return models.NetworkStats{
+	return types.NetworkStats{
 		ID:         l.Host.ID().String(),
 		ListenAddr: strings.Join(lAddrs, ", "),
 	}
@@ -320,11 +320,11 @@ func (l *Libp2p) Stat() models.NetworkStats {
 //
 // TODO (Return error once): something that was confusing me when using this method is that the error is
 // returned twice if any. Once as a field of PingResult and one as a return value.
-func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Duration) (models.PingResult, error) {
+func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Duration) (types.PingResult, error) {
 	// avoid dial to self attempt
 	if peerIDAddress == l.Host.ID().String() {
 		err := errors.New("can't ping self")
-		return models.PingResult{Success: false, Error: err}, err
+		return types.PingResult{Success: false, Error: err}, err
 	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -332,7 +332,7 @@ func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Du
 
 	remotePeer, err := peer.Decode(peerIDAddress)
 	if err != nil {
-		return models.PingResult{}, err
+		return types.PingResult{}, err
 	}
 
 	pingChan := ping.Ping(pingCtx, l.Host, remotePeer)
@@ -341,19 +341,19 @@ func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Du
 	case res := <-pingChan:
 		if res.Error != nil {
 			zlog.Sugar().Errorf("failed to ping peer %s: %v", peerIDAddress, res.Error)
-			return models.PingResult{
+			return types.PingResult{
 				Success: false,
 				RTT:     res.RTT,
 				Error:   res.Error,
 			}, res.Error
 		}
 
-		return models.PingResult{
+		return types.PingResult{
 			RTT:     res.RTT,
 			Success: true,
 		}, nil
 	case <-pingCtx.Done():
-		return models.PingResult{
+		return types.PingResult{
 			Error: pingCtx.Err(),
 		}, pingCtx.Err()
 	}
@@ -548,7 +548,7 @@ func (l *Libp2p) Subscribe(ctx context.Context, topic string, handler func(data 
 	return nil
 }
 
-func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg models.MessageEnvelope) error {
+func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg types.MessageEnvelope) error {
 	peerAddr, err := multiaddr.NewMultiaddr(addr)
 	if err != nil {
 		return fmt.Errorf("invalid multiaddr %s: %v", addr, err)
@@ -709,12 +709,12 @@ func PingPeer(ctx context.Context, target peer.ID) (bool, *ping.Result) {
 	return false, nil
 }
 
-func DumpKademliaDHT(ctx context.Context) ([]models.PeerData, error) {
+func DumpKademliaDHT(ctx context.Context) ([]types.PeerData, error) {
 	zlog.Warn("DumpKademliaDHT: Stub")
 	return nil, nil
 }
 
-func OldPingPeer(ctx context.Context, target peer.ID) (bool, *models.PingResult) {
+func OldPingPeer(ctx context.Context, target peer.ID) (bool, *types.PingResult) {
 	zlog.Warn("OldPingPeer: Stub")
 	return false, nil
 }

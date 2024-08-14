@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/fivebinaries/go-cardano-serialization/address"
 	"gitlab.com/nunet/device-management-service/db"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // KoiosEndpoint type for Koios rest api endpoints
@@ -62,13 +62,13 @@ func GetJobTxHashes(size int, clean string) ([]TxHashResp, error) {
 		return nil, fmt.Errorf("invalid clean_tx parameter")
 	}
 
-	err := db.DB.Where("transaction_type = ?", clean).Delete(&models.Services{}).Error
+	err := db.DB.Where("transaction_type = ?", clean).Delete(&types.Services{}).Error
 	if err != nil {
 		zlog.Sugar().Errorf("%w", err)
 	}
 
 	var resp []TxHashResp
-	var services []models.Services
+	var services []types.Services
 	if size == 0 {
 		err = db.DB.
 			Where("tx_hash IS NOT NULL").
@@ -99,7 +99,7 @@ func GetJobTxHashes(size int, clean string) ([]TxHashResp, error) {
 func RequestReward(claim ClaimCardanoTokenBody) (*rewardRespToCPD, error) {
 	// At some point, management dashboard should send container ID to identify
 	// against which container we are requesting reward
-	service := models.Services{
+	service := types.Services{
 		TxHash: claim.TxHash,
 	}
 
@@ -130,11 +130,11 @@ func RequestReward(claim ClaimCardanoTokenBody) (*rewardRespToCPD, error) {
 	return &reward, nil
 }
 
-func SendStatus(status models.BlockchainTxStatus) string {
+func SendStatus(status types.BlockchainTxStatus) string {
 	if status.TransactionStatus == "success" {
 		zlog.Sugar().Infof("withdraw transaction successful - updating DB")
 		// Partial deletion of entry
-		var service models.Services
+		var service types.Services
 		err := db.DB.Where("tx_hash = ?", status.TxHash).Find(&service).Error
 		if err != nil {
 			zlog.Sugar().Errorln(err)
@@ -153,7 +153,7 @@ func UpdateStatus(body UpdateTxStatusBody) error {
 	}
 
 	fiveMinAgo := time.Now().Add(-5 * time.Minute)
-	var services []models.Services
+	var services []types.Services
 	err = db.DB.
 		Where("tx_hash IS NOT NULL").
 		Where("log_url LIKE ?", "%log.nunet.io%").
@@ -176,9 +176,9 @@ func UpdateStatus(body UpdateTxStatusBody) error {
 	return nil
 }
 
-func getLimitedTransactions(sizeDone int) ([]models.Services, error) {
-	var doneServices []models.Services
-	var services []models.Services
+func getLimitedTransactions(sizeDone int) ([]types.Services, error) {
+	var doneServices []types.Services
+	var services []types.Services
 	err := db.DB.
 		Where("tx_hash IS NOT NULL").
 		Where("log_url LIKE ?", "%log.nunet.io%").
@@ -187,7 +187,7 @@ func getLimitedTransactions(sizeDone int) ([]models.Services, error) {
 		Limit(sizeDone).
 		Find(&doneServices).Error
 	if err != nil {
-		return []models.Services{}, err
+		return []types.Services{}, err
 	}
 
 	err = db.DB.
@@ -198,7 +198,7 @@ func getLimitedTransactions(sizeDone int) ([]models.Services, error) {
 		Not("transaction_type = ?", "").
 		Find(&services).Error
 	if err != nil {
-		return []models.Services{}, err
+		return []types.Services{}, err
 	}
 
 	services = append(services, doneServices...)
@@ -375,7 +375,7 @@ func GetUTXOsOfSmartContract(address string, endpoint KoiosEndpoint) ([]string, 
 }
 
 // UpdateTransactionStatus updates the status of claimed transactions in local DB
-func UpdateTransactionStatus(services []models.Services, utxoHashes []string) error {
+func UpdateTransactionStatus(services []types.Services, utxoHashes []string) error {
 	for _, service := range services {
 		if !SliceContains(utxoHashes, service.TxHash) {
 			if service.TransactionType == "withdraw" {

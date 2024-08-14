@@ -10,21 +10,21 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/db/repositories/clover"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type VolControllerTestSuiteHelper struct {
 	BasicVolController *BasicVolumeController
 	Fs                 afero.Fs
 	DB                 *clover.DB
-	Volumes            map[string]*models.StorageVolume
+	Volumes            map[string]*types.StorageVolume
 	TempDBDir          string
 }
 
 // SetupVolControllerTestSuite sets up a volume controller with 0-n volumes given a base path.
 // If volumes are inputed, directories will be created and volumes will be stored in the database
 func SetupVolControllerTestSuite(t *testing.T, basePath string,
-	volumes map[string]*models.StorageVolume) (*VolControllerTestSuiteHelper, error) {
+	volumes map[string]*types.StorageVolume) (*VolControllerTestSuiteHelper, error) {
 
 	tempDir, err := os.MkdirTemp("", "clover-test-*")
 	if err != nil {

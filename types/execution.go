@@ -1,4 +1,4 @@
-package models
+package types
 
 type Executor struct {
 	ExecutorType ExecutorType `json:"executor_type"`

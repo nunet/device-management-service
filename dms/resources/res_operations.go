@@ -3,7 +3,7 @@ package resources
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 
 	"gorm.io/gorm"
 )
@@ -22,13 +22,13 @@ func (e *negativeValueError) Error() string {
 
 // Note: Despite FreeResources model's main goal being represent the machine's free resources,
 // we're using its model to represent general resources usage for all operations between
-// resources-related structs (a REFACTORING is needed, we need to simplify the resource-relate models)
+// resources-related structs (a REFACTORING is needed, we need to simplify the resource-relate types.
 
 // addResourcesUsage returns the sum between each field of two FreeResources
 // structs. Use it when increasing resources usage based on two resources-usage
 // structs.
-func addResourcesUsage(r1, r2 models.FreeResources) models.FreeResources {
-	return models.FreeResources{
+func addResourcesUsage(r1, r2 types.FreeResources) types.FreeResources {
+	return types.FreeResources{
 		TotCpuHz: r1.TotCpuHz + r2.TotCpuHz,
 		Ram:      r1.Ram + r2.Ram,
 		Disk:     r1.Disk + r2.Disk,
@@ -38,18 +38,18 @@ func addResourcesUsage(r1, r2 models.FreeResources) models.FreeResources {
 // subResourcesUsage returns the result of subtracting each field of the second FreeResources
 // struct from the corresponding field of the first. It is used when decreasing resources usage
 // based on two resources-usage structs.
-func subResourcesUsage(r1, r2 models.FreeResources) (models.FreeResources, error) {
-	// We don't need this function if when refactoring the resources models,
+func subResourcesUsage(r1, r2 types.FreeResources) (types.FreeResources, error) {
+	// We don't need this function if when refactoring the resources types.
 	// we use unint instead of int
 	if err := resultsInNegativeValuesFreeRes(&r1, &r2); err != nil {
-		return models.FreeResources{
+		return types.FreeResources{
 			TotCpuHz: r1.TotCpuHz - r2.TotCpuHz,
 			Ram:      r1.Ram - r2.Ram,
 			Disk:     r1.Disk - r2.Disk,
 		}, fmt.Errorf("Subtraction of resources would result in negative values, Error: %w", err)
 	}
 
-	return models.FreeResources{
+	return types.FreeResources{
 		TotCpuHz: r1.TotCpuHz - r2.TotCpuHz,
 		Ram:      r1.Ram - r2.Ram,
 		Disk:     r1.Disk - r2.Disk,
@@ -59,8 +59,8 @@ func subResourcesUsage(r1, r2 models.FreeResources) (models.FreeResources, error
 // resultsInNegativeValuesFreeRes checks if any subtraction operation between the
 // fields of two FreeResources structs results in a negative value. It returns an error if so,
 // since resource values cannot be negative.
-func resultsInNegativeValuesFreeRes(r1, r2 *models.FreeResources) error {
-	// We don't need this function if when refactoring the resources models,
+func resultsInNegativeValuesFreeRes(r1, r2 *types.FreeResources) error {
+	// We don't need this function if when refactoring the resources types.
 	// we use unint instead of int
 	if r1.TotCpuHz-r2.TotCpuHz < 0 {
 		return &negativeValueError{fieldName: "TotCpuHz", r1: r1.TotCpuHz, r2: r2.TotCpuHz}
@@ -77,7 +77,7 @@ func resultsInNegativeValuesFreeRes(r1, r2 *models.FreeResources) error {
 // resultsInNegativeValuesAvailableRes checks if any subtraction operation between the
 // fields of two different resource-related structs (AvailableResources and FreeResources) results in a negative value.
 // It returns an error if so, since resource values cannot be negative.
-func resultsInNegativeValuesAvailableRes(r1 models.AvailableResources, r2 models.FreeResources) error {
+func resultsInNegativeValuesAvailableRes(r1 types.AvailableResources, r2 types.FreeResources) error {
 	// Basically duplicate function just because we have different models
 	// We will remove that when simplifying resources structs
 	if r1.TotCpuHz-r2.TotCpuHz < 0 {
@@ -94,9 +94,9 @@ func resultsInNegativeValuesAvailableRes(r1 models.AvailableResources, r2 models
 
 // subtractFromAvailableRes returns the difference between AvailableResources usage and
 // FreeResources struct.
-func subtractFromAvailableRes(gormDB *gorm.DB, resourcesUsage models.FreeResources,
-) (models.FreeResources, error) {
-	var freeRes models.FreeResources
+func subtractFromAvailableRes(gormDB *gorm.DB, resourcesUsage types.FreeResources,
+) (types.FreeResources, error) {
+	var freeRes types.FreeResources
 
 	availableRes, err := GetAvailableResources(gormDB)
 	if err != nil {

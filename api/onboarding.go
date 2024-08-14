@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // OnboardingHandler is a controller for /onboarding endpoint functionalities
@@ -25,7 +25,7 @@ func NewOnboardingHandler(s *onboarding.Onboarding) OnboardingHandler {
 //	@Description	Get total memory capacity in MB and CPU capacity in MHz.
 //	@Tags			onboarding
 //	@Produce		json
-//	@Success		200	{object}	models.Provisioned
+//	@Success		200	{object}	types.Provisioned
 //	@Router			/onboarding/provisioned [get]
 func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
 	// TODO: Waiting on MR for resource manager
@@ -38,7 +38,7 @@ func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
 //	@Description	Create a payment address from public key. Return payment address and private key.
 //	@Tags			onboarding
 //	@Produce		json
-//	@Success		200	{object}	models.BlockchainAddressPrivKey
+//	@Success		200	{object}	types.BlockchainAddressPrivKey
 //	@Router			/onboarding/address/new [get]
 func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 	wallet := c.DefaultQuery("blockchain", "cardano")
@@ -56,8 +56,8 @@ func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 //	@Description	Onboard runs onboarding script given the amount of resources to onboard.
 //	@Tags			onboarding
 //	@Produce		json
-//	@Param			capacity	body		models.CapacityForNunet	true	"Capacity for NuNet"
-//	@Success		200			{object}	models.OnboardingConfig
+//	@Param			capacity	body		types.CapacityForNunet	true	"Capacity for NuNet"
+//	@Success		200			{object}	types.OnboardingConfig
 //	@Failure		400			{object}	object	"invalid request data"
 //	@Failure		500			{object}	object	"could not check if config directory exists"
 //	@Failure		500			{object}	object	"config directory does not exist"
@@ -71,7 +71,7 @@ func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 //	@Failure		500			{object}	object	"could not register and run new node"
 //	@Router			/onboarding/onboard [post]
 func (h OnboardingHandler) Onboard(c *gin.Context) {
-	capacity := models.CapacityForNunet{
+	capacity := types.CapacityForNunet{
 		ServerMode:  true,
 		IsAvailable: true,
 	}
@@ -133,7 +133,7 @@ func (h OnboardingHandler) Offboard(c *gin.Context) {
 //	@Description	`database_path` is the path to nunet.db only if it exists
 //	@Tags			onboarding
 //	@Produce		json
-//	@Success		200	{object}	models.OnboardingStatus
+//	@Success		200	{object}	types.OnboardingStatus
 //	@Router			/onboarding/status [get]
 func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
 	status, err := h.service.Status(c.Request.Context())
@@ -149,7 +149,7 @@ func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
 //	@Summary	changes the amount of resources of onboarded device .
 //	@Tags		onboarding
 //	@Produce	json
-//	@Success	200	{object}	models.OnboardingConfig
+//	@Success	200	{object}	types.OnboardingConfig
 //	@Router		/onboarding/resource-config [post]
 func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
 	if c.Request.ContentLength == 0 {
@@ -157,7 +157,7 @@ func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
 		return
 	}
 
-	var capacity models.CapacityForNunet
+	var capacity types.CapacityForNunet
 	err := c.BindJSON(&capacity)
 	if err != nil {
 		c.AbortWithStatusJSON(400, gin.H{"error": "invalid request data"})

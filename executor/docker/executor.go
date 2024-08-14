@@ -12,7 +12,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -52,7 +52,7 @@ func (e *Executor) IsInstalled(ctx context.Context) bool {
 }
 
 // Start begins the execution of a request by starting a Docker container.
-func (e *Executor) Start(ctx context.Context, request *models.ExecutionRequest) error {
+func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
 	zlog.Sugar().
 		Infof("Starting execution for job %s, execution %s", request.JobID, request.ExecutionID)
 
@@ -108,9 +108,9 @@ func (e *Executor) Start(ctx context.Context, request *models.ExecutionRequest) 
 func (e *Executor) Wait(
 	ctx context.Context,
 	executionID string,
-) (<-chan *models.ExecutionResult, <-chan error) {
+) (<-chan *types.ExecutionResult, <-chan error) {
 	handler, found := e.handlers.Get(executionID)
-	resultCh := make(chan *models.ExecutionResult, 1)
+	resultCh := make(chan *types.ExecutionResult, 1)
 	errCh := make(chan error, 1)
 
 	if !found {
@@ -130,7 +130,7 @@ func (e *Executor) Wait(
 // flaw in the executor logic.
 func (e *Executor) doWait(
 	ctx context.Context,
-	out chan *models.ExecutionResult,
+	out chan *types.ExecutionResult,
 	errCh chan error,
 	handler *executionHandler,
 ) {
@@ -169,7 +169,7 @@ func (e *Executor) Cancel(ctx context.Context, executionID string) error {
 // It returns an error if the execution is not found.
 func (e *Executor) GetLogStream(
 	ctx context.Context,
-	request models.LogStreamRequest,
+	request types.LogStreamRequest,
 ) (io.ReadCloser, error) {
 	// It's possible we've recorded the execution as running, but have not yet added the handler to
 	// the handler map because we're still waiting for the container to start. We will try and wait
@@ -218,8 +218,8 @@ func (e *Executor) GetLogStream(
 // or waiting fails, or if the context is canceled.
 func (e *Executor) Run(
 	ctx context.Context,
-	request *models.ExecutionRequest,
-) (*models.ExecutionResult, error) {
+	request *types.ExecutionRequest,
+) (*types.ExecutionResult, error) {
 	if err := e.Start(ctx, request); err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 // The method returns a container.CreateResponse and an error if any part of the setup fails.
 func (e *Executor) newDockerExecutionContainer(
 	ctx context.Context,
-	params *models.ExecutionRequest,
+	params *types.ExecutionRequest,
 ) (string, error) {
 	dockerArgs, err := DecodeSpec(params.EngineSpec)
 	if err != nil {
@@ -309,10 +309,10 @@ func (e *Executor) newDockerExecutionContainer(
 
 // configureHostConfig sets up the host configuration for the container based on the
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
-func configureHostConfig(vendor models.GPUVendor, params *models.ExecutionRequest, mounts []mount.Mount) container.HostConfig {
+func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, mounts []mount.Mount) container.HostConfig {
 	var hostConfig container.HostConfig
 	switch vendor {
-	case models.GPUVendorNvidia:
+	case types.GPUVendorNvidia:
 		deviceIDs := make([]string, len(params.Resources.GPUs))
 		for i, gpu := range params.Resources.GPUs {
 			deviceIDs[i] = fmt.Sprint(gpu.Index)
@@ -330,7 +330,7 @@ func configureHostConfig(vendor models.GPUVendor, params *models.ExecutionReques
 				},
 			},
 		}
-	case models.GPUVendorAMDATI:
+	case types.GPUVendorAMDATI:
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Binds: []string{
@@ -361,7 +361,7 @@ func configureHostConfig(vendor models.GPUVendor, params *models.ExecutionReques
 	// This change exposes all Intel GPUs to the container, which may be preferable for
 	// environments with multiple Intel GPUs. It reduces complexity as granular control
 	// is not required if all GPUs need to be accessible.
-	case models.GPUVendorIntel:
+	case types.GPUVendorIntel:
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Binds: []string{
@@ -396,15 +396,15 @@ func configureHostConfig(vendor models.GPUVendor, params *models.ExecutionReques
 // does not exist. The function returns a list of mounts and an error if any part of the
 // process fails.
 func makeContainerMounts(
-	inputs []*models.StorageVolumeExecutor,
-	outputs []*models.StorageVolumeExecutor,
+	inputs []*types.StorageVolumeExecutor,
+	outputs []*types.StorageVolumeExecutor,
 	resultsDir string,
 ) ([]mount.Mount, error) {
 	// the actual mounts we will give to the container
 	// these are paths for both input and output data
 	var mounts []mount.Mount
 	for _, input := range inputs {
-		if input.Type != models.StorageVolumeTypeBind {
+		if input.Type != types.StorageVolumeTypeBind {
 			mounts = append(mounts, mount.Mount{
 				Type:     mount.TypeBind,
 				Source:   input.Source,
