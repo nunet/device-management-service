@@ -3,7 +3,7 @@ package onboarding
 import (
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // totalRamInMB fetches total memory installed on host machine
@@ -37,10 +37,10 @@ func hz_per_cpu() float64 {
 }
 
 // GetTotalProvisioned returns Provisioned struct with provisioned memory and CPU.
-func GetTotalProvisioned() *models.Provisioned {
+func GetTotalProvisioned() *types.Provisioned {
 	cores, _ := cpu.Info()
 
-	provisioned := &models.Provisioned{
+	provisioned := &types.Provisioned{
 		CPU:      totalCPUInMHz(),
 		Memory:   totalRamInMB(),
 		NumCores: uint64(len(cores)),

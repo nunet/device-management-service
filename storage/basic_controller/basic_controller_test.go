@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
 )
 
@@ -27,19 +27,19 @@ func TestVolumeControllerTestSuite(t *testing.T) {
 func (s *VolumeControllerTestSuite) SetupTest() {
 	basePath := "/home/.nunet/volumes/"
 
-	volumes := map[string]*models.StorageVolume{
+	volumes := map[string]*types.StorageVolume{
 		"volume1": {
 			Path:           basePath + "volume1",
 			ReadOnly:       false,
 			Private:        false,
-			EncryptionType: models.EncryptionTypeNull,
+			EncryptionType: types.EncryptionTypeNull,
 		},
 		"volume2": {
 			CID:            "baf222",
 			Path:           basePath + "volume2",
 			ReadOnly:       false,
 			Private:        false,
-			EncryptionType: models.EncryptionTypeNull,
+			EncryptionType: types.EncryptionTypeNull,
 		},
 	}
 
@@ -72,14 +72,14 @@ func (s *VolumeControllerTestSuite) TestCreateVolume() {
 	assert.Empty(s.T(), vol1.CID)
 	assert.Equal(s.T(), false, vol1.Private)
 	assert.Equal(s.T(), false, vol1.ReadOnly)
-	assert.Equal(s.T(), models.EncryptionTypeNull, vol1.EncryptionType)
+	assert.Equal(s.T(), types.EncryptionTypeNull, vol1.EncryptionType)
 
 	// Verify returned volume details for test case 2
 	assert.NotEmpty(s.T(), vol2.Path)
 	assert.Empty(s.T(), vol2.CID)
 	assert.Equal(s.T(), true, vol2.Private)
 	assert.Equal(s.T(), false, vol2.ReadOnly)
-	assert.Equal(s.T(), models.EncryptionTypeNull, vol2.EncryptionType)
+	assert.Equal(s.T(), types.EncryptionTypeNull, vol2.EncryptionType)
 
 	// Verify that the volumes are stored in the database
 	volumes, err := s.vcHelper.BasicVolController.repo.FindAll(

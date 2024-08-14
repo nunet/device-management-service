@@ -5,7 +5,7 @@ import (
 
 	"github.com/shirou/gopsutil/cpu"
 	"gitlab.com/nunet/device-management-service/db"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/gorm"
 )
 
@@ -33,22 +33,22 @@ func CalcFreeResAndUpdateDB() error {
 // calcFreeResources returns the subtraction between onboarded resources (AvailableResources)
 // by the user and the sum of resources usage for every services, virtual machines, plugins
 // and any other process started by DMS on the user's machine.
-func calcFreeResources(gormDB *gorm.DB, cpuInfo []cpu.InfoStat) (models.FreeResources, error) {
+func calcFreeResources(gormDB *gorm.DB, cpuInfo []cpu.InfoStat) (types.FreeResources, error) {
 	vms, err := queryRunningVMs(gormDB)
 	if err != nil {
-		return models.FreeResources{},
+		return types.FreeResources{},
 			fmt.Errorf("Error querying running VMs: %w", err)
 	}
 
 	conts, err := queryRunningConts(gormDB)
 	if err != nil {
-		return models.FreeResources{},
+		return types.FreeResources{},
 			fmt.Errorf("Error querying running containers: %w", err)
 	}
 
 	servicesReqs, err := getServiceResourcesRequirements(gormDB)
 	if err != nil {
-		return models.FreeResources{},
+		return types.FreeResources{},
 			fmt.Errorf("Error querying ServiceResourceRequirements table: %w", err)
 	}
 
@@ -68,8 +68,8 @@ func calcFreeResources(gormDB *gorm.DB, cpuInfo []cpu.InfoStat) (models.FreeReso
 
 // calcUsedResourcesVMs returns the sum of resource usage between all running Firecracker
 // virtual machines started by DMS.
-func calcUsedResourcesVMs(vms []models.VirtualMachine, cpuInfo []cpu.InfoStat) models.FreeResources {
-	var resourcesUsage models.FreeResources
+func calcUsedResourcesVMs(vms []types.VirtualMachine, cpuInfo []cpu.InfoStat) types.FreeResources {
+	var resourcesUsage types.FreeResources
 	if len(vms) == 0 {
 		return resourcesUsage
 	}
@@ -86,10 +86,10 @@ func calcUsedResourcesVMs(vms []models.VirtualMachine, cpuInfo []cpu.InfoStat) m
 // calcUsedResourcesConts returns the sum of resource usage between all running Docker
 // containers started by DMS.
 func calcUsedResourcesConts(
-	services []models.Services, requirements map[string]models.ServiceResourceRequirements,
-) models.FreeResources {
+	services []types.Services, requirements map[string]types.ServiceResourceRequirements,
+) types.FreeResources {
 
-	var resourcesUsage models.FreeResources
+	var resourcesUsage types.FreeResources
 	if len(services) == 0 {
 		return resourcesUsage
 	}
@@ -109,8 +109,8 @@ func calcUsedResourcesConts(
 }
 
 // queryRunningVMs returns a list of running Firecracker's virtual machines
-func queryRunningVMs(gormDB *gorm.DB) ([]models.VirtualMachine, error) {
-	var vm []models.VirtualMachine
+func queryRunningVMs(gormDB *gorm.DB) ([]types.VirtualMachine, error) {
+	var vm []types.VirtualMachine
 	result := gormDB.Where("state = ?", "running").Find(&vm)
 	if result.Error != nil {
 		return nil, fmt.Errorf("unable to query running vms - %v", result.Error)
@@ -120,8 +120,8 @@ func queryRunningVMs(gormDB *gorm.DB) ([]models.VirtualMachine, error) {
 }
 
 // queryRunningConts returns a list of running Docker Containers
-func queryRunningConts(gormDB *gorm.DB) ([]models.Services, error) {
-	var services []models.Services
+func queryRunningConts(gormDB *gorm.DB) ([]types.Services, error) {
+	var services []types.Services
 	result := gormDB.Where("job_status = ?", "running").Find(&services)
 	if result.Error != nil {
 		return nil, fmt.Errorf("unable to query running containers - %v", result.Error)

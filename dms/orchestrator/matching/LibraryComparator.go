@@ -1,50 +1,50 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"github.com/hashicorp/go-version"
 )
 
-func LibraryComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison {
+func LibraryComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
 	// comparator for single Library type:
 	// left represent machine capabilities;
 	// right represent required capabilities;
 
 	// validate input type
-	_, lrawok := lraw.(models.Library)
-	_, rrawok := rraw.(models.Library)
+	_, lrawok := lraw.(types.Library)
+	_, rrawok := rraw.(types.Library)
 	if !lrawok || !rrawok {
-		return models.Error
+		return types.Error
 	}	
 
-	l := lraw.(models.Library)
+	l := lraw.(types.Library)
 	lVersion, err := version.NewVersion(l.Version)
 	if err != nil {
-		return models.Error
+		return types.Error
 	}
-	r := rraw.(models.Library)
+	r := rraw.(types.Library)
 
 	// return 'Error' if the version of the left library is not valid
 	constraints, err := version.NewConstraint(r.Constraint + " " + r.Version)
 	if err != nil {	
-		return models.Error
+		return types.Error
 	}
 	
 	// return 'Error' if the names of the libraries are different
 	if l.Name != r.Name {
-		return models.Error
+		return types.Error
 	}
 	
 	// else return 'Equal if versions of libraries are equal and the constraint is '='
 	if r.Constraint == "=" && constraints.Check(lVersion) {
-		return models.Equal
+		return types.Equal
 	}
 
 	// else return 'Better' if versions of libraries match the constraint
 	if constraints.Check(lVersion) {
-		return models.Better
+		return types.Better
 	}
 
 	// else return 'Worse'
-	return models.Worse
+	return types.Worse
 }

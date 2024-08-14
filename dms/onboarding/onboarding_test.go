@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/db"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -54,13 +54,13 @@ func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
 }
 
 func (ts *TestSuite) setupDB() {
-	ts.db.AutoMigrate(&models.AvailableResources{})
-	ts.db.AutoMigrate(&models.Libp2pInfo{})
-	ts.db.AutoMigrate(&models.MachineUUID{})
+	ts.db.AutoMigrate(&types.AvailableResources{})
+	ts.db.AutoMigrate(&types.Libp2pInfo{})
+	ts.db.AutoMigrate(&types.MachineUUID{})
 }
 
 func (ts *TestSuite) savePrivateKey(ctx context.Context) error {
-	p2p := models.Libp2pInfo{
+	p2p := types.Libp2pInfo{
 		PrivateKey: []byte("1234"),
 	}
 	_, err := ts.service.config.P2PRepo.Save(ctx, p2p)
@@ -72,7 +72,7 @@ func (ts *TestSuite) saveMachineUUID(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	mUUID := models.MachineUUID{
+	mUUID := types.MachineUUID{
 		UUID: uuid,
 	}
 	_, err = ts.service.config.UUIDRepo.Save(ctx, mUUID)
@@ -129,7 +129,7 @@ func TestStatus(t *testing.T) {
 // func TestResourceConfig(t *testing.T) {}
 func TestOnboard(t *testing.T) {
 	ctx := context.Background()
-	capacity := models.CapacityForNunet{
+	capacity := types.CapacityForNunet{
 		CPU:               8000,
 		Memory:            16000,
 		Channel:           "test",
@@ -153,7 +153,7 @@ func TestOnboard(t *testing.T) {
 	// XXX: only after we get rid of the global db usage everywhere
 	db.DB = mockDB
 
-	mockDB.AutoMigrate(&models.AvailableResources{})
+	mockDB.AutoMigrate(&types.AvailableResources{})
 
 	oConfig := OnboardingConfig{
 		Fs:             testFS,
@@ -188,7 +188,7 @@ func TestOnboard(t *testing.T) {
 }
 func TestResourceConfig(t *testing.T) {
 	ctx := context.Background()
-	capacity := models.CapacityForNunet{
+	capacity := types.CapacityForNunet{
 		CPU:               8000,
 		Memory:            16000,
 		Channel:           "test",
@@ -212,7 +212,7 @@ func TestResourceConfig(t *testing.T) {
 	// XXX: only after we get rid of the global db usage everywhere
 	db.DB = mockDB
 
-	mockDB.AutoMigrate(&models.AvailableResources{})
+	mockDB.AutoMigrate(&types.AvailableResources{})
 
 	oConfig := OnboardingConfig{
 		Fs:             testFS,

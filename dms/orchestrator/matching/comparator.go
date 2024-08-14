@@ -3,16 +3,16 @@ package matching
 import (
 	"reflect"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils/validate"
 )
 
 // generic compare function for comparing any custom types given a custom comparator
 // for simple types (i.e which are not nested in the map[string]interface{} structure)
 
-type Comparator func(l, r interface{}, preference ...Preference) models.Comparison
+type Comparator func(l, r interface{}, preference ...Preference) types.Comparison
 
-func Compare(l, r interface{}, preference ...Preference) models.Comparison {
+func Compare(l, r interface{}, preference ...Preference) types.Comparison {
 
 	// TODO: it would be better to pass a pointer as this is a global structure
 	var comparatorMap = initComparatorMap()
@@ -21,7 +21,7 @@ func Compare(l, r interface{}, preference ...Preference) models.Comparison {
 	if _, numeric := validate.ConvertNumericToFloat64(l); numeric {
 		comparator := comparatorMap["Numeric"]
 		if comparator == nil {
-			return models.Error
+			return types.Error
 		}
 		return comparator(l, r)
 	}
@@ -34,23 +34,23 @@ func Compare(l, r interface{}, preference ...Preference) models.Comparison {
 		// check if we have a slice of further types
 		// we need to mention each type explicitly
 		case reflect.Slice:
-			if _, ok := l.([]models.GPU); ok {
+			if _, ok := l.([]types.GPU); ok {
 				typeName = "GPUs"
 			}
-			if _, ok := l.([]models.Library); ok {
+			if _, ok := l.([]types.Library); ok {
 				typeName = "Libraries"
 			}
-			if _, ok := l.([]models.Locality); ok {
+			if _, ok := l.([]types.Locality); ok {
 				typeName = "Localities"
 			}
-			if _, ok := l.([]models.Locality); ok {
+			if _, ok := l.([]types.Locality); ok {
 				typeName = "Localities"
 			}
 	}
 	// select the comparator based on type
 	comparator := comparatorMap[typeName]
 	if comparator == nil {
-		return models.Error
+		return types.Error
 	}
 	return comparator(l, r)
 

@@ -96,7 +96,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.BlockchainAddressPrivKey"
+                            "$ref": "#/definitions/types.BlockchainAddressPrivKey"
                         }
                     }
                 }
@@ -116,7 +116,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Metadata"
+                            "$ref": "#/definitions/types.Metadata"
                         }
                     }
                 }
@@ -156,7 +156,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Metadata"
+                            "$ref": "#/definitions/types.Metadata"
                         }
                     }
                 }
@@ -176,7 +176,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Provisioned"
+                            "$ref": "#/definitions/types.Provisioned"
                         }
                     }
                 }
@@ -195,7 +195,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Metadata"
+                            "$ref": "#/definitions/types.Metadata"
                         }
                     }
                 }
@@ -215,7 +215,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.OnboardingStatus"
+                            "$ref": "#/definitions/types.OnboardingStatus"
                         }
                     }
                 }
@@ -569,7 +569,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.BlockchainTxStatus"
+                            "$ref": "#/definitions/types.BlockchainTxStatus"
                         }
                     }
                 ],
@@ -661,7 +661,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.BlockchainAddressPrivKey": {
+        "types.BlockchainAddressPrivKey": {
             "type": "object",
             "properties": {
                 "address": {
@@ -675,7 +675,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.BlockchainTxStatus": {
+        "types.BlockchainTxStatus": {
             "type": "object",
             "properties": {
                 "transaction_status": {
@@ -690,7 +690,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Gpu": {
+        "types.Gpu": {
             "type": "object",
             "properties": {
                 "free_vram": {
@@ -704,7 +704,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Metadata": {
+        "types.Metadata": {
             "type": "object",
             "properties": {
                 "allow_cardano": {
@@ -727,7 +727,7 @@ const docTemplate = `{
                 "gpu_info": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Gpu"
+                        "$ref": "#/definitions/types.Gpu"
                     }
                 },
                 "name": {
@@ -775,7 +775,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.OnboardingStatus": {
+        "types.OnboardingStatus": {
             "type": "object",
             "properties": {
                 "database_path": {
@@ -793,7 +793,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Provisioned": {
+        "types.Provisioned": {
             "type": "object",
             "properties": {
                 "cpu": {

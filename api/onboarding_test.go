@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -70,21 +70,21 @@ func (s *TestSuite) setupDB() error {
 	if s.db == nil {
 		return fmt.Errorf("db not set")
 	}
-	s.db.AutoMigrate(&models.Libp2pInfo{})
-	s.db.AutoMigrate(&models.AvailableResources{})
-	s.db.AutoMigrate(&models.MachineUUID{})
+	s.db.AutoMigrate(&types.Libp2pInfo{})
+	s.db.AutoMigrate(&types.AvailableResources{})
+	s.db.AutoMigrate(&types.MachineUUID{})
 	return nil
 }
 
 func (s *TestSuite) setupPrivateKey(key string) error {
-	p2pInfo := &models.Libp2pInfo{
+	p2pInfo := &types.Libp2pInfo{
 		PrivateKey: []byte(key),
 	}
 	return s.db.Create(&p2pInfo).Error
 }
 
 func (s *TestSuite) setupMachineUUID(uuid string) error {
-	machine := models.MachineUUID{
+	machine := types.MachineUUID{
 		UUID: uuid,
 	}
 	return s.db.Create(&machine).Error
@@ -163,7 +163,7 @@ func TestProvisionedCapacity(t *testing.T) {
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 200, w.Code, w.Body)
 
-	var prov *models.Provisioned
+	var prov *types.Provisioned
 	err := json.Unmarshal(w.Body.Bytes(), &prov)
 	assert.NoError(t, err)
 }

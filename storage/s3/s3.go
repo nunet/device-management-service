@@ -8,7 +8,7 @@ import (
 	s3Manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
 )
 
@@ -43,7 +43,7 @@ func NewClient(config aws.Config, volController storage.VolumeController) (*S3St
 	}, nil
 }
 
-func (s *S3Storage) Size(ctx context.Context, source *models.SpecConfig) (uint64, error) {
+func (s *S3Storage) Size(ctx context.Context, source *types.SpecConfig) (uint64, error) {
 	inputSource, err := DecodeInputSpec(source)
 	if err != nil {
 		return 0, fmt.Errorf("failed to decode input spec: %v", err)

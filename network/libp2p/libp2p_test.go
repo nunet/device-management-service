@@ -11,14 +11,14 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestNew(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		config *models.Libp2pConfig
+		config *types.Libp2pConfig
 		expErr string
 	}{
 		"no config": {
@@ -26,7 +26,7 @@ func TestNew(t *testing.T) {
 			expErr: "config is nil",
 		},
 		"no scheduler": {
-			config: &models.Libp2pConfig{
+			config: &types.Libp2pConfig{
 				PrivateKey:              &crypto.Secp256k1PrivateKey{},
 				BootstrapPeers:          []multiaddr.Multiaddr{},
 				Rendezvous:              "nunet-randevouz",
@@ -35,14 +35,14 @@ func TestNew(t *testing.T) {
 				CustomNamespace:         "/nunet-dht-1/",
 				ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 				PeerCountDiscoveryLimit: 40,
-				PrivateNetwork: models.PrivateNetworkConfig{
+				PrivateNetwork: types.PrivateNetworkConfig{
 					WithSwarmKey: false,
 				},
 			},
 			expErr: "scheduler is nil",
 		},
 		"success": {
-			config: &models.Libp2pConfig{
+			config: &types.Libp2pConfig{
 				PrivateKey:              &crypto.Secp256k1PrivateKey{},
 				BootstrapPeers:          []multiaddr.Multiaddr{},
 				Rendezvous:              "nunet-randevouz",
@@ -51,7 +51,7 @@ func TestNew(t *testing.T) {
 				CustomNamespace:         "/nunet-dht-1/",
 				ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 				PeerCountDiscoveryLimit: 40,
-				PrivateNetwork: models.PrivateNetworkConfig{
+				PrivateNetwork: types.PrivateNetworkConfig{
 					WithSwarmKey: false,
 				},
 			},
@@ -168,7 +168,7 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 // if we connect to ourselves we deliver the message properlly to the right handler.
 func TestSelfDial(t *testing.T) {
 	peer1, _, _ := createPeers(t, 65524, 65525, 65526)
-	messageType := models.MessageType("/custom_bytes_callback/1.1.4")
+	messageType := types.MessageType("/custom_bytes_callback/1.1.4")
 	messageChannel := make(chan string)
 
 	err := peer1.RegisterBytesMessageHandler(messageType, func(dt []byte) {
@@ -177,7 +177,7 @@ func TestSelfDial(t *testing.T) {
 	assert.NoError(t, err)
 	peer1p2pAddrs, err := peer1.GetMultiaddr()
 	assert.NoError(t, err)
-	err = peer1.SendMessage(context.Background(), []string{peer1p2pAddrs[0].String()}, models.MessageEnvelope{
+	err = peer1.SendMessage(context.Background(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{
 		Type: messageType,
 		Data: []byte("testing 123"),
 	})
@@ -196,10 +196,10 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	// use different test cases to check if communication can be established to remote peers
 	// 1. peer1 is not handling any message types so we try to send a message and get an error
 
-	customMessageProtocol := models.MessageType("/chat/1.1.1")
+	customMessageProtocol := types.MessageType("/chat/1.1.1")
 
 	helloWorlPayload := "hello world"
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, models.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
 	assert.ErrorContains(t, err, "protocols not supported: [/chat/1.1.1]")
 
 	// 2. peer1 registers the message
@@ -215,7 +215,7 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	assert.ErrorContains(t, err, "stream with this protocol is already registered")
 
 	// 4. send message from peer2 and wait to get the response from peer1
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, models.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
 	assert.NoError(t, err)
 	peer1MessageContent := <-payloadReceived
 	assert.Equal(t, helloWorlPayload, peer1MessageContent)
@@ -223,13 +223,13 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	// 5. open stream functionality
 	streamPayloadMessage := "nunet world"
 	streamPayloadReceived := make(chan string)
-	err = peer1.RegisterStreamMessageHandler(models.MessageType("/custom_stream/1.2.3"), func(stream network.Stream) {
+	err = peer1.RegisterStreamMessageHandler(types.MessageType("/custom_stream/1.2.3"), func(stream network.Stream) {
 		bytesToRead := make([]byte, len([]byte(streamPayloadMessage)))
 		stream.Read(bytesToRead)
 		streamPayloadReceived <- string(bytesToRead)
 	})
 	assert.NoError(t, err)
-	openedStream, err := peer2.OpenStream(context.TODO(), peer1p2pAddrs[0].String(), models.MessageType("/custom_stream/1.2.3"))
+	openedStream, err := peer2.OpenStream(context.TODO(), peer1p2pAddrs[0].String(), types.MessageType("/custom_stream/1.2.3"))
 	assert.NoError(t, err)
 	openedStream.Write([]byte("nunet world"))
 	peer1MessageContent = <-streamPayloadReceived
@@ -238,11 +238,11 @@ func TestSendMessageAndHandlers(t *testing.T) {
 
 	// 6. register message with bytes handler function
 	secondPayloadReceived := make(chan string)
-	err = peer1.RegisterBytesMessageHandler(models.MessageType("/custom_bytes_callback/1.1.4"), func(dt []byte) {
+	err = peer1.RegisterBytesMessageHandler(types.MessageType("/custom_bytes_callback/1.1.4"), func(dt []byte) {
 		secondPayloadReceived <- string(dt)
 	})
 	assert.NoError(t, err)
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, models.MessageEnvelope{Type: models.MessageType("/custom_bytes_callback/1.1.4"), Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{Type: types.MessageType("/custom_bytes_callback/1.1.4"), Data: []byte(helloWorlPayload)})
 	assert.NoError(t, err)
 	messageFromBytesHandler := <-secondPayloadReceived
 	assert.Equal(t, helloWorlPayload, messageFromBytesHandler)

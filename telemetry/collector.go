@@ -1,7 +1,7 @@
 package telemetry
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
 
@@ -11,13 +11,13 @@ type Collector interface {
 	Initialize() error
 	HandleEvent(event Event) error
 	Shutdown() error
-	GetObservedLevel() models.ObservabilityLevel
+	GetObservedLevel() types.ObservabilityLevel
 	GetEndpoint() string
 }
 
 type LogCollector struct{}
 
-func NewLogCollector(config *models.TelemetryConfig) (Collector, error) {
+func NewLogCollector(config *types.TelemetryConfig) (Collector, error) {
 	// No specific configuration needed for LogCollector currently.
 	return &LogCollector{}, nil
 }
@@ -42,8 +42,8 @@ func (c *LogCollector) Flush() error {
 	return nil
 }
 
-func (c *LogCollector) GetObservedLevel() models.ObservabilityLevel {
-	return models.INFO
+func (c *LogCollector) GetObservedLevel() types.ObservabilityLevel {
+	return types.INFO
 }
 
 func (c *LogCollector) GetEndpoint() string {

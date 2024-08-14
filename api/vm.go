@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type CustomVM struct {
@@ -63,13 +63,13 @@ func (h *VMHandler) StartCustom(c *gin.Context) {
 		WithKernelImage(body.KernelImagePath).
 		Build()
 
-	fer := &models.ExecutionRequest{
+	fer := &types.ExecutionRequest{
 		JobID:       "test_job",
 		ExecutionID: "test_execution",
 		EngineSpec:  fe,
-		Resources: &models.ExecutionResources{
-			CPU:    models.CPU{Cores: uint64(body.VCPUCount)},
-			Memory: models.Memory{Size: uint64(body.MemSizeMib)},
+		Resources: &types.ExecutionResources{
+			CPU:    types.CPU{Cores: uint64(body.VCPUCount)},
+			Memory: types.Memory{Size: uint64(body.MemSizeMib)},
 		},
 	}
 
@@ -122,13 +122,13 @@ func (h *VMHandler) StartDefault(c *gin.Context) {
 		WithKernelImage(body.KernelImagePath).
 		Build()
 
-	fer := &models.ExecutionRequest{
+	fer := &types.ExecutionRequest{
 		JobID:       "test_job",
 		ExecutionID: "test_execution",
 		EngineSpec:  fe,
-		Resources: &models.ExecutionResources{
-			CPU:    models.CPU{Cores: 1},
-			Memory: models.Memory{Size: 1024},
+		Resources: &types.ExecutionResources{
+			CPU:    types.CPU{Cores: 1},
+			Memory: types.Memory{Size: 1024},
 		},
 	}
 

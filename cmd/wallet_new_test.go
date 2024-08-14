@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type MockWalletService struct {
@@ -16,8 +16,8 @@ type MockWalletService struct {
 	privateKey string
 }
 
-func (mw *MockWalletService) GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error) {
-	addr := &models.BlockchainAddressPrivKey{
+func (mw *MockWalletService) GetCardanoAddressAndMnemonic() (*types.BlockchainAddressPrivKey, error) {
+	addr := &types.BlockchainAddressPrivKey{
 		Address:  mw.address,
 		Mnemonic: mw.mnemonic,
 	}
@@ -25,8 +25,8 @@ func (mw *MockWalletService) GetCardanoAddressAndMnemonic() (*models.BlockchainA
 	return addr, nil
 }
 
-func (mw *MockWalletService) GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error) {
-	addr := &models.BlockchainAddressPrivKey{
+func (mw *MockWalletService) GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error) {
+	addr := &types.BlockchainAddressPrivKey{
 		Address:    mw.address,
 		PrivateKey: mw.privateKey,
 	}

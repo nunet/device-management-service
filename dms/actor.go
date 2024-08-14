@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network"
 )
 
@@ -131,8 +131,8 @@ func (a *Actor) SendMessage(ctx context.Context, destination *ActorAddrInfo, m *
 		return fmt.Errorf("failed to send message to actor %s: %v", destination.HostID, err)
 	}
 
-	err = a.network.SendMessage(ctx, []string{addresses[0]}, models.MessageEnvelope{
-		Type: models.MessageType(fmt.Sprintf("actor/%s/messages/0.0.1", destination.InboxAddress)),
+	err = a.network.SendMessage(ctx, []string{addresses[0]}, types.MessageEnvelope{
+		Type: types.MessageType(fmt.Sprintf("actor/%s/messages/0.0.1", destination.InboxAddress)),
 		Data: m.data,
 	})
 	if err != nil {

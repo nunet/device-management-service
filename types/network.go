@@ -1,4 +1,4 @@
-package models
+package types
 
 const (
 	NetP2P = "p2p"

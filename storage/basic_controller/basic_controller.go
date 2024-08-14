@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -45,11 +45,11 @@ func NewDefaultVolumeController(repo repositories.StorageVolumeRepository, volBa
 // where `name` is random.
 //
 // TODO-maybe [withName]: allow callers to specify custom name for path
-func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, opts ...storage.CreateVolOpt) (models.StorageVolume, error) {
-	vol := models.StorageVolume{
+func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, opts ...storage.CreateVolOpt) (types.StorageVolume, error) {
+	vol := types.StorageVolume{
 		Private:        false,
 		ReadOnly:       false,
-		EncryptionType: models.EncryptionTypeNull,
+		EncryptionType: types.EncryptionTypeNull,
 	}
 
 	for _, opt := range opts {
@@ -59,12 +59,12 @@ func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, op
 	vol.Path = vc.basePath + string(volSource) + "-" + utils.RandomString(16)
 
 	if err := vc.FS.Mkdir(vol.Path, 0770); err != nil {
-		return models.StorageVolume{}, fmt.Errorf("failed to create storage volume: %w", err)
+		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume: %w", err)
 	}
 
 	createdVol, err := vc.repo.Create(context.Background(), vol)
 	if err != nil {
-		return models.StorageVolume{}, fmt.Errorf("failed to create storage volume in repository: %w", err)
+		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume in repository: %w", err)
 	}
 
 	return createdVol, nil
@@ -105,7 +105,7 @@ func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.Lo
 // WithPrivate designates a given volume as private. It can be used both
 // when creating or locking a volume.
 func WithPrivate[T storage.CreateVolOpt | storage.LockVolOpt]() T {
-	return func(v *models.StorageVolume) {
+	return func(v *types.StorageVolume) {
 		v.Private = true
 	}
 }
@@ -114,7 +114,7 @@ func WithPrivate[T storage.CreateVolOpt | storage.LockVolOpt]() T {
 //
 // TODO [validate]: check if CID provided is valid
 func WithCID(cid string) storage.LockVolOpt {
-	return func(v *models.StorageVolume) {
+	return func(v *types.StorageVolume) {
 		v.CID = cid
 	}
 }
@@ -156,7 +156,7 @@ func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.
 // ListVolumes returns a list of all storage volumes stored on the database
 //
 // TODO [filter]: maybe add opts to filter results by certain values
-func (vc *BasicVolumeController) ListVolumes() ([]models.StorageVolume, error) {
+func (vc *BasicVolumeController) ListVolumes() ([]types.StorageVolume, error) {
 	volumes, err := vc.repo.FindAll(context.Background(), vc.repo.GetQuery())
 	if err != nil {
 		return nil, fmt.Errorf("failed to list volumes: %w", err)
@@ -192,12 +192,12 @@ func (vc *BasicVolumeController) GetSize(identifier string, idType storage.IDTyp
 }
 
 // EncryptVolume encrypts a given volume
-func (vc *BasicVolumeController) EncryptVolume(path string, encryptor models.Encryptor, encryptionType models.EncryptionType) error {
+func (vc *BasicVolumeController) EncryptVolume(path string, encryptor types.Encryptor, encryptionType types.EncryptionType) error {
 	return fmt.Errorf("not implemented")
 }
 
 // DecryptVolume decrypts a given volume
-func (vc *BasicVolumeController) DecryptVolume(path string, decryptor models.Decryptor, decryptionType models.EncryptionType) error {
+func (vc *BasicVolumeController) DecryptVolume(path string, decryptor types.Decryptor, decryptionType types.EncryptionType) error {
 	return fmt.Errorf("not implemented")
 }
 

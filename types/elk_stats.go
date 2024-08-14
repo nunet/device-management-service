@@ -1,4 +1,4 @@
-package models
+package types
 
 // NewDeviceOnboarded defines the schema of the data to be sent to stats db when a new device gets onboarded
 type NewDeviceOnboarded struct {

@@ -1,4 +1,4 @@
-package models
+package types
 
 // note: this data type may be moved to dms or jobs package in the future
 

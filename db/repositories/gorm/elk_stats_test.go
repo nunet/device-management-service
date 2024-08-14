@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // TestRequestTrackerRepository is a test suite for the requestTrackerRepository.
@@ -24,7 +24,7 @@ func TestRequestTrackerRepository(t *testing.T) {
 	// Test Create method
 	createdRequestTracker, err := requestTrackerRepo.Create(
 		context.Background(),
-		models.RequestTracker{},
+		types.RequestTracker{},
 	)
 	assert.NoError(t, err)
 	assert.NotZero(t, createdRequestTracker.ID)
@@ -65,7 +65,7 @@ func TestRequestTrackerRepository(t *testing.T) {
 	// Test Find method
 	requestTracker1, err := requestTrackerRepo.Create(
 		context.Background(),
-		models.RequestTracker{Status: "started"},
+		types.RequestTracker{Status: "started"},
 	)
 	assert.NoError(t, err)
 
@@ -78,7 +78,7 @@ func TestRequestTrackerRepository(t *testing.T) {
 	// Test FindAll method
 	requestTracker2, err := requestTrackerRepo.Create(
 		context.Background(),
-		models.RequestTracker{Status: "finished"},
+		types.RequestTracker{Status: "finished"},
 	)
 	assert.NoError(t, err)
 

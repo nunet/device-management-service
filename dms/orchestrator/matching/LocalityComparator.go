@@ -1,33 +1,33 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func LocalityComparator(lraw interface{}, rraw interface{}, preference ...Preference) models.Comparison {
+func LocalityComparator(lraw interface{}, rraw interface{}, preference ...Preference) types.Comparison {
 	// simplified version of (placeholder)
 	// comparator for Locality:
 	// left represent machine capabilities;
 	// right represent required capabilities;
 
 	// validate input type
-	_, lrawok := lraw.(models.Locality)
-	_, rrawok := rraw.(models.Locality)
+	_, lrawok := lraw.(types.Locality)
+	_, rrawok := rraw.(types.Locality)
 	if !lrawok || !rrawok {
-		return models.Error
+		return types.Error
 	}		
 
-	l := lraw.(models.Locality)
-	r := rraw.(models.Locality)
+	l := lraw.(types.Locality)
+	r := rraw.(types.Locality)
 
 	if l.Kind == r.Kind {
 		if l.Name == r.Name {
-			return models.Equal
+			return types.Equal
 		} else {
-			return models.Worse
+			return types.Worse
 		}
 	} else {
-		return models.Error
+		return types.Error
 	}	
 
 }

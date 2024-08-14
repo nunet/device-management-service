@@ -1,4 +1,4 @@
-package models
+package types
 
 const (
 	StorageVolumeTypeBind = "bind"

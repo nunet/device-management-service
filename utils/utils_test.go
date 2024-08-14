@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestIsExecutorStrictlyContained(t *testing.T) {
-	docker := models.Executor{models.ExecutorTypeDocker}
-	firecracker := models.Executor{models.ExecutorTypeFirecracker}
-	wasm := models.Executor{models.ExecutorTypeWasm}
+	docker := types.Executor{types.ExecutorTypeDocker}
+	firecracker := types.Executor{types.ExecutorTypeFirecracker}
+	wasm := types.Executor{types.ExecutorTypeWasm}
 
 	executors1 := []interface{}{docker, firecracker, wasm}
 	executors2 := []interface{}{docker, firecracker}
@@ -26,9 +26,9 @@ func TestIsExecutorStrictlyContained(t *testing.T) {
 }
 
 func TestIntersectionStringSlices(t *testing.T) {
-	docker := models.Executor{models.ExecutorTypeDocker}
-	firecracker := models.Executor{models.ExecutorTypeFirecracker}
-	wasm := models.Executor{models.ExecutorTypeWasm}
+	docker := types.Executor{types.ExecutorTypeDocker}
+	firecracker := types.Executor{types.ExecutorTypeFirecracker}
+	wasm := types.Executor{types.ExecutorTypeWasm}
 
 	executors1 := []interface{}{docker, firecracker, wasm}
 	executors2 := []interface{}{docker, firecracker}
@@ -83,9 +83,9 @@ func TestIsSameShallowType(t *testing.T) {
 }
 
 func TestIsExecutor(t *testing.T) {
-	executor1 := models.Executor{models.ExecutorTypeDocker}
-	executor2 := models.Executor{models.ExecutorTypeFirecracker}
-	executor3 := models.Executor{models.ExecutorTypeWasm}
+	executor1 := types.Executor{types.ExecutorTypeDocker}
+	executor2 := types.Executor{types.ExecutorTypeFirecracker}
+	executor3 := types.Executor{types.ExecutorTypeWasm}
 
 	// positive assertions
 	assert.True(t, IsExecutor(executor1))
@@ -98,9 +98,9 @@ func TestIsExecutor(t *testing.T) {
 }
 
 func TestIsExecutorType(t *testing.T) {
-	var executorType1 models.ExecutorType = models.ExecutorTypeDocker
-	var executorType2 models.ExecutorType = models.ExecutorTypeFirecracker
-	var executorType3 models.ExecutorType = models.ExecutorTypeWasm
+	var executorType1 types.ExecutorType = types.ExecutorTypeDocker
+	var executorType2 types.ExecutorType = types.ExecutorTypeFirecracker
+	var executorType3 types.ExecutorType = types.ExecutorTypeWasm
 
 	// positive assertions
 	assert.True(t, IsExecutorType(executorType1))
@@ -113,17 +113,17 @@ func TestIsExecutorType(t *testing.T) {
 }
 
 func TestIsJobTypes(t *testing.T) {
-	var jobType1 models.JobTypes
-	jobType1 = append(jobType1, models.BATCH)
-	jobType1 = append(jobType1, models.SINGLERUN)
+	var jobType1 types.JobTypes
+	jobType1 = append(jobType1, types.BATCH)
+	jobType1 = append(jobType1, types.SINGLERUN)
 
-	var jobType2 models.JobTypes
-	jobType2 = append(jobType2, models.BATCH)
-	jobType2 = append(jobType2, models.LONGRUNNING)
+	var jobType2 types.JobTypes
+	jobType2 = append(jobType2, types.BATCH)
+	jobType2 = append(jobType2, types.LONGRUNNING)
 
-	var jobType3 models.JobTypes
-	jobType3 = append(jobType3, models.RECURRING)
-	jobType3 = append(jobType3, models.SINGLERUN)
+	var jobType3 types.JobTypes
+	jobType3 = append(jobType3, types.RECURRING)
+	jobType3 = append(jobType3, types.SINGLERUN)
 
 	// positive assertions
 	assert.True(t, IsJobTypes(jobType1))
@@ -136,9 +136,9 @@ func TestIsJobTypes(t *testing.T) {
 }
 
 func TestIsJobType(t *testing.T) {
-	var jobType1 models.JobType = models.BATCH
-	var jobType2 models.JobType = models.SINGLERUN
-	var jobType3 models.JobType = models.LONGRUNNING
+	var jobType1 types.JobType = types.BATCH
+	var jobType2 types.JobType = types.SINGLERUN
+	var jobType3 types.JobType = types.LONGRUNNING
 
 	// positive assertions
 	assert.True(t, IsJobType(jobType1))
@@ -151,37 +151,37 @@ func TestIsJobType(t *testing.T) {
 }
 
 func TestConvertTypedSliceToUntypedSlice(t *testing.T) {
-	var jobType1 models.JobTypes
-	jobType1 = append(jobType1, models.BATCH)
-	jobType1 = append(jobType1, models.SINGLERUN)
+	var jobType1 types.JobTypes
+	jobType1 = append(jobType1, types.BATCH)
+	jobType1 = append(jobType1, types.SINGLERUN)
 
-	var jobType2 models.JobTypes
-	jobType2 = append(jobType2, models.BATCH)
-	jobType2 = append(jobType2, models.LONGRUNNING)
+	var jobType2 types.JobTypes
+	jobType2 = append(jobType2, types.BATCH)
+	jobType2 = append(jobType2, types.LONGRUNNING)
 
-	var jobType3 models.JobTypes
-	jobType3 = append(jobType3, models.RECURRING)
-	jobType3 = append(jobType3, models.SINGLERUN)
+	var jobType3 types.JobTypes
+	jobType3 = append(jobType3, types.RECURRING)
+	jobType3 = append(jobType3, types.SINGLERUN)
 
 	// positive assertions
 	actualValue := ConvertTypedSliceToUntypedSlice(jobType1)
-	expectedValue := []interface{}{models.BATCH, models.SINGLERUN}
+	expectedValue := []interface{}{types.BATCH, types.SINGLERUN}
 	assert.Equal(t, expectedValue, actualValue)
 
 	actualValue = ConvertTypedSliceToUntypedSlice(jobType2)
-	expectedValue = []interface{}{models.BATCH, models.LONGRUNNING}
+	expectedValue = []interface{}{types.BATCH, types.LONGRUNNING}
 	assert.Equal(t, expectedValue, actualValue)
 	
 	
 	actualValue = ConvertTypedSliceToUntypedSlice(jobType3)
-	expectedValue = []interface{}{models.RECURRING, models.SINGLERUN}	
+	expectedValue = []interface{}{types.RECURRING, types.SINGLERUN}	
 	assert.Equal(t, expectedValue, actualValue)
 }
 
 func TestIsGPUVendor(t *testing.T) {
-	var gpuVendor1 models.GPUVendor = models.GPUVendorNvidia
-	var gpuVendor2 models.GPUVendor = models.GPUVendorAMDATI
-	var gpuVendor3 models.GPUVendor = models.GPUVendorIntel
+	var gpuVendor1 types.GPUVendor = types.GPUVendorNvidia
+	var gpuVendor2 types.GPUVendor = types.GPUVendorAMDATI
+	var gpuVendor3 types.GPUVendor = types.GPUVendorIntel
 
 	// positive assertions
 	assert.True(t, IsGPUVendor(gpuVendor1))

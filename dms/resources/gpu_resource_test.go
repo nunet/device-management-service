@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestGetNVIDIAGPUInfo(t *testing.T) {
@@ -84,11 +84,11 @@ func TestDetectGPUVendors(t *testing.T) {
 	}
 
 	// Check if the detected vendors are among the expected values
-	expectedVendors := map[models.GPUVendor]bool{
-		models.GPUVendorNvidia: true,
-		models.GPUVendorAMDATI: true,
-		models.GPUVendorIntel:  true,
-		models.Unknown:         true,
+	expectedVendors := map[types.GPUVendor]bool{
+		types.GPUVendorNvidia: true,
+		types.GPUVendorAMDATI: true,
+		types.GPUVendorIntel:  true,
+		types.Unknown:         true,
 	}
 
 	for _, vendor := range vendors {

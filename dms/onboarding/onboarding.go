@@ -11,7 +11,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 
 	"github.com/spf13/afero"
@@ -47,7 +47,7 @@ func (o *Onboarding) IsOnboarded(ctx context.Context) (bool, error) {
 }
 
 // Status returns onbaording status and any error if encountered
-func (o *Onboarding) Status(ctx context.Context) (*models.OnboardingStatus, error) {
+func (o *Onboarding) Status(ctx context.Context) (*types.OnboardingStatus, error) {
 	onboarded, err := o.IsOnboarded(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not check onboard status: %w", err)
@@ -56,7 +56,7 @@ func (o *Onboarding) Status(ctx context.Context) (*models.OnboardingStatus, erro
 	if err != nil {
 		return nil, fmt.Errorf("could not get machine UUID: %w", err)
 	}
-	resp := models.OnboardingStatus{
+	resp := types.OnboardingStatus{
 		Onboarded:    onboarded,
 		Error:        err,
 		MachineUUID:  machine.UUID,
@@ -66,8 +66,8 @@ func (o *Onboarding) Status(ctx context.Context) (*models.OnboardingStatus, erro
 }
 
 // Onboard validates the onboarding params and onboards the machine to the network
-// It returns a *models.OnboardingConfig and any error if encountered
-func (o *Onboarding) Onboard(ctx context.Context, capacity models.CapacityForNunet) (*models.OnboardingConfig, error) {
+// It returns a *types.OnboardingConfig and any error if encountered
+func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNunet) (*types.OnboardingConfig, error) {
 	if err := o.validateOnboardingPrerequisites(capacity); err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity models.CapacityForNun
 	totalMem := resources.GetTotalProvisioned().Memory
 	numCores := resources.GetTotalProvisioned().NumCores
 
-	var oConf models.OnboardingConfig
+	var oConf types.OnboardingConfig
 	oConf.Name = hostname
 	oConf.UpdateTimestamp = time.Now().Unix()
 	oConf.Resource.MemoryMax = int64(totalMem)
@@ -124,7 +124,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity models.CapacityForNun
 }
 
 // ResourceConfig allows changing onboarding parameters
-func (o *Onboarding) ResourceConfig(ctx context.Context, capacity models.CapacityForNunet) (*models.OnboardingConfig, error) {
+func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.CapacityForNunet) (*types.OnboardingConfig, error) {
 	onboarded, err := o.IsOnboarded(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not check onboard status: %w", err)
@@ -209,7 +209,7 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 	return nil
 }
 
-func validateCapacityForNunet(capacity models.CapacityForNunet) error {
+func validateCapacityForNunet(capacity types.CapacityForNunet) error {
 	// TODO: Replace with ResourceManager
 	totalCPU := resources.GetTotalProvisioned().CPU
 	totalMem := resources.GetTotalProvisioned().Memory
@@ -225,7 +225,7 @@ func validateCapacityForNunet(capacity models.CapacityForNunet) error {
 	return nil
 }
 
-func (o *Onboarding) validateOnboardingPrerequisites(capacity models.CapacityForNunet) error {
+func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForNunet) error {
 	ok, err := o.config.Fs.DirExists(o.config.WorkDir)
 	if err != nil {
 		return fmt.Errorf("could not check if config directory exists: %w", err)
@@ -249,11 +249,11 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity models.CapacityFor
 	return nil
 }
 
-func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity models.CapacityForNunet) error {
+func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity types.CapacityForNunet) error {
 	// TODO: Replace with ResourceManager
 	totalProvisioned := resources.GetTotalProvisioned()
 
-	avalRes := models.AvailableResources{
+	avalRes := types.AvailableResources{
 		TotCpuHz:          int(capacity.CPU),
 		CpuNo:             int(totalProvisioned.NumCores),
 		CpuHz:             resources.Hz_per_cpu(),
@@ -281,9 +281,9 @@ func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity mode
 
 // CreatePaymentAddress generates a keypair based on the wallet type. Currently supported types: ethereum, cardano.
 // TODO: This should be moved to utils-related package. It's a utility function independent of onboarding
-func CreatePaymentAddress(wallet string) (*models.BlockchainAddressPrivKey, error) {
+func CreatePaymentAddress(wallet string) (*types.BlockchainAddressPrivKey, error) {
 	var (
-		pair *models.BlockchainAddressPrivKey
+		pair *types.BlockchainAddressPrivKey
 		err  error
 	)
 	switch wallet {

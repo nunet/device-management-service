@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const DestroyTimeout = time.Second * 10
@@ -33,7 +33,7 @@ type executionHandler struct {
 	running  *atomic.Bool // Indicates if the container is currently running.
 
 	// result of the execution
-	result *models.ExecutionResult
+	result *types.ExecutionResult
 
 	// TTY setting
 	TTYEnabled bool // Indicates if TTY is enabled for the container.
@@ -56,7 +56,7 @@ func (h *executionHandler) run(ctx context.Context) {
 	}()
 
 	if err := h.client.StartContainer(ctx, h.containerID); err != nil {
-		h.result = models.NewFailedExecutionResult(fmt.Errorf("failed to start container: %v", err))
+		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start container: %v", err))
 		return
 	}
 
@@ -69,11 +69,11 @@ func (h *executionHandler) run(ctx context.Context) {
 	statusCh, errCh := h.client.WaitContainer(ctx, h.containerID)
 	select {
 	case status := <-ctx.Done():
-		h.result = models.NewFailedExecutionResult(fmt.Errorf("execution cancelled: %v", status))
+		h.result = types.NewFailedExecutionResult(fmt.Errorf("execution cancelled: %v", status))
 		return
 	case err := <-errCh:
 		zlog.Sugar().Errorf("error while waiting for container: %v\n", err)
-		h.result = models.NewFailedExecutionResult(
+		h.result = types.NewFailedExecutionResult(
 			fmt.Errorf("failed to wait for container: %v", err),
 		)
 		return
@@ -81,7 +81,7 @@ func (h *executionHandler) run(ctx context.Context) {
 		containerExitStatusCode = exitStatus.StatusCode
 		containerJSON, err := h.client.InspectContainer(ctx, h.containerID)
 		if err != nil {
-			h.result = &models.ExecutionResult{
+			h.result = &types.ExecutionResult{
 				ExitCode: int(containerExitStatusCode),
 				ErrorMsg: err.Error(),
 			}
@@ -89,7 +89,7 @@ func (h *executionHandler) run(ctx context.Context) {
 		}
 		if containerJSON.ContainerJSONBase.State.OOMKilled {
 			containerError = errors.New("container was killed due to OOM")
-			h.result = &models.ExecutionResult{
+			h.result = &types.ExecutionResult{
 				ExitCode: int(containerExitStatusCode),
 				ErrorMsg: containerError.Error(),
 			}
@@ -105,7 +105,7 @@ func (h *executionHandler) run(ctx context.Context) {
 	if logsErr != nil {
 		followError := fmt.Errorf("failed to follow container logs: %w", logsErr)
 		if containerError != nil {
-			h.result = &models.ExecutionResult{
+			h.result = &types.ExecutionResult{
 				ExitCode: int(containerExitStatusCode),
 				ErrorMsg: fmt.Sprintf(
 					"container error: '%s'. logs error: '%s'",
@@ -114,7 +114,7 @@ func (h *executionHandler) run(ctx context.Context) {
 				),
 			}
 		} else {
-			h.result = &models.ExecutionResult{
+			h.result = &types.ExecutionResult{
 				ExitCode: int(containerExitStatusCode),
 				ErrorMsg: followError.Error(),
 			}
@@ -123,7 +123,7 @@ func (h *executionHandler) run(ctx context.Context) {
 	}
 
 	// Initialize the result with the exit status code.
-	h.result = models.NewExecutionResult(int(containerExitStatusCode))
+	h.result = types.NewExecutionResult(int(containerExitStatusCode))
 
 	// Capture the logs based on the TTY setting.
 	if h.TTYEnabled {
@@ -165,7 +165,7 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 
 func (h *executionHandler) outputStream(
 	ctx context.Context,
-	request models.LogStreamRequest,
+	request types.LogStreamRequest,
 ) (io.ReadCloser, error) {
 	since := "1" // Default to the start of UNIX time to get all logs.
 	if request.Tail {

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/cmd/backend"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func setupMockDB() error {
@@ -17,17 +17,17 @@ func setupMockDB() error {
 		return fmt.Errorf("failed to initialize mock db: %v", err)
 	}
 
-	err = resetMockDB(mockDB, models.Libp2pInfo{})
+	err = resetMockDB(mockDB, types.Libp2pInfo{})
 	if err != nil {
 		return fmt.Errorf("failed to reset previous db tables: %v", err)
 	}
 
-	err = mockDB.AutoMigrate(&models.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
 	if err != nil {
 		return fmt.Errorf("unable to auto migrate mock db: %v", err)
 	}
 
-	mockP2PInfo := models.Libp2pInfo{
+	mockP2PInfo := types.Libp2pInfo{
 		PrivateKey: []byte("secretkey"),
 	}
 

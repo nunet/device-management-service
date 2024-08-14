@@ -1,6 +1,6 @@
 package jobs
 
-import "gitlab.com/nunet/device-management-service/models"
+import "gitlab.com/nunet/device-management-service/types"
 
 // JobConfig represents the root of the job configuration
 type JobSpec struct {
@@ -21,8 +21,8 @@ type Job struct {
 	Name      string                    `json:"name" description:"Name of the job"`
 	Metadata  JobMetadata               `json:"metadata" description:"Metadata of the job"`
 	Locality  []string                  `json:"locality" description:"Deployment locality"`
-	Execution models.SpecConfig         `json:"execution" description:"Execution Engine configuration"`
-	Resources models.ExecutionResources `json:"resources" description:"Resources required"`
+	Execution types.SpecConfig         `json:"execution" description:"Execution Engine configuration"`
+	Resources types.ExecutionResources `json:"resources" description:"Resources required"`
 	Volumes   []VolumeConfig           `json:"volumes" description:"List of volumes"`
 	Networks  []NetworkConfig          `json:"networks" description:"List of networks"`
 	Libraries []Library                 `json:"libraries" description:"List of required libraries"`
@@ -39,7 +39,7 @@ type JobMetadata struct {
 type VolumeConfig struct {
 	Name       string            `json:"name" description:"Name of the volume"`
 	Type       string            `json:"type" description:"Type of the volume"`
-	Remote     models.SpecConfig `json:"remote" description:"Remote volume configuration"`
+	Remote     types.SpecConfig `json:"remote" description:"Remote volume configuration"`
 	Mountpoint string            `json:"mountpoint" description:"Mountpoint of the volume"`
 }
 

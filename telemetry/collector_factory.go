@@ -3,7 +3,7 @@ package telemetry
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
 
@@ -17,18 +17,18 @@ const (
 )
 
 type CollectorFactory struct {
-	config     *models.TelemetryConfig
-	collectors map[CollectorType]func(config *models.TelemetryConfig) (Collector, error)
+	config     *types.TelemetryConfig
+	collectors map[CollectorType]func(config *types.TelemetryConfig) (Collector, error)
 }
 
-func NewCollectorFactory(config *models.TelemetryConfig) *CollectorFactory {
+func NewCollectorFactory(config *types.TelemetryConfig) *CollectorFactory {
 	return &CollectorFactory{
 		config:     config,
-		collectors: make(map[CollectorType]func(config *models.TelemetryConfig) (Collector, error)),
+		collectors: make(map[CollectorType]func(config *types.TelemetryConfig) (Collector, error)),
 	}
 }
 
-func (f *CollectorFactory) RegisterCollector(t CollectorType, creator func(config *models.TelemetryConfig) (Collector, error)) {
+func (f *CollectorFactory) RegisterCollector(t CollectorType, creator func(config *types.TelemetryConfig) (Collector, error)) {
 	f.collectors[t] = creator
 }
 

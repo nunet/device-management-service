@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -18,20 +18,20 @@ func ConnectDatabase() {
 		panic("Failed to connect to database!")
 	}
 
-	database.AutoMigrate(&models.ElasticToken{})
-	database.AutoMigrate(&models.VirtualMachine{})
-	database.AutoMigrate(&models.Machine{})
-	database.AutoMigrate(&models.AvailableResources{})
-	database.AutoMigrate(&models.FreeResources{})
-	database.AutoMigrate(&models.PeerInfo{})
-	database.AutoMigrate(&models.Services{})
-	database.AutoMigrate(&models.ServiceResourceRequirements{})
-	database.AutoMigrate(&models.ContainerImages{})
-	database.AutoMigrate(&models.RequestTracker{})
-	database.AutoMigrate(&models.Libp2pInfo{})
-	database.AutoMigrate(&models.DeploymentRequestFlat{})
-	database.AutoMigrate(&models.MachineUUID{})
-	database.AutoMigrate(&models.Connection{})
+	database.AutoMigrate(&types.ElasticToken{})
+	database.AutoMigrate(&types.VirtualMachine{})
+	database.AutoMigrate(&types.Machine{})
+	database.AutoMigrate(&types.AvailableResources{})
+	database.AutoMigrate(&types.FreeResources{})
+	database.AutoMigrate(&types.PeerInfo{})
+	database.AutoMigrate(&types.Services{})
+	database.AutoMigrate(&types.ServiceResourceRequirements{})
+	database.AutoMigrate(&types.ContainerImages{})
+	database.AutoMigrate(&types.RequestTracker{})
+	database.AutoMigrate(&types.Libp2pInfo{})
+	database.AutoMigrate(&types.DeploymentRequestFlat{})
+	database.AutoMigrate(&types.MachineUUID{})
+	database.AutoMigrate(&types.Connection{})
 
 	DB = database
 }

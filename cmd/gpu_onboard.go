@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -37,9 +37,9 @@ var gpuOnboardCmd = &cobra.Command{
 			return
 		}
 
-		hasAMD := containsVendor(vendors, models.GPUVendorAMDATI)
-		hasNVIDIA := containsVendor(vendors, models.GPUVendorNvidia)
-		hasIntel := containsVendor(vendors, models.GPUVendorIntel)
+		hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
+		hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
+		hasIntel := containsVendor(vendors, types.GPUVendorIntel)
 
 		if !hasAMD && !hasNVIDIA && !hasIntel {
 			fmt.Println(`No NVIDIA/AMD/Intel GPU(s) detected...`)
@@ -93,7 +93,7 @@ var gpuOnboardCmd = &cobra.Command{
 					return
 				}
 
-				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), models.GPUVendorNvidia, nvidiaDriverPath)
+				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorNvidia, nvidiaDriverPath)
 				if err != nil {
 					fmt.Println("Error during NVIDIA drivers installation:", err)
 					return
@@ -109,7 +109,7 @@ var gpuOnboardCmd = &cobra.Command{
 
 				printGPUs(AMDGPUs)
 
-				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), models.GPUVendorAMDATI, amdDriverPath)
+				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorAMDATI, amdDriverPath)
 				if err != nil {
 					fmt.Println("Error during AMD drivers installation:", err)
 					return
@@ -123,7 +123,7 @@ var gpuOnboardCmd = &cobra.Command{
 
 // containsVendor takes a slice of GPUVendor structs that were detected in the system
 // and look for a specific vendor, returning true if it is found.
-func containsVendor(vendors []models.GPUVendor, target models.GPUVendor) bool {
+func containsVendor(vendors []types.GPUVendor, target types.GPUVendor) bool {
 	for _, v := range vendors {
 		if v == target {
 			return true
@@ -168,7 +168,7 @@ func promptContainer(in io.Reader, out io.Writer, containerPath string) error {
 
 // promptDriverInstallation takes GPUVendor (for printing) and the installation script as inputs.
 // It prompts the user for confirmation and if confirmed it runs the script.
-func promptDriverInstallation(in io.Reader, out io.Writer, vendor models.GPUVendor, scriptPath string) error {
+func promptDriverInstallation(in io.Reader, out io.Writer, vendor types.GPUVendor, scriptPath string) error {
 	prompt := fmt.Sprintf("Do you want to proceed with %s driver installation? (y/N)", vendor)
 
 	proceed, err := utils.PromptYesNo(in, out, prompt)
@@ -189,7 +189,7 @@ func promptDriverInstallation(in io.Reader, out io.Writer, vendor models.GPUVend
 // printGPUs display a list of detected GPUs in the machine.
 // It takes a slice of GPUInfo structs as input, get the vendor from the first element
 // and then iterate over each element to display the GPU card series.
-func printGPUs(gpus []models.GPU) {
+func printGPUs(gpus []types.GPU) {
 	var vendor string
 
 	if len(gpus) == 0 {

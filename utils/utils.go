@@ -18,7 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/db"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"golang.org/x/exp/slices"
 
 	"reflect"
@@ -81,7 +81,7 @@ func RandomString(n int) string {
 
 // GenerateMachineUUID generates a machine uuid
 func GenerateMachineUUID() (string, error) {
-	var machine models.MachineUUID
+	var machine types.MachineUUID
 
 	machineUUID, err := uuid.NewDCEGroup()
 	if err != nil {
@@ -94,7 +94,7 @@ func GenerateMachineUUID() (string, error) {
 
 // GetMachineUUID returns the machine uuid from the DB
 func GetMachineUUID() string {
-	var machine models.MachineUUID
+	var machine types.MachineUUID
 	uuid, err := GenerateMachineUUID()
 	if err != nil {
 		zlog.Sugar().Errorf("could not generate machine uuid: %v", err)
@@ -132,7 +132,7 @@ func DeleteFile(path string, backup bool) (err error) {
 
 // ReadyForElastic checks if the device is ready to send logs to elastic
 func ReadyForElastic() bool {
-	elasticToken := models.ElasticToken{}
+	elasticToken := types.ElasticToken{}
 	db.DB.Find(&elasticToken)
 	return elasticToken.NodeId != "" && elasticToken.ChannelName != ""
 }
@@ -299,17 +299,17 @@ func CheckWSL() (bool, error) {
 }
 
 // SaveServiceInfo updates service info into SP's DMS for claim Reward by SP user
-func SaveServiceInfo(cpService models.Services) error {
+func SaveServiceInfo(cpService types.Services) error {
 
-	var spService models.Services
-	err := db.DB.Model(&models.Services{}).Where("tx_hash = ?", cpService.TxHash).Find(&spService).Error
+	var spService types.Services
+	err := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Find(&spService).Error
 	if err != nil {
 		return fmt.Errorf("Unable to find service on SP side: %v", err)
 	}
 	cpService.ID = spService.ID
 	cpService.CreatedAt = spService.CreatedAt
 
-	result := db.DB.Model(&models.Services{}).Where("tx_hash = ?", cpService.TxHash).Updates(&cpService)
+	result := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Updates(&cpService)
 	if result.Error != nil {
 		return fmt.Errorf("Unable to update service info on SP side: %v", result.Error.Error())
 	}
@@ -323,27 +323,27 @@ func RandomBool() bool {
 }
 
 func IsExecutorType(v interface{}) bool {
-	_, ok := v.(models.ExecutorType)
+	_, ok := v.(types.ExecutorType)
 	return ok
 }
 
 func IsGPUVendor(v interface{}) bool {
-	_, ok := v.(models.GPUVendor)
+	_, ok := v.(types.GPUVendor)
 	return ok
 }
 
 func IsJobType(v interface{}) bool {
-	_, ok := v.(models.JobType)
+	_, ok := v.(types.JobType)
 	return ok
 }
 
 func IsJobTypes(v interface{}) bool {
-	_, ok := v.(models.JobTypes)
+	_, ok := v.(types.JobTypes)
 	return ok
 }
 
 func IsExecutor(v interface{}) bool {
-	_, ok := v.(models.Executor)
+	_, ok := v.(types.Executor)
 	return ok
 }
 

@@ -7,7 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // StreamHandler is a function type that processes data from a stream.
@@ -31,7 +31,7 @@ func NewHandlerRegistry(host host.Host) *HandlerRegistry {
 }
 
 // RegisterHandlerWithStreamCallback registers a stream handler for a specific protocol.
-func (r *HandlerRegistry) RegisterHandlerWithStreamCallback(messageType models.MessageType, handler StreamHandler) error {
+func (r *HandlerRegistry) RegisterHandlerWithStreamCallback(messageType types.MessageType, handler StreamHandler) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -47,7 +47,7 @@ func (r *HandlerRegistry) RegisterHandlerWithStreamCallback(messageType models.M
 }
 
 // RegisterHandlerWithBytesCallback registers a stream handler for a specific protocol and sends the bytes back to callback.
-func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType models.MessageType, s StreamHandler, handler func(data []byte)) error {
+func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType types.MessageType, s StreamHandler, handler func(data []byte)) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -63,7 +63,7 @@ func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType models.Me
 }
 
 // SendMessageToLocalHandler given the message type it sends data to the local handler found.
-func (r *HandlerRegistry) SendMessageToLocalHandler(messageType models.MessageType, data []byte) {
+func (r *HandlerRegistry) SendMessageToLocalHandler(messageType types.MessageType, data []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

@@ -13,7 +13,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var gpuStatusCmd = &cobra.Command{
@@ -28,9 +28,9 @@ var gpuStatusCmd = &cobra.Command{
 			return
 		}
 
-		hasAMD := containsVendor(vendors, models.GPUVendorAMDATI)
-		hasNVIDIA := containsVendor(vendors, models.GPUVendorNvidia)
-		hasIntel := containsVendor(vendors, models.GPUVendorIntel)
+		hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
+		hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
+		hasIntel := containsVendor(vendors, types.GPUVendorIntel)
 
 		if hasNVIDIA || hasAMD || hasIntel {
 			if hasNVIDIA {

@@ -1,4 +1,4 @@
-package models
+package types
 
 // BlockchainAddressPrivKey holds Ethereum wallet address and private key from which the
 // address is derived.

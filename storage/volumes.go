@@ -1,13 +1,13 @@
 package storage
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type IDType int
 type VolumeSource string
-type CreateVolOpt func(*models.StorageVolume)
-type LockVolOpt func(*models.StorageVolume)
+type CreateVolOpt func(*types.StorageVolume)
+type LockVolOpt func(*types.StorageVolume)
 
 const (
 	IDTypeUndefined IDType = iota
@@ -31,7 +31,7 @@ type VolumeController interface {
 	//
 	// Be aware: CreateVolume does not insert any data within the directory. It's up to the caller
 	// to do that.
-	CreateVolume(volSource VolumeSource, opts ...CreateVolOpt) (models.StorageVolume, error)
+	CreateVolume(volSource VolumeSource, opts ...CreateVolOpt) (types.StorageVolume, error)
 
 	// LockVolume makes the volume read-only. It should be used after all necessary data has being written
 	// to the volume. It makes clear if a volume will change state or not,that comes handy when we need
@@ -47,7 +47,7 @@ type VolumeController interface {
 	DeleteVolume(identifier string, idType IDType) error
 
 	// ListVolumes returns a list of all storage volumes managed by the VolumeController implementation
-	ListVolumes() ([]models.StorageVolume, error)
+	ListVolumes() ([]types.StorageVolume, error)
 
 	// GetSize returns the size of a volume
 	// TODO-minor: identify which measurement type will be used
@@ -56,6 +56,6 @@ type VolumeController interface {
 	// TODO-maybe: encrypt/decrypt method might move to an unique EncryptVolume/DecryptVolume interfaces
 	// or something else.
 	//  - Warning: if moved, EncryptionType field of StorageVolume must be updated somehow by the new interface
-	EncryptVolume(path string, encryptor models.Encryptor, encryptionType models.EncryptionType) error
-	DecryptVolume(path string, decryptor models.Decryptor, decryptionType models.EncryptionType) error
+	EncryptVolume(path string, encryptor types.Encryptor, encryptionType types.EncryptionType) error
+	DecryptVolume(path string, decryptor types.Decryptor, decryptionType types.EncryptionType) error
 }

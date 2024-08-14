@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -19,19 +19,19 @@ var (
 	testDBReadOnlyResOperations *gorm.DB
 )
 
-var mockFreeRes1 = models.FreeResources{
+var mockFreeRes1 = types.FreeResources{
 	TotCpuHz: 6000,
 	Ram:      5000,
 	Disk:     600,
 }
 
-var mockFreeRes2 = models.FreeResources{
+var mockFreeRes2 = types.FreeResources{
 	TotCpuHz: 1000,
 	Ram:      1000,
 	Disk:     500,
 }
 
-var mockAvailableRes1 = models.AvailableResources{
+var mockAvailableRes1 = types.AvailableResources{
 	TotCpuHz: 2000,
 	Ram:      1500,
 	Disk:     800,
@@ -45,20 +45,20 @@ var mockAvailableRes1 = models.AvailableResources{
 // in which communicates with the in-memory DB with mock data.
 func TestSubtractFromAvailableRes(t *testing.T) {
 	tests := []struct {
-		resUsage models.FreeResources
-		want     models.FreeResources
+		resUsage types.FreeResources
+		want     types.FreeResources
 		wantErr  bool
 	}{
 		{
 			// If AvailableResources is less than the resources usage, should return error
 			resUsage: mockFreeRes1,
-			want:     models.FreeResources{},
+			want:     types.FreeResources{},
 			wantErr:  true,
 		},
 		{
 			// Normal case, subtracting AvailableResources from resources usage
 			resUsage: mockFreeRes2,
-			want:     models.FreeResources{TotCpuHz: 1000, Ram: 500, Disk: 300, Vcpu: 10},
+			want:     types.FreeResources{TotCpuHz: 1000, Ram: 500, Disk: 300, Vcpu: 10},
 			wantErr:  false,
 		},
 	}
@@ -83,21 +83,21 @@ func TestSubtractFromAvailableRes(t *testing.T) {
 // TestSubResourcesUsage tests subResourcesUsage() with table tests
 func TestSubResourcesUsage(t *testing.T) {
 	tests := []struct {
-		r1, r2, want models.FreeResources
+		r1, r2, want types.FreeResources
 		wantErr      bool
 	}{
 		{
 			// Normal case, subtraction resulting in positive values
 			r1:      mockFreeRes1,
 			r2:      mockFreeRes2,
-			want:    models.FreeResources{TotCpuHz: 5000, Ram: 4000, Disk: 100},
+			want:    types.FreeResources{TotCpuHz: 5000, Ram: 4000, Disk: 100},
 			wantErr: false,
 		},
 		{
 			// Subtraction of resources resulting in negative values should return error
 			r1:      mockFreeRes2,
 			r2:      mockFreeRes1,
-			want:    models.FreeResources{TotCpuHz: -5000, Ram: -4000, Disk: -100},
+			want:    types.FreeResources{TotCpuHz: -5000, Ram: -4000, Disk: -100},
 			wantErr: true,
 		},
 	}
@@ -117,11 +117,11 @@ func TestSubResourcesUsage(t *testing.T) {
 // TestAddResourcesUsage tests addResourcesUsage() with table tests (mocked structs)
 func TestAddResourcesUsage(t *testing.T) {
 	tests := []struct {
-		r1, r2, want models.FreeResources
+		r1, r2, want types.FreeResources
 	}{
 		{
 			// When adding to an empty struct, the final value must not change
-			r1:   models.FreeResources{},
+			r1:   types.FreeResources{},
 			r2:   mockFreeRes1,
 			want: mockFreeRes1,
 		},
@@ -129,7 +129,7 @@ func TestAddResourcesUsage(t *testing.T) {
 			// Normal addition case
 			r1:   mockFreeRes1,
 			r2:   mockFreeRes2,
-			want: models.FreeResources{TotCpuHz: 7000, Ram: 6000, Disk: 1100},
+			want: types.FreeResources{TotCpuHz: 7000, Ram: 6000, Disk: 1100},
 		},
 	}
 
@@ -145,7 +145,7 @@ func TestAddResourcesUsage(t *testing.T) {
 // with table tests (mocked structs)
 func TestResultsInNegativeValuesFreeRes(t *testing.T) {
 	tests := []struct {
-		r1, r2  models.FreeResources
+		r1, r2  types.FreeResources
 		wantErr bool
 	}{
 		{
@@ -174,8 +174,8 @@ func TestResultsInNegativeValuesFreeRes(t *testing.T) {
 // with table tests (mocked structs)
 func TestResultsInNegativeValuesAvailableRes(t *testing.T) {
 	tests := []struct {
-		r1      models.AvailableResources
-		r2      models.FreeResources
+		r1      types.AvailableResources
+		r2      types.FreeResources
 		wantErr bool
 	}{
 		{
@@ -216,7 +216,7 @@ func setupTestDBResOperations() error {
 		}
 
 		errLocal = testDB.AutoMigrate(
-			&models.AvailableResources{},
+			&types.AvailableResources{},
 		)
 
 		if errLocal != nil {

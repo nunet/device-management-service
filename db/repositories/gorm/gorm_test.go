@@ -1,7 +1,7 @@
 package repositories_gorm
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -9,7 +9,7 @@ import (
 var db *gorm.DB
 
 // setup initializes and sets up the in-memory SQLite database connection for testing purposes.
-// Additionally, it automatically migrates the necessary models to ensure the schema is up-to-date.
+// Additionally, it automatically migrates the necessary types.to ensure the schema is up-to-date.
 func setup() {
 	// Set up the database connection for tests
 	var err error
@@ -20,19 +20,19 @@ func setup() {
 
 	// Run Migrations if needed
 	db.AutoMigrate(
-		&models.PeerInfo{},
-		&models.Machine{},
-		&models.FreeResources{},
-		&models.AvailableResources{},
-		&models.Services{},
-		&models.ServiceResourceRequirements{},
-		&models.Libp2pInfo{},
-		&models.MachineUUID{},
-		&models.Connection{},
-		&models.ElasticToken{},
-		&models.DeploymentRequestFlat{},
-		&models.RequestTracker{},
-		&models.VirtualMachine{},
+		&types.PeerInfo{},
+		&types.Machine{},
+		&types.FreeResources{},
+		&types.AvailableResources{},
+		&types.Services{},
+		&types.ServiceResourceRequirements{},
+		&types.Libp2pInfo{},
+		&types.MachineUUID{},
+		&types.Connection{},
+		&types.ElasticToken{},
+		&types.DeploymentRequestFlat{},
+		&types.RequestTracker{},
+		&types.VirtualMachine{},
 	)
 }
 

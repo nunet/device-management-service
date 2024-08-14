@@ -7,11 +7,11 @@ import (
 	"io"
 	"testing"
 
-	"github.com/docker/docker/api/types"
+	docker_types "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestGPUDeployment(t *testing.T) {
@@ -29,12 +29,12 @@ func TestGPUDeployment(t *testing.T) {
 	// Determine the appropriate image name based on the GPU vendor
 	imageName := "registry.gitlab.com/nunet/ml-on-gpu/ml-on-gpu-service/develop/pytorch"
 	switch maxFreeVRAMGpu.Vendor {
-	case models.GPUVendorNvidia:
+	case types.GPUVendorNvidia:
 		t.Log("NVIDIA GPU selected, no suffix needed for image name")
-	case models.GPUVendorAMDATI:
+	case types.GPUVendorAMDATI:
 		t.Log("AMD GPU selected, adding -amd suffix to image name")
 		imageName += "-amd"
-	case models.GPUVendorIntel:
+	case types.GPUVendorIntel:
 		t.Log("Intel GPU selected, adding -intel suffix to image name")
 		imageName += "-intel"
 	default:
@@ -66,7 +66,7 @@ func TestGPUDeployment(t *testing.T) {
 }
 
 func pullImage(t *testing.T, cli *client.Client, imageName string) error {
-	out, err := cli.ImagePull(context.Background(), imageName, types.ImagePullOptions{})
+	out, err := cli.ImagePull(context.Background(), imageName, docker_types.ImagePullOptions{})
 	if err != nil {
 		return fmt.Errorf("unable to pull image: %v", err)
 	}
@@ -92,7 +92,7 @@ func pullImage(t *testing.T, cli *client.Client, imageName string) error {
 	return nil
 }
 
-func runContainer(t *testing.T, cli *client.Client, imageName string, vendor models.GPUVendor, gpu models.GPU) error {
+func runContainer(t *testing.T, cli *client.Client, imageName string, vendor types.GPUVendor, gpu types.GPU) error {
 	ctx := context.Background()
 
 	containerConfig := &container.Config{
@@ -111,7 +111,7 @@ func runContainer(t *testing.T, cli *client.Client, imageName string, vendor mod
 	var hostConfig *container.HostConfig
 
 	switch vendor {
-	case models.GPUVendorNvidia:
+	case types.GPUVendorNvidia:
 		hostConfig = &container.HostConfig{
 			Resources: container.Resources{
 				DeviceRequests: []container.DeviceRequest{
@@ -123,7 +123,7 @@ func runContainer(t *testing.T, cli *client.Client, imageName string, vendor mod
 				},
 			},
 		}
-	case models.GPUVendorAMDATI:
+	case types.GPUVendorAMDATI:
 		hostConfig = &container.HostConfig{ // Critical configuration for AMD GPUs
 			Binds: []string{
 				"/dev/kfd:/dev/kfd",
@@ -145,7 +145,7 @@ func runContainer(t *testing.T, cli *client.Client, imageName string, vendor mod
 			},
 			GroupAdd: []string{"video"},
 		}
-	case models.GPUVendorIntel:
+	case types.GPUVendorIntel:
 		hostConfig = &container.HostConfig{ // Critical configuration for discrete Intel GPUs
 			Binds: []string{
 				"/dev/dri:/dev/dri",
@@ -171,12 +171,12 @@ func runContainer(t *testing.T, cli *client.Client, imageName string, vendor mod
 	}
 
 	t.Log("Starting container..updating container and installing pciutils to run lspci command..")
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if err := cli.ContainerStart(ctx, resp.ID, docker_types.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("unable to start container: %v", err)
 	}
 
 	t.Log("Fetching container logs")
-	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Follow: true})
+	out, err := cli.ContainerLogs(ctx, resp.ID, docker_types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Follow: true})
 	if err != nil {
 		return fmt.Errorf("unable to get container logs: %v", err)
 	}

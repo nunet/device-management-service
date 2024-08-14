@@ -21,7 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/backend"
 	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 
 	// "gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -96,7 +96,7 @@ func promptReonboard(reader io.Reader, writer io.Writer) error {
 
 // setOnboardData takes all onboarding parameters and marshal them into JSON
 func setOnboardData(memory int64, cpu int64, ntxPrice float64, channel, address string, cardano, serverMode, isAvailable bool) ([]byte, error) {
-	reserved := models.CapacityForNunet{
+	reserved := types.CapacityForNunet{
 		Memory:            memory,
 		CPU:               cpu,
 		Channel:           channel,
@@ -280,8 +280,8 @@ func selfPeerAddrs(body []byte) (addrsByte []byte, err error) {
 	return addrsByte, nil
 }
 
-// printWallet takes models.BlockchainAddressPrivKey struct as input and display it in YAML-like format for better readability
-func printWallet(w io.Writer, pair *models.BlockchainAddressPrivKey) {
+// printWallet takes types.BlockchainAddressPrivKey struct as input and display it in YAML-like format for better readability
+func printWallet(w io.Writer, pair *types.BlockchainAddressPrivKey) {
 	if pair.Address != "" {
 		fmt.Fprintf(w, "address: %s\n", pair.Address)
 	}
@@ -295,7 +295,7 @@ func printWallet(w io.Writer, pair *models.BlockchainAddressPrivKey) {
 	}
 }
 
-func setFullData(provisioned *models.Provisioned) []string {
+func setFullData(provisioned *types.Provisioned) []string {
 	return []string{
 		"Full",
 		fmt.Sprintf("%d", provisioned.Memory),
@@ -304,7 +304,7 @@ func setFullData(provisioned *models.Provisioned) []string {
 	}
 }
 
-func setAvailableData(oConf *models.OnboardingConfig) []string {
+func setAvailableData(oConf *types.OnboardingConfig) []string {
 	return []string{
 		"Available",
 		fmt.Sprintf("%d", oConf.Available.Memory),
@@ -313,7 +313,7 @@ func setAvailableData(oConf *models.OnboardingConfig) []string {
 	}
 }
 
-func setOnboardedData(oConf *models.OnboardingConfig) []string {
+func setOnboardedData(oConf *types.OnboardingConfig) []string {
 	return []string{
 		"Onboarded",
 		fmt.Sprintf("%d", oConf.Reserved.Memory),

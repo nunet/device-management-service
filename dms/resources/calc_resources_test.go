@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/shirou/gopsutil/cpu"
 	"gorm.io/driver/sqlite"
@@ -20,26 +20,26 @@ var (
 	testDBReadOnlyCalcRes *gorm.DB
 )
 
-var vm1 = models.VirtualMachine{
+var vm1 = types.VirtualMachine{
 	VCPUCount:  10,
 	MemSizeMib: 1000,
 	State:      "running",
 }
 
-var availableResTable = models.AvailableResources{
+var availableResTable = types.AvailableResources{
 	TotCpuHz: 15000,
 	Ram:      11000,
 	CpuHz:    100,
 	Disk:     2000,
 }
 
-var s1 = models.Services{
+var s1 = types.Services{
 	ResourceRequirements: 1,
 	JobStatus:            "running",
 }
 
-var serviceResReqs1 = models.ServiceResourceRequirements{
-	BaseDBModel: models.BaseDBModel{
+var serviceResReqs1 = types.ServiceResourceRequirements{
+	BaseDBModel: types.BaseDBModel{
 		ID: "1",
 	},
 	CPU: 3000,
@@ -47,13 +47,13 @@ var serviceResReqs1 = models.ServiceResourceRequirements{
 	HDD: 500,
 }
 
-var s2 = models.Services{
+var s2 = types.Services{
 	ResourceRequirements: 2,
 	JobStatus:            "running",
 }
 
-var serviceResReqs2 = models.ServiceResourceRequirements{
-	BaseDBModel: models.BaseDBModel{
+var serviceResReqs2 = types.ServiceResourceRequirements{
+	BaseDBModel: types.BaseDBModel{
 		ID: "2",
 	},
 	CPU: 4000,
@@ -84,7 +84,7 @@ func TestCalcFreeResources(t *testing.T) {
 		t.Fatalf("calcFreeResources failed with error: %v", err)
 	}
 
-	expectedFreeRes := models.FreeResources{
+	expectedFreeRes := types.FreeResources{
 		TotCpuHz: 7000,
 		Ram:      7000,
 		Disk:     2000,
@@ -97,16 +97,16 @@ func TestCalcFreeResources(t *testing.T) {
 }
 
 // TestCalcUsedResourcesConts is an unit test which tests the calcUsedResourcesConts()
-// with []models.Services and models.ServiceResourceRequirements being mocked structs
+// with []types.Services and types.ServiceResourceRequirements being mocked structs
 func TestCalcUsedResourcesConts(t *testing.T) {
-	services := []models.Services{s1, s2}
-	requirements := map[string]models.ServiceResourceRequirements{
+	services := []types.Services{s1, s2}
+	requirements := map[string]types.ServiceResourceRequirements{
 		"1": serviceResReqs1,
 		"2": serviceResReqs2,
 	}
 
 	result := calcUsedResourcesConts(services, requirements)
-	expected := models.FreeResources{
+	expected := types.FreeResources{
 		TotCpuHz: serviceResReqs1.CPU + serviceResReqs2.CPU,
 		Ram:      serviceResReqs1.RAM + serviceResReqs2.RAM,
 	}
@@ -117,14 +117,14 @@ func TestCalcUsedResourcesConts(t *testing.T) {
 }
 
 // TestCalcUsedResourcesVMs is an unit test which tests the calcUsedResourcesVMs()
-// with []models.VirtualMachine being a mocked struct
+// with []types.VirtualMachine being a mocked struct
 func TestCalcUsedResourcesVMs(t *testing.T) {
-	vms := []models.VirtualMachine{vm1}
+	vms := []types.VirtualMachine{vm1}
 
 	cpuInfo := mockCpuInfo()
 	result := calcUsedResourcesVMs(vms, cpuInfo)
 
-	expected := models.FreeResources{
+	expected := types.FreeResources{
 		Ram:      vm1.MemSizeMib,
 		TotCpuHz: vm1.VCPUCount * int(cpuInfo[0].Mhz),
 	}
@@ -150,10 +150,10 @@ func setupTestDBCalcFree() error {
 		}
 
 		errLocal = testDB.AutoMigrate(
-			&models.AvailableResources{},
-			&models.ServiceResourceRequirements{},
-			&models.VirtualMachine{},
-			&models.Services{},
+			&types.AvailableResources{},
+			&types.ServiceResourceRequirements{},
+			&types.VirtualMachine{},
+			&types.Services{},
 		)
 		if errLocal != nil {
 			err = errLocal

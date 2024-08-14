@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // TestDeploymentRequestFlatRepository is a test suite for the DeploymentRequestFlatRepository.
@@ -24,7 +24,7 @@ func TestDeploymentRequestFlatRepository(t *testing.T) {
 	// Test Create method
 	createdDeploymentRequestFlat, err := deploymentRequestFlatRepo.Create(
 		context.Background(),
-		models.DeploymentRequestFlat{
+		types.DeploymentRequestFlat{
 			JobStatus: "pending",
 		},
 	)
@@ -67,7 +67,7 @@ func TestDeploymentRequestFlatRepository(t *testing.T) {
 	// Test Find method
 	deploymentRequestFlat1, err := deploymentRequestFlatRepo.Create(
 		context.Background(),
-		models.DeploymentRequestFlat{JobStatus: "finished without errors"},
+		types.DeploymentRequestFlat{JobStatus: "finished without errors"},
 	)
 	assert.NoError(t, err)
 
@@ -83,7 +83,7 @@ func TestDeploymentRequestFlatRepository(t *testing.T) {
 	// Test FindAll method
 	deploymentRequestFlat2, err := deploymentRequestFlatRepo.Create(
 		context.Background(),
-		models.DeploymentRequestFlat{JobStatus: "finished with errors"},
+		types.DeploymentRequestFlat{JobStatus: "finished with errors"},
 	)
 	assert.NoError(t, err)
 

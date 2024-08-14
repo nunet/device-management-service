@@ -1,11 +1,11 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"golang.org/x/exp/slices"
 )
 
-func GPUsComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison {
+func GPUsComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
 	// comparator for GPUs type which is just a slice of GPU types:
 	// left represent machine capabilities;
 	// right represent required capabilities;
@@ -13,18 +13,18 @@ func GPUsComparator(lraw, rraw interface{}, preference ...Preference) models.Com
     // (since given slices are not ordered...)
 
 	// validate input type
-	_, lrawok := lraw.([]models.GPU)
-	_, rrawok := rraw.([]models.GPU)
+	_, lrawok := lraw.([]types.GPU)
+	_, rrawok := rraw.([]types.GPU)
 	if !lrawok || !rrawok {
-		return models.Error
+		return types.Error
 	}
 
-	l := lraw.([]models.GPU)
-	r := rraw.([]models.GPU)
+	l := lraw.([]types.GPU)
+	r := rraw.([]types.GPU)
 
-	var interimComparison1 [][]models.Comparison
+	var interimComparison1 [][]types.Comparison
 	for _, rGPU := range r {
-		var interimComparison2 []models.Comparison
+		var interimComparison2 []types.Comparison
 		for _, lGPU := range l {
 			interimComparison2 = append(interimComparison2, Compare(lGPU, rGPU))
 		}
@@ -36,7 +36,7 @@ func GPUsComparator(lraw, rraw interface{}, preference ...Preference) models.Com
 	}
 		// we can now implement a logic to figure out if each required GPU on the left has a matching GPU on the right
 
-	var finalComparison []models.Comparison
+	var finalComparison []types.Comparison
 	var consideredIndexes []int
 	for i := 0; i < len(interimComparison1); i++ {
 		// we need to find the best match for each GPU on the right
@@ -50,16 +50,16 @@ func GPUsComparator(lraw, rraw interface{}, preference ...Preference) models.Com
 		interimComparison1 = removeIndex(interimComparison1, index)
 	} 
 	
-	if slices.Contains(finalComparison, models.Error) {
-		return models.Error
+	if slices.Contains(finalComparison, types.Error) {
+		return types.Error
 	}
-	if slices.Contains(finalComparison, models.Worse) {
-		return models.Worse
+	if slices.Contains(finalComparison, types.Worse) {
+		return types.Worse
 	}
-	if SliceContainsOneValue(finalComparison, models.Equal) {
-		return models.Equal
+	if SliceContainsOneValue(finalComparison, types.Equal) {
+		return types.Equal
 	}
-	return models.Better
+	return types.Better
 }
 
 

@@ -10,7 +10,7 @@ import (
 )
 
 // setup initializes and sets up the clover database using bbolt under the hood in a temporary dir.
-// Additionally, it automatically creates collections for the necessary models.
+// Additionally, it automatically creates collections for the necessary types.
 // TODO: add error handling?
 func setup() (*clover.DB, string) {
 	path, err := tempDir()

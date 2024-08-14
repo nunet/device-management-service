@@ -1,7 +1,7 @@
 package telemetry
 
 import (
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
 
@@ -12,12 +12,12 @@ type Flusher interface {
 }
 
 type Telemetry struct {
-	config      *models.TelemetryConfig
+	config      *types.TelemetryConfig
 	observables map[EventType]map[string][]Observable
 	collectors  map[string]Collector
 }
 
-func NewTelemetry(config *models.TelemetryConfig) *Telemetry {
+func NewTelemetry(config *types.TelemetryConfig) *Telemetry {
 	return &Telemetry{
 		config:      config,
 		observables: make(map[EventType]map[string][]Observable),

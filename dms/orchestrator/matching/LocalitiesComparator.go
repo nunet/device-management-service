@@ -3,10 +3,10 @@ package matching
 import (
 	//	"reflect"
 	"golang.org/x/exp/slices"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func LocalitiesComparator(lraw interface{}, rraw interface{}, preference ...Preference) models.Comparison {
+func LocalitiesComparator(lraw interface{}, rraw interface{}, preference ...Preference) types.Comparison {
 	// simplified version of Localities comparator
 	// which is simply a slice of Locality type;
 	// we do not have separate type defined for Localities
@@ -16,19 +16,19 @@ func LocalitiesComparator(lraw interface{}, rraw interface{}, preference ...Pref
 	// right represent required capabilities;
 
 	// validate input type
-	_, lrawok := lraw.([]models.Locality)
-	_, rrawok := rraw.([]models.Locality)
+	_, lrawok := lraw.([]types.Locality)
+	_, rrawok := rraw.([]types.Locality)
 	if !lrawok || !rrawok {
-		return models.Error
+		return types.Error
 	}	
 
-	l := lraw.([]models.Locality)
-	r := rraw.([]models.Locality)
+	l := lraw.([]types.Locality)
+	r := rraw.([]types.Locality)
 
-	var interimComparison [](map[string]models.Comparison)
+	var interimComparison [](map[string]types.Comparison)
 	for _, rLocality := range r {
-		field := make(map[string]models.Comparison)
-		field[rLocality.Kind] = models.Error
+		field := make(map[string]types.Comparison)
+		field[rLocality.Kind] = types.Error
 		for _, lLocality := range l {
 			if lLocality.Kind == rLocality.Kind {
 				field[rLocality.Kind] = Compare(lLocality, rLocality)
@@ -38,21 +38,21 @@ func LocalitiesComparator(lraw interface{}, rraw interface{}, preference ...Pref
 		interimComparison = append(interimComparison, field)
 	}
 		// we can now implement a logic to figure out if each required GPU on the left has a matching GPU on the right
-	var finalComparison []models.Comparison
+	var finalComparison []types.Comparison
 	for _, c := range interimComparison {
 		for _, v := range c { // we know that there is only one value in the map
 			finalComparison = append(finalComparison, v)
 		}
 	}
 
-	if slices.Contains(finalComparison, models.Error) {
-		return models.Error
+	if slices.Contains(finalComparison, types.Error) {
+		return types.Error
 	}
-	if slices.Contains(finalComparison, models.Worse) {
-		return models.Worse
+	if slices.Contains(finalComparison, types.Worse) {
+		return types.Worse
 	}
-	if SliceContainsOneValue(finalComparison, models.Equal) {
-		return models.Equal
+	if SliceContainsOneValue(finalComparison, types.Equal) {
+		return types.Equal
 	}
-	return models.Better
+	return types.Better
 }

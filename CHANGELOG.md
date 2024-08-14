@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.179](#524)
+
+### Changed
+- Rename the `models` package to `types`
+
 ## [0.4.178](#466)
 
 ### Changed
