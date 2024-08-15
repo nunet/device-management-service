@@ -351,7 +351,7 @@ func handleAvailable(table *tablewriter.Table, utilsService backend.Utility) err
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	onboardR := gdb.NewOnboardingParamsRepository(db)
+	onboardR := gdb.NewOnboardingParams(db)
 	oConf, err := onboardR.Get(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to get onboarding config: %w", err)
@@ -375,7 +375,7 @@ func handleOnboarded(table *tablewriter.Table, utilsService backend.Utility) err
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	onboardR := gdb.NewOnboardingParamsRepository(db)
+	onboardR := gdb.NewOnboardingParams(db)
 	oConf, err := onboardR.Get(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to get onboarding config: %w", err)

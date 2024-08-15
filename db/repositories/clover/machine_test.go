@@ -11,16 +11,16 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// TestPeerInfoRepository is a test suite for the PeerInfoRepository.
+// TestPeerInfo is a test suite for the PeerInfo.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the PeerInfo model behave as expected.
-func TestPeerInfoRepository(t *testing.T) {
+func TestPeerInfo(t *testing.T) {
 	// Setup database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	peerInfoRepo := NewPeerInfoRepository(db)
+	peerInfoRepo := NewPeerInfo(db)
 
 	// Test Create method
 	createdPeerInfo, err := peerInfoRepo.Create(context.Background(), types.PeerInfo{})
@@ -79,16 +79,16 @@ func TestPeerInfoRepository(t *testing.T) {
 	err = peerInfoRepo.Delete(context.Background(), peerInfo2.ID)
 }
 
-// TestMachineRepository is a test suite for the MachineRepository.
+// TestMachine is a test suite for the Machine.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the Machine model behave as expected.
-func TestMachineRepository(t *testing.T) {
+func TestMachine(t *testing.T) {
 	// Setup database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	machineRepo := NewMachineRepository(db)
+	machineRepo := NewMachine(db)
 
 	// Test Create method
 	createdMachine, err := machineRepo.Create(context.Background(), types.Machine{})
@@ -141,16 +141,16 @@ func TestMachineRepository(t *testing.T) {
 	err = machineRepo.Delete(context.Background(), machine2.ID)
 }
 
-// TestFreeResourcesRepository is a test suite for the FreeResourcesRepository.
+// TestFreeResources is a test suite for the FreeResources.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the FreeResources model behave as expected.
-func TestFreeResourcesRepository(t *testing.T) {
+func TestFreeResources(t *testing.T) {
 	// Setup your database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	freeResourcesRepo := NewFreeResourcesRepository(db)
+	freeResourcesRepo := NewFreeResources(db)
 
 	// Test Save method
 	createdFreeResources, err := freeResourcesRepo.Save(
@@ -190,16 +190,16 @@ func TestFreeResourcesRepository(t *testing.T) {
 	assert.Len(t, history, 0)
 }
 
-// TestAvailableResourcesRepository is a test suite for the AvailableResourcesRepository.
+// TestAvailableResources is a test suite for the AvailableResources.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the AvailableResources model behave as expected.
-func TestAvailableResourcesRepository(t *testing.T) {
+func TestAvailableResources(t *testing.T) {
 	// Setup your database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	availableResourcesRepo := NewAvailableResourcesRepository(db)
+	availableResourcesRepo := NewAvailableResources(db)
 
 	// Test Save method
 	createdAvailableResources, err := availableResourcesRepo.Save(
@@ -239,16 +239,16 @@ func TestAvailableResourcesRepository(t *testing.T) {
 	assert.Len(t, history, 0)
 }
 
-// TestServicesRepository is a test suite for the ServicesRepository.
+// TestServices is a test suite for the Services.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the Services model behave as expected.
-func TestServicesRepository(t *testing.T) {
+func TestServices(t *testing.T) {
 	// Setup database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	servicesRepo := NewServicesRepository(db)
+	servicesRepo := NewServices(db)
 
 	// Test Create method
 	createdServices, err := servicesRepo.Create(context.Background(), types.Services{})
@@ -307,16 +307,16 @@ func TestServicesRepository(t *testing.T) {
 	err = servicesRepo.Delete(context.Background(), service2.ID)
 }
 
-// TestServiceResourceRequirementsRepository is a test suite for the ServiceResourceRequirementsRepository.
+// TestServiceResourceRequirements is a test suite for the ServiceResourceRequirements.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the ServiceResourceRequirements model behave as expected.
-func TestServiceResourceRequirementsRepository(t *testing.T) {
+func TestServiceResourceRequirements(t *testing.T) {
 	// Setup database serviceResourceRequirements for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	serviceResourceRequirementsRepo := NewServiceResourceRequirementsRepository(
+	serviceResourceRequirementsRepo := NewServiceResourceRequirements(
 		db,
 	)
 
@@ -408,16 +408,16 @@ func TestServiceResourceRequirementsRepository(t *testing.T) {
 	)
 }
 
-// TestLibp2pInfoRepository is a test suite for the Libp2pInfoRepository.
+// TestLibp2pInfo is a test suite for the Libp2pInfo.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the Libp2pInfo model behave as expected.
-func TestLibp2pInfoRepository(t *testing.T) {
+func TestLibp2pInfo(t *testing.T) {
 	// Setup your database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	libp2pInfoRepo := NewLibp2pInfoRepository(db)
+	libp2pInfoRepo := NewLibp2pInfo(db)
 
 	// Test Save method
 	_, err := libp2pInfoRepo.Save(
@@ -454,16 +454,16 @@ func TestLibp2pInfoRepository(t *testing.T) {
 	assert.Len(t, history, 0)
 }
 
-// TestMachineUUIDRepository is a test suite for the MachineUUIDRepository.
+// TestMachineUUID is a test suite for the MachineUUID.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the MachineUUID model behave as expected.
-func TestMachineUUIDRepository(t *testing.T) {
+func TestMachineUUID(t *testing.T) {
 	// Setup your database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	machineUUIDRepo := NewMachineUUIDRepository(db)
+	machineUUIDRepo := NewMachineUUID(db)
 
 	// Test Save method
 	createdMachineUUID, err := machineUUIDRepo.Save(
@@ -502,16 +502,16 @@ func TestMachineUUIDRepository(t *testing.T) {
 	assert.Len(t, history, 0)
 }
 
-// TestConnectionRepository is a test suite for the ConnectionRepository.
+// TestConnection is a test suite for the Connection.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the Connection model behave as expected.
-func TestConnectionRepository(t *testing.T) {
+func TestConnection(t *testing.T) {
 	// Setup database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	connectionRepo := NewConnectionRepository(db)
+	connectionRepo := NewConnection(db)
 
 	// Test Create method
 	createdConnection, err := connectionRepo.Create(context.Background(), types.Connection{})
@@ -570,16 +570,16 @@ func TestConnectionRepository(t *testing.T) {
 	err = connectionRepo.Delete(context.Background(), connection2.ID)
 }
 
-// TestElasticTokenRepository is a test suite for the ElasticTokenRepository.
+// TestElasticToken is a test suite for the ElasticToken.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the ElasticToken model behave as expected.
-func TestElasticTokenRepository(t *testing.T) {
+func TestElasticToken(t *testing.T) {
 	// Setup database elasticToken for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	elasticTokenRepo := NewElasticTokenRepository(db)
+	elasticTokenRepo := NewElasticToken(db)
 
 	// Test Create method
 	createdElasticToken, err := elasticTokenRepo.Create(context.Background(), types.ElasticToken{})

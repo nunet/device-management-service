@@ -10,16 +10,16 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// TestStorageVolumeRepository is a test suite for the StorageVolumeRepository.
+// TestStorageVolume is a test suite for the StorageVolume.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the StorageVolume model behave as expected.
-func TestStorageVolumeRepository(t *testing.T) {
+func TestStorageVolume(t *testing.T) {
 	// Setup database connection for testing
 	db, path := setup()
 	defer teardown(db, path)
 
 	// Initialize the repository
-	storageVolRepo := NewStorageVolumeRepository(db)
+	storageVolRepo := NewStorageVolume(db)
 
 	// Test Create method
 	createdStorageVol, err := storageVolRepo.Create(

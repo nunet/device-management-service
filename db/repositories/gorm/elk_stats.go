@@ -7,15 +7,15 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// RequestTrackerRepositoryGORM is a GORM implementation of the RequestTrackerRepository interface.
-type RequestTrackerRepositoryGORM struct {
+// RequestTrackerGORM is a GORM implementation of the RequestTracker interface.
+type RequestTrackerGORM struct {
 	repositories.GenericRepository[types.RequestTracker]
 }
 
-// NewRequestTrackerRepository creates a new instance of RequestTrackerRepositoryGORM.
+// NewRequestTracker creates a new instance of RequestTrackerGORM.
 // It initializes and returns a GORM-based repository for RequestTracker entities.
-func NewRequestTrackerRepository(db *gorm.DB) repositories.RequestTrackerRepository {
-	return &RequestTrackerRepositoryGORM{
+func NewRequestTracker(db *gorm.DB) repositories.RequestTracker {
+	return &RequestTrackerGORM{
 		NewGenericRepository[types.RequestTracker](db),
 	}
 }

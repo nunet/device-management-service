@@ -42,9 +42,9 @@ func NewTestSuite(t *testing.T) *TestSuite {
 func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
 	oConfig := OnboardingConfig{
 		Fs:             afero.Afero{Fs: fs},
-		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(db),
-		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(db),
-		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(db),
+		P2PRepo:        repositories_gorm.NewLibp2pInfo(db),
+		UUIDRepo:       repositories_gorm.NewMachineUUID(db),
+		AvResourceRepo: repositories_gorm.NewAvailableResources(db),
 		WorkDir:        "/test",
 		DatabasePath:   "/test/db.sqlite",
 		Channels:       []string{"test1", "test2", "test3"},
@@ -157,9 +157,9 @@ func TestOnboard(t *testing.T) {
 
 	oConfig := OnboardingConfig{
 		Fs:             testFS,
-		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
+		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
+		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
+		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
 		WorkDir:        tmpDir,
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
@@ -216,9 +216,9 @@ func TestResourceConfig(t *testing.T) {
 
 	oConfig := OnboardingConfig{
 		Fs:             testFS,
-		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
+		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
+		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
+		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
 		WorkDir:        tmpDir,
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
@@ -245,9 +245,9 @@ func TestOffboard(t *testing.T) {
 
 	oConfig := OnboardingConfig{
 		Fs:             fs,
-		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
+		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
+		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
+		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
 		WorkDir:        tmpDir,
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},

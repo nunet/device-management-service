@@ -47,10 +47,10 @@ func Run() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	onboardR := gdb.NewOnboardingParamsRepository(db)
-	p2pR := gdb.NewLibp2pInfoRepository(db)
-	uuidR := gdb.NewMachineUUIDRepository(db)
-	avResR := gdb.NewAvailableResourcesRepository(db)
+	onboardR := gdb.NewOnboardingParams(db)
+	p2pR := gdb.NewLibp2pInfo(db)
+	uuidR := gdb.NewMachineUUID(db)
+	avResR := gdb.NewAvailableResources(db)
 
 	oConf, err := onboardR.Get(ctx)
 	if err != nil {

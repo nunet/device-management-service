@@ -10,16 +10,16 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// TestRequestTrackerRepository is a test suite for the requestTrackerRepository.
+// TestRequestTracker is a test suite for the requestTrackerRepository.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the RequestTracker model behave as expected.
-func TestRequestTrackerRepository(t *testing.T) {
+func TestRequestTracker(t *testing.T) {
 	// Setup database connection for testing
 	setup()
 	defer teardown()
 
 	// Initialize the repository
-	requestTrackerRepo := NewRequestTrackerRepository(db)
+	requestTrackerRepo := NewRequestTracker(db)
 
 	// Test Create method
 	createdRequestTracker, err := requestTrackerRepo.Create(

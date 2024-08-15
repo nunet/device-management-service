@@ -41,9 +41,9 @@ func TestInitializeRoutes(t *testing.T) {
 
 	oConf := onboarding.OnboardingConfig{
 		Fs:             afero.Afero{Fs: afero.NewMemMapFs()},
-		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(mockDB),
+		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
+		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
+		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
 		WorkDir:        "/test",
 		DatabasePath:   "/test/db.sqlite",
 		Channels:       []string{"test1", "test2", "test3"},

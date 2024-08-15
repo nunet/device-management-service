@@ -4,7 +4,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// DeploymentRequestFlatRepository represents a repository for CRUD operations on DeploymentRequestFlat entities.
-type DeploymentRequestFlatRepository interface {
+// DeploymentRequestFlat represents a repository for CRUD operations on DeploymentRequestFlat entities.
+type DeploymentRequestFlat interface {
 	GenericRepository[types.DeploymentRequestFlat]
 }

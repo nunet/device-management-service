@@ -4,52 +4,52 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// PeerInfoRepository represents a repository for CRUD operations on PeerInfo entities.
-type PeerInfoRepository interface {
+// PeerInfo represents a repository for CRUD operations on PeerInfo entities.
+type PeerInfo interface {
 	GenericRepository[types.PeerInfo]
 }
 
-// MachineRepository represents a repository for CRUD operations on Machine entities.
-type MachineRepository interface {
+// Machine represents a repository for CRUD operations on Machine entities.
+type Machine interface {
 	GenericRepository[types.Machine]
 }
 
-// FreeResourcesRepository represents a repository for CRUD operations on FreeResources entity.
-type FreeResourcesRepository interface {
+// FreeResources represents a repository for CRUD operations on FreeResources entity.
+type FreeResources interface {
 	GenericEntityRepository[types.FreeResources]
 }
 
-// AvailableResourcesRepository represents a repository for CRUD operations on AvailableResources entity.
-type AvailableResourcesRepository interface {
+// AvailableResources represents a repository for CRUD operations on AvailableResources entity.
+type AvailableResources interface {
 	GenericEntityRepository[types.AvailableResources]
 }
 
-// ServicesRepository represents a repository for CRUD operations on Services entities.
-type ServicesRepository interface {
+// Services represents a repository for CRUD operations on Services entities.
+type Services interface {
 	GenericRepository[types.Services]
 }
 
-// ServiceResourceRequirementsRepository represents a repository for CRUD operations on ServiceResourceRequirements entities.
-type ServiceResourceRequirementsRepository interface {
+// ServiceResourceRequirements represents a repository for CRUD operations on ServiceResourceRequirements entities.
+type ServiceResourceRequirements interface {
 	GenericRepository[types.ServiceResourceRequirements]
 }
 
-// Libp2pInfoRepository represents a repository for CRUD operations on Libp2pInfo entity.
-type Libp2pInfoRepository interface {
+// Libp2pInfo represents a repository for CRUD operations on Libp2pInfo entity.
+type Libp2pInfo interface {
 	GenericEntityRepository[types.Libp2pInfo]
 }
 
-// MachineUUIDRepository represents a repository for CRUD operations on MachineUUID entity.
-type MachineUUIDRepository interface {
+// MachineUUID represents a repository for CRUD operations on MachineUUID entity.
+type MachineUUID interface {
 	GenericEntityRepository[types.MachineUUID]
 }
 
-// ConnectionRepository represents a repository for CRUD operations on Connection entities.
-type ConnectionRepository interface {
+// Connection represents a repository for CRUD operations on Connection entities.
+type Connection interface {
 	GenericRepository[types.Connection]
 }
 
-// ElasticTokenRepository represents a repository for CRUD operations on ElasticToken entities.
-type ElasticTokenRepository interface {
+// ElasticToken represents a repository for CRUD operations on ElasticToken entities.
+type ElasticToken interface {
 	GenericRepository[types.ElasticToken]
 }

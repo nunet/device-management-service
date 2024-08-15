@@ -10,16 +10,16 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// TestDeploymentRequestFlatRepository is a test suite for the DeploymentRequestFlatRepository.
+// TestDeploymentRequestFlat is a test suite for the DeploymentRequestFlat.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the DeploymentRequestFlat model behave as expected.
-func TestDeploymentRequestFlatRepository(t *testing.T) {
+func TestDeploymentRequestFlat(t *testing.T) {
 	// Setup database connection for testing
 	setup()
 	defer teardown()
 
 	// Initialize the repository
-	deploymentRequestFlatRepo := NewDeploymentRequestFlatRepository(db)
+	deploymentRequestFlatRepo := NewDeploymentRequestFlat(db)
 
 	// Test Create method
 	createdDeploymentRequestFlat, err := deploymentRequestFlatRepo.Create(

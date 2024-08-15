@@ -55,9 +55,9 @@ func (s *TestSuite) newTestOnboardingHandler() *OnboardingHandler {
 
 	oConfig := onboarding.OnboardingConfig{
 		Fs:             s.afs,
-		P2PRepo:        repositories_gorm.NewLibp2pInfoRepository(s.db),
-		UUIDRepo:       repositories_gorm.NewMachineUUIDRepository(s.db),
-		AvResourceRepo: repositories_gorm.NewAvailableResourcesRepository(s.db),
+		P2PRepo:        repositories_gorm.NewLibp2pInfo(s.db),
+		UUIDRepo:       repositories_gorm.NewMachineUUID(s.db),
+		AvResourceRepo: repositories_gorm.NewAvailableResources(s.db),
 		WorkDir:        s.WorkDir,
 		DatabasePath:   s.dbPath,
 		Channels:       s.channels,

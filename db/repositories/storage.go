@@ -4,7 +4,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// StorageVolumeRepository represents a repository for CRUD operations on StorageVolume entities.
-type StorageVolumeRepository interface {
+// StorageVolume represents a repository for CRUD operations on StorageVolume entities.
+type StorageVolume interface {
 	GenericRepository[types.StorageVolume]
 }

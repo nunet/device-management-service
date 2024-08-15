@@ -7,15 +7,15 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// DeploymentRequestFlatRepositoryClover is a Clover implementation of the DeploymentRequestFlatRepository interface.
-type DeploymentRequestFlatRepositoryClover struct {
+// DeploymentRequestFlatClover is a Clover implementation of the DeploymentRequestFlat interface.
+type DeploymentRequestFlatClover struct {
 	repositories.GenericRepository[types.DeploymentRequestFlat]
 }
 
-// NewDeploymentRequestFlatRepository creates a new instance of DeploymentRequestFlatRepositoryClover.
+// NewDeploymentRequestFlat creates a new instance of DeploymentRequestFlatClover.
 // It initializes and returns a Clover-based repository for DeploymentRequestFlat entities.
-func NewDeploymentRequestFlatRepository(db *clover.DB) repositories.DeploymentRequestFlatRepository {
-	return &DeploymentRequestFlatRepositoryClover{
+func NewDeploymentRequestFlat(db *clover.DB) repositories.DeploymentRequestFlat {
+	return &DeploymentRequestFlatClover{
 		NewGenericRepository[types.DeploymentRequestFlat](db),
 	}
 }

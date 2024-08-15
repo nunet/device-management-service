@@ -21,10 +21,10 @@ type OnboardingConfig struct {
 	Fs             afero.Afero
 	WorkDir        string
 	DatabasePath   string
-	OnboardingRepo repositories.OnboardingParamsRepository
-	P2PRepo        repositories.Libp2pInfoRepository
-	AvResourceRepo repositories.AvailableResourcesRepository
-	UUIDRepo       repositories.MachineUUIDRepository
+	OnboardingRepo repositories.OnboardingParams
+	P2PRepo        repositories.Libp2pInfo
+	AvResourceRepo repositories.AvailableResources
+	UUIDRepo       repositories.MachineUUID
 	Channels       []string // supported channels such as nunet-test and nunet-team
 }
 
