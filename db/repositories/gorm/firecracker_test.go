@@ -10,16 +10,16 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// TestVirtualMachineRepository is a test suite for the VirtualMachineRepository.
+// TestVirtualMachine is a test suite for the VirtualMachine.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the VirtualMachine model behave as expected.
-func TestVirtualMachineRepository(t *testing.T) {
+func TestVirtualMachine(t *testing.T) {
 	// Setup database connection for testing
 	setup()
 	defer teardown()
 
 	// Initialize the repository
-	virtualMachineRepo := NewVirtualMachineRepository(db)
+	virtualMachineRepo := NewVirtualMachine(db)
 
 	// Test Create method
 	createdVirtualMachine, err := virtualMachineRepo.Create(

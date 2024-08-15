@@ -7,15 +7,15 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// StorageVolumeRepositoryClover is a Clover implementation of the StorageVolumeRepository interface.
-type StorageVolumeRepositoryClover struct {
+// StorageVolumeClover is a Clover implementation of the StorageVolume interface.
+type StorageVolumeClover struct {
 	repositories.GenericRepository[types.StorageVolume]
 }
 
-// NewStorageVolumeRepository creates a new instance of StorageVolumeRepositoryClover.
+// NewStorageVolume creates a new instance of StorageVolumeClover.
 // It initializes and returns a Clover-based repository for StorageVolume entities.
-func NewStorageVolumeRepository(db *clover.DB) repositories.StorageVolumeRepository {
-	return &StorageVolumeRepositoryClover{
+func NewStorageVolume(db *clover.DB) repositories.StorageVolume {
+	return &StorageVolumeClover{
 		NewGenericRepository[types.StorageVolume](db),
 	}
 }

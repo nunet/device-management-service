@@ -7,15 +7,15 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// VirtualMachineRepositoryGORM is a GORM implementation of the VirtualMachineRepository interface.
-type VirtualMachineRepositoryGORM struct {
+// VirtualMachineGORM is a GORM implementation of the VirtualMachine interface.
+type VirtualMachineGORM struct {
 	repositories.GenericRepository[types.VirtualMachine]
 }
 
-// NewVirtualMachineRepository creates a new instance of VirtualMachineRepositoryGORM.
+// NewVirtualMachine creates a new instance of VirtualMachineGORM.
 // It initializes and returns a GORM-based repository for VirtualMachine entities.
-func NewVirtualMachineRepository(db *gorm.DB) repositories.VirtualMachineRepository {
-	return &VirtualMachineRepositoryGORM{
+func NewVirtualMachine(db *gorm.DB) repositories.VirtualMachine {
+	return &VirtualMachineGORM{
 		NewGenericRepository[types.VirtualMachine](db),
 	}
 }

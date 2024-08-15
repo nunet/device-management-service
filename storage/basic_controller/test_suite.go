@@ -46,7 +46,7 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string,
 		return nil, fmt.Errorf("failed to create base path: %w", err)
 	}
 
-	repo := repositories_clover.NewStorageVolumeRepository(db)
+	repo := repositories_clover.NewStorageVolume(db)
 	vc, err := NewDefaultVolumeController(repo, basePath, fs)
 	if err != nil {
 		db.Close()

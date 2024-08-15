@@ -35,11 +35,11 @@ Here is quick overview of the contents of this pacakge:
 
 * [generic_entity_repository](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/generic_entity_repository.go): This file implements the methods of `GenericEntityRepository` interface.
 
-* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/deployment.go): This file contains implementation of `DeploymentRequestFlatRepository` interface. 
+* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/deployment.go): This file contains implementation of `DeploymentRequestFlat` interface. 
 
-* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/elk_stats.go): This file contains implementation of `RequestTrackerRepository` interface.
+* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/elk_stats.go): This file contains implementation of `RequestTracker` interface.
 
-* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/firecracker.go): This file contains implementation of `VirtualMachineRepository` interface.
+* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/firecracker.go): This file contains implementation of `VirtualMachine` interface.
 
 * [machine](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/machine.go): This file contains implementation of interfaces defined in [machine.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/machine.go).  
 

@@ -35,7 +35,7 @@ func NewInfoCmd(net backend.NetworkManager, utilsService backend.Utility) *cobra
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 
-			onboardR := gdb.NewOnboardingParamsRepository(db)
+			onboardR := gdb.NewOnboardingParams(db)
 			oConf, err := onboardR.Get(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("failed to get onboarding config: %w", err)

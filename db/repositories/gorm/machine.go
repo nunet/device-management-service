@@ -7,118 +7,118 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// PeerInfoRepositoryGORM is a GORM implementation of the PeerInfoRepository interface.
-type PeerInfoRepositoryGORM struct {
+// PeerInfoGORM is a GORM implementation of the PeerInfo interface.
+type PeerInfoGORM struct {
 	repositories.GenericRepository[types.PeerInfo]
 }
 
-// NewPeerInfoRepository creates a new instance of PeerInfoRepositoryGORM.
+// NewPeerInfo creates a new instance of PeerInfoGORM.
 // It initializes and returns a GORM-based repository for PeerInfo entities.
-func NewPeerInfoRepository(db *gorm.DB) repositories.PeerInfoRepository {
-	return &PeerInfoRepositoryGORM{NewGenericRepository[types.PeerInfo](db)}
+func NewPeerInfo(db *gorm.DB) repositories.PeerInfo {
+	return &PeerInfoGORM{NewGenericRepository[types.PeerInfo](db)}
 }
 
-// MachineRepositoryGORM is a GORM implementation of the MachineRepository interface.
-type MachineRepositoryGORM struct {
+// MachineGORM is a GORM implementation of the Machine interface.
+type MachineGORM struct {
 	repositories.GenericRepository[types.Machine]
 }
 
-// NewMachineRepository creates a new instance of MachineRepositoryGORM.
+// NewMachine creates a new instance of MachineGORM.
 // It initializes and returns a GORM-based repository for Machine entities.
-func NewMachineRepository(db *gorm.DB) repositories.MachineRepository {
-	return &MachineRepositoryGORM{NewGenericRepository[types.Machine](db)}
+func NewMachine(db *gorm.DB) repositories.Machine {
+	return &MachineGORM{NewGenericRepository[types.Machine](db)}
 }
 
-// FreeResourcesRepositoryGORM is a GORM implementation of the FreeResourcesRepository interface.
-type FreeResourcesRepositoryGORM struct {
+// FreeResourcesGORM is a GORM implementation of the FreeResources interface.
+type FreeResourcesGORM struct {
 	repositories.GenericEntityRepository[types.FreeResources]
 }
 
-// NewFreeResourcesRepository creates a new instance of FreeResourcesRepositoryGORM.
+// NewFreeResources creates a new instance of FreeResourcesGORM.
 // It initializes and returns a GORM-based repository for FreeResources entity.
-func NewFreeResourcesRepository(db *gorm.DB) repositories.FreeResourcesRepository {
-	return &FreeResourcesRepositoryGORM{NewGenericEntityRepository[types.FreeResources](db)}
+func NewFreeResources(db *gorm.DB) repositories.FreeResources {
+	return &FreeResourcesGORM{NewGenericEntityRepository[types.FreeResources](db)}
 }
 
-// AvailableResourcesRepositoryGORM is a GORM implementation of the AvailableResourcesRepository interface.
-type AvailableResourcesRepositoryGORM struct {
+// AvailableResourcesGORM is a GORM implementation of the AvailableResources interface.
+type AvailableResourcesGORM struct {
 	repositories.GenericEntityRepository[types.AvailableResources]
 }
 
-// NewAvailableResourcesRepository creates a new instance of AvailableResourcesRepositoryGORM.
+// NewAvailableResources creates a new instance of AvailableResourcesGORM.
 // It initializes and returns a GORM-based repository for AvailableResources entity.
-func NewAvailableResourcesRepository(db *gorm.DB) repositories.AvailableResourcesRepository {
-	return &AvailableResourcesRepositoryGORM{
+func NewAvailableResources(db *gorm.DB) repositories.AvailableResources {
+	return &AvailableResourcesGORM{
 		NewGenericEntityRepository[types.AvailableResources](db),
 	}
 }
 
-// ServicesRepositoryGORM is a GORM implementation of the ServicesRepository interface.
-type ServicesRepositoryGORM struct {
+// ServicesGORM is a GORM implementation of the Services interface.
+type ServicesGORM struct {
 	repositories.GenericRepository[types.Services]
 }
 
-// NewServicesRepository creates a new instance of ServicesRepositoryGORM.
+// NewServices creates a new instance of ServicesGORM.
 // It initializes and returns a GORM-based repository for Services entities.
-func NewServicesRepository(db *gorm.DB) repositories.ServicesRepository {
-	return &ServicesRepositoryGORM{NewGenericRepository[types.Services](db)}
+func NewServices(db *gorm.DB) repositories.Services {
+	return &ServicesGORM{NewGenericRepository[types.Services](db)}
 }
 
-// ServiceResourceRequirementsRepositoryGORM is a GORM implementation of the ServiceResourceRequirementsRepository interface.
-type ServiceResourceRequirementsRepositoryGORM struct {
+// ServiceResourceRequirementsGORM is a GORM implementation of the ServiceResourceRequirements interface.
+type ServiceResourceRequirementsGORM struct {
 	repositories.GenericRepository[types.ServiceResourceRequirements]
 }
 
-// NewServiceResourceRequirementsRepository creates a new instance of ServiceResourceRequirementsRepositoryGORM.
+// NewServiceResourceRequirements creates a new instance of ServiceResourceRequirementsGORM.
 // It initializes and returns a GORM-based repository for ServiceResourceRequirements entities.
-func NewServiceResourceRequirementsRepository(
+func NewServiceResourceRequirements(
 	db *gorm.DB,
-) repositories.ServiceResourceRequirementsRepository {
-	return &ServiceResourceRequirementsRepositoryGORM{
+) repositories.ServiceResourceRequirements {
+	return &ServiceResourceRequirementsGORM{
 		NewGenericRepository[types.ServiceResourceRequirements](db),
 	}
 }
 
-// Libp2pInfoRepositoryGORM is a GORM implementation of the Libp2pInfoRepository interface.
-type Libp2pInfoRepositoryGORM struct {
+// Libp2pInfoGORM is a GORM implementation of the Libp2pInfo interface.
+type Libp2pInfoGORM struct {
 	repositories.GenericEntityRepository[types.Libp2pInfo]
 }
 
-// NewLibp2pInfoRepository creates a new instance of Libp2pInfoRepositoryGORM.
+// NewLibp2pInfo creates a new instance of Libp2pInfoGORM.
 // It initializes and returns a GORM-based repository for Libp2pInfo entity.
-func NewLibp2pInfoRepository(db *gorm.DB) repositories.Libp2pInfoRepository {
-	return &Libp2pInfoRepositoryGORM{NewGenericEntityRepository[types.Libp2pInfo](db)}
+func NewLibp2pInfo(db *gorm.DB) repositories.Libp2pInfo {
+	return &Libp2pInfoGORM{NewGenericEntityRepository[types.Libp2pInfo](db)}
 }
 
-// MachineUUIDRepositoryGORM is a GORM implementation of the MachineUUIDRepository interface.
-type MachineUUIDRepositoryGORM struct {
+// MachineUUIDGORM is a GORM implementation of the MachineUUID interface.
+type MachineUUIDGORM struct {
 	repositories.GenericEntityRepository[types.MachineUUID]
 }
 
-// NewMachineUUIDRepository creates a new instance of MachineUUIDRepositoryGORM.
+// NewMachineUUID creates a new instance of MachineUUIDGORM.
 // It initializes and returns a GORM-based repository for MachineUUID entity.
-func NewMachineUUIDRepository(db *gorm.DB) repositories.MachineUUIDRepository {
-	return &MachineUUIDRepositoryGORM{NewGenericEntityRepository[types.MachineUUID](db)}
+func NewMachineUUID(db *gorm.DB) repositories.MachineUUID {
+	return &MachineUUIDGORM{NewGenericEntityRepository[types.MachineUUID](db)}
 }
 
-// ConnectionRepositoryGORM is a GORM implementation of the ConnectionRepository interface.
-type ConnectionRepositoryGORM struct {
+// ConnectionGORM is a GORM implementation of the Connection interface.
+type ConnectionGORM struct {
 	repositories.GenericRepository[types.Connection]
 }
 
-// NewConnectionRepository creates a new instance of ConnectionRepositoryGORM.
+// NewConnection creates a new instance of ConnectionGORM.
 // It initializes and returns a GORM-based repository for Connection entities.
-func NewConnectionRepository(db *gorm.DB) repositories.ConnectionRepository {
-	return &ConnectionRepositoryGORM{NewGenericRepository[types.Connection](db)}
+func NewConnection(db *gorm.DB) repositories.Connection {
+	return &ConnectionGORM{NewGenericRepository[types.Connection](db)}
 }
 
-// ElasticTokenRepositoryGORM is a GORM implementation of the ElasticTokenRepository interface.
-type ElasticTokenRepositoryGORM struct {
+// ElasticTokenGORM is a GORM implementation of the ElasticToken interface.
+type ElasticTokenGORM struct {
 	repositories.GenericRepository[types.ElasticToken]
 }
 
-// NewElasticTokenRepository creates a new instance of ElasticTokenRepositoryGORM.
+// NewElasticToken creates a new instance of ElasticTokenGORM.
 // It initializes and returns a GORM-based repository for ElasticToken entities.
-func NewElasticTokenRepository(db *gorm.DB) repositories.ElasticTokenRepository {
-	return &ElasticTokenRepositoryGORM{NewGenericRepository[types.ElasticToken](db)}
+func NewElasticToken(db *gorm.DB) repositories.ElasticToken {
+	return &ElasticTokenGORM{NewGenericRepository[types.ElasticToken](db)}
 }

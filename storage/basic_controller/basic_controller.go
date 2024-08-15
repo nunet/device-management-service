@@ -13,10 +13,10 @@ import (
 )
 
 // BasicVolumeController is the default implementation of the VolumeController.
-// It persists storage volumes information using the StorageVolumeRepository.
+// It persists storage volumes information using the StorageVolume.
 type BasicVolumeController struct {
 	// repo is the repository for storage volume operations
-	repo repositories.StorageVolumeRepository
+	repo repositories.StorageVolume
 
 	// basePath is the base path where volumes are stored under
 	basePath string
@@ -29,7 +29,7 @@ type BasicVolumeController struct {
 //
 // TODO-BugFix [path]: volBasePath might not end with `/`, causing errors when calling methods.
 // We need to validate it using the `path` library or just verifying the string.
-func NewDefaultVolumeController(repo repositories.StorageVolumeRepository, volBasePath string, fs afero.Fs) (*BasicVolumeController, error) {
+func NewDefaultVolumeController(repo repositories.StorageVolume, volBasePath string, fs afero.Fs) (*BasicVolumeController, error) {
 	return &BasicVolumeController{
 		repo:     repo,
 		basePath: volBasePath,

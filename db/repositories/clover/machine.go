@@ -2,122 +2,123 @@ package repositories_clover
 
 import (
 	"github.com/ostafen/clover/v2"
+
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// PeerInfoRepositoryClover is a Clover implementation of the PeerInfoRepository interface.
-type PeerInfoRepositoryClover struct {
+// PeerInfoClover is a Clover implementation of the PeerInfo interface.
+type PeerInfoClover struct {
 	repositories.GenericRepository[types.PeerInfo]
 }
 
-// NewPeerInfoRepository creates a new instance of PeerInfoRepositoryClover.
+// NewPeerInfo creates a new instance of PeerInfoClover.
 // It initializes and returns a Clover-based repository for PeerInfo entities.
-func NewPeerInfoRepository(db *clover.DB) repositories.PeerInfoRepository {
-	return &PeerInfoRepositoryClover{NewGenericRepository[types.PeerInfo](db)}
+func NewPeerInfo(db *clover.DB) repositories.PeerInfo {
+	return &PeerInfoClover{NewGenericRepository[types.PeerInfo](db)}
 }
 
-// MachineRepositoryClover is a Clover implementation of the MachineRepository interface.
-type MachineRepositoryClover struct {
+// MachineClover is a Clover implementation of the Machine interface.
+type MachineClover struct {
 	repositories.GenericRepository[types.Machine]
 }
 
-// NewMachineRepository creates a new instance of MachineRepositoryClover.
+// NewMachine creates a new instance of MachineClover.
 // It initializes and returns a Clover-based repository for Machine entities.
-func NewMachineRepository(db *clover.DB) repositories.MachineRepository {
-	return &MachineRepositoryClover{NewGenericRepository[types.Machine](db)}
+func NewMachine(db *clover.DB) repositories.Machine {
+	return &MachineClover{NewGenericRepository[types.Machine](db)}
 }
 
-// FreeResourcesRepositoryClover is a Clover implementation of the FreeResourcesRepository interface.
-type FreeResourcesRepositoryClover struct {
+// FreeResourcesClover is a Clover implementation of the FreeResources interface.
+type FreeResourcesClover struct {
 	repositories.GenericEntityRepository[types.FreeResources]
 }
 
-// NewFreeResourcesRepository creates a new instance of FreeResourcesRepositoryClover.
+// NewFreeResources creates a new instance of FreeResourcesClover.
 // It initializes and returns a Clover-based repository for FreeResources entity.
-func NewFreeResourcesRepository(db *clover.DB) repositories.FreeResourcesRepository {
-	return &FreeResourcesRepositoryClover{NewGenericEntityRepository[types.FreeResources](db)}
+func NewFreeResources(db *clover.DB) repositories.FreeResources {
+	return &FreeResourcesClover{NewGenericEntityRepository[types.FreeResources](db)}
 }
 
-// AvailableResourcesRepositoryClover is a Clover implementation of the AvailableResourcesRepository interface.
-type AvailableResourcesRepositoryClover struct {
+// AvailableResourcesClover is a Clover implementation of the AvailableResources interface.
+type AvailableResourcesClover struct {
 	repositories.GenericEntityRepository[types.AvailableResources]
 }
 
-// NewAvailableResourcesRepository creates a new instance of AvailableResourcesRepositoryClover.
+// NewAvailableResources creates a new instance of AvailableResourcesClover.
 // It initializes and returns a Clover-based repository for AvailableResources entity.
-func NewAvailableResourcesRepository(db *clover.DB) repositories.AvailableResourcesRepository {
-	return &AvailableResourcesRepositoryClover{
+func NewAvailableResources(db *clover.DB) repositories.AvailableResources {
+	return &AvailableResourcesClover{
 		NewGenericEntityRepository[types.AvailableResources](db),
 	}
 }
 
-// ServicesRepositoryClover is a Clover implementation of the ServicesRepository interface.
-type ServicesRepositoryClover struct {
+// ServicesClover is a Clover implementation of the Services interface.
+type ServicesClover struct {
 	repositories.GenericRepository[types.Services]
 }
 
-// NewServicesRepository creates a new instance of ServicesRepositoryClover.
+// NewServices creates a new instance of ServicesClover.
 // It initializes and returns a Clover-based repository for Services entities.
-func NewServicesRepository(db *clover.DB) repositories.ServicesRepository {
-	return &ServicesRepositoryClover{NewGenericRepository[types.Services](db)}
+func NewServices(db *clover.DB) repositories.Services {
+	return &ServicesClover{NewGenericRepository[types.Services](db)}
 }
 
-// ServiceResourceRequirementsRepositoryClover is a Clover implementation of the ServiceResourceRequirementsRepository interface.
-type ServiceResourceRequirementsRepositoryClover struct {
+// ServiceResourceRequirementsClover is a Clover implementation of the ServiceResourceRequirements interface.
+type ServiceResourceRequirementsClover struct {
 	repositories.GenericRepository[types.ServiceResourceRequirements]
 }
 
-// NewServiceResourceRequirementsRepository creates a new instance of ServiceResourceRequirementsRepositoryClover.
+// NewServiceResourceRequirements creates a new instance of ServiceResourceRequirementsClover.
 // It initializes and returns a Clover-based repository for ServiceResourceRequirements entities.
-func NewServiceResourceRequirementsRepository(
+func NewServiceResourceRequirements(
 	db *clover.DB,
-) repositories.ServiceResourceRequirementsRepository {
-	return &ServiceResourceRequirementsRepositoryClover{
+) repositories.ServiceResourceRequirements {
+	return &ServiceResourceRequirementsClover{
 		NewGenericRepository[types.ServiceResourceRequirements](db),
 	}
 }
 
-// Libp2pInfoRepositoryClover is a Clover implementation of the Libp2pInfoRepository interface.
-type Libp2pInfoRepositoryClover struct {
+// Libp2pInfoClover is a Clover implementation of the Libp2pInfo interface.
+type Libp2pInfoClover struct {
 	repositories.GenericEntityRepository[types.Libp2pInfo]
 }
 
-// NewLibp2pInfoRepository creates a new instance of Libp2pInfoRepositoryClover.
+// NewLibp2pInfo creates a new instance of Libp2pInfoClover.
 // It initializes and returns a Clover-based repository for Libp2pInfo entity.
-func NewLibp2pInfoRepository(db *clover.DB) repositories.Libp2pInfoRepository {
-	return &Libp2pInfoRepositoryClover{NewGenericEntityRepository[types.Libp2pInfo](db)}
+func NewLibp2pInfo(db *clover.DB) repositories.Libp2pInfo {
+	return &Libp2pInfoClover{NewGenericEntityRepository[types.Libp2pInfo](db)}
 }
 
-// MachineUUIDRepositoryClover is a Clover implementation of the MachineUUIDRepository interface.
-type MachineUUIDRepositoryClover struct {
+// MachineUUIDClover is a Clover implementation of the MachineUUID interface.
+type MachineUUIDClover struct {
 	repositories.GenericEntityRepository[types.MachineUUID]
 }
 
-// NewMachineUUIDRepository creates a new instance of MachineUUIDRepositoryClover.
+// NewMachineUUID creates a new instance of MachineUUIDClover.
 // It initializes and returns a Clover-based repository for MachineUUID entity.
-func NewMachineUUIDRepository(db *clover.DB) repositories.MachineUUIDRepository {
-	return &MachineUUIDRepositoryClover{NewGenericEntityRepository[types.MachineUUID](db)}
+func NewMachineUUID(db *clover.DB) repositories.MachineUUID {
+	return &MachineUUIDClover{NewGenericEntityRepository[types.MachineUUID](db)}
 }
 
-// ConnectionRepositoryClover is a Clover implementation of the ConnectionRepository interface.
-type ConnectionRepositoryClover struct {
+// ConnectionClover is a Clover implementation of the Connection interface.
+type ConnectionClover struct {
 	repositories.GenericRepository[types.Connection]
 }
 
-// NewConnectionRepository creates a new instance of ConnectionRepositoryClover.
+// NewConnection creates a new instance of ConnectionClover.
 // It initializes and returns a Clover-based repository for Connection entities.
-func NewConnectionRepository(db *clover.DB) repositories.ConnectionRepository {
-	return &ConnectionRepositoryClover{NewGenericRepository[types.Connection](db)}
+func NewConnection(db *clover.DB) repositories.Connection {
+	return &ConnectionClover{NewGenericRepository[types.Connection](db)}
 }
 
-// ElasticTokenRepositoryClover is a Clover implementation of the ElasticTokenRepository interface.
-type ElasticTokenRepositoryClover struct {
+// ElasticTokenClover is a Clover implementation of the ElasticToken interface.
+type ElasticTokenClover struct {
 	repositories.GenericRepository[types.ElasticToken]
 }
 
-// NewElasticTokenRepository creates a new instance of ElasticTokenRepositoryClover.
+// NewElasticToken creates a new instance of ElasticTokenClover.
 // It initializes and returns a Clover-based repository for ElasticToken entities.
-func NewElasticTokenRepository(db *clover.DB) repositories.ElasticTokenRepository {
-	return &ElasticTokenRepositoryClover{NewGenericRepository[types.ElasticToken](db)}
+func NewElasticToken(db *clover.DB) repositories.ElasticToken {
+	return &ElasticTokenClover{NewGenericRepository[types.ElasticToken](db)}
 }
