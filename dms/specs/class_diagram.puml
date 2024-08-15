@@ -29,13 +29,15 @@
     !include $rootUrl/onboarding/specs/class_diagram.puml
 '}
 
+'package dms.resources {
+    !include $rootUrl/resources/specs/class_diagram.puml
+'}
+
 'package dms.orchestrator {
     !include $rootUrl/orchestrator/specs/class_diagram.puml
 '}
 
-'package dms.resources {
-    !include $rootUrl/resources/specs/class_diagram.puml
-'}
+
 
 ' END SUBPACKAGES
 
