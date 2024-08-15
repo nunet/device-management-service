@@ -39,7 +39,7 @@ Here is quick overview of the contents of this pacakge:
 
 * [darwin_arm64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_arm64_resources.go): This contains methods to calculate machine resources.
 
-* [handler](handler.go): This contains methods related to resources management on a machine.
+* [handler](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/handler.go): This contains methods related to resources management on a machine.
 
 * [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/init.go): This initializes a logger instance.
 
