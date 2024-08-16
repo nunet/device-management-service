@@ -12,7 +12,7 @@
     - [Implementation](#implementation)
       - [Actor model](#actor-model)
       - [Decentralized search and matching model](#decentralized-search-and-matching-model)
-      - [Remote procedure call logic](#remote-procedure-call-logic)
+      - [Dynamic method dispatch](#dynamic-method-dispatch)
       - [Local access (API and CMD)](#local-access-api-and-cmd)
       - [Local database interface and implementation](#local-database-interface-and-implementation)
       - [Executor interface and implementation](#executor-interface-and-implementation)
@@ -22,15 +22,18 @@
       - [IP over Libp2p](#ip-over-libp2p)
       - [Private Swarm](#private-swarm)
       - [Observability and Telemetry](#observability-and-telemetry)
-      - [Recursive job definition](#recursive-job-definition)
+      - [Definition of compute workflows / recursive jobs](#definition-of-compute-workflows--recursive-jobs)
       - [Job deployment and orchestration model](#job-deployment-and-orchestration-model)
       - [Capability model](#capability-model)
       - [Supervision model](#supervision-model)
       - [Tokenomics interface](#tokenomics-interface)
-  - [Release process](#release-process)
-    - [Feature environment and CI/CD process launch](#feature-environment-and-cicd-process-launch)
-    - [Documentation portal launch](#documentation-portal-launch)
+  - [Release management](#release-management)
+    - [Branching strategy](#branching-strategy)
+    - [Release process](#release-process)
+      - [Feature scope freeze](#feature-scope-freeze)
+      - [Specification and documentation portal launch](#specification-and-documentation-portal-launch)
     - [Project management portal launch](#project-management-portal-launch)
+    - [Test management system launch](#test-management-system-launch)
     - [Release testing start](#release-testing-start)
     - [Release candidate 1](#release-candidate-1)
     - [Release candidate 2](#release-candidate-2)
@@ -186,11 +189,11 @@ Context / links:
 | **Impacted functionality** | All functionality of the platform is fundamentally affected implementation of search and match related functionality; This is especially true for the future projected functionalities involving edge computing, IoT deployments and decentralized physical infrastructure in general. |
 | **Acceptance tests** | A valid compute job (described in eligible formats) demanded via exposed interfaces triggers finding suitable machines and their configurations for deploying the job and pics the most fitting hardware configuration. |
 
-#### Remote procedure call logic  
+#### Dynamic method dispatch  
 
 | | |
 | --- | --- |
-| **Feature name** | Remote procedure call logic for initiating behaviors in actors |
+| **Feature name** | Dynamic method dispatch logic for initiating behaviors in actors |
 | **Work packages** | Implemented within the scope of [Node package](https://nunet.gitlab.io/publisher/project-management-portal/device-management-service-version-0-5-x/work_packages/node-package-implementation_technical_dependencies.html)  |
 | **Code reference** | [issue](https://gitlab.com/nunet/device-management-service/-/issues/474) with minimal description; |
 | **Description / definition of done** | Methods / functions can be run remotely by sending a message from one Actor to another | 
@@ -378,11 +381,11 @@ Context / links:
 | **Impacted functionality** | Logging, tracing and monitoring of decentralized computing framework on any level of granularity; Constitutes a part of developer tooling of NuNet, which will be used by both internal team as well as community contributors |
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: after logging is implemented via telemetry interface and default logging is elasticsearch collector; all telemetry events are stored in elasticsearch database and can be analyzed via API / Kibana dashboard;  |
 
-#### Recursive job definition
+#### Definition of compute workflows / recursive jobs
 
 | | |
 | --- | --- |
-| **Feature name** | Recursive job definition, structure and types |
+| **Feature name** | Structure, types and definitions of compute workflows / recursive jobs |
 | **Work packages** | [jobs work package](https://nunet.gitlab.io/publisher/project-management-portal/device-management-service-version-0-5-x/work_packages/jobs-package-implementation_technical_dependencies.html) |
 | **Code reference** | [jobs package code](https://gitlab.com/nunet/device-management-service/-/tree/develop/dms/jobs?ref_type=heads) |
 | **Description / definition of done** | [jobs design description](https://gitlab.com/nunet/architecture/-/issues/245) | 
@@ -476,32 +479,54 @@ Context / links:
 | **Impacted functionality** | Ability to conclude peer to peer contracts between machines requesting a job and machines accepting job execution (eventually); Ability to include explicit contract information into each job invocation request, independently of the type of contract and micro-payment channels  implementation |
 | **Acceptance tests** | Unit tests; Functional tests / integration tests as part of job orchestration; |
 
+## Release management
 
-## Release process
+The goal of the process is to expose all developed functionalities with frozen scope, as described above, to a rigorous internal and community testing via succession of release candidate builds. 
 
-The release process for this milestone is based on the general NuNet [branching strategy](https://gitlab.com/nunet/test-suite#branching-strategy). The goal of the process is to expose all developed functionalities with frozen scope, as described above, to a rigorous internal and community testing via succession of release candidate builds. The preliminary plan of the release process for this milestone is:
+### Branching strategy
 
-### Feature environment and CI/CD process launch
+In preparation for this release process we will be changing the branching strategy as discussed and agreed in this [issue](https://gitlab.com/nunet/device-management-service/-/issues/542) and tracked by this [issue](https://gitlab.com/nunet/device-management-service/-/issues/547). In summary:
 
-Both feature environment and CI/CD process are instrumental to reach release level quality of the developed features. Both have been in development for months prior to current moment and are close to completion. Both are moving targets as they will develop together with the platform. Nevertheless, we aim to launch them as described above in the first half of August.
+* We will operate on two branches: `main` (for trunk development) and `release` (for minor / final releases and patches).
+* The public dms binaries will be built from `release` branch tags in the form of v{version_number}-{suffix}, e.g. `v0.5-rc1`, etc. and released via [gitlab release page](https://gitlab.com/nunet/device-management-service/-/releases) as usual.
 
-### Documentation portal launch
+### Release process
 
-Documentation portal was operating internally since end of 2023, but was not fully aligned with the specification and documentation process that involves the whole team and including updates of documentation into acceptance criteria of each pull request. Documentation portal shall be launched in August.
+The release process of [Device Management Service Version 0.5.x](https://gitlab.com/groups/nunet/-/milestones/44#tab-issues) is scheduled to start September 15, 2024 and finish December 15, 2024. It involves the following steps in chronological order:
+
+1. Feature scope freeze
+2. Specification and documentation system launch
+3. Project management portal launch 
+4. Test management system launch (feature environment, CI/CD pipeline and QA visibility)
+8. Release candidates testing and delivering full feature scope
+
+#### Feature scope freeze
+
+We first define the final scope of the dms features that we are releasing within this milestone, which is done within [this section](#implementation) of the document. The scope of each feature should defined by functional test cases / scenarios associated with each feature and linked in **Acceptance tests** row of each table. All required test cases and scenarios pertaining to the feature scope freeze shall be written by September 15, 2024. The work is tracked by the work package [dms/tests](https://nunet.gitlab.io/publisher/project-management-portal/device-management-service-version-0-5-x/work_packages/tests_technical_dependencies.html) integrated into the test management system. Until then we will be continuing to implement all the features as they are explained in this document.
+
+#### Specification and documentation portal launch
+
+Documentation portal was operating internally since end of 2023, but was not fully aligned with the specification and documentation process that involves the whole team and including updates of documentation into acceptance criteria of each pull request. Documentation portal shall be launched in August. The work involving finishing and launching documentation portal are tracked by [this issue](https://gitlab.com/nunet/publisher/documentation/-/issues/4). 
 
 ### Project management portal launch
 
-Project management portal has been operating internally since Q4 2023, but was not exposed publicly as of yet. It will be launched publicly in the second half of August 2024.
+Project management portal has been operating internally since Q4 2023, but was not exposed publicly as of yet. It will be launched publicly by the end of August 2024. The work involved in finishing and launching the project management portal for the dms v.0.5 milestone is tracked by [this issue](https://gitlab.com/nunet/publisher/project-management-portal/-/issues/17)
+
+### Test management system launch
+
+NuNet test management system consists of three main components, which have been developed for months now and are close to completion, but need to be finally coordinated and aligned in the preparation for the start of the DMS v0.5 release process and release candidate testing internally as well as via the community contributions. The components of the test management system are:
+
+1. CI/CD pipeline that publishes and makes available for further publishing all testing artifacts and reports; These are further used by developers, QA engineers and shall be exposed to community developers publicly; 
+2. Feature environment features a small network of geographically distributed virtual machines connected via public internet, and allows for the execution of selected CI/CD pipeline stages automatically on heterogenous hardware environments -- testing functionality of the fully built DMS; Most of the acceptance tests of the frozen feature scope will be running via the 
+3. QA management portal is a web portal (Testmo) which exposes all test artifacts via single interface and provides all information for NuNet QA team to see which test are passing / failing for every built of the DMS.  
+
+All three components are tightly coupled and will be internally released in quick succession, the last week of August - first week of September, targeting finalizing the test management system launch at the end of first week of September, so that the quality of release candidates can be fully validated by QA team.
+
+Both feature environment and CI/CD process are instrumental to reach release level quality of the developed features. Both have been in development for months prior to current moment and are close to completion. Both are moving targets as they will develop together with the platform. Nevertheless, we aim to launch them as described above in the first half of August.
 
 ### Release testing start
 
-We start by merging the newest codebase with features scoped above from cutting edge `develop` branch into the `staging` branch. This merge is scheduled the first part of September, as early in the month as possible. As per our [branching strategy](https://gitlab.com/nunet/test-suite/-/tree/develop#branching-strategy), all development will continue on `develop` branch, but improvements, hot fixes and bugs will of the frozen scope of the features will be immediately synchronized with the `staging` branch. 
-
-`staging` branch will feature frequent builds aimed at testing the frozen scope of the release (we aim at nightly builds, but this may be different). Besides the frequent nightly builds, featuring the latest code pertaining to frozen scope of the features to be released, we will organize the major upgrades of the `staging` branch into release candidate builds. 
-
-Release candidates will build from a tagged state of the `staging` branch and will be used primarily for managed community testing and reporting. Currently we are planning to build and community-test at least two release candidates prior to final release.
-
-All release candidates will feature the same feature scope as described in this document, but of increasing quality and precision of feature implementation. Besides testing the features, the release process will aim to involve community developers, testers and compute providers into the process (leveraging public test management, documentation and project management portals, which will be launched prior to release process start for this purpose).
+Given that all prerequisites are launched and prepared, we aim at starting the release process September 15 by releasing the first release candidate and exposing it to testing. We will release at least 3 release candidates and then final release, but the process will be fluid as explained [here](https://gitlab.com/nunet/device-management-service/-/issues/542) and most probably fill feature more minor release candidate releases per the adopted branching strategy.
 
 ### Release candidate 1
 
