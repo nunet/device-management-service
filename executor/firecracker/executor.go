@@ -34,12 +34,16 @@ type Executor struct {
 
 // NewExecutor initializes a new executor for Firecracker VMs.
 func NewExecutor(
-	_ context.Context,
+	ctx context.Context,
 	id string,
 ) (*Executor, error) {
 	firecrackerClient, err := NewFirecrackerClient()
 	if err != nil {
 		return nil, err
+	}
+
+	if !firecrackerClient.IsInstalled() {
+		return nil, fmt.Errorf("firecracker is not installed")
 	}
 	fe := &Executor{
 		ID:     id,
@@ -47,11 +51,6 @@ func NewExecutor(
 	}
 
 	return fe, nil
-}
-
-// IsInstalled checks if Firecracker is installed on the host.
-func (e *Executor) IsInstalled(ctx context.Context) bool {
-	return e.client.IsInstalled()
 }
 
 // start begins the execution of a request by starting a new Firecracker VM.

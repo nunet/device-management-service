@@ -59,9 +59,6 @@ The main functionality offered by the `executor` package is defined via the `Exe
 
 ```
 type Executor interface {
-	// IsInstalled checks if the executor is installed and available for use.
-	IsInstalled(ctx context.Context) bool
-
 	// Start initiates an execution for the given ExecutionRequest.
 	// It returns an error if the execution already exists and is in a started or terminal state.
 	// Implementations may also return other errors based on resource limitations or internal faults.
@@ -93,14 +90,6 @@ type Executor interface {
 ```
 
 Its methods are explained below:
-
-#### IsInstalled
-
-* signature: `IsInstalled(ctx context.Context) -> bool` <br/>
-* input: `Go context` <br/>
-* output: `bool` 
-
-`IsInstalled` checks if the executor is installed and available for use. It takes the Go `context` object as input and returns a boolean indicating if the executor is installed or not.
 
 #### Start
 
@@ -232,4 +221,8 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 8. References
+### 7. References
+
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)

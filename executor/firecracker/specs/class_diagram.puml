@@ -6,7 +6,6 @@
         -doWait(er <-chan *ExecutionResult, e <-chan error, eh *executionHandler)
         -newFirecrackerExecutionVM(er *ExecutionRequest) *firecracker.Machine, error
         -generateSocketPath(jobID string, executionID string) string
-        +IsInstalled() bool
         +Start(*ExecutionRequest) error
         +Run(*ExecutionRequest) *ExecutionResult, error
         +Wait(executionID) <-chan *ExecutionResult, <-chan error

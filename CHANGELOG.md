@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.180](#522)
+
+### Deprecated
+- Deprecated IsInstalled method on executor interface
+
 ## [0.4.179](#524)
 
 ### Changed

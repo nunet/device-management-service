@@ -333,7 +333,6 @@ classDiagram
     namespace executor {
         class Executor {
             <<interface>>
-            +IsInstalled() bool
             +Start(*ExecutionRequest) error
             +Run(*ExecutionRequest) *ExecutionResult, error
             +Wait(executionID) <-chan *ExecutionResult, <-chan error
@@ -351,7 +350,6 @@ classDiagram
             -newDockerExecutionContainer(er *ExecutionRequest) string, error
             -containerLabels(jobID string, executionID string) map[string]string
 
-            +IsInstalled() bool
             +Start(*ExecutionRequest) error
             +Run(*ExecutionRequest) *ExecutionResult, error
             +Wait(executionID) <-chan *ExecutionResult, <-chan error
@@ -430,7 +428,6 @@ classDiagram
             -newFirecrackerExecutionVM(er *ExecutionRequest) *firecracker.Machine, error
             -generateSocketPath(jobID string, executionID string) string
 
-            +IsInstalled() bool
             +Start(*ExecutionRequest) error
             +Run(*ExecutionRequest) *ExecutionResult, error
             +Wait(executionID) <-chan *ExecutionResult, <-chan error

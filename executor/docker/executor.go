@@ -34,21 +34,20 @@ type Executor struct {
 }
 
 // NewExecutor initializes a new Executor instance with a Docker client.
-func NewExecutor(_ context.Context, id string) (*Executor, error) {
+func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	dockerClient, err := NewDockerClient()
 	if err != nil {
 		return nil, err
+	}
+
+	if !dockerClient.IsInstalled(ctx) {
+		return nil, fmt.Errorf("docker is not installed")
 	}
 
 	return &Executor{
 		ID:     id,
 		client: dockerClient,
 	}, nil
-}
-
-// IsInstalled checks if Docker is installed and the Docker daemon is accessible.
-func (e *Executor) IsInstalled(ctx context.Context) bool {
-	return e.client.IsInstalled(ctx)
 }
 
 // Start begins the execution of a request by starting a Docker container.

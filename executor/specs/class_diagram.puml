@@ -18,7 +18,6 @@
 ' START DIAGRAM
 
     interface executor.Executor {
-        +IsInstalled() bool
         +Start(*ExecutionRequest) error
         +Run(*ExecutionRequest) *ExecutionResult, error
         +Wait(executionID) <-chan *ExecutionResult, <-chan error
