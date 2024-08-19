@@ -7,7 +7,6 @@
         -doWait(er <-chan *ExecutionResult, e <-chan error, eh *executionHandler)
         -newDockerExecutionContainer(er *ExecutionRequest) string, error
         -containerLabels(jobID string, executionID string) map[string]string
-        +IsInstalled() bool
         +Start(*ExecutionRequest) error
         +Run(*ExecutionRequest) *ExecutionResult, error
         +Wait(executionID) <-chan *ExecutionResult, <-chan error
@@ -70,5 +69,4 @@
         -destroy(timeout time.Duration) error
         -outputStream(request LogStreamRequest) ReadCloser, error
     }
-
 ' END DIAGRAM

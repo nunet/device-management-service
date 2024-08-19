@@ -20,9 +20,6 @@ type ExecutorTestSuite struct {
 // SetupTest sets up the test suite by initializing a new Docker executor.
 func (s *ExecutorTestSuite) SetupTest() {
 	e, err := docker.NewExecutor(context.Background(), "test_docker_executor")
-	if !e.IsInstalled(context.Background()) {
-		s.T().Skip("Docker is not installed on the host machine")
-	}
 	require.NoError(s.T(), err)
 	s.executor = e
 	s.T().Cleanup(func() {

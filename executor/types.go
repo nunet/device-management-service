@@ -10,9 +10,6 @@ import (
 // Executor serves as an execution manager for running jobs on a specific backend, such as a Docker daemon.
 // It provides a comprehensive set of methods to initiate, monitor, terminate, and retrieve output streams for executions.
 type Executor interface {
-	// IsInstalled checks if the executor is installed and available for use.
-	IsInstalled(ctx context.Context) bool
-
 	// Start initiates an execution for the given ExecutionRequest.
 	// It returns an error if the execution already exists and is in a started or terminal state.
 	// Implementations may also return other errors based on resource limitations or internal faults.

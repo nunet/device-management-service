@@ -78,12 +78,6 @@ Below methods have been implemented in this package:
 
 It is expecte that `NewExecutor` would be called prior to calling any other executor functions. The Executor instance returned would then be used to call other functions like `Start`, `Stop` etc.
 
-#### IsInstalled
-
-For function signature refer to the package [readme](../README.md#isinstalled)
-
-`IsInstalled` checks if the Docker is installed and the Docker daemon is accessible. It returns `true` if Docker is installed and accessible, `false` otherwise. 
-
 #### Start
 
 For function signature refer to the package [readme](../README.md#start) 
@@ -255,4 +249,8 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 8. References
+### 7. References
+
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)

@@ -21,9 +21,6 @@ type ExecutorTestSuite struct {
 // SetupTest sets up the test suite by initializing a new Firecracker executor.
 func (s *ExecutorTestSuite) SetupTest() {
 	e, err := firecracker.NewExecutor(context.Background(), "test_firecracker_executor")
-	if !e.IsInstalled(context.Background()) {
-		s.T().Skip("Firecracker is not installed on the host machine")
-	}
 	require.NoError(s.T(), err)
 	s.executor = e
 	s.T().Cleanup(func() {
