@@ -128,7 +128,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | as described during [tech discussion 2024/07/25](https://docs.google.com/presentation/d/1NyLo3W0Ee9ygyvYSYr5jVZdTwYmbITdO_vRVwneZmKM/edit?usp=sharing) |
 | **Impacted functionality** | This does not affect any feature directly but fundamentally enables the quality and integrity of the whole platform functionality, alignment with the business goals, use-case based platform development model and evolvability of the software.|
-| **Acceptance tests** | n/a |
+| **Acceptance tests** | [documentation portal launch issue and deliverables](https://gitlab.com/nunet/publisher/documentation/-/issues/4) |
 
 
 #### Project management portal
@@ -147,7 +147,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | As described in [project management portal repository](https://gitlab.com/nunet/publisher/project-management-portal) readme |
 | **Impacted functionality** | This does not affect any feature directly but fundamentally enables alignment with the business goals, use-case based platform development model and evolvability of the software.|
-| **Acceptance tests** | n/a |
+| **Acceptance tests** | [Project management portal launch issue and deliverables](https://gitlab.com/nunet/publisher/project-management-portal/-/issues/17) |
 
 ### Implementation
 
@@ -168,7 +168,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | [DMS architecture](https://nunet.gitlab.io/research/blog/posts/dms-architecture/) |
 | **Impacted functionality** | All functionality of the platform is fundamentally affected implementation of actor model; This is especially true for the future projected functionalities involving edge computing, IoT deployments and decentralized physical infrastructure in general. |
-| **Acceptance tests** | Functional and integration tests defined in node package, dms package related to Actor interface and jobs package related to Allocation interface |
+| **Acceptance tests** | Functional and integration tests defined in node package, dms package related to Actor interface and jobs package related to Allocation interface; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/122) |
 
 #### Decentralized search and matching model
 
@@ -187,7 +187,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | [Job Orchestration I](https://nunet.gitlab.io/research/blog/posts/job-orchestration-details/) <br>[Job Orchestration II](https://nunet.gitlab.io/research/blog/posts/orchestration-discussion/) <br> [Consolidating job orchestration proposal issue](https://gitlab.com/nunet/open-api/platform-data-model/-/issues/19) <br>[and related merge request with discussion](https://gitlab.com/nunet/open-api/platform-data-model/-/merge_requests/35) |
 | **Impacted functionality** | All functionality of the platform is fundamentally affected implementation of search and match related functionality; This is especially true for the future projected functionalities involving edge computing, IoT deployments and decentralized physical infrastructure in general. |
-| **Acceptance tests** | A valid compute job (described in eligible formats) demanded via exposed interfaces triggers finding suitable machines and their configurations for deploying the job and pics the most fitting hardware configuration. |
+| **Acceptance tests** | A valid compute job (described in eligible formats) demanded via exposed interfaces triggers finding suitable machines and their configurations for deploying the job and pics the most fitting hardware configuration. ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/138) |
 
 #### Dynamic method dispatch  
 
@@ -206,7 +206,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  |
 | **Impacted functionality** | Fundamental functionality that enables the full realization of the Actor model potential |
-| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: sending rpc call from one actor (node or allocation) on different network configuration to another Actor (node or allocation); and initiate chosen method |
+| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: sending rpc call from one actor (node or allocation) on different network configuration to another Actor (node or allocation); and initiate chosen method; ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/137) |
 
 #### Local access (API and CMD)
 
@@ -225,7 +225,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  |
 | **Impacted functionality** | Configuration of dms; Access to NuNet network from external applications via REST-API; |
-| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: api responds to locally issued commands; api does not respond to remotely issued commands; |
+| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: api responds to locally issued commands; api does not respond to remotely issued commands; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/123) |
 
 #### Local database interface and implementation
 
@@ -244,7 +244,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  |
 | **Impacted functionality** | Configuration management; Local telemetry and logging management; |
-| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: Arbitrary information can be stored, retrieved and searched via the implemented interface;  |
+| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: Arbitrary information can be stored, retrieved and searched via the implemented interface; ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/136) |
 
 #### Executor interface and implementation
 
@@ -263,7 +263,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  |
 | **Impacted functionality** | Definition of generic interface for easy plugging third party developed executables to dms; Full implementation of docker and firecracker executables; |
-| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: starting a compute job with docker / firecracker executables; observing the runtime; finishing and receiving results;  |
+| **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: starting a compute job with docker / firecracker executables; observing the runtime; finishing and receiving results;  ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/135)|
 
 #### Machine benchmarking
 
@@ -282,7 +282,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  |
 | **Impacted functionality** | Machine benchmarking is needed for the Capability / Comparison interface implemented in [dms.orchestrator.matching](https://gitlab.com/nunet/device-management-service/-/tree/develop/dms/orchestrator/matching?ref_type=heads) subpackage |
-| **Acceptance tests** | Unit tests; Functional tests: Machines are benchmarked while onboarding, the benchmarking data is stored / accessed via database interface; |
+| **Acceptance tests** | Unit tests; Functional tests: Machines are benchmarked while onboarding, the benchmarking data is stored / accessed via database interface; ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/134)|
 
 
 #### p2p network and routing
@@ -302,7 +302,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | Messages and routing partially explained in research blog on [gossipsub, DHT and pull/push mechanisms](https://nunet.gitlab.io/research/blog/posts/gossipsub/)  |
 | **Impacted functionality** | Fundamental functionality of NuNet -- connecting dms's into p2p neworks and subnetworks; |
-| **Acceptance tests** | Unit tests; Functional tests: Actors (nodes and allocations) are able to see peers / neighbours; It is possible to send and receive messages from other Actors (nodes and allocations) either directly (addressed) or via gossip routing indirectly |
+| **Acceptance tests** | Unit tests; Functional tests: Actors (nodes and allocations) are able to see peers / neighbours; It is possible to send and receive messages from other Actors (nodes and allocations) either directly (addressed) or via gossip routing indirectly; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/133) |
 
 #### Storage interface
 
@@ -321,7 +321,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  [list of related issues and comments](https://gitlab.com/search?search=storage&nav_source=navbar&project_id=23187917&group_id=6160918&scope=issues)  |
 | **Impacted functionality** | Fundamental functionality of NuNet -- providing input and output data storage for computation processes |
-| **Acceptance tests** | Unit tests; Functional tests: all executors are able to read and write data to the provided storage, as allowed and via the interface |
+| **Acceptance tests** | Unit tests; Functional tests: all executors are able to read and write data to the provided storage, as allowed and via the interface; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/132) |
 
 #### IP over Libp2p
 
@@ -340,7 +340,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  [related issues](https://gitlab.com/search?search=ip+over+libp2p&nav_source=navbar&project_id=35912922&group_id=6160918&scope=issues); [related comments](https://gitlab.com/search?group_id=6160918&project_id=35912922&scope=notes&search=ip+over+libp2p); [proof of concept implementation](https://gitlab.com/nunet/misc-experiments/ipoverlibp2p-poc-orchestration)  |
 | **Impacted functionality** | Ability to integrate with third party frameworks for orchestration (e.g. Kubernetes, others) as well as run distributed software (database clusters, etc.); Will be mostly used for the [Public Alpha Solutions milestone](https://app.gitbook.com/o/HmQiiAfFnBUd24KadDsO/s/UoAe47nbLYU9lZHCUSJH/public-alpha-solutions)  |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: (1) spawn a ipv4 network for containers running on different machines to directly interact with each other; (2) Access compute providers via Kubernetes cluster / orchestrate jobs via Kubernetes cluster (advanced);  |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests: (1) spawn a ipv4 network for containers running on different machines to directly interact with each other; (2) Access compute providers via Kubernetes cluster / orchestrate jobs via Kubernetes cluster (advanced);  <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/131)|
 
 
 #### Private Swarm
@@ -360,7 +360,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |    |
 | **Impacted functionality** | Ability to create private swarms for connecting dedicated DMSs. Will be mostly used for  the [Public Alpha Solutions milestone](https://app.gitbook.com/o/HmQiiAfFnBUd24KadDsO/s/UoAe47nbLYU9lZHCUSJH/public-alpha-solutions) |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: (1) a dms is able to create a new private swarm network during onboarding; (2) other dms's are able to connect to the network by manually configuring swarm key (via config or onboarding parameter) (the key is shared externally between machine owners)  |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests: (1) a dms is able to create a new private swarm network during onboarding; (2) other dms's are able to connect to the network by manually configuring swarm key (via config or onboarding parameter) (the key is shared externally between machine owners); <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/130)  |
 
 #### Observability and Telemetry
 
@@ -379,7 +379,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** |  [observability interface in yellow-paper](https://app.gitbook.com/o/HmQiiAfFnBUd24KadDsO/s/nUIl2GGpV9Wq3xiFlif2/public-technical-documentation/publisher/platform-yellow-paper/main/c_observability-framework) |
 | **Impacted functionality** | Logging, tracing and monitoring of decentralized computing framework on any level of granularity; Constitutes a part of developer tooling of NuNet, which will be used by both internal team as well as community contributors |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: after logging is implemented via telemetry interface and default logging is elasticsearch collector; all telemetry events are stored in elasticsearch database and can be analyzed via API / Kibana dashboard;  |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests: after logging is implemented via telemetry interface and default logging is elasticsearch collector; all telemetry events are stored in elasticsearch database and can be analyzed via API / Kibana dashboard; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/129) |
 
 #### Definition of compute workflows / recursive jobs
 
@@ -398,7 +398,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | [jobs design description](https://gitlab.com/nunet/architecture/-/issues/245)  |
 | **Impacted functionality** | Used in job orchestration in order to be able to search and match fitting machines that are connected to the network; Related to Capability / Comparison model |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: Ability to represent any job that can be represented via kubernetes / nomad in nunet job fomat / convert to inner type and orchestrate its execution |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests: Ability to represent any job that can be represented via kubernetes / nomad in nunet job fomat / convert to inner type and orchestrate its execution; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/128) |
 
 
 #### Job deployment and orchestration model
@@ -418,7 +418,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | [specification and architecture of job orchestration (issue)](https://gitlab.com/nunet/research/core-platform/-/issues/17)  |
 | **Impacted functionality** | Related to all sub-packages in the dms package and defines Capability / Comparison model |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: Submit a job described in NuNet job description format, observe its deployment and execution and returning results |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests: Submit a job described in NuNet job description format, observe its deployment and execution and returning results; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/127) |
 
 
 #### Capability model
@@ -438,7 +438,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | [comment on job orchestration proposal](https://gitlab.com/nunet/open-api/platform-data-model/-/merge_requests/35#note_1928384731)  |
 | **Impacted functionality** | (1) Ability to match compute requirements with available Capabilities of machines, considering not only hard (hardware, etc), but also soft requirements (price, time, etc preferences from both sides of matching process); (2) Comparing different machine Capabilities (selecting best machine for a job); (3) Adding / subtracting Capabilities in order to be able to calculate machine usage in real time; See also mentions of Capability model in other functionality descriptions in this document |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: via job orchestration integration tests |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests: via job orchestration integration tests; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/126) |
 
 
 #### Supervision model
@@ -458,7 +458,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | [research blog on Supervision model proposal](https://nunet.gitlab.io/research/blog/posts/supervisor-model/) |
 | **Impacted functionality** | Ability to build a 'decentralized' control plane on NuNet; error propagation between Actors participating in the same compute workflow; heartbeat and health-check functionalities; conceptually, supervisor model enables failure recovery and fault tolerance features in the network; related to 'remote procedure calls' functionality; |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: build hierarchies of actors (nodes and allocations) that can observe each other; |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests: build hierarchies of actors (nodes and allocations) that can observe each other; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/125)|
 
 #### Tokenomics interface
 
@@ -477,7 +477,7 @@ Context / links:
 | **Value score** | n/a |
 | **Design** | [tokenomics design work package description](https://gitlab.com/nunet/architecture/-/issues/251); <br>[tokenomics implementation work package description](https://gitlab.com/nunet/architecture/-/issues/250) |
 | **Impacted functionality** | Ability to conclude peer to peer contracts between machines requesting a job and machines accepting job execution (eventually); Ability to include explicit contract information into each job invocation request, independently of the type of contract and micro-payment channels  implementation |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests as part of job orchestration; |
+| **Acceptance tests** | Unit tests; Functional tests / integration tests as part of job orchestration; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/124)|
 
 ## Release management
 
@@ -530,16 +530,16 @@ Given that all prerequisites are launched and prepared, we aim at starting the r
 
 ### Release candidate 1
 
-Release candidate 1 will be built and released on September 15 and tested publicly until October 15 (this includes integration of bug reports and solving them);
+Release candidate 1 will be built and released on September 15 and tested publicly until October 8 (this includes integration of bug reports and solving them);
 
 ### Release candidate 2
 
-Release candidate 2 will be built and released on October 15 and tested publicly until November 15, which includes integration of bug reports and solving problems.
+Release candidate 2 will be built and released on October 15 and tested publicly until November 1, which includes integration of bug reports and solving problems.
 
 ### Release candidate 3
 
-Release candidate 3 will be built and released on November 15 and tested publicly until December 15, including integration of final bug reports and thorough testing via feature environment augmented by community provided hardware
+Release candidate 3 will be built and released on November 15 and tested publicly until November 23, including integration of final bug reports and thorough testing via feature environment augmented by community provided hardware
 
 ### Release
 
-After testing the frozen feature scope of the release, we aim at releasing the 0.5.x version of device-management-service during the last half of December 2024.
+After testing the frozen feature scope of the release, we aim at releasing the 0.5.x version of device-management-service during the first half of December 2024.
