@@ -28,8 +28,12 @@ func NewOnboardingHandler(s *onboarding.Onboarding) OnboardingHandler {
 //	@Success		200	{object}	types.Provisioned
 //	@Router			/onboarding/provisioned [get]
 func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
-	// TODO: Waiting on MR for resource manager
-	c.JSON(200, resources.GetTotalProvisioned())
+	provisionedResources, err := resources.ManagerInstance.SystemSpecs().GetProvisionedResources()
+	if err != nil {
+		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, provisionedResources)
 }
 
 // CreatePaymentAddressHandler      godoc

@@ -21,6 +21,19 @@ Types of changes
 
 -->
 
+## [0.4.181](#259)
+
+### Changed
+- Removed the functions in the package and replaced them with an interface-based design.
+- Updated the types for Resource, AvailableResources, FreeResources and RequiredResources
+- Updated the usage of resources package
+
+### Added
+- Added interfaces ResourceManager, UsageMonitor and SystemSpecs
+- Added linux, amd64_darwin and arm64_darwin implementations for SystemSpecs
+- Added the SpecInfo struct
+- Added tests for the package
+
 ## [0.4.180](#522)
 
 ### Deprecated

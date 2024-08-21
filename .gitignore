@@ -5,6 +5,7 @@ maint-scripts/inventory.yaml
 *.json
 !test/*.json
 .env
+.idea
 
 # Holds local development files. These files are used to develop
 # features separately then merging into main code before commit.
@@ -15,4 +16,6 @@ maint-scripts/inventory.yaml
 Dockerfile
 docker-compose.yml
 .DS_Store
+
+# others
 .aider*

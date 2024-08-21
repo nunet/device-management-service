@@ -14,16 +14,6 @@ type Machine interface {
 	GenericRepository[types.Machine]
 }
 
-// FreeResources represents a repository for CRUD operations on FreeResources entity.
-type FreeResources interface {
-	GenericEntityRepository[types.FreeResources]
-}
-
-// AvailableResources represents a repository for CRUD operations on AvailableResources entity.
-type AvailableResources interface {
-	GenericEntityRepository[types.AvailableResources]
-}
-
 // Services represents a repository for CRUD operations on Services entities.
 type Services interface {
 	GenericRepository[types.Services]

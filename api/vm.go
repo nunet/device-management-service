@@ -68,8 +68,8 @@ func (h *VMHandler) StartCustom(c *gin.Context) {
 		ExecutionID: "test_execution",
 		EngineSpec:  fe,
 		Resources: &types.ExecutionResources{
-			CPU:    types.CPU{Cores: uint64(body.VCPUCount)},
-			Memory: types.Memory{Size: uint64(body.MemSizeMib)},
+			CPU:    types.CPU{Cores: int(uint64(body.VCPUCount))},
+			Memory: types.RAM{Size: uint64(body.MemSizeMib)},
 		},
 	}
 
@@ -128,7 +128,7 @@ func (h *VMHandler) StartDefault(c *gin.Context) {
 		EngineSpec:  fe,
 		Resources: &types.ExecutionResources{
 			CPU:    types.CPU{Cores: 1},
-			Memory: types.Memory{Size: 1024},
+			Memory: types.RAM{Size: 1024},
 		},
 	}
 

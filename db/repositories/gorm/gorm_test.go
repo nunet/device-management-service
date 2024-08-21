@@ -33,6 +33,8 @@ func setup() {
 		&types.DeploymentRequestFlat{},
 		&types.RequestTracker{},
 		&types.VirtualMachine{},
+		&types.OnboardedResources{},
+		&types.RequiredResources{},
 	)
 }
 

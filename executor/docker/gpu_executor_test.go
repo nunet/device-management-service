@@ -19,8 +19,8 @@ func TestGPUDeployment(t *testing.T) {
 
 	// Get the GPU with the highest free VRAM
 	t.Log("Fetching GPU with highest free VRAM")
-	gpus, err := resources.GetGPUInfo()
-	maxFreeVRAMGpu, err := resources.GPUList(gpus).GetGPUWithHighestFreeVRAM()
+	gpus, err := resources.ManagerInstance.SystemSpecs().GetGPUs()
+	maxFreeVRAMGpu, err := types.GPUList(gpus).GetGPUWithHighestFreeVRAM()
 	if err != nil {
 		t.Fatalf("Error getting GPU with highest free VRAM: %v", err)
 	}

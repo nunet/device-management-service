@@ -156,7 +156,9 @@ func TestFreeResources(t *testing.T) {
 	createdFreeResources, err := freeResourcesRepo.Save(
 		context.Background(),
 		types.FreeResources{
-			Vcpu: 2,
+			Resources: types.Resources{
+				CPU: 2,
+			},
 		},
 	)
 	assert.NoError(t, err)
@@ -164,17 +166,17 @@ func TestFreeResources(t *testing.T) {
 	// Test Get method
 	retrievedFreeResources, err := freeResourcesRepo.Get(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, createdFreeResources.Vcpu, retrievedFreeResources.Vcpu)
+	assert.Equal(t, createdFreeResources.CPU, retrievedFreeResources.CPU)
 
 	// Test Save (update) method
 	updatedFreeResources := retrievedFreeResources
-	updatedFreeResources.Vcpu = 4
+	updatedFreeResources.CPU = 4
 
 	_, err = freeResourcesRepo.Save(context.Background(), updatedFreeResources)
 	assert.NoError(t, err)
 	retrievedFreeResources, err = freeResourcesRepo.Get(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, updatedFreeResources.Vcpu, retrievedFreeResources.Vcpu)
+	assert.Equal(t, updatedFreeResources.CPU, retrievedFreeResources.CPU)
 
 	// Test History method
 	query := freeResourcesRepo.GetQuery()

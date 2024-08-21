@@ -27,13 +27,19 @@ var gpuOnboardCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		wsl, err := utils.CheckWSL()
 		if err != nil {
-			fmt.Println("Error checking WSL:", err)
+			zlog.Sugar().Errorf("Error checking WSL: %v", err)
 			return
 		}
 
-		vendors, err := resources.DetectGPUVendors()
+		mining, err := checkMiningOS()
 		if err != nil {
-			fmt.Println("Error detecting GPUs:", err)
+			zlog.Sugar().Errorf("Error checking Mining OS: %v", err)
+			return
+		}
+
+		vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
+		if err != nil {
+			zlog.Sugar().Errorf("Error trying to detect GPU(s): %v", err)
 			return
 		}
 
@@ -42,81 +48,66 @@ var gpuOnboardCmd = &cobra.Command{
 		hasIntel := containsVendor(vendors, types.GPUVendorIntel)
 
 		if !hasAMD && !hasNVIDIA && !hasIntel {
-			fmt.Println(`No NVIDIA/AMD/Intel GPU(s) detected...`)
+			zlog.Sugar().Error("No NVIDIA/AMD/Intel GPU(s) detected...")
 			return
 		}
 
-		if wsl {
-			fmt.Printf("You are running on Windows Subsystem for Linux (WSL)\n\nWARNING: AMD GPUs are not supported!\n")
+		switch {
+		case wsl:
+			zlog.Warn("You are running on Windows Subsystem for Linux (WSL). AMD GPUs are not supported.")
+			if !hasNVIDIA {
+				zlog.Warn("No NVIDIA GPU(s) detected")
+				return
+			}
 
+			if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
+				fmt.Println("Error during Container Runtime installation:", err)
+				return
+			}
+
+		case mining:
+			zlog.Warn("You are likely running a Mining OS. Skipping driver installation...")
+
+			if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
+				zlog.Sugar().Errorf("Error during Container Runtime installation: %v", err)
+				return
+			}
+
+		default:
 			if hasNVIDIA {
-				err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath)
-				if err != nil {
-					fmt.Println("Error during Container Runtime installation:", err)
-					return
-				}
-			} else {
-				fmt.Println("No NVIDIA GPU(s) detected...")
-				return
-			}
-		} else {
-			mining, err := checkMiningOS()
-			if err != nil {
-				fmt.Println("Error checking Mining OS:", err)
-				return
-			}
-
-			if mining {
-				fmt.Println("You are likely running a Mining OS. Skipping driver installation...")
-
-				err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath)
-				if err != nil {
-					fmt.Println("Error during Container Runtime installation:", err)
-					return
-				}
-
-				return
-			}
-
-			if hasNVIDIA {
-				NVIDIAGPUs, err := resources.GetNVIDIAGPUInfo()
+				nvidiaGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorNvidia)
 				if err != nil {
 					fmt.Println("Error while fetching NVIDIA info:", err)
 					return
 				}
 
-				printGPUs(NVIDIAGPUs)
+				printGPUs(nvidiaGPUs)
 
-				err = promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath)
-				if err != nil {
-					fmt.Println("Error during Container Runtime installation:", err)
+				if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
+					zlog.Sugar().Errorf("Error during Container Runtime installation: %v", err)
 					return
 				}
 
-				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorNvidia, nvidiaDriverPath)
-				if err != nil {
-					fmt.Println("Error during NVIDIA drivers installation:", err)
+				if err := promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorNvidia, nvidiaDriverPath); err != nil {
+					zlog.Sugar().Errorf("Error during NVIDIA drivers installation: %v", err)
 					return
 				}
 			}
 
 			if hasAMD {
-				AMDGPUs, err := resources.GetAMDGPUInfo()
+				AMDGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorAMDATI)
 				if err != nil {
-					fmt.Println("Error while fetching AMD info:", err)
+					zlog.Sugar().Errorf("Error while fetching AMD info: %v", err)
 					return
 				}
 
 				printGPUs(AMDGPUs)
 
-				err = promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorAMDATI, amdDriverPath)
-				if err != nil {
-					fmt.Println("Error during AMD drivers installation:", err)
+				if err := promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorAMDATI, amdDriverPath); err != nil {
+					zlog.Sugar().Errorf("Error during AMD drivers installation: %v", err)
 					return
 				}
 			}
-
-			return
 		}
 	},
 }

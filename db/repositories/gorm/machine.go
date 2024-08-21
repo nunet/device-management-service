@@ -29,17 +29,6 @@ func NewMachine(db *gorm.DB) repositories.Machine {
 	return &MachineGORM{NewGenericRepository[types.Machine](db)}
 }
 
-// FreeResourcesGORM is a GORM implementation of the FreeResources interface.
-type FreeResourcesGORM struct {
-	repositories.GenericEntityRepository[types.FreeResources]
-}
-
-// NewFreeResources creates a new instance of FreeResourcesGORM.
-// It initializes and returns a GORM-based repository for FreeResources entity.
-func NewFreeResources(db *gorm.DB) repositories.FreeResources {
-	return &FreeResourcesGORM{NewGenericEntityRepository[types.FreeResources](db)}
-}
-
 // AvailableResourcesGORM is a GORM implementation of the AvailableResources interface.
 type AvailableResourcesGORM struct {
 	repositories.GenericEntityRepository[types.AvailableResources]

@@ -28,22 +28,6 @@ type Machine struct {
 	TokenomicsBlockchain string
 }
 
-// FreeResources are the resources free to be used by new services,
-// plugins and any other processes started by DMS. It's basically
-// the subtraction between AvailableResources and the amount of resources
-// already used by DMS and its processes (mostly services)
-type FreeResources struct {
-	BaseDBModel
-	TotCpuHz          int     `json:"tot_cpu_hz"`
-	PriceCpu          float64 `json:"price_cpu"`
-	Ram               int     `json:"ram"`
-	PriceRam          float64 `json:"price_ram"`
-	Vcpu              int     `json:"vcpu"`
-	Disk              float64 `json:"disk"`
-	PriceDisk         float64 `json:"price_disk"`
-	NTXPricePerMinute float64 `json:"ntx_price"`
-}
-
 // AvailableResources are the amount of resources onboarded which
 // can be used by NuNet
 type AvailableResources struct {
