@@ -1,7 +1,6 @@
 package dms
 
 import (
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gorm.io/gorm"
 )
 
@@ -15,5 +14,5 @@ import (
 func SanityCheck(gormDB *gorm.DB) {
 	// TODO: sanity check of DMS last exit and correction of invalid states
 
-	resources.CalcFreeResAndUpdateDB()
+	//resources.CalcFreeResAndUpdateDB()
 }

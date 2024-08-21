@@ -20,16 +20,16 @@ func GpuComparator(l, r interface{}, preference ...Preference) types.Comparison 
 
 	comparison := ReturnComplexComparison(l, r)
 
-	if comparison["VRAM"] == types.Error  {
+	if comparison["TotalVRAM"] == types.Error {
 		return types.Error
-	} 
-	if comparison["VRAM"] == types.Worse  {
+	}
+	if comparison["TotalVRAM"] == types.Worse {
 		return types.Worse
 	}
-	if comparison["VRAM"] == types.Better  {
+	if comparison["TotalVRAM"] == types.Better {
 		return types.Better
 	}
-	if comparison["VRAM"] == types.Equal {
+	if comparison["TotalVRAM"] == types.Equal {
 		return types.Equal
 	}
 
@@ -38,7 +38,7 @@ func GpuComparator(l, r interface{}, preference ...Preference) types.Comparison 
 	// for more complex comparisons we would need to encode the very specific hardware knowledge;
 	// it could be, that we want to compare types.of GPUs and rank them in some way;
 	// using e.g. benchmarking data from Tom's Hardware or some other source;
-	
+
 	return types.Error // error is the default value
 
 }

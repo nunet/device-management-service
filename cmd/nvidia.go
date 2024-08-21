@@ -18,7 +18,7 @@ type nvidiaGPU struct {
 func (n *nvidiaGPU) getDevice() (nvml.Device, error) {
 	device, ret := nvml.DeviceGetHandleByIndex(n.index)
 	if ret != nvml.SUCCESS {
-		return nvml.Device{}, fmt.Errorf("failed to get device (index %d) handle: %s", n.index, nvml.ErrorString(ret))
+		return nil, fmt.Errorf("failed to get device (index %d) handle: %s", n.index, nvml.ErrorString(ret))
 	}
 	return device, nil
 }

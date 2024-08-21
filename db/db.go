@@ -32,6 +32,8 @@ func ConnectDatabase() {
 	database.AutoMigrate(&types.DeploymentRequestFlat{})
 	database.AutoMigrate(&types.MachineUUID{})
 	database.AutoMigrate(&types.Connection{})
+	database.AutoMigrate(&types.OnboardedResources{})
+	database.AutoMigrate(&types.RequiredResources{})
 
 	DB = database
 }

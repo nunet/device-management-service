@@ -22,7 +22,7 @@ var gpuStatusCmd = &cobra.Command{
 	Long:    ``,
 	PreRunE: isDMSRunning(networkService),
 	Run: func(cmd *cobra.Command, args []string) {
-		vendors, err := resources.DetectGPUVendors()
+		vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
 		if err != nil {
 			fmt.Println("Error trying to detect GPU(s):", err)
 			return

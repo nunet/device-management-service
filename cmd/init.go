@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"gitlab.com/nunet/device-management-service/telemetry/logger"
 
 	"github.com/coreos/go-systemd/sdjournal"
 	"gitlab.com/nunet/device-management-service/cmd/backend"
@@ -16,6 +17,7 @@ var (
 	utilsService      = &backend.Utils{}
 	walletService     = &backend.Wallet{}
 	journalService    *backend.Journal
+	zlog              = logger.OtelZapLogger("cmd")
 )
 
 func init() {

@@ -12,16 +12,15 @@
 
 1. [Description](#1-description)
 2. [Structure and organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+3. [Functionality](#3-functionality)
+4. [Data Types](#4-data-types)
+5. [Testing](#5-testing)
+6. [References](#6-references)
+
 
 ## Specification
 
-### 1. `proposed` Description
+### 1. Description
 
 `resources` deals with resource management for the machine. This includes calculation of available resources for new jobs or bid requests.
 
@@ -31,267 +30,234 @@ Here is quick overview of the contents of this pacakge:
 
 * [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/README.md): Current file which is aimed towards developers who wish to use and modify the DMS functionality.
 
-* [calc_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/calc_resources.go): This contains methods to calculate and update free resources.
-
-* [darwin_amd64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_amd64_resources.go): This contains methods to calculate machine resources.
-
-* [darwin_arm64_gpu](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_arm64_gpu.go): This contains placeholder method to detect GPU on machine. 
-
-* [darwin_arm64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/darwin_arm64_resources.go): This contains methods to calculate machine resources.
-
-* [handler](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/handler.go): This contains methods related to resources management on a machine.
-
-* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/init.go): This initializes a logger instance.
-
-* [linux_amd64_gpuinfo](linux_amd64_gpuinfo.go): This contains methods to collect GPU info.
-
-* [linux_amd64_resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/linux_amd64_resources.go): This contains methods to calculate machine resources.
-
-* [res_operations](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/res_operations.go): This contains methods to perform various operations (addition, subtraction etc) on machine resources.
+* [init](init.go): Contains the initialization of the package.
+* [resource_manager](resource_manager.go): Contains the resource manager which is responsible for managing the resources of dms.
+* [system_specs_linux](system_specs_linux.go): Contains the implementation of the `SystemSpecs` interface for linux.
+* [system_specs_amd64_darwin](system_specs_amd64_darwin.go): Contains the implementation of the `SystemSpecs` interface for amd64 darwin.
+* [system_specs_arm64_darwin](system_specs_arm64_darwin.go): Contains the implementation of the `SystemSpecs` interface for arm64 darwin.
+* [usage_monitor](usage_monitor.go): Contains the implementation of the `UsageMonitor` interface.
 
 All files with `*_test.go` contains unit tests for the corresponding functionality.
 
-### 3. Class Diagram
+### 3. Functionality
 
-#### Source
+### ResourceManager
 
-[resources class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/specs/class_diagram.puml)
+#### `UpdateFreeResources`
 
-#### Rendered from source file
-
-```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
-!$packageRelativePath = "/dms/resources"
-!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
- 
-!include $packageUrlGitlab/specs/class_diagram.puml
-```
-
-### 4. Functionality
-
-#### `GetFreeResource`
-
-- signature: `GetFreeResource(ctx context.Context) (*models.FreeResources, error)`
-
-- input: `Context object`
-
-- output: `models.FreeResources`
-
+- signature: `UpdateFreeResources(context.Context) (types.FreeResources, error)`
+- input: `Context`
+- output: `types.FreeResources`
 - output (error): Error message
 
-`GetFreeResource` calculates the FreeResources based on the AvailableResources and all processes started by DMS, and updates the FreeResources database table accordingly.
+#### `GetOnboardedResources`
 
+- signature: `GetOnboardedResources(context.Context) (types.OnboardedResources, error)`
+- input: `Context`
+- output: `types.OnboardedResources`
+- output (error): Error message
 
-#### `updateDBFreeResources`
+#### `GetRequiredResources`
 
-- signature: `updateDBFreeResources(freeRes models.FreeResources) error`
+- signature: `GetRequiredResources(context.Context) (types.Resource, error)`
+- input: `Context`
+- output: `types.Resource`
+- output (error): Error message
 
-- input: `models.FreeResources`
+#### `UpdateOnboardedResources`
 
+- signature: `UpdateOnboardedResources(context.Context, types.OnboardedResources) error`
+- input: `Context`, `types.OnboardedResources`
 - output: None
-
 - output (error): Error message
 
-`updateDBFreeResources` updates the database using the FreeResources provided.
+#### `SystemSpecs`
 
-#### `getServiceResourcesRequirements`
-
-- signature: `getServiceResourcesRequirements(gormDB *gorm.DB) (map[int]models.ServiceResourceRequirements, error) `
-
-- input: `gorm DB object` 
-
-- output: map of `models.ServiceResourceRequirements`
-
-- output (error): Error message
-
-`getServiceResourcesRequirements` returns a map `models.ServiceResourceRequirements` from the database provided.
-
-#### `GetFreeResources`
-
-- signature: `func GetFreeResources() (models.FreeResources, error)`
-
+- signature: `SystemSpecs() types.SystemSpecs`
 - input: None
+- output: `types.SystemSpecs` instance
+- output (error): None
 
-- output: `models.FreeResources`
+#### `UsageMonitor`
 
-- output (error): Error message
-
-`GetFreeResources` retrieves the currently available free resources of a machine.
-
-
-#### `GetAvailableResources`
-
-- signature: `GetAvailableResources(gormDB *gorm.DB) (models.AvailableResources, error)`
-
-- input: `gorm DB object`
-
-- output: `models.AvailableResources`
-
-- output (error): Error message
-
-`GetAvailableResources` retrieves and returns the available resources onboarded to Nunet.
-
-#### `GetGPUInfo`
-
-- signature: `GetGPUInfo() ([]models.GPU, error)`
-
+- signature: `UsageMonitor() types.UsageMonitor`
 - input: None
+- output: `types.UsageMonitor` instance
+- output (error): None
 
-- output: `[]models.GPU`
+### System Specs
 
-- output (error): Error message
+#### `GetSpecInfo`
 
-`GetGPUInfo` detects the presence of GPUs, fetches detailed information for NVIDIA, AMD, and Intel GPUs, and returns this information in a list of `models.GPU`. It includes checks for GPU vendors, handles cases where vendor-specific tools (like `rocm-smi` for AMD or `xpu-smi` for Intel) are not installed, and retrieves the PCI address and index for each detected GPU.
-
-#### `GetGPUWithHighestFreeVRAM`
-
-- signature: `GetGPUWithHighestFreeVRAM() (models.GPU, error)`
-
+- signature: `GetSpecInfo() (types.SpecInfo, error)`
 - input: None
-
-- output: `models.GPU`
-
+- output: `types.SpecInfo`
 - output (error): Error message
 
-`GetGPUWithHighestFreeVRAM` determines the GPU vendor with the highest free VRAM from the available GPUs and returns the corresponding `models.GPU` structure.
+#### `GetGPUVendors`
 
-#### `FetchGPUPCIAddressandIndex`
-
-- signature: `FetchGPUPCIAddressandIndex() (map[uint64]models.GPU, error)`
-
+- signature: `GetGPUVendors() ([]types.GPUVendor, error)`
 - input: None
-
-- output: `map[uint64]models.GPU`
-
+- output: `[]types.GPUVendor`
 - output (error): Error message
 
-`FetchGPUPCIAddressandIndex` fetches the PCI address and index details for detected GPUs and returns a map of these details.
+#### `GetGPUs`
 
-#### `GetNVIDIAGPUInfo`
+- signature: `GetGPUs(vendor ...types.GPUVendor) ([]types.GPU, error)`
+- input: `[]types.GPUVendor`
+- output: `[]types.GPU`
+- output (error): Error message
 
-- signature: `GetNVIDIAGPUInfo() ([]models.GPU, error)`
+#### `GetTotalMemory`
 
+- signature: `GetTotalMemory() (uint64, error)`
 - input: None
-
-- output: `[]models.GPU`
-
+- output: `uint64`
 - output (error): Error message
 
-`GetNVIDIAGPUInfo` fetches detailed information about NVIDIA GPUs using NVML and returns this information in a list of `models.GPU`.
+#### `GetTotalStorage`
 
-#### `GetAMDGPUInfo`
-
-- signature: `GetAMDGPUInfo() ([]models.GPU, error)`
-
+- signature: `GetTotalStorage() (uint64, error)`
 - input: None
-
-- output: `[]models.GPU`
-
+- output: `uint64`
 - output (error): Error message
 
-`GetAMDGPUInfo` fetches detailed information about AMD GPUs using `rocm-smi` and returns this information in a list of `models.GPU`.  CLI based information retrieval will be stopped in future and made programmatic like NVML.
+#### `GetCPUInfo`
 
-#### `GetIntelGPUInfo`
-
-- signature: `GetIntelGPUInfo() ([]models.GPU, error)`
-
+- signature: `GetCPUInfo() (types.CPUInfo, error)`
 - input: None
-
-- output: `[]models.GPU`
-
+- output: `types.CPUInfo`
 - output (error): Error message
 
-`GetIntelGPUInfo` fetches detailed information about Intel GPUs using `xpu-smi` and returns this information in a list of `models.GPU`. CLI based information retrieval will be stopped in future and made programmatic like NVML.
+#### `GetProvisionedResources`
 
-#### `DetectGPUVendors`
-
-- signature: `DetectGPUVendors() ([]models.GPUVendor, error)`
-
+- signature: `GetProvisionedResources() (types.Resource, error)`
 - input: None
-
-- output: `[]models.GPUVendor`
-
+- output: `types.Resource`
 - output (error): Error message
 
-`DetectGPUVendors` detects the GPU vendors present in the system and returns a list of detected `models.GPUVendor`.
+### System Specs
 
-**Note: the functionality of DMS is being currently developed. The above methods are expected to be modified. See the [proposed](#6-proposed-functionality--requirements) section for the suggested design.**
+#### `GetUsage`
 
+- signature: `GetUsage(context.Context) (types.Resource, error)`
+- input: `Context`
+- output: `types.Resource`
+- output (error): Error message
 
 ### 4. Data Types
 
-- `models.AvailableResources`: resources onboarded to Nunet.
+- `types.Resources`: resources defined for the machine.
 
-- `models.FreeResources`: resources currently available for new jobs.
-
-- `models.Provisioned`: total capacity of the machine
-
-- `models.GPU`: contains GPU related parameters.
-
+```go
+type Resources struct {
+    CPU      float64
+    NumCores uint64
+    GPU      []GPU `gorm:"foreignKey:ResourceID"`
+    RAM      uint64
+    Disk     uint64
+}
 ```
-// Currently functional version (check below for future version with todos)
+
+- `types.AvailableResources`: resources onboarded to Nunet.
+
+```go
+type AvailableResources struct {
+    models.BaseDBModel
+    Resources
+}
+```
+
+- `types.FreeResources`: resources currently available for new jobs.
+
+```go
+type FreeResources struct {
+    models.BaseDBModel
+    Resources
+}
+```
+
+- `types.RequiredResources`: resources required by the jobs running on the machine.
+
+```go
+type RequiredResources struct {
+    models.BaseDBModel
+    Resources
+}
+```
+
+- `types.GPUVendor`: GPU vendors available on the machine.
+
+```go
+type GPUVendor string
+
+const (
+	GPUVendorNvidia  GPUVendor = "NVIDIA"
+	GPUVendorAMDATI  GPUVendor = "AMD/ATI"
+	GPUVendorIntel   GPUVendor = "Intel"
+	GPUVendorUnknown GPUVendor = "Unknown"
+	None             GPUVendor = "None"
+)
+```
+
+- `types.GPU`: GPU details.
+
+```go
 type GPU struct {
-	// added from the proposed specifications
-	// Model name of the GPU e.g. Tesla T4 A100
-	Model string `json:"model" description:"GPU model, ex Tesla T4 A100"`
-	// Total VRAM in MB
-	VRAM uint64 `json:"vram" description:"GPU VRAM size in MB"`
-	// Used VRAM in MB
-	UsedVram uint64 `json:"used_vram" description:"Used GPU VRAM size in MB"`
-	// Free VRAM in MB
-	FreeVram uint64 `json:"free_vram" description:"Free GPU VRAM size in MB"`
-	// Self-reported index of the device in the system
-	Index uint64
-	// Maker of the GPU, e.g. NVIDIA, AMD, Intel
+	// Index is the self-reported index of the device in the system
+	Index int
+	// Name is the model name of the GPU e.g. Tesla T4
+	Name string
+	// Vendor is the maker of the GPU, e.g. NVidia, AMD, Intel
 	Vendor GPUVendor
-	// PCI address of the device, in the format AAAA:BB:CC.C
+	// PCIAddress is the PCI address of the device, in the format AAAA:BB:CC.C
 	// Used to discover the correct device rendering cards
 	PCIAddress string
+	// Model of the GPU, e.g. A100
+	Model string `json:"model" description:"GPU model, ex A100"`
+	// TotalVRAM is the total amount of VRAM on the device
+	TotalVRAM uint64
+	// UsedVRAM is the amount of VRAM currently in use
+	UsedVRAM uint64
+	// FreeVRAM is the amount of VRAM currently free
+	FreeVRAM uint64
+
+	// Gorm fields
+	ResourceID uint `gorm:"foreignKey:ID"`
 }
 ```
 
-- `negativeValueError`: It is used to return a custom error when result of resource operation is negative.
+- `types.GPUList`: A slice of `GPU`.
 
+```go
+type GPUList []GPU
 ```
-type negativeValueError struct {
-	fieldName string
-	r1        int
-	r2        int
+
+- `types.CPUInfo`: CPU information of the machine.
+
+```go
+type CPUInfo struct {
+    NumCores   uint64
+    MHzPerCore float64
+    Compute    float64
 }
-``` 
-
-
-**Note: the functionality of DMS is being currently developed. See the [proposed](#6-proposed-functionality--requirements) section for the suggested data types.**
-
-
-### 6. Testing
-
-`proposed` Refer to `*_test.go` files for unit tests of different functionalities.
-
-### 7. Proposed Functionality / Requirements 
-
-#### List of issues
-
-All issues that are related to the implementation of `dms` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
-
-- [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
-
-
-#### Data types
-
-##### `proposed` Resources data models
-
-Below are data models proposed for handling machine resoures. Relevant issue can be found [here](https://gitlab.com/nunet/device-management-service/-/issues/259#note_1896703735)
-
 ```
-type Resources struct {
+
+- `types.SpecInfo`: detailed specifications of the machine.
+
+```go
+type SpecInfo struct {
 	CPUs    []CPU
 	GPUs    []GPU
 	RAMs    []RAM
 	Disks   []Disk
 	Network NetworkInfo
 }
+```
 
+- `types.CPU`: CPU details.
+
+```go
 type CPU struct {
 	// Model represents the CPU model, e.g., "Intel Core i7-9700K", "AMD Ryzen 9 5900X"
 	Model string
@@ -314,39 +280,11 @@ type CPU struct {
 	// Cache size in bytes
 	CacheSize uint64
 }
+```
 
-type GPU struct {
-	// Model represents the GPU model, e.g., "NVIDIA GeForce RTX 3080", "AMD Radeon RX 6800 XT"
-	Model string
+- `types.RAM`: RAM details.
 
-	// Vendor represents the GPU manufacturer, e.g., "NVIDIA", "AMD"
-	Vendor string
-
-	// PCI address of the device, in the format AAAA:BB:CC.C
-	// Used to discover the correct device rendering cards
-	PCIAddress string
-
-	// Memory size in bytes - currently functional as VRAM
-	MemorySize uint64
-
-	// MemoryType represents the type of GPU memory, e.g., "GDDR6", "HBM2"
-	// TODO: may be removed as it may be too specific for our case
-	MemoryType string
-
-	// TODO: ClockSpeedHz in Hz
-	ClockSpeedHz uint64
-
-	// TODO: ComputeUnits represents the number of compute units (e.g., CUDA cores for NVIDIA, Stream Processors for AMD)
-	ComputeUnits int
-
-	// TODO
-	CUDASupport    bool //Specific only to NVIDIA GPUs and depends on the results of the `nunet capacity --cuda-tensor` command
-	HIPSupport	   bool //Specific to AMD GPUs but not restricted to other vendors. Depends on the results of the `nunet capacity --rocm-hip` command
-	XPUSupport	   bool //Specific only to Intel GPUs. Depends on the results of the `nunet capacity --intel-xpu` command
-	OpenCLSupport  bool //Device independent and not restricted to GPUs alone.
-	DirectXSupport bool //Specific only to Windows Operating System.
-}
-
+```go
 type RAM struct {
 	// Size in bytes
 	Size uint64
@@ -357,14 +295,16 @@ type RAM struct {
 	// Type represents the RAM type, e.g., "DDR4", "DDR5", "LPDDR4"
 	Type string
 }
+```
 
+- `types.Disk`: Disk details.
+
+```go
 type Disk struct {
 	// Model represents the disk model, e.g., "Samsung 970 EVO Plus", "Western Digital Blue SN550"
-	// TODO: may be removed as Disk models will be usually irrelevant, right?
 	Model string
 
 	// Vendor represents the disk manufacturer, e.g., "Samsung", "Western Digital"
-	// TODO: may be removed as Disk vendors will be usually irrelevant, right?
 	Vendor string
 
 	// Size in bytes
@@ -377,40 +317,63 @@ type Disk struct {
 	Interface string
 
 	// Read speed in bytes per second
-	// TODO: may be removed as it may be too specific for our case
 	ReadSpeed uint64
 	// Write speed in bytes per second
-	// TODO: may be removed as it may be too specific for our case
 	WriteSpeed uint64
 }
+```
 
-type NetworkInfo struct {
+- `types.NetworkInfo`: Network details.
+
+```go
 	// Bandwidth in bits per second (b/s)
 	Bandwidth uint64
 
 	// NetworkType represents the network type, e.g., "Ethernet", "Wi-Fi", "Cellular"
 	NetworkType string
 }
-
 ```
 
-```
-type FreeResources struct {
-    Resources
+- `types.ExecutionResource`: resources resources required to execute a task
+
+```go
+type ExecutionResources struct {
+	// CPU configuration
+	CPU CPU `json:"cpu,omitempty" description:"CPU configuration"`
+	// Memory configuration
+	Memory RAM `json:"memory,omitempty" description:"Memory configuration"`
+	// Disk configuration
+	Disk Disk `json:"disk,omitempty" description:"Disk configuration"`
+	// GPU configuration
+	GPUs []GPU `json:"gpus,omitempty" description:"GPU configuration"`
 }
-
 ```
 
-```
-type OnboardedResources struct {
-    Resources
+- `negativeValueError`: It is used to return a custom error when result of resource operation is negative.
+
+```go
+type negativeValueError struct {
+	resource string
+	r1       any
+	r2       any
 }
 ```
 
+### 5. Testing
 
+Refer to `*_test.go` files for unit tests of different functionalities.
 
+#### List of issues
 
-### 8. References
+All issues that are related to the implementation of `dms` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
+
+- [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
+
+### 6. References
+
+The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
+- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
+- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
 
 
 

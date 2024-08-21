@@ -37,7 +37,7 @@ var onboardMLCmd = &cobra.Command{
 			return
 		}
 
-		vendors, err := resources.DetectGPUVendors()
+		vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
 		if err != nil {
 			fmt.Println("Error detecting GPUs:", err)
 			return

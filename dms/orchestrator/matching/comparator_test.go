@@ -1,11 +1,9 @@
 package matching
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/assert"
-
 	"gitlab.com/nunet/device-management-service/types"
+	"testing"
 )
 
 func TestLiteral(t *testing.T) {
@@ -18,15 +16,17 @@ func TestLiteral(t *testing.T) {
 
 func TestGpuCompare(t *testing.T) {
 	gpu1 := types.GPU{Index: 0,
+		Name:       "Tesla T4",
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "Tesla T4 A100",
-		VRAM:       16384}
+		Model:      "A100",
+		TotalVRAM:  16384}
 	gpu2 := types.GPU{Index: 1,
+		Name:       "Intel A770",
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "A770",
+		TotalVRAM:  8192}
 	expectedValue := types.Better
 	actualValue := Compare(gpu1, gpu2)
 	assert.Equal(t, expectedValue, actualValue)
@@ -169,23 +169,27 @@ func TestGpuComparator(t *testing.T) {
 	gpu1 := types.GPU{Index: 0,
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "Tesla T4 A100",
-		VRAM:       16384}
+		Model:      "Tesla T4A100",
+		TotalVRAM:  16384}
 	gpu2 := types.GPU{Index: 1,
+
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "IntelA770",
+		TotalVRAM:  8192}
 	gpu3 := types.GPU{Index: 2,
+
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "IntelA770",
+		TotalVRAM:  8192}
 	gpu4 := types.GPU{Index: 0,
+
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "Tesla T4 A100",
-		VRAM:       16384}
+		Model:      "Tesla T4A100",
+		TotalVRAM:  16384,
+	}
 
 	// positive examples
 	actualValue := Compare(gpu1, gpu2)
@@ -209,43 +213,55 @@ func TestGpuComparator(t *testing.T) {
 func TestGPUsComparator(t *testing.T) {
 	var gpus1 []types.GPU
 	gpu1 := types.GPU{Index: 0,
+
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "Tesla T4 A100",
-		VRAM:       16384}
+		Model:      "Tesla T4A100",
+		TotalVRAM:  16384,
+	}
 	gpu2 := types.GPU{Index: 1,
+
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "IntelA770",
+		TotalVRAM:  8192,
+	}
 	gpus1 = append(gpus1, gpu1)
 	gpus1 = append(gpus1, gpu2)
 
 	var gpus2 []types.GPU
 	gpu3 := types.GPU{Index: 2,
+
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "IntelA770",
+		TotalVRAM:  8192,
+	}
 	gpu4 := types.GPU{Index: 0,
+
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "Tesla T4 A100",
-		VRAM:       16384}
+		Model:      "Tesla T4A100",
+		TotalVRAM:  16384,
+	}
 	gpus2 = append(gpus2, gpu3)
 	gpus2 = append(gpus2, gpu4)
 
 	var gpus3 []types.GPU
 	gpu5 := types.GPU{Index: 2,
+
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "IntelA770",
+		TotalVRAM:  8192,
+	}
 	gpu6 := types.GPU{Index: 1,
+
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "IntelA770",
+		TotalVRAM:  8192,
+	}
 	gpus3 = append(gpus3, gpu5)
 	gpus3 = append(gpus3, gpu6)
 	gpus1 = append(gpus1, gpu5)
@@ -275,30 +291,31 @@ func TestExecutionResourcesComparator(t *testing.T) {
 	disk1 := types.Disk{Size: 1024}
 	disk2 := types.Disk{Size: 512}
 	gpu1 := types.GPU{Index: 0,
+
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
-		Model:      "Tesla T4 A100",
-		VRAM:       16384}
+		Model:      "Tesla T4A100",
+		TotalVRAM:  16384,
+	}
 	gpu2 := types.GPU{Index: 1,
+
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
-		Model:      "Intel A770",
-		VRAM:       8192}
+		Model:      "IntelA770",
+		TotalVRAM:  8192,
+	}
 
-	executionResources1 := types.ExecutionResources{
-		CPU:    cpu1,
+	executionResources1 := types.ExecutionResources{CPU: cpu1,
 		Memory: memory1,
 		Disk:   disk1,
 		GPUs:   []types.GPU{gpu1, gpu2},
 	}
-	executionResources2 := types.ExecutionResources{
-		CPU:    cpu2,
+	executionResources2 := types.ExecutionResources{CPU: cpu2,
 		Memory: memory2,
 		Disk:   disk2,
 		GPUs:   []types.GPU{gpu1},
 	}
-	executionResources3 := types.ExecutionResources{
-		CPU:    cpu2,
+	executionResources3 := types.ExecutionResources{CPU: cpu2,
 		Memory: memory1,
 		Disk:   disk2,
 		GPUs:   []types.GPU{gpu2},

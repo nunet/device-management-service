@@ -45,6 +45,11 @@ type AvailableResourcesClover struct {
 	repositories.GenericEntityRepository[types.AvailableResources]
 }
 
+// AvailableResourcesRepositoryClover is a Clover implementation of the AvailableResourcesRepository interface.
+type AvailableResourcesRepositoryClover struct {
+	repositories.GenericEntityRepository[types.AvailableResources]
+}
+
 // NewAvailableResources creates a new instance of AvailableResourcesClover.
 // It initializes and returns a Clover-based repository for AvailableResources entity.
 func NewAvailableResources(db *clover.DB) repositories.AvailableResources {

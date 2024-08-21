@@ -25,13 +25,13 @@ func setup() (*clover.DB, string) {
 		panic(err)
 	}
 
-	//Create collections
+	// Create collections
 	collections := []string{
 		"peer_info", "machine", "free_resources", "available_resources",
 		"services", "service_resource_requirements", "libp_2_p_info",
 		"machine_uuid", "connection", "elastic_token", "log_bin_auth",
 		"deployment_request_flat", "request_tracker", "virtual_machine",
-		"storage_volume",
+		"storage_volume", "onboarded_resources", "required_resources",
 	}
 
 	for _, collection := range collections {
