@@ -17,6 +17,10 @@ import (
 	"github.com/spf13/afero"
 )
 
+var (
+	ErrMachineNotOnboarded = errors.New("machine is not onboarded")
+)
+
 type OnboardingConfig struct {
 	Fs             afero.Afero
 	WorkDir        string
@@ -131,7 +135,7 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, fmt.Errorf("could not check onboard status: %w", err)
 	}
 	if !onboarded {
-		return nil, fmt.Errorf("machine is not onboarded")
+		return nil, ErrMachineNotOnboarded
 	}
 
 	if err := validateCapacityForNunet(capacity); err != nil {

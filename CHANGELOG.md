@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.182](#425)
+
+### Changed
+- Improve status codes and replace with constants
+
 ## [0.4.181](#259)
 
 ### Changed

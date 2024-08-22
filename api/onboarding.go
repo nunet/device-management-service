@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -30,10 +31,10 @@ func NewOnboardingHandler(s *onboarding.Onboarding) OnboardingHandler {
 func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
 	provisionedResources, err := resources.ManagerInstance.SystemSpecs().GetProvisionedResources()
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, provisionedResources)
+	c.JSON(http.StatusOK, provisionedResources)
 }
 
 // CreatePaymentAddressHandler      godoc
@@ -48,10 +49,10 @@ func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 	wallet := c.DefaultQuery("blockchain", "cardano")
 	pair, err := onboarding.CreatePaymentAddress(wallet)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, pair)
+	c.JSON(http.StatusCreated, pair)
 }
 
 // Onboard      godoc
@@ -61,7 +62,7 @@ func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 //	@Tags			onboarding
 //	@Produce		json
 //	@Param			capacity	body		types.CapacityForNunet	true	"Capacity for NuNet"
-//	@Success		200			{object}	types.OnboardingConfig
+//	@Success		201			{object}	types.OnboardingConfig
 //	@Failure		400			{object}	object	"invalid request data"
 //	@Failure		500			{object}	object	"could not check if config directory exists"
 //	@Failure		500			{object}	object	"config directory does not exist"
@@ -81,17 +82,17 @@ func (h OnboardingHandler) Onboard(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&capacity); err != nil {
-		c.AbortWithStatusJSON(400, gin.H{"error": "invalid request data"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request data"})
 		return
 
 	}
 
 	oConfig, err := h.service.Onboard(c.Request.Context(), capacity)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, oConfig)
+	c.JSON(http.StatusCreated, oConfig)
 }
 
 // Offboard      godoc
@@ -113,17 +114,17 @@ func (h OnboardingHandler) Offboard(c *gin.Context) {
 	query := c.DefaultQuery("force", "false")
 	force, err := strconv.ParseBool(query)
 	if err != nil {
-		c.AbortWithStatusJSON(400, gin.H{"error": "invalid query data"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid query data"})
 		return
 	}
 
 	err = h.service.Offboard(c.Request.Context(), force)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "device successfully offboarded"})
+	c.JSON(http.StatusOK, gin.H{"message": "device successfully offboarded"})
 }
 
 // OnboardStatus      godoc
@@ -142,10 +143,10 @@ func (h OnboardingHandler) Offboard(c *gin.Context) {
 func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
 	status, err := h.service.Status(c.Request.Context())
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, status)
+	c.JSON(http.StatusOK, status)
 }
 
 // ResourceConfig        godoc
@@ -157,21 +158,26 @@ func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
 //	@Router		/onboarding/resource-config [post]
 func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
 	if c.Request.ContentLength == 0 {
-		c.AbortWithStatusJSON(400, gin.H{"error": "request body is empty"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "request body is empty"})
 		return
 	}
 
 	var capacity types.CapacityForNunet
 	err := c.BindJSON(&capacity)
 	if err != nil {
-		c.AbortWithStatusJSON(400, gin.H{"error": "invalid request data"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request data"})
 		return
 	}
 
 	oConfig, err := h.service.ResourceConfig(c.Request.Context(), capacity)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		switch err {
+		case onboarding.ErrMachineNotOnboarded:
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
 		return
 	}
-	c.JSON(200, oConfig)
+	c.JSON(http.StatusOK, oConfig)
 }

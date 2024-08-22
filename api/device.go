@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -30,7 +32,8 @@ func (h *DeviceHandler) DeviceStatus(c *gin.Context) {
 	// 	return
 	// }
 	// c.JSON(200, gin.H{"online": status})
-	c.AbortWithStatusJSON(500, gin.H{"error": "device status not implemented"})
+	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "device status not implemented"})
+
 }
 
 // UpdateDeviceStatus  godoc
@@ -60,12 +63,12 @@ func (h *DeviceHandler) UpdateDeviceStatus(c *gin.Context) {
 	}
 
 	if c.Request.ContentLength == 0 {
-		c.AbortWithStatusJSON(400, gin.H{"error": "empty content data"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "empty content data"})
 		return
 	}
 	err := c.ShouldBindJSON(&status)
 	if err != nil {
-		c.AbortWithStatusJSON(400, gin.H{"error": "invalid payload data"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid payload data"})
 		return
 	}
 
@@ -75,7 +78,7 @@ func (h *DeviceHandler) UpdateDeviceStatus(c *gin.Context) {
 	// 	c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 	// 	return
 	// }
-	c.AbortWithStatusJSON(500, gin.H{"error": "change device status not implemented"})
+	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "change device status not implemented"})
 	// END
 
 	var msg string
@@ -84,5 +87,5 @@ func (h *DeviceHandler) UpdateDeviceStatus(c *gin.Context) {
 	} else {
 		msg = "Device status successfully changed to offline"
 	}
-	c.JSON(200, gin.H{"message": msg})
+	c.JSON(http.StatusOK, gin.H{"message": msg})
 }

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -55,7 +57,7 @@ func (h *VMHandler) StartCustom(c *gin.Context) {
 	var body CustomVM
 	err := c.BindJSON(&body)
 	if err != nil {
-		c.AbortWithStatusJSON(400, gin.H{"error": "invalid request body"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -75,17 +77,17 @@ func (h *VMHandler) StartCustom(c *gin.Context) {
 
 	fc, err := firecracker.NewExecutor(c.Request.Context(), "manual-start-custom")
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = fc.Start(c.Request.Context(), fer)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "VM started successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "VM started successfully"})
 }
 
 // StartDefault godoc
@@ -114,7 +116,7 @@ func (h *VMHandler) StartDefault(c *gin.Context) {
 	var body DefaultVM
 	err := c.BindJSON(&body)
 	if err != nil {
-		c.AbortWithStatusJSON(400, gin.H{"error": "invalid request body"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -134,14 +136,14 @@ func (h *VMHandler) StartDefault(c *gin.Context) {
 
 	fc, err := firecracker.NewExecutor(c.Request.Context(), "manual-start-default")
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = fc.Start(c.Request.Context(), fer)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"message": "VM started successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "VM started successfully"})
 }
