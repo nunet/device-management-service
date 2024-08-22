@@ -26,7 +26,7 @@ type P2PHandler struct {
 //		@Router			/peers [get]
 func (p *P2PHandler) ListPeers(c *gin.Context) {
 	if p.p2p == nil {
-		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
 	peers := p.p2p.VisiblePeers()
@@ -34,7 +34,7 @@ func (p *P2PHandler) ListPeers(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "no peers yet"})
 		return
 	}
-	c.JSON(200, peers)
+	c.JSON(http.StatusOK, peers)
 }
 
 // KnownPeers  godoc
@@ -49,19 +49,19 @@ func (p *P2PHandler) ListPeers(c *gin.Context) {
 //	@Router		/peers/dht [get]
 func (p *P2PHandler) KnownPeers(c *gin.Context) {
 	if p.p2p == nil {
-		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
 	peers, err := p.p2p.KnownPeers()
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if len(peers) == 0 {
-		c.JSON(404, gin.H{"message": "no peers found"})
+		c.JSON(http.StatusNotFound, gin.H{"message": "no peers found"})
 		return
 	}
-	c.JSON(200, peers)
+	c.JSON(http.StatusOK, peers)
 }
 
 // SelfPeerInfo  godoc
@@ -75,11 +75,11 @@ func (p *P2PHandler) KnownPeers(c *gin.Context) {
 //	@Router			/peers/self [get]
 func (p *P2PHandler) SelfPeerInfo(c *gin.Context) {
 	if p.p2p == nil {
-		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
 	self := p.p2p.Stat()
-	c.JSON(200, self)
+	c.JSON(http.StatusOK, self)
 }
 
 // DumpDHT  godoc
@@ -94,17 +94,18 @@ func (p *P2PHandler) SelfPeerInfo(c *gin.Context) {
 //	@Router			/peers/dht/dump [get]
 func (p *P2PHandler) DumpDHT(c *gin.Context) {
 	if p.p2p == nil {
-		c.JSON(500, gin.H{"error": "host node hasn't yet been initialized"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
 	dht, err := p.p2p.DumpDHTRoutingTable()
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if len(dht) == 0 {
-		c.JSON(500, gin.H{"message": "empty DHT"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "empty DHT"})
 		return
 	}
-	c.JSON(200, dht)
+	c.JSON(http.StatusOK, dht)
+
 }
