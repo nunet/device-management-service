@@ -23,11 +23,12 @@ func NewLogCmd(net backend.NetworkManager, fs backend.FileSystem, journal backen
 		Use:     "log",
 		Short:   "Gather all logs into a tarball. COMMAND MUST RUN AS ROOT WITH SUDO",
 		PreRunE: isDMSRunning(net),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			dmsLogDir := filepath.Join(logDir, "dms-log")
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Collecting logs...")
 
+			// nolint:gofumpt
 			err := fs.MkdirAll(dmsLogDir, 0777)
 			if err != nil {
 				return fmt.Errorf("cannot create dms-log directory: %w", err)

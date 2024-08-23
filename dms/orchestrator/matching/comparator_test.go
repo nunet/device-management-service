@@ -1,9 +1,10 @@
 package matching
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/types"
-	"testing"
 )
 
 func TestLiteral(t *testing.T) {
@@ -15,18 +16,22 @@ func TestLiteral(t *testing.T) {
 }
 
 func TestGpuCompare(t *testing.T) {
-	gpu1 := types.GPU{Index: 0,
+	gpu1 := types.GPU{
+		Index:      0,
 		Name:       "Tesla T4",
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
 		Model:      "A100",
-		TotalVRAM:  16384}
-	gpu2 := types.GPU{Index: 1,
+		TotalVRAM:  16384,
+	}
+	gpu2 := types.GPU{
+		Index:      1,
 		Name:       "Intel A770",
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "A770",
-		TotalVRAM:  8192}
+		TotalVRAM:  8192,
+	}
 	expectedValue := types.Better
 	actualValue := Compare(gpu1, gpu2)
 	assert.Equal(t, expectedValue, actualValue)
@@ -47,9 +52,9 @@ func TestNumericComparator(t *testing.T) {
 }
 
 func TestExecutorComparator(t *testing.T) {
-	executor1 := types.Executor{types.ExecutorTypeDocker}
-	executor2 := types.Executor{types.ExecutorTypeFirecracker}
-	executor3 := types.Executor{types.ExecutorTypeDocker}
+	executor1 := types.Executor{ExecutorType: types.ExecutorTypeDocker}
+	executor2 := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}
+	executor3 := types.Executor{ExecutorType: types.ExecutorTypeDocker}
 	executor4 := types.Executor{}
 
 	// positive examples
@@ -73,7 +78,6 @@ func TestExecutorComparator(t *testing.T) {
 	actualValue = Compare(executor1, executor2)
 	expectedValue = types.Worse
 	assert.NotEqual(t, expectedValue, actualValue)
-
 }
 
 func TestJobTypesComparator(t *testing.T) {
@@ -132,11 +136,9 @@ func TestJobTypesComparator(t *testing.T) {
 	actualValue = Compare(jobs1, jobs2)
 	expectedValue = types.Equal
 	assert.NotEqual(t, expectedValue, actualValue)
-
 }
 
 func TestJobTypeComparator(t *testing.T) {
-
 	// positive examples
 	actualValue := Compare(types.BATCH, types.SINGLERUN)
 	expectedValue := types.Error
@@ -162,29 +164,32 @@ func TestJobTypeComparator(t *testing.T) {
 	actualValue = Compare(types.BATCH, types.SINGLERUN)
 	expectedValue = types.Worse
 	assert.NotEqual(t, expectedValue, actualValue)
-
 }
 
 func TestGpuComparator(t *testing.T) {
-	gpu1 := types.GPU{Index: 0,
+	gpu1 := types.GPU{
+		Index:      0,
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
 		Model:      "Tesla T4A100",
-		TotalVRAM:  16384}
-	gpu2 := types.GPU{Index: 1,
-
+		TotalVRAM:  16384,
+	}
+	gpu2 := types.GPU{
+		Index:      1,
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "IntelA770",
-		TotalVRAM:  8192}
-	gpu3 := types.GPU{Index: 2,
-
+		TotalVRAM:  8192,
+	}
+	gpu3 := types.GPU{
+		Index:      2,
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "IntelA770",
-		TotalVRAM:  8192}
-	gpu4 := types.GPU{Index: 0,
-
+		TotalVRAM:  8192,
+	}
+	gpu4 := types.GPU{
+		Index:      0,
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
 		Model:      "Tesla T4A100",
@@ -212,15 +217,15 @@ func TestGpuComparator(t *testing.T) {
 
 func TestGPUsComparator(t *testing.T) {
 	var gpus1 []types.GPU
-	gpu1 := types.GPU{Index: 0,
-
+	gpu1 := types.GPU{
+		Index:      0,
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
 		Model:      "Tesla T4A100",
 		TotalVRAM:  16384,
 	}
-	gpu2 := types.GPU{Index: 1,
-
+	gpu2 := types.GPU{
+		Index:      1,
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "IntelA770",
@@ -230,15 +235,15 @@ func TestGPUsComparator(t *testing.T) {
 	gpus1 = append(gpus1, gpu2)
 
 	var gpus2 []types.GPU
-	gpu3 := types.GPU{Index: 2,
-
+	gpu3 := types.GPU{
+		Index:      2,
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "IntelA770",
 		TotalVRAM:  8192,
 	}
-	gpu4 := types.GPU{Index: 0,
-
+	gpu4 := types.GPU{
+		Index:      0,
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
 		Model:      "Tesla T4A100",
@@ -248,15 +253,15 @@ func TestGPUsComparator(t *testing.T) {
 	gpus2 = append(gpus2, gpu4)
 
 	var gpus3 []types.GPU
-	gpu5 := types.GPU{Index: 2,
-
+	gpu5 := types.GPU{
+		Index:      2,
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "IntelA770",
 		TotalVRAM:  8192,
 	}
-	gpu6 := types.GPU{Index: 1,
-
+	gpu6 := types.GPU{
+		Index:      1,
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "IntelA770",
@@ -278,44 +283,45 @@ func TestGPUsComparator(t *testing.T) {
 	actualValue = Compare(gpus1, gpus1)
 	expectedValue = types.Equal
 	assert.Equal(t, expectedValue, actualValue)
-
 }
 
 func TestExecutionResourcesComparator(t *testing.T) {
-
 	// constructing some execution resources to test upon
-	cpu1 := types.CPU{Cores: 8, Freq: 1024}
-	cpu2 := types.CPU{Cores: 4, Freq: 2048}
-	memory1 := types.Memory{Size: 16}
-	memory2 := types.Memory{Size: 8}
+	cpu1 := types.CPU{Cores: 8}
+	cpu2 := types.CPU{Cores: 4}
+	memory1 := types.RAM{Size: 16}
+	memory2 := types.RAM{Size: 8}
 	disk1 := types.Disk{Size: 1024}
 	disk2 := types.Disk{Size: 512}
-	gpu1 := types.GPU{Index: 0,
-
+	gpu1 := types.GPU{
+		Index:      0,
 		Vendor:     types.GPUVendorNvidia,
 		PCIAddress: "AAAA:BB:CC.C",
 		Model:      "Tesla T4A100",
 		TotalVRAM:  16384,
 	}
-	gpu2 := types.GPU{Index: 1,
-
+	gpu2 := types.GPU{
+		Index:      1,
 		Vendor:     types.GPUVendorIntel,
 		PCIAddress: "AAAA:BB:CC.D",
 		Model:      "IntelA770",
 		TotalVRAM:  8192,
 	}
 
-	executionResources1 := types.ExecutionResources{CPU: cpu1,
+	executionResources1 := types.ExecutionResources{
+		CPU:    cpu1,
 		Memory: memory1,
 		Disk:   disk1,
 		GPUs:   []types.GPU{gpu1, gpu2},
 	}
-	executionResources2 := types.ExecutionResources{CPU: cpu2,
+	executionResources2 := types.ExecutionResources{
+		CPU:    cpu2,
 		Memory: memory2,
 		Disk:   disk2,
 		GPUs:   []types.GPU{gpu1},
 	}
-	executionResources3 := types.ExecutionResources{CPU: cpu2,
+	executionResources3 := types.ExecutionResources{
+		CPU:    cpu2,
 		Memory: memory1,
 		Disk:   disk2,
 		GPUs:   []types.GPU{gpu2},
@@ -338,7 +344,6 @@ func TestExecutionResourcesComparator(t *testing.T) {
 	actualValue = Compare(executionResources1, executionResources1)
 	expectedValue = types.Better
 	assert.NotEqual(t, expectedValue, actualValue)
-
 }
 
 func TestLibraryComparator(t *testing.T) {

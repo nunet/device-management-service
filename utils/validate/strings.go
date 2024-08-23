@@ -6,10 +6,7 @@ import (
 
 // IsBlank checks if a string is empty or contains only whitespace
 func IsBlank(s string) bool {
-	if len(strings.TrimSpace(s)) == 0 {
-		return true
-	}
-	return false
+	return len(strings.TrimSpace(s)) == 0
 }
 
 // IsNotBlank checks if a string is not empty and does not contain only whitespace

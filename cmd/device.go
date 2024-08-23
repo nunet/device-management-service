@@ -10,14 +10,18 @@ import (
 
 var deviceCmd = NewDeviceCmd(networkService)
 
+var deviceStatusCmd = NewDeviceStatusCmd(utilsService)
+
+var deviceSetCmd = NewDeviceSetCmd(utilsService)
+
 func NewDeviceCmd(net backend.NetworkManager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "device",
 		Short:             "device related operations",
 		Long:              `manage onboarded device`,
 		PersistentPreRunE: isDMSRunning(net),
-		Run: func(cmd *cobra.Command, args []string) {
-			cmd.Help()
+		Run: func(cmd *cobra.Command, _ []string) {
+			_ = cmd.Help()
 		},
 	}
 
@@ -26,15 +30,12 @@ func NewDeviceCmd(net backend.NetworkManager) *cobra.Command {
 	return cmd
 }
 
-var deviceStatusCmd = NewDeviceStatusCmd(utilsService)
-var deviceSetCmd = NewDeviceSetCmd(utilsService)
-
 func NewDeviceStatusCmd(utilsService backend.Utility) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Display current device status",
 		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := checkOnboarded(utilsService)
 			if err != nil {
 				return err
@@ -76,17 +77,18 @@ func NewDeviceSetCmd(utilsService backend.Utility) *cobra.Command {
 				return fmt.Errorf("invalid number of arguments")
 			}
 
-			var statusJson []byte
+			var statusJSON []byte
 
-			if args[0] == "online" {
-				statusJson = []byte(`{"is_available": true}`)
-			} else if args[0] == "offline" {
-				statusJson = []byte(`{"is_available": false}`)
-			} else {
+			switch args[0] {
+			case "online":
+				statusJSON = []byte(`{"is_available": true}`)
+			case "offline":
+				statusJSON = []byte(`{"is_available": false}`)
+			default:
 				return fmt.Errorf("invalid argument")
 			}
 
-			body, err := utilsService.ResponseBody(nil, "POST", "/api/v1/device/status", "", statusJson)
+			body, err := utilsService.ResponseBody(nil, "POST", "/api/v1/device/status", "", statusJSON)
 			if err != nil {
 				return fmt.Errorf("could not get response body: %w", err)
 			}

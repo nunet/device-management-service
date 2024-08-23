@@ -20,24 +20,24 @@ func UpdateField[T interface{}](input T, fieldName string, newValue interface{})
 
 	// Check if the input is a struct
 	if val.Kind() != reflect.Struct {
-		return input, fmt.Errorf("Not a struct: %T", input)
+		return input, fmt.Errorf("not a struct: %T", input)
 	}
 
 	// Get the field by name
 	field := val.FieldByName(fieldName)
 	if !field.IsValid() {
-		return input, fmt.Errorf("Field not found: %v", fieldName)
+		return input, fmt.Errorf("field not found: %v", fieldName)
 	}
 
 	// Check if the field is settable
 	if !field.CanSet() {
-		return input, fmt.Errorf("Field not settable: %v", fieldName)
+		return input, fmt.Errorf("field not settable: %v", fieldName)
 	}
 
 	// Check if types are compatible
 	if !reflect.TypeOf(newValue).ConvertibleTo(field.Type()) {
 		return input, fmt.Errorf(
-			"Incompatible conversion: %v -> %v; value: %v",
+			"incompatible conversion: %v -> %v; value: %v",
 			field.Type(), reflect.TypeOf(newValue), newValue,
 		)
 	}

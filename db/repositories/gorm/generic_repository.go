@@ -1,4 +1,4 @@
-package repositories_gorm
+package gorm
 
 import (
 	"context"

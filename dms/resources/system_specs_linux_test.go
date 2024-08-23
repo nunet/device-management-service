@@ -2,8 +2,9 @@ package resources
 
 import (
 	"fmt"
-	"gitlab.com/nunet/device-management-service/types"
 	"testing"
+
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/stretchr/testify/assert"

@@ -21,7 +21,7 @@ var gpuStatusCmd = &cobra.Command{
 	Short:   "Check GPU status in real time",
 	Long:    ``,
 	PreRunE: isDMSRunning(networkService),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
 		if err != nil {
 			fmt.Println("Error trying to detect GPU(s):", err)
@@ -198,7 +198,7 @@ func getCountAMD() (int, error) {
 
 	matches := re.FindAllStringSubmatch(rocmOutput, -1)
 
-	var ids []string
+	ids := make([]string, 0, len(matches))
 	for _, match := range matches {
 		ids = append(ids, match[1])
 	}

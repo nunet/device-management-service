@@ -13,7 +13,7 @@ func NewChatClearCmd(p2pService backend.PeerManager) *cobra.Command {
 	return &cobra.Command{
 		Use:   "clear",
 		Short: "Clear open chat streams",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			err := p2pService.ClearIncomingChatRequests()
 			if err != nil {
 				return fmt.Errorf("clear chat failed: %w", err)

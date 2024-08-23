@@ -1,4 +1,4 @@
-package repositories_clover
+package clover
 
 import (
 	"encoding/json"
@@ -15,13 +15,13 @@ func handleDBError(err error) error {
 	if err != nil {
 		switch err {
 		case clover.ErrDocumentNotExist:
-			return repositories.NotFoundError
+			return repositories.ErrNotFound
 		case clover.ErrDuplicateKey:
-			return repositories.InvalidDataError
+			return repositories.ErrInvalidData
 		case repositories.ErrParsingModel:
 			return err
 		default:
-			return errors.Join(repositories.DatabaseError, err)
+			return errors.Join(repositories.ErrDatabase, err)
 		}
 	}
 	return nil

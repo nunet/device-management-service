@@ -24,6 +24,9 @@ darwin_amd64:
 	@echo "Building for Darwin AMD64..."
 	GOOS=darwin GOARCH=amd64 go build -o builds/dms_darwin_amd64 .
 
+lint:
+	golangci-lint run --max-issues-per-linter=200
+
 clean:
 	@echo "Cleaning up..."
 	rm -rf builds/

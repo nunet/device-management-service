@@ -4,33 +4,33 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func CpuComparator(l, r interface{}, preference ...Preference) types.Comparison {
+func CPUComparator(l, r interface{}, _ ...Preference) types.Comparison {
 	// comparator for CPU type
 
 	// we want to reason about the inner fields of the CPU type and how they compare between left and right
 
 	// validate input type
-	lCpu, lok := l.(types.CPU)
-	rCpu, rok := r.(types.CPU)
+	lCPU, lok := l.(types.CPU)
+	rCPU, rok := r.(types.CPU)
 	if !lok || !rok {
 		return types.Error
 	}
 
-	perf_comparison := NumericComparator(
-		(lCpu.Cores * lCpu.Freq),
-		(rCpu.Cores * rCpu.Freq),
+	perfComparison := NumericComparator(
+		(int64(lCPU.Cores) * lCPU.ClockSpeedHz),
+		(int64(rCPU.Cores) * rCPU.ClockSpeedHz),
 	)
 
-	arch_comparision := LiteralComparator(lCpu.Arch, rCpu.Arch)
+	archComparison := LiteralComparator(lCPU.Architecture, rCPU.Architecture)
 
-	if arch_comparision == types.Error {
+	if archComparison == types.Error {
 		return types.Error
-	} 
-	if arch_comparision != types.Equal {
+	}
+	if archComparison != types.Equal {
 		return types.Worse
 	}
 
-	return perf_comparison
+	return perfComparison
 
 	// currently this is a very simple comparison, based on the assumption
 	// that more cores / or equal amount of cores and frequency is acceptable, but nothing less;
@@ -38,4 +38,3 @@ func CpuComparator(l, r interface{}, preference ...Preference) types.Comparison 
 	// it could be, that we want to compare types.of CPUs and rank them in some way;
 	// using e.g. benchmarking data from Tom's Hardware or some other source;
 }
-

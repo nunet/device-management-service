@@ -64,7 +64,6 @@ func (ml *MockLogger) Close() error {
 func (ml *MockLogger) GetEntry() (*sdjournal.JournalEntry, error) {
 	if ml.errRead == (ml.nextEntry - 2) {
 		return &sdjournal.JournalEntry{}, fmt.Errorf("entry corrupted: unable to read")
-
 	}
 
 	return &ml.entries[(ml.nextEntry - 2)], nil

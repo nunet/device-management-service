@@ -23,7 +23,7 @@ func NewInfoCmd(net backend.NetworkManager, utilsService backend.Utility) *cobra
 		Short:   "Display information about onboarded device",
 		Long:    "Display onboarding config of onboarded device on Nunet Device Management Service",
 		PreRunE: isDMSRunning(net),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := checkOnboarded(utilsService)
 			if err != nil {
 				return err

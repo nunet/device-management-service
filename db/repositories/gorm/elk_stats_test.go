@@ -1,4 +1,4 @@
-package repositories_gorm
+package gorm
 
 import (
 	"context"
@@ -90,6 +90,6 @@ func TestRequestTracker(t *testing.T) {
 	assert.Len(t, allRequestTracker, 2)
 
 	// Clean up created records
-	err = requestTrackerRepo.Delete(context.Background(), requestTracker1.ID)
-	err = requestTrackerRepo.Delete(context.Background(), requestTracker2.ID)
+	_ = requestTrackerRepo.Delete(context.Background(), requestTracker1.ID)
+	_ = requestTrackerRepo.Delete(context.Background(), requestTracker2.ID)
 }

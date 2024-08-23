@@ -12,8 +12,8 @@ func NewWalletCmd(net backend.NetworkManager) *cobra.Command {
 		Use:               "wallet",
 		Short:             "Wallet Management",
 		PersistentPreRunE: isDMSRunning(net),
-		Run: func(cmd *cobra.Command, args []string) {
-			cmd.Help()
+		Run: func(cmd *cobra.Command, _ []string) {
+			_ = cmd.Help()
 		},
 	}
 

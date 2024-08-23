@@ -1,4 +1,4 @@
-package repositories_clover
+package clover
 
 import (
 	"context"
@@ -106,6 +106,6 @@ func TestStorageVolume(t *testing.T) {
 	assert.Len(t, allStorageVols, 2)
 
 	// Clean up created records
-	err = storageVolRepo.Delete(context.Background(), storageVol2.ID)
-	err = storageVolRepo.Delete(context.Background(), storageVol3.ID)
+	_ = storageVolRepo.Delete(context.Background(), storageVol2.ID)
+	_ = storageVolRepo.Delete(context.Background(), storageVol3.ID)
 }

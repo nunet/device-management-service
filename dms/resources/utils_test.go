@@ -3,8 +3,9 @@ package resources
 import (
 	"context"
 	"fmt"
-	"gitlab.com/nunet/device-management-service/types"
 	"testing"
+
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"

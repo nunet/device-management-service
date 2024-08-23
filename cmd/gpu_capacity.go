@@ -34,14 +34,14 @@ var gpuCapacityCmd = &cobra.Command{
 	Short:   "Check availability of NVIDIA/AMD/Intel GPUs",
 	Long:    ``,
 	PreRunE: isDMSRunning(networkService),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		cuda, _ := cmd.Flags().GetBool("cuda-tensor")
 		rocm, _ := cmd.Flags().GetBool("rocm-hip")
 		intelXPU, _ := cmd.Flags().GetBool("intel-xpu")
 
 		if !cuda && !rocm && !intelXPU {
 			fmt.Println(`Error: no flags specified`)
-			cmd.Help()
+			_ = cmd.Help()
 			return
 		}
 
@@ -88,14 +88,14 @@ var gpuCapacityCmd = &cobra.Command{
 			}
 
 			if !imageExists(images, cudaOpts.Image) {
-				err := pullImage(cli, ctx, cudaOpts.Image)
+				err := pullImage(ctx, cli, cudaOpts.Image)
 				if err != nil {
 					fmt.Println("Error pulling CUDA image:", err)
 					return
 				}
 			}
 
-			err = runDockerContainer(cli, ctx, cudaOpts)
+			err = runDockerContainer(ctx, cli, cudaOpts)
 			if err != nil {
 				fmt.Println("Error running CUDA container:", err)
 				return
@@ -129,14 +129,14 @@ var gpuCapacityCmd = &cobra.Command{
 			}
 
 			if !imageExists(images, rocmOpts.Image) {
-				err := pullImage(cli, ctx, rocmOpts.Image)
+				err := pullImage(ctx, cli, rocmOpts.Image)
 				if err != nil {
 					fmt.Println("Error pulling ROCm-HIP image:", err)
 					return
 				}
 			}
 
-			err = runDockerContainer(cli, ctx, rocmOpts)
+			err = runDockerContainer(ctx, cli, rocmOpts)
 			if err != nil {
 				fmt.Println("Error running ROCm-HIP container:", err)
 				return
@@ -169,14 +169,14 @@ var gpuCapacityCmd = &cobra.Command{
 			}
 
 			if !imageExists(images, intelXPUOpts.Image) {
-				err := pullImage(cli, ctx, intelXPUOpts.Image)
+				err := pullImage(ctx, cli, intelXPUOpts.Image)
 				if err != nil {
 					fmt.Println("Error pulling Intel XPU image:", err)
 					return
 				}
 			}
 
-			err = runDockerContainer(cli, ctx, intelXPUOpts)
+			err = runDockerContainer(ctx, cli, intelXPUOpts)
 			if err != nil {
 				fmt.Println("Error running Intel XPU container:", err)
 				return
@@ -185,7 +185,7 @@ var gpuCapacityCmd = &cobra.Command{
 	},
 }
 
-func runDockerContainer(cli *client.Client, ctx context.Context, options ContainerOptions) error {
+func runDockerContainer(ctx context.Context, cli *client.Client, options ContainerOptions) error {
 	if options.Image == "" {
 		return fmt.Errorf("image name cannot be empty")
 	}
@@ -241,7 +241,10 @@ func runDockerContainer(cli *client.Client, ctx context.Context, options Contain
 		return fmt.Errorf("failed attaching container: %v", err)
 	}
 
-	io.Copy(os.Stdout, out.Reader)
+	_, err = io.Copy(os.Stdout, out.Reader)
+	if err != nil {
+		return fmt.Errorf("failed to copy container output: %w", err)
+	}
 
 	waitCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 	select {
@@ -267,7 +270,7 @@ func imageExists(images []docker_types.ImageSummary, imageName string) bool {
 	return false
 }
 
-func pullImage(cli *client.Client, ctx context.Context, imageName string) error {
+func pullImage(ctx context.Context, cli *client.Client, imageName string) error {
 	ctxCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
 	out, err := cli.ImagePull(ctxCancel, imageName, docker_types.ImagePullOptions{})
@@ -287,7 +290,10 @@ func pullImage(cli *client.Client, ctx context.Context, imageName string) error 
 	fmt.Printf("Pulling image: %s\nThis may take some time...\n", imageName)
 	defer out.Close()
 
-	io.Copy(os.Stdout, out)
+	_, err = io.Copy(os.Stdout, out)
+	if err != nil {
+		return fmt.Errorf("failed to copy image pull to stdout: %w", err)
+	}
 
 	return nil
 }

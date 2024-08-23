@@ -14,7 +14,7 @@ type intelGPU struct {
 
 // name returns the name of the Intel GPU.
 func (i *intelGPU) name() string {
-	pattern := fmt.Sprintf(`Device Name:\s+(.+)`)
+	pattern := `Device Name:\s+(.+)`
 	re := regexp.MustCompile(pattern)
 
 	xpuOutput, err := runShellCmd(fmt.Sprintf("xpu-smi discovery -d %d", i.index))
@@ -31,7 +31,7 @@ func (i *intelGPU) name() string {
 }
 
 // utilizationRate returns the utilization rate of the Intel GPU.
-func (i *intelGPU) utilizationRate() uint32 {
+func (i *intelGPU) utilizationRate() int64 {
 	pattern := fmt.Sprintf(`GPU Utilization \(%%\)\s+\|\s+(\d+)`)
 	re := regexp.MustCompile(pattern)
 
@@ -47,7 +47,7 @@ func (i *intelGPU) utilizationRate() uint32 {
 			return 0
 		}
 
-		return uint32(utilization)
+		return utilization
 	}
 
 	return 0
@@ -55,10 +55,10 @@ func (i *intelGPU) utilizationRate() uint32 {
 
 // memory returns the memory information of the Intel GPU.
 func (i *intelGPU) memory() memoryInfo {
-	patternTotal := fmt.Sprintf(`Memory Physical Size:\s+([^\s]+)\s+MiB`)
+	patternTotal := `Memory Physical Size:\s+([^\s]+)\s+MiB`
 	reTotal := regexp.MustCompile(patternTotal)
 
-	patternUsed := fmt.Sprintf(`GPU Memory Used \(MiB\)\s+\|\s+(\d+)`)
+	patternUsed := `GPU Memory Used \(MiB\)\s+\|\s+(\d+)`
 	reUsed := regexp.MustCompile(patternUsed)
 
 	xpuOutput, err := runShellCmd(fmt.Sprintf("xpu-smi discovery -d %d", i.index))
@@ -94,7 +94,7 @@ func (i *intelGPU) memory() memoryInfo {
 
 // powerUsage returns the power usage of the Intel GPU.
 func (i *intelGPU) powerUsage() uint32 {
-	pattern := fmt.Sprintf(`GPU Power \(W\)\s+\|\s+([\d\.]+)`)
+	pattern := `GPU Power \(W\)\s+\|\s+([\d\.]+)`
 	re := regexp.MustCompile(pattern)
 
 	xpuOutput, err := runShellCmd(fmt.Sprintf("xpu-smi stats -d %d", i.index))

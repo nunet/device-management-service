@@ -10,7 +10,8 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/internal/background_tasks"
+	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -47,7 +48,7 @@ func TestNew(t *testing.T) {
 				BootstrapPeers:          []multiaddr.Multiaddr{},
 				Rendezvous:              "nunet-randevouz",
 				Server:                  false,
-				Scheduler:               background_tasks.NewScheduler(1),
+				Scheduler:               backgroundtasks.NewScheduler(1),
 				CustomNamespace:         "/nunet-dht-1/",
 				ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 				PeerCountDiscoveryLimit: 40,
@@ -148,7 +149,7 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	// calling one time publish doesnt gurantee that the message has been sent.
+	// calling one time publish doesnt guarantee that the message has been sent.
 	// without this we might not get a message in the subscribe and we would get
 	// flaky test which will fail
 	go func() {
@@ -206,12 +207,13 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	payloadReceived := make(chan string)
 	err = peer1.RegisterStreamMessageHandler(customMessageProtocol, func(stream network.Stream) {
 		bytesToRead := make([]byte, len([]byte(helloWorlPayload))+8)
-		stream.Read(bytesToRead)
+		_, err = stream.Read(bytesToRead)
+		assert.NoError(t, err)
 		payloadReceived <- string(bytesToRead[8:])
 	})
 	assert.NoError(t, err)
 	// 3. re-register should be error
-	err = peer1.RegisterStreamMessageHandler(customMessageProtocol, func(stream network.Stream) {})
+	err = peer1.RegisterStreamMessageHandler(customMessageProtocol, func(_ network.Stream) {})
 	assert.ErrorContains(t, err, "stream with this protocol is already registered")
 
 	// 4. send message from peer2 and wait to get the response from peer1
@@ -225,13 +227,15 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	streamPayloadReceived := make(chan string)
 	err = peer1.RegisterStreamMessageHandler(types.MessageType("/custom_stream/1.2.3"), func(stream network.Stream) {
 		bytesToRead := make([]byte, len([]byte(streamPayloadMessage)))
-		stream.Read(bytesToRead)
+		_, err := stream.Read(bytesToRead)
+		assert.NoError(t, err)
 		streamPayloadReceived <- string(bytesToRead)
 	})
 	assert.NoError(t, err)
 	openedStream, err := peer2.OpenStream(context.TODO(), peer1p2pAddrs[0].String(), types.MessageType("/custom_stream/1.2.3"))
 	assert.NoError(t, err)
-	openedStream.Write([]byte("nunet world"))
+	_, err = openedStream.Write([]byte("nunet world"))
+	assert.NoError(t, err)
 	peer1MessageContent = <-streamPayloadReceived
 	openedStream.Close()
 	assert.Equal(t, "nunet world", peer1MessageContent)

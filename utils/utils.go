@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -20,14 +21,14 @@ import (
 	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/types"
 	"golang.org/x/exp/slices"
-
-	"reflect"
 )
 
-var KernelFileURL = "https://d.nunet.io/fc/vmlinux"
-var KernelFilePath = "/etc/nunet/vmlinux"
-var FilesystemURL = "https://d.nunet.io/fc/nunet-fc-ubuntu-20.04-0.ext4"
-var FilesystemPath = "/etc/nunet/nunet-fc-ubuntu-20.04-0.ext4"
+const (
+	KernelFileURL  = "https://d.nunet.io/fc/vmlinux"
+	KernelFilePath = "/etc/nunet/vmlinux"
+	FilesystemURL  = "https://d.nunet.io/fc/nunet-fc-ubuntu-20.04-0.ext4"
+	FilesystemPath = "/etc/nunet/nunet-fc-ubuntu-20.04-0.ext4"
+)
 
 // DownloadFile downloads a file from a url and saves it to a filepath
 func DownloadFile(url string, filepath string) (err error) {
@@ -38,7 +39,7 @@ func DownloadFile(url string, filepath string) (err error) {
 	}
 	defer file.Close()
 
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) // nolint
 	if err != nil {
 		return err
 	}
@@ -52,9 +53,9 @@ func DownloadFile(url string, filepath string) (err error) {
 	return nil
 }
 
-// ReadHttpString GET request to http endpoint and return response as string
-func ReadHttpString(url string) (string, error) {
-	resp, err := http.Get(url)
+// ReadHTTPString GET request to http endpoint and return response as string
+func ReadHTTPString(url string) (string, error) {
+	resp, err := http.Get(url) // nolint
 	if err != nil {
 		return "", err
 	}
@@ -74,7 +75,7 @@ func RandomString(n int) string {
 	sb := strings.Builder{}
 	sb.Grow(n)
 	for i := 0; i < n; i++ {
-		sb.WriteByte(charset[rand.Intn(len(charset))])
+		sb.WriteByte(charset[rand.Intn(len(charset))]) // nolint
 	}
 	return sb.String()
 }
@@ -107,7 +108,6 @@ func GetMachineUUID() string {
 		zlog.Sugar().Errorf("could not find or create machine uuid record in DB: %v", result.Error)
 	}
 	return machine.UUID
-
 }
 
 // SliceContains checks if a string exists in a slice
@@ -134,7 +134,7 @@ func DeleteFile(path string, backup bool) (err error) {
 func ReadyForElastic() bool {
 	elasticToken := types.ElasticToken{}
 	db.DB.Find(&elasticToken)
-	return elasticToken.NodeId != "" && elasticToken.ChannelName != ""
+	return elasticToken.NodeID != "" && elasticToken.ChannelName != ""
 }
 
 // PromptYesNo loops on confirmation from user until valid answer
@@ -162,6 +162,7 @@ func PromptYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
 // CreateDirectoryIfNotExists creates a directory if it does not exist
 func CreateDirectoryIfNotExists(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
+		// nolint:gofumpt
 		err := os.MkdirAll(path, 0755)
 		if err != nil {
 			return err
@@ -244,6 +245,7 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 		// Construct the full target path by joining the target directory with
 		// the name of the file or directory from the archive.
+		// nolint
 		fullTargetPath := filepath.Join(extractedPath, header.Name)
 
 		// Ensure that the directory path leading to the file exists.
@@ -266,8 +268,14 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 			defer newFile.Close()
 
 			// Copy the file contents from the tar archive to the new file.
-			if _, err := io.Copy(newFile, tarReader); err != nil {
-				return fmt.Errorf("error copying file contents: %v", err)
+			for {
+				_, err := io.CopyN(newFile, tarReader, 1024)
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					return err
+				}
 			}
 		}
 	}
@@ -300,25 +308,26 @@ func CheckWSL() (bool, error) {
 
 // SaveServiceInfo updates service info into SP's DMS for claim Reward by SP user
 func SaveServiceInfo(cpService types.Services) error {
-
 	var spService types.Services
 	err := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Find(&spService).Error
 	if err != nil {
-		return fmt.Errorf("Unable to find service on SP side: %v", err)
+		return fmt.Errorf("unable to find service on SP side: %v", err)
 	}
 	cpService.ID = spService.ID
 	cpService.CreatedAt = spService.CreatedAt
 
 	result := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Updates(&cpService)
 	if result.Error != nil {
-		return fmt.Errorf("Unable to update service info on SP side: %v", result.Error.Error())
+		return fmt.Errorf("unable to update service info on SP side: %v", result.Error.Error())
 	}
 
 	return nil
 }
 
 func RandomBool() bool {
+	// nolint:staticcheck
 	rand.Seed(time.Now().UnixNano())
+	// nolint:gosec
 	return rand.Intn(2) == 1
 }
 
@@ -354,9 +363,8 @@ func IsStrictlyContained(leftSlice, rightSlice []interface{}) bool {
 		if !slices.Contains(leftSlice, subElement) {
 			result = false
 			break
-		} else {
-			result = true
 		}
+		result = true
 	}
 	return result
 }

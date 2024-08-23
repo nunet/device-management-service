@@ -99,7 +99,7 @@ type ResourceOps interface {
 // Resources represents the resources of the machine
 type Resources struct {
 	CPU      float64
-	NumCores uint64
+	NumCores int
 	GPU      []GPU `gorm:"foreignKey:ResourceID"`
 	RAM      uint64
 	Disk     uint64
@@ -107,7 +107,7 @@ type Resources struct {
 
 // Add returns the sum of the resources
 func (r Resources) Add(r2 Resources) Resources {
-	//TODO: GPU addition
+	// TODO: GPU addition
 	return Resources{
 		CPU:  r.CPU + r2.CPU,
 		RAM:  r.RAM + r2.RAM,
@@ -192,10 +192,10 @@ type CPU struct {
 	Vendor string
 
 	// ClockSpeedHz represents the CPU clock speed in Hz
-	ClockSpeedHz uint64
+	ClockSpeedHz int64
 
 	// Cores represents the number of physical CPU cores
-	Cores int
+	Cores uint32
 
 	// Threads represents the number of logical CPU threads (including hyperthreading)
 	Threads int
@@ -210,7 +210,7 @@ type CPU struct {
 // RAM represents the RAM information
 type RAM struct {
 	// Size in bytes
-	Size uint64
+	Size int64
 
 	// Clock speed in Hz
 	ClockSpeedHz uint64

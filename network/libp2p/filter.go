@@ -62,7 +62,7 @@ func (f *filtersConnectionGater) InterceptAddrDial(_ peer.ID, addr multiaddr.Mul
 	return !(*multiaddr.Filters)(f).AddrBlocked(addr)
 }
 
-func (f *filtersConnectionGater) InterceptPeerDial(p peer.ID) (allow bool) {
+func (f *filtersConnectionGater) InterceptPeerDial(_ peer.ID) (allow bool) {
 	return true
 }
 
@@ -91,7 +91,7 @@ func makeAddrsFactory(announce []string, appendAnnouce []string, noAnnounce []st
 		existing[addr] = true
 	}
 
-	var appendAnnAddrs []multiaddr.Multiaddr
+	appendAnnAddrs := make([]multiaddr.Multiaddr, 0)
 	for _, addr := range appendAnnouce {
 		if existing[addr] {
 			// skip AppendAnnounce that is on the Announce list already

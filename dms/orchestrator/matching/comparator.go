@@ -12,11 +12,10 @@ import (
 
 type Comparator func(l, r interface{}, preference ...Preference) types.Comparison
 
-func Compare(l, r interface{}, preference ...Preference) types.Comparison {
-
+func Compare(l, r interface{}, _ ...Preference) types.Comparison {
 	// TODO: it would be better to pass a pointer as this is a global structure
-	var comparatorMap = initComparatorMap()
-	
+	comparatorMap := initComparatorMap()
+
 	// check if the type is numeric
 	if _, numeric := validate.ConvertNumericToFloat64(l); numeric {
 		comparator := comparatorMap["Numeric"]
@@ -26,43 +25,38 @@ func Compare(l, r interface{}, preference ...Preference) types.Comparison {
 		return comparator(l, r)
 	}
 
-    typeName := reflect.TypeOf(l).Name()
+	typeName := reflect.TypeOf(l).Name()
 	// this means that the type is probably a slice of custom types
 	// we have to get the element types and then map it to existing custom types that know
 	// so that we can call a correct comparator for that
-	switch reflect.TypeOf(l).Kind() { 
+	if reflect.TypeOf(l).Kind() == reflect.Slice {
 		// check if we have a slice of further types
 		// we need to mention each type explicitly
-		case reflect.Slice:
-			if _, ok := l.([]types.GPU); ok {
-				typeName = "GPUs"
-			}
-			if _, ok := l.([]types.Library); ok {
-				typeName = "Libraries"
-			}
-			if _, ok := l.([]types.Locality); ok {
-				typeName = "Localities"
-			}
-			if _, ok := l.([]types.Locality); ok {
-				typeName = "Localities"
-			}
+		if _, ok := l.([]types.GPU); ok {
+			typeName = "GPUs"
+		}
+		if _, ok := l.([]types.Library); ok {
+			typeName = "Libraries"
+		}
+		if _, ok := l.([]types.Locality); ok {
+			typeName = "Localities"
+		}
 	}
+
 	// select the comparator based on type
 	comparator := comparatorMap[typeName]
 	if comparator == nil {
 		return types.Error
 	}
 	return comparator(l, r)
-
 }
 
 type ComparatorMap map[string]Comparator
 
 func initComparatorMap() ComparatorMap {
-
 	// comparatorMap holds all defined comparators in a variable that can be passed
 	// around and searched / referenced
-	var comparatorMap = make(map[string]Comparator)
+	comparatorMap := make(map[string]Comparator)
 
 	comparatorMap["Numeric"] = NumericComparator
 	comparatorMap["Capability"] = CapabilityComparator
@@ -75,10 +69,10 @@ func initComparatorMap() ComparatorMap {
 	comparatorMap["GPUs"] = GPUsComparator
 	comparatorMap["GPU"] = GpuComparator
 	comparatorMap["Executor"] = ExecutorComparator
-	comparatorMap["ExecutionResources"] = ExecutionResourcesComparator	
-	comparatorMap["CPU"] = CpuComparator	
-	comparatorMap["Memory"] = MemoryComparator	
-	comparatorMap["Disk"] = DiskComparator	
+	comparatorMap["ExecutionResources"] = ExecutionResourcesComparator
+	comparatorMap["CPU"] = CPUComparator
+	comparatorMap["RAM"] = MemoryComparator
+	comparatorMap["Disk"] = DiskComparator
 	comparatorMap["Library"] = LibraryComparator
 	comparatorMap["Libraries"] = LibrariesComparator
 	comparatorMap["Locality"] = LocalityComparator
@@ -87,8 +81,8 @@ func initComparatorMap() ComparatorMap {
 }
 
 type Preference struct {
-	TypeName string
-	Strength PreferenceString
+	TypeName                  string
+	Strength                  PreferenceString
 	DefaultComparatorOverride Comparator
 }
 

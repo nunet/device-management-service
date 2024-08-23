@@ -52,8 +52,7 @@ func NewTestSuite(t *testing.T) *TestSuite {
 }
 
 func (s *TestSuite) newTestOnboardingHandler() *OnboardingHandler {
-
-	oConfig := onboarding.OnboardingConfig{
+	oConfig := onboarding.Config{
 		Fs:             s.afs,
 		P2PRepo:        repositories_gorm.NewLibp2pInfo(s.db),
 		UUIDRepo:       repositories_gorm.NewMachineUUID(s.db),
@@ -70,9 +69,9 @@ func (s *TestSuite) setupDB() error {
 	if s.db == nil {
 		return fmt.Errorf("db not set")
 	}
-	s.db.AutoMigrate(&types.Libp2pInfo{})
-	s.db.AutoMigrate(&types.AvailableResources{})
-	s.db.AutoMigrate(&types.MachineUUID{})
+	_ = s.db.AutoMigrate(&types.Libp2pInfo{})
+	_ = s.db.AutoMigrate(&types.AvailableResources{})
+	_ = s.db.AutoMigrate(&types.MachineUUID{})
 	return nil
 }
 
@@ -101,16 +100,20 @@ func TestOnboardStatus(t *testing.T) {
 		{
 			name: "success",
 			setupMock: func(ts *TestSuite) {
-				ts.setupDB()
-				ts.setupPrivateKey("abc123")
-				ts.setupMachineUUID("12345")
+				err := ts.setupDB()
+				assert.NoError(t, err)
+				err = ts.setupPrivateKey("abc123")
+				assert.NoError(t, err)
+				err = ts.setupMachineUUID("12345")
+				assert.NoError(t, err)
 			},
 			expectedCode: 200,
 		},
 		{
 			name: "fail",
 			setupMock: func(ts *TestSuite) {
-				ts.setupDB()
+				err := ts.setupDB()
+				assert.NoError(t, err)
 			},
 			expectedCode: 500,
 			wantErr:      true,
@@ -303,8 +306,10 @@ func TestOffboard(t *testing.T) {
 		{
 			name: "internal error",
 			setupMock: func(ts *TestSuite) {
-				ts.setupDB()
-				ts.setupPrivateKey("1234")
+				err := ts.setupDB()
+				assert.NoError(t, err)
+				err = ts.setupPrivateKey("1234")
+				assert.NoError(t, err)
 			},
 			query:        "?force=false",
 			expectedCode: 500,
@@ -369,7 +374,8 @@ func TestResourceConfig(t *testing.T) {
 			name:    "valid request data, not onboarded",
 			reqBody: []byte(`{"memory":1000,"cpu":1000,"channel":"test","payment_addr":"abc123"}`),
 			setupMock: func(ts *TestSuite) {
-				ts.setupDB()
+				err := ts.setupDB()
+				assert.NoError(t, err)
 			},
 			expectedCode: 500,
 			wantErr:      true,

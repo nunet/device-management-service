@@ -1,11 +1,11 @@
 package matching
 
 import (
-	"gitlab.com/nunet/device-management-service/types"
 	"github.com/hashicorp/go-version"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func LibraryComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
+func LibraryComparator(lraw, rraw interface{}, _ ...Preference) types.Comparison {
 	// comparator for single Library type:
 	// left represent machine capabilities;
 	// right represent required capabilities;
@@ -15,7 +15,7 @@ func LibraryComparator(lraw, rraw interface{}, preference ...Preference) types.C
 	_, rrawok := rraw.(types.Library)
 	if !lrawok || !rrawok {
 		return types.Error
-	}	
+	}
 
 	l := lraw.(types.Library)
 	lVersion, err := version.NewVersion(l.Version)
@@ -26,15 +26,15 @@ func LibraryComparator(lraw, rraw interface{}, preference ...Preference) types.C
 
 	// return 'Error' if the version of the left library is not valid
 	constraints, err := version.NewConstraint(r.Constraint + " " + r.Version)
-	if err != nil {	
+	if err != nil {
 		return types.Error
 	}
-	
+
 	// return 'Error' if the names of the libraries are different
 	if l.Name != r.Name {
 		return types.Error
 	}
-	
+
 	// else return 'Equal if versions of libraries are equal and the constraint is '='
 	if r.Constraint == "=" && constraints.Check(lVersion) {
 		return types.Equal

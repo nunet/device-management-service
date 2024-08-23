@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/buger/jsonparser"
@@ -16,7 +17,7 @@ func NewChatListCmd(utilsService backend.Utility) *cobra.Command {
 		Use:   "list",
 		Short: "Display table of open chat streams",
 		Long:  "",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			chatBody, err := utilsService.ResponseBody(nil, "GET", "/api/v1/peers/chat", "", nil)
 			if err != nil {
 				return fmt.Errorf("unable to get chat list response body: %w", err)
@@ -24,7 +25,7 @@ func NewChatListCmd(utilsService backend.Utility) *cobra.Command {
 
 			errMsg, err := jsonparser.GetString(chatBody, "error")
 			if err == nil {
-				return fmt.Errorf(errMsg)
+				return errors.New(errMsg)
 			}
 
 			// chatList, err := getIncomingChatList(chatBody)

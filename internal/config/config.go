@@ -15,7 +15,7 @@ type General struct {
 
 type Rest struct {
 	Addr string `mapstructure:"addr"`
-	Port int    `mapstructure:"port"`
+	Port uint32 `mapstructure:"port"`
 }
 
 type P2P struct {

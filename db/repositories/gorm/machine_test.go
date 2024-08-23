@@ -1,4 +1,4 @@
-package repositories_gorm
+package gorm
 
 import (
 	"context"
@@ -75,8 +75,8 @@ func TestPeerInfo(t *testing.T) {
 	assert.Len(t, allPeerInfos, 2)
 
 	// Clean up created records
-	err = peerInfoRepo.Delete(context.Background(), peerInfo1.ID)
-	err = peerInfoRepo.Delete(context.Background(), peerInfo2.ID)
+	_ = peerInfoRepo.Delete(context.Background(), peerInfo1.ID)
+	_ = peerInfoRepo.Delete(context.Background(), peerInfo2.ID)
 }
 
 // TestMachine is a test suite for the Machine.
@@ -102,7 +102,7 @@ func TestMachine(t *testing.T) {
 
 	// Test Update method
 	updatedMachine := retrievedMachine
-	updatedMachine.IpAddr = "127.0.0.1"
+	updatedMachine.IPAddr = "127.0.0.1"
 
 	_, err = machineRepo.Update(
 		context.Background(),
@@ -112,24 +112,24 @@ func TestMachine(t *testing.T) {
 	assert.NoError(t, err)
 	retrievedMachine, err = machineRepo.Get(context.Background(), createdMachine.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, updatedMachine.IpAddr, retrievedMachine.IpAddr)
+	assert.Equal(t, updatedMachine.IPAddr, retrievedMachine.IPAddr)
 
 	// Test Delete method
 	err = machineRepo.Delete(context.Background(), updatedMachine.ID)
 	assert.NoError(t, err)
 
 	// Test Find method
-	machine1, err := machineRepo.Create(context.Background(), types.Machine{IpAddr: "127.0.0.1"})
+	machine1, err := machineRepo.Create(context.Background(), types.Machine{IPAddr: "127.0.0.1"})
 	assert.NoError(t, err)
 
 	query := machineRepo.GetQuery()
-	query.Conditions = append(query.Conditions, repositories.EQ("IpAddr", machine1.IpAddr))
+	query.Conditions = append(query.Conditions, repositories.EQ("IPAddr", machine1.IPAddr))
 	foundMachine, err := machineRepo.Find(context.Background(), query)
 	assert.NoError(t, err)
-	assert.Equal(t, machine1.IpAddr, foundMachine.IpAddr)
+	assert.Equal(t, machine1.IPAddr, foundMachine.IPAddr)
 
 	// Test FindAll method
-	machine2, err := machineRepo.Create(context.Background(), types.Machine{IpAddr: "127.0.0.2"})
+	machine2, err := machineRepo.Create(context.Background(), types.Machine{IPAddr: "127.0.0.2"})
 	assert.NoError(t, err)
 
 	allMachines, err := machineRepo.FindAll(context.Background(), machineRepo.GetQuery())
@@ -137,8 +137,8 @@ func TestMachine(t *testing.T) {
 	assert.Len(t, allMachines, 2)
 
 	// Clean up created records
-	err = machineRepo.Delete(context.Background(), machine1.ID)
-	err = machineRepo.Delete(context.Background(), machine2.ID)
+	_ = machineRepo.Delete(context.Background(), machine1.ID)
+	_ = machineRepo.Delete(context.Background(), machine2.ID)
 }
 
 // TestServices is a test suite for the Services.
@@ -205,8 +205,8 @@ func TestServices(t *testing.T) {
 	assert.Len(t, allServices, 2)
 
 	// Clean up created records
-	err = servicesRepo.Delete(context.Background(), service1.ID)
-	err = servicesRepo.Delete(context.Background(), service2.ID)
+	_ = servicesRepo.Delete(context.Background(), service1.ID)
+	_ = servicesRepo.Delete(context.Background(), service2.ID)
 }
 
 // TestServiceResourceRequirements is a test suite for the ServiceResourceRequirements.
@@ -304,10 +304,12 @@ func TestServiceResourceRequirements(t *testing.T) {
 		context.Background(),
 		serviceResourceRequirements1.ID,
 	)
+	assert.NoError(t, err)
 	err = serviceResourceRequirementsRepo.Delete(
 		context.Background(),
 		serviceResourceRequirements2.ID,
 	)
+	assert.NoError(t, err)
 }
 
 // TestLibp2pInfo is a test suite for the Libp2pInfo.
@@ -355,6 +357,7 @@ func TestLibp2pInfo(t *testing.T) {
 	err = libp2pInfoRepo.Clear(context.Background())
 	assert.NoError(t, err)
 	history, err = libp2pInfoRepo.History(context.Background(), query)
+	assert.NoError(t, err)
 	assert.Len(t, history, 0)
 }
 
@@ -407,6 +410,7 @@ func TestMachineUUID(t *testing.T) {
 	err = machineUUIDRepo.Clear(context.Background())
 	assert.NoError(t, err)
 	history, err = machineUUIDRepo.History(context.Background(), query)
+	assert.NoError(t, err)
 	assert.Len(t, history, 0)
 }
 
@@ -474,8 +478,8 @@ func TestConnection(t *testing.T) {
 	assert.Len(t, allConnections, 2)
 
 	// Clean up created records
-	err = connectionRepo.Delete(context.Background(), connection1.ID)
-	err = connectionRepo.Delete(context.Background(), connection2.ID)
+	_ = connectionRepo.Delete(context.Background(), connection1.ID)
+	_ = connectionRepo.Delete(context.Background(), connection2.ID)
 }
 
 // TestElasticToken is a test suite for the ElasticToken.
@@ -545,6 +549,6 @@ func TestElasticToken(t *testing.T) {
 	assert.Len(t, allElasticTokens, 2)
 
 	// Clean up created records
-	err = elasticTokenRepo.Delete(context.Background(), elasticToken1.ID)
-	err = elasticTokenRepo.Delete(context.Background(), elasticToken2.ID)
+	_ = elasticTokenRepo.Delete(context.Background(), elasticToken1.ID)
+	_ = elasticTokenRepo.Delete(context.Background(), elasticToken2.ID)
 }

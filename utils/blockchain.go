@@ -42,7 +42,7 @@ type ClaimCardanoTokenBody struct {
 	ComputeProviderAddress string `json:"compute_provider_address"`
 	TxHash                 string `json:"tx_hash"`
 }
-type rewardRespToCPD struct {
+type RewardRespToCPD struct {
 	ServiceProviderAddr string `json:"service_provider_addr"`
 	ComputeProviderAddr string `json:"compute_provider_addr"`
 	RewardType          string `json:"reward_type,omitempty"`
@@ -67,8 +67,8 @@ func GetJobTxHashes(size int, clean string) ([]TxHashResp, error) {
 		zlog.Sugar().Errorf("%w", err)
 	}
 
-	var resp []TxHashResp
-	var services []types.Services
+	resp := make([]TxHashResp, 0)
+	services := make([]types.Services, 0)
 	if size == 0 {
 		err = db.DB.
 			Where("tx_hash IS NOT NULL").
@@ -96,7 +96,7 @@ func GetJobTxHashes(size int, clean string) ([]TxHashResp, error) {
 	return resp, nil
 }
 
-func RequestReward(claim ClaimCardanoTokenBody) (*rewardRespToCPD, error) {
+func RequestReward(claim ClaimCardanoTokenBody) (*RewardRespToCPD, error) {
 	// At some point, management dashboard should send container ID to identify
 	// against which container we are requesting reward
 	service := types.Services{
@@ -116,7 +116,7 @@ func RequestReward(claim ClaimCardanoTokenBody) (*rewardRespToCPD, error) {
 		// c.JSON(503, gin.H{"error": "the job is still running"})
 	}
 
-	reward := rewardRespToCPD{
+	reward := RewardRespToCPD{
 		ServiceProviderAddr: service.ServiceProviderAddr,
 		ComputeProviderAddr: service.ComputeProviderAddr,
 		RewardType:          service.TransactionType,
@@ -223,7 +223,7 @@ func ValidateAddress(addr string) error {
 		return errors.New("ethereum wallet address not allowed")
 	}
 
-	var validCardano = false
+	validCardano := false
 	isValidCardano(addr, &validCardano)
 	if validCardano {
 		return nil
@@ -257,7 +257,6 @@ func GetTxReceiver(txHash string, endpoint KoiosEndpoint) (string, error) {
 		fmt.Sprintf("https://%s/api/v1/tx_info", endpoint),
 		"application/json",
 		bytes.NewBuffer(reqBody))
-
 	if err != nil {
 		return "", err
 	}
@@ -299,7 +298,6 @@ func GetTxConfirmations(txHash string, endpoint KoiosEndpoint) (int, error) {
 		fmt.Sprintf("https://%s/api/v1/tx_status", endpoint),
 		"application/json",
 		bytes.NewBuffer(reqBody))
-
 	if err != nil {
 		return 0, err
 	}
@@ -366,7 +364,7 @@ func GetUTXOsOfSmartContract(address string, endpoint KoiosEndpoint) ([]string, 
 		return nil, err
 	}
 
-	var utxoHashes []string
+	utxoHashes := make([]string, 0)
 	for _, utxo := range utxos {
 		utxoHashes = append(utxoHashes, utxo.TxHash)
 	}
@@ -378,15 +376,24 @@ func GetUTXOsOfSmartContract(address string, endpoint KoiosEndpoint) ([]string, 
 func UpdateTransactionStatus(services []types.Services, utxoHashes []string) error {
 	for _, service := range services {
 		if !SliceContains(utxoHashes, service.TxHash) {
-			if service.TransactionType == "withdraw" {
-				service.TransactionType = transactionWithdrawnStatus
-			} else if service.TransactionType == "refund" {
-				service.TransactionType = transactionRefundedStatus
-			} else if service.TransactionType == "distribute-50" || service.TransactionType == "distribute-75" {
-				service.TransactionType = transactionDistributedStatus
+			switch service.TransactionType {
+			case "withdraw":
+				{
+					service.TransactionType = transactionWithdrawnStatus
+				}
+			case "refund":
+				{
+					service.TransactionType = transactionRefundedStatus
+				}
+			case "distribute-50":
+			case "distribute-75":
+				{
+					service.TransactionType = transactionDistributedStatus
+				}
 			}
 
-			if err := db.DB.Save(&service).Error; err != nil {
+			s := service
+			if err := db.DB.Save(&s).Error; err != nil {
 				return err
 			}
 		}

@@ -7,9 +7,10 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/types"
+	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
+
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestNewNetwork(t *testing.T) {
@@ -38,7 +39,7 @@ func TestNewNetwork(t *testing.T) {
 					BootstrapPeers:          []multiaddr.Multiaddr{},
 					Rendezvous:              "nunet-randevouz",
 					Server:                  false,
-					Scheduler:               background_tasks.NewScheduler(1),
+					Scheduler:               backgroundtasks.NewScheduler(1),
 					CustomNamespace:         "/nunet-dht-1/",
 					ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 					PeerCountDiscoveryLimit: 40,
@@ -73,7 +74,7 @@ func TestLibp2pNetwork(t *testing.T) {
 			BootstrapPeers:          []multiaddr.Multiaddr{},
 			Rendezvous:              "nunet-randevouz",
 			Server:                  false,
-			Scheduler:               background_tasks.NewScheduler(1),
+			Scheduler:               backgroundtasks.NewScheduler(1),
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/localhost/tcp/10219"},
 			PeerCountDiscoveryLimit: 40,

@@ -20,9 +20,9 @@ func NewNuNetTransformer() transform.Transformer {
 				"jobs.**.networks": TransformNetworks,
 			},
 			{
-				"jobs.**.volumes.[]":        TransformVolume,
-				"jobs.**.networks.[]":       TransformNetwork,
-				"jobs.**.libraries.[]":      TransformLibrary,
+				"jobs.**.volumes.[]":   TransformVolume,
+				"jobs.**.networks.[]":  TransformNetwork,
+				"jobs.**.libraries.[]": TransformLibrary,
 			},
 			{
 				"jobs.**.execution":         TransformExecution,
@@ -33,7 +33,7 @@ func NewNuNetTransformer() transform.Transformer {
 }
 
 // TransformJobs transforms the jobs map to a slice and assigns the keys to the "name" field.
-func TransformJobs(root *map[string]interface{}, data any, path tree.Path) (any, error) {
+func TransformJobs(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -45,7 +45,7 @@ func TransformJobs(root *map[string]interface{}, data any, path tree.Path) (any,
 }
 
 // TransformVolumes transforms the volumes map to a slice and assigns the keys to the "name" field.
-func TransformVolumes(root *map[string]interface{}, data any, path tree.Path) (any, error) {
+func TransformVolumes(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -57,7 +57,7 @@ func TransformVolumes(root *map[string]interface{}, data any, path tree.Path) (a
 }
 
 // TransformNetworks transforms the networks map to a slice and assigns the keys to the "name" field.
-func TransformNetworks(root *map[string]interface{}, data any, path tree.Path) (any, error) {
+func TransformNetworks(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -69,7 +69,7 @@ func TransformNetworks(root *map[string]interface{}, data any, path tree.Path) (
 }
 
 // TransformExecution transforms the engine configuration from flat map to SpecConfig format.
-func TransformExecution(root *map[string]interface{}, data any, path tree.Path) (any, error) {
+func TransformExecution(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -145,7 +145,7 @@ func TransformVolume(root *map[string]interface{}, data any, path tree.Path) (an
 	return config, nil
 }
 
-func TransformVolumeRemote(root *map[string]interface{}, data any, path tree.Path) (any, error) {
+func TransformVolumeRemote(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -169,9 +169,8 @@ func TransformVolumeRemote(root *map[string]interface{}, data any, path tree.Pat
 	return remoteConfig, nil
 }
 
-
 // TransformNetwork transforms the network configuration
-func TransformNetwork(root *map[string]interface{}, data any, path tree.Path) (any, error) {
+func TransformNetwork(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -182,7 +181,7 @@ func TransformNetwork(root *map[string]interface{}, data any, path tree.Path) (a
 	ports, _ := transform.ToAnySlice(config["ports"])
 	portMap := []map[string]any{}
 	for _, port := range ports {
-		protocol, host, container := "tcp", 0, 0;
+		protocol, host, container := "tcp", 0, 0
 		switch v := port.(type) {
 		case string:
 			parts := strings.Split(v, ":")
@@ -198,14 +197,14 @@ func TransformNetwork(root *map[string]interface{}, data any, path tree.Path) (a
 			host = v
 			container = v
 		case map[string]any:
-			switch h := v["host_port"].(type){
+			switch h := v["host_port"].(type) {
 			case int:
 				host = h
 			case string:
 				host, _ = strconv.Atoi(h)
 			}
 
-			switch c := v["container_port"].(type){
+			switch c := v["container_port"].(type) {
 			case int:
 				container = c
 			case string:
@@ -217,7 +216,7 @@ func TransformNetwork(root *map[string]interface{}, data any, path tree.Path) (a
 			}
 		}
 		portMap = append(portMap, map[string]any{
-			"protocol":      protocol,
+			"protocol":       protocol,
 			"host_port":      host,
 			"container_port": container,
 		})
@@ -231,7 +230,7 @@ func TransformNetwork(root *map[string]interface{}, data any, path tree.Path) (a
 
 // TransformLibrary tansforms the library configuration to a map.
 // The library configuration can be a string in the format "name:version" or a map.
-func TransformLibrary(root *map[string]interface{}, data any, path tree.Path) (any, error) {
+func TransformLibrary(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 	if data == nil {
 		return nil, nil
 	}

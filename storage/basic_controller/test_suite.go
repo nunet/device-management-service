@@ -1,4 +1,4 @@
-package basic_controller
+package basiccontroller
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
 
-	"gitlab.com/nunet/device-management-service/db/repositories/clover"
+	rclover "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -23,15 +23,13 @@ type VolControllerTestSuiteHelper struct {
 
 // SetupVolControllerTestSuite sets up a volume controller with 0-n volumes given a base path.
 // If volumes are inputed, directories will be created and volumes will be stored in the database
-func SetupVolControllerTestSuite(t *testing.T, basePath string,
-	volumes map[string]*types.StorageVolume) (*VolControllerTestSuiteHelper, error) {
-
+func SetupVolControllerTestSuite(t *testing.T, basePath string, volumes map[string]*types.StorageVolume) (*VolControllerTestSuiteHelper, error) {
 	tempDir, err := os.MkdirTemp("", "clover-test-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	db, err := repositories_clover.NewDB(tempDir, []string{"storage_volume"})
+	db, err := rclover.NewDB(tempDir, []string{"storage_volume"})
 	if err != nil {
 		os.RemoveAll(tempDir)
 		return nil, fmt.Errorf("failed to open clover db: %w", err)
@@ -39,6 +37,7 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string,
 
 	fs := afero.NewMemMapFs()
 
+	// nolint:gofumpt
 	err = fs.MkdirAll(basePath, 0755)
 	if err != nil {
 		db.Close()
@@ -46,7 +45,7 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string,
 		return nil, fmt.Errorf("failed to create base path: %w", err)
 	}
 
-	repo := repositories_clover.NewStorageVolume(db)
+	repo := rclover.NewStorageVolume(db)
 	vc, err := NewDefaultVolumeController(repo, basePath, fs)
 	if err != nil {
 		db.Close()
@@ -56,6 +55,7 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string,
 
 	for _, vol := range volumes {
 		// create root volume dir
+		// nolint:gofumpt
 		err = fs.MkdirAll(vol.Path, 0755)
 		if err != nil {
 			db.Close()

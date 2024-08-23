@@ -4,7 +4,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func ExecutorComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
+func ExecutorComparator(lraw, rraw interface{}, _ ...Preference) types.Comparison {
 	// comparator for  Executor types
 	// it is needed because executor type is defined as enum of ExecutorType's in types.execution.go
 	// left represent machine capabilities

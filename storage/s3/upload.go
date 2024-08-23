@@ -11,8 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	basiccontroller "gitlab.com/nunet/device-management-service/storage/basic_controller"
 	"gitlab.com/nunet/device-management-service/types"
-	"gitlab.com/nunet/device-management-service/storage/basic_controller"
 )
 
 // Upload uploads all files (recursively) from a local volume to an S3 bucket.
@@ -21,9 +21,7 @@ import (
 // Warning: the implementation should rely on the FS provided by the volume controller,
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
-func (s *S3Storage) Upload(ctx context.Context, vol types.StorageVolume,
-	destinationSpecs *types.SpecConfig) error {
-
+func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinationSpecs *types.SpecConfig) error {
 	target, err := DecodeInputSpec(destinationSpecs)
 	if err != nil {
 		return fmt.Errorf("failed to decode input spec: %v", err)
@@ -33,7 +31,7 @@ func (s *S3Storage) Upload(ctx context.Context, vol types.StorageVolume,
 
 	// set file system to act upon based on the volume controller implementation
 	var fs afero.Fs
-	if basicVolController, ok := s.volController.(*basic_controller.BasicVolumeController); ok {
+	if basicVolController, ok := s.volController.(*basiccontroller.BasicVolumeController); ok {
 		fs = basicVolController.FS
 	}
 
@@ -74,7 +72,6 @@ func (s *S3Storage) Upload(ctx context.Context, vol types.StorageVolume,
 
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("upload failed. It's possible that some files were uploaded; Error: %v", err)
 	}

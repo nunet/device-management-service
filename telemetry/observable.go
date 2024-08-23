@@ -16,7 +16,7 @@ func NewObservableImpl() *ObservableImpl {
 
 func (o *ObservableImpl) Observe(event Event) {
 	for _, collector := range o.collectors {
-		collector.HandleEvent(event)
+		_ = collector.HandleEvent(event)
 	}
 }
 

@@ -1,4 +1,4 @@
-package repositories_clover
+package clover
 
 import (
 	"context"
@@ -95,6 +95,6 @@ func TestDeploymentRequestFlat(t *testing.T) {
 	assert.Len(t, allDeploymentRequestFlat, 2)
 
 	// Clean up created records
-	err = deploymentRequestFlatRepo.Delete(context.Background(), deploymentRequestFlat1.ID)
-	err = deploymentRequestFlatRepo.Delete(context.Background(), deploymentRequestFlat2.ID)
+	_ = deploymentRequestFlatRepo.Delete(context.Background(), deploymentRequestFlat1.ID)
+	_ = deploymentRequestFlatRepo.Delete(context.Background(), deploymentRequestFlat2.ID)
 }

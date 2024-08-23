@@ -16,7 +16,7 @@ import (
 
 var chatStartCmd = NewChatStartCmd(p2pService, utilsService, webSocketClient)
 
-func NewChatStartCmd(p2pService backend.PeerManager, utilsService backend.Utility, wsClient backend.WebSocketClient) *cobra.Command {
+func NewChatStartCmd(p2pService backend.PeerManager, _ backend.Utility, wsClient backend.WebSocketClient) *cobra.Command {
 	return &cobra.Command{
 		Use:     "start",
 		Short:   "Start chat with a peer",

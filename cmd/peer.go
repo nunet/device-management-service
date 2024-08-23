@@ -13,8 +13,8 @@ func NewPeerCmd(net backend.NetworkManager) *cobra.Command {
 		Short:             "Peer-related operations",
 		Long:              ``,
 		PersistentPreRunE: isDMSRunning(net),
-		Run: func(cmd *cobra.Command, args []string) {
-			cmd.Help()
+		Run: func(cmd *cobra.Command, _ []string) {
+			_ = cmd.Help()
 		},
 	}
 

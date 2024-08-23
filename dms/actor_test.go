@@ -9,10 +9,10 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/types"
+	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestNewActorFactory(t *testing.T) {
@@ -69,7 +69,7 @@ func TestNewActor(t *testing.T) {
 func TestCreateActor(t *testing.T) {
 	actorRegistry := NewActorRegistry()
 	net, err := libp2p.New(&types.Libp2pConfig{
-		Scheduler: &background_tasks.Scheduler{},
+		Scheduler: &backgroundtasks.Scheduler{},
 	}, nil)
 	assert.NoError(t, err)
 	err = net.Init(context.Background())
@@ -154,7 +154,7 @@ func newActorFactory(t *testing.T, port string, bootstrap []multiaddr.Multiaddr)
 			BootstrapPeers:          bootstrap,
 			Rendezvous:              "nunet-randevouz",
 			Server:                  false,
-			Scheduler:               background_tasks.NewScheduler(1),
+			Scheduler:               backgroundtasks.NewScheduler(1),
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/127.0.0.1/tcp/" + port},
 			PeerCountDiscoveryLimit: 40,

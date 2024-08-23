@@ -17,7 +17,7 @@ func NewPeerListCmd(utilsService backend.Utility) *cobra.Command {
 		Use:   "list",
 		Short: "Display list of peers in the network",
 		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := checkOnboarded(utilsService)
 			if err != nil {
 				return err

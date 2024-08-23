@@ -16,7 +16,7 @@ var offboardCmd = &cobra.Command{
 	Short:   "Offboard the device from NuNet",
 	Long:    ``,
 	PreRunE: isDMSRunning(networkService),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		err := checkOnboarded(utilsService)
 		if err != nil {
 			fmt.Println("Machine isn't onboarded:", err)
@@ -33,29 +33,26 @@ var offboardCmd = &cobra.Command{
 		if !answer {
 			fmt.Println("Exiting...")
 			return
-		} else {
-			force, _ := cmd.Flags().GetBool("force")
-			query := bytes.NewBufferString(fmt.Sprintf(`{"force": %t}`, force))
+		}
 
-			body, err := utils.ResponseBody(nil, "POST", "/api/v1/onboarding/offboard", "", query.Bytes())
-			if err != nil {
-				fmt.Println("Error getting response body:", err)
-				return
-			}
+		force, _ := cmd.Flags().GetBool("force")
+		query := bytes.NewBufferString(fmt.Sprintf(`{"force": %t}`, force))
 
-			if errMsg, err := jsonparser.GetString(body, "error"); err == nil { // if field "error" IS found
-				fmt.Println("Error:", errMsg)
-				return
-			} else if err == jsonparser.KeyPathNotFoundError { // if field "error" is NOT found
-				msg, _ := jsonparser.GetString(body, "message")
-				fmt.Println(msg)
-			} else { // if another error occurred
-				fmt.Println("Error parsing response:", err)
-				return
-			}
-
+		body, err := utils.ResponseBody(nil, "POST", "/api/v1/onboarding/offboard", "", query.Bytes())
+		if err != nil {
+			fmt.Println("Error getting response body:", err)
 			return
+		}
 
+		if errMsg, err := jsonparser.GetString(body, "error"); err == nil { // if field "error" IS found
+			fmt.Println("Error:", errMsg)
+			return
+		} else if err == jsonparser.KeyPathNotFoundError { // if field "error" is NOT found
+			msg, _ := jsonparser.GetString(body, "message")
+			fmt.Println(msg)
+		} else { // if another error occurred
+			fmt.Println("Error parsing response:", err)
+			return
 		}
 	},
 }

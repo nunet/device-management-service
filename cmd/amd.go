@@ -28,7 +28,7 @@ func (a *amdGPU) name() string {
 	return ""
 }
 
-func (a *amdGPU) utilizationRate() uint32 {
+func (a *amdGPU) utilizationRate() int64 {
 	pattern := fmt.Sprintf(`GPU\[%d\]\s+: GPU use \(%%\): (\d+)`, a.index)
 	re := regexp.MustCompile(pattern)
 
@@ -44,7 +44,7 @@ func (a *amdGPU) utilizationRate() uint32 {
 			return 0
 		}
 
-		return uint32(utilization)
+		return utilization
 	}
 
 	return 0

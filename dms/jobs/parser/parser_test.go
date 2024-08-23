@@ -58,7 +58,7 @@ jobs: []
 
 	suite.expectedData = map[string]any{
 		"version": "1.0",
-		"jobs": []any{},
+		"jobs":    []any{},
 	}
 }
 

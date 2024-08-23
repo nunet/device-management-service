@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/buger/jsonparser"
@@ -10,7 +11,7 @@ import (
 
 var (
 	onboardCmd                                = NewOnboardCmd(networkService, utilsService)
-	flagCpu, flagMemory                       int64
+	flagCPU, flagMemory                       int64
 	flagChan, flagAddr, flagPlugin            string
 	flagCardano, flagLocal, flagIsUnavailable bool
 	flagNtxPrice                              float64
@@ -21,7 +22,7 @@ func NewOnboardCmd(net backend.NetworkManager, utilsService backend.Utility) *co
 		Use:     "onboard",
 		Short:   "Onboard current machine to NuNet",
 		PreRunE: isDMSRunning(net),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			memory, _ := cmd.Flags().GetInt64("memory")
 			cpu, _ := cmd.Flags().GetInt64("cpu")
 			channel, _ := cmd.Flags().GetString("nunet-channel")
@@ -65,28 +66,28 @@ func NewOnboardCmd(net backend.NetworkManager, utilsService backend.Utility) *co
 				}
 			}
 
-			onboardJson, err := setOnboardData(memory, cpu, ntxPrice, channel, address, cardano, local, !isUnavailable)
+			onboardJSON, err := setOnboardData(memory, cpu, ntxPrice, channel, address, cardano, local, !isUnavailable)
 			if err != nil {
 				return fmt.Errorf("failed to set onboard data: %w", err)
 			}
 
-			body, err := utilsService.ResponseBody(nil, "POST", "/api/v1/onboarding/onboard", "", onboardJson)
+			body, err := utilsService.ResponseBody(nil, "POST", "/api/v1/onboarding/onboard", "", onboardJSON)
 			if err != nil {
 				return fmt.Errorf("could not get response body: %w", err)
 			}
 
 			errMsg, err := jsonparser.GetString(body, "error")
-			if err == nil { // if error message IS found
-				return fmt.Errorf(errMsg)
+			if err == nil {
+				return errors.New(errMsg)
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "Sucessfully onboarded!")
+			fmt.Fprintln(cmd.OutOrStdout(), "Successfully onboarded!")
 			return nil
 		},
 	}
 
 	cmd.Flags().Int64VarP(&flagMemory, "memory", "m", 0, "set value for memory usage")
-	cmd.Flags().Int64VarP(&flagCpu, "cpu", "c", 0, "set value for CPU usage")
+	cmd.Flags().Int64VarP(&flagCPU, "cpu", "c", 0, "set value for CPU usage")
 	cmd.Flags().StringVarP(&flagChan, "nunet-channel", "n", "", "set channel")
 	cmd.Flags().StringVarP(&flagAddr, "address", "a", "", "set wallet address")
 	cmd.Flags().Float64VarP(&flagNtxPrice, "ntx-price", "x", 0, "price in NTX per minute for onboarded compute resource")

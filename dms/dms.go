@@ -17,8 +17,8 @@ import (
 	"gorm.io/gorm"
 
 	// "gitlab.com/nunet/device-management-service/internal/messaging"
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -57,7 +57,7 @@ func Run() {
 		log.Fatalf("Failed to get onboarding config: %v", err)
 	}
 
-	onboard := onboarding.New(onboarding.OnboardingConfig{
+	onboard := onboarding.New(onboarding.Config{
 		Fs:             afero.Afero{Fs: afero.NewOsFs()},
 		P2PRepo:        p2pR,
 		UUIDRepo:       uuidR,
@@ -92,7 +92,13 @@ func Run() {
 	}
 	rServer := api.NewRESTServer(restConfig)
 	rServer.InitializeRoutes()
-	go rServer.Run()
+
+	go func() {
+		err := rServer.Run()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	// wait for SIGINT or SIGTERM
 	sig := <-internal.ShutdownChan
@@ -100,8 +106,6 @@ func Run() {
 
 	// add cleanup code here
 	fmt.Println("Cleaning up before shutting down")
-
-	return
 }
 
 func ValidateOnboarding(oConf *types.OnboardingConfig) {

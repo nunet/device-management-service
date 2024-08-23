@@ -107,5 +107,4 @@ func (p *P2PHandler) DumpDHT(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dht)
-
 }

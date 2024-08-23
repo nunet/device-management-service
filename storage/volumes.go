@@ -5,8 +5,11 @@ import (
 )
 
 type IDType int
+
 type VolumeSource string
+
 type CreateVolOpt func(*types.StorageVolume)
+
 type LockVolOpt func(*types.StorageVolume)
 
 const (

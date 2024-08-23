@@ -5,7 +5,6 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/nunet"
 )
 
-
 var registry Registry[jobs.JobSpec]
 
 func init() {
@@ -18,10 +17,5 @@ func init() {
 		nunet.NewNuNetTransformer(),
 		nunet.NewNuNetValidator(),
 	)
-	registry.RegisterParser(
-		specTypeNuNet, 
-		nunetParser,
-	)
-
-	// Register other parsers here.
+	registry.RegisterParser(specTypeNuNet, nunetParser)
 }

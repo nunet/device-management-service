@@ -25,6 +25,7 @@ type Parser[T any] interface {
 	Parse(data []byte) (T, error)
 }
 
+// nolint:revive
 type ParserImpl[T any] struct {
 	validator   validate.Validator
 	transformer transform.Transformer

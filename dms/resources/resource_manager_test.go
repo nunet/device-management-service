@@ -2,9 +2,10 @@ package resources
 
 import (
 	"context"
-	"gitlab.com/nunet/device-management-service/types"
 	"testing"
 	"time"
+
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -28,9 +29,13 @@ func TestUpdateAndGetFreeResources(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+
+	t.Cleanup(func() {
+		ctrl.Finish()
+	})
 
 	t.Run("Must be able to update and get free resources", func(t *testing.T) {
+		t.Parallel()
 		mockDB, err := gorm.Open(sqlite.Open("file:test_updateAndGetFreeResources1?mode=memory&cache=shared"), &gorm.Config{})
 		assert.NoError(t, err)
 
@@ -85,9 +90,12 @@ func TestOnboardedResources(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Cleanup(func() {
+		ctrl.Finish()
+	})
 
 	t.Run("Must be able to get onboarded resources", func(t *testing.T) {
+		t.Parallel()
 		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources1?mode=memory&cache=shared"), &gorm.Config{})
 		assert.NoError(t, err)
 
@@ -112,6 +120,7 @@ func TestOnboardedResources(t *testing.T) {
 	})
 
 	t.Run("Must be able to update onboarded resources", func(t *testing.T) {
+		t.Parallel()
 		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources2?mode=memory&cache=shared"), &gorm.Config{})
 		assert.NoError(t, err)
 
@@ -150,9 +159,13 @@ func TestRequiredResources(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+
+	t.Cleanup(func() {
+		ctrl.Finish()
+	})
 
 	t.Run("Must be able to get required resources", func(t *testing.T) {
+		t.Parallel()
 		mockDB, err := gorm.Open(sqlite.Open("file:test_RequiredResources1?mode=memory&cache=shared"), &gorm.Config{})
 		assert.NoError(t, err)
 
@@ -222,9 +235,12 @@ func TestSystemSpecs(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Cleanup(func() {
+		ctrl.Finish()
+	})
 
 	t.Run("Must be able to get cpu info", func(t *testing.T) {
+		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
 		rm := &defaultManager{
@@ -245,6 +261,7 @@ func TestSystemSpecs(t *testing.T) {
 	})
 
 	t.Run("Must be able to get total memory", func(t *testing.T) {
+		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
 		rm := &defaultManager{
@@ -259,6 +276,7 @@ func TestSystemSpecs(t *testing.T) {
 	})
 
 	t.Run("Must be able to get provisioned resources", func(t *testing.T) {
+		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
 		rm := &defaultManager{
@@ -277,6 +295,7 @@ func TestSystemSpecs(t *testing.T) {
 	})
 
 	t.Run("Must be able to get gpu vendors", func(t *testing.T) {
+		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
 		rm := &defaultManager{
@@ -291,6 +310,7 @@ func TestSystemSpecs(t *testing.T) {
 	})
 
 	t.Run("Must be able to get gpu info", func(t *testing.T) {
+		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
 		rm := &defaultManager{
@@ -314,9 +334,12 @@ func TestUsageMonitor(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Cleanup(func() {
+		ctrl.Finish()
+	})
 
 	t.Run("Must be able to get usage", func(t *testing.T) {
+		t.Parallel()
 		mockUsageMonitor := NewMockUsageMonitor(ctrl)
 
 		rm := &defaultManager{

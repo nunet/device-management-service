@@ -9,14 +9,14 @@ import (
 )
 
 // Sample validator functions
-func sampleValidatorFunc1(root *map[string]any, data any, path tree.Path) error {
+func sampleValidatorFunc1(_ *map[string]any, data any, _ tree.Path) error {
 	if data == "invalid1" {
 		return errors.New("invalid data for sampleValidatorFunc1")
 	}
 	return nil
 }
 
-func sampleValidatorFunc2(root *map[string]any, data any, path tree.Path) error {
+func sampleValidatorFunc2(_ *map[string]any, data any, _ tree.Path) error {
 	if data == "invalid2" {
 		return errors.New("invalid data for sampleValidatorFunc2")
 	}
@@ -34,9 +34,9 @@ func TestValidatorTestSuite(t *testing.T) {
 
 func (s *ValidatorTestSuite) SetupTest() {
 	validators := map[tree.Path]ValidatorFunc{
-		tree.NewPath("a.b"):      sampleValidatorFunc1,
-		tree.NewPath("c.d"):      sampleValidatorFunc2,
-		tree.NewPath("a.b.[]"):   sampleValidatorFunc2,
+		tree.NewPath("a.b"):    sampleValidatorFunc1,
+		tree.NewPath("c.d"):    sampleValidatorFunc2,
+		tree.NewPath("a.b.[]"): sampleValidatorFunc2,
 	}
 
 	s.validators = validators
@@ -103,4 +103,3 @@ func (s *ValidatorTestSuite) TestValidateSlice() {
 	err = v.Validate(&rawConfigValid)
 	s.NoError(err)
 }
-

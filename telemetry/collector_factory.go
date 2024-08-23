@@ -3,8 +3,8 @@ package telemetry
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var logCollectorFactory = logger.OtelZapLogger("collector_factory")

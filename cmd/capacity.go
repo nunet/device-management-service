@@ -26,7 +26,7 @@ func NewCapacityCmd(net backend.NetworkManager, resources backend.ResourceManage
 		Short:   "Display capacity of device resources",
 		Long:    `Retrieve capacity of the machine, onboarded or available amount of resources`,
 		PreRunE: isDMSRunning(net),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			onboarded, _ := cmd.Flags().GetBool("onboarded")
 			full, _ := cmd.Flags().GetBool("full")
 			available, _ := cmd.Flags().GetBool("available")

@@ -14,6 +14,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const tmpDir = "/tmp/test"
+
 type TestSuite struct {
 	service *Onboarding
 	db      *gorm.DB
@@ -40,7 +42,7 @@ func NewTestSuite(t *testing.T) *TestSuite {
 }
 
 func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
-	oConfig := OnboardingConfig{
+	oConfig := Config{
 		Fs:             afero.Afero{Fs: fs},
 		P2PRepo:        repositories_gorm.NewLibp2pInfo(db),
 		UUIDRepo:       repositories_gorm.NewMachineUUID(db),
@@ -54,9 +56,9 @@ func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
 }
 
 func (ts *TestSuite) setupDB() {
-	ts.db.AutoMigrate(&types.AvailableResources{})
-	ts.db.AutoMigrate(&types.Libp2pInfo{})
-	ts.db.AutoMigrate(&types.MachineUUID{})
+	_ = ts.db.AutoMigrate(&types.AvailableResources{})
+	_ = ts.db.AutoMigrate(&types.Libp2pInfo{})
+	_ = ts.db.AutoMigrate(&types.MachineUUID{})
 }
 
 func (ts *TestSuite) savePrivateKey(ctx context.Context) error {
@@ -141,8 +143,10 @@ func TestOnboard(t *testing.T) {
 	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
 
 	// Create a temporary working directory
-	tmpDir := "/tmp/test"
-	testFS.MkdirAll(tmpDir, 0755)
+
+	// nolint:gofumpt
+	err := testFS.MkdirAll(tmpDir, 0755)
+	assert.NoError(t, err)
 
 	// Create a new Onboarding instance with the test options
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
@@ -153,9 +157,9 @@ func TestOnboard(t *testing.T) {
 	// XXX: only after we get rid of the global db usage everywhere
 	db.DB = mockDB
 
-	mockDB.AutoMigrate(&types.AvailableResources{})
+	_ = mockDB.AutoMigrate(&types.AvailableResources{})
 
-	oConfig := OnboardingConfig{
+	oConfig := Config{
 		Fs:             testFS,
 		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
@@ -186,6 +190,7 @@ func TestOnboard(t *testing.T) {
 	// TODO: more test cases once resource manager is fixed
 	//       currently there're problems with gpu detection during onboard
 }
+
 func TestResourceConfig(t *testing.T) {
 	ctx := context.Background()
 	capacity := types.CapacityForNunet{
@@ -201,7 +206,9 @@ func TestResourceConfig(t *testing.T) {
 
 	// Create a temporary working directory
 	tmpDir := "/tmp/test"
-	testFS.MkdirAll(tmpDir, 0755)
+	// nolint:gofumpt
+	err := testFS.MkdirAll(tmpDir, 0755)
+	assert.NoError(t, err)
 
 	// Create a new Onboarding instance with the test options
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
@@ -212,9 +219,9 @@ func TestResourceConfig(t *testing.T) {
 	// XXX: only after we get rid of the global db usage everywhere
 	db.DB = mockDB
 
-	mockDB.AutoMigrate(&types.AvailableResources{})
+	_ = mockDB.AutoMigrate(&types.AvailableResources{})
 
-	oConfig := OnboardingConfig{
+	oConfig := Config{
 		Fs:             testFS,
 		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
@@ -231,19 +238,20 @@ func TestResourceConfig(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "could not check onboard status")
 	})
-
 	// TODO: Add more test cases when onboarding is implemented after resource manager
 }
+
 func TestOffboard(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.Afero{Fs: afero.NewMemMapFs()}
 	tmpDir := "/tmp/test"
-	fs.MkdirAll(tmpDir, 0755)
-
+	// nolint:gofumpt
+	err := fs.MkdirAll(tmpDir, 0755)
+	assert.NoError(t, err)
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	oConfig := OnboardingConfig{
+	oConfig := Config{
 		Fs:             fs,
 		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),

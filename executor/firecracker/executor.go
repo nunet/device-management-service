@@ -19,9 +19,6 @@ import (
 
 const (
 	socketDir = "/tmp"
-
-	DefaultCpuCount int64 = 1
-	DefaultMemSize  int64 = 50
 )
 
 // Executor manages the lifecycle of Firecracker VMs for execution requests.
@@ -33,10 +30,7 @@ type Executor struct {
 }
 
 // NewExecutor initializes a new executor for Firecracker VMs.
-func NewExecutor(
-	ctx context.Context,
-	id string,
-) (*Executor, error) {
+func NewExecutor(_ context.Context, id string) (*Executor, error) {
 	firecrackerClient, err := NewFirecrackerClient()
 	if err != nil {
 		return nil, err
@@ -67,9 +61,8 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		if handler, ok := e.handlers.Get(request.ExecutionID); ok {
 			if handler.active() {
 				return fmt.Errorf("execution is already started")
-			} else {
-				return fmt.Errorf("execution is already completed")
 			}
+			return fmt.Errorf("execution is already completed")
 		}
 
 		// Create a new handler for the execution.
@@ -144,7 +137,7 @@ func (e *Executor) doWait(
 	case <-handler.waitCh:
 		if handler.result != nil {
 			zlog.Sugar().
-				Infof("executionID %s recieved results from execution", handler.executionID)
+				Infof("executionID %s received results from execution", handler.executionID)
 			out <- handler.result
 		} else {
 			errCh <- fmt.Errorf("execution (%s) result is nil", handler.executionID)
@@ -188,16 +181,13 @@ func (e *Executor) Run(
 // GetLogStream is not implemented for Firecracker.
 // It is defined to satisfy the Executor interface.
 // This method will return an error if called.
-func (e *Executor) GetLogStream(
-	ctx context.Context,
-	request types.LogStreamRequest,
-) (io.ReadCloser, error) {
+func (e *Executor) GetLogStream(_ context.Context, _ types.LogStreamRequest) (io.ReadCloser, error) {
 	return nil, fmt.Errorf("GetLogStream is not implemented for Firecracker")
 }
 
 // Cleanup removes all resources associated with the executor.
 // This includes stopping and removing all running VMs and deleting their socket paths.
-func (e *Executor) Cleanup(ctx context.Context) error {
+func (e *Executor) Cleanup(_ context.Context) error {
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(e.handlers.Keys()))
 	e.handlers.Iter(func(_ string, handler *executionHandler) bool {
@@ -243,7 +233,7 @@ func (e *Executor) newFirecrackerExecutionVM(
 		KernelArgs:      fcArgs.KernelArgs,
 		MachineCfg: fcModels.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(params.Resources.CPU.Cores)),
-			MemSizeMib: firecracker.Int64(int64(params.Resources.Memory.Size)),
+			MemSizeMib: firecracker.Int64(params.Resources.Memory.Size),
 		},
 	}
 

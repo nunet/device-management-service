@@ -33,8 +33,8 @@ func GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error) 
 	return &pair, nil
 }
 
-func harden(num uint) uint32 {
-	return uint32(0x80000000 + num)
+func harden(num uint32) uint32 {
+	return 0x80000000 + num
 }
 
 func GetCardanoAddressAndMnemonic() (*types.BlockchainAddressPrivKey, error) {

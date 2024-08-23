@@ -9,7 +9,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type S3InputSource struct {
+type InputSource struct {
 	Bucket   string
 	Key      string
 	Filter   string
@@ -17,28 +17,28 @@ type S3InputSource struct {
 	Endpoint string
 }
 
-func (s S3InputSource) Validate() error {
+func (s InputSource) Validate() error {
 	if s.Bucket == "" {
 		return fmt.Errorf("invalid s3 storage params: bucket cannot be empty")
 	}
 	return nil
 }
 
-func (s S3InputSource) ToMap() map[string]interface{} {
+func (s InputSource) ToMap() map[string]interface{} {
 	return structs.Map(s)
 }
 
-func DecodeInputSpec(spec *types.SpecConfig) (S3InputSource, error) {
+func DecodeInputSpec(spec *types.SpecConfig) (InputSource, error) {
 	if !spec.IsType(types.StorageProviderS3) {
-		return S3InputSource{}, fmt.Errorf("invalid storage source type. Expected %s but received %s", types.StorageProviderS3, spec.Type)
+		return InputSource{}, fmt.Errorf("invalid storage source type. Expected %s but received %s", types.StorageProviderS3, spec.Type)
 	}
 
 	inputParams := spec.Params
 	if inputParams == nil {
-		return S3InputSource{}, fmt.Errorf("invalid storage input source params. cannot be nil")
+		return InputSource{}, fmt.Errorf("invalid storage input source params. cannot be nil")
 	}
 
-	var c S3InputSource
+	var c InputSource
 	if err := mapstructure.Decode(spec.Params, &c); err != nil {
 		return c, err
 	}

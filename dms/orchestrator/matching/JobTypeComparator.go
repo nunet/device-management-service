@@ -6,8 +6,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func JobTypeComparator(l, r interface{}, preference ...Preference) types.Comparison {
-
+func JobTypeComparator(l, r interface{}, _ ...Preference) types.Comparison {
 	// validate input type
 	_, lok := l.(types.JobType)
 	_, rok := r.(types.JobType)

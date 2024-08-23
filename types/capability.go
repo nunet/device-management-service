@@ -3,8 +3,8 @@ package types
 // note: this data type may be moved to dms or jobs package in the future
 
 type Capability struct {
-	Executors    Executors         `json:"executor" description:"Executor type required for the job (docker, vm, wasm, or others)"`
-	JobTypes     JobTypes          `json:"type" description:"Details about type of the job (One time, batch, recurring, long running). Refer to dms.jobs package for jobType data model"`
+	Executors    Executors          `json:"executor" description:"Executor type required for the job (docker, vm, wasm, or others)"`
+	JobTypes     JobTypes           `json:"type" description:"Details about type of the job (One time, batch, recurring, long running). Refer to dms.jobs package for jobType data model"`
 	Resources    ExecutionResources `json:"resources" description:"Resources required for the job"`
 	Libraries    []Library          `json:"libraries" description:"Libraries required for the job"`
 	Localities   []Locality         `json:"locality" description:"Preferred localities of the machine for execution"`
@@ -34,9 +34,9 @@ type TimeInformation struct {
 }
 
 type Library struct {
-	Name    string `json:"name" description:"Name of the library"`
+	Name       string `json:"name" description:"Name of the library"`
 	Constraint string `json:"constraint" description:"Constraint of the library"`
-	Version string `json:"version" description:"Version of the library"`
+	Version    string `json:"version" description:"Version of the library"`
 }
 
 type Locality struct {
@@ -60,9 +60,9 @@ type JobTypes []JobType
 type JobType string
 
 const (
-	BATCH JobType = "batch"
-	SINGLERUN JobType = "single_run"
-	RECURRING JobType = "recurring"
+	BATCH       JobType = "batch"
+	SINGLERUN   JobType = "single_run"
+	RECURRING   JobType = "recurring"
 	LONGRUNNING JobType = "long_running"
 )
 

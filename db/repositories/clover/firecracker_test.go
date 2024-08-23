@@ -1,4 +1,4 @@
-package repositories_clover
+package clover
 
 import (
 	"context"
@@ -90,6 +90,6 @@ func TestVirtualMachine(t *testing.T) {
 	assert.Len(t, allVirtualMachine, 2)
 
 	// Clean up created records
-	err = virtualMachineRepo.Delete(context.Background(), virtualMachine1.ID)
-	err = virtualMachineRepo.Delete(context.Background(), virtualMachine2.ID)
+	_ = virtualMachineRepo.Delete(context.Background(), virtualMachine1.ID)
+	_ = virtualMachineRepo.Delete(context.Background(), virtualMachine2.ID)
 }

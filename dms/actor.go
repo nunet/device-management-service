@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // ActorInterface defines the functionalities of actor.
@@ -188,9 +188,10 @@ func (a *Actor) ProcessMessages() {
 // Hello behaviour
 func (a *Actor) Hello(ctx context.Context, destination *ActorAddrInfo, m *Message) {
 	m.msgType = "hello"
-	a.SendMessage(ctx, destination, m)
+	_ = a.SendMessage(ctx, destination, m)
 }
 
+// nolint:unused
 func (a *Actor) handleHello(m Message) {
 	fmt.Println("handled hello message", m)
 }

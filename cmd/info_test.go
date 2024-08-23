@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	gonet "github.com/shirou/gopsutil/net"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/cmd/backend"
@@ -17,12 +16,14 @@ import (
 	"gorm.io/gorm"
 )
 
-var mockFS = afero.NewMemMapFs()
-
-// ========= MOCK IMPLEMENTATIONS ==========
-
 type MockUtilsService struct {
 	responses map[string][]byte
+	onboarded bool
+	err       error
+}
+
+func (mu *MockUtilsService) IsOnboarded() (bool, error) {
+	return mu.onboarded, mu.err
 }
 
 // SetResponseFor is a helper method. It sets a mock response for a specific method and endpoint
@@ -35,7 +36,7 @@ func (mu *MockUtilsService) SetResponseFor(method, endpoint string, resp []byte)
 	mu.responses[key] = resp
 }
 
-func (mu *MockUtilsService) ResponseBody(c *gin.Context, method, endpoint, query string, body []byte) ([]byte, error) {
+func (mu *MockUtilsService) ResponseBody(_ *gin.Context, method, endpoint, _ string, _ []byte) ([]byte, error) {
 	key := method + ":" + endpoint
 	response, ok := mu.responses[key]
 
@@ -50,11 +51,9 @@ type MockConnection struct {
 	conns []gonet.ConnectionStat
 }
 
-func (mc *MockConnection) GetConnections(kind string) ([]gonet.ConnectionStat, error) {
+func (mc *MockConnection) GetConnections(_ string) ([]gonet.ConnectionStat, error) {
 	return mc.conns, nil
 }
-
-// ========= HELPERS ==========
 
 func initMockDB() (*gorm.DB, error) {
 	// initialize mocked db in-memory
@@ -66,6 +65,7 @@ func initMockDB() (*gorm.DB, error) {
 	return mockDB, nil
 }
 
+// nolint
 func resetMockDB(mockDB *gorm.DB, schema types.Libp2pInfo) error {
 	err := mockDB.Migrator().DropTable(schema)
 	if err != nil {
@@ -74,8 +74,6 @@ func resetMockDB(mockDB *gorm.DB, schema types.Libp2pInfo) error {
 
 	return nil
 }
-
-// ========= TESTS ==========
 
 func Test_InfoCmd(t *testing.T) {
 	assert := assert.New(t)
@@ -100,26 +98,25 @@ func Test_InfoCmd(t *testing.T) {
 	assert.NoError(result.Error)
 
 	// TODO: get info from onboarding db repo
-
-	expectedResponse := "+----------------------+----------+\n"
-	expectedResponse += "|         INFO         |  VALUE   |\n"
-	expectedResponse += "+----------------------+----------+\n"
-	expectedResponse += "| Name                 | metadata |\n"
-	expectedResponse += "| Update Timestamp     |        0 |\n"
-	expectedResponse += "| Memory Max           |      256 |\n"
-	expectedResponse += "| Total Core           |        4 |\n"
-	expectedResponse += "| CPU Max              |      700 |\n"
-	expectedResponse += "| Available CPU        |      690 |\n"
-	expectedResponse += "| Available Memory     |      246 |\n"
-	expectedResponse += "| Reserved CPU         |       10 |\n"
-	expectedResponse += "| Reserved Memory      |       10 |\n"
-	expectedResponse += "| Network              | tcp      |\n"
-	expectedResponse += "| Public Key           | abc123   |\n"
-	expectedResponse += "| Node ID              |          |\n"
-	expectedResponse += "| Allow Cardano        | false    |\n"
-	expectedResponse += "| Dashboard            |          |\n"
-	expectedResponse += "| NTX Price Per Minute | 0.000000 |\n"
-	expectedResponse += "+----------------------+----------+\n"
+	expectedResponse := `+----------------------+----------+\n
+|         INFO         |  VALUE   |\n"
++----------------------+----------+\n"
+| Name                 | metadata |\n"
+| Update Timestamp     |        0 |\n"
+| Memory Max           |      256 |\n"
+| Total Core           |        4 |\n"
+| CPU Max              |      700 |\n"
+| Available CPU        |      690 |\n"
+| Available Memory     |      246 |\n"
+| Reserved CPU         |       10 |\n"
+| Reserved Memory      |       10 |\n"
+| Network              | tcp      |\n"
+| Public Key           | abc123   |\n"
+| Node ID              |          |\n"
+| Allow Cardano        | false    |\n"
+| Dashboard            |          |\n"
+| NTX Price Per Minute | 0.000000 |\n"
++----------------------+----------+\n"`
 
 	conns := GetMockConn(true)
 

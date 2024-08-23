@@ -1,4 +1,4 @@
-package background_tasks
+package backgroundtasks
 
 import (
 	"testing"

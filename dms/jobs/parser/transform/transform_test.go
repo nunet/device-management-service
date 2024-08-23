@@ -14,12 +14,11 @@ type TransformerTestSuite struct {
 }
 
 // Mock transformer function
-func mockTransformer(root *map[string]interface{}, data interface{}, path tree.Path) (any, error) {
+func mockTransformer(_ *map[string]interface{}, _ interface{}, _ tree.Path) (any, error) {
 	return "transformed", nil
 }
 
 func TestTransformerTestSuite(t *testing.T) {
-
 	suite.Run(t, new(TransformerTestSuite))
 }
 

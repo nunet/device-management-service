@@ -1,4 +1,4 @@
-package basic_controller
+package basiccontroller
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type VolumeControllerTestSuite struct {
@@ -48,6 +48,7 @@ func (s *VolumeControllerTestSuite) SetupTest() {
 	assert.NoError(s.T(), err)
 
 	// Write a file in volume2
+	// nolint:gofumpt
 	err = afero.WriteFile(s.vcHelper.Fs, s.vcHelper.Volumes["volume2"].Path+"/file.txt", []byte("hello world"), 0644)
 	assert.NoError(s.T(), err)
 }
@@ -160,6 +161,7 @@ func (s *VolumeControllerTestSuite) TestLockVolume() {
 				// verifying volume dir is read-only
 				fileInfo, err := s.vcHelper.Fs.Stat(tc.volumePath)
 				assert.NoError(t, err)
+				// nolint:gofumpt
 				assert.Equal(t, os.FileMode(0400), fileInfo.Mode().Perm())
 			}
 		})

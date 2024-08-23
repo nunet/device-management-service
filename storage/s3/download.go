@@ -11,9 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/afero"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
-	"gitlab.com/nunet/device-management-service/storage/basic_controller"
+	basiccontroller "gitlab.com/nunet/device-management-service/storage/basic_controller"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // Download fetch files from a given S3 bucket. The key may be a directory ending
@@ -23,8 +23,7 @@ import (
 // Warning: the implementation should rely on the FS provided by the volume controller,
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
-func (s *S3Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig) (
-	types.StorageVolume, error) {
+func (s *Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig) (types.StorageVolume, error) {
 	var storageVol types.StorageVolume
 
 	source, err := DecodeInputSpec(sourceSpecs)
@@ -57,17 +56,16 @@ func (s *S3Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig)
 	return storageVol, nil
 }
 
-func (s *S3Storage) downloadObject(ctx context.Context, source *S3InputSource,
-	object s3Object, volPath string) error {
-
+func (s *Storage) downloadObject(ctx context.Context, source *InputSource, object s3Object, volPath string) error {
 	outputPath := filepath.Join(volPath, *object.key)
 
 	// use the same file system instance used by the Volume Controller
 	var fs afero.Fs
-	if basicVolController, ok := s.volController.(*basic_controller.BasicVolumeController); ok {
+	if basicVolController, ok := s.volController.(*basiccontroller.BasicVolumeController); ok {
 		fs = basicVolController.FS
 	}
 
+	// nolint:gofumpt
 	err := fs.MkdirAll(outputPath, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
@@ -78,6 +76,7 @@ func (s *S3Storage) downloadObject(ctx context.Context, source *S3InputSource,
 		return nil
 	}
 
+	// nolint:gofumpt
 	outputFile, err := fs.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
 		return err
@@ -90,12 +89,15 @@ func (s *S3Storage) downloadObject(ctx context.Context, source *S3InputSource,
 		Key:     object.key,
 		IfMatch: object.eTag,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to download file: %w", err)
+	}
 
 	return nil
 }
 
 // resolveStorageKey returns a list of s3 objects within a bucket accordingly to the key provided.
-func resolveStorageKey(ctx context.Context, client *s3.Client, source *S3InputSource) ([]s3Object, error) {
+func resolveStorageKey(ctx context.Context, client *s3.Client, source *InputSource) ([]s3Object, error) {
 	key := source.Key
 	if key == "" {
 		return nil, fmt.Errorf("key is required")
@@ -110,7 +112,7 @@ func resolveStorageKey(ctx context.Context, client *s3.Client, source *S3InputSo
 	return resolveObjectsWithPrefix(ctx, client, source)
 }
 
-func resolveSingleObject(ctx context.Context, client *s3.Client, source *S3InputSource) ([]s3Object, error) {
+func resolveSingleObject(ctx context.Context, client *s3.Client, source *InputSource) ([]s3Object, error) {
 	key := sanitizeKey(source.Key)
 
 	headObjectInput := &s3.HeadObjectInput{
@@ -125,7 +127,7 @@ func resolveSingleObject(ctx context.Context, client *s3.Client, source *S3Input
 	// TODO-minor: validate checksum if provided
 
 	if strings.HasPrefix(*headObjectOut.ContentType, "application/x-directory") {
-		return []s3Object{}, fmt.Errorf("x-directory is not yet handled!")
+		return []s3Object{}, fmt.Errorf("x-directory is not yet handled")
 	}
 
 	return []s3Object{
@@ -137,7 +139,7 @@ func resolveSingleObject(ctx context.Context, client *s3.Client, source *S3Input
 	}, nil
 }
 
-func resolveObjectsWithPrefix(ctx context.Context, client *s3.Client, source *S3InputSource) ([]s3Object, error) {
+func resolveObjectsWithPrefix(ctx context.Context, client *s3.Client, source *InputSource) ([]s3Object, error) {
 	key := sanitizeKey(source.Key)
 
 	// List objects with the given prefix

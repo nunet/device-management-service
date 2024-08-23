@@ -4,7 +4,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func DiskComparator(l, r interface{}, preference ...Preference) types.Comparison {
+func DiskComparator(l, r interface{}, _ ...Preference) types.Comparison {
 	// comparator for Memory type
 
 	// we want to reason about the inner fields of the Memory type and how they compare between left and right
@@ -18,10 +18,9 @@ func DiskComparator(l, r interface{}, preference ...Preference) types.Comparison
 
 	comparison := ReturnComplexComparison(l, r)
 
-
 	if comparison["Type"] == types.Error {
 		return types.Error
-	} 
+	}
 	if comparison["Type"] != types.Equal {
 		return types.Worse
 	}
@@ -31,6 +30,3 @@ func DiskComparator(l, r interface{}, preference ...Preference) types.Comparison
 	// currently this is a very simple comparison, based on the assumption
 	// that more Size / or equal amount of size and speed is acceptable, but nothing less;
 }
-
-
-

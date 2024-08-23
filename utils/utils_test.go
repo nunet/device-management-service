@@ -9,9 +9,9 @@ import (
 )
 
 func TestIsExecutorStrictlyContained(t *testing.T) {
-	docker := types.Executor{types.ExecutorTypeDocker}
-	firecracker := types.Executor{types.ExecutorTypeFirecracker}
-	wasm := types.Executor{types.ExecutorTypeWasm}
+	docker := types.Executor{ExecutorType: types.ExecutorTypeDocker}
+	firecracker := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}
+	wasm := types.Executor{ExecutorType: types.ExecutorTypeWasm}
 
 	executors1 := []interface{}{docker, firecracker, wasm}
 	executors2 := []interface{}{docker, firecracker}
@@ -26,9 +26,9 @@ func TestIsExecutorStrictlyContained(t *testing.T) {
 }
 
 func TestIntersectionStringSlices(t *testing.T) {
-	docker := types.Executor{types.ExecutorTypeDocker}
-	firecracker := types.Executor{types.ExecutorTypeFirecracker}
-	wasm := types.Executor{types.ExecutorTypeWasm}
+	docker := types.Executor{ExecutorType: types.ExecutorTypeDocker}
+	firecracker := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}
+	wasm := types.Executor{ExecutorType: types.ExecutorTypeWasm}
 
 	executors1 := []interface{}{docker, firecracker, wasm}
 	executors2 := []interface{}{docker, firecracker}
@@ -48,12 +48,12 @@ func TestIntersectionStringSlices(t *testing.T) {
 }
 
 func TestIsSameShallowType(t *testing.T) {
-	var v1 = make(map[string]int)
+	v1 := make(map[string]int)
 	v1["1"] = 1
 	v1["2"] = 2
 	v1["3"] = 3
 
-	var v4 = make(map[string]int)
+	v4 := make(map[string]int)
 	v4["1"] = 5
 	v4["2"] = 6
 	v4["3"] = 7
@@ -61,14 +61,14 @@ func TestIsSameShallowType(t *testing.T) {
 	v2 := "string"
 	v5 := "another string"
 	v3 := float32(6.629)
-	var v6 float32 = 7.9790
+	v6 := float32(7.9790)
 
-	var v7 = make(map[string]interface{})
+	v7 := make(map[string]interface{})
 	v7["1"] = 1
 	v7["2"] = 3
 	v7["3"] = 3
 
-	var v8 = make(map[string]interface{})
+	v8 := make(map[string]interface{})
 	v8["1"] = 5
 	v8["2"] = 6
 	v8["3"] = 7
@@ -83,9 +83,9 @@ func TestIsSameShallowType(t *testing.T) {
 }
 
 func TestIsExecutor(t *testing.T) {
-	executor1 := types.Executor{types.ExecutorTypeDocker}
-	executor2 := types.Executor{types.ExecutorTypeFirecracker}
-	executor3 := types.Executor{types.ExecutorTypeWasm}
+	executor1 := types.Executor{ExecutorType: types.ExecutorTypeDocker}
+	executor2 := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}
+	executor3 := types.Executor{ExecutorType: types.ExecutorTypeWasm}
 
 	// positive assertions
 	assert.True(t, IsExecutor(executor1))
@@ -136,9 +136,9 @@ func TestIsJobTypes(t *testing.T) {
 }
 
 func TestIsJobType(t *testing.T) {
-	var jobType1 types.JobType = types.BATCH
-	var jobType2 types.JobType = types.SINGLERUN
-	var jobType3 types.JobType = types.LONGRUNNING
+	jobType1 := types.BATCH
+	jobType2 := types.SINGLERUN
+	jobType3 := types.LONGRUNNING
 
 	// positive assertions
 	assert.True(t, IsJobType(jobType1))
@@ -171,17 +171,16 @@ func TestConvertTypedSliceToUntypedSlice(t *testing.T) {
 	actualValue = ConvertTypedSliceToUntypedSlice(jobType2)
 	expectedValue = []interface{}{types.BATCH, types.LONGRUNNING}
 	assert.Equal(t, expectedValue, actualValue)
-	
-	
+
 	actualValue = ConvertTypedSliceToUntypedSlice(jobType3)
-	expectedValue = []interface{}{types.RECURRING, types.SINGLERUN}	
+	expectedValue = []interface{}{types.RECURRING, types.SINGLERUN}
 	assert.Equal(t, expectedValue, actualValue)
 }
 
 func TestIsGPUVendor(t *testing.T) {
-	var gpuVendor1 types.GPUVendor = types.GPUVendorNvidia
-	var gpuVendor2 types.GPUVendor = types.GPUVendorAMDATI
-	var gpuVendor3 types.GPUVendor = types.GPUVendorIntel
+	gpuVendor1 := types.GPUVendorNvidia
+	gpuVendor2 := types.GPUVendorAMDATI
+	gpuVendor3 := types.GPUVendorIntel
 
 	// positive assertions
 	assert.True(t, IsGPUVendor(gpuVendor1))

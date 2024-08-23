@@ -7,7 +7,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-func JobTypesComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
+func JobTypesComparator(lraw, rraw interface{}, _ ...Preference) types.Comparison {
 	// comparator for JobTypes type:
 	// left represent machine capabilities;
 	// right represent required capabilities;
@@ -20,26 +20,29 @@ func JobTypesComparator(lraw, rraw interface{}, preference ...Preference) types.
 		return types.Error
 	}
 
-	var result types.Comparison
-	result = types.Error // error is the default value
+	result := types.Error // error is the default value
 
 	// we know that interfaces here are slices, so need to assert first
-	var l []interface{} = utils.ConvertTypedSliceToUntypedSlice(lraw)
-	var r []interface{} = utils.ConvertTypedSliceToUntypedSlice(rraw)
+	l := utils.ConvertTypedSliceToUntypedSlice(lraw)
+	r := utils.ConvertTypedSliceToUntypedSlice(rraw)
 
 	if !utils.IsSameShallowType(l, r) {
 		result = types.Error
 	}
-	if reflect.DeepEqual(l, r) {
+
+	switch {
+	case reflect.DeepEqual(l, r):
 		// if available capabilities are
 		// equal to required capabilities
 		// then the result of comparison is 'Equal'
 		result = types.Equal
-	} else if utils.IsStrictlyContained(l, r) {
+
+	case utils.IsStrictlyContained(l, r):
 		// if machine capabilities contain all the required capabilities
 		// then the result of comparison is 'Better'
 		result = types.Better
-	} else if utils.IsStrictlyContained(r, l) {
+
+	case utils.IsStrictlyContained(r, l):
 		// if required capabilities contain all the machine capabilities
 		// then the result of comparison is 'Worse'
 		// ("available Capabilities are worse than required")')
@@ -49,7 +52,6 @@ func JobTypesComparator(lraw, rraw interface{}, preference ...Preference) types.
 		// TODO: this comparator does not take into account options when several job types are available and several job types are required
 		// in the same data structure; this is why the test fails;
 	}
-
 
 	return result
 }

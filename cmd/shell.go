@@ -8,6 +8,6 @@ var shellCmd = &cobra.Command{
 	Use:   "shell",
 	Short: "Send commands to DMS instance",
 	Long:  "",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 	},
 }

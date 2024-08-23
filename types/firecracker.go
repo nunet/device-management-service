@@ -36,7 +36,7 @@ type MMDSMsg struct {
 }
 
 type MMDSMetadata struct {
-	NodeId string `json:"node_id"`
+	NodeID string `json:"node_id"`
 	PKey   string `json:"pkey"`
 }
 

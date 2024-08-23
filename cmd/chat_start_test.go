@@ -34,7 +34,7 @@ type MockWebSocket struct {
 	pingErr    error
 }
 
-func (mws *MockWebSocket) Initialize(url string) error {
+func (mws *MockWebSocket) Initialize(_ string) error {
 	mws.initializeCalled++
 	return mws.initializeErr
 }
@@ -44,7 +44,7 @@ func (mws *MockWebSocket) Close() error {
 	return mws.closeErr
 }
 
-func (mws *MockWebSocket) ReadMessage(ctx context.Context, w io.Writer) error {
+func (mws *MockWebSocket) ReadMessage(_ context.Context, w io.Writer) error {
 	mws.readMessageCalled++
 	if mws.readMessageErr != nil {
 		return mws.readMessageErr
@@ -65,7 +65,7 @@ func (mws *MockWebSocket) ReadMessage(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-func (mws *MockWebSocket) WriteMessage(ctx context.Context, r io.Reader) error {
+func (mws *MockWebSocket) WriteMessage(_ context.Context, r io.Reader) error {
 	mws.writeMessageCalled++
 	if mws.writeMessageErr != nil {
 		return mws.writeMessageErr
@@ -89,7 +89,7 @@ func (mws *MockWebSocket) WriteMessage(ctx context.Context, r io.Reader) error {
 	}
 }
 
-func (mws *MockWebSocket) Ping(ctx context.Context, w io.Writer) error {
+func (mws *MockWebSocket) Ping(_ context.Context, _ io.Writer) error {
 	mws.mu.Lock()
 	defer mws.mu.Unlock()
 
@@ -172,9 +172,9 @@ func Test_ChatStartCmdGoroutinesFail(t *testing.T) {
 	mockUtils := &MockUtilsService{}
 
 	mocks := []*MockWebSocket{
-		&MockWebSocket{readMessageErr: fmt.Errorf("impossible to read")},
-		&MockWebSocket{writeMessageErr: fmt.Errorf("impossible to write")},
-		&MockWebSocket{pingErr: fmt.Errorf("impossible to interrupt")},
+		{readMessageErr: fmt.Errorf("impossible to read")},
+		{writeMessageErr: fmt.Errorf("impossible to write")},
+		{pingErr: fmt.Errorf("impossible to interrupt")},
 	}
 
 	tests := []struct {

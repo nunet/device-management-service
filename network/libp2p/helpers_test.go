@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 
-	"gitlab.com/nunet/device-management-service/internal/background_tasks"
+	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -130,8 +130,7 @@ func createTestNetwork(t *testing.T, n int, withSwarmKey bool) []*Libp2p {
 	return peers
 }
 
-func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr,
-	withSwarmKey bool) *types.Libp2pConfig {
+func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr, withSwarmKey bool) *types.Libp2pConfig {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
 	assert.NoError(t, err)
 	return &types.Libp2pConfig{
@@ -139,7 +138,7 @@ func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Mu
 		BootstrapPeers:          bootstrapPeers,
 		Rendezvous:              "nunet-randevouz",
 		Server:                  false,
-		Scheduler:               background_tasks.NewScheduler(10),
+		Scheduler:               backgroundtasks.NewScheduler(10),
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           []string{fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", libp2pPort)},
 		PeerCountDiscoveryLimit: 40,

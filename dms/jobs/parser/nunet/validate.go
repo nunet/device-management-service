@@ -19,7 +19,7 @@ func NewNuNetValidator() validate.Validator {
 }
 
 // ValidateSpec checks the root configuration for consistency.
-func ValidateSpec(root *map[string]any, data any, path tree.Path) error {
+func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 	spec, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid spec configuration: %v", data)
@@ -32,7 +32,7 @@ func ValidateSpec(root *map[string]any, data any, path tree.Path) error {
 }
 
 // ValidateJob checks the job configuration.
-func ValidateJob(root *map[string]any, data any, path tree.Path) error {
+func ValidateJob(_ *map[string]any, data any, _ tree.Path) error {
 	job, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid job configuration: %v", data)

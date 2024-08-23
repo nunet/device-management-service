@@ -24,7 +24,7 @@ var gpuOnboardCmd = &cobra.Command{
 	Short:   "Install GPU drivers and Container Runtime",
 	Long:    ``,
 	PreRunE: isDMSRunning(networkService),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		wsl, err := utils.CheckWSL()
 		if err != nil {
 			zlog.Sugar().Errorf("Error checking WSL: %v", err)
@@ -125,7 +125,7 @@ func containsVendor(vendors []types.GPUVendor, target types.GPUVendor) bool {
 }
 
 // runScript executes a bash script from a given path.
-// It takes the script's path as input and tries to run it, if successfull it prints the output.
+// It takes the script's path as input and tries to run it, if successful it prints the output.
 func runScript(scriptPath string) error {
 	script := exec.Command("/bin/bash", scriptPath)
 

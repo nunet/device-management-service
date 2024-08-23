@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/afero"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // Messenger defines the interface for sending messages.
@@ -47,11 +47,11 @@ type Network interface {
 	// type allows publish/subscribe functionality such as gossipsub or nats
 	Publish(ctx context.Context, topic string, data []byte) error
 	// Subscribe subscribes to the given topic and calls the handler function
-	// if the network type allows it simmilar to Publish()
+	// if the network type allows it similar to Publish()
 	Subscribe(ctx context.Context, topic string, handler func(data []byte)) error
 	// Unsubscribe from a topic
 	Unsubscribe(topic string) error
-	// Stop stops the network including any existing advertisments and subscriptions
+	// Stop stops the network including any existing advertisements and subscriptions
 	Stop() error
 }
 

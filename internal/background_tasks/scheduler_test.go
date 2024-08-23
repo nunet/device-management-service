@@ -1,4 +1,4 @@
-package background_tasks
+package backgroundtasks
 
 import (
 	"testing"
@@ -13,7 +13,7 @@ func TestSchedulerAddAndRemoveTask(t *testing.T) {
 	task := &Task{
 		Name:        "Test Task",
 		Description: "A task for testing",
-		Function: func(args interface{}) error {
+		Function: func(_ interface{}) error {
 			return nil
 		},
 		Triggers: []Trigger{&OneTimeTrigger{Delay: 1 * time.Second}},

@@ -28,7 +28,7 @@ var onboardMLCmd = &cobra.Command{
 	Short:   "Setup for Machine Learning with GPU",
 	Long:    ``,
 	PreRunE: isDMSRunning(networkService),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		ctx := context.Background()
 
 		wsl, err := utils.CheckWSL()
@@ -70,7 +70,7 @@ var onboardMLCmd = &cobra.Command{
 		}
 
 		if hasNVIDIA {
-			err = pullMultipleImages(cli, ctx, imageList, imagesNVIDIA)
+			err = pullMultipleImages(ctx, cli, imageList, imagesNVIDIA)
 			if err != nil {
 				fmt.Println("Error pulling NVIDIA images:", err)
 				return
@@ -78,7 +78,7 @@ var onboardMLCmd = &cobra.Command{
 		}
 
 		if hasAMD {
-			err = pullMultipleImages(cli, ctx, imageList, imagesAMD)
+			err = pullMultipleImages(ctx, cli, imageList, imagesAMD)
 			if err != nil {
 				fmt.Println("Error pulling AMD images:", err)
 				return
@@ -87,10 +87,10 @@ var onboardMLCmd = &cobra.Command{
 	},
 }
 
-func pullMultipleImages(cli *client.Client, ctx context.Context, imageList []docker_types.ImageSummary, images []string) error {
+func pullMultipleImages(ctx context.Context, cli *client.Client, imageList []docker_types.ImageSummary, images []string) error {
 	for i := 0; i < len(images); i++ {
 		if !imageExists(imageList, images[i]) {
-			err := pullImage(cli, ctx, images[i])
+			err := pullImage(ctx, cli, images[i])
 			if err != nil {
 				return fmt.Errorf("unable to pull image %s: %v", images[i], err)
 			}

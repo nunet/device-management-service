@@ -64,9 +64,8 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		if handler, ok := e.handlers.Get(request.ExecutionID); ok {
 			if handler.active() {
 				return fmt.Errorf("execution is already started")
-			} else {
-				return fmt.Errorf("execution is already completed")
 			}
+			return fmt.Errorf("execution is already completed")
 		}
 
 		// Create a new handler for the execution.
@@ -261,6 +260,9 @@ func (e *Executor) newDockerExecutionContainer(
 	// TODO: Move this code block ( L263-272) to the allocator in future
 	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
 	gpus, err := resources.ManagerInstance.SystemSpecs().GetGPUs()
+	if err != nil {
+		return "", fmt.Errorf("failed to get GPU info: %w", err)
+	}
 	maxFreeVRAMGpu, err := types.GPUList(gpus).GetGPUWithHighestFreeVRAM()
 	if err != nil {
 		return "", fmt.Errorf("failed to get GPU with highest free VRAM: %w", err)
@@ -319,7 +321,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.ClockSpeedHz),
+				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
 				CPUCount: int64(params.Resources.CPU.Cores),
 				DeviceRequests: []container.DeviceRequest{
 					{
@@ -337,7 +339,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.ClockSpeedHz),
+				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -367,7 +369,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.ClockSpeedHz),
+				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -382,7 +384,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.ClockSpeedHz),
+				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
 				CPUCount: int64(params.Resources.CPU.Cores),
 			},
 		}
@@ -401,7 +403,7 @@ func makeContainerMounts(
 ) ([]mount.Mount, error) {
 	// the actual mounts we will give to the container
 	// these are paths for both input and output data
-	var mounts []mount.Mount
+	mounts := make([]mount.Mount, 0)
 	for _, input := range inputs {
 		if input.Type != types.StorageVolumeTypeBind {
 			mounts = append(mounts, mount.Mount{

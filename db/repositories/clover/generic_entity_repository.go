@@ -1,4 +1,4 @@
-package repositories_clover
+package clover
 
 import (
 	"context"
@@ -12,10 +12,6 @@ import (
 	clover_q "github.com/ostafen/clover/v2/query"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-)
-
-const (
-	pKField = "_id"
 )
 
 // GenericEntityRepositoryClover is a generic single entity repository implementation using Clover.
@@ -44,7 +40,7 @@ func (repo *GenericEntityRepositoryClover[T]) query() *clover_q.Query {
 }
 
 // Save creates or updates the record to the repository and returns the new/updated data.
-func (repo *GenericEntityRepositoryClover[T]) Save(ctx context.Context, data T) (T, error) {
+func (repo *GenericEntityRepositoryClover[T]) Save(_ context.Context, data T) (T, error) {
 	var model T
 	doc := toCloverDoc(data)
 	doc.Set("CreatedAt", time.Now())
@@ -63,7 +59,7 @@ func (repo *GenericEntityRepositoryClover[T]) Save(ctx context.Context, data T) 
 }
 
 // Get retrieves the record from the repository.
-func (repo *GenericEntityRepositoryClover[T]) Get(ctx context.Context) (T, error) {
+func (repo *GenericEntityRepositoryClover[T]) Get(_ context.Context) (T, error) {
 	var model T
 	q := repo.query().Sort(clover_q.SortOption{
 		Field:     "CreatedAt",
@@ -77,22 +73,19 @@ func (repo *GenericEntityRepositoryClover[T]) Get(ctx context.Context) (T, error
 
 	model, err = toModel[T](doc, true)
 	if err != nil {
-		return model, fmt.Errorf("Failed to convert document to model: %v", err)
+		return model, fmt.Errorf("failed to convert document to model: %v", err)
 	}
 
 	return model, nil
 }
 
 // Clear removes the record with its history from the repository.
-func (repo *GenericEntityRepositoryClover[T]) Clear(ctx context.Context) error {
+func (repo *GenericEntityRepositoryClover[T]) Clear(_ context.Context) error {
 	return repo.db.Delete(repo.query())
 }
 
 // History retrieves previous versions of the record from the repository.
-func (repo *GenericEntityRepositoryClover[T]) History(
-	ctx context.Context,
-	query repositories.Query[T],
-) ([]T, error) {
+func (repo *GenericEntityRepositoryClover[T]) History(_ context.Context, query repositories.Query[T]) ([]T, error) {
 	var models []T
 	q := repo.query()
 	q = applyConditions(q, query)

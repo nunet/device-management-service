@@ -5,7 +5,7 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func LibrariesComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
+func LibrariesComparator(lraw, rraw interface{}, _ ...Preference) types.Comparison {
 	// comparator for Libraries slices (of different lengths) of Library types:
 	// left represent machine capabilities;
 	// right represent required capabilities;
@@ -15,12 +15,12 @@ func LibrariesComparator(lraw, rraw interface{}, preference ...Preference) types
 	_, rrawok := rraw.([]types.Library)
 	if !lrawok || !rrawok {
 		return types.Error
-	}	
+	}
 
 	l := lraw.([]types.Library)
 	r := rraw.([]types.Library)
 
-	var interimComparison1 [][]types.Comparison
+	interimComparison1 := make([][]types.Comparison, 0)
 	for _, rLibrary := range r {
 		var interimComparison2 []types.Comparison
 		for _, lLibrary := range l {
@@ -32,10 +32,9 @@ func LibrariesComparator(lraw, rraw interface{}, preference ...Preference) types
 		// second dimension represents right GPUs
 		interimComparison1 = append(interimComparison1, interimComparison2)
 	}
-		// we can now implement a logic to figure out if each required GPU on the left has a matching GPU on the right
+	// we can now implement a logic to figure out if each required GPU on the left has a matching GPU on the right
 
-	var finalComparison []types.Comparison
-	var consideredIndexes []int
+	finalComparison := make([]types.Comparison, 0)
 	for i := 0; i < len(interimComparison1); i++ {
 		// we need to find the best match for each GPU on the right
 		if len(interimComparison1[i]) < i {
@@ -44,10 +43,9 @@ func LibrariesComparator(lraw, rraw interface{}, preference ...Preference) types
 		c := interimComparison1[i]
 		bestMatch, index := returnBestMatch(c)
 		finalComparison = append(finalComparison, bestMatch)
-		consideredIndexes = append(consideredIndexes, index)
 		interimComparison1 = removeIndex(interimComparison1, index)
-	} 
-	
+	}
+
 	if slices.Contains(finalComparison, types.Error) {
 		return types.Error
 	}
@@ -59,4 +57,3 @@ func LibrariesComparator(lraw, rraw interface{}, preference ...Preference) types
 	}
 	return types.Better
 }
-

@@ -4,10 +4,11 @@ package storage
 
 import (
 	"context"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// StorageProvider handles I/O operations of files with remote storage providers
+// Provider handles I/O operations of files with remote storage providers
 // such as AWS S3 and IPFS.
 //
 // Its functionality is coupled with local mounted volumes, meaning that implementations
@@ -23,7 +24,7 @@ import (
 // - Although it may be feasible to implement, the interface was not built with
 // the idea of supporting streaming of data and non-file storage operations (e.g.:
 // some databases)
-type StorageProvider interface {
+type Provider interface {
 	// Upload uploads a storage volume data to a given remote storage provider.
 	// The operation results in a return value that might vary from provider to provider
 	// (and it may not exist in some cases).
