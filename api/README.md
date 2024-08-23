@@ -6,7 +6,7 @@
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
 - [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
 - [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Secure coding guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@
 5. [Data Types](#5-data-types)
 6. [Testing](#6-testing)
 7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+8. [References](#8-references)  
 
 
 ## Specification
@@ -76,7 +76,23 @@ The class diagram for the `api` package is shown below.
 
 ### 4. Functionality
 
-The following sections describe the different functionality of the DMS covered in the `api` package.
+#### Configuration
+The default server address for the REST API is `127.0.0.1` which means that the API can only be accessed from the same machine. Also note that REST API functionality runs on port `9999` by default. 
+
+If needed, the port value can be configured by modifying the `dms_config.json` file. DMS looks for the `dms_config.json` at the time of startup. It searches for the file in the following order:
+1. first in the current directory in which DMS is running;
+2. then in `~/.nunet`
+3. and finally in `/etc/nunet`
+
+The parameters `rest.port` and `rest.addr` define the port and the address. The values specified in the `dms_config.json` file will override the default values specified above.
+
+You can use the following format to construct the URL for accessing API endpoints
+
+```
+http://localhost:<port>/api/v1/<endpoint>
+```
+
+The following sections describe the different endpoints of the DMS covered in the `api` package. You can also refer to the [Swagger docs](https://nunet.gitlab.io/open-api/device-management-api-spec/develop/swagger/#/) for the various endpoints.
 
 #### Device Status
 
@@ -108,7 +124,7 @@ It returns an error message in case of any failure during the operation.
 |--------               |---------          |
 | **endpoint**:         | `/onboarding/address/new` |
 | **method**:           | `HTTP GET` |
-| **output**:           |`models.onboarding.BlockchainAddressPrivKey`| 
+| **output**:           |`types.BlockchainAddressPrivKey`| 
 
 This endpoint creates a new blockchain payment address for the user. It returns an error message in case of any failure during the operation.
 
@@ -118,10 +134,10 @@ This endpoint creates a new blockchain payment address for the user. It returns 
 |--------               |---------              |
 | **endpoint**:         | `/onboarding/onboard` |
 | **method**:           | `HTTP POST`           |
-| **input**:            |  `models.onboarding.CapacityForNunet` |
-| **output**:           | `models.onboarding.Metadata` |
+| **input**:            |  `types.CapacityForNunet` |
+| **output**:           | `types.Metadata` |
 
-This endpoint executes the onboarding process for a compute provider device. It expects various details from the user with respect to hardware resources, price etc as specified in `models.onboarding.CapacityForNunet`. Upon succesful onboarding, it returns the machine metadata recorded by the DMS. 
+This endpoint executes the onboarding process for a compute provider device. It expects various details from the user with respect to hardware resources, price etc as specified in `types.CapacityForNunet`. Upon succesful onboarding, it returns the machine metadata recorded by the DMS. 
 
 It returns an error message in case of any failure during the operation.
 
@@ -131,7 +147,7 @@ It returns an error message in case of any failure during the operation.
 |--------               |---------          |
 | **endpoint**:         | `/onboarding/metadata` |
 | **method**:           | `HTTP GET` |
-| **output**:           | `models.onboarding.Metadata`|
+| **output**:           | `types.Metadata`|
 
 This endpoint fetches the current metadata of the onboarded device. It returns an error message in case of any failure during the operation.
 
@@ -141,7 +157,7 @@ This endpoint fetches the current metadata of the onboarded device. It returns a
 |--------               |---------          |
 | **endpoint**:         | `/onboarding/provisioned` |
 | **method**:           | `HTTP GET` |
-| **output**:           | `models.onboarding.Provisioned` |
+| **output**:           | `types.Provisioned` |
 
 This endpoint fetches the total capacity of the machine that is onboarded to Nunet.
 
@@ -151,7 +167,7 @@ This endpoint fetches the total capacity of the machine that is onboarded to Nun
 |--------               |---------          |
 | **endpoint**:         | `/onboarding/status` |
 | **method**:           | `HTTP GET` |
-| **output**:           | `models.onboarding.OnboardingStatus` |
+| **output**:           | `types.OnboardingStatus` |
 
 This endpoint returns onboarding status of the machine along with some metadata. It returns an error message in case of any failure during the operation.
 
@@ -161,8 +177,8 @@ This endpoint returns onboarding status of the machine along with some metadata.
 |--------               |---------          |
 | **endpoint**:         | `/onboarding/resource-config` |
 | **method**:           | `HTTP POST` |
-| **input**:            | `models.onboarding.CapacityForNunet` |
-| **output**:           |`models.onboarding.Metadata` |
+| **input**:            | `types.CapacityForNunet` |
+| **output**:           |`types.Metadata` |
 
 This endpoint allows the user to change the configuration of the resources onboarded to Nunet. It returns the updated metadata of the machine.
 
@@ -495,15 +511,15 @@ This endpoint returns the DHT contents.
 
 The API functionality of DMS consists of following data types:
 
-- `models.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
+- `types.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
 
-- `models.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
+- `types.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
 
-- `models.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
+- `types.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
 
-- `models.Provisioned`: This has total capacity of the machine onboarded by the user.
+- `types.Provisioned`: This has total capacity of the machine onboarded by the user.
 
-- `models.OnboardingStatus`: This is returned while retrieving the onboarding status.
+- `types.OnboardingStatus`: This is returned while retrieving the onboarding status.
 
 - `Available Resources (TBD)`: This will have the available capacity of the machine that can be considered for running a job.
 
@@ -519,7 +535,7 @@ All unit tests for various functionalities can be found in files with `_test` in
 
 #### Functional tests
 
-- **TBD with Abhishek**
+Reference is made to the [test-suite](https://gitlab.com/nunet/test-suite/-/tree/develop/stages/functional_tests/features/device-management-service) repository for functional tests for DMS API functionality.
 
 ### 7. Proposed Functionality / Requirements 
 
@@ -530,4 +546,5 @@ All issues that are related to the design of API package can be found below. The
 - [API package design](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A12&first_page_size=20)
 
 ### 8. References
+
 

@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -55,9 +55,9 @@ The proposed lifecyle of a job on Nunet platform consists of various operations 
 
 7. **Contract Settlement**: After job is completed, service provider DMS verifies the work done. If the work is correct, the `Contract-Database` makes the necessary transactions to settle the the contract.
 
-See [References](#7-references) section for research blogs with more details on this topic.
+See [References](#8-references) section for research blogs with more details on this topic.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -255,16 +255,16 @@ Note that the above methods not an exhaustive list. These are to be considered a
 
 #### Data types
 
-- `proposed` `Actor`: Actor has a identifier and a mailbox to send/receive messages.
+- `proposed` `dms.orchestrator.Actor`: Actor has a identifier and a mailbox to send/receive messages.
 
 ```
 type Actor struct {
-	id models.ID
+	id types.ID
 	mailbox dms.orchestrator.Mailbox
 }
 ```
 
-- `proposed` `Bid`: Consists of information sent by the compute provider node to the requestor node as a bid for the job broadcasted to the network.
+- `proposed` `dms.orchestrator.Bid`: Consists of information sent by the compute provider node to the requestor node as a bid for the job broadcasted to the network.
 
 ```
 // Bid represents a bid made by the compute provider DMS
@@ -297,19 +297,19 @@ type Bid struct {
 ```
 
 
-- `proposed` `BidRequest`: A bid request is a message sent by a node to the network to request for bids.
+- `proposed` `dms.orchestrator.BidRequest`: A bid request is a message sent by a node to the network to request for bids.
 
 ```
 type BidRequest struct {
 
     // id is unique identifier for this bid request
-	ID models.ID
+	ID types.ID
 	
 	// request for bids are done with Pods, as pods combine capacities, required from a single machine
 	Pod dms.jobs.Pod
 
 	// a requestor could be dms or an allocation; both types are accepted;
-	Requestor models.ID
+	Requestor types.ID
 
 	ResourceRequirements dms.resource.ResourceRequirements
 
@@ -319,7 +319,7 @@ type BidRequest struct {
 
 ```
 
-- `proposed` `PriceBid`: Contains price related information of the bid.
+- `proposed` `dms.orchestrator.PriceBid`: Contains price related information of the bid.
 
 ```
 // PriceBid represents the pricing parameters of the bid
@@ -333,7 +333,7 @@ type PriceBid struct {
 ```
 
 
-- `proposed` `TimeBid`: Contains time related information of the bid.
+- `proposed` `dms.orchestrator.TimeBid`: Contains time related information of the bid.
 
 ```
 // TimeBid represents time parameters of the bid
@@ -347,15 +347,15 @@ type TimeBid struct {
 
 ```
 
-- `proposed` `CapabilityComparator`: Preferences of the node which has an influence on the comparison operation. 
+- `proposed` `dms.orchestrator.CapabilityComparator`: Preferences of the node which has an influence on the comparison operation. 
 
 `TBD`
 
-- `proposed` `CapabilityComparison`: Result of the comparison operation.
+- `proposed` `dms.orchestrator.CapabilityComparison`: Result of the comparison operation.
 
 `TBD`
 
-- `proposed` `Invocation`: An invocation is a message sent by the orchestrator to the node that accepted the job. It contains the job details and the contract.
+- `proposed` `dms.orchestrator.Invocation`: An invocation is a message sent by the orchestrator to the node that accepted the job. It contains the job details and the contract.
 
 ```
 type Invocation struct {
@@ -364,12 +364,12 @@ type Invocation struct {
 
 	// Contract contains jobID, IDs of both DMS and proof of contract
 	contract      tokenomics.Contract
-	source        models.ID // since an invocation can in principe be done by any Actor (node or an allocation)
+	source        types.ID // since an invocation can in principe be done by any Actor (node or an allocation)
 }
 
 ```
 
-- `proposed` Mailbox: A mailbox is a communication channel between two actors. It uses `network` package functionality to send and receive messages.
+- `proposed` dms.orchestrator.Mailbox: A mailbox is a communication channel between two actors. It uses `network` package functionality to send and receive messages.
 
 ```
 type Mailbox struct {

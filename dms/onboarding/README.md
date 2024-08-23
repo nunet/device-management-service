@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -26,7 +26,7 @@
 
 This file explains the onboarding functionality of Device Management Service (DMS). This functionality is catered towards compute providers who wish provide their hardware resources to Nunet for running computational tasks as well as developers who are contributing to platform development.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -64,13 +64,13 @@ The class diagram for the `onboarding` package is shown below.
 
 #### Onboard Compute Provider
 
-- signature: `Onboard(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error)`
+- signature: `Onboard(ctx context.Context, capacity types.CapacityForNunet) (*types.Metadata, error)`
 
 - input #1: `Context object`
 
-- input #2: `models.CapacityForNunet`
+- input #2: `types.CapacityForNunet`
 
-- output: `models.Metadata`
+- output: `types.Metadata`
 
 - output (error): Error message
 
@@ -79,13 +79,13 @@ The class diagram for the `onboarding` package is shown below.
 
 #### Get Metadata 
 
-- signature: `GetMetadata(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error)`
+- signature: `GetMetadata(ctx context.Context, capacity types.CapacityForNunet) (*types.Metadata, error)`
 
 - input #1: `Context object`
 
-- input #2: `models.CapacityForNunet`
+- input #2: `types.CapacityForNunet`
 
-- output: `models.Metadata`
+- output: `types.Metadata`
 
 - output (error): Error message
 
@@ -93,11 +93,11 @@ The class diagram for the `onboarding` package is shown below.
  
  #### CreatePaymentAddress
 
-- signature: `CreatePaymentAddress(wallet string) (*models.BlockchainAddressPrivKey, error)`
+- signature: `CreatePaymentAddress(wallet string) (*types.BlockchainAddressPrivKey, error)`
 
 - input: `Blockchain name`
 
-- output: `models.BlockchainAddressPrivKey`
+- output: `types.BlockchainAddressPrivKey`
 
 - output (error): Error message
 
@@ -105,11 +105,11 @@ The class diagram for the `onboarding` package is shown below.
 
 #### Onboarding status
 
-- signature: `Status() (*models.OnboardingStatus, error)`
+- signature: `Status() (*types.OnboardingStatus, error)`
 
 - input: None
 
-- output: `models.OnboardingStatus`
+- output: `types.OnboardingStatus`
 
 - output (error): Error message
 
@@ -118,13 +118,13 @@ The class diagram for the `onboarding` package is shown below.
 
 ### Change Resource Configuration
 
-- signature: `ResourceConfig(ctx context.Context, capacity models.CapacityForNunet) (*models.Metadata, error)`
+- signature: `ResourceConfig(ctx context.Context, capacity types.CapacityForNunet) (*types.Metadata, error)`
 
 - input #1: `Context object`
 
-- input #2: `models.CapacityForNunet`
+- input #2: `types.CapacityForNunet`
 
-- output: `models.Metadata`
+- output: `types.Metadata`
 
 - output (error): Error message
 
@@ -148,17 +148,17 @@ The class diagram for the `onboarding` package is shown below.
 
 ### 5. Data Types
 
-- `models.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
+- `types.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
 
-- `models.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
+- `types.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
 
-- `models.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
+- `types.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
 
-- `models.Provisioned`: This has total capacity of the machine onboarded by the user.
+- `types.Provisioned`: This has total capacity of the machine onboarded by the user.
 
-- `models.OnboardingStatus`: This is returned while retrieving the onboarding status.
+- `types.OnboardingStatus`: This is returned while retrieving the onboarding status.
 
-- `models.AvailableResources`: This has the available capacity that has been onboarded to Nunet.
+- `types.AvailableResources`: This has the available capacity that has been onboarded to Nunet.
 
 ### 6. Testing
 

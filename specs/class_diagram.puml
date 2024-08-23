@@ -52,8 +52,8 @@ hide <<hide>>
     !include $rootUrl/internal/specs/class_diagram.puml
 '}
 
-'package models {
-    !include $rootUrl/models/specs/class_diagram.puml
+'package types {
+    !include $rootUrl/types/specs/class_diagram.puml
 '}
 
 'package network {
@@ -83,21 +83,21 @@ hide <<hide>>
 ' END SUBPACKAGES
 
 ' START INTER-PACKAGE RELATIONS
-models.ID ..|> dms.jobs.AllocationID
+types.ID ..|> dms.jobs.AllocationID
 
-dms.orchestrator.matching.ComparatorMap::ExecutorsComparator <|-- models.Executors 
-dms.orchestrator.matching.ComparatorMap::ExecutorTypeComparator <|-- models.ExecutorType
-dms.orchestrator.matching.ComparatorMap::GPUsComparator <|-- models.GPUs
-dms.orchestrator.matching.ComparatorMap::GPUVendorComparator <|-- models.GPUVendor
-dms.orchestrator.matching.ComparatorMap::GPUComparator <|-- models.GPU
-dms.orchestrator.matching.ComparatorMap::JobTypesComparator <|-- models.JobTypes
-dms.orchestrator.matching.ComparatorMap::LibraryComparator <|-- models.Library
-dms.orchestrator.matching.ComparatorMap::LocalityComparator <|-- models.Locality
+dms.orchestrator.matching.ComparatorMap::ExecutorsComparator <|-- types.Executors 
+dms.orchestrator.matching.ComparatorMap::ExecutorTypeComparator <|-- types.ExecutorType
+dms.orchestrator.matching.ComparatorMap::GPUsComparator <|-- types.GPUs
+dms.orchestrator.matching.ComparatorMap::GPUVendorComparator <|-- types.GPUVendor
+dms.orchestrator.matching.ComparatorMap::GPUComparator <|-- types.GPU
+dms.orchestrator.matching.ComparatorMap::JobTypesComparator <|-- types.JobTypes
+dms.orchestrator.matching.ComparatorMap::LibraryComparator <|-- types.Library
+dms.orchestrator.matching.ComparatorMap::LocalityComparator <|-- types.Locality
 
 
-dms.orchestrator.matching.Comparator::Compare <|-- models.Comparison 
+dms.orchestrator.matching.Comparator::Compare <|-- types.Comparison 
 
-models.ID ..|> dms.node.NodeID
+types.ID ..|> dms.node.NodeID
 
 db.repositories.GenericRepository <|.. telemetry.DatabaseCollector
 

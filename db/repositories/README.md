@@ -4,9 +4,9 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@
 
 ### 1. Description
 
-The db package contains the configuration and functionality of database used by the DMS
+The `db` package contains the configuration and functionality of database used by the DMS
 
 ### 2. Structure and organisation
 
@@ -38,19 +38,19 @@ _Files_
 
 * [generic_entity_repository](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/generic_entity_repository.go): This file contains the interface for those databases which will hold only a single record.
 
-* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/deployment.go): This file specifies a database interface having `models.DeploymentRequestFlat` data type.
+* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/deployment.go): This file specifies a database interface having `types.DeploymentRequestFlat` data type.
 
-* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/elk_stats.go): This file specifies a database interface having `models.RequestTracker` data type.
+* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/elk_stats.go): This file specifies a database interface having `types.RequestTracker` data type.
 
 * [errors](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/errors.go): This file specifies the different types of errors.
 
-* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/firecracker.go): This file specifies a database interface having `models.VirtualMachine` data type.
+* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/firecracker.go): This file specifies a database interface having `types.VirtualMachine` data type.
 
 * [machine](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/machine.go): This file defines database interfaces of various data types. 
 
 * [utils](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils.go): This file contains some utility functions with respect to database operations.
 
-* [utils_test](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils_test.go): This file contains unit tests for functions defined in [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils.go) file 
+* [utils_test](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils_test.go): This file contains unit tests for functions defined in [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils.go) file. 
 
 _Subpackages_
 
@@ -76,7 +76,7 @@ The class diagram for the `db` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 5. Functionality
+### 4. Functionality
 
 There are two types of interfaces defined to cover database operations:
 
@@ -158,7 +158,7 @@ The methods of `GenericRepository` are as follows:
 
 * input #1: Go context <br/>
 
-* input #2: Query of type `dms.database.query` <br/>
+* input #2: Query of type `db.query` <br/>
 
 * output (success): Result of query having the data type used to initialize the repository <br/>
 
@@ -172,7 +172,7 @@ The methods of `GenericRepository` are as follows:
 
 * input #1: Go context <br/>
 
-* input #2: Query of type `dms.database.query` <br/>
+* input #2: Query of type `db.query` <br/>
 
 * output (success): Lists of records based on query result. The data type of each record will be what was used to initialize the repository <br/>
 
@@ -185,7 +185,7 @@ The methods of `GenericRepository` are as follows:
 
 * input: None <br/>
 
-* output: Query of type `dms.database.query`<br/>
+* output: Query of type `db.query`<br/>
 
 `GetQuery` function returns an empty query instance for the repository's type.
 
@@ -241,7 +241,7 @@ The methods of `GenericEntityRepository` are as follows:
 
 * input #1: Go context <br/>
 
-* input #2: query of type `dms.database.query` <br/>
+* input #2: query of type `db.query` <br/>
 
 * output (success):List of records of repository's type <br/>
 
@@ -255,18 +255,18 @@ The methods of `GenericEntityRepository` are as follows:
 
 * input: None <br/>
 
-* output: New query of type `dms.database.query` <br/>
+* output: New query of type `db.query` <br/>
 
 `GetQuery` function returns an empty query instance for the repository's type.
 
-### 4. Data Types
+### 5. Data Types
 
 - `db.Query`: This contains parameters related to a query that is passed to the database.
 
 ```
 type Query[T any] struct {
 	Instance   T                // Instance is an optional object of type T used to build conditions from its fields.
-	Conditions []QueryCondition // Conditions represent the conditions applied to the query.
+	Conditions []db.QueryCondition // Conditions represent the conditions applied to the query.
 	SortBy     string           // SortBy specifies the field by which the query results should be sorted.
 	Limit      int              // Limit specifies the maximum number of results to return.
 	Offset     int              // Offset specifies the number of results to skip before starting to return data.
@@ -285,20 +285,20 @@ type QueryCondition struct {
 
 `GenericRepository` has been initialised for the following data types:
 
-- `models.DeploymentRequestFlat`
-- `models.VirtualMachine`
-- `models.PeerInfo`
-- `models.Machine`
-- `models.Services`
-- `models.ServiceResourceRequirements`
-- `models.Connection`
-- `models.ElasticToken`
+- `types.DeploymentRequestFlat`
+- `types.VirtualMachine`
+- `types.PeerInfo`
+- `types.Machine`
+- `types.Services`
+- `types.ServiceResourceRequirements`
+- `types.Connection`
+- `types.ElasticToken`
 
 `GenericEntityRepository` has been initialised for the following data types:
-- `models.FreeResources`
-- `models.AvailableResources`
-- `models.Libp2pInfo`
-- `models.MachineUUID`
+- `types.FreeResources`
+- `types.AvailableResources`
+- `types.Libp2pInfo`
+- `types.MachineUUID`
 
 
 ### 6. Testing
@@ -314,7 +314,3 @@ All issues that are related to the implementation of `db` package can be found b
 - [db package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A36&first_page_size=20)
 
 ### 8. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)

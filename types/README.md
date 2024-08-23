@@ -1,17 +1,17 @@
-# models
+# types
 
 - [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -23,59 +23,59 @@
 
 ### 1. Description
 
-`models` package defines and keeps data structures and interfaces that are used across the whole DMS component by different packages. 
+`types` package defines and keeps data structures and interfaces that are used across the whole DMS component by different packages. 
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [capability](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/capability.go): This file contains data structures to describe machine capability.
+* [capability](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/capability.go): This file contains data structures to describe machine capability.
 
-* [comparison](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/comparison.go): This file contains constans and types used for capability comparison.
+* [comparison](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/comparison.go): This file contains constans and types used for capability comparison.
 
-* [constants](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/constants.go): This file contains constants that are used across different packages.
+* [constants](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/constants.go): This file contains constants that are used across different packages.
 
-* [deployment](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/deployment.go): This file contains data structure related to job deployment.
+* [deployment](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/deployment.go): This file contains data structure related to job deployment.
 
-* [elk_stats](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/elk_stats.go): This file contains data structure to be sent to elasticsearch collector.
+* [elk_stats](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/elk_stats.go): This file contains data structure to be sent to elasticsearch collector.
 
-* [encryption](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/encryption.go): This file contains data structure related to encryption in DMS.
+* [encryption](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/encryption.go): This file contains data structure related to encryption in DMS.
 
-* [execution](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/execution.go): This file contains data structure related to executor functionality.
+* [execution](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/execution.go): This file contains data structure related to executor functionality.
 
-* [firecracker](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/firecracker.go): This file contains data structure related to firecracker.
+* [firecracker](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/firecracker.go): This file contains data structure related to firecracker.
 
-* [machine](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/machine.go): This file contains data structure related to the machine - resources, peer details, services etc.
+* [machine](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/machine.go): This file contains data structure related to the machine - resources, peer details, services etc.
 
-* [network](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/network.go): This file contains data structure related to networking functionality of DMS
+* [network](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/network.go): This file contains data structure related to networking functionality of DMS
 
-* [network_config](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/network_config.go): This file defines message types, network types (libp2p, NATS) with configurations, and libp2p specific configurations (DHT, keys, peers, scheduling etc).
+* [network_config](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/network_config.go): This file defines message types, network types (libp2p, NATS) with configurations, and libp2p specific configurations (DHT, keys, peers, scheduling etc).
 
-* [onboarding](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/onboarding.go): This file contains data structure related to compute provider onboarding.
+* [onboarding](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/onboarding.go): This file contains data structure related to compute provider onboarding.
 
-* [resource](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/resource.go): This file contains data structures of GPU and execution resources.
+* [resource](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/resource.go): This file contains data structures of GPU and execution resources.
 
-* [spec_config](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/spec_config.go): This file defines a `SpecConfig` struct for configuration data with type, parameters, normalization, validation, and type checking functionalities.
+* [spec_config](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/spec_config.go): This file defines a `SpecConfig` struct for configuration data with type, parameters, normalization, validation, and type checking functionalities.
 
-* [storage](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/storage.go): This file contains data structures related to storage.
+* [storage](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/storage.go): This file contains data structures related to storage.
 
-* [telemetry](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/telemetry_config.go): This file defines structs related to telemetry configuration and methods to load configuration from environment variables.
+* [telemetry](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/telemetry_config.go): This file defines structs related to telemetry configuration and methods to load configuration from environment variables.
 
-* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/models/types.go):  This file defines a base model for entities in the application with auto-generated UUIDs, timestamps, and soft delete functionality using GORM hooks.
+* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/types.go):  This file defines a base model for entities in the application with auto-generated UUIDs, timestamps, and soft delete functionality using GORM hooks.
 
 ### 3. Class Diagram
 
 #### Source
 
-[models class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/models/specs/class_diagram.puml)
+[types class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/types/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
 !$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
-!$packageRelativePath = "/models"
+!$packageRelativePath = "/types"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
 !include $packageUrlGitlab/specs/class_diagram.puml
@@ -83,9 +83,9 @@ Here is quick overview of the contents of this pacakge:
 
 ### 4. Functionality
 
-`models` package holds interfaces and methods that are used by multiple packages. The functionality of these interfaces/methods are typically implemented in other packages.
+`types` package holds interfaces and methods that are used by multiple packages. The functionality of these interfaces/methods are typically implemented in other packages.
 
-Here are some methods defined in `models` package:
+Here are some methods defined in `types` package:
 
 #### NewExecutionResult
 
@@ -93,7 +93,7 @@ Here are some methods defined in `models` package:
 
 * input: `exit code` <br/>
 
-* output: `models.ExecutionResult`
+* output: `types.ExecutionResult`
 
 `NewExecutionResult` creates a new `ExecutionResult` object.
 
@@ -103,7 +103,7 @@ Here are some methods defined in `models` package:
 
 * input: `error` <br/>
 
-* output: `models.ExecutionResult`
+* output: `types.ExecutionResult`
 
 `NewFailedExecutionResult` creates a new `ExecutionResult` object for a failed execution. It sets the error message from the provided error and sets the exit code to -1.
 
@@ -123,7 +123,7 @@ type Config interface {
 
 * input: `type for the configuration object` <br/>
 
-* output: `models.SpecConfig`
+* output: `types.SpecConfig`
 
 `NewSpecConfig` creates new `SpecConfig` with the given type and an empty params map.
 
@@ -135,7 +135,7 @@ type Config interface {
 
 * input #2 : `value associated with the key` <br/>
 
-* output: `models.SpecConfig`
+* output: `types.SpecConfig`
 
 `WithParam` adds a new key-value pair to the spec parameters and returns the updated `SpecConfig` object.
 
@@ -181,7 +181,7 @@ type Config interface {
 
 #### GetID
 
-* signature: `(m models.BaseDBModel) GetID() string` <br/>
+* signature: `(m types.BaseDBModel) GetID() string` <br/>
 
 * input: None <br/>
 
@@ -215,11 +215,11 @@ type Config interface {
 
 * input: none <br/>
 
-* output: `models.TelemetryConfig`
+* output: `types.TelemetryConfig`
 
 * output (error): error message
 
-`LoadConfigFromEnv` loads the telemetry configuration from environment variables. This includes observabilitty level and collector configuration. It returns the final configuration as `models.TelemetryConfig` object.
+`LoadConfigFromEnv` loads the telemetry configuration from environment variables. This includes observabilitty level and collector configuration. It returns the final configuration as `types.TelemetryConfig` object.
 
 #### parseObservabilityLevel
 
@@ -237,7 +237,7 @@ type Config interface {
 
 #### Deployment
 
-- `DeploymentRequest`
+- `types.DeploymentRequest`
 
 ```
 type DeploymentRequest struct {
@@ -283,7 +283,7 @@ type DeploymentRequest struct {
 }
 ```
 
-- `DeploymentResponse`
+- `types.DeploymentResponse`
 
 ```
 type DeploymentResponse struct {
@@ -292,7 +292,7 @@ type DeploymentResponse struct {
 }
 ```
 
-- `DeploymentUpdate`
+- `types.DeploymentUpdate`
 
 ```
 type DeploymentUpdate struct {
@@ -301,18 +301,18 @@ type DeploymentUpdate struct {
 }
 ```
 
-- `DeploymentRequestFlat`
+- `types.DeploymentRequestFlat`
 
 ```
 type DeploymentRequestFlat struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	DeploymentRequest string `json:"deployment_request"`
 	// represents job status from services table; goal is to keep then in sync (both tables are on different DMSes).
 	JobStatus string `json:"job_status"`
 }
 ```
 
-- `BlockchainTxStatus`
+- `types.BlockchainTxStatus`
 
 ```
 type BlockchainTxStatus struct {
@@ -324,7 +324,7 @@ type BlockchainTxStatus struct {
 
 #### ELK
 
-- `NewDeviceOnboarded`
+- `types.NewDeviceOnboarded`
 
 ```
 // NewDeviceOnboarded defines the schema of the data to be sent to stats db when a new device gets onboarded
@@ -338,7 +338,7 @@ type NewDeviceOnboarded struct {
 }
 ```
 
-- `DeviceStatusChange`
+- `types.DeviceStatusChange`
 ```
 // DeviceStatusChange defines the schema of the data to be sent to stats db when a device status gets changed
 type DeviceStatusChange struct {
@@ -348,7 +348,7 @@ type DeviceStatusChange struct {
 }
 ```
 
-- `DeviceResourceChange`
+- `types.DeviceResourceChange`
 ```
 // DeviceResourceChange defines the schema of the data to be sent to stats db when a device resource gets changed
 type DeviceResourceChange struct {
@@ -363,7 +363,7 @@ type DeviceResourceChange struct {
 }
 ```
 
-- `DeviceResourceConfig`
+- `types.DeviceResourceConfig`
 
 ```
 // DeviceResourceConfig defines the schema of the data to be sent to stats db when a device resource config gets changed
@@ -379,7 +379,7 @@ type DeviceResourceConfig struct {
 }
 ```
 
-- `NewService`
+- `types.NewService`
 
 // NewService defines the schema of the data to be sent to stats db when a new service gets registered in the platform
 type NewService struct {
@@ -389,7 +389,7 @@ type NewService struct {
 	Timestamp          float32
 }
 
-- `ServiceCall`
+- `types.ServiceCall`
 
 ```
 // ServiceCall defines the schema of the data to be sent to stats db when a host machine accepts a deployement request
@@ -408,7 +408,7 @@ type ServiceCall struct {
 }
 ```
 
-- `ServiceStatus`
+- `types.ServiceStatus`
 
 ```
 // ServiceStatus defines the schema of update the status of service to stats db of the job being executed on host machine
@@ -421,7 +421,7 @@ type ServiceStatus struct {
 }
 ```
 
-- `ServiceRemove`
+- `types.ServiceRemove`
 
 ```
 // ServiceRemove defines the schema of the data to be sent to stats db when a new service gets removed from the platform
@@ -431,7 +431,7 @@ type ServiceRemove struct {
 }
 ```
 
-- `NtxPayment`
+- `types.NtxPayment`
 
 ```
 // NtxPayment defines the schema of the data to be sent to stats db when a payment is made to device for the completion of service.
@@ -447,7 +447,7 @@ type NtxPayment struct {
 
 #### Executor
 
-- `Executor`: This defines the type of executor that is used to execute the job.
+- `types.Executor`: This defines the type of executor that is used to execute the job.
 
 ```
 type Executor struct {
@@ -458,7 +458,7 @@ type ExecutorType string
 ``` 
 
 
-- `ExecutionRequest`: This is the input that `executor` receives to initiate a job execution. 
+- `types.ExecutionRequest`: This is the input that `executor` receives to initiate a job execution. 
 
 ```
 type ExecutionRequest struct {
@@ -469,7 +469,7 @@ type ExecutionRequest struct {
 	ExecutionID string
 
 	// Engine spec for the execution
-	EngineSpec models.SpecConfig
+	EngineSpec types.SpecConfig
 
 	// Resources for the execution
 	Resources executor.ExecutionResources
@@ -485,7 +485,7 @@ type ExecutionRequest struct {
 }
 ```
 
-- `ExecutionResult`: This contains the result of the job execution. 
+- `types.ExecutionResult`: This contains the result of the job execution. 
 
 ```
 type ExecutionResult struct {
@@ -503,7 +503,7 @@ type ExecutionResult struct {
 }
 ```
 
-- `SpecConfig` `TBD`: This allows arbitrary configuration/parameters as needed during implementation of specific executor. 
+- `types.SpecConfig` `TBD`: This allows arbitrary configuration/parameters as needed during implementation of specific executor. 
 
 ```
 // SpecConfig represents a configuration for a spec
@@ -518,7 +518,7 @@ type SpecConfig struct {
 }
 ```
 
-- `LogStreamRequest`: This is the input provided when a request to stream logs of an execution is made.
+- `types.LogStreamRequest`: This is the input provided when a request to stream logs of an execution is made.
 
 ```
 type LogStreamRequest struct {
@@ -531,7 +531,7 @@ type LogStreamRequest struct {
 
 #### Firecracker
 
-- `BootSource`: This contains configuration parameters for booting a Firecracker VM.
+- `types.BootSource`: This contains configuration parameters for booting a Firecracker VM.
 
 ```
 type BootSource struct {
@@ -540,7 +540,7 @@ type BootSource struct {
 }
 ```
 
-- `Drives`: This contains properties of a virtual drive for Firecracker VM.
+- `types.Drives`: This contains properties of a virtual drive for Firecracker VM.
 ```
 type Drives struct {
 	DriveID      string `json:"drive_id"`
@@ -550,7 +550,7 @@ type Drives struct {
 }
 ```
 
-- `MachineConfig`: This defines the configuration parameters of the machine to be used while creating a new Firecracker VM.
+- `types.MachineConfig`: This defines the configuration parameters of the machine to be used while creating a new Firecracker VM.
 
 ```
 type MachineConfig struct {
@@ -559,7 +559,7 @@ type MachineConfig struct {
 }
 ```
 
-- `NetworkInterfaces`: This defines the network configuration parameters.
+- `types.NetworkInterfaces`: This defines the network configuration parameters.
 
 ```
 type NetworkInterfaces struct {
@@ -569,25 +569,25 @@ type NetworkInterfaces struct {
 }
 ```
 
-- `MMDSConfig`: This contains a list of the network configuration parameters defined by` NetworkInterfaces` struct.
+- `types.MMDSConfig`: This contains a list of the network configuration parameters defined by` NetworkInterfaces` struct.
 ```
 type MMDSConfig struct {
 	NetworkInterface []string `json:"network_interfaces"`
 }
 ```
 
-- `MMDSMsg` `TBD`: This contains the latest metadata of the machine.
+- `types.MMDSMsg` `TBD`: This contains the latest metadata of the machine.
 ```
 type MMDSMsg struct {
 	Latest struct {
 		Metadata struct {
-			models.MMDSMetadata
+			types.MMDSMetadata
 		} `json:"meta-data"`
 	} `json:"latest"`
 }
 ```
 
-- `MMDSMetadata` `TBD`: This contains the metadata of the machine.
+- `types.MMDSMetadata` `TBD`: This contains the metadata of the machine.
 ```
 type MMDSMetadata struct {
 	NodeId string `json:"node_id"`
@@ -595,17 +595,17 @@ type MMDSMetadata struct {
 }
 ```
 
-- `Actions` `TBD`: This contains the type of action to be performed on the Firecracker VM.
+- `types.Actions` `TBD`: This contains the type of action to be performed on the Firecracker VM.
 ```
 type Actions struct {
 	ActionType string `json:"action_type"`
 }
 ```
 
-- `VirtualMachine`: This contains the configuration parameters of Firecracker virtual machine.
+- `types.VirtualMachine`: This contains the configuration parameters of Firecracker virtual machine.
 ```
 type VirtualMachine struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	SocketFile string `json:"socket_file"`
 	BootSource string `json:"boot_source"`
 	Filesystem string `json:"filesystem"`
@@ -618,16 +618,16 @@ type VirtualMachine struct {
 
 #### Machine
 
-- `IP`
+- `types.IP`
 ```
 type IP []any
 ```
 
-- `PeerInfo` `TBD`: This contains parameters of the peer node.
+- `types.PeerInfo` `TBD`: This contains parameters of the peer node.
 
 ```
 type PeerInfo struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	NodeID    string `json:"nodeID,omitempty"`
 	Key       string `json:"key,omitempty"`
 	Mid       string `json:"mid,omitempty"`
@@ -637,11 +637,11 @@ type PeerInfo struct {
 
 ```
 
-- `Machine`: This contains the configuration parameters of the machine.
+- `types.Machine`: This contains the configuration parameters of the machine.
 
 ```
 type Machine struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	NodeId               string
 	PeerInfo             int
 	IpAddr               string
@@ -652,7 +652,7 @@ type Machine struct {
 }
 ```
 
-- `FreeResources`: This contains the resources currently available for a job.
+- `types.FreeResources`: This contains the resources currently available for a job.
 
 ```
 // FreeResources are the resources free to be used by new services,
@@ -672,13 +672,13 @@ type FreeResources struct {
 }
 ``` 
 
-- `AvailableResources`: This contains the resources onboarded to Nunet by the user.
+- `types.AvailableResources`: This contains the resources onboarded to Nunet by the user.
 
 ```
 // AvailableResources are the amount of resources onboarded which
 // can be used by NuNet
 type AvailableResources struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	TotCpuHz          int
 	CpuNo             int
 	CpuHz             float64
@@ -692,11 +692,11 @@ type AvailableResources struct {
 }
 ```
 
-- `Services` `TBD`: This contains the details of the services running on the machine.
+- `types.Services` `TBD`: This contains the details of the services running on the machine.
 
 ```
 type Services struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	TxHash               string
 	TransactionType      string // transaction type can be running, done, withdraw, refund and distribute
 	JobStatus            string // whether job is running or exited; one of these 'running', 'finished without errors', 'finished with errors'
@@ -726,11 +726,11 @@ type Services struct {
 }
 ```
 
-- `ServiceResourceRequirements`: This contains the resource requirements for a service.
+- `types.ServiceResourceRequirements`: This contains the resource requirements for a service.
 
 ```
 type ServiceResourceRequirements struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	CPU  int
 	RAM  int
 	VCPU int
@@ -739,7 +739,7 @@ type ServiceResourceRequirements struct {
 
 ```
 
-- `ContainerImages`: This contains parameters of a container image.
+- `types.ContainerImages`: This contains parameters of a container image.
 
 ```
 type ContainerImages struct {
@@ -750,7 +750,7 @@ type ContainerImages struct {
 }
 ```
 
-- `Libp2pInfo`: This contains parameters of Libp2p node.
+- `types.Libp2pInfo`: This contains parameters of Libp2p node.
 
 ```
 type Libp2pInfo struct {
@@ -762,7 +762,7 @@ type Libp2pInfo struct {
 }
 ```
 
-- `MachineUUID`: This defines the unique identifier for the machine.
+- `types.MachineUUID`: This defines the unique identifier for the machine.
 
 ```
 type MachineUUID struct {
@@ -771,7 +771,7 @@ type MachineUUID struct {
 }
 ```
 
-- `Gpu`: This contains the GPU parameters of the machine.
+- `types.Gpu`: This contains the GPU parameters of the machine.
 
 ```
 type Gpu struct {
@@ -781,7 +781,7 @@ type Gpu struct {
 }
 ```
 
-- `resources`: This defines the resource parameters of the machine.
+- `types.resources`: This defines the resource parameters of the machine.
 
 ```
 type resources struct {
@@ -795,7 +795,7 @@ type resources struct {
 }
 ```
 
-- `PeerData`: This contains the details of the peer node.
+- `types.PeerData`: This contains the details of the peer node.
 
 ```
 type PeerData struct {
@@ -812,17 +812,17 @@ type PeerData struct {
 }
 ```
 
-- `Connection`: `TBD`
+- `types.Connection`: `TBD`
 
 ```
 type Connection struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	PeerID     string `json:"peer_id"`
 	Multiaddrs string `json:"multiaddrs"`
 }
 ```
 
-- `PingResult`: The contains the details of the ping result.
+- `types.PingResult`: The contains the details of the ping result.
 
 ```
 type PingResult struct {
@@ -832,12 +832,12 @@ type PingResult struct {
 }
 ```
 
-- `Machines`: `TBD`
+- `types.Machines`: `TBD`
 ```
 type Machines map[string]PeerData
 ```
 
-- `KadDHTMachineUpdate`: This contains machine info for KAD-DHT.
+- `types.KadDHTMachineUpdate`: This contains machine info for KAD-DHT.
 
 ```
 // machine info for KAD-DHT
@@ -847,11 +847,11 @@ type KadDHTMachineUpdate struct {
 }
 ```
 
-- `ElasticToken`: `TBD`
+- `types.ElasticToken`: `TBD`
 
 ```
 type ElasticToken struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	NodeId      string
 	Token       string
 	ChannelName string
@@ -860,7 +860,7 @@ type ElasticToken struct {
 
 #### Onboarding
 
-- `BlockchainAddressPrivKey`
+- `types.BlockchainAddressPrivKey`
 
 ```
 // BlockchainAddressPrivKey holds Ethereum wallet address and private key from which the
@@ -872,7 +872,7 @@ type BlockchainAddressPrivKey struct {
 }
 ```
 
-- `CapacityForNunet`
+- `types.CapacityForNunet`
 
 ```
 // CapacityForNunet is a struct required in request body for the onboarding
@@ -888,7 +888,7 @@ type CapacityForNunet struct {
 }
 ```
 
-- `Provisioned`
+- `types.Provisioned`
 
 ```
 // Provisioned struct holds data about how much total resource
@@ -900,7 +900,7 @@ type Provisioned struct {
 }
 ```
 
-- `Metadata`
+- `types.Metadata`
 
 ```
 // Metadata - machine metadata of onboarding parameters
@@ -930,7 +930,7 @@ type Metadata struct {
 }
 ```
 
-- `OnboardingStatus`
+- `types.OnboardingStatus`
 
 ```
 type OnboardingStatus struct {
@@ -942,11 +942,11 @@ type OnboardingStatus struct {
 }
 ```
 
-- `LogBinAuth`: This stores the authorisation token for LogBin.
+- `types.LogBinAuth`: This stores the authorisation token for LogBin.
 
 ```
 type LogBinAuth struct {
-	models.BaseDBModel
+	types.BaseDBModel
 	PeerID      string `json:"peer_id"`
 	MachineUUID string `json:"machine_uuid"`
 	Token       string `json:"token"`
@@ -955,42 +955,211 @@ type LogBinAuth struct {
 
 #### Resource
 
-- `GPU`: This contains GPU parameters.
+- `types.Resources`: resources defined for the machine.
 
-```
-type GPUVendor string
-
-type GPU struct {
-	// Self-reported index of the device in the system
-	Index uint64
-	// Model name of the GPU e.g. Tesla T4
-	Name string
-	// Maker of the GPU, e.g. NVidia, AMD, Intel
-	Vendor GPUVendor
-	// PCI address of the device, in the format AAAA:BB:CC.C
-	// Used to discover the correct device rendering cards
-	PCIAddress string
+```go
+type Resources struct {
+    CPU      float64
+    NumCores uint64
+    GPU      []types.GPU `gorm:"foreignKey:ResourceID"`
+    RAM      uint64
+    Disk     uint64
 }
 ```
 
-- `ExecutionResources`: `TBD` 
+- `types.AvailableResources`: resources onboarded to Nunet.
 
+```go
+type AvailableResources struct {
+    types.BaseDBModel
+    Resources
+}
+``` 
+
+- `types.FreeResources`: resources currently available for new jobs.
+
+```go
+type FreeResources struct {
+    types.BaseDBModel
+    Resources
+}
 ```
+
+- `types.RequiredResources`: resources required by the jobs running on the machine.
+
+```go
+type RequiredResources struct {
+    types.BaseDBModel
+    Resources
+}
+```
+ `types.GPUVendor`: GPU vendors available on the machine.
+
+```go
+type GPUVendor string
+
+const (
+	GPUVendorNvidia  GPUVendor = "NVIDIA"
+	GPUVendorAMDATI  GPUVendor = "AMD/ATI"
+	GPUVendorIntel   GPUVendor = "Intel"
+	GPUVendorUnknown GPUVendor = "Unknown"
+	None             GPUVendor = "None"
+)
+```
+
+- `types.GPU`: GPU details.
+
+```go
+type GPU struct {
+	// Index is the self-reported index of the device in the system
+	Index int
+	// Name is the model name of the GPU e.g. Tesla T4
+	Name string
+	// Vendor is the maker of the GPU, e.g. NVidia, AMD, Intel
+	Vendor types.GPUVendor
+	// PCIAddress is the PCI address of the device, in the format AAAA:BB:CC.C
+	// Used to discover the correct device rendering cards
+	PCIAddress string
+	// Model of the GPU, e.g. A100
+	Model string `json:"model" description:"GPU model, ex A100"`
+	// TotalVRAM is the total amount of VRAM on the device
+	TotalVRAM uint64
+	// UsedVRAM is the amount of VRAM currently in use
+	UsedVRAM uint64
+	// FreeVRAM is the amount of VRAM currently free
+	FreeVRAM uint64
+
+	// Gorm fields
+	ResourceID uint `gorm:"foreignKey:ID"`
+}
+```
+
+- `types.GPUList`: A slice of `GPU`.
+
+```go
+type GPUList []types.GPU
+```
+
+- `types.CPUInfo`: CPU information of the machine.
+
+```go
+type CPUInfo struct {
+    NumCores   uint64
+    MHzPerCore float64
+    Compute    float64
+}
+```
+
+- `types.SpecInfo`: detailed specifications of the machine.
+
+```go
+type SpecInfo struct {
+	CPUs    []types.CPU
+	GPUs    []types.GPU
+	RAMs    []types.RAM
+	Disks   []types.Disk
+	Network NetworkInfo
+}
+```
+
+- `types.CPU`: CPU details.
+
+```go
+type CPU struct {
+	// Model represents the CPU model, e.g., "Intel Core i7-9700K", "AMD Ryzen 9 5900X"
+	Model string
+
+	// Vendor represents the CPU manufacturer, e.g., "Intel", "AMD"
+	Vendor string
+
+	// ClockSpeedHz represents the CPU clock speed in Hz
+	ClockSpeedHz uint64
+
+	// Cores represents the number of physical CPU cores
+	Cores int
+
+	// Threads represents the number of logical CPU threads (including hyperthreading)
+	Threads int
+
+	// Architecture represents the CPU architecture, e.g., "x86", "x86_64", "arm64"
+	Architecture string
+
+	// Cache size in bytes
+	CacheSize uint64
+}
+```
+
+- `types.RAM`: RAM details.
+
+```go
+type RAM struct {
+	// Size in bytes
+	Size uint64
+
+	// Clock speed in Hz
+	ClockSpeedHz uint64
+
+	// Type represents the RAM type, e.g., "DDR4", "DDR5", "LPDDR4"
+	Type string
+}
+```
+
+- `types.Disk`: Disk details.
+
+```go
+type Disk struct {
+	// Model represents the disk model, e.g., "Samsung 970 EVO Plus", "Western Digital Blue SN550"
+	Model string
+
+	// Vendor represents the disk manufacturer, e.g., "Samsung", "Western Digital"
+	Vendor string
+
+	// Size in bytes
+	Size uint64
+
+	// Type represents the disk type, e.g., "SSD", "HDD", "NVMe"
+	Type string
+
+	// Interface represents the disk interface, e.g., "SATA", "PCIe", "M.2"
+	Interface string
+
+	// Read speed in bytes per second
+	ReadSpeed uint64
+	// Write speed in bytes per second
+	WriteSpeed uint64
+}
+```
+
+- `types.NetworkInfo`: Network details.
+
+```go
+type NetworkInfo struct {
+	// Bandwidth in bits per second (b/s)
+	Bandwidth uint64
+
+	// NetworkType represents the network type, e.g., "Ethernet", "Wi-Fi", "Cellular"
+	NetworkType string
+}
+```
+
+- `types.ExecutionResource`: resources resources required to execute a task
+
+```go
 type ExecutionResources struct {
-	// CPU units
-	CPU float64 `json:"cpu,omitempty"`
-	// Memory in bytes
-	Memory uint64 `json:"memory,omitempty"`
-	// Disk in bytes
-	Disk uint64 `json:"disk,omitempty"`
-	// GPU configurations
-	GPUs []models.GPU `json:"gpus,omitempty"`
+	// CPU configuration
+	CPU types.CPU `json:"cpu,omitempty" description:"CPU configuration"`
+	// Memory configuration
+	Memory types.RAM `json:"memory,omitempty" description:"Memory configuration"`
+	// Disk configuration
+	Disk types.Disk `json:"disk,omitempty" description:"Disk configuration"`
+	// GPU configuration
+	GPUs []types.GPU `json:"gpus,omitempty" description:"GPU configuration"`
 }
 ```
 
 #### Spec_config
 
-- `SpecConfig`: This allows arbitrary configuration to be defined as needed.
+- `types.SpecConfig`: This allows arbitrary configuration to be defined as needed.
 
 ```
 // SpecConfig represents a configuration for a spec
@@ -1005,7 +1174,7 @@ type SpecConfig struct {
 
 #### Storage
 
-- `StorageVolume`: This contains the parameters related to the storage volume that is created by the DMS on the local machine.
+- `types.StorageVolume`: This contains the parameters related to the storage volume that is created by the DMS on the local machine.
 
 ```
 // StorageVolume represents a prepared storage volume that can be mounted to an execution
@@ -1023,7 +1192,7 @@ type StorageVolume struct {
 
 #### Telemetry Config
 
-- `CollectorConfig`: This contains the parameters for a collector. 
+- `types.CollectorConfig`: This contains the parameters for a collector. 
 
 ```
 type CollectorConfig struct {
@@ -1032,7 +1201,7 @@ type CollectorConfig struct {
 }
 ```
 
-- `TelemetryConfig`: This defines the telemetry parameters such as obervability level, collector configurations etc. 
+- `types.TelemetryConfig`: This defines the telemetry parameters such as obervability level, collector configurations etc. 
 
 ```
 type TelemetryConfig struct {
@@ -1056,7 +1225,7 @@ ObservabilityLevel is an enum that defines the level of observability. Currently
 
 #### Types
 
-- `BaseDBModel`
+- `types.BaseDBModel`
 
 ```
 // BaseDBModel is a base model for all entities. It'll be mainly used for database
@@ -1071,15 +1240,15 @@ type BaseDBModel struct {
 
 ### 6. Testing
 
-Test are defined in other packages where functionality is implemented
+Test are defined in other packages where functionality is implemented.
 
 ### 7. Proposed Functionality / Requirements 
 
 #### List of issues
 
-All issues that are related to the implementation of `models` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
+All issues that are related to the implementation of `types` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
 
-- [models package implementation]() `TBD`
+- [types package implementation]() `TBD`
 
 ##### `proposed` Encryption interfaces
 
@@ -1101,16 +1270,16 @@ type Decryptor interface {
 
 ##### `proposed` Network types and methods 
 
-This section contains the proposed data models and methods related to network functionality.
+This section contains the proposed data types and methods related to network functionality.
 
-- `NetworkSpec`
+- `types.NetworkSpec`
 ```
 // NetworkSpec is a stub. Please expand based on requirements.
 type NetworkSpec struct {
 }
 ```
 
-- `NetConfig`
+- `types.NetConfig`
 ```
 // NetConfig is a stub. Please expand it or completely change it based on requirements.
 type NetConfig struct {
@@ -1118,7 +1287,7 @@ type NetConfig struct {
 }
 ```
 
-`NetConfig` struct will implement a `GetNetworkConfig` method which returns network configuration parameters.
+`types.NetConfig` struct will implement a `GetNetworkConfig` method which returns network configuration parameters.
 
 ```
 func (nc *NetConfig) GetNetworkConfig() *SpecConfig {
@@ -1126,7 +1295,7 @@ func (nc *NetConfig) GetNetworkConfig() *SpecConfig {
 }
 ```
 
-- `NetworkStats`
+- `types.NetworkStats`
 ```
 // NetworkStats should contain all network info the user is interested in.
 // for now there's only peerID and listening address but reachability, local and remote addr etc...
@@ -1137,7 +1306,7 @@ type NetworkStats struct {
 }
 ```
 
-- `MessageInfo`
+- `types.MessageInfo`
 ```
 // MessageInfo is a stub. Please expand it or completely change it based on requirements.
 type MessageInfo struct {
@@ -1147,7 +1316,7 @@ type MessageInfo struct {
 
 ##### `proposed` Network configuration data type
 
-- `MessageEnvelope`
+- `types.MessageEnvelope`
 
 ```
 type MessageType string
@@ -1158,7 +1327,7 @@ type MessageEnvelope struct {
 }
 ``` 
 
-- `NetworkConfig`
+- `types.NetworkConfig`
 
 ```
 type NetworkType string
@@ -1167,14 +1336,14 @@ type NetworkConfig struct {
 	Type NetworkType
 
 	// libp2p
-	models.Libp2pConfig
+	types.Libp2pConfig
 
 	// nats
 	NATSUrl string
 }
 ```
 
-- `Libp2pConfig`
+- `types.Libp2pConfig`
 
 // Libp2pConfig holds the libp2p configuration
 type Libp2pConfig struct {
@@ -1188,12 +1357,12 @@ type Libp2pConfig struct {
 	CustomNamespace         string
 	ListenAddress           []string
 	PeerCountDiscoveryLimit int
-	PrivateNetwork          models.PrivateNetworkConfig
+	PrivateNetwork          types.PrivateNetworkConfig
 	GracePeriodMs           int
 	GossipMaxMessageSize    int
 }
 
-- `PrivateNetworkConfig`
+- `types.PrivateNetworkConfig`
 ```
 type PrivateNetworkConfig struct {
 	// WithSwarmKey if true, DMS will try to fetch the key from

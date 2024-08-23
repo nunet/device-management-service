@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -25,7 +25,7 @@
 
 The storage package is responsible for disk storage management on each DMS (Device Management Service) for data related to DMS and jobs deployed by DMS. It primarily handles storage access to remote storage providers such as [AWS S3](https://aws.amazon.com/s3/), [IPFS](https://ipfs.tech/) etc. It also handles the control of storage volumes.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -75,7 +75,7 @@ Its functionality is coupled with local mounted volumes, meaning that implementa
 *Notes:*
 * If needed, the availability-checking of a storage provider should be handled druing instantiation of the implementation.
 
-* Any necessary authentication data should be provided within the `models.SpecConfig` parameters
+* Any necessary authentication data should be provided within the `types.SpecConfig` parameters
 
 * The interface has been designed for file based transfer of data. It is not built with the idea of supporting streaming of data and non-file storage operations (e.g.: some databases). Assessing the feasiblity of such requirement if needed should be done while implementation.
 
@@ -83,15 +83,15 @@ The methods of `StorageProvider` are as follows:
 
 ##### Upload
 
-* signature: `Upload(ctx context.Context, vol StorageVolume, target *models.SpecConfig) (*models.SpecConfig, error)` <br/>
+* signature: `Upload(ctx context.Context, vol StorageVolume, target *types.SpecConfig) (*types.SpecConfig, error)` <br/>
 
 * input #1: Context object <br/>
 
 * input #2: storage volume from which data will be uploaded of type `storage.StorageVolume` <br/>
 
-* input #3: configuration parameters of specified storage provider of type `models.SpecConfig` <br/>
+* input #3: configuration parameters of specified storage provider of type `types.SpecConfig` <br/>
 
-* output (sucess): parameters related to storage provider like upload details/metadata etc of type `models.SpecConfig` <br/>
+* output (sucess): parameters related to storage provider like upload details/metadata etc of type `types.SpecConfig` <br/>
 
 * output (error): error message
 
@@ -99,11 +99,11 @@ The methods of `StorageProvider` are as follows:
 
 ##### Download
 
-* signature: `Download(ctx context.Context, source *models.SpecConfig) (StorageVolume, error)` <br/>
+* signature: `Download(ctx context.Context, source *types.SpecConfig) (StorageVolume, error)` <br/>
 
 * input #1: Context object <br/>
 
-* input #2: configuration parameters of specified storage provider of type `models.SpecConfig` <br/>
+* input #2: configuration parameters of specified storage provider of type `types.SpecConfig` <br/>
 
 * output (sucess): storage volume which has downloaded data of type `storage.StorageVolume` <br/>
 
@@ -115,11 +115,11 @@ It will return an error if the operation fails. Note that this can also happen i
 
 ##### Size
 
-* signature: `Size(ctx context.Context, source *models.SpecConfig) (uint64, error)` <br/>
+* signature: `Size(ctx context.Context, source *types.SpecConfig) (uint64, error)` <br/>
 
 * input #1: Context object <br/>
 
-* input #2: configuration parameters of specified storage provider of type `models.SpecConfig` <br/>
+* input #2: configuration parameters of specified storage provider of type `types.SpecConfig` <br/>
 
 * output (sucess): size of the storage in Megabytes of type `uint64` <br/>
 
@@ -236,7 +236,7 @@ type StorageVolume struct {
 
 	// EncryptionType indicates the type of encryption used for the storage volume.
 	// In case no encryption is used, the value will be EncryptionTypeNull
-    EncryptionType models.EncryptionType 
+    EncryptionType types.EncryptionType 
 
 	// CreatedAt represents the creation timestamp of the storage volume
 	CreatedAt time.Time
@@ -245,9 +245,9 @@ type StorageVolume struct {
 	UpdatedAt time.Time
 }
 ```
-`TBD` **Note: EncryptionType is not yet defined in models package**
+`TBD` **Note: EncryptionType is not yet defined in types package**
 
-- `models.SpecConfig`: This allows arbitrary configuration/parameters as needed during implementation of a specific storage provider. The parameters include authentication related data (if applicable).
+- `types.SpecConfig`: This allows arbitrary configuration/parameters as needed during implementation of a specific storage provider. The parameters include authentication related data (if applicable).
 
 - `storage.VolumeSource`: This represents the source of data for a storage volume, for example IPFS, S3 etc. 
 
@@ -289,9 +289,9 @@ const (
 )
 ```
 
-`models.EncryptionType`: `TBD`
+`types.EncryptionType`: `TBD`
 
-**Note: The definition below should be moved to models package** 
+**Note: The definition below should be moved to types package** 
 ```
 type EncryptionType int
 

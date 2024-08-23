@@ -4,9 +4,9 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
@@ -76,7 +76,7 @@ The class diagram for the `clover` package is shown below.
 
 * input: clover Database object <br/>
 
-* output: Repository of type `dms.database.clover.GenericRepositoryclover` <br/>
+* output: Repository of type `db.clover.GenericRepositoryclover` <br/>
 
 `NewGenericRepository` function creates a new instance of `GenericRepositoryclover` struct. It initializes and returns a repository with the provided clover database. 
 
@@ -116,7 +116,7 @@ Providing `includeDeleted` as `False` will add a condition to exclude the delete
 
 * input: clover Database object <br/>
 
-* output: Repository of type `dms.database.clover.GenericEntityRepositoryclover` <br/>
+* output: Repository of type `db.clover.GenericEntityRepositoryclover` <br/>
 
 `NewGenericEntityRepository` creates a new instance of `GenericEntityRepositoryclover` struct. It initializes and returns a repository with the provided clover database instance and name of the collection in the database.
 
