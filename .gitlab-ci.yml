@@ -36,8 +36,8 @@ Build:
       when: never
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
       when: never
-    - if:  $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(develop|staging|main)$/
-    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(develop|staging|main)$/
+    - if:  $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
+    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
       when: manual
     - when: never
 
@@ -56,7 +56,7 @@ Build DMS Builder:
       when: never
     - changes: 
         - maint-scripts/Dockerfile.builder
-      if: $CI_COMMIT_BRANCH == "develop"
+      if: $CI_COMMIT_BRANCH == "main"
 
 Deploy DMS:
   stage: deploy
@@ -137,4 +137,3 @@ Deploy:
     - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
       when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "staging"
-
