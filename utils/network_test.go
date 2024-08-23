@@ -15,6 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const readHeaderTimeout = 10 * time.Second
+
 func TestGetInternalBaseURL(t *testing.T) {
 	// Test with a valid internal endpoint
 	endpoint, err := InternalAPIURL("http", "/swagger/doc.json", "")
@@ -46,8 +48,9 @@ func TestMakeInternalRequest(t *testing.T) { // *
 	})
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", config.GetConfig().Rest.Port),
-		Handler: router,
+		Addr:              fmt.Sprintf(":%d", config.GetConfig().Rest.Port),
+		Handler:           router,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
 	go func() {

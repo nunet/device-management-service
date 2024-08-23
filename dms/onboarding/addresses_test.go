@@ -22,7 +22,6 @@ func TestGetEthereumAddressAndPrivateKey(t *testing.T) {
 		want := 66
 		assert.Equal(t, want, len(privKey))
 	})
-
 }
 
 func TestGetCardanoAddressAndMnemonic(t *testing.T) {

@@ -13,9 +13,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var (
-	chatJoinCmd = NewChatJoinCmd(utilsService, webSocketClient)
-)
+var chatJoinCmd = NewChatJoinCmd(utilsService, webSocketClient)
 
 // XXX NewChatJoinCmd and NewChatStartCmd are similar, consider refactoring
 func NewChatJoinCmd(utilsService backend.Utility, wsClient backend.WebSocketClient) *cobra.Command {

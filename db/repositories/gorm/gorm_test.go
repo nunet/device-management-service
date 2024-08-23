@@ -1,6 +1,8 @@
-package repositories_gorm
+package gorm
 
 import (
+	"log"
+
 	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -19,7 +21,7 @@ func setup() {
 	}
 
 	// Run Migrations if needed
-	db.AutoMigrate(
+	err = db.AutoMigrate(
 		&types.PeerInfo{},
 		&types.Machine{},
 		&types.FreeResources{},
@@ -36,6 +38,9 @@ func setup() {
 		&types.OnboardedResources{},
 		&types.RequiredResources{},
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // teardown resets the GORM database connection after tests.

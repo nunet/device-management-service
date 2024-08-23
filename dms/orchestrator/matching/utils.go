@@ -2,9 +2,9 @@ package matching
 
 import (
 	"reflect"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
-
 
 func ReturnComplexComparison(l, r interface{}) types.ComplexComparison {
 	// Complex comparison is a comparison of two complex types
@@ -13,7 +13,7 @@ func ReturnComplexComparison(l, r interface{}) types.ComplexComparison {
 	// it is a helper function used in some type comparators
 	vl := reflect.ValueOf(l)
 	vr := reflect.ValueOf(r)
-	var complexComparison types.ComplexComparison = make(types.ComplexComparison)
+	complexComparison := make(types.ComplexComparison)
 	for i := 0; i < vl.NumField(); i++ {
 		innerTypeName := vl.Type().Field(i).Name
 		valueL := vl.Field(i).Interface()
@@ -24,8 +24,8 @@ func ReturnComplexComparison(l, r interface{}) types.ComplexComparison {
 }
 
 func removeIndex(slice [][]types.Comparison, index int) [][]types.Comparison {
-// removeIndex removes the element at the specified index from each sub-slice in the given slice.
-// If the index is out of bounds for a sub-slice, the function leaves that sub-slice unmodified.
+	// removeIndex removes the element at the specified index from each sub-slice in the given slice.
+	// If the index is out of bounds for a sub-slice, the function leaves that sub-slice unmodified.
 	for i, c := range slice {
 		if index < 0 || index >= len(c) {
 			// Index is out of bounds, leave the sub-slice unmodified
@@ -37,7 +37,6 @@ func removeIndex(slice [][]types.Comparison, index int) [][]types.Comparison {
 }
 
 func returnBestMatch(dimension []types.Comparison) (types.Comparison, int) {
-
 	// while i feel that there could be some weird matrix sorting algorithm that could be used here
 	// i can't think of any right now, so i will just iterate over the matrix and return matches
 	// in somewhat manual way
@@ -55,7 +54,7 @@ func returnBestMatch(dimension []types.Comparison) (types.Comparison, int) {
 	for i, v := range dimension {
 		if v == types.Worse {
 			return v, i // this is just for sport
-		}	
+		}
 	}
 	for i, v := range dimension {
 		if v == types.Error {
@@ -74,4 +73,3 @@ func SliceContainsOneValue(slice []types.Comparison, value types.Comparison) boo
 	}
 	return true
 }
-	

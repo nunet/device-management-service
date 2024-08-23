@@ -45,7 +45,7 @@ func (c EngineSpec) Validate() error {
 func DecodeSpec(spec *types.SpecConfig) (EngineSpec, error) {
 	if !spec.IsType(types.ExecutorTypeFirecracker) {
 		return EngineSpec{}, fmt.Errorf(
-			"invalid firecracker engine type. expected %s, but recieved: %s",
+			"invalid firecracker engine type. expected %s, but received: %s",
 			types.ExecutorTypeFirecracker,
 			spec.Type,
 		)
@@ -70,50 +70,50 @@ func DecodeSpec(spec *types.SpecConfig) (EngineSpec, error) {
 	return *firecrackerSpec, firecrackerSpec.Validate()
 }
 
-// FirecrackerEngineBuilder is a struct that is used for constructing an EngineSpec object
+// EngineBuilder is a struct that is used for constructing an EngineSpec object
 // specifically for Firecracker engines using the Builder pattern.
 // It embeds an EngineBuilder object for handling the common builder methods.
-type FirecrackerEngineBuilder struct {
+type EngineBuilder struct {
 	eb *types.SpecConfig
 }
 
 // NewFirecrackerEngineBuilder function initializes a new FirecrackerEngineBuilder instance.
 // It sets the engine type to EngineFirecracker.String() and kernel image path as per the input argument.
-func NewFirecrackerEngineBuilder(rootFileSystem string) *FirecrackerEngineBuilder {
+func NewFirecrackerEngineBuilder(rootFileSystem string) *EngineBuilder {
 	eb := types.NewSpecConfig(types.ExecutorTypeFirecracker)
 	eb.WithParam(EngineKeyRootFileSystem, rootFileSystem)
-	return &FirecrackerEngineBuilder{eb: eb}
+	return &EngineBuilder{eb: eb}
 }
 
 // WithRootFileSystem is a builder method that sets the Firecracker engine root file system.
 // It returns the FirecrackerEngineBuilder for further chaining of builder methods.
-func (b *FirecrackerEngineBuilder) WithRootFileSystem(e string) *FirecrackerEngineBuilder {
+func (b *EngineBuilder) WithRootFileSystem(e string) *EngineBuilder {
 	b.eb.WithParam(EngineKeyRootFileSystem, e)
 	return b
 }
 
 // WithKernelImage is a builder method that sets the Firecracker engine kernel image.
 // It returns the FirecrackerEngineBuilder for further chaining of builder methods.
-func (b *FirecrackerEngineBuilder) WithKernelImage(e string) *FirecrackerEngineBuilder {
+func (b *EngineBuilder) WithKernelImage(e string) *EngineBuilder {
 	b.eb.WithParam(EngineKeyKernelImage, e)
 	return b
 }
 
 // WithKernelArgs is a builder method that sets the Firecracker engine kernel arguments.
 // It returns the FirecrackerEngineBuilder for further chaining of builder methods.
-func (b *FirecrackerEngineBuilder) WithKernelArgs(e string) *FirecrackerEngineBuilder {
+func (b *EngineBuilder) WithKernelArgs(e string) *EngineBuilder {
 	b.eb.WithParam(EngineKeyKernelArgs, e)
 	return b
 }
 
 // WithMMDSMessage is a builder method that sets the Firecracker engine MMDS message.
 // It returns the FirecrackerEngineBuilder for further chaining of builder methods.
-func (b *FirecrackerEngineBuilder) WithMMDSMessage(e string) *FirecrackerEngineBuilder {
+func (b *EngineBuilder) WithMMDSMessage(e string) *EngineBuilder {
 	b.eb.WithParam(EngineKeyMMDSMessage, e)
 	return b
 }
 
 // Build method constructs the final SpecConfig object by calling the embedded EngineBuilder's Build method.
-func (b *FirecrackerEngineBuilder) Build() *types.SpecConfig {
+func (b *EngineBuilder) Build() *types.SpecConfig {
 	return b.eb
 }

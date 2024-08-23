@@ -12,8 +12,8 @@ func NewChatCmd(net backend.NetworkManager) *cobra.Command {
 		Use:               "chat",
 		Short:             "Chat-related operations",
 		PersistentPreRunE: isDMSRunning(net),
-		Run: func(cmd *cobra.Command, args []string) {
-			cmd.Help()
+		Run: func(cmd *cobra.Command, _ []string) {
+			_ = cmd.Help()
 		},
 	}
 

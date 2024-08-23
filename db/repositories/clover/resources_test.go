@@ -1,9 +1,10 @@
-package repositories_clover
+package clover
 
 import (
 	"context"
-	"gitlab.com/nunet/device-management-service/types"
 	"testing"
+
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/stretchr/testify/assert"
 
@@ -60,6 +61,7 @@ func TestFreeResourcesRepository(t *testing.T) {
 	err = freeResourcesRepo.Clear(context.Background())
 	assert.NoError(t, err)
 	history, err = freeResourcesRepo.History(context.Background(), query)
+	assert.NoError(t, err)
 	assert.Len(t, history, 0)
 }
 
@@ -211,5 +213,6 @@ func TestOnboardedResourcesRepository(t *testing.T) {
 	err = onboardedResourcesRepo.Clear(context.Background())
 	assert.NoError(t, err)
 	history, err = onboardedResourcesRepo.History(context.Background(), query)
+	assert.NoError(t, err)
 	assert.Len(t, history, 0)
 }

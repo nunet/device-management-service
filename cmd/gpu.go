@@ -6,7 +6,7 @@ var gpuCmd = &cobra.Command{
 	Use:   "gpu",
 	Short: "GPU-related operations",
 	Long:  ``,
-	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+	Run: func(cmd *cobra.Command, _ []string) {
+		_ = cmd.Help()
 	},
 }

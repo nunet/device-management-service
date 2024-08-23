@@ -8,7 +8,6 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 )
 
-
 type RegistryTestSuite struct {
 	suite.Suite
 	registry *RegistryImpl[jobs.JobSpec]

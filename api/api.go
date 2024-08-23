@@ -21,7 +21,7 @@ type RESTServerConfig struct {
 	Onboarding *onboarding.Onboarding
 	Logger     *logger.Logger
 	MidW       []gin.HandlerFunc
-	Port       int
+	Port       uint32
 	Addr       string
 }
 
@@ -95,8 +95,8 @@ func (s *RESTServer) InitializeRoutes() {
 }
 
 // Run starts the server on the specified port
-func (s *RESTServer) Run() {
-	s.router.Run(fmt.Sprintf("%s:%d", s.config.Addr, s.config.Port))
+func (s *RESTServer) Run() error {
+	return s.router.Run(fmt.Sprintf("%s:%d", s.config.Addr, s.config.Port))
 }
 
 func getCustomCorsConfig() cors.Config {

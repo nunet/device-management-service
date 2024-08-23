@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 
 	"github.com/coreos/go-systemd/sdjournal"

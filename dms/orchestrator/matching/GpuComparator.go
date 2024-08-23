@@ -4,7 +4,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func GpuComparator(l, r interface{}, preference ...Preference) types.Comparison {
+func GpuComparator(l, r interface{}, _ ...Preference) types.Comparison {
 	// comparator for GPU type
 
 	// we want to reason about the inner fields of the GPU type and how they compare between left and right
@@ -40,5 +40,4 @@ func GpuComparator(l, r interface{}, preference ...Preference) types.Comparison 
 	// using e.g. benchmarking data from Tom's Hardware or some other source;
 
 	return types.Error // error is the default value
-
 }

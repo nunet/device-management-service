@@ -105,7 +105,7 @@ func Test_OnboardCmdSuccess(t *testing.T) {
 	err := cmd.Execute()
 	assert.NoError(err)
 
-	assert.Contains(outBuf.String(), "Sucessfully onboarded!")
+	assert.Contains(outBuf.String(), "Successfully onboarded!")
 }
 
 func Test_OnboardNegativeNtxValue(t *testing.T) {

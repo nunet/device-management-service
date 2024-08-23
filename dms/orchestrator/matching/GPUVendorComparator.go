@@ -6,8 +6,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func GPUVendorComparator(l, r interface{}, preference ...Preference) types.Comparison {
-
+func GPUVendorComparator(l, r interface{}, _ ...Preference) types.Comparison {
 	// validate input type
 	_, lok := l.(types.GPUVendor)
 	_, rok := r.(types.GPUVendor)

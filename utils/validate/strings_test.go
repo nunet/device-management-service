@@ -2,13 +2,14 @@ package validate
 
 import (
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
 func TestIsLiteral(t *testing.T) {
-	var intValue int = 2
-	var float32Value float32 = 3.456
-	var float64Value float64 = 45.59736
+	intValue := int(2)
+	float32Value := float32(3.456)
+	float64Value := float64(45.59736)
 
 	stringValue := "some string"
 
@@ -19,7 +20,6 @@ func TestIsLiteral(t *testing.T) {
 
 	// negative assertions
 	assert.True(t, IsLiteral(stringValue))
-
 }
 
 func TestIsBlank(t *testing.T) {

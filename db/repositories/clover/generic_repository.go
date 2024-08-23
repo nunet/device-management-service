@@ -1,4 +1,4 @@
-package repositories_clover
+package clover
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func (repo *GenericRepositoryClover[T]) queryWithID(
 }
 
 // Create adds a new record to the repository and returns the created data.
-func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, error) {
+func (repo *GenericRepositoryClover[T]) Create(_ context.Context, data T) (T, error) {
 	var model T
 
 	doc := toCloverDoc(data)
@@ -76,7 +76,7 @@ func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, 
 }
 
 // Get retrieves a record by its identifier.
-func (repo *GenericRepositoryClover[T]) Get(ctx context.Context, id interface{}) (T, error) {
+func (repo *GenericRepositoryClover[T]) Get(_ context.Context, id interface{}) (T, error) {
 	var model T
 	doc, err := repo.db.FindFirst(repo.queryWithID(id, false))
 	if err != nil || doc == nil {
@@ -110,7 +110,7 @@ func (repo *GenericRepositoryClover[T]) Update(
 }
 
 // Delete removes a record by its identifier.
-func (repo *GenericRepositoryClover[T]) Delete(ctx context.Context, id interface{}) error {
+func (repo *GenericRepositoryClover[T]) Delete(_ context.Context, id interface{}) error {
 	err := repo.db.Update(
 		repo.queryWithID(id, false),
 		map[string]interface{}{"DeletedAt": time.Now()},
@@ -120,7 +120,7 @@ func (repo *GenericRepositoryClover[T]) Delete(ctx context.Context, id interface
 
 // Find retrieves a single record based on a query.
 func (repo *GenericRepositoryClover[T]) Find(
-	ctx context.Context,
+	_ context.Context,
 	query repositories.Query[T],
 ) (T, error) {
 	var model T
@@ -136,7 +136,7 @@ func (repo *GenericRepositoryClover[T]) Find(
 
 	model, err = toModel[T](doc, false)
 	if err != nil {
-		return model, fmt.Errorf("Failed to convert document to model: %v", err)
+		return model, fmt.Errorf("failed to convert document to model: %v", err)
 	}
 
 	return model, nil
@@ -144,7 +144,7 @@ func (repo *GenericRepositoryClover[T]) Find(
 
 // FindAll retrieves multiple records based on a query.
 func (repo *GenericRepositoryClover[T]) FindAll(
-	ctx context.Context,
+	_ context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
 	var models []T
@@ -163,7 +163,6 @@ func (repo *GenericRepositoryClover[T]) FindAll(
 		models = append(models, model)
 		return true
 	})
-
 	if err != nil {
 		return models, handleDBError(err)
 	}

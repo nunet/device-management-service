@@ -25,7 +25,7 @@ import (
 
 // TODO-pnet-1: we shouldn't handle configuration paths here, a general configuration path
 // should be provided by /internal/config.go
-func getBasePath(fs afero.Fs) (string, error) {
+func getBasePath(_ afero.Fs) (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("error getting home directory: %w", err)
@@ -57,6 +57,9 @@ func configureSwarmKey(fs afero.Fs) (pnet.PSK, error) {
 // getSwarmKey reads the swarm key from a file
 func getSwarmKey(fs afero.Fs) (pnet.PSK, error) {
 	homeDir, err := getBasePath(fs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get base file path: %w", err)
+	}
 	swarmkey, err := afero.ReadFile(fs, filepath.Join(homeDir, "swarm.key"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read swarm key file: %w", err)
@@ -94,6 +97,7 @@ func generateSwarmKey(fs afero.Fs) (pnet.PSK, error) {
 	}
 
 	swarmKeyPath := filepath.Join(nunetDir, "swarm.key")
+	// nolint:gofumpt
 	if err := afero.WriteFile(fs, swarmKeyPath, []byte(swarmKeyWithCodec), 0600); err != nil {
 		return nil, fmt.Errorf("error writing swarm key to file: %w", err)
 	}

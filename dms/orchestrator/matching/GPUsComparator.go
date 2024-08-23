@@ -5,12 +5,12 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func GPUsComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
+func GPUsComparator(lraw, rraw interface{}, _ ...Preference) types.Comparison {
 	// comparator for GPUs type which is just a slice of GPU types:
 	// left represent machine capabilities;
 	// right represent required capabilities;
 	// we need to check if for ech GPU on the right there exist a matching GPU on the left...
-    // (since given slices are not ordered...)
+	// (since given slices are not ordered...)
 
 	// validate input type
 	_, lrawok := lraw.([]types.GPU)
@@ -22,7 +22,7 @@ func GPUsComparator(lraw, rraw interface{}, preference ...Preference) types.Comp
 	l := lraw.([]types.GPU)
 	r := rraw.([]types.GPU)
 
-	var interimComparison1 [][]types.Comparison
+	interimComparison1 := make([][]types.Comparison, 0)
 	for _, rGPU := range r {
 		var interimComparison2 []types.Comparison
 		for _, lGPU := range l {
@@ -34,10 +34,9 @@ func GPUsComparator(lraw, rraw interface{}, preference ...Preference) types.Comp
 		// second dimension represents right GPUs
 		interimComparison1 = append(interimComparison1, interimComparison2)
 	}
-		// we can now implement a logic to figure out if each required GPU on the left has a matching GPU on the right
+	// we can now implement a logic to figure out if each required GPU on the left has a matching GPU on the right
 
 	var finalComparison []types.Comparison
-	var consideredIndexes []int
 	for i := 0; i < len(interimComparison1); i++ {
 		// we need to find the best match for each GPU on the right
 		if len(interimComparison1[i]) < i {
@@ -46,10 +45,9 @@ func GPUsComparator(lraw, rraw interface{}, preference ...Preference) types.Comp
 		c := interimComparison1[i]
 		bestMatch, index := returnBestMatch(c)
 		finalComparison = append(finalComparison, bestMatch)
-		consideredIndexes = append(consideredIndexes, index)
 		interimComparison1 = removeIndex(interimComparison1, index)
-	} 
-	
+	}
+
 	if slices.Contains(finalComparison, types.Error) {
 		return types.Error
 	}
@@ -61,6 +59,3 @@ func GPUsComparator(lraw, rraw interface{}, preference ...Preference) types.Comp
 	}
 	return types.Better
 }
-
-
-

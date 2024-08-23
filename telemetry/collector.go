@@ -1,8 +1,8 @@
 package telemetry
 
 import (
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var logCollector = logger.OtelZapLogger("collector")
@@ -17,7 +17,7 @@ type Collector interface {
 
 type LogCollector struct{}
 
-func NewLogCollector(config *types.TelemetryConfig) (Collector, error) {
+func NewLogCollector() (Collector, error) {
 	// No specific configuration needed for LogCollector currently.
 	return &LogCollector{}, nil
 }

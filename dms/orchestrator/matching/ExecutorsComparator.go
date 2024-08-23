@@ -7,7 +7,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-func ExecutorsComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
+func ExecutorsComparator(lraw, rraw interface{}, _ ...Preference) types.Comparison {
 	// comparator for Executors types:
 	// left represent machine capabilities;
 	// right represent required capabilities;
@@ -21,24 +21,26 @@ func ExecutorsComparator(lraw, rraw interface{}, preference ...Preference) types
 		return types.Error
 	}
 
-	var l []interface{} 
-	l = lraw.([]interface{})
-	var r []interface{}
-	r = rraw.([]interface{})
+	l := lraw.([]interface{})
+	r := rraw.([]interface{})
 
 	if !utils.IsSameShallowType(l, r) {
 		result = types.Error
 	}
-	if reflect.DeepEqual(l, r) {
+
+	switch {
+	case reflect.DeepEqual(l, r):
 		// if available capabilities are
 		// equal to required capabilities
 		// then the result of comparison is 'Equal'
 		result = types.Equal
-	} else if utils.IsStrictlyContained(l, r) {
+
+	case utils.IsStrictlyContained(l, r):
 		// if machine capabilities contain all the required capabilities
-		// then the result of comparison is 'Better'		
+		// then the result of comparison is 'Better'
 		result = types.Better
-	} else if utils.IsStrictlyContained(r, l) {
+
+	case utils.IsStrictlyContained(r, l):
 		// if required capabilities contain all the machine capabilities
 		// then the result of comparison is 'Worse'
 		// ("available Capabilities are worse than required")')

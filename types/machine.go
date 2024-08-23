@@ -19,9 +19,9 @@ type PeerInfo struct {
 
 type Machine struct {
 	BaseDBModel
-	NodeId               string
+	NodeID               string
 	PeerInfo             int
-	IpAddr               string
+	IPAddr               string
 	AvailableResources   int
 	FreeResources        int
 	TokenomicsAddress    string
@@ -32,12 +32,12 @@ type Machine struct {
 // can be used by NuNet
 type AvailableResources struct {
 	BaseDBModel
-	TotCpuHz          int
-	CpuNo             int
-	CpuHz             float64
-	PriceCpu          float64
-	Ram               int
-	PriceRam          float64
+	TotCPUHz          int
+	CPUNo             int
+	CPUHz             float64
+	PriceCPU          float64
+	RAM               int
+	PriceRAM          float64
 	Vcpu              int
 	Disk              float64
 	PriceDisk         float64
@@ -62,8 +62,8 @@ type Services struct {
 	MetadataHash         string
 	WithdrawHash         string
 	RefundHash           string // saving hashes for call the `/request-reward` endpoint by SPD
-	Distribute_50Hash    string
-	Distribute_75Hash    string
+	Distribute50Hash     string
+	Distribute75Hash     string
 	SignatureDatum       string
 	MessageHashDatum     string
 	Datum                string
@@ -71,7 +71,6 @@ type Services struct {
 	MessageHashAction    string
 	Action               string
 	// TODO: Add ContainerType field
-
 }
 
 type ServiceResourceRequirements struct {
@@ -100,16 +99,6 @@ type Libp2pInfo struct {
 type MachineUUID struct {
 	BaseDBModel
 	UUID string `json:"uuid"`
-}
-
-type resources struct {
-	TotCpuHz  float64
-	PriceCpu  float64
-	Ram       int
-	PriceRam  float64
-	Vcpu      int
-	Disk      float64
-	PriceDisk float64
 }
 
 type PeerData struct {
@@ -147,7 +136,7 @@ type KadDHTMachineUpdate struct {
 
 type ElasticToken struct {
 	BaseDBModel
-	NodeId      string
+	NodeID      string
 	Token       string
 	ChannelName string
 }

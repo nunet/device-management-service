@@ -14,7 +14,7 @@ import (
 type CustomVM struct {
 	KernelImagePath string `json:"kernel_image_path"`
 	FilesystemPath  string `json:"filesystem_path"`
-	VCPUCount       int    `json:"vcpu_count"`
+	VCPUCount       int32  `json:"vcpu_count"`
 	MemSizeMib      int    `json:"mem_size_mib"`
 	TapDevice       string `json:"tap_device"`
 }
@@ -70,8 +70,8 @@ func (h *VMHandler) StartCustom(c *gin.Context) {
 		ExecutionID: "test_execution",
 		EngineSpec:  fe,
 		Resources: &types.ExecutionResources{
-			CPU:    types.CPU{Cores: int(uint64(body.VCPUCount))},
-			Memory: types.RAM{Size: uint64(body.MemSizeMib)},
+			CPU:    types.CPU{Cores: uint32(body.VCPUCount)},
+			Memory: types.RAM{Size: int64(body.MemSizeMib)},
 		},
 	}
 

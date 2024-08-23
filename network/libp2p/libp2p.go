@@ -1,10 +1,9 @@
 package libp2p
 
 import (
-	"context"
-
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -147,7 +146,7 @@ func (l *Libp2p) Start(context context.Context) error {
 	discoveryTask := &bt.Task{
 		Name:        "Peer Discovery",
 		Description: "Periodic task to discover new peers every 15 minutes",
-		Function: func(args interface{}) error {
+		Function: func(_ interface{}) error {
 			return l.DiscoverDialPeers(context)
 		},
 		Triggers: []bt.Trigger{&bt.PeriodicTrigger{Interval: 15 * time.Minute}},
@@ -208,7 +207,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	}
 
 	// create a buffer with the size of the message and then read until its full
-	lengthPrefix := int64(binary.LittleEndian.Uint64(msgLengthBuffer))
+	lengthPrefix := binary.LittleEndian.Uint64(msgLengthBuffer)
 	buf := make([]byte, lengthPrefix)
 
 	// read the full message
@@ -233,7 +232,6 @@ func (l *Libp2p) SendMessage(ctx context.Context, addrs []string, msg types.Mess
 			if err != nil {
 				errCh <- err
 			}
-
 		}(addr)
 	}
 	wg.Wait()
@@ -306,7 +304,7 @@ func (l *Libp2p) Stop() error {
 
 // Stat returns the status about the libp2p network.
 func (l *Libp2p) Stat() types.NetworkStats {
-	var lAddrs []string
+	lAddrs := make([]string, 0, len(l.Host.Addrs()))
 	for _, addr := range l.Host.Addrs() {
 		lAddrs = append(lAddrs, addr.String())
 	}
@@ -421,7 +419,7 @@ func (l *Libp2p) Query(ctx context.Context, key string) ([]*commonproto.Advertis
 	if err != nil {
 		return nil, fmt.Errorf("failed to find providers for key %s: %w", key, err)
 	}
-	var advertisements []*commonproto.Advertisement
+	advertisements := make([]*commonproto.Advertisement, 0)
 	for _, v := range addrInfo {
 		// TODO: use go routines to get the values in parallel.
 		bytesAdvertisement, err := l.DHT.GetValue(ctx, l.getCustomNamespace(key, v.ID.String()))
@@ -568,13 +566,11 @@ func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg types.Message
 
 	if err := l.Host.Connect(ctx, *peerInfo); err != nil {
 		return fmt.Errorf("failed to connect to peer %v: %v", peerInfo.ID, err)
-
 	}
 
 	stream, err := l.Host.NewStream(ctx, peerInfo.ID, protocol.ID(msg.Type))
 	if err != nil {
 		return fmt.Errorf("failed to open stream to peer %v: %v", peerInfo.ID, err)
-
 	}
 	defer stream.Close()
 
@@ -699,22 +695,22 @@ func createCIDFromKey(key string) (cid.Cid, error) {
 	return cid.NewCidV1(cid.Raw, mh), nil
 }
 
-func CleanupPeer(id peer.ID) error {
+func CleanupPeer(_ peer.ID) error {
 	zlog.Warn("CleanupPeer: Stub")
 	return nil
 }
 
-func PingPeer(ctx context.Context, target peer.ID) (bool, *ping.Result) {
+func PingPeer(_ context.Context, _ peer.ID) (bool, *ping.Result) {
 	zlog.Warn("PingPeer: Stub")
 	return false, nil
 }
 
-func DumpKademliaDHT(ctx context.Context) ([]types.PeerData, error) {
+func DumpKademliaDHT(_ context.Context) ([]types.PeerData, error) {
 	zlog.Warn("DumpKademliaDHT: Stub")
 	return nil, nil
 }
 
-func OldPingPeer(ctx context.Context, target peer.ID) (bool, *types.PingResult) {
+func OldPingPeer(_ context.Context, _ peer.ID) (bool, *types.PingResult) {
 	zlog.Warn("OldPingPeer: Stub")
 	return false, nil
 }

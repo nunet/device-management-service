@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -82,11 +82,11 @@ func (c *CollectorImpl) HandleEvent(event telemetry.Event) error {
 
 	ctx := context.Background()
 	tr := otel.Tracer("http-tracer")
-	ctx, span := tr.Start(ctx, "HandleEvent")
+	_, span := tr.Start(ctx, "HandleEvent")
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.String("event.type", fmt.Sprintf("%d", event.Type)),
+		attribute.String("event.type", string(event.Type)),
 		attribute.String("event.payload", fmt.Sprintf("%v", event.Payload)),
 		attribute.String("event.index", event.Index),
 	)

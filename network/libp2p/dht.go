@@ -102,7 +102,7 @@ func (l *Libp2p) UpdateKadDHT() {
 }
 
 // ListKadDHTPeers is a stub
-func (l *Libp2p) ListKadDHTPeers(c *gin.Context, ctx context.Context) ([]string, error) {
+func (l *Libp2p) ListKadDHTPeers(_ context.Context, _ *gin.Context) ([]string, error) {
 	zlog.Warn("ListKadDHTPeers: Stub")
 	return nil, nil
 }

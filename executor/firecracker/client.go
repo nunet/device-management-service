@@ -61,13 +61,15 @@ func (c *Client) DestroyVM(
 	m *firecracker.Machine,
 	timeout time.Duration,
 ) error {
-	// Remove the socket file.
-	defer os.Remove(m.Cfg.SocketPath)
-
 	// Get the PID of the Firecracker process and shut down the VM.
 	// If the process is still running after the timeout, kill it.
+	err := c.ShutdownVM(ctx, m)
+	if err != nil {
+		return fmt.Errorf("failed to shutdown vm: %w", err)
+	}
+
 	pid, _ := m.PID()
-	c.ShutdownVM(ctx, m)
+	defer os.Remove(m.Cfg.SocketPath)
 
 	// If the process is not running, return early.
 	if pid <= 0 {
@@ -97,16 +99,15 @@ func (c *Client) DestroyVM(
 	}()
 
 	// Wait for the check to finish.
-	select {
-	case killed := <-done:
-		if !killed {
-			// The shutdown request timed out, kill the process with SIGKILL.
-			err := syscall.Kill(int(pid), syscall.SIGKILL)
-			if err != nil {
-				return fmt.Errorf("failed to kill process: %v", err)
-			}
+	killed := <-done
+	if !killed {
+		// The shutdown request timed out, kill the process with SIGKILL.
+		err := syscall.Kill(pid, syscall.SIGKILL)
+		if err != nil {
+			return fmt.Errorf("failed to kill process: %v", err)
 		}
 	}
+
 	return nil
 }
 

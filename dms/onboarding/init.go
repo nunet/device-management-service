@@ -9,5 +9,4 @@ var zlog *otelzap.Logger
 
 func init() {
 	zlog = logger.OtelZapLogger("onboarding")
-
 }

@@ -59,8 +59,8 @@ func (s *ClientTestSuite) createTestContainer(name, image string, cmd []string) 
 	)
 	require.NoError(s.T(), err)
 	s.T().Cleanup(func() {
-		s.client.StopContainer(context.Background(), id, docker.DestroyTimeout)
-		s.client.RemoveContainer(context.Background(), id)
+		_ = s.client.StopContainer(context.Background(), id, docker.DestroyTimeout)
+		_ = s.client.RemoveContainer(context.Background(), id)
 	})
 	return id
 }

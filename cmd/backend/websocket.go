@@ -39,9 +39,8 @@ func (ws *WebSocket) ReadMessage(ctx context.Context, w io.Writer) error {
 					websocket.CloseNormalClosure) ||
 					strings.Contains(err.Error(), "use of closed network connection") {
 					return fmt.Errorf("connection closed")
-				} else {
-					return fmt.Errorf("error reading message: %w", err)
 				}
+				return fmt.Errorf("error reading message: %w", err)
 			}
 			fmt.Fprintf(w, "%s\n", msg)
 		}
@@ -76,15 +75,14 @@ func (ws *WebSocket) WriteMessage(ctx context.Context, r io.Reader) error {
 					websocket.CloseNormalClosure) ||
 					strings.Contains(err.Error(), "use of closed network connection") {
 					return fmt.Errorf("connection closed")
-				} else {
-					return fmt.Errorf("error writing message: %w", err)
 				}
+				return fmt.Errorf("error writing message: %w", err)
 			}
 		}
 	}
 }
 
-func (ws *WebSocket) Ping(ctx context.Context, w io.Writer) error {
+func (ws *WebSocket) Ping(ctx context.Context, _ io.Writer) error {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 

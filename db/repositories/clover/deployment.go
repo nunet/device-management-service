@@ -1,4 +1,4 @@
-package repositories_clover
+package clover
 
 import (
 	clover "github.com/ostafen/clover/v2"

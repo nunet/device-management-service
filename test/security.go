@@ -285,7 +285,7 @@ package main
 
 // 	spClient.SendDeploymentRequest(req)
 
-// 	spClient.AssertJobFail("Malicious SP sent a valid transaction but decalred a higher payout to the DMS and the job ran success")
+// 	spClient.AssertJobFail("Malicious SP sent a valid transaction but declared a higher payout to the DMS and the job ran success")
 // }
 
 // // Test that the CP DMS will only run the job when the Params specifying a correct LocalPublicKey
@@ -429,7 +429,7 @@ package main
 // 			}
 // 			// Final confirmation that the job finished without errors and that SP obtains a valid LogURL from CP
 // 			s.Equal(libp2p.MsgJobStatus, update.MsgType, "Expected Job Status update")
-// 			s.Equal("finished without errors", update.Services.JobStatus, "Expected Job to have finished succesfully")
+// 			s.Equal("finished without errors", update.Services.JobStatus, "Expected Job to have finished successfully")
 // 			s.NotEqual(0, len(update.Services.LogURL), "Expected LogURL to be non empty")
 // 			break
 // 		}
@@ -480,7 +480,7 @@ package main
 // 			}
 // 			// Final confirmation that the job finished without errors and that SP obtains a valid LogURL from CP
 // 			s.Equal(libp2p.MsgJobStatus, update.MsgType, "Expected Job Status update")
-// 			s.Equal("finished without errors", update.Services.JobStatus, "Expected Job to have finished succesfully")
+// 			s.Equal("finished without errors", update.Services.JobStatus, "Expected Job to have finished successfully")
 // 			s.NotEqual(0, len(update.Services.LogURL), "Expected LogURL to be non empty")
 // 			break
 // 		}
@@ -516,7 +516,7 @@ package main
 // 			}
 // 			// Final confirmation that the job finished without errors and that SP obtains a valid LogURL from CP
 // 			s.Equal(libp2p.MsgJobStatus, update.MsgType, "Expected Job Status update")
-// 			s.Equal("finished without errors", update.Services.JobStatus, "Expected Job to have finished succesfully")
+// 			s.Equal("finished without errors", update.Services.JobStatus, "Expected Job to have finished successfully")
 // 			s.NotEqual(0, len(update.Services.LogURL), "Expected LogURL to be non empty")
 // 			break
 // 		}

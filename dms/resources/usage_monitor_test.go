@@ -2,8 +2,9 @@ package resources
 
 import (
 	"context"
-	"gitlab.com/nunet/device-management-service/types"
 	"testing"
+
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -16,7 +17,10 @@ func TestGetUsage(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Cleanup(func() {
+		ctrl.Finish()
+	})
+
 	mockCPU := types.CPUInfo{
 		NumCores:   5,
 		MHzPerCore: 10000,
@@ -245,9 +249,12 @@ func TestGetContainerUsage(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Cleanup(func() {
+		ctrl.Finish()
+	})
 
 	t.Run("Must get only running services", func(t *testing.T) {
+		t.Parallel()
 		mockDB, err := gorm.Open(sqlite.Open("file:test6?mode=memory&cache=shared"), &gorm.Config{})
 		assert.NoError(t, err)
 

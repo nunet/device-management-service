@@ -17,7 +17,7 @@ func NewWalletNewCmd(wallet backend.WalletManager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "new",
 		Short: "Create new wallet",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			eth, _ := cmd.Flags().GetBool("ethereum")
 			ada, _ := cmd.Flags().GetBool("cardano")
 
@@ -25,14 +25,15 @@ func NewWalletNewCmd(wallet backend.WalletManager) *cobra.Command {
 			var err error
 
 			// limit wallet creation to one at a time
-			if ada && eth {
+			switch {
+			case ada && eth:
 				return fmt.Errorf("cannot create both wallets")
-			} else if ada {
+			case ada:
 				pair, err = wallet.GetCardanoAddressAndMnemonic()
-			} else if eth {
+			case eth:
 				pair, err = wallet.GetEthereumAddressAndPrivateKey()
-			} else {
-				cmd.Help()
+			default:
+				_ = cmd.Help()
 				return fmt.Errorf("no wallet flag specified")
 			}
 

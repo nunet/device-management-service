@@ -15,6 +15,7 @@ import (
 //
 // TODO: sometimes it takes several seconds to run this test (maximum 15s)
 func TestPrivateSwarm(t *testing.T) {
+	t.Parallel()
 	numNodes := 3
 	nodes := createTestNetwork(t, numNodes, true)
 

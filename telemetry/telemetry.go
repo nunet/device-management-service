@@ -1,8 +1,8 @@
 package telemetry
 
 import (
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var logTelemetry = logger.OtelZapLogger("telemetry")

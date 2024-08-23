@@ -10,22 +10,22 @@ type JobSpec struct {
 
 // JobLink represents a link between two jobs
 type JobLink struct {
-	Type   string `json:"type" description:"Type of the link"`
-	Target string `json:"target" description:"Name of the target job"`
+	Type       string `json:"type" description:"Type of the link"`
+	Target     string `json:"target" description:"Name of the target job"`
 	Dependency string `json:"dependency" description:"Dependency of the link"`
 }
 
 // Job represents a single job in the configuration
 type Job struct {
-	Instances int                       `json:"instances" description:"Number of instances"`
-	Name      string                    `json:"name" description:"Name of the job"`
-	Metadata  JobMetadata               `json:"metadata" description:"Metadata of the job"`
-	Locality  []string                  `json:"locality" description:"Deployment locality"`
+	Instances int                      `json:"instances" description:"Number of instances"`
+	Name      string                   `json:"name" description:"Name of the job"`
+	Metadata  JobMetadata              `json:"metadata" description:"Metadata of the job"`
+	Locality  []string                 `json:"locality" description:"Deployment locality"`
 	Execution types.SpecConfig         `json:"execution" description:"Execution Engine configuration"`
 	Resources types.ExecutionResources `json:"resources" description:"Resources required"`
 	Volumes   []VolumeConfig           `json:"volumes" description:"List of volumes"`
 	Networks  []NetworkConfig          `json:"networks" description:"List of networks"`
-	Libraries []Library                 `json:"libraries" description:"List of required libraries"`
+	Libraries []Library                `json:"libraries" description:"List of required libraries"`
 	Links     []JobLink                `json:"links" description:"List of links"`
 	Children  []Job                    `json:"children" description:"List of tasks"`
 }
@@ -37,16 +37,16 @@ type JobMetadata struct {
 
 // Volume represents a volume configuration
 type VolumeConfig struct {
-	Name       string            `json:"name" description:"Name of the volume"`
-	Type       string            `json:"type" description:"Type of the volume"`
+	Name       string           `json:"name" description:"Name of the volume"`
+	Type       string           `json:"type" description:"Type of the volume"`
 	Remote     types.SpecConfig `json:"remote" description:"Remote volume configuration"`
-	Mountpoint string            `json:"mountpoint" description:"Mountpoint of the volume"`
+	Mountpoint string           `json:"mountpoint" description:"Mountpoint of the volume"`
 }
 
 // NetworkConfig represents a network configuration
 type NetworkConfig struct {
-	Name    string         `json:"name" description:"Name of the network"`
-	Type    string         `json:"type" description:"Type of the network"`
+	Name    string           `json:"name" description:"Name of the network"`
+	Type    string           `json:"type" description:"Type of the network"`
 	PortMap []NetworkPortMap `json:"port_map" description:"Port mapping"`
 }
 

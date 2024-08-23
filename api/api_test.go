@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -31,15 +31,16 @@ func performRequest(r http.Handler, method, path string) *httptest.ResponseRecor
 	r.ServeHTTP(w, req)
 	return w
 }
+
 func TestInitializeRoutes(t *testing.T) {
 	// Create a new RESTServer instance
 	logger := &logger.Logger{}
 	p2p := &libp2p.Libp2p{}
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	assert.NoError(t, err)
-	mockDB.AutoMigrate(&types.Libp2pInfo{})
+	_ = mockDB.AutoMigrate(&types.Libp2pInfo{})
 
-	oConf := onboarding.OnboardingConfig{
+	oConf := onboarding.Config{
 		Fs:             afero.Afero{Fs: afero.NewMemMapFs()},
 		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
 		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
@@ -50,7 +51,7 @@ func TestInitializeRoutes(t *testing.T) {
 	}
 	ob := onboarding.New(oConf)
 	mid := []gin.HandlerFunc{}
-	port := 8080
+	port := uint32(8080)
 	server := NewRESTServer(RESTServerConfig{
 		P2p:        p2p,
 		Onboarding: ob,
@@ -80,5 +81,4 @@ func TestInitializeRoutes(t *testing.T) {
 		server.router.ServeHTTP(w, req)
 		assert.Equal(t, test.expCode, w.Code)
 	}
-
 }

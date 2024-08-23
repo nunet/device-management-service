@@ -11,10 +11,10 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/internal/background_tasks"
+	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // setupTestP2P creates a new P2PHandler with a mock Libp2p instance
@@ -34,7 +34,7 @@ func setupTestP2P() (*P2PHandler, error) {
 		BootstrapPeers:  bootstrapPeers,
 		Rendezvous:      "nunet-test",
 		Server:          true,
-		Scheduler:       background_tasks.NewScheduler(5),
+		Scheduler:       backgroundtasks.NewScheduler(5),
 		CustomNamespace: "/nunet-dht-1/",
 		DHTPrefix:       "/nunet",
 		ListenAddress: []string{
@@ -138,7 +138,6 @@ func TestSelfPeerInfo(t *testing.T) {
 	w = performRequest(router, "GET", "/peers/self")
 	assert.Equal(t, 200, w.Code)
 	assert.Contains(t, w.Body.String(), p2p.p2p.Host.ID().String())
-
 }
 
 func TestDumpDHT(t *testing.T) {
@@ -168,5 +167,4 @@ func TestDumpDHT(t *testing.T) {
 	w = performRequest(router, "GET", "/peers/dht/dump")
 	assert.Equal(t, 200, w.Code)
 	assert.Contains(t, w.Body.String(), "LastSuccessfulOutboundQueryAt")
-
 }

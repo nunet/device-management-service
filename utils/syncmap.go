@@ -51,7 +51,7 @@ func (m *SyncMap[K, V]) Iter(ranger func(key K, value V) bool) {
 // Keys returns a slice containing all the keys present in the map.
 func (m *SyncMap[K, V]) Keys() []K {
 	var keys []K
-	m.Iter(func(key K, value V) bool {
+	m.Iter(func(key K, _ V) bool {
 		keys = append(keys, key)
 		return true
 	})

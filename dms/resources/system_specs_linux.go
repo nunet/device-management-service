@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gitlab.com/nunet/device-management-service/types"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/jaypipes/ghw"
@@ -234,7 +235,7 @@ func (l linuxSystemSpecs) getAMDGPUInfo(metadata []gpuMetadata) ([]types.GPU, er
 		return nil, fmt.Errorf("inconsistent AMD GPU information detected")
 	}
 
-	var gpuInfos []types.GPU
+	gpuInfos := make([]types.GPU, 0)
 	for i := range gpuNameMatches {
 		gpuName := gpuNameMatches[i][1]
 		totalMemoryBytes, err := strconv.ParseInt(totalMatches[i][1], 10, 64)
@@ -273,7 +274,10 @@ func (l linuxSystemSpecs) getNVIDIAGPUInfo(metadata []gpuMetadata) ([]types.GPU,
 	if !errors.Is(ret, nvml.SUCCESS) {
 		return nil, fmt.Errorf("NVIDIA Management Library not installed, initialized or configured (reboot recommended for newly installed NVIDIA GPU drivers): %s", nvml.ErrorString(ret))
 	}
-	defer nvml.Shutdown()
+
+	defer func() {
+		_ = nvml.Shutdown()
+	}()
 
 	// Get the number of GPU devices
 	deviceCount, ret := nvml.DeviceGetCount()
@@ -347,7 +351,7 @@ func (l linuxSystemSpecs) getIntelGPUInfo(metadata []gpuMetadata) ([]types.GPU, 
 		return nil, fmt.Errorf("failed to find Intel GPU information for all GPUs")
 	}
 
-	var gpuInfos []types.GPU
+	gpuInfos := make([]types.GPU, 0)
 	for i, match := range deviceIDMatches {
 		deviceID := match[1]
 

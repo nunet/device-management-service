@@ -15,7 +15,7 @@ func NewPeerSelfCmd(utilsService backend.Utility) *cobra.Command {
 		Use:   "self",
 		Short: "Display self peer info",
 		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := checkOnboarded(utilsService)
 			if err != nil {
 				return err
@@ -39,9 +39,12 @@ func NewPeerSelfCmd(utilsService backend.Utility) *cobra.Command {
 			var addrs []string
 
 			// iterate through array and append each value to slice
-			jsonparser.ArrayEach(addrsByte, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+			_, err = jsonparser.ArrayEach(addrsByte, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
 				addrs = append(addrs, string(value))
 			})
+			if err != nil {
+				return fmt.Errorf("failed to itterate through parser: %w", err)
+			}
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Host ID:", id)
 			for index, addr := range addrs {

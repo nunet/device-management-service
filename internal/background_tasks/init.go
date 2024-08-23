@@ -1,4 +1,4 @@
-package background_tasks
+package backgroundtasks
 
 import (
 	"github.com/uptrace/opentelemetry-go-extra/otelzap"

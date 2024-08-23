@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"fmt"
+
 	"gitlab.com/nunet/device-management-service/types"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"

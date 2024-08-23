@@ -1,4 +1,4 @@
-package repositories_gorm
+package gorm
 
 import (
 	"fmt"
@@ -15,16 +15,16 @@ import (
 func TestHandleDBError(t *testing.T) {
 	// Test case: GORM ErrRecordNotFound should result in NotFoundError
 	err := handleDBError(gorm.ErrRecordNotFound)
-	assert.Equal(t, repositories.NotFoundError, err)
+	assert.Equal(t, repositories.ErrNotFound, err)
 
 	// Test case: GORM ErrInvalidData should result in InvalidDataError
 	err = handleDBError(gorm.ErrInvalidData)
-	assert.Equal(t, repositories.InvalidDataError, err)
+	assert.Equal(t, repositories.ErrInvalidData, err)
 
 	// Test case: GORM ErrInvalidDB should result in DatabaseError
 	// We should check if error HAS a DatabaseError as it may be wrapped with other errors
 	err = handleDBError(gorm.ErrInvalidDB)
-	assert.ErrorAs(t, err, &repositories.DatabaseError)
+	assert.ErrorAs(t, err, &repositories.ErrDatabase)
 
 	// Test case: custom ErrParsingModel should result in ErrParsingModel
 	// ErrParsingModel is a wrapped error

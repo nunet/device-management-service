@@ -56,7 +56,7 @@ const (
 	PreGenDistribute75Hash = "612072616E646F6D20737472696E66"
 	PreGenDistribute50Hash = "612072616E646F6D20737472696E67"
 
-	DATUM_FORMAT_STRING = `{
+	DatumFormatString = `{
       "constructor": 0,
       "fields": [
          {
@@ -84,35 +84,6 @@ const (
             "bytes": "%s"
          }
       ]
-   }`
-
-	REDEEMER_FORMAT_STRING = `{
-     "constructor": %d,
-     "fields": [
-      {
-   		"constructor": 0,
-   		"fields": [
-   			{
-   				"bytes" : "%s"
-   			},
-   			{
-   				"bytes" : "%s"
-   			},
-   			{
-   				"bytes" : "%s"
-   			},
-   			{
-   				"bytes" : "%s"
-   			},
-   			{
-   				"bytes" : "%s"
-   			},
-   			{
-   				"bytes" : "%s"
-   			}
-   	 	]
-   	  }
-     ]
    }`
 )
 
@@ -148,6 +119,8 @@ type Transaction struct {
 
 // Get the Inputs owned by an address.
 func GetUTXOs(address string) ([]Input, error) {
+	result := []Input{}
+
 	cmd := exec.Command("cardano-cli",
 		"query",
 		"utxo",
@@ -158,15 +131,15 @@ func GetUTXOs(address string) ([]Input, error) {
 		"--testnet-magic",
 		testnetMagic)
 	output, err := execCommand(cmd)
-
-	var result []Input
-
 	if err != nil {
 		return result, err
 	}
 
 	var dev map[string]JSONInput
-	json.Unmarshal([]byte(output), &dev)
+	err = json.Unmarshal([]byte(output), &dev)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal output: %w", err)
+	}
 
 	for key, input := range dev {
 		// Skip the tester collateral!
@@ -196,8 +169,8 @@ func GetUTXOs(address string) ([]Input, error) {
 	return result, err
 }
 
-func FindOutput(inputs []Input, tx_hash string, index int) (Input, bool) {
-	key := fmt.Sprintf("%s#%d", tx_hash, index)
+func FindOutput(inputs []Input, txHash string, index int) (Input, bool) {
+	key := fmt.Sprintf("%s#%d", txHash, index)
 	for _, input := range inputs {
 		if input.Key == key {
 			return input, true
@@ -342,18 +315,18 @@ func BuildPaymentScriptAddress() (address string, err error) {
 // 	return err
 // }
 
-func WaitForTransaction(tx_hash string, max_timeout_minutes int) error {
-
-	log.Printf("Waiting for Transaction Confirmation %s", tx_hash)
-	if max_timeout_minutes == 0 {
-		return errors.New("Max timeout reached, transaction not observed")
+func WaitForTransaction(txHash string, maxTimeoutMinutes int) error {
+	log.Printf("Waiting for Transaction Confirmation %s", txHash)
+	if maxTimeoutMinutes == 0 {
+		return errors.New("max timeout reached, transaction not observed")
 	}
 
+	// nolint:gosec
 	cmd := exec.Command("cardano-cli",
 		"query",
 		"utxo",
 		"--tx-in",
-		fmt.Sprintf("%s#0", tx_hash),
+		fmt.Sprintf("%s#0", txHash),
 		"--out-file",
 		"/dev/stdout",
 		"--testnet-magic",
@@ -361,9 +334,9 @@ func WaitForTransaction(tx_hash string, max_timeout_minutes int) error {
 	)
 
 	output, err := execCommand(cmd)
-	if err != nil || string(output) == "{}" {
+	if err != nil || output == "{}" {
 		time.Sleep(1 * time.Minute)
-		return WaitForTransaction(tx_hash, max_timeout_minutes-1)
+		return WaitForTransaction(txHash, maxTimeoutMinutes-1)
 	}
 
 	return nil
@@ -401,9 +374,16 @@ func PayToScript(ntx int64, spPubKey string, cpPubKey string) (string, error) {
 	// Set the min ada to be held in the output
 	transaction.Outputs[currentContract].Value["lovelace"] = minOutputLovelace
 
-	var txFees = int64(0) // do estimation
-	BuildTransaction(transaction, txFees)
-	SignTransaction(SPAccount)
+	txFees := int64(0) // do estimation
+	err = BuildTransaction(transaction, txFees)
+	if err != nil {
+		return "", fmt.Errorf("failed to build transaction: %w", err)
+	}
+
+	err = SignTransaction(SPAccount)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign transaction: %w", err)
+	}
 	hash, err := GetTransactionHash()
 	if err != nil {
 		return "", err
@@ -447,8 +427,12 @@ var minOutputLovelace = int64(5500000)
 
 // Helper to build a valid transaction
 func BuildTransaction(tx Transaction, txFees int64) (err error) {
-	EnsureProtocolParameters()
-	fee := int64(200000)
+	err = EnsureProtocolParameters()
+	if err != nil {
+		return fmt.Errorf("failed to ensure protocol params: %w", err)
+	}
+
+	fee := int64(0)
 	if txFees == 0 { // Estimate fees if not specified
 		// We pass in a wide enough lovelace value so the
 		// size is approximated correctly.
@@ -467,7 +451,8 @@ func BuildTransaction(tx Transaction, txFees int64) (err error) {
 }
 
 // Sign a transaction with the SPAddress.
-func SignTransaction(account string) {
+func SignTransaction(account string) error {
+	// nolint:gosec
 	cmd := exec.Command("cardano-cli",
 		"transaction",
 		"sign",
@@ -479,21 +464,26 @@ func SignTransaction(account string) {
 		"tx.signed",
 	)
 
-	execCommand(cmd)
+	_, err := execCommand(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to execute command")
+	}
+
+	return nil
 }
 
 // Estimate fee of transaction
 func EstimateFee(tx Transaction) (fee int64, err error) {
-
-	witness_count := 1
+	witnessCount := 1
 
 	// Factor in script witnesses
 	for _, input := range tx.Inputs {
 		if input.ScriptFile != "" {
-			witness_count += 1
+			witnessCount++
 		}
 	}
 
+	// nolint:gosec
 	cmd := exec.Command("cardano-cli",
 		"transaction",
 		"calculate-min-fee",
@@ -504,7 +494,7 @@ func EstimateFee(tx Transaction) (fee int64, err error) {
 		"--tx-out-count",
 		fmt.Sprintf("%d", len(tx.Outputs)),
 		"--witness-count",
-		fmt.Sprintf("%d", witness_count),
+		fmt.Sprintf("%d", witnessCount),
 		"--protocol-params-file",
 		"protocol.json",
 		"--testnet-magic",
@@ -516,16 +506,16 @@ func EstimateFee(tx Transaction) (fee int64, err error) {
 		return 0, err
 	}
 
-	_, fee_err := fmt.Sscan(output, &fee)
-	if fee_err != nil {
-		log.Fatal(fee_err)
+	_, feeErr := fmt.Sscan(output, &fee)
+	if feeErr != nil {
+		log.Fatal(feeErr)
 	}
 
 	return fee, err
 }
 
 func BalanceTransaction(tx *Transaction, fee int64) {
-	var change map[string]int64 = make(map[string]int64)
+	change := make(map[string]int64)
 
 	// Seed change with inputs
 	for _, input := range tx.Inputs {
@@ -567,7 +557,7 @@ func BalanceTransaction(tx *Transaction, fee int64) {
 }
 
 // Ensures a valid protocol.json file exists and creates one from the connected chain otherwise.
-func EnsureProtocolParameters() {
+func EnsureProtocolParameters() error {
 	cmd := exec.Command("cardano-cli",
 		"query",
 		"protocol-parameters",
@@ -576,7 +566,12 @@ func EnsureProtocolParameters() {
 		"--testnet-magic",
 		testnetMagic)
 
-	execCommand(cmd)
+	_, err := execCommand(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to execute command")
+	}
+
+	return nil
 }
 
 // Get the transaction hash of the most recently built transaction.
@@ -651,8 +646,8 @@ func EstimatePlutusInteraction(tx Transaction) {
 		}
 	}()
 
-	cmd.Start()
-	cmd.Wait()
+	_ = cmd.Start()
+	_ = cmd.Wait()
 }
 
 // Builds a transaction file with the given fee.
@@ -718,8 +713,8 @@ func BuildTransactionRaw(tx Transaction, fee int64) {
 		}
 	}()
 
-	cmd.Start()
-	cmd.Wait()
+	_ = cmd.Start()
+	_ = cmd.Wait()
 }
 
 // Create a cardano-cli compatible multi-asset vaule string from a map of asset to amount
@@ -727,7 +722,7 @@ func ValueStr(value map[string]int64) (str string) {
 	builder := strings.Builder{}
 
 	count := 0
-	output_count := len(value)
+	outputCount := len(value)
 	for token, amount := range value {
 		if token == "lovelace" {
 			builder.WriteString(fmt.Sprintf("%d", amount))
@@ -735,11 +730,11 @@ func ValueStr(value map[string]int64) (str string) {
 			builder.WriteString(fmt.Sprintf("%d %s", amount, token))
 		}
 
-		if count < output_count-1 {
+		if count < outputCount-1 {
 			builder.WriteString("+")
 		}
 
-		count += 1
+		count++
 	}
 
 	return builder.String()
@@ -768,7 +763,8 @@ func ValueStr(value map[string]int64) (str string) {
 // }
 
 func WriteDatumFile(path string, ntx int64, spPubKeyHash string, cpPubKeyHash string) {
-	if err := os.WriteFile(path, []byte(fmt.Sprintf(DATUM_FORMAT_STRING, spPubKeyHash, cpPubKeyHash, ntx, PreGenMetaDataHash, PreGenWithdrawHash, PreGenRefundHash, PreGenDistribute75Hash, PreGenDistribute50Hash)), 0666); err != nil {
+	// nolint:gofumpt
+	if err := os.WriteFile(path, []byte(fmt.Sprintf(DatumFormatString, spPubKeyHash, cpPubKeyHash, ntx, PreGenMetaDataHash, PreGenWithdrawHash, PreGenRefundHash, PreGenDistribute75Hash, PreGenDistribute50Hash)), 0600); err != nil {
 		log.Fatal(err)
 	}
 }

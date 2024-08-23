@@ -36,7 +36,7 @@ func listenDMSPort(net backend.NetworkManager) (bool, error) {
 	}
 
 	for _, conn := range conns {
-		if conn.Status == "LISTEN" && uint32(port) == conn.Laddr.Port {
+		if conn.Status == "LISTEN" && port == conn.Laddr.Port {
 			return true, nil
 		}
 	}
@@ -47,7 +47,7 @@ func listenDMSPort(net backend.NetworkManager) (bool, error) {
 // isDMSRunning is intended to be used as a PreRun hook and ensure that DMS
 // is running before command execution
 func isDMSRunning(net backend.NetworkManager) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
+	return func(_ *cobra.Command, _ []string) error {
 		open, err := listenDMSPort(net)
 		if err != nil {
 			return fmt.Errorf("unable to listen on DMS port: %w", err)
@@ -127,7 +127,7 @@ func setOnboardData(memory int64, cpu int64, ntxPrice float64, channel, address 
 
 //		return chatList, nil
 //	}
-func getIncomingChatList(body []byte) (string, error) {
+func getIncomingChatList(_ []byte) (string, error) {
 	err := errors.New("getIncomingChatList not implemented")
 	return "", err
 }
@@ -142,11 +142,11 @@ func validateJoinChatInput(args []string, chatList []byte) error {
 		return fmt.Errorf("no chat ID specified")
 	} else if len(args) > 1 {
 		return fmt.Errorf("unable to join multiple chats")
-	} else {
-		chatID, err = strconv.Atoi(args[0])
-		if err != nil {
-			return fmt.Errorf("argument is not integer")
-		}
+	}
+
+	chatID, err = strconv.Atoi(args[0])
+	if err != nil {
+		return fmt.Errorf("argument is not integer")
 	}
 
 	openChats, err := getIncomingChatList(chatList)
@@ -163,14 +163,14 @@ func validateJoinChatInput(args []string, chatList []byte) error {
 
 func validateStartChatInput(p2pService backend.PeerManager, args []string) error {
 	if len(args) == 0 || args[0] == "" {
-		return fmt.Errorf("no peer ID specified")
+		return errors.New("no peer ID specified")
 	} else if len(args) > 1 {
-		return fmt.Errorf("cannot start multiple chats")
-	} else {
-		_, err := p2pService.Decode(args[0])
-		if err != nil {
-			return fmt.Errorf("invalid peer ID: %w", err)
-		}
+		return errors.New("cannot start multiple chats")
+	}
+
+	_, err := p2pService.Decode(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid peer ID: %w", err)
 	}
 
 	return nil
@@ -198,14 +198,14 @@ func getDHTPeers(utilsService backend.Utility) ([]string, error) {
 
 	errMsg, err := jsonparser.GetString(bodyDht, "error")
 	if err == nil {
-		return nil, fmt.Errorf(errMsg)
+		return nil, errors.New(errMsg)
 	}
 	msg, err := jsonparser.GetString(bodyDht, "message")
 	if err == nil {
-		return nil, fmt.Errorf(msg)
+		return nil, errors.New(msg)
 	}
 
-	_, err = jsonparser.ArrayEach(bodyDht, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+	_, err = jsonparser.ArrayEach(bodyDht, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
 		dhtSlice = append(dhtSlice, string(value))
 	})
 	if err != nil {
@@ -230,15 +230,14 @@ func getBootstrapPeers(writer io.Writer, utilsService backend.Utility) ([]string
 
 	errMsg, err := jsonparser.GetString(bodyBoot, "error")
 	if err == nil {
-		return nil, fmt.Errorf(errMsg)
+		return nil, errors.New(errMsg)
 	}
 	msg, err := jsonparser.GetString(bodyBoot, "message")
 	if err == nil {
-		return nil, fmt.Errorf(msg)
-
+		return nil, errors.New(msg)
 	}
 
-	_, err = jsonparser.ArrayEach(bodyBoot, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+	_, err = jsonparser.ArrayEach(bodyBoot, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
 		id, err := jsonparser.GetString(value, "ID")
 		if err != nil {
 			fmt.Fprintln(writer, "Error getting bootstrap peer ID string:", err)
@@ -389,6 +388,7 @@ func handleOnboarded(table *tablewriter.Table, utilsService backend.Utility) err
 
 // appendToFile opens filename and write string data to it
 func appendToFile(fs backend.FileSystem, filename, data string) error {
+	// nolint:gofumpt
 	f, err := fs.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("open %s file failed: %w", filename, err)

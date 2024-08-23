@@ -2,6 +2,7 @@ package validate
 
 import (
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -82,5 +83,4 @@ func TestConvertNumericToFloat64(t *testing.T) {
 	f, ok = ConvertNumericToFloat64(float32(3.14))
 	assert.True(t, ok)
 	assert.NotEqual(t, float64(3.14), f)
-
 }

@@ -84,7 +84,6 @@ func (h OnboardingHandler) Onboard(c *gin.Context) {
 	if err := c.BindJSON(&capacity); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request data"})
 		return
-
 	}
 
 	oConfig, err := h.service.Onboard(c.Request.Context(), capacity)

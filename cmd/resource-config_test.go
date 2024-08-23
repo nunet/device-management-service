@@ -16,7 +16,7 @@ func GetMockConn(open bool) []gonet.ConnectionStat {
 
 	conns := []gonet.ConnectionStat{
 		{
-			Laddr:  gonet.Addr{Port: uint32(dmsPort)},
+			Laddr:  gonet.Addr{Port: dmsPort},
 			Status: "",
 		},
 	}

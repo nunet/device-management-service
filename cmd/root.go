@@ -16,8 +16,8 @@ var rootCmd = &cobra.Command{
 	},
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+	Run: func(cmd *cobra.Command, _ []string) {
+		_ = cmd.Help()
 	},
 }
 

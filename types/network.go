@@ -5,8 +5,7 @@ const (
 )
 
 // NetworkSpec is a stub. Please expand based on requirements.
-type NetworkSpec struct {
-}
+type NetworkSpec struct{}
 
 // NetConfig is a stub. Please expand it or completely change it based on requirements.
 type NetConfig struct {

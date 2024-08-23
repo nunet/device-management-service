@@ -26,7 +26,6 @@ func (l *Logger) init() error {
 		zapConfig := zap.NewDevelopmentConfig()
 		zapConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		l.Logger, _ = zapConfig.Build()
-
 	} else {
 		l.Logger, err = zap.NewProduction()
 	}

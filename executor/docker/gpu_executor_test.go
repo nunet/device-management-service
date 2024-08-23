@@ -10,6 +10,7 @@ import (
 	docker_types "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -20,6 +21,7 @@ func TestGPUDeployment(t *testing.T) {
 	// Get the GPU with the highest free VRAM
 	t.Log("Fetching GPU with highest free VRAM")
 	gpus, err := resources.ManagerInstance.SystemSpecs().GetGPUs()
+	assert.NoError(t, err)
 	maxFreeVRAMGpu, err := types.GPUList(gpus).GetGPUWithHighestFreeVRAM()
 	if err != nil {
 		t.Fatalf("Error getting GPU with highest free VRAM: %v", err)
@@ -92,7 +94,7 @@ func pullImage(t *testing.T, cli *client.Client, imageName string) error {
 	return nil
 }
 
-func runContainer(t *testing.T, cli *client.Client, imageName string, vendor types.GPUVendor, gpu types.GPU) error {
+func runContainer(t *testing.T, cli *client.Client, imageName string, vendor types.GPUVendor, _ types.GPU) error {
 	ctx := context.Background()
 
 	containerConfig := &container.Config{

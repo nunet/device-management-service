@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/buger/jsonparser"
@@ -15,14 +16,14 @@ func NewResourceConfigCmd(net backend.NetworkManager, utilsService backend.Utili
 		Use:     "resource-config",
 		Short:   "Update configuration of onboarded device",
 		PreRunE: isDMSRunning(net),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			memory, _ := cmd.Flags().GetInt64("memory")
 			cpu, _ := cmd.Flags().GetInt64("cpu")
 			ntxPrice, _ := cmd.Flags().GetFloat64("ntx-price")
 
 			// check for both flags values
 			if memory == 0 || cpu == 0 || ntxPrice < 0 {
-				cmd.Help()
+				_ = cmd.Help()
 				return fmt.Errorf("all flag values must be specified")
 			}
 
@@ -43,8 +44,8 @@ func NewResourceConfigCmd(net backend.NetworkManager, utilsService backend.Utili
 			}
 
 			msg, err := jsonparser.GetString(resp, "error")
-			if err == nil { // if error message IS found
-				return fmt.Errorf(msg)
+			if err == nil {
+				return errors.New(msg)
 			}
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Resources updated successfully!")
@@ -54,7 +55,7 @@ func NewResourceConfigCmd(net backend.NetworkManager, utilsService backend.Utili
 	}
 
 	cmd.Flags().Int64VarP(&flagMemory, "memory", "m", 0, "set amount of memory")
-	cmd.Flags().Int64VarP(&flagCpu, "cpu", "c", 0, "set amount of CPU")
+	cmd.Flags().Int64VarP(&flagCPU, "cpu", "c", 0, "set amount of CPU")
 	cmd.Flags().Float64VarP(&flagNtxPrice, "ntx-price", "x", 0, "Set NTX Price per minute for compute resources you are updating")
 	return cmd
 }

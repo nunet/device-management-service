@@ -8,11 +8,11 @@ import (
 	s3Manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-type S3Storage struct {
+type Storage struct {
 	*s3.Client
 	volController storage.VolumeController
 	downloader    *s3Manager.Downloader
@@ -20,22 +20,21 @@ type S3Storage struct {
 }
 
 type s3Object struct {
-	key       *string
-	eTag      *string
-	versionID *string
-	size      int64
-	isDir     bool
+	key   *string
+	eTag  *string
+	size  int64
+	isDir bool
 }
 
 // NewClient creates a new S3Storage which includes a S3-SDK client.
 // It depends on a VolumeController to manage the volumes being acted upon.
-func NewClient(config aws.Config, volController storage.VolumeController) (*S3Storage, error) {
+func NewClient(config aws.Config, volController storage.VolumeController) (*Storage, error) {
 	if !hasValidCredentials(config) {
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
 	s3Client := s3.NewFromConfig(config)
-	return &S3Storage{
+	return &Storage{
 		s3Client,
 		volController,
 		s3Manager.NewDownloader(s3Client),
@@ -43,7 +42,7 @@ func NewClient(config aws.Config, volController storage.VolumeController) (*S3St
 	}, nil
 }
 
-func (s *S3Storage) Size(ctx context.Context, source *types.SpecConfig) (uint64, error) {
+func (s *Storage) Size(ctx context.Context, source *types.SpecConfig) (uint64, error) {
 	inputSource, err := DecodeInputSpec(source)
 	if err != nil {
 		return 0, fmt.Errorf("failed to decode input spec: %v", err)

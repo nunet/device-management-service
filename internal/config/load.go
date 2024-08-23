@@ -12,6 +12,7 @@ import (
 )
 
 var cfg Config
+
 var home = os.Getenv("HOME")
 
 func getViper() *viper.Viper {
@@ -58,16 +59,16 @@ func LoadConfig() {
 
 	config, err := findConfig(paths, configFile)
 	if err != nil {
-		setDefaultConfig().Unmarshal(&cfg)
+		_ = setDefaultConfig().Unmarshal(&cfg)
 	}
 
 	modifiedConfig := removeComments(config)
 	if err = v.ReadConfig(bytes.NewBuffer(modifiedConfig)); err != nil { // Viper only reads buffer, keeping comments in original config
-		setDefaultConfig().Unmarshal(&cfg)
+		_ = setDefaultConfig().Unmarshal(&cfg)
 	}
 
 	if err = v.Unmarshal(&cfg); err != nil {
-		setDefaultConfig().Unmarshal(&cfg)
+		_ = setDefaultConfig().Unmarshal(&cfg)
 	}
 }
 
@@ -76,7 +77,7 @@ func SetConfig(key string, value interface{}) {
 	v.Set(key, value)
 	err := v.Unmarshal(&cfg)
 	if err != nil {
-		setDefaultConfig().Unmarshal(&cfg)
+		_ = setDefaultConfig().Unmarshal(&cfg)
 	}
 }
 
@@ -95,9 +96,8 @@ func findConfig(paths []string, filename string) ([]byte, error) {
 			config, err := os.ReadFile(fullPath)
 			if err == nil {
 				return config, nil
-			} else {
-				return nil, err
 			}
+			return nil, err
 		}
 	}
 

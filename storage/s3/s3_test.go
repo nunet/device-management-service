@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 
-	"gitlab.com/nunet/device-management-service/storage/basic_controller"
+	basiccontroller "gitlab.com/nunet/device-management-service/storage/basic_controller"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -49,16 +49,12 @@ const (
 type S3ProviderTestSuite struct {
 	suite.Suite
 	ctx       context.Context
-	s3Storage *S3Storage
-	vcHelper  *basic_controller.VolControllerTestSuiteHelper
-
-	// map of pathWithinVolume(key):content
-	testBuckets map[string]string
+	s3Storage *Storage
+	vcHelper  *basiccontroller.VolControllerTestSuiteHelper
 }
 
 // SetupTest is mainly setting up a volume controller based on its test suite and a S3 client.
 func (s *S3ProviderTestSuite) SetupTest() {
-
 	volumes := map[string]*types.StorageVolume{
 		"volume1": {
 			Path:           filepath.Join(basePath, "volume1"),
@@ -68,10 +64,11 @@ func (s *S3ProviderTestSuite) SetupTest() {
 		},
 	}
 
-	vcHelper, err := basic_controller.SetupVolControllerTestSuite(s.T(), basePath, volumes)
+	vcHelper, err := basiccontroller.SetupVolControllerTestSuite(s.T(), basePath, volumes)
 	s.NoError(err)
 
 	// Write a file in volume1 to be later used to upload
+	// nolint:gofumpt
 	err = afero.WriteFile(vcHelper.Fs, filepath.Join(vcHelper.Volumes["volume1"].Path, vol1File), []byte("hello world"), 0644)
 	s.NoError(err)
 
@@ -154,7 +151,6 @@ func (s *S3ProviderTestSuite) TestDownload() {
 //
 // TODO: test different scenarios, mainly one with nested directories being uploaded
 func (s *S3ProviderTestSuite) TestUpload() {
-
 	// inputKey is the key received by the S3Provider.Upload() method
 	inputKey := "upload/"
 	// keyUploadedAs is the key resolved based on file path relative to its vol
@@ -165,9 +161,7 @@ func (s *S3ProviderTestSuite) TestUpload() {
 		Key:    aws.String(keyUploadedAs),
 	})
 	if err != nil {
-		if s3Err, ok := err.(*s3_types.NoSuchKey); ok && s3Err.ErrorCode() == "NoSuchKey" {
-			// File does not exist, ignore the error
-		} else {
+		if s3Err, ok := err.(*s3_types.NoSuchKey); !(ok && s3Err.ErrorCode() == "NoSuchKey") {
 			s.NoError(err)
 		}
 	}

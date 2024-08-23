@@ -33,7 +33,6 @@ func (h *DeviceHandler) DeviceStatus(c *gin.Context) {
 	// }
 	// c.JSON(200, gin.H{"online": status})
 	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "device status not implemented"})
-
 }
 
 // UpdateDeviceStatus  godoc

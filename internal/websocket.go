@@ -1,4 +1,4 @@
-// Package internal is a work in progress. It is planned to accomodate
+// Package internal is a work in progress. It is planned to accommodate
 // modules such as db and types.
 package internal
 
@@ -13,7 +13,7 @@ import (
 var UpgradeConnection = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin:     func(_ *http.Request) bool { return true },
 }
 
 // WebSocketConnection is pointer to gorilla/websocket.Conn
@@ -30,6 +30,7 @@ type Command struct {
 }
 
 var commandChan = make(chan Command)
+
 var clients = make(map[WebSocketConnection]string)
 
 // ListenForWs listens to the connected client for any message. It is assumed that
@@ -65,6 +66,9 @@ func SendCommandForExecution() {
 		// fetch result
 
 		// send back result
-		command.Conn.WriteMessage(websocket.TextMessage, []byte(command.Command))
+		err := command.Conn.WriteMessage(websocket.TextMessage, []byte(command.Command))
+		if err != nil {
+			zlog.Sugar().Warnf("failed to write message: %w", err)
+		}
 	}
 }

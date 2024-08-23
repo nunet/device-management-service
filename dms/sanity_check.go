@@ -11,8 +11,8 @@ import (
 // Recalculates free resources and update the database.
 //
 // Deleted now because dependencies such as the docker package have been replaced with executor/docker
-func SanityCheck(gormDB *gorm.DB) {
+func SanityCheck(_ *gorm.DB) {
 	// TODO: sanity check of DMS last exit and correction of invalid states
 
-	//resources.CalcFreeResAndUpdateDB()
+	// resources.CalcFreeResAndUpdateDB()
 }

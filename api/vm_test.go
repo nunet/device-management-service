@@ -63,7 +63,7 @@ func TestStartDefault(t *testing.T) {
 }
 
 // TODO: test it with incorrect bind json
-//func TestStartCustomHandler(t *testing.T) {
+// func TestStartCustomHandler(t *testing.T) {
 //	router := SetupMockRouter()
 //
 //	body := CustomVM{
@@ -83,7 +83,7 @@ func TestStartDefault(t *testing.T) {
 //	assert.Contains(t, w.Body.String(), "VM started successfully")
 //}
 //
-//func TestStartDefaultHandler(t *testing.T) {
+// func TestStartDefaultHandler(t *testing.T) {
 //	router := SetupMockRouter()
 //
 //	body := DefaultVM{

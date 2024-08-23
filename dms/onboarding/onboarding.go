@@ -17,11 +17,9 @@ import (
 	"github.com/spf13/afero"
 )
 
-var (
-	ErrMachineNotOnboarded = errors.New("machine is not onboarded")
-)
+var ErrMachineNotOnboarded = errors.New("machine is not onboarded")
 
-type OnboardingConfig struct {
+type Config struct {
 	Fs             afero.Afero
 	WorkDir        string
 	DatabasePath   string
@@ -33,16 +31,16 @@ type OnboardingConfig struct {
 }
 
 type Onboarding struct {
-	config OnboardingConfig
+	config Config
 }
 
-func New(config OnboardingConfig) *Onboarding {
+func New(config Config) *Onboarding {
 	return &Onboarding{config: config}
 }
 
 // IsOnboarded checks whether the machine is onboarded or not
 func (o *Onboarding) IsOnboarded(ctx context.Context) (bool, error) {
-	_, err := o.config.OnboardingRepo.Get(context.Background())
+	_, err := o.config.OnboardingRepo.Get(ctx)
 	if err != nil {
 		return false, nil
 	}
@@ -89,6 +87,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	var oConf types.OnboardingConfig
 	oConf.Name = hostname
 	oConf.UpdateTimestamp = time.Now().Unix()
+	// nolint TODO: 553
 	oConf.Resource.MemoryMax = int64(provisionedResources.RAM)
 	oConf.Resource.TotalCore = int64(provisionedResources.NumCores)
 	oConf.Resource.CPUMax = int64(provisionedResources.CPU)
@@ -109,6 +108,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 
 	oConf.Reserved.Memory = capacity.Memory
 	oConf.Reserved.CPU = capacity.CPU
+	// nolint TODO: 553
 	oConf.Available.Memory = int64(provisionedResources.RAM) - capacity.Memory
 	oConf.Available.CPU = int64(provisionedResources.CPU) - capacity.CPU
 	oConf.Network = capacity.Channel
@@ -156,8 +156,8 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, fmt.Errorf("could not get available resources info: %w", err)
 	}
 
-	available.TotCpuHz = int(capacity.CPU)
-	available.Ram = int(capacity.Memory)
+	available.TotCPUHz = int(capacity.CPU)
+	available.RAM = int(capacity.Memory)
 	available.NTXPricePerMinute = capacity.NTXPricePerMinute
 
 	if _, err := o.config.AvResourceRepo.Save(ctx, available); err != nil {
@@ -223,6 +223,7 @@ func validateCapacityForNunet(capacity types.CapacityForNunet) error {
 		return fmt.Errorf("CPU should be between 10%% and 90%% of the available CPU (%d and %d)", int64(provisionedResources.CPU/10), int64(provisionedResources.CPU*9/10))
 	}
 
+	// nolint TODO: 553
 	if capacity.Memory > int64(provisionedResources.RAM*9/10) || capacity.Memory < int64(provisionedResources.RAM/10) {
 		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory (%d and %d)", int64(provisionedResources.RAM/10), int64(provisionedResources.RAM*9/10))
 	}
@@ -266,12 +267,12 @@ func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity type
 	}
 
 	avalRes := types.AvailableResources{
-		TotCpuHz:          int(capacity.CPU),
-		CpuNo:             int(totalProvisioned.NumCores),
-		CpuHz:             cpuInfo.MHzPerCore,
-		PriceCpu:          0, // TODO: Get price of CPU
-		Ram:               int(capacity.Memory),
-		PriceRam:          0, // TODO: Get price of RAM
+		TotCPUHz:          int(capacity.CPU),
+		CPUNo:             totalProvisioned.NumCores,
+		CPUHz:             cpuInfo.MHzPerCore,
+		PriceCPU:          0, // TODO: Get price of CPU
+		RAM:               int(capacity.Memory),
+		PriceRAM:          0, // TODO: Get price of RAM
 		Vcpu:              int(math.Floor((float64(capacity.CPU)) / cpuInfo.MHzPerCore)),
 		Disk:              0,
 		PriceDisk:         0,

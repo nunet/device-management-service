@@ -277,7 +277,8 @@ func (s *TransformTestSuite) TestTransformVolume() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result, err := TransformVolume(&tt.root, tt.input, tt.path)
+			r := tt.root
+			result, err := TransformVolume(&r, tt.input, tt.path)
 			if tt.wantErr {
 				s.Error(err)
 				return
@@ -596,7 +597,8 @@ func (s *TransformTestSuite) TestNunetTransformer() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result, err := transformer.Transform(&tt.input)
+			v := tt.input
+			result, err := transformer.Transform(&v)
 			if tt.wantErr {
 				s.Error(err)
 				return

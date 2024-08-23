@@ -14,8 +14,8 @@ type DeploymentRequest struct {
 	MetadataHash           string    `json:"metadata_hash"`
 	WithdrawHash           string    `json:"withdraw_hash"`
 	RefundHash             string    `json:"refund_hash"`
-	Distribute_50Hash      string    `json:"distribute_50_hash"`
-	Distribute_75Hash      string    `json:"distribute_75_hash"`
+	Distribute50Hash       string    `json:"distribute_50_hash"`
+	Distribute75Hash       string    `json:"distribute_75_hash"`
 	Params                 struct {
 		ImageID   string `json:"image_id"`
 		ModelURL  string `json:"model_url"`

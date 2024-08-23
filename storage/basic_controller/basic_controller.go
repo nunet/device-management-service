@@ -1,14 +1,15 @@
-package basic_controller
+package basiccontroller
 
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -57,8 +58,7 @@ func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, op
 	}
 
 	vol.Path = vc.basePath + string(volSource) + "-" + utils.RandomString(16)
-
-	if err := vc.FS.Mkdir(vol.Path, 0770); err != nil {
+	if err := vc.FS.Mkdir(vol.Path, os.ModePerm); err != nil {
 		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume: %w", err)
 	}
 
@@ -95,6 +95,7 @@ func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.Lo
 	}
 
 	// change file permissions
+	// nolint:gofumpt
 	if err := vc.FS.Chmod(updatedVol.Path, 0400); err != nil {
 		return fmt.Errorf("failed to make storage volume read-only (path: %s): %w", updatedVol.Path, err)
 	}
@@ -139,7 +140,7 @@ func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.
 
 	vol, err := vc.repo.Find(context.Background(), query)
 	if err != nil {
-		if err == repositories.NotFoundError {
+		if err == repositories.ErrNotFound {
 			return fmt.Errorf("volume not found: %w", err)
 		}
 		return fmt.Errorf("failed to find volume: %w", err)
@@ -192,12 +193,12 @@ func (vc *BasicVolumeController) GetSize(identifier string, idType storage.IDTyp
 }
 
 // EncryptVolume encrypts a given volume
-func (vc *BasicVolumeController) EncryptVolume(path string, encryptor types.Encryptor, encryptionType types.EncryptionType) error {
+func (vc *BasicVolumeController) EncryptVolume(_ string, _ types.Encryptor, _ types.EncryptionType) error {
 	return fmt.Errorf("not implemented")
 }
 
 // DecryptVolume decrypts a given volume
-func (vc *BasicVolumeController) DecryptVolume(path string, decryptor types.Decryptor, decryptionType types.EncryptionType) error {
+func (vc *BasicVolumeController) DecryptVolume(_ string, _ types.Decryptor, _ types.EncryptionType) error {
 	return fmt.Errorf("not implemented")
 }
 

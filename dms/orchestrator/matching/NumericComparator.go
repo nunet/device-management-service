@@ -7,7 +7,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils/validate"
 )
 
-func NumericComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison {
+func NumericComparator(lraw, rraw interface{}, _ ...Preference) types.Comparison {
 	// comparator for  numeric types:
 	// left represent machine capabilities;
 	// right represent required capabilities;
@@ -22,23 +22,25 @@ func NumericComparator(lraw, rraw interface{}, preference ...Preference) types.C
 		result = types.Error
 	}
 
-	if reflect.DeepEqual(l, r) {
+	switch {
+	case reflect.DeepEqual(l, r):
 		// if available capabilities are
 		// equal to required capabilities
 		// then the result of comparison is 'Equal'
 		result = types.Equal
-	} else if l < r {
+
+	case l < r:
 		// if declared machine numeric capability
-		// is less than jobs required capability
-		// then the result of comparison in 'Less'
-		// ("less is required than available")
+		// is less than job's required capability
+		// then the result of comparison is 'Worse'
 		result = types.Worse
-	} else if l > r {
+
+	case l > r:
 		// if declared machine numeric capability
-		// is more than jobs required numeric capability
-		// then the result of comparison is 'More'
-		// ("more is required than available")
+		// is more than job's required numeric capability
+		// then the result of comparison is 'Better'
 		result = types.Better
 	}
+
 	return result
 }

@@ -39,13 +39,12 @@ func TestClientTestSuite(t *testing.T) {
 
 // createTestVM is a helper method to create a VM for testing.
 func (s *ClientTestSuite) createTestVM(socketPath string) *firecrackerSdk.Machine {
-	
 	cfg := firecrackerSdk.Config{
-		SocketPath: socketPath,
+		SocketPath:      socketPath,
 		KernelImagePath: kernelImagePath,
 		Drives: []firecrackerModels.Drive{
 			{
-				DriveID: firecrackerSdk.String("1"),
+				DriveID:      firecrackerSdk.String("1"),
 				PathOnHost:   firecrackerSdk.String(rootDrivePath),
 				IsRootDevice: firecrackerSdk.Bool(true),
 				IsReadOnly:   firecrackerSdk.Bool(true),
@@ -63,7 +62,7 @@ func (s *ClientTestSuite) createTestVM(socketPath string) *firecrackerSdk.Machin
 	})
 	go func(m *firecrackerSdk.Machine) {
 		time.Sleep(3 * time.Second)
-		m.StopVMM()
+		_ = m.StopVMM()
 	}(m)
 	return m
 }
