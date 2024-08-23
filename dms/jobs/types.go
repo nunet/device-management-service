@@ -17,6 +17,7 @@ type JobLink struct {
 
 // Job represents a single job in the configuration
 type Job struct {
+	ID        string                   `json:"id" description:"Job ID"`
 	Instances int                      `json:"instances" description:"Number of instances"`
 	Name      string                   `json:"name" description:"Name of the job"`
 	Metadata  JobMetadata              `json:"metadata" description:"Metadata of the job"`

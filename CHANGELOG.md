@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.183](#480)
+
+### Added
+- Node and Allocation initial implementation
+
 ## [0.4.182](#425)
 
 ### Changed

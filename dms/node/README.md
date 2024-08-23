@@ -116,7 +116,7 @@ type Node_interface interface {
 	checkAllocationStatus()
 	
 	// routes message to the allocation of the job that is running on the machine
-	routeToAllocation()
+	// routeToAllocation()
 
 	// below methods related to COMPUTE PROVIDER functionality (mostly)
 	// All setters and getters are not included into global dms class diagram to make

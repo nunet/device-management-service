@@ -2,22 +2,26 @@ package dms
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// ActorInterface defines the functionalities of actor.
-type ActorInterface interface {
+// Actor defines the functionalities of actor.
+type Actor interface {
 	// Address of actor.
 	Address() *ActorAddrInfo
 	// SendMessage to another actor.
 	SendMessage(destination *ActorAddrInfo, m *Message)
 	// CreateActor creates a new actor.
-	CreateActor() (*ActorAddrInfo, error)
+	CreateActor() (*BasicActor, error)
+	// Messages gets the actor messages
+	Messages() <-chan Message
 }
 
 // ActorAddrInfo encapsulates the data required to address an actor.
@@ -33,20 +37,19 @@ func (a *ActorAddrInfo) Valid() bool {
 
 // Message is passed between actors.
 type Message struct {
-	msgType string
-	sender  string
-	data    []byte
+	Type   string
+	Sender string
+	Data   []byte
 }
 
 // ActorFactory is an actor factory.
 type ActorFactory struct {
-	hostID        string
-	network       network.Network
-	actorRegistry *ActorRegistry
+	hostID  string
+	network network.Network
 }
 
-// Actor represents an actor.
-type Actor struct {
+// BasicActor represents an actor.
+type BasicActor struct {
 	hostID        string
 	address       string
 	network       network.Network
@@ -56,25 +59,24 @@ type Actor struct {
 }
 
 // NewActorFactory holds the dependencies to create and manage actors.
-func NewActorFactory(hostID string, network network.Network, actorRegistry *ActorRegistry) *ActorFactory {
+func NewActorFactory(hostID string, network network.Network) *ActorFactory {
 	return &ActorFactory{
-		hostID:        hostID,
-		network:       network,
-		actorRegistry: actorRegistry,
+		hostID:  hostID,
+		network: network,
 	}
 }
 
 // NewActor allows the factory to create a new actor.
-func (f *ActorFactory) NewActor() (*Actor, error) {
+func (f *ActorFactory) NewActor() (*BasicActor, error) {
 	return f.newActor(nil)
 }
 
-func (f *ActorFactory) newActor(parentActorAddress *ActorAddrInfo) (*Actor, error) {
-	return newActor(parentActorAddress, f.hostID, f.network, f.actorRegistry, f)
+func (f *ActorFactory) newActor(parentActorAddress *ActorAddrInfo) (*BasicActor, error) {
+	return newActor(parentActorAddress, f.hostID, f.network, f)
 }
 
 // newActor returns a new actor based on the given arguments.
-func newActor(parentActorAddress *ActorAddrInfo, hostID string, net network.Network, actorRegistry *ActorRegistry, factory *ActorFactory) (*Actor, error) {
+func newActor(parentActorAddress *ActorAddrInfo, hostID string, net network.Network, factory *ActorFactory) (*BasicActor, error) {
 	if hostID == "" {
 		return nil, errors.New("host id is empty")
 	}
@@ -88,27 +90,27 @@ func newActor(parentActorAddress *ActorAddrInfo, hostID string, net network.Netw
 		return nil, fmt.Errorf("failed to generate uuid: %w", err)
 	}
 
-	createdActor := &Actor{
+	createdActor := &BasicActor{
 		hostID:        hostID,
 		network:       net,
 		address:       id.String(),
-		actorRegistry: actorRegistry,
+		actorRegistry: NewActorRegistry(),
 		factory:       factory,
 		messages:      make(chan Message, 100),
 	}
 
-	actorRegistry.AddActorAddress(createdActor.Address())
+	createdActor.actorRegistry.AddActorAddress(createdActor.Address())
 
 	if parentActorAddress != nil {
-		actorRegistry.SetParentAddress(createdActor.address, parentActorAddress)
-		actorRegistry.AddChild(parentActorAddress.InboxAddress, createdActor.Address())
+		createdActor.actorRegistry.SetParentAddress(createdActor.address, parentActorAddress)
+		createdActor.actorRegistry.AddChild(parentActorAddress.InboxAddress, createdActor.Address())
 	}
 
 	return createdActor, nil
 }
 
 // Address returns the address of an actor.
-func (a *Actor) Address() *ActorAddrInfo {
+func (a *BasicActor) Address() *ActorAddrInfo {
 	return &ActorAddrInfo{
 		HostID:       a.hostID,
 		InboxAddress: a.address,
@@ -116,7 +118,7 @@ func (a *Actor) Address() *ActorAddrInfo {
 }
 
 // SendMessage sends a message to another actor.
-func (a *Actor) SendMessage(ctx context.Context, destination *ActorAddrInfo, m *Message) error {
+func (a *BasicActor) SendMessage(ctx context.Context, destination *ActorAddrInfo, m *Message) error {
 	if !destination.Valid() {
 		return errors.New("destination actor addr info is invalid")
 	}
@@ -131,9 +133,15 @@ func (a *Actor) SendMessage(ctx context.Context, destination *ActorAddrInfo, m *
 		return fmt.Errorf("failed to send message to actor %s: %v", destination.HostID, err)
 	}
 
+	// TODO: convert to proto message and marshal with protobuf
+	actorMessge, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("failed to marshal actor message")
+	}
+
 	err = a.network.SendMessage(ctx, []string{addresses[0]}, types.MessageEnvelope{
 		Type: types.MessageType(fmt.Sprintf("actor/%s/messages/0.0.1", destination.InboxAddress)),
-		Data: m.data,
+		Data: actorMessge,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to send message to remote actor %s: %v", destination.InboxAddress, err)
@@ -142,13 +150,20 @@ func (a *Actor) SendMessage(ctx context.Context, destination *ActorAddrInfo, m *
 	return nil
 }
 
+func (a *BasicActor) HandleGenericAction1(payload []byte) {
+	fmt.Println("This is generic method for actor: ", string(payload))
+}
+
 // Start registers the message handlers and starts an actor.
-func (a *Actor) Start() error {
+func (a *BasicActor) Start() error {
 	err := a.network.HandleMessage(fmt.Sprintf("actor/%s/messages/0.0.1", a.address), func(data []byte) {
-		a.messages <- Message{
-			sender: "sender",
-			data:   data,
+		var msg Message
+		err := json.Unmarshal(data, &msg)
+		if err != nil {
+			log.Warn("error while handling message", err)
+			return
 		}
+		a.messages <- msg
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start actor %s: %w", a.address, err)
@@ -158,40 +173,33 @@ func (a *Actor) Start() error {
 }
 
 // CreateActor creates another actor.
-func (a *Actor) CreateActor() (*ActorAddrInfo, error) {
+func (a *BasicActor) CreateActor() (*BasicActor, error) {
 	newActor, err := a.factory.newActor(a.Address())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new actor: %w", err)
 	}
-	if err := newActor.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start new actor: %w", err)
-	}
 
-	return newActor.Address(), nil
+	return newActor, nil
 }
 
 // ProcessMessages reads messages from the incoming messages channel.
-func (a *Actor) ProcessMessages() {
+func (a *BasicActor) ProcessMessages() {
 	for msg := range a.messages {
-		fmt.Printf("received message from %s", msg.sender)
-		// switch msg.msgType {
-		// case "hello":
-		// 	{
-		// 		a.handleHello(msg)
-		// 	}
-		// default:
-		// 	fmt.Printf("unhandled message type: %s\n", msg.msgType)
-		// }
+		fmt.Printf("received message from %s", msg.Sender)
 	}
 }
 
+// Messages returns the messages channel to be consumed
+func (a *BasicActor) Messages() <-chan Message {
+	return a.messages
+}
+
 // Hello behaviour
-func (a *Actor) Hello(ctx context.Context, destination *ActorAddrInfo, m *Message) {
-	m.msgType = "hello"
+func (a *BasicActor) Hello(ctx context.Context, destination *ActorAddrInfo, m *Message) {
 	_ = a.SendMessage(ctx, destination, m)
 }
 
 // nolint:unused
-func (a *Actor) handleHello(m Message) {
+func (a *BasicActor) handleHello(m Message) {
 	fmt.Println("handled hello message", m)
 }
