@@ -280,12 +280,9 @@ The global class diagram for the DMS is shown below.
 #### Rendered from Source File
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
-!$packageRelativePath = ""
-!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
-
-!include $packageUrlGitlab/specs/class_diagram.puml
+!include https://gitlab.com/nunet/device-management-service/-/raw/develop/specs/class_diagram.puml
 ```
+
 
 ## Getting Started for Developers
 
