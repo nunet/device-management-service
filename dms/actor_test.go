@@ -16,12 +16,9 @@ import (
 )
 
 func TestNewActorFactory(t *testing.T) {
-	actorRegistry := NewActorRegistry()
-
-	factory := NewActorFactory("host1", &libp2p.Libp2p{}, actorRegistry)
+	factory := NewActorFactory("host1", &libp2p.Libp2p{})
 
 	assert.Equal(t, "host1", factory.hostID)
-	assert.Equal(t, actorRegistry, factory.actorRegistry)
 }
 
 func TestNewActor(t *testing.T) {
@@ -43,9 +40,8 @@ func TestNewActor(t *testing.T) {
 		},
 		"success": {
 			af: &ActorFactory{
-				hostID:        "123",
-				network:       &libp2p.Libp2p{},
-				actorRegistry: NewActorRegistry(),
+				hostID:  "123",
+				network: &libp2p.Libp2p{},
 			},
 		},
 	}
@@ -67,22 +63,24 @@ func TestNewActor(t *testing.T) {
 }
 
 func TestCreateActor(t *testing.T) {
-	actorRegistry := NewActorRegistry()
 	net, err := libp2p.New(&types.Libp2pConfig{
 		Scheduler: &backgroundtasks.Scheduler{},
 	}, nil)
 	assert.NoError(t, err)
 	err = net.Init(context.Background())
 	assert.NoError(t, err)
-	factory := NewActorFactory("host1", net, actorRegistry)
+	factory := NewActorFactory("host1", net)
 
 	root, err := factory.NewActor()
 	assert.NoError(t, err)
 
 	newActor, err := root.CreateActor()
 	assert.NoError(t, err)
-	assert.Equal(t, "host1", newActor.HostID)
-	assert.NotEmpty(t, newActor.InboxAddress)
+	err = newActor.Start()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "host1", newActor.hostID)
+	assert.NotEmpty(t, newActor.Address().InboxAddress)
 }
 
 func TestActorMessaging(t *testing.T) {
@@ -108,15 +106,17 @@ func TestActorMessaging(t *testing.T) {
 	// create another actor from root 1 and get its address
 	actor1, err := root1.CreateActor()
 	assert.NoError(t, err)
+	err = actor1.Start()
+	assert.NoError(t, err)
 
 	// send a message from root 1 to newly created actor which are on the same dms
 	// both have same host id but different inbox address
 	msgToSend := &Message{
-		msgType: "generic",
-		sender:  actor1.InboxAddress,
-		data:    []byte("hello world"),
+		Type:   "generic",
+		Sender: actor1.Address().InboxAddress,
+		Data:   []byte("hello world"),
 	}
-	err = root1.SendMessage(context.Background(), &ActorAddrInfo{HostID: actor1.HostID, InboxAddress: actor1.InboxAddress}, msgToSend)
+	err = root1.SendMessage(context.Background(), &ActorAddrInfo{HostID: actor1.hostID, InboxAddress: actor1.Address().InboxAddress}, msgToSend)
 	assert.NoError(t, err)
 
 	// create another root actor from factory 2 and start it
@@ -127,24 +127,23 @@ func TestActorMessaging(t *testing.T) {
 
 	// from root 2, send a message to root 1
 	msgToSend2 := &Message{
-		msgType: "generic",
-		sender:  root2AnotherMachine.address,
-		data:    []byte("hello from remote actor"),
+		Type:   "generic",
+		Sender: root2AnotherMachine.address,
+		Data:   []byte("hello from remote actor"),
 	}
 	err = root2AnotherMachine.SendMessage(context.Background(), &ActorAddrInfo{HostID: root1.hostID, InboxAddress: root1.address}, msgToSend2)
 	assert.NoError(t, err)
 
 	// from root 2, send a message to newly created actor 1 by root 1
-	err = root2AnotherMachine.SendMessage(context.Background(), &ActorAddrInfo{HostID: actor1.HostID, InboxAddress: actor1.InboxAddress}, msgToSend2)
+	err = root2AnotherMachine.SendMessage(context.Background(), &ActorAddrInfo{HostID: actor1.hostID, InboxAddress: actor1.Address().InboxAddress}, msgToSend2)
 	assert.NoError(t, err)
 
 	// send invalid message
-	err = root2AnotherMachine.SendMessage(context.Background(), &ActorAddrInfo{HostID: actor1.HostID, InboxAddress: actor1.InboxAddress}, nil)
+	err = root2AnotherMachine.SendMessage(context.Background(), &ActorAddrInfo{HostID: actor1.hostID, InboxAddress: actor1.Address().InboxAddress}, nil)
 	assert.EqualError(t, err, "message is invalid")
 }
 
 func newActorFactory(t *testing.T, port string, bootstrap []multiaddr.Multiaddr) (*ActorFactory, []multiaddr.Multiaddr, *libp2p.Libp2p) {
-	actorRegistry := NewActorRegistry()
 	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
 	assert.NoError(t, err)
 	net, err := network.NewNetwork(&types.NetworkConfig{
@@ -174,5 +173,5 @@ func newActorFactory(t *testing.T, port string, bootstrap []multiaddr.Multiaddr)
 
 	multi, err := libp2pInstance.GetMultiaddr()
 	assert.NoError(t, err)
-	return NewActorFactory(libp2pInstance.DHT.PeerID().String(), net, actorRegistry), multi, libp2pInstance
+	return NewActorFactory(libp2pInstance.DHT.PeerID().String(), net), multi, libp2pInstance
 }
