@@ -163,7 +163,7 @@ func PromptYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
 func CreateDirectoryIfNotExists(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		// nolint:gofumpt
-		err := os.MkdirAll(path, 0755)
+		err := os.MkdirAll(path, 0o755)
 		if err != nil {
 			return err
 		}

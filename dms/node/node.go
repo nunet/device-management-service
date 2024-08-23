@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
@@ -53,7 +54,10 @@ func New(_ context.Context, id string, net network.Network, benchmark benchmarke
 		return nil, errors.New("resource manager is nil")
 	}
 
-	actorFactory := dms.NewActorFactory(id, net)
+	actorFactory := dms.NewActorFactory(id, net, &dms.ActorParams{
+		HeartbeatInterval:      time.Second * 5,
+		HeartbeatCheckInterval: time.Second * 8,
+	})
 
 	n := &Node{
 		ID:              id,
@@ -99,7 +103,7 @@ func (n *Node) CreateAllocation(_ context.Context, job jobs.Job) (*jobs.Allocati
 
 	allocation, err := jobs.NewAllocation(allocationActor, jobs.AllocationDetails{Job: job, NodeID: n.ID, SourceID: ""}, n.resourceManager)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create allocation: %w", err)
+		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
 
 	n.mu.Lock()

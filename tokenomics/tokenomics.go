@@ -3,14 +3,12 @@
 package tokenomics
 
 import (
-
+	"contract"
 	"jobs"
 	"orchestrator"
 	"payments"
 	"proofs"
-	"contract"
 )
-
 
 // Contract defines the methods for contract operations
 type contract interface {
@@ -32,5 +30,3 @@ type payments interface {
 	Deposit(contractID int, payment Payment, pricing PricingMethod) error
 	SettleContract(contractID int, verificationResult jobs.JobVerificationResult) error
 }
-
-

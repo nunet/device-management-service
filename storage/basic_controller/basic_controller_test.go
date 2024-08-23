@@ -49,7 +49,7 @@ func (s *VolumeControllerTestSuite) SetupTest() {
 
 	// Write a file in volume2
 	// nolint:gofumpt
-	err = afero.WriteFile(s.vcHelper.Fs, s.vcHelper.Volumes["volume2"].Path+"/file.txt", []byte("hello world"), 0644)
+	err = afero.WriteFile(s.vcHelper.Fs, s.vcHelper.Volumes["volume2"].Path+"/file.txt", []byte("hello world"), 0o644)
 	assert.NoError(s.T(), err)
 }
 
@@ -162,7 +162,7 @@ func (s *VolumeControllerTestSuite) TestLockVolume() {
 				fileInfo, err := s.vcHelper.Fs.Stat(tc.volumePath)
 				assert.NoError(t, err)
 				// nolint:gofumpt
-				assert.Equal(t, os.FileMode(0400), fileInfo.Mode().Perm())
+				assert.Equal(t, os.FileMode(0o400), fileInfo.Mode().Perm())
 			}
 		})
 	}

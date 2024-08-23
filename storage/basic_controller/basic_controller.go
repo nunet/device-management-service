@@ -96,7 +96,7 @@ func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.Lo
 
 	// change file permissions
 	// nolint:gofumpt
-	if err := vc.FS.Chmod(updatedVol.Path, 0400); err != nil {
+	if err := vc.FS.Chmod(updatedVol.Path, 0o400); err != nil {
 		return fmt.Errorf("failed to make storage volume read-only (path: %s): %w", updatedVol.Path, err)
 	}
 

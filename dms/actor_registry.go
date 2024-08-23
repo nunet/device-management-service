@@ -58,3 +58,12 @@ func (r *ActorRegistry) GetActorAddress(address string) (*ActorAddrInfo, bool) {
 	a, ok := r.actors[address]
 	return a.addrInfo, ok
 }
+
+func (r *ActorRegistry) GetParentAddress(address string) (*ActorAddrInfo, bool) {
+	a, ok := r.actors[address]
+	if !ok {
+		return nil, false
+	}
+
+	return a.parent, true
+}

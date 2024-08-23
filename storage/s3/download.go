@@ -66,7 +66,7 @@ func (s *Storage) downloadObject(ctx context.Context, source *InputSource, objec
 	}
 
 	// nolint:gofumpt
-	err := fs.MkdirAll(outputPath, 0755)
+	err := fs.MkdirAll(outputPath, 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
 	}
@@ -77,7 +77,7 @@ func (s *Storage) downloadObject(ctx context.Context, source *InputSource, objec
 	}
 
 	// nolint:gofumpt
-	outputFile, err := fs.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0755)
+	outputFile, err := fs.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0o755)
 	if err != nil {
 		return err
 	}
