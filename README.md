@@ -1,4 +1,4 @@
-![latest release version](https://gitlab.com/nunet/device-management-service/-/badges/release.svg) ![unit tests](https://gitlab.com/nunet/device-management-service/badges/develop/pipeline.svg) ![coverage](https://gitlab.com/nunet/device-management-service/badges/develop/coverage.svg)
+![latest release version](https://gitlab.com/nunet/device-management-service/-/badges/547-branching-strategy-implementation/coverage.svg)
 
 # Device Management Service (DMS)
 
