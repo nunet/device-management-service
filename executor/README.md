@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -24,7 +24,7 @@
 ### 1. Description
 The executor package is responsible for executing the jobs received by the device management service (DMS). It provides an unified interface to run various executors such as docker, firecracker etc
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -62,19 +62,19 @@ type Executor interface {
 	// Start initiates an execution for the given ExecutionRequest.
 	// It returns an error if the execution already exists and is in a started or terminal state.
 	// Implementations may also return other errors based on resource limitations or internal faults.
-	Start(ctx context.Context, request *models.ExecutionRequest) error
+	Start(ctx context.Context, request *types.ExecutionRequest) error
 
 	// Run initiates and waits for the completion of an execution for the given ExecutionRequest.
 	// It returns a ExecutionResult and an error if any part of the operation fails.
 	// Specifically, it will return an error if the execution already exists and is in a started or terminal state.
-	Run(ctx context.Context, request *models.ExecutionRequest) (*models.ExecutionResult, error)
+	Run(ctx context.Context, request *types.ExecutionRequest) (*types.ExecutionResult, error)
 
 	// Wait monitors the completion of an execution identified by its executionID.
 	// It returns two channels:
 	// 1. A channel that emits the execution result once the task is complete.
 	// 2. An error channel that relays any issues encountered, such as when the
 	//    execution is non-existent or has already concluded.
-	Wait(ctx context.Context, executionID string) (<-chan *models.ExecutionResult, <-chan error)
+	Wait(ctx context.Context, executionID string) (<-chan *types.ExecutionResult, <-chan error)
 
 	// Cancel attempts to cancel an ongoing execution identified by its executionID.
 	// Returns an error if the execution does not exist or is already in a terminal state.
@@ -93,29 +93,29 @@ Its methods are explained below:
 
 #### Start
 
-* signature: `Start(ctx context.Context, request dms.executor.ExecutionRequest) -> error` <br/>
+* signature: `Start(ctx context.Context, request executor.ExecutionRequest) -> error` <br/>
 * input #1: `Go context` <br/>
-* input #2: `dms.executor.ExecutionRequest` <br/>
+* input #2: `executor.ExecutionRequest` <br/>
 * output: `error` 
 
-`Start` function takes a Go `context` object and a `dms.executor.ExecutionRequest` type as input. It returns an error if the execution already exists and is in a started or terminal state. Implementations may also return other errors based on resource limitations or internal faults.
+`Start` function takes a Go `context` object and a `executor.ExecutionRequest` type as input. It returns an error if the execution already exists and is in a started or terminal state. Implementations may also return other errors based on resource limitations or internal faults.
 
 #### Run
 
-* signature: `Run(ctx context.Context, request dms.executor.ExecutionRequest) -> (dms.executor.ExecutionResult, error)` <br/>
+* signature: `Run(ctx context.Context, request executor.ExecutionRequest) -> (executor.ExecutionResult, error)` <br/>
 * input #1: `Go context` <br/>
-* input #2: `dms.executor.ExecutionRequest` <br/>
-* output (success): `dms.executor.ExecutionResult` <br/>
+* input #2: `executor.ExecutionRequest` <br/>
+* output (success): `executor.ExecutionResult` <br/>
 * output (error): `error`
 
-`Run` initiates and waits for the completion of an execution for the given Execution Request. It returns a `dms.executor.ExecutionResult` and an error if any part of the operation fails. Specifically, it will return an error if the execution already exists and is in a started or terminal state.
+`Run` initiates and waits for the completion of an execution for the given Execution Request. It returns a `executor.ExecutionResult` and an error if any part of the operation fails. Specifically, it will return an error if the execution already exists and is in a started or terminal state.
 
 #### Wait
 
-* signature: `Wait(ctx context.Context, executionID string) -> (<-chan dms.executor.ExecutionResult, <-chan error)` <br/>
+* signature: `Wait(ctx context.Context, executionID string) -> (<-chan executor.ExecutionResult, <-chan error)` <br/>
 * input #1: `Go context` <br/>
-* input #2: `dms.executor.ExecutionRequest.ExecutionID` <br/>
-* output #1: Channel that returns `dms.executor.ExecutionResult` <br/>
+* input #2: `executor.ExecutionRequest.ExecutionID` <br/>
+* output #1: Channel that returns `executor.ExecutionResult` <br/>
 * output #2: Channel that returns `error`
 
 `Wait` monitors the completion of an execution identified by its `executionID`. It returns two channels:
@@ -126,17 +126,17 @@ Its methods are explained below:
 
 * signature: `Cancel(ctx context.Context, executionID string) -> error` <br/>
 * input #1: `Go context` <br/>
-* input #2: `dms.executor.ExecutionRequest.ExecutionID` <br/>
+* input #2: `executor.ExecutionRequest.ExecutionID` <br/>
 * output: `error`
 
 `Cancel` attempts to terminate an ongoing execution identified by its `executionID`. It returns an error if the execution does not exist or is already in a terminal state.
 
 #### GetLogStream
 
-* signature: `GetLogStream(ctx context.Context, request dms.executor.LogStreamRequest, executionID string) -> (io.ReadCloser, error)` <br/>
+* signature: `GetLogStream(ctx context.Context, request executor.LogStreamRequest, executionID string) -> (io.ReadCloser, error)` <br/>
 * input #1: `Go context` <br/>
-* input #2: `dms.executor.LogStreamRequest` <br/>
-* input #3: `dms.executor.ExecutionRequest.ExecutionID` <br/>
+* input #2: `executor.LogStreamRequest` <br/>
+* input #3: `executor.ExecutionRequest.ExecutionID` <br/>
 * output #1: `io.ReadCloser` <br/>
 * output #2: `error`
 
@@ -148,9 +148,9 @@ It returns an `io.ReadCloser` object to read the output stream and an error if t
 
 ### 5. Data Types
 
-- `models.ExecutionRequest`: This is the input that `executor` receives to initiate a job execution. 
+- `types.ExecutionRequest`: This is the input that `executor` receives to initiate a job execution. 
 
-- `models.ExecutionResult`: This contains the result of the job execution. 
+- `types.ExecutionResult`: This contains the result of the job execution. 
 
 - `executor.LogStreamRequest`: This contains input parameters sent to the `executor` to get job execution logs.
 
@@ -171,7 +171,7 @@ type LogStreamRequest struct {
 }
 ```
 
-- `models.SpecConfig`: This allows arbitrary configuration/parameters as needed during implementation of specific executor. 
+- `types.SpecConfig`: This allows arbitrary configuration/parameters as needed during implementation of specific executor. 
 
 - `executor.ExecutionResources`: This contains resources to be used for execution.
 
@@ -221,8 +221,4 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 7. References
-
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)
+### 8. References

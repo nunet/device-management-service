@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -26,7 +26,7 @@
 
 This sub package is an implementation of `StorageProvider` interface for S3 storage.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -76,7 +76,7 @@ The class diagram for the `s3` sub-package is shown below.
 * output (sucess): new instance of type `storage.s3.S3Storage` <br/>
 * output (error): error
 
-`NewClient` is a constructor method. It creates a new instance of `storage.S3Storage` struct.
+`NewClient` is a constructor method. It creates a new instance of `storage.s3.S3Storage` struct.
 
 
 #### Upload
@@ -123,7 +123,6 @@ type S3Storage struct {
 ```
 
 - `storage.s3.s3Object`: `TBD`
-**`TBD` Note: 's' should be capitalised in 's3Object' as per naming convention**
 ```
 type s3Object struct {
 	key       *string
@@ -145,7 +144,7 @@ type S3InputSource struct {
 }
 ```
 
-Refer to package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#list-of-data-types) for other data types.
+Refer to package readme for other data types.
 
 
 ### 6. Testing

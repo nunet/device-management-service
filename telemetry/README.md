@@ -1,17 +1,82 @@
-# Telemetry Package
+# telemetry 
 
-## Overview
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
+
+## Table of Contents
+
+1. [Description](#1-description)
+2. [Structure and Organisation](#2-structure-and-organisation)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
+
+## Specification
+
+### 1. Description
 
 The Telemetry package is designed to handle and manage telemetry data collection within the Device Management Service (DMS). It supports a variety of observables and collectors to provide a flexible and extensible telemetry system. This package is built to cater to different requirements and separate indices for various packages within DMS.
 
-## Features
+### 2. Structure and Organisation
+
+Here is quick overview of the contents of this pacakge:
+
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/README.md): Current file which is aimed towards developers who wish to use and modify the functionality.
+
+* [collector.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/collector.go): `TBD`
+
+* [collector_factory.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/collector_factory.go): `TBD`
+
+* [observable.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/observable.go): `TBD`
+
+* [observable_factory.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/observable_factory.go): `TBD`
+
+* [event.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/event.go): `TBD`
+
+* [telemetry.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/telemetry.go): `TBD`
+
+* [logger](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/logger): `TBD`
+
+* [otel](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/otel): `TBD`
+
+* [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/specs): `TBD`
+
+### 3. Class Diagram
+
+The class diagram for the `telemetry` sub-package is shown below.
+
+#### Source file
+
+[telemetry Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/specs/class_diagram.puml)
+
+#### Rendered from source file
+
+```plantuml
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$packageRelativePath = "/telemetry"
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+ 
+!include $packageUrlGitlab/specs/class_diagram.puml
+```
+
+### 4. Functionality
+
+#### Features
 
 - **Modular Collectors**: Easily configure and extend collectors.
 - **Dynamic Observables**: Create and manage observables dynamically.
 - **Separate Indices**: Support separate indices for different types of metrics and traces.
 - **Configuration Management**: Handle multiple configurations for different parts of the application.
 
-## Installation
+#### Installation
 
 To use the Telemetry package, import it as follows:
 
@@ -19,9 +84,9 @@ To use the Telemetry package, import it as follows:
 import "gitlab.com/nunet/device-management-service/telemetry"
 ```
 
-## Configuration
+#### Configuration
 
-### TelemetryConfig
+##### TelemetryConfig
 
 The `TelemetryConfig` struct holds the configuration for the telemetry system. Configuration can be loaded from environment variables:
 
@@ -45,9 +110,9 @@ if err != nil {
 }
 ```
 
-## Usage
+#### Usage
 
-### Initializing Telemetry
+##### Initializing Telemetry
 
 Initialize the telemetry system with the loaded configuration:
 
@@ -55,7 +120,7 @@ Initialize the telemetry system with the loaded configuration:
 telemetryInstance := telemetry.NewTelemetry(config)
 ```
 
-## Creating Collectors
+#### Creating Collectors
 
 Use the `CollectorFactory` to create and register collectors:
 
@@ -88,7 +153,7 @@ if err := otelCollector.Initialize(); err != nil {
 telemetryInstance.AddCollector("otel", otelCollector)
 ```
 
-## Creating Observables
+#### Creating Observables
 
 Use the `ObservableFactory` to create observables and add them to the telemetry instance:
 
@@ -102,7 +167,7 @@ metricObservable := observableFactory.CreateObservable()
 telemetryInstance.AddObservable(telemetry.Metric, "metrics_index", metricObservable, []string{"otel"})
 ```
 
-## Handling Events
+#### Handling Events
 
 Create an event and handle it through the telemetry instance:
 
@@ -122,7 +187,7 @@ metricEvent := telemetry.Event{
 telemetryInstance.HandleEvent(metricEvent)
 ```
 
-## Manually Flushing Collectors
+#### Manually Flushing Collectors
 
 You can manually flush the collectors if needed:
 
@@ -132,7 +197,7 @@ if err := telemetryInstance.Flush(); err != nil {
 }
 ```
 
-## Shutting Down
+#### Shutting Down
 
 Ensure proper shutdown of the telemetry system to flush and close all collectors:
 
@@ -144,9 +209,9 @@ defer func() {
 }()
 ```
 
-## Extending the Telemetry Package
+#### Extending the Telemetry Package
 
-### Adding New Collectors
+##### Adding New Collectors
 
 To add a new collector, implement the `Collector` interface:
 
@@ -167,7 +232,7 @@ Register the new collector with the `CollectorFactory`:
 collectorFactory.RegisterCollector("newCollectorType", NewNewCollector)
 ```
 
-### Adding New Observables
+##### Adding New Observables
 
 To add a new observable, implement the `Observable` interface:
 
@@ -186,7 +251,7 @@ observableFactory := telemetry.NewObservableFactory()
 observable := observableFactory.CreateObservable()
 ```
 
-## Different Collector Sets and Endpoints
+#### Different Collector Sets and Endpoints
 
 You can configure different sets of collectors for different observables. For example, you may want heartbeat events to be handled by a log collector and metric events to be handled by an OpenTelemetry collector.
 
@@ -221,15 +286,15 @@ metricObservable := observableFactory.CreateObservable()
 telemetryInstance.AddObservable(telemetry.Metric, "metrics_index", metricObservable, []string{"otel"})
 ```
 
-## Why This Design?
+#### Why This Design?
 
 This design ensures a modular and flexible approach to telemetry data collection, catering to various requirements and indices across different packages. It provides a robust configuration management system and supports dynamic creation and management of observables and collectors, making it easy to extend and integrate into different parts of the application.
 
-## Conclusion
+#### Conclusion
 
 The Telemetry package is a powerful tool for managing telemetry data in a device management service. By following the detailed guide provided, developers can easily integrate and extend this package to meet their specific needs, ensuring efficient and effective telemetry data collection and management.
 
-## Demo Implementation in Main
+#### Demo Implementation in Main
 
 Below is a demo implementation in `main.go`. This is just for showcasing and will be removed later on:
 
@@ -401,3 +466,21 @@ func main() {
 	}()
 }
 ```
+
+### 5. Data Types
+
+`TBD`
+
+### 6. Testing
+`TBD`
+
+### 7. Proposed Functionality / Requirements 
+
+#### List of issues
+
+All issues that are related to the implementation of `telemetry` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
+
+- [telemetry package implementation]() `TBD`
+
+
+### 8. References

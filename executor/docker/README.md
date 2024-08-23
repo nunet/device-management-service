@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -24,7 +24,7 @@
 ### 1. Description
 This sub-package contains functionality including drivers and api for the Docker executor.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -64,13 +64,13 @@ Below methods have been implemented in this package:
 
 #### NewExecutor
 
-* signature: `NewExecutor(ctx context.Context, id string) -> (dms.executor.docker.Executor, error)` <br/>
+* signature: `NewExecutor(ctx context.Context, id string) -> (executor.docker.Executor, error)` <br/>
 
 * input #1: `Go context` <br/>
 
 * input #2: identifier of the executor <br/>
 
-* output (sucess): Executor instance of type `dms.executor.docker.Executor` <br/>
+* output (sucess): Executor instance of type `executor.docker.Executor` <br/>
 
 * output (error): error
 
@@ -80,7 +80,7 @@ It is expecte that `NewExecutor` would be called prior to calling any other exec
 
 #### Start
 
-For function signature refer to the package [readme](../README.md#start) 
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#start) 
 
 `Start` function begins the execution of a request by starting a Docker container. It creates the container based on the configuration parameters provided in the execution request. It returns an error message if
 * container is already started
@@ -90,7 +90,7 @@ For function signature refer to the package [readme](../README.md#start)
 
 #### Wait
 
-For function signature refer to the package [readme](../README.md#wait)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#wait)
 
 `Wait` initiates a wait for the completion of a specific execution using its `executionID`. The function returns two channels: one for the result and another for any potential error. 
 
@@ -100,14 +100,14 @@ Otherwise, an internal goroutine is spawned to handle the asynchronous waiting. 
 
 #### Cancel
 
-For function signature refer to the package [readme](../README.md#cancel)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#cancel)
 
 `Cancel` tries to terminate an ongoing execution identified by its `executionID`. It returns an error if the execution does not exist.
 
 
 #### GetLogStream
 
-For function signature refer to the package [readme](../README.md#getlogstream)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#getlogstream)
 
 `GetLogStream` provides a stream of output logs for a specific execution. Parameters `tail` and `follow` specified in `executor.LogStreamRequest` provided as input control whether to include past logs and whether to keep the stream open for new logs, respectively.
 
@@ -115,7 +115,7 @@ It returns an error if the execution is not found.
 
 #### Run
 
-For function signature refer to the package [readme](../README.md#run)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#run)
 
 `Run` initiates and waits for the completion of an execution in one call. This method serves as a higher-level convenience function that internally calls `Start` and `Wait` methods. It returns the result of the execution as `executor.ExecutionResult` type. 
 
@@ -126,11 +126,11 @@ It returns an error in case of:
 
 #### ConfigureHostConfig
 
-* signature: configureHostConfig(vendor models.GPUVendor, params *models.ExecutionRequest, mounts []mount.Mount) container.HostConfig <br/>
+* signature: configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, mounts []mount.Mount) container.HostConfig <br/>
 
-* input #1: GPU vendor (models.GPUVendor) <br/>
+* input #1: GPU vendor (types.GPUVendor) <br/>
 
-* input #2: Execution request parameters (models.ExecutionRequest) <br/>
+* input #2: Execution request parameters (types.ExecutionRequest) <br/>
 
 * input #3: List of container mounts ([]mount.Mount) <br/>
 
@@ -234,7 +234,7 @@ type executionHandler struct {
 }
 ```
 
-Refer to package [readme](../README.md#4-data-types) for other data types.
+Refer to package readme for other data types.
 
 ### 6. Testing
 
@@ -249,8 +249,5 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 7. References
+### 8. References
 
-The DMS is being refactored and augmented with several new functionalities. The proposed class diagram can be found here:
-- [Class Diagram - Source](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.mermaid)
-- [Class Diagram - Rendered](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/classDiagrams/dms-global.svg)

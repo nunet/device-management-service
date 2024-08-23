@@ -7,7 +7,7 @@
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
 - [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
 - [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Secure coding guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
@@ -40,13 +40,13 @@ Here is quick overview of the contents of this directory:
 
 * [chat](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat.go): This file contains implementation of `chat` functionality.
 
-* [chat_clear](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_clear.go): This file contains implementation of clear chat functionality.
+* [chat_clear](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_clear.go): This file contains implementation of `clear chat` functionality.
 
-* [chat_join](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_join.go): This file contains implementation of join chat functionality.
+* [chat_join](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_join.go): This file contains implementation of `join chat` functionality.
 
-* [chat_list](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_list.go): This file contains implementation of list chat functionality.
+* [chat_list](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_list.go): This file contains implementation of `list chat` functionality.
 
-* [chat_start](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_start.go): This file contains implementation of start chat functionality.
+* [chat_start](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/chat_start.go): This file contains implementation of `start chat` functionality.
 
 * [device](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/device.go): This file contains implementation of device related operations.
 
@@ -100,7 +100,7 @@ Here is quick overview of the contents of this directory:
 
 * [wallet_new](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/wallet_new.go): This file defines the subcommand `new` for the `wallet` command.
 
-* [backend](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/backend): This directory contains 
+* [backend](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/backend): This directory contains files related to the actual implementation of the Nunet CLI commands.
 
 All of the files named as `*_test.go` contains the unit tests for the corresponding functionality.
 
@@ -124,7 +124,7 @@ The class diagram for the `cmd` package is shown below.
 
 ### 4. Functionality
 
-The following sections describe the command line options that can be used with the CLI.
+The following sections describe the command line options that can be used with the Nunet CLI.
 
 #### capacity
 
@@ -266,7 +266,7 @@ nunet gpu status
 
 #### info
 
-This command displays the metadata (`models.onboarding.Metadata`) of the onboarded device. 
+This command displays the metadata (`types.Metadata`) of the onboarded device. 
 
 ``` 
 nunet info
@@ -274,7 +274,7 @@ nunet info
 
 #### log
 
-This command gathers all the logs into a tarball. The command must be run as root with SUDO access. Note that current MacOS is not supported.
+This command gathers all the logs into a tarball. The command must be run as root with `SUDO` access. Note that currently MacOS is not supported.
 
 ``` 
 nunet log
@@ -310,7 +310,7 @@ nunet onboard-ml
 
 #### onboard
 
-This command is used to onboard a compute provider machine onto Nunet. It expects input parameters specified in `models.onboarding.CapacityForNunet`. The machine metadata (`models.onboarding.Metadata`) is displayed once the onboarding process is completed.
+This command is used to onboard a compute provider machine onto Nunet. It expects input parameters specified in `types.CapacityForNunet`. The machine metadata (`types.Metadata`) is displayed once the onboarding process is completed.
 
 Example usage: 
 
@@ -362,7 +362,7 @@ Use <peerID> parameter as '0' to remove default deployment request receiver. Usi
 
 #### resource-config
 
-This command is used to update the configuration of onboarded device. The machine metadata (`models.onboarding.Metadata`) is displayed upon update.
+This command is used to update the configuration of onboarded device. The machine metadata (`types.Metadata`) is displayed upon update.
 
 ```
 nunet resource-config -m <memory in MB> -c <cpu in MHz> -x <Price in NTX/min>
@@ -426,7 +426,7 @@ All unit tests for various functionalities can be found in files with `_test` in
 
 #### Functional tests
 
-- **TBD with Abhishek**
+Reference is made to the [test-suite](https://gitlab.com/nunet/test-suite/-/tree/develop/stages/functional_tests/features/device-management-service) repository for functional tests for DMS CLI functionality.
 
 ### 7. Proposed Functionality / Requirements 
 

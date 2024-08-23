@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -58,7 +58,7 @@ For the network latency part, DMS should also be able to keep latency table betw
 * CP connects to same kind of CP.
 * Can use gossipsub.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -156,7 +156,7 @@ Following is a sequence of event happening on compute provider side:
 1. Checks if `InboundDepReqStream` variable is set. And if it is, reply to service provider: `DepReq open stream length exceeded`. Currently we have only 1 job allowed per dep req stream.
 2. If above is not the case, we go and read from the stream. We are expecting a 
 3. Now is the point to set the `InboundDepReqStream` to the incoming stream value.
-4. In unmarshal the incoming message into `models.DeploymentRequest` struct. If it can't, it informs the other party about the it.
+4. In unmarshal the incoming message into `types.DeploymentRequest` struct. If it can't, it informs the other party about the it.
 5. Otherwise, if everything is going well till now, we check the `txHash` value from the depReq. And make sure it exist on the blockchain before proceeding. If the txHash is not valid, or it timed out while waiting for validation, we let the other side know.
 6. Final thing we do it to put the depReq inside the `DepReqQueue`.
 
@@ -193,16 +193,16 @@ type PeerFilter interface {
 
 ### 5. Data Types
 
-- `models.DeploymentResponse`: DeploymentResponse is initial response from the Compute Provider (CP) to Service Provider (SP). It tells the SP that if deployment was successful or was declined due to operational or validational reasons. Most of the validation is just error check at stream handling or executor level.
+- `types.DeploymentResponse`: DeploymentResponse is initial response from the Compute Provider (CP) to Service Provider (SP). It tells the SP that if deployment was successful or was declined due to operational or validational reasons. Most of the validation is just error check at stream handling or executor level.
 
 
-- `models.DeploymentUpdate`: DeploymentUpdate update is used to inform SP about the state of the job. Most of the update is handled using libp2p stream on network level and websocket on the user level. There is no REST API defined. This should change in next iteration. See the proposed section for this.
+- `types.DeploymentUpdate`: DeploymentUpdate update is used to inform SP about the state of the job. Most of the update is handled using libp2p stream on network level and websocket on the user level. There is no REST API defined. This should change in next iteration. See the proposed section for this.
 
 On the service provider side, we have `DeploymentUpdateListener` listening to the stream for any activity from the computer provider for update on the job. 
 
 Based on the message types, it does specific actions, which is more or less sending it to websocket client. These message types are `MsgJobStatus`, `MsgDepResp`, `MsgLogStdout` and `MsgLogStderr`
 
-- `DHTValidator`: `TBD`
+- `network.libp2p.DHTValidator`: `TBD`
 
 ```
 type DHTValidator struct {
@@ -210,7 +210,7 @@ type DHTValidator struct {
 }
 ```
 
-- `SelfPeer`: `TBD`
+- `network.libp2p.SelfPeer`: `TBD`
 
 ```
 type SelfPeer struct {
@@ -219,7 +219,7 @@ type SelfPeer struct {
 }
 ```
 
-- `NoAddrIDFilter`: filters out peers with no listening addresses
+- `network.libp2p.NoAddrIDFilter`: filters out peers with no listening addresses
 // and a peer with a specific ID
 
 ```
@@ -228,7 +228,7 @@ type NoAddrIDFilter struct {
 }
 ```
 
-- `Libp2p`: contains the configuration for a Libp2p instance
+- `network.libp2p.Libp2p`: contains the configuration for a Libp2p instance
 
 ```
 type Libp2p struct {
@@ -249,7 +249,7 @@ type Libp2pConfig struct {
 }
 ```
 
-- `Advertisement`: `TBD`
+- `network.libp2p.Advertisement`: `TBD`
 
 type Advertisement struct {
 	PeerID    string `json:"peer_id"`
@@ -257,7 +257,7 @@ type Advertisement struct {
 	Data      []byte `json:"data"`
 }
 
-- `OpenStream`: `TBD`
+- `network.libp2p.OpenStream`: `TBD`
 
 ```
 type OpenStream struct {
@@ -281,16 +281,6 @@ type OpenStream struct {
 All issues that are related to the implementation of `network` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
 
 - [network package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A39&first_page_size=20)
-
-
-#### `proposed` Description of packages
-
-- `libp2p` - the core of DMS to DMS communication, more on this later
-- `libp2p/machines` - mostly job handling on the SP side e.g. filtering, job request handler
-- `libp2p/pubsub` - current pubsub implementation
-- `firecracker/networking` - creates and configures tap device
-- `internal` - deals with websocket client
-- `internal/messaging`? - workers working on job queues
 
 ### 8. References
 

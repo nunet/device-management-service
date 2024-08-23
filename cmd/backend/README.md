@@ -7,7 +7,7 @@
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
 - [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
 - [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Secure coding guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
@@ -77,11 +77,11 @@ The class diagram for the `backend` package is shown below.
 
 ##### GetTotalProvisioned
 
-- signature: `GetTotalProvisioned() *models.Provisioned`
+- signature: `GetTotalProvisioned() *types.Provisioned`
 
 - input: None
 
-- output: `models.onboarding.Provisioned`
+- output: `types.onboarding.Provisioned`
 
 `GetTotalProvisioned` returns the total capacity of the machine.
 
@@ -117,11 +117,11 @@ The class diagram for the `backend` package is shown below.
 
 ##### GetCardanoAddressAndMnemonic
 
-- signature: `GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error)`
+- signature: `GetCardanoAddressAndMnemonic() (*types.BlockchainAddressPrivKey, error)`
 
 - input: None
 
-- output: `models.onboarding.BlockchainAddressPrivKey`
+- output: `types.onboarding.BlockchainAddressPrivKey`
 
 - output (error): `error message`
 
@@ -129,11 +129,11 @@ The class diagram for the `backend` package is shown below.
 
 ##### GetEthereumAddressAndPrivateKey
 
-- signature: `GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error)`
+- signature: `GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error)`
 
 - input: None
 
-- output: `models.onboarding.BlockchainAddressPrivKey`
+- output: `types.onboarding.BlockchainAddressPrivKey`
 
 - output (error): `error message`
 
@@ -175,11 +175,11 @@ The class diagram for the `backend` package is shown below.
 
 ##### ReadMetadataFile
 
-- signature: `ReadMetadataFile() (*models.Metadata, error)`
+- signature: `ReadMetadataFile() (*types.Metadata, error)`
 
 - input: None
 
-- output: `models.onboarding.Metadata`
+- output: `types.onboarding.Metadata`
 
 - output (error): `error message`
 

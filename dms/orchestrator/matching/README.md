@@ -35,7 +35,7 @@ The main goal of the package is to define and express the `Comparator` logic for
 
 The `matching` sub-package should be considered in the context of `orchestrator` functionality and general 'proposed' Job Orchestration logic (see [`orchestrator` package README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/README.md)).
 
-Provided implementation of `Capability` and `Comparison` model is designed in a way that should allow developers to update and upgrade comparison semantics of each complex type  (e.g. `models.GPU`s comparison may involve pulling information about GPU benchmarking from external sources and adjusting comparison operators to use it or involve new hardware (e.g. TPUs)). Type comparators that can be updated separately and plugged at runtime into generic comparator operator were conceived for this purpose.
+Provided implementation of `Capability` and `Comparison` model is designed in a way that should allow developers to update and upgrade comparison semantics of each complex type  (e.g. `types.GPU`s comparison may involve pulling information about GPU benchmarking from external sources and adjusting comparison operators to use it or involve new hardware (e.g. TPUs)). Type comparators that can be updated separately and plugged at runtime into generic comparator operator were conceived for this purpose.
 
 ### 2. Structure and organisation
 
@@ -47,19 +47,19 @@ Here is quick overview of the contents of this directory:
 
 * *type comparators*: separate '.go' file for each type-specific `Comparator` that can be picked by the generic comparison function defined in `Comparator.go`:
 
-    * `CapabilityComparator.go`: Comparator for variables of `models.Capability` type; Most of the other listed comparators are fields of `models.Capability`;
-	* `ExecutionResourcesComparator`: Comparator for variables of `models.ExecutionResources` type;
-	* `ExecutorComparator`: Comparator for variables of `models.Executor` type;
-	* `ExecutorsComparator`: Comparator for variables of `models.Executors` type (which is just a Slice of `models.Executor`);
-	* `GpuComparator`: Comparator for variables of `models.GPU` type;
-	* `GPUsComparator`: Comparator for slices of `model.GPU` typed variables, which is a field in `models.Capability`;
-	* `GPUVendorComparator`: Comparator for variables of `models.GPUVendor` type;
-	* `JobTypeComparator`: Comparator for variables of `models.JobType` type;
-	* `JobTypesComparator`: Comparator for variables of `models.JobTypes` type (which is just a Slice of `models.JobType`);
-	* `LibrariesComparator`: Comparator for slices of `model.Library` typed variables, which is a field in `models.Capability`;
-	* `LibraryComparator`: Comparator for variables of `models.Library` type;
-	* `LocalitiesComparator`: Comparator for slices of `model.Locality` typed variables, which is a field in `models.Capability`;
-	* `LocalityComparator`: Comparator for variables of `models.Locality` type;
+    * `CapabilityComparator.go`: Comparator for variables of `types.Capability` type; Most of the other listed comparators are fields of `types.Capability`;
+	* `ExecutionResourcesComparator`: Comparator for variables of `types.ExecutionResources` type;
+	* `ExecutorComparator`: Comparator for variables of `types.Executor` type;
+	* `ExecutorsComparator`: Comparator for variables of `types.Executors` type (which is just a Slice of `types.Executor`);
+	* `GpuComparator`: Comparator for variables of `types.GPU` type;
+	* `GPUsComparator`: Comparator for slices of `model.GPU` typed variables, which is a field in `types.Capability`;
+	* `GPUVendorComparator`: Comparator for variables of `types.GPUVendor` type;
+	* `JobTypeComparator`: Comparator for variables of `types.JobType` type;
+	* `JobTypesComparator`: Comparator for variables of `types.JobTypes` type (which is just a Slice of `types.JobType`);
+	* `LibrariesComparator`: Comparator for slices of `model.Library` typed variables, which is a field in `types.Capability`;
+	* `LibraryComparator`: Comparator for variables of `types.Library` type;
+	* `LocalitiesComparator`: Comparator for slices of `model.Locality` typed variables, which is a field in `types.Capability`;
+	* `LocalityComparator`: Comparator for variables of `types.Locality` type;
 	* `NumericComparator`: Comparator for all go numeric variables (int, float, etc);
 
 * [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/develop/orchestrator/matching/specs): Directory containing package specifications, including package class diagram.
@@ -86,23 +86,23 @@ Here is quick overview of the contents of this directory:
 
 #### Generic type comparison
 
-Generic type comparison is implemented by the function `Compare(l, r interface{}, preference ...Preference) models.Comparison`, which takes two variables of the same type, comparison Preferences (_note: note yet implemented_) and outputs a variable of `models.Comparison` type. The function:
+Generic type comparison is implemented by the function `Compare(l, r interface{}, preference ...Preference) types.Comparison`, which takes two variables of the same type, comparison Preferences (_note: note yet implemented_) and outputs a variable of `types.Comparison` type. The function:
 
 * detects the type of parameters supplied to it;
 * searches for the appropriate comparator;
 * applies the comparator, which, if needed, calls the same function recursively;
 
-So the `Compose` function implements the comparison operator on custom types with a kind of generic tree recursion algorithm. Since each type comparator is plugged in at runtime, the actual logic of each type comparison has to be defined and implemented in type comparators (see below). For this to work, when a new type is introduced and included into `models.Capability` structure (or any other type that is _comparable_ in this sense), its type comparator has to be explicitly defined and registered in `matching.ComparatorMap`.
+So the `Compose` function implements the comparison operator on custom types with a kind of generic tree recursion algorithm. Since each type comparator is plugged in at runtime, the actual logic of each type comparison has to be defined and implemented in type comparators (see below). For this to work, when a new type is introduced and included into `types.Capability` structure (or any other type that is _comparable_ in this sense), its type comparator has to be explicitly defined and registered in `matching.ComparatorMap`.
 
 The comparison operator is generally not symmetric, therefore the semantics of assigning variables to `l` and `r` parameters is important. Current implementation is based on the following semantics:
 
 * *left represent machine capabilities // right represent required capabilities*. 
 
-#### Type Comparators for `models.Capability`
+#### Type Comparators for `types.Capability`
 
-As provided in [Description](#1-description), the main purpose of this package is to compare `models.Capability` typed variables, which is a complex custom type, nesting other complex custom types. Each custom type has its own comparison logic, defined in respective comparator. This section is organized by fields of `models.Capability` type. Comparison of each field may involve one or more `Comparator` function (see `methods and interfaces`).
+As provided in [Description](#1-description), the main purpose of this package is to compare `types.Capability` typed variables, which is a complex custom type, nesting other complex custom types. Each custom type has its own comparison logic, defined in respective comparator. This section is organized by fields of `types.Capability` type. Comparison of each field may involve one or more `Comparator` function (see `methods and interfaces`).
 
-Currently `models.Capability` is defined as follows:
+Currently `types.Capability` is defined as follows:
 
 ```
 
@@ -131,28 +131,28 @@ Each comparator is unit-tested via implementation in `Comparator_test.go`. Besid
 
 ##### Executors
 
-`Executors` field determines the available executors on dms (in case `models.Capability` represents available resources of a compute provider) or required executor needed to execute a job (in case `models.Capability` represent requested resource) holds variable of `models.Executors` type which is just a wrapper around `[]model.Executor`. Full comparison requires two functions / comparators:
+`Executors` field determines the available executors on dms (in case `types.Capability` represents available resources of a compute provider) or required executor needed to execute a job (in case `types.Capability` represent requested resource) holds variable of `types.Executors` type which is just a wrapper around `[]model.Executor`. Full comparison requires two functions / comparators:
 
-* `ExecutorsComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` is the comparator for Executors types. It returns `Equal` if both left and right parameters hold deeply equal variables, `Worse` if left parameter holds contains more executors than the right parameter and `Better` if `Executor`s in available capabilities contain the required executor.
+* `ExecutorsComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison` is the comparator for Executors types. It returns `Equal` if both left and right parameters hold deeply equal variables, `Worse` if left parameter holds contains more executors than the right parameter and `Better` if `Executor`s in available capabilities contain the required executor.
 
-* `ExecutorComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` is the comparator for `models.Executor` type. It is needed because executor type is defined as enum of `ExecutorType`'s in `models/execution.go`. It is not so complex as the type has only one field therefore this method just passes through the result of wrapped `ExecutorType`.
+* `ExecutorComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison` is the comparator for `types.Executor` type. It is needed because executor type is defined as enum of `ExecutorType`'s in `types/execution.go`. It is not so complex as the type has only one field therefore this method just passes through the result of wrapped `ExecutorType`.
 
-* `ExecutorTypeComparator(l, r interface{}, preference ...Preference) models.Comparison` is the comparator for `models.ExecutorType` variables. It returns `Equal` if the `l` and `r` variables are equivalent and otherwise an `Error`. For this comparator `Worse` and `Better` returns are undefined. 
+* `ExecutorTypeComparator(l, r interface{}, preference ...Preference) types.Comparison` is the comparator for `types.ExecutorType` variables. It returns `Equal` if the `l` and `r` variables are equivalent and otherwise an `Error`. For this comparator `Worse` and `Better` returns are undefined. 
 
 ##### JobTypes
 
-* `JobTypeComparator(l, r interface{}, preference ...Preference) models.Comparison` returns `Equal` if two Job types are equivalent and `Error` otherwise. Semantics of other comparison values (`Worse` and `Better`) are undefined for this type;
+* `JobTypeComparator(l, r interface{}, preference ...Preference) types.Comparison` returns `Equal` if two Job types are equivalent and `Error` otherwise. Semantics of other comparison values (`Worse` and `Better`) are undefined for this type;
 
-* `JobTypesComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` is a comparator for `models.JobTypes` variables, which are just wrappers of `[]models.JobType` and captures the need to capabilities that may involve more than one possible `JobType`. If machine capabilities contain oll the required capabilities, then we are good to go. If available capabilities are equal to required capabilities, then the result of comparison is `Equal`. If available JobTypes in capabilities contain required JobTypes, the comparator returns `Better`. If required JobTypes contain available JobTypes, then the comparator returns `Worse`. 
+* `JobTypesComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison` is a comparator for `types.JobTypes` variables, which are just wrappers of `[]types.JobType` and captures the need to capabilities that may involve more than one possible `JobType`. If machine capabilities contain oll the required capabilities, then we are good to go. If available capabilities are equal to required capabilities, then the result of comparison is `Equal`. If available JobTypes in capabilities contain required JobTypes, the comparator returns `Better`. If required JobTypes contain available JobTypes, then the comparator returns `Worse`. 
 
 
 ##### Resources
 
-'ExecutionResources' is one of the main fields of the `models.Capability` type as it contains hardware requirements definition.
+'ExecutionResources' is one of the main fields of the `types.Capability` type as it contains hardware requirements definition.
 
-* `ExecutionResourcesComparator(l, r interface{}, preference ...Preference) models.Comparison` is a comparator for `models.ExecutionResources` type which recursively compares all fields (currently CPU, Memory, Disk, GPUs) and then compares then to each other.
+* `ExecutionResourcesComparator(l, r interface{}, preference ...Preference) types.Comparison` is a comparator for `types.ExecutionResources` type which recursively compares all fields (currently CPU, Memory, Disk, GPUs) and then compares then to each other.
 
-* This type comparator deals with a complex custom type constructed from other complex custom types and therefore uses the functionality provided by `models.ComplexComparison` type.
+* This type comparator deals with a complex custom type constructed from other complex custom types and therefore uses the functionality provided by `types.ComplexComparison` type.
 
 * Currently we consider that all fields of have to be 'Better' or 'Equal' for the comparison to be 'Better' or 'Equal' else we return 'Worse'.
 
@@ -161,19 +161,19 @@ Each comparator is unit-tested via implementation in `Comparator_test.go`. Besid
 
 'Libraries' field holds available libraries installed on a machine and required libraries by a job. Reasoning about this field involves two data structures and therefore two type comparators.
 
-* `func LibraryComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two variables of `models.Library` type, which itself has three fields `Name`, `Version` and `Constraint`. The `Constraint` field is conceived for enabling the same type to express both available and required libraries (which often involve constraints like 'more or less' or 'strictly more', etc.). The comparator returns 'Error' if libraries do not match and 'Worse' or 'Better' depending on the provided constraints and library versions.
+* `func LibraryComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison` compares two variables of `types.Library` type, which itself has three fields `Name`, `Version` and `Constraint`. The `Constraint` field is conceived for enabling the same type to express both available and required libraries (which often involve constraints like 'more or less' or 'strictly more', etc.). The comparator returns 'Error' if libraries do not match and 'Worse' or 'Better' depending on the provided constraints and library versions.
 
-* `func LibrariesComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two slices of `models.Library` types, so `[]models.Library` which also can be of different length (i.e. in cases when a job needs two specific libraries, and a machine has 10 libraries installed). This is done internally in the comparator by constructing matrix of pair-wise comparisons and then reasoning on top of them.  
+* `func LibrariesComparator(lraw, rraw interface{}, preference ...Preference) types.Comparison` compares two slices of `types.Library` types, so `[]types.Library` which also can be of different length (i.e. in cases when a job needs two specific libraries, and a machine has 10 libraries installed). This is done internally in the comparator by constructing matrix of pair-wise comparisons and then reasoning on top of them.  
 
-Note, that, contrary to 'Executors' field, 'Libraries' field comparison does not involve a separate type `models.Libraries`, but reasons directly on `[]model.Libraries` structure. So overall we showcase two different ways to implement the comparison logic. The difference between them is that they need different treatment when adjusting `matching.Comparator.Compare()` function: explicit types are resolved automagically with type reflection, given they are correctly registered in `matching.ComparisonMap`, while `[]any` style structures have to be resolved manually (i.e. hardcoded). 
+Note, that, contrary to 'Executors' field, 'Libraries' field comparison does not involve a separate type `types.Libraries`, but reasons directly on `[]model.Libraries` structure. So overall we showcase two different ways to implement the comparison logic. The difference between them is that they need different treatment when adjusting `matching.Comparator.Compare()` function: explicit types are resolved automagically with type reflection, given they are correctly registered in `matching.ComparisonMap`, while `[]any` style structures have to be resolved manually (i.e. hardcoded). 
 
 ##### Localities
 
 It is not yet clear how are we will be defining localities in our model therefore the comparator of this field was constructed in a similar way to 'Libraries' and involves two data structures and type comparators:
 
-* `func LocalityComparator(lraw interface{}, rraw interface{}, preference ...Preference) models.Comparison` compares two variables of `models.Locality` type, which has two fields `Kind` and `Name`. It may make sense to define the type better (e.g. introduce enums, etc). The current logic of the type is best understood by looking at unit test for `LocalityComparator`.
+* `func LocalityComparator(lraw interface{}, rraw interface{}, preference ...Preference) types.Comparison` compares two variables of `types.Locality` type, which has two fields `Kind` and `Name`. It may make sense to define the type better (e.g. introduce enums, etc). The current logic of the type is best understood by looking at unit test for `LocalityComparator`.
 
-* `LocalitiesComparator(lraw interface{}, rraw interface{}, preference ...Preference) models.Comparison` compares two slices `[]models.Library` of (potentially) different lengths. 
+* `LocalitiesComparator(lraw interface{}, rraw interface{}, preference ...Preference) types.Comparison` compares two slices `[]types.Library` of (potentially) different lengths. 
 
 ##### Storage
 
@@ -202,11 +202,11 @@ It is not yet clear how are we will be defining localities in our model therefor
 
 Most of the data types used by this package are defined in other packages. Here is the list of important types used by this package, indicating whether or not they are defined here or elsewhere. Note that the `matching` package potentially will deal with comparison of most of the complex types defined within the whole `dms`, therefore it does not make sense to list them all here, but they are mentioned / explained as needed in functionality description of each type comparator (see above).
 
-* `models.Comparison` is an `enum` that defines the result comparison (possible values: `better`, `worse`, `equal` or `error`); the goal of having separate data type for that is to be able to make decisions based on the comparison.
+* `types.Comparison` is an `enum` that defines the result comparison (possible values: `better`, `worse`, `equal` or `error`); the goal of having separate data type for that is to be able to make decisions based on the comparison.
 
-* `models.ComplexComparison` is a helper type for holding `map[string]models.Comparison` which is needed when a comparison of complex custom type depends on the comparisons of its fields and separate logic has to be applied to them.
+* `types.ComplexComparison` is a helper type for holding `map[string]types.Comparison` which is needed when a comparison of complex custom type depends on the comparisons of its fields and separate logic has to be applied to them.
 
-* `matching.Comparator` defined the type of the function that each comparator has to implement in order to be used by `Compare()`: `type Comparator func(l, r interface{}, preference ...Preference) models.Comparison`.
+* `matching.Comparator` defined the type of the function that each comparator has to implement in order to be used by `Compare()`: `type Comparator func(l, r interface{}, preference ...Preference) types.Comparison`.
 
 * `matching.Preference` proposed type for handling functionality of injecting complex type comparison semantics at run time.
 
@@ -229,7 +229,7 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 
 * _Sorting_: based on the `Comparator` model and comparisons between types, we will need to implement sorting of Capabilities, and them Bids or BidRequests. For that, we may need to consider the implementation of `Preference` type (see below) for expressing preferences of sorting, which may be use-case specific. For example, some jobs may need to be processed quickly but can remunerate better while others can be volunteer based or prefer price-efficiency instead of time-efficiency. _Sorting_ logic and `Preference` operators should be constructed in general enough way to handle open-ended list of possible parameters (ideally or in the long term) or clear and efficient process for updating it (in current implementation and in the short term).
 
-* _Upgrading capabilities on demand_: We want to consider a situation when a machine does not have requested capabilities by a job but **can** upgrade them to match the requirements. For now, this functionality may involve Capability fields like 'Libraries'. For this we want to include upgrade method into `matching.Comparator` interface (or somehow into `models.Capability`), so that `matching.CapabilityComparator` could call it if needed. It is important to build this functionality in at interface level + some trivial implementation at least. In the future, it may evolve into quite advanced functionality of the platform, e.g. issuing hardware configuration commands (if installed on configurable hardware clusters) or installing plugins on demand (i.e. 'Executors').
+* _Upgrading capabilities on demand_: We want to consider a situation when a machine does not have requested capabilities by a job but **can** upgrade them to match the requirements. For now, this functionality may involve Capability fields like 'Libraries'. For this we want to include upgrade method into `matching.Comparator` interface (or somehow into `types.Capability`), so that `matching.CapabilityComparator` could call it if needed. It is important to build this functionality in at interface level + some trivial implementation at least. In the future, it may evolve into quite advanced functionality of the platform, e.g. issuing hardware configuration commands (if installed on configurable hardware clusters) or installing plugins on demand (i.e. 'Executors').
 
 * _Generic Add / Subtract functions_: We need to have a way to add and subtract computing resources (for calculating the Capability needed for several combined jobs and for updating available Capability of a machine after deploying jobs).It my be beneficial to use expand this Capability / Comparator model with generic Add and Subract functionality that would take care of that in a flexible manner. This was originally proposed in [initial job orchestration proposal](https://gitlab.com/nunet/open-api/platform-data-model/-/merge_requests/35#note_1915687497).
 

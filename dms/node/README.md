@@ -4,14 +4,14 @@
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
 - [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+1. [Description](#1-proposed-description)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -35,7 +35,7 @@ The `Node` is responsible for:
 - Continuous monitoring of the machine
 
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -91,14 +91,14 @@ All issues that are related to the implementation of `dms` package can be found 
 
 ```
 type Node_interface interface {
-	// Extends Actor interface from models package;
+	// Extends Actor interface from types package;
 	// which implements message passing logic
 
 	// Somewhat similar to the libp2p.Host interface in the current implementation;
 	// (however, network.libp2p package is too low level for this interface in the 
 	// new architecture)
 	
-	models.Actor
+	types.Actor
 
     // extends the Orchestrator interface from orchestrator sub-package
 	dms.orchestrator.Orchestrator
@@ -108,7 +108,7 @@ type Node_interface interface {
 
 	// each node will hold a structure with allocations that will be running on it
 	// allocation type is specified in jobs package
-	getAllocation(allocationID jobs.Allocation.allocationID) jobs.Allocation
+	getAllocation(allocationID dms.jobs.Allocation.allocationID) dms.jobs.Allocation
 
 	// allocations will be short-lived objects (depending on the requirements of a job pertaining to that allocation)
 	// but (ideally) all allocations that have ever been initiated on a node
@@ -138,7 +138,7 @@ type Node_interface interface {
 	getAvailableCapability()
 
     // reserve resources for a job
-	lockCapability(jobs.Pod, dms.Capability)
+	lockCapability(dms.jobs.Pod, dms.Capability)
 
 	// get all locked Capabilities
 	getLockedCapabilities()
@@ -149,10 +149,10 @@ type Node_interface interface {
 	getPreferences() dms.orchestrator.CapabilityComparator
 
 	// below methods are related to SERVICE PROVIDER functionality (mostly)
-	getRegisteredBids(bidRequestID models.ID) []orchestrator.Bid
+	getRegisteredBids(bidRequestID types.ID) []dms.orchestrator.Bid
 
 	// start a new allocation
-	startAllocation(orchestrator.Invocation) 
+	startAllocation(dms.orchestrator.Invocation) 
 
 }
 ```
@@ -188,7 +188,7 @@ type Node_interface interface {
 
 #### Data types
 
-##### `proposed` Node
+##### `proposed` dms.node.Node
 
 An initial data model for `Node` is defined below.
 
@@ -198,7 +198,7 @@ type Node struct {
 	id dms.node.nodeID
 
 	// unique mailbox
-	mailbox models.Mailbox
+	mailbox types.Mailbox
 	
 	// access to the local events database on the node
 	db db.LocalDatabaseCollector // a type allowing to issue queries to our local database
@@ -222,7 +222,7 @@ type Node struct {
 	// it is the difference between registered capability and available capability
 	// can be calculated readily, but it is good to have it cached too.
 	// for orchestration purposes
-	lockedCapabilities map[dms.Job]dms.Capability
+	lockedCapabilities map[dms.jobs.Job]dms.Capability
 
 	// each node has its preferences encoded into CapabilityComparator type
 	// which will be used directly in the functions which compare job requirements with availableCapabilities
@@ -233,9 +233,7 @@ type Node struct {
 	// but we want this to be extendable to unlimited complexity of behaviors
 	preferences dms.orchestrator.CapabilityComparator
 
-	allocations slice[jobs.AllocationID] // list of all allocations running on the node
-
-	// -- FOLLOWING FIELDS NOT INCLUDED INTO dms global class diagram --
+	allocations slice[dms.jobs.AllocationID] // list of all allocations running on the node
 
 	// indices of activity
 	// we may need to have more indexes
@@ -264,16 +262,16 @@ type Node struct {
 ```
 
 
-##### `proposed` NodeID
+##### `proposed` dms.node.NodeID
 
 
 ```
 type NodeID struct {
 	// ID is unique identifier created by DMS 
-    ID models.ID.UUID
+    ID types.ID.UUID
    
     // CID is a Content identifier that can be used in DHT or otherwise
-    CID models.ID.CID
+    CID types.ID.CID
 
     // libp2p peerID
 	PeerID string
