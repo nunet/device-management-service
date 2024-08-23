@@ -3,15 +3,6 @@
 !$rootUrlLocal = ".."
 !$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
 
-' package relative path: change this for each package
-!$packageRelativePath = ""
-
-!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
-
-' uncomment the following line to render all locally
-' !$rootUrl = $rootUrlLocal
-' uncomment the following line to render all from gitlab
-!$rootUrl = $packageUrlGitlab
 
 ' END PREAMBLE
 
@@ -29,55 +20,55 @@ hide <<hide>>
 ' START SUBPACKAGES
 
 'package api {
-    !include $rootUrl/api/specs/class_diagram.puml
+    !include $rootUrlGitlab/api/specs/class_diagram.puml
 ' }
 
 'package cmd {
-    !include $rootUrl/cmd/specs/class_diagram.puml
+    !include $rootUrlGitlab/cmd/specs/class_diagram.puml
 '}
 
 'package db {
-    !include $rootUrl/db/specs/class_diagram.puml
+    !include $rootUrlGitlab/db/specs/class_diagram.puml
 '}
 
 'package dms {
-    !include $rootUrl/dms/specs/class_diagram.puml
+    !include $rootUrlGitlab/dms/specs/class_diagram.puml
 '}
 
 'package executor {
-    !include $rootUrl/executor/specs/class_diagram.puml
+    !include $rootUrlGitlab/executor/specs/class_diagram.puml
 '}
 
 'package internal {
-    !include $rootUrl/internal/specs/class_diagram.puml
+    !include $rootUrlGitlab/internal/specs/class_diagram.puml
 '}
 
 'package types {
-    !include $rootUrl/types/specs/class_diagram.puml
+    !include $rootUrlGitlab/types/specs/class_diagram.puml
 '}
 
 'package network {
-    !include $rootUrl/network/specs/class_diagram.puml
+    !include $rootUrlGitlab/network/specs/class_diagram.puml
 '}
 
 'package plugins {
-    !include $rootUrl/plugins/specs/class_diagram.puml
+    !include $rootUrlGitlab/plugins/specs/class_diagram.puml
 '}
 
 'package storage {
-    !include $rootUrl/storage/specs/class_diagram.puml
+    !include $rootUrlGitlab/storage/specs/class_diagram.puml
 '}
 
 'package telemetry {
-    !include $rootUrl/telemetry/specs/class_diagram.puml
+    !include $rootUrlGitlab/telemetry/specs/class_diagram.puml
 '}
 
 'package tokenomics {
-    !include $rootUrl/tokenomics/specs/class_diagram.puml
+    !include $rootUrlGitlab/tokenomics/specs/class_diagram.puml
 '}
 
 'package utils {
-    !include $rootUrl/utils/specs/class_diagram.puml
+    !include $rootUrlGitlab/utils/specs/class_diagram.puml
 '}
 
 ' END SUBPACKAGES
