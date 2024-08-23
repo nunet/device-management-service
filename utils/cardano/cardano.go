@@ -764,7 +764,7 @@ func ValueStr(value map[string]int64) (str string) {
 
 func WriteDatumFile(path string, ntx int64, spPubKeyHash string, cpPubKeyHash string) {
 	// nolint:gofumpt
-	if err := os.WriteFile(path, []byte(fmt.Sprintf(DatumFormatString, spPubKeyHash, cpPubKeyHash, ntx, PreGenMetaDataHash, PreGenWithdrawHash, PreGenRefundHash, PreGenDistribute75Hash, PreGenDistribute50Hash)), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(fmt.Sprintf(DatumFormatString, spPubKeyHash, cpPubKeyHash, ntx, PreGenMetaDataHash, PreGenWithdrawHash, PreGenRefundHash, PreGenDistribute75Hash, PreGenDistribute50Hash)), 0o600); err != nil {
 		log.Fatal(err)
 	}
 }

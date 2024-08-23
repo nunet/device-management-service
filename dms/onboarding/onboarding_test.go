@@ -145,7 +145,7 @@ func TestOnboard(t *testing.T) {
 	// Create a temporary working directory
 
 	// nolint:gofumpt
-	err := testFS.MkdirAll(tmpDir, 0755)
+	err := testFS.MkdirAll(tmpDir, 0o755)
 	assert.NoError(t, err)
 
 	// Create a new Onboarding instance with the test options
@@ -207,7 +207,7 @@ func TestResourceConfig(t *testing.T) {
 	// Create a temporary working directory
 	tmpDir := "/tmp/test"
 	// nolint:gofumpt
-	err := testFS.MkdirAll(tmpDir, 0755)
+	err := testFS.MkdirAll(tmpDir, 0o755)
 	assert.NoError(t, err)
 
 	// Create a new Onboarding instance with the test options
@@ -246,7 +246,7 @@ func TestOffboard(t *testing.T) {
 	fs := afero.Afero{Fs: afero.NewMemMapFs()}
 	tmpDir := "/tmp/test"
 	// nolint:gofumpt
-	err := fs.MkdirAll(tmpDir, 0755)
+	err := fs.MkdirAll(tmpDir, 0o755)
 	assert.NoError(t, err)
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	assert.NoError(t, err)
