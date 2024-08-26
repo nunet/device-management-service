@@ -1,9 +1,10 @@
 package resources
 
 import (
+	"testing"
+
 	"github.com/shoenig/go-m1cpu"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestArm64DarwinNewSystemSpecs(t *testing.T) {

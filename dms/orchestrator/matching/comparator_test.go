@@ -396,6 +396,7 @@ func TestLibrariesComparator(t *testing.T) {
 	var libraries3 []types.Library
 	library5 := types.Library{Name: "tensorflow", Version: "2.4.1", Constraint: "="}
 	library6 := types.Library{Name: "pytorch", Version: "1.7.1", Constraint: ">="}
+
 	libraries3 = append(libraries3, library5)
 	libraries3 = append(libraries3, library6)
 	libraries3 = append(libraries3, library6)
@@ -502,4 +503,528 @@ func TestLocalitiesComparator(t *testing.T) {
 	actualValue = Compare(localities1, localities2)
 	expectedValue = types.Equal
 	assert.NotEqual(t, expectedValue, actualValue)
+}
+
+func TestStorageComparator(t *testing.T) {
+	storages := []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 250, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 250, Amount: 1},
+		{Type: types.SSD_STORAGE_TYPE, Size: 500, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 500, Amount: 1},
+		{Type: types.SSD_STORAGE_TYPE, Size: 500, Amount: 2},
+		{Type: types.HDD_STORAGE_TYPE, Size: 500, Amount: 2},
+	}
+
+	actualValue := Compare(storages[0], storages[1])
+	expectedValue := types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	actualValue = Compare(storages[1], storages[0])
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	actualValue = Compare(storages[0], storages[2])
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	actualValue = Compare(storages[2], storages[0])
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	actualValue = Compare(storages[2], storages[3])
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	actualValue = Compare(storages[3], storages[2])
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	actualValue = Compare(storages[2], storages[5])
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	actualValue = Compare(storages[5], storages[2])
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+}
+
+func TestStoragesComparator(t *testing.T) {
+	host := []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	job := []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	actualValue := Compare(host, job)
+	expectedValue := types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 50, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 50, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 50, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 200, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.HDD_STORAGE_TYPE, Size: 200, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 200, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.Storage{
+		{Type: types.HDD_STORAGE_TYPE, Size: 200, Amount: 1},
+	}
+	job = []types.Storage{
+		{Type: types.SSD_STORAGE_TYPE, Size: 100, Amount: 1},
+		{Type: types.HDD_STORAGE_TYPE, Size: 100, Amount: 1},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+}
+
+func TestConnectivityComparator(t *testing.T) {
+	host := types.Connectivity{Ports: []int{2000, 3000, 4000}, VPN: true}
+	job := types.Connectivity{Ports: []int{3000}, VPN: false}
+	actualValue := Compare(host, job)
+	expectedValue := types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.Connectivity{Ports: []int{3000}, VPN: false}
+	job = types.Connectivity{Ports: []int{3000}, VPN: false}
+	actualValue = Compare(host, job)
+	expectedValue = types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.Connectivity{Ports: []int{3000}, VPN: false}
+	job = types.Connectivity{Ports: []int{3000}, VPN: true}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.Connectivity{Ports: []int{3000, 2000}, VPN: false}
+	job = types.Connectivity{Ports: []int{3000}, VPN: true}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+}
+
+func TestPriceInformationComparator(t *testing.T) {
+	host := types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	job := types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	actualValue := Compare(host, job)
+	expectedValue := types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 80,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	job = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	job = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 80,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	job = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 80,
+		TotalPerJob:     800,
+		Preference:      0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     800,
+		Preference:      0,
+	}
+	job = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 80,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 80,
+		TotalPerJob:     800,
+		Preference:      0,
+	}
+	job = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.PriceInformation{
+		Currency:        "EUR",
+		CurrencyPerHour: 80,
+		TotalPerJob:     800,
+		Preference:      0,
+	}
+	job = types.PriceInformation{
+		Currency:        "USD",
+		CurrencyPerHour: 100,
+		TotalPerJob:     1000,
+		Preference:      0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Error
+	assert.Equal(t, expectedValue, actualValue)
+}
+
+func TestPricesInformationComparator(t *testing.T) {
+	host := []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	job := []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	actualValue := Compare(host, job)
+	expectedValue := types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	job = []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+		{Currency: "EUR", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 80, TotalPerJob: 1000, Preference: 0},
+	}
+	job = []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+		{Currency: "EUR", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	job = []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 80, TotalPerJob: 800, Preference: 0},
+		{Currency: "EUR", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.PriceInformation{
+		{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	job = []types.PriceInformation{
+		{Currency: "MAD", CurrencyPerHour: 80, TotalPerJob: 800, Preference: 0},
+		{Currency: "EUR", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Error
+	assert.Equal(t, expectedValue, actualValue)
+}
+
+func TestTimeInformationComparator(t *testing.T) {
+	host := types.TimeInformation{
+		Units:      "seconds",
+		MaxTime:    120,
+		Preference: 0,
+	}
+	job := types.TimeInformation{
+		Units:      "seconds",
+		MaxTime:    120,
+		Preference: 0,
+	}
+	actualValue := Compare(host, job)
+	expectedValue := types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.TimeInformation{
+		Units:      "seconds",
+		MaxTime:    120,
+		Preference: 0,
+	}
+	job = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    2,
+		Preference: 0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.TimeInformation{
+		Units:      "seconds",
+		MaxTime:    180,
+		Preference: 0,
+	}
+	job = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    2,
+		Preference: 0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    180,
+		Preference: 0,
+	}
+	job = types.TimeInformation{
+		Units:      "hours",
+		MaxTime:    2,
+		Preference: 0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    180,
+		Preference: 0,
+	}
+	job = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    2,
+		Preference: 0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    120,
+		Preference: 0,
+	}
+	job = types.TimeInformation{
+		Units:      "hours",
+		MaxTime:    2,
+		Preference: 0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    180,
+		Preference: 0,
+	}
+	job = types.TimeInformation{
+		Units:      "hours",
+		MaxTime:    2,
+		Preference: 0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Better
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.TimeInformation{
+		Units:      "minutes",
+		MaxTime:    60,
+		Preference: 0,
+	}
+	job = types.TimeInformation{
+		Units:      "hours",
+		MaxTime:    2,
+		Preference: 0,
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Worse
+	assert.Equal(t, expectedValue, actualValue)
+}
+
+func TestKYCComparator(t *testing.T) {
+	host := types.KYC{
+		Type: "ke",
+		Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233",
+	}
+	job := types.KYC{
+		Type: "ke",
+		Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233",
+	}
+	actualValue := Compare(host, job)
+	expectedValue := types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = types.KYC{
+		Type: "ek",
+		Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233",
+	}
+	job = types.KYC{
+		Type: "ke",
+		Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233",
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Error
+	assert.Equal(t, expectedValue, actualValue)
+}
+
+func TestKYCsComparator(t *testing.T) {
+	host := []types.KYC{
+		{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	job := []types.KYC{
+		{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	actualValue := Compare(host, job)
+	expectedValue := types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.KYC{
+		{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	job = []types.KYC{
+		{Type: "ek", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Error
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.KYC{
+		{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	job = []types.KYC{
+		{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+		{Type: "ed", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Equal
+	assert.Equal(t, expectedValue, actualValue)
+
+	host = []types.KYC{
+		{Type: "kde", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	job = []types.KYC{
+		{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+		{Type: "ed", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
+	}
+	actualValue = Compare(host, job)
+	expectedValue = types.Error
+	assert.Equal(t, expectedValue, actualValue)
 }

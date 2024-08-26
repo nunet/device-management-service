@@ -29,9 +29,11 @@ func Compare(l, r interface{}, _ ...Preference) types.Comparison {
 	// this means that the type is probably a slice of custom types
 	// we have to get the element types and then map it to existing custom types that know
 	// so that we can call a correct comparator for that
-	if reflect.TypeOf(l).Kind() == reflect.Slice {
-		// check if we have a slice of further types
-		// we need to mention each type explicitly
+	//nolint
+	switch reflect.TypeOf(l).Kind() {
+	// check if we have a slice of further types
+	// we need to mention each type explicitly
+	case reflect.Slice:
 		if _, ok := l.([]types.GPU); ok {
 			typeName = "GPUs"
 		}
@@ -40,6 +42,15 @@ func Compare(l, r interface{}, _ ...Preference) types.Comparison {
 		}
 		if _, ok := l.([]types.Locality); ok {
 			typeName = "Localities"
+		}
+		if _, ok := l.([]types.Storage); ok {
+			typeName = "Storages"
+		}
+		if _, ok := l.([]types.PriceInformation); ok {
+			typeName = "PricesInformation"
+		}
+		if _, ok := l.([]types.KYC); ok {
+			typeName = "KYCs"
 		}
 	}
 
@@ -77,6 +88,15 @@ func initComparatorMap() ComparatorMap {
 	comparatorMap["Libraries"] = LibrariesComparator
 	comparatorMap["Locality"] = LocalityComparator
 	comparatorMap["Localities"] = LocalitiesComparator
+	comparatorMap["Storage"] = StorageComparator
+	comparatorMap["Storages"] = StoragesComparator
+	comparatorMap["Connectivity"] = ConnectivityComparator
+	comparatorMap["PriceInformation"] = PriceInformationComparator
+	comparatorMap["PricesInformation"] = PricesInformationComparator
+	comparatorMap["TimeInformation"] = TimeInformationComparator
+	comparatorMap["KYC"] = KYCComparator
+	comparatorMap["KYCs"] = KYCsComparator
+
 	return comparatorMap
 }
 

@@ -31,7 +31,7 @@ The main goal of the package is to define and express the `Comparator` logic for
 
 2. According to the current orchestration logic, a `dms` acting as 'service provider', sends to the network a `bidRequest` for each requested job. If a `dms` acting as 'compute provider' decides (using functionality of this package) that it is willing to execute a job, it sends a `bid`. Both `bidRequest` and `bid` types contain not only declarations of compute requirements and demands, but also pricing, timing and other preferences that need to be considered by the `Comparator` logic. This aspect is the secondary focus of the implemented functionality.
 
-3. `Comparator` logic will also be used in sorting `bid`s or `bidRequest`s in order to choose a preferred one (e.g. if and when a `dms` acting as 'service provider' will receive multiple `bid`s for the same `bidRequest`, it will have to choose the best in the list). This aspect is not yet implemented but proposed. 
+3. `Comparator` logic will also be used in sorting `bid`s or `bidRequest`s in order to choose a preferred one (e.g. if and when a `dms` acting as 'service provider' will receive multiple `bid`s for the same `bidRequest`, it will have to choose the best in the list). This aspect is not yet implemented but proposed.
 
 The `matching` sub-package should be considered in the context of `orchestrator` functionality and general 'proposed' Job Orchestration logic (see [`orchestrator` package README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/README.md)).
 
@@ -41,7 +41,7 @@ Provided implementation of `Capability` and `Comparison` model is designed in a 
 
 Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality.
 
 * [Comparator.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/Comparator.go): implements generic comparison function for comparing two variables of a custom type; the function detects the type of parameters and uses an appropriate type comparator for comparing them.
 
@@ -61,7 +61,14 @@ Here is quick overview of the contents of this directory:
 	* `LocalitiesComparator`: Comparator for slices of `model.Locality` typed variables, which is a field in `types.Capability`;
 	* `LocalityComparator`: Comparator for variables of `types.Locality` type;
 	* `NumericComparator`: Comparator for all go numeric variables (int, float, etc);
-
+	* `StorageComparator`: Comparator for variables of `models.Storage` type;
+	* `StoragesComparator`: Comparator for slices of `model.Storage` typed variables, which is a field in `models.Capability`;
+	* `ConnectivityComparator`: Comparator for variables of `models.Connectivity` type;
+  * `TimeInformationComparator` : Comparator for variables of `models.TimeInformation` type;
+  * `PriceInformationComparator` : Comparator for variables of `models.PriceInformation` type;
+  * `PriceInformationsComparator` : Comparator for slices of `model.PriceInformation` typed variables, which is a field in `models.Capability`;
+  * `KYCComparator` : Comparator for variables of `models.KYC` type;
+  * `KYCsComparator` : Comparator for slices of `model.KYC` typed variables, which is a field in `models.Capability`;
 * [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/develop/orchestrator/matching/specs): Directory containing package specifications, including package class diagram.
 
 * [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/utils.go): Utility methods specific to this package only.
@@ -78,7 +85,7 @@ Here is quick overview of the contents of this directory:
 !$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
 !$packageRelativePath = "/dms/orchestrator/matching"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
- 
+
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
@@ -96,7 +103,7 @@ So the `Compose` function implements the comparison operator on custom types wit
 
 The comparison operator is generally not symmetric, therefore the semantics of assigning variables to `l` and `r` parameters is important. Current implementation is based on the following semantics:
 
-* *left represent machine capabilities // right represent required capabilities*. 
+* *left represent machine capabilities // right represent required capabilities*.
 
 #### Type Comparators for `types.Capability`
 
@@ -177,24 +184,40 @@ It is not yet clear how are we will be defining localities in our model therefor
 
 ##### Storage
 
-`TBD`
+'Storages' field holds available storages on a machine and required storages by a job. Reasoning about this field involves two data structures and therefore two type comparators.
+
+* `func StorageComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two variables of `models.Storage` type, which itself has three fields `Type`, `Size` and `Amount`. The `Type` field holds either `ssd` or `hdd`. The comparator returns Equal on the same type and size and amount, Better if available storage is more than required or if available is `sdd` type while required is `hdd`, and Worse if available storage is less than required, or available storage is `hdd` but required is `ssd`.
+
+* `func StoragesComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two slices of `models.Storage` types, so `[]models.Storage` which also can be of different length (i.e. in cases when a job needs more than 1 disk, and a machine has 1 big disk or so). This is done internally in the comparator by constructing accumulators of size per type to calculate total available size per type. If totals are equal, then the result is Equal, if the total is equal but types are different, if required is `hdd` and available is `sdd`, then it's better, and if available is `hdd` and required is `sdd`, then it's worse. If available storage is more than required, then it's better, and if available storage is less than required, then it's worse.
 
 
 ##### Connectivity
 
-`TBD`
+'Connectivity' field holds available network connectivity specs on a machine and required network connectivity specs by a job. Namely, the `models.Connectivity` has two fields `VPN` and `Ports` to indicate whether a machine has VPN and which ports are open. This field involves one comparator:
+
+`func ConnectivityComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two variables of `models.Connectivity` type, which itself has two fields `VPN` and `Ports`. The comparator returns Equal if VPN and Ports are the same, Better if available VPN is true and required is false, or if available ports are more than required, and Worse if available VPN is false and required is true, or if available ports are less than required.
 
 ##### Price
 
-`TBD`
+'Price' field holds a machine's capacity to pay for a job, and required price by a job. The `models.Price` has two fields `Currency` and `Amount`.  Reasoning about this field involves two data structures and therefore two type comparators:
+
+`func PriceInformationComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two variables of `models.Price` type, which itself has two fields `Currency` and `Amount`. The comparator returns Equal if Currency and Amount are the same, Better if available amount is more than required, and Worse if available amount is less than required.
+
+`func PricesComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two slices of `models.Price` types, so `[]models.Price` which also can be of different length (i.e. in cases when a job has more than 1 currency, and a machine different currencies supported). This is done internally in the comparator by comparing for equality first, otherwise, it just looks to see if at least one price comparison is better than the other or worse than others. Otherwise it returns Error.
 
 ##### Time
 
-`TBD`
+'Time' field holds a machine's availability to work on a job, and required time by a job. The `models.Time` has fields `MaxTime` and `Units`.  Reasoning about this field involves one comparator:
+
+`func TimeComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two variables of `models.Time` type, which itself has two fields `MaxTime` and `Units`. The comparator returns Equal if MaxTime and Units are the same, Better if available time is more than required, and Worse if available time is less than required.
 
 ##### KYCs
 
-`TBD`
+'KYCs' field holds a machine's supported KYC types, and required KYC types by a job. The `models.KYC` has fields `Type` and `Data`.  Reasoning about this field involves one comparator:
+
+`func KYCComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two variables of `models.KYC` type, which itself has two fields `Type` and `Data`. The comparator returns Equal if Type and Data are the same, or Error otherwise
+
+`func KYCsComparator(lraw, rraw interface{}, preference ...Preference) models.Comparison` compares two slices of `models.KYC` types, so `[]models.KYC` which also can be of different length (i.e. in cases when a job has more than 1 KYC type, and a machine supports different KYC types). This is done internally in the comparator by comparing for equality first, otherwise, it returns Error.
 
 **Note: the functionality of the package is currently being developed; please see description for details and developed / proposed aspects.**
 
@@ -216,7 +239,7 @@ Most of the data types used by this package are defined in other packages. Here 
 
 All unit tests for the package are implemented in `comparator_test.go`. This file includes at least one test for each type comparator. Currently unit tests are implemented using assertions on manually constructed types. This approach allows to check the logic of comparison, but also limits the input domain of tests. In the future these manually constructed tests maybe augmented by a more elaborate complex type mocking code.
 
-### 7. Proposed Functionality / Requirements 
+### 7. Proposed Functionality / Requirements
 
 #### List of issues
 
@@ -244,7 +267,6 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 ### 8. References
 
 
-#### Related research blogs 
+#### Related research blogs
 
 `TBD`
-

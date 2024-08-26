@@ -10,7 +10,7 @@ class dms.orchestrator.matching.Preference <<comparator.go>> {
 
 enum dms.orchestrator.matching.PreferenceStrength {
    proposed
-   ..   
+   ..
    Hard
    Soft
 }
@@ -20,29 +20,35 @@ metaclass dms.orchestrator.matching.Comparator <<comparator.go>>{
 }
 
 class dms.orchestrator.matching.ComparatorMap <<comparator.go>> {
-   ExecutionResourcesComparator(): models.Comparison
-   ExecutorComparator(): models.Comparison
-   ExecutorsComparator(): models.Comparison
-   ExecutorTypeComparator(): models.Comparison
-   GPUComparator(): models.Comparison
-   GPUsComparator(): models.Comparison
-   GPUVendorComparator(): models.Comparison
-   JobTypeComparator(): models.Comparison
-   JobTypesComparator(): models.Comparison
-   LibrariesComparator(): models.Comparison
-   LibraryComparator(): models.Comparison
-   LiteralComparator(): models.Comparison
-   LocalitiesComparator(): models.Comparison
-   LocalityComparator(): models.Comparison
-   NumericComparator(): models.Comparison
+   ExecutionResourcesComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   ExecutorComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   ExecutorsComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   ExecutorTypeComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   GPUComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   GPUsComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   GPUVendorComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   JobTypeComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   JobTypesComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   LibrariesComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   LibraryComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   LiteralComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   LocalitiesComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   LocalityComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   NumericComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   StorageComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   StoragesComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   ConnectivityComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   PriceInformationComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   PricesInformationComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   TimeInformationComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   KYCComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
+   KYCsComparator(l: interface{}, r: interface{}, preference ...Preference): models.Comparison
 }
 
 ' END DIAGRAM
 
 ' START IN-PACKAGE RELATIONS
-dms.orchestrator.matching.Preference::Strength <|-- dms.orchestrator.matching.PreferenceStrength 
+dms.orchestrator.matching.Preference::Strength <|-- dms.orchestrator.matching.PreferenceStrength
 dms.orchestrator.matching.Comparator <|-- dms.orchestrator.matching.ComparatorMap
 dms.orchestrator.matching.Preference --> dms.orchestrator.matching.Comparator::Compare
 ' END IN-PACKAGE RELATIONS
-
- 

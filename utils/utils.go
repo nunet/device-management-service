@@ -163,7 +163,7 @@ func PromptYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
 func CreateDirectoryIfNotExists(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		// nolint:gofumpt
-		err := os.MkdirAll(path, 0755)
+		err := os.MkdirAll(path, 0o755)
 		if err != nil {
 			return err
 		}
@@ -358,6 +358,19 @@ func IsExecutor(v interface{}) bool {
 
 // IsStrictlyContained checks if all elements of rightSlice are contained in leftSlice
 func IsStrictlyContained(leftSlice, rightSlice []interface{}) bool {
+	result := false // the default result is false
+	for _, subElement := range rightSlice {
+		if !slices.Contains(leftSlice, subElement) {
+			result = false
+			break
+		}
+		result = true
+	}
+	return result
+}
+
+// IsStrictlyContainedInt checks if all elements of rightSlice are contained in leftSlice
+func IsStrictlyContainedInt(leftSlice, rightSlice []int) bool {
 	result := false // the default result is false
 	for _, subElement := range rightSlice {
 		if !slices.Contains(leftSlice, subElement) {
