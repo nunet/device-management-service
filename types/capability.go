@@ -45,10 +45,19 @@ type Locality struct {
 }
 
 type Storage struct {
-	Type   string `json:"type" description:"Type of storage"`
-	Size   int    `json:"size" description:"Size of storage"`
-	Amount int    `json:"amount" description:"Amount of storage"`
+	Type   StorageType `json:"type" description:"Type of storage"`
+	Size   int         `json:"size" description:"Size of storage"`
+	Amount int         `json:"amount" description:"Amount of storage"`
 }
+
+type StorageType string
+
+const (
+	//nolint
+	SSD_STORAGE_TYPE StorageType = "ssd"
+	//nolint
+	HDD_STORAGE_TYPE StorageType = "hdd"
+)
 
 type KYC struct {
 	Type string `json:"type" description:"Type of KYC"`

@@ -369,6 +369,19 @@ func IsStrictlyContained(leftSlice, rightSlice []interface{}) bool {
 	return result
 }
 
+// IsStrictlyContainedInt checks if all elements of rightSlice are contained in leftSlice
+func IsStrictlyContainedInt(leftSlice, rightSlice []int) bool {
+	result := false // the default result is false
+	for _, subElement := range rightSlice {
+		if !slices.Contains(leftSlice, subElement) {
+			result = false
+			break
+		}
+		result = true
+	}
+	return result
+}
+
 func NoIntersectionSlices(slice1, slice2 []interface{}) bool {
 	result := false // the default result is false
 	for _, subElement := range slice1 {

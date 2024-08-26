@@ -15,14 +15,20 @@ func ExecutorsComparator(lraw, rraw interface{}, _ ...Preference) types.Comparis
 	result = types.Error // error is the default value
 
 	// validate input type
-	_, lrawok := lraw.(types.Executors)
-	_, rrawok := rraw.(types.Executors)
+	ll, lrawok := lraw.(types.Executors)
+	rr, rrawok := rraw.(types.Executors)
 	if !lrawok || !rrawok {
 		return types.Error
 	}
 
-	l := lraw.([]interface{})
-	r := rraw.([]interface{})
+	l := make([]interface{}, 0)
+	r := make([]interface{}, 0)
+	for _, v := range ll {
+		l = append(l, v)
+	}
+	for _, v := range rr {
+		r = append(r, v)
+	}
 
 	if !utils.IsSameShallowType(l, r) {
 		result = types.Error
