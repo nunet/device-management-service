@@ -21,6 +21,11 @@ Types of changes
 
 -->
 
+## [0.4.184](#530)
+
+### Added
+- `Add` and `Subtract` methods to Capability model through `CapabilityAddSubtracter` interface/behavior
+
 ## [0.4.183](#480)
 
 ### Added

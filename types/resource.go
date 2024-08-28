@@ -52,6 +52,19 @@ type GPU struct {
 	ResourceID uint `gorm:"foreignKey:ID"`
 }
 
+func (g *GPU) Equal(gpu *GPU) bool {
+	if g.Model == gpu.Model &&
+		g.TotalVRAM == gpu.TotalVRAM &&
+		g.UsedVRAM == gpu.UsedVRAM &&
+		g.FreeVRAM == gpu.FreeVRAM &&
+		g.Index == gpu.Index &&
+		g.Vendor == gpu.Vendor &&
+		g.PCIAddress == gpu.PCIAddress {
+		return true
+	}
+	return false
+}
+
 type GPUList []GPU
 
 // GetGPUWithHighestFreeVRAM Determine the GPU vendor with the highest free VRAM: NVIDIA, AMD, or Intel.
