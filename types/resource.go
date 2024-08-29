@@ -158,6 +158,12 @@ func (r Resources) Subtract(r2 Resources) (Resources, error) {
 
 var _ ResourceOps = (*Resources)(nil)
 
+// MachineResources represents the total resources of the machine
+type MachineResources struct {
+	BaseDBModel
+	Resources
+}
+
 // FreeResources represents the free resources of the machine
 type FreeResources struct {
 	BaseDBModel

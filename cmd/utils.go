@@ -97,7 +97,7 @@ func promptReonboard(reader io.Reader, writer io.Writer) error {
 // setOnboardData takes all onboarding parameters and marshal them into JSON
 func setOnboardData(memory int64, cpu int64, ntxPrice float64, channel, address string, cardano, serverMode, isAvailable bool) ([]byte, error) {
 	reserved := types.CapacityForNunet{
-		Memory:            memory,
+		Memory:            uint64(memory),
 		CPU:               cpu,
 		Channel:           channel,
 		PaymentAddress:    address,
@@ -303,20 +303,11 @@ func setFullData(provisioned *types.Provisioned) []string {
 	}
 }
 
-func setAvailableData(oConf *types.OnboardingConfig) []string {
-	return []string{
-		"Available",
-		fmt.Sprintf("%d", oConf.Available.Memory),
-		fmt.Sprintf("%d", oConf.Available.CPU),
-		"",
-	}
-}
-
 func setOnboardedData(oConf *types.OnboardingConfig) []string {
 	return []string{
 		"Onboarded",
-		fmt.Sprintf("%d", oConf.Reserved.Memory),
-		fmt.Sprintf("%d", oConf.Reserved.CPU),
+		fmt.Sprintf("%d", oConf.OnboardedResources.RAM),
+		fmt.Sprintf("%.2f", oConf.OnboardedResources.CPU),
 		"",
 	}
 }
@@ -336,30 +327,6 @@ func handleFull(table *tablewriter.Table, resources backend.ResourceManager) {
 
 	fullData := setFullData(totalProvisioned)
 	table.Append(fullData)
-}
-
-func handleAvailable(table *tablewriter.Table, utilsService backend.Utility) error {
-	err := checkOnboarded(utilsService)
-	if err != nil {
-		return err
-	}
-
-	// XXX: don't leave me like this
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir)), &gorm.Config{})
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-
-	onboardR := gdb.NewOnboardingParams(db)
-	oConf, err := onboardR.Get(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to get onboarding config: %w", err)
-	}
-
-	availableData := setAvailableData(&oConf)
-	table.Append(availableData)
-
-	return nil
 }
 
 func handleOnboarded(table *tablewriter.Table, utilsService backend.Utility) error {

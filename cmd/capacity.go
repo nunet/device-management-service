@@ -56,11 +56,9 @@ func NewCapacityCmd(net backend.NetworkManager, resources backend.ResourceManage
 			if flagCombination&bitFullFlag != 0 {
 				handleFull(table, resources)
 			}
+			// nolint
 			if flagCombination&bitAvailableFlag != 0 {
-				err := handleAvailable(table, utilsService)
-				if err != nil {
-					return fmt.Errorf("cannot fetch available data: %w", err)
-				}
+				// XXX done in !430
 			}
 			if flagCombination&bitOnboardedFlag != 0 {
 				err := handleOnboarded(table, utilsService)

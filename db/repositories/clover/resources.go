@@ -7,6 +7,19 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 )
 
+// MachineResourcesRepositoryClover is a Clover implementation of the MachineResourcesRepository interface.
+type MachineResourcesRepositoryClover struct {
+	repositories.GenericEntityRepository[types.MachineResources]
+}
+
+// NewMachineResourcesRepository creates a new instance of MachineResourcesRepositoryClover.
+// It initializes and returns a Clover-based repository for MachineResources entity.
+func NewMachineResourcesRepository(db *clover.DB) repositories.MachineResources {
+	return &MachineResourcesRepositoryClover{
+		NewGenericEntityRepository[types.MachineResources](db),
+	}
+}
+
 // FreeResourcesRepositoryClover is a Clover implementation of the FreeResourcesRepository interface.
 type FreeResourcesRepositoryClover struct {
 	repositories.GenericEntityRepository[types.FreeResources]

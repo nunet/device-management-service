@@ -11,6 +11,60 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 )
 
+// TestMachineResourcesRepository is a test suite for the MachineResourcesRepository.
+// It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
+// This test suite ensures that the repository functions for the MachineResources model behave as expected.
+func TestMachineResourcesRepository(t *testing.T) {
+	// Setup your database connection for testing
+	db, path := setup()
+	defer teardown(db, path)
+
+	// Initialize the repository
+	machineResourcesRepo := NewMachineResourcesRepository(db)
+
+	// Test Save method
+	createdMachineResources, err := machineResourcesRepo.Save(
+		context.Background(),
+		types.MachineResources{
+			Resources: types.Resources{
+				CPU:  2.0,
+				RAM:  4096,
+				Disk: 100000,
+			},
+		},
+	)
+	assert.NoError(t, err)
+
+	// Test Get method
+	retrievedMachineResources, err := machineResourcesRepo.Get(context.Background())
+	assert.NoError(t, err)
+	assert.Equal(t, createdMachineResources.CPU, retrievedMachineResources.CPU)
+
+	// Test Save (update) method
+	updatedMachineResources := retrievedMachineResources
+	updatedMachineResources.CPU = 4.0
+
+	_, err = machineResourcesRepo.Save(context.Background(), updatedMachineResources)
+	assert.NoError(t, err)
+	retrievedMachineResources, err = machineResourcesRepo.Get(context.Background())
+	assert.NoError(t, err)
+	assert.Equal(t, updatedMachineResources.CPU, retrievedMachineResources.CPU)
+
+	// Test History method
+	query := machineResourcesRepo.GetQuery()
+	query.Limit = 3
+	history, err := machineResourcesRepo.History(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Len(t, history, 2)
+
+	// Test Clear method
+	err = machineResourcesRepo.Clear(context.Background())
+	assert.NoError(t, err)
+	history, err = machineResourcesRepo.History(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Len(t, history, 0)
+}
+
 // TestFreeResourcesRepository is a test suite for the FreeResourcesRepository.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the FreeResources model behave as expected.

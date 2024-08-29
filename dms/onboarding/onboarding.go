@@ -88,9 +88,9 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	oConf.Name = hostname
 	oConf.UpdateTimestamp = time.Now().Unix()
 	// nolint TODO: 553
-	oConf.Resource.MemoryMax = int64(provisionedResources.RAM)
-	oConf.Resource.TotalCore = int64(provisionedResources.NumCores)
-	oConf.Resource.CPUMax = int64(provisionedResources.CPU)
+	oConf.TotalResources.RAM = provisionedResources.RAM
+	oConf.TotalResources.NumCores = provisionedResources.NumCores
+	oConf.TotalResources.CPU = provisionedResources.CPU
 
 	oConf.AllowCardano = false
 	if capacity.Cardano {
@@ -106,11 +106,9 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	}
 	oConf.GpuInfo = gpuInfo
 
-	oConf.Reserved.Memory = capacity.Memory
-	oConf.Reserved.CPU = capacity.CPU
+	oConf.OnboardedResources.RAM = capacity.Memory
+	oConf.OnboardedResources.CPU = float64(capacity.CPU)
 	// nolint TODO: 553
-	oConf.Available.Memory = int64(provisionedResources.RAM) - capacity.Memory
-	oConf.Available.CPU = int64(provisionedResources.CPU) - capacity.CPU
 	oConf.Network = capacity.Channel
 	oConf.PublicKey = capacity.PaymentAddress
 	oConf.NTXPricePerMinute = capacity.NTXPricePerMinute
@@ -147,8 +145,8 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, fmt.Errorf("could not read onboarding params from db: %w", err)
 	}
 
-	oParams.Reserved.CPU = capacity.CPU
-	oParams.Reserved.Memory = capacity.Memory
+	oParams.OnboardedResources.CPU = float64(capacity.CPU)
+	oParams.OnboardedResources.RAM = capacity.Memory
 	oParams.NTXPricePerMinute = capacity.NTXPricePerMinute
 
 	available, err := o.config.AvResourceRepo.Get(ctx)
@@ -156,8 +154,8 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, fmt.Errorf("could not get available resources info: %w", err)
 	}
 
-	available.TotCPUHz = int(capacity.CPU)
-	available.RAM = int(capacity.Memory)
+	available.TotCPUHz = capacity.CPU
+	available.RAM = capacity.Memory
 	available.NTXPricePerMinute = capacity.NTXPricePerMinute
 
 	if _, err := o.config.AvResourceRepo.Save(ctx, available); err != nil {
@@ -224,7 +222,7 @@ func validateCapacityForNunet(capacity types.CapacityForNunet) error {
 	}
 
 	// nolint TODO: 553
-	if capacity.Memory > int64(provisionedResources.RAM*9/10) || capacity.Memory < int64(provisionedResources.RAM/10) {
+	if capacity.Memory > provisionedResources.RAM*9/10 || capacity.Memory < provisionedResources.RAM/10 {
 		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory (%d and %d)", int64(provisionedResources.RAM/10), int64(provisionedResources.RAM*9/10))
 	}
 
@@ -267,11 +265,11 @@ func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity type
 	}
 
 	avalRes := types.AvailableResources{
-		TotCPUHz:          int(capacity.CPU),
+		TotCPUHz:          capacity.CPU,
 		CPUNo:             totalProvisioned.NumCores,
 		CPUHz:             cpuInfo.MHzPerCore,
 		PriceCPU:          0, // TODO: Get price of CPU
-		RAM:               int(capacity.Memory),
+		RAM:               capacity.Memory,
 		PriceRAM:          0, // TODO: Get price of RAM
 		Vcpu:              int(math.Floor((float64(capacity.CPU)) / cpuInfo.MHzPerCore)),
 		Disk:              0,
