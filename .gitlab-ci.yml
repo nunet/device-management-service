@@ -16,7 +16,7 @@ variables:
 include:
   project: nunet/test-suite
   file: cicd/Auto-DevOps.gitlab-ci.yml
-  ref: develop
+  ref: release
 
 image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:0.4
 
