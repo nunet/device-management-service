@@ -1,4 +1,4 @@
-![latest release version](https://gitlab.com/nunet/device-management-service/-/badges/547-branching-strategy-implementation/coverage.svg)
+![latest release version](https://gitlab.com/nunet/device-management-service/-/badges/main/coverage.svg)
 
 # Device Management Service (DMS)
 
