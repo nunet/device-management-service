@@ -24,6 +24,7 @@ func setup() {
 	err = db.AutoMigrate(
 		&types.PeerInfo{},
 		&types.Machine{},
+		&types.MachineResources{},
 		&types.FreeResources{},
 		&types.AvailableResources{},
 		&types.Services{},

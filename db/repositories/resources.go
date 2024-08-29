@@ -4,6 +4,11 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+// MachineResources represents a repository for CRUD operations on MachineResources entity.
+type MachineResources interface {
+	GenericEntityRepository[types.MachineResources]
+}
+
 // FreeResources represents a repository for CRUD operations on FreeResources entity.
 type FreeResources interface {
 	GenericEntityRepository[types.FreeResources]

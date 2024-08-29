@@ -32,11 +32,11 @@ type Machine struct {
 // can be used by NuNet
 type AvailableResources struct {
 	BaseDBModel
-	TotCPUHz          int
+	TotCPUHz          int64
 	CPUNo             int
 	CPUHz             float64
 	PriceCPU          float64
-	RAM               int
+	RAM               uint64
 	PriceRAM          float64
 	Vcpu              int
 	Disk              float64

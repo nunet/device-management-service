@@ -10,7 +10,7 @@ type BlockchainAddressPrivKey struct {
 
 // CapacityForNunet is a struct required in request body for the onboarding
 type CapacityForNunet struct {
-	Memory            int64   `json:"memory,omitempty"`
+	Memory            uint64  `json:"memory,omitempty"`
 	CPU               int64   `json:"cpu,omitempty"`
 	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
 	Channel           string  `json:"channel,omitempty"`
@@ -31,28 +31,17 @@ type Provisioned struct {
 // OnboardingConfig - parameters to configure onboarding
 type OnboardingConfig struct {
 	BaseDBModel
-	Name            string `json:"name,omitempty"`
-	UpdateTimestamp int64  `json:"update_timestamp,omitempty"`
-	Resource        struct {
-		MemoryMax int64 `json:"memory_max,omitempty"`
-		TotalCore int64 `json:"total_core,omitempty"`
-		CPUMax    int64 `json:"cpu_max,omitempty"`
-	} `json:"resource,omitempty"`
-	Available struct {
-		CPU    int64 `json:"cpu,omitempty"`
-		Memory int64 `json:"memory,omitempty"`
-	} `json:"available,omitempty"`
-	Reserved struct {
-		CPU    int64 `json:"cpu,omitempty"`
-		Memory int64 `json:"memory,omitempty"`
-	} `json:"reserved,omitempty"`
-	Network           string  `json:"network,omitempty"`
-	PublicKey         string  `json:"public_key,omitempty"`
-	NodeID            string  `json:"node_id,omitempty"`
-	AllowCardano      bool    `json:"allow_cardano,omitempty"`
-	GpuInfo           []GPU   `json:"gpu_info,omitempty"`
-	Dashboard         string  `json:"dashboard,omitempty"`
-	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
+	Name               string             `json:"name,omitempty"`
+	UpdateTimestamp    int64              `json:"update_timestamp,omitempty"`
+	TotalResources     MachineResources   `json:"total_resources,omitempty" gorm:"foreignKey:ID"`
+	OnboardedResources OnboardedResources `json:"onboarded_resources,omitempty" gorm:"foreignKey:ID"`
+	Network            string             `json:"network,omitempty"`
+	PublicKey          string             `json:"public_key,omitempty"`
+	NodeID             string             `json:"node_id,omitempty"`
+	AllowCardano       bool               `json:"allow_cardano,omitempty"`
+	GpuInfo            []GPU              `json:"gpu_info,omitempty" gorm:"foreignKey:ResourceID"`
+	Dashboard          string             `json:"dashboard,omitempty"`
+	NTXPricePerMinute  float64            `json:"ntx_price,omitempty"`
 }
 
 type OnboardingStatus struct {
