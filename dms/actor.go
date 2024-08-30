@@ -314,11 +314,6 @@ func (a *BasicActor) Hello(ctx context.Context, destination *ActorAddrInfo, m *M
 	_ = a.SendMessage(ctx, destination, m)
 }
 
-// nolint:unused
-func (a *BasicActor) handleHello(m Message) {
-	fmt.Println("handled hello message", m)
-}
-
 func (a *BasicActor) handleHeartbeat(data []byte) {
 	var msg Message
 	err := json.Unmarshal(data, &msg)

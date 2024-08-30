@@ -355,7 +355,6 @@ func handleOnboarded(table *tablewriter.Table, utilsService backend.Utility) err
 
 // appendToFile opens filename and write string data to it
 func appendToFile(fs backend.FileSystem, filename, data string) error {
-	// nolint:gofumpt
 	f, err := fs.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("open %s file failed: %w", filename, err)

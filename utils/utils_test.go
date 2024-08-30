@@ -8,6 +8,38 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+func TestRandomString(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		numChars int
+		expErr   string
+	}{
+		"generate with zero characters": {
+			numChars: 0,
+		},
+		"generate with two characters": {
+			numChars: 2,
+		},
+		"generate with 1024 characters": {
+			numChars: 1024,
+		},
+	}
+
+	for name, tt := range cases {
+		tt := tt
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			chars, err := RandomString(tt.numChars)
+			if tt.expErr != "" {
+				assert.EqualError(t, err, tt.expErr)
+			} else {
+				assert.Len(t, chars, tt.numChars)
+			}
+		})
+	}
+}
+
 func TestIsExecutorStrictlyContained(t *testing.T) {
 	docker := types.Executor{ExecutorType: types.ExecutorTypeDocker}
 	firecracker := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}

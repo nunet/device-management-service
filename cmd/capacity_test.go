@@ -105,7 +105,7 @@ func Test_CapacityCmdAvailable(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
@@ -154,7 +154,7 @@ func Test_CapacityCmdOnboarded(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct

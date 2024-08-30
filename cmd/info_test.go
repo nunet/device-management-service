@@ -65,8 +65,8 @@ func initMockDB() (*gorm.DB, error) {
 	return mockDB, nil
 }
 
-// nolint
-func resetMockDB(mockDB *gorm.DB, schema types.Libp2pInfo) error {
+func resetMockDB(mockDB *gorm.DB) error {
+	schema := types.Libp2pInfo{}
 	err := mockDB.Migrator().DropTable(schema)
 	if err != nil {
 		return fmt.Errorf("failed to drop tables: %v", err)
@@ -82,7 +82,7 @@ func Test_InfoCmd(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
@@ -148,7 +148,7 @@ func Test_InfoCmdNotOnboarded(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
@@ -182,7 +182,7 @@ func Test_InfoCmdInvalidMetadata(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct
@@ -219,7 +219,7 @@ func Test_InfoCmdDMSNotRunning(t *testing.T) {
 	assert.NoError(err)
 
 	// reset previous tables because of shared in-memory
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	// create table using Libp2pInfo struct

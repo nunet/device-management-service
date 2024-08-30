@@ -57,7 +57,12 @@ func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, op
 		opt(&vol)
 	}
 
-	vol.Path = vc.basePath + string(volSource) + "-" + utils.RandomString(16)
+	randomStr, err := utils.RandomString(16)
+	if err != nil {
+		return types.StorageVolume{}, fmt.Errorf("failed to create random string: %w", err)
+	}
+
+	vol.Path = vc.basePath + string(volSource) + "-" + randomStr
 	if err := vc.FS.Mkdir(vol.Path, os.ModePerm); err != nil {
 		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume: %w", err)
 	}
@@ -95,7 +100,6 @@ func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.Lo
 	}
 
 	// change file permissions
-	// nolint:gofumpt
 	if err := vc.FS.Chmod(updatedVol.Path, 0o400); err != nil {
 		return fmt.Errorf("failed to make storage volume read-only (path: %s): %w", updatedVol.Path, err)
 	}
