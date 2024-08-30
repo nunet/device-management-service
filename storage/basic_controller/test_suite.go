@@ -37,7 +37,6 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string, volumes map[stri
 
 	fs := afero.NewMemMapFs()
 
-	// nolint:gofumpt
 	err = fs.MkdirAll(basePath, 0o755)
 	if err != nil {
 		db.Close()
@@ -55,7 +54,6 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string, volumes map[stri
 
 	for _, vol := range volumes {
 		// create root volume dir
-		// nolint:gofumpt
 		err = fs.MkdirAll(vol.Path, 0o755)
 		if err != nil {
 			db.Close()

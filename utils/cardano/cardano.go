@@ -321,12 +321,13 @@ func WaitForTransaction(txHash string, maxTimeoutMinutes int) error {
 		return errors.New("max timeout reached, transaction not observed")
 	}
 
-	// nolint:gosec
+	constructedtxHash := txHash + "#0"
+
 	cmd := exec.Command("cardano-cli",
 		"query",
 		"utxo",
 		"--tx-in",
-		fmt.Sprintf("%s#0", txHash),
+		constructedtxHash,
 		"--out-file",
 		"/dev/stdout",
 		"--testnet-magic",
@@ -452,14 +453,14 @@ func BuildTransaction(tx Transaction, txFees int64) (err error) {
 
 // Sign a transaction with the SPAddress.
 func SignTransaction(account string) error {
-	// nolint:gosec
+	constructedAccount := account + ".sk"
 	cmd := exec.Command("cardano-cli",
 		"transaction",
 		"sign",
 		"--tx-body-file",
 		"tx.draft",
 		"--signing-key-file",
-		fmt.Sprintf("%s.sk", account),
+		constructedAccount,
 		"--out-file",
 		"tx.signed",
 	)
@@ -483,18 +484,21 @@ func EstimateFee(tx Transaction) (fee int64, err error) {
 		}
 	}
 
-	// nolint:gosec
+	constructedInput := fmt.Sprintf("%d", len(tx.Inputs))
+	constructedOutput := fmt.Sprintf("%d", len(tx.Outputs))
+	constructedwitnessCount := fmt.Sprintf("%d", witnessCount)
+
 	cmd := exec.Command("cardano-cli",
 		"transaction",
 		"calculate-min-fee",
 		"--tx-body-file",
 		"tx.draft",
 		"--tx-in-count",
-		fmt.Sprintf("%d", len(tx.Inputs)),
+		constructedInput,
 		"--tx-out-count",
-		fmt.Sprintf("%d", len(tx.Outputs)),
+		constructedOutput,
 		"--witness-count",
-		fmt.Sprintf("%d", witnessCount),
+		constructedwitnessCount,
 		"--protocol-params-file",
 		"protocol.json",
 		"--testnet-magic",
@@ -763,7 +767,6 @@ func ValueStr(value map[string]int64) (str string) {
 // }
 
 func WriteDatumFile(path string, ntx int64, spPubKeyHash string, cpPubKeyHash string) {
-	// nolint:gofumpt
 	if err := os.WriteFile(path, []byte(fmt.Sprintf(DatumFormatString, spPubKeyHash, cpPubKeyHash, ntx, PreGenMetaDataHash, PreGenWithdrawHash, PreGenRefundHash, PreGenDistribute75Hash, PreGenDistribute50Hash)), 0o600); err != nil {
 		log.Fatal(err)
 	}

@@ -68,7 +68,6 @@ func (s *S3ProviderTestSuite) SetupTest() {
 	s.NoError(err)
 
 	// Write a file in volume1 to be later used to upload
-	// nolint:gofumpt
 	err = afero.WriteFile(vcHelper.Fs, filepath.Join(vcHelper.Volumes["volume1"].Path, vol1File), []byte("hello world"), 0o644)
 	s.NoError(err)
 

@@ -35,7 +35,7 @@ func Test_PeerListCmdNoFlag(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
@@ -102,7 +102,7 @@ func Test_PeerListCmdWithFlags(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
@@ -155,7 +155,7 @@ func Test_PeerListCmdWithMessage(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
@@ -186,7 +186,7 @@ func Test_PeerListCmdEmptyDHTArray(t *testing.T) {
 	mockDB, err := initMockDB()
 	assert.NoError(err)
 
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	assert.NoError(err)
 
 	err = mockDB.AutoMigrate(&types.Libp2pInfo{})

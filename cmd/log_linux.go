@@ -28,7 +28,6 @@ func NewLogCmd(net backend.NetworkManager, fs backend.FileSystem, journal backen
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Collecting logs...")
 
-			// nolint:gofumpt
 			err := fs.MkdirAll(dmsLogDir, 0o777)
 			if err != nil {
 				return fmt.Errorf("cannot create dms-log directory: %w", err)

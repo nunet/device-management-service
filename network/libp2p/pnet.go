@@ -97,7 +97,6 @@ func generateSwarmKey(fs afero.Fs) (pnet.PSK, error) {
 	}
 
 	swarmKeyPath := filepath.Join(nunetDir, "swarm.key")
-	// nolint:gofumpt
 	if err := afero.WriteFile(fs, swarmKeyPath, []byte(swarmKeyWithCodec), 0o600); err != nil {
 		return nil, fmt.Errorf("error writing swarm key to file: %w", err)
 	}

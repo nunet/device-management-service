@@ -17,7 +17,7 @@ func setupMockDB() error {
 		return fmt.Errorf("failed to initialize mock db: %v", err)
 	}
 
-	err = resetMockDB(mockDB, types.Libp2pInfo{})
+	err = resetMockDB(mockDB)
 	if err != nil {
 		return fmt.Errorf("failed to reset previous db tables: %v", err)
 	}

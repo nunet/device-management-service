@@ -25,20 +25,19 @@ type Parser[T any] interface {
 	Parse(data []byte) (T, error)
 }
 
-// nolint:revive
-type ParserImpl[T any] struct {
+type Impl[T any] struct {
 	validator   validate.Validator
 	transformer transform.Transformer
 }
 
 func NewParser[T any](transformer transform.Transformer, validator validate.Validator) Parser[T] {
-	return ParserImpl[T]{
+	return Impl[T]{
 		transformer: transformer,
 		validator:   validator,
 	}
 }
 
-func (p ParserImpl[T]) Parse(data []byte) (T, error) {
+func (p Impl[T]) Parse(data []byte) (T, error) {
 	var rawConfig map[string]any
 	var config T
 

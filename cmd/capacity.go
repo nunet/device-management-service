@@ -56,6 +56,7 @@ func NewCapacityCmd(net backend.NetworkManager, resources backend.ResourceManage
 			if flagCombination&bitFullFlag != 0 {
 				handleFull(table, resources)
 			}
+
 			// nolint
 			if flagCombination&bitAvailableFlag != 0 {
 				// XXX done in !430

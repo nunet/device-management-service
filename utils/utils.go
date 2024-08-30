@@ -4,12 +4,13 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -39,10 +40,16 @@ func DownloadFile(url string, filepath string) (err error) {
 	}
 	defer file.Close()
 
-	resp, err := http.Get(url) // nolint
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
 	defer resp.Body.Close()
 
 	_, err = io.Copy(file, resp.Body)
@@ -55,10 +62,16 @@ func DownloadFile(url string, filepath string) (err error) {
 
 // ReadHTTPString GET request to http endpoint and return response as string
 func ReadHTTPString(url string) (string, error) {
-	resp, err := http.Get(url) // nolint
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -70,14 +83,19 @@ func ReadHTTPString(url string) (string, error) {
 }
 
 // RandomString generates a random string of length n
-func RandomString(n int) string {
+func RandomString(n int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	sb := strings.Builder{}
 	sb.Grow(n)
 	for i := 0; i < n; i++ {
-		sb.WriteByte(charset[rand.Intn(len(charset))]) // nolint
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			return "", err
+		}
+
+		sb.WriteByte(charset[n.Int64()])
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 // GenerateMachineUUID generates a machine uuid
@@ -162,7 +180,6 @@ func PromptYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
 // CreateDirectoryIfNotExists creates a directory if it does not exist
 func CreateDirectoryIfNotExists(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// nolint:gofumpt
 		err := os.MkdirAll(path, 0o755)
 		if err != nil {
 			return err
@@ -211,6 +228,16 @@ func CreateCheckSumFile(filePath string, checksum string) (string, error) {
 	return sha256FilePath, nil
 }
 
+// SanitizeArchivePath Sanitize archive file pathing from "G305: Zip Slip vulnerability"
+func SanitizeArchivePath(d, t string) (v string, err error) {
+	v = filepath.Join(d, t)
+	if strings.HasPrefix(v, filepath.Clean(d)) {
+		return v, nil
+	}
+
+	return "", fmt.Errorf("%s: %s", "content filepath is tainted", t)
+}
+
 // ExtractTarGzToPath extracts a tar.gz file to a specified path
 func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 	// Ensure the target directory exists; create it if it doesn't.
@@ -245,8 +272,10 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 		// Construct the full target path by joining the target directory with
 		// the name of the file or directory from the archive.
-		// nolint
-		fullTargetPath := filepath.Join(extractedPath, header.Name)
+		fullTargetPath, err := SanitizeArchivePath(extractedPath, header.Name)
+		if err != nil {
+			return fmt.Errorf("failed to santize path %w", err)
+		}
 
 		// Ensure that the directory path leading to the file exists.
 		if header.FileInfo().IsDir() {
@@ -324,11 +353,13 @@ func SaveServiceInfo(cpService types.Services) error {
 	return nil
 }
 
-func RandomBool() bool {
-	// nolint:staticcheck
-	rand.Seed(time.Now().UnixNano())
-	// nolint:gosec
-	return rand.Intn(2) == 1
+func RandomBool() (bool, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(2))
+	if err != nil {
+		return false, err
+	}
+	// Return true if the number is 1, otherwise false
+	return n.Int64() == 1, nil
 }
 
 func IsExecutorType(v interface{}) bool {

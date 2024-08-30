@@ -30,7 +30,7 @@ func (m *MockValidator) Validate(data *map[string]any) error {
 
 type ParserTestSuite struct {
 	suite.Suite
-	parser       ParserImpl[jobs.JobSpec]
+	parser       Impl[jobs.JobSpec]
 	transformer  *MockTransformer
 	validator    *MockValidator
 	rawYAMLData  []byte
@@ -41,7 +41,7 @@ type ParserTestSuite struct {
 func (suite *ParserTestSuite) SetupTest() {
 	suite.transformer = new(MockTransformer)
 	suite.validator = new(MockValidator)
-	suite.parser = ParserImpl[jobs.JobSpec]{
+	suite.parser = Impl[jobs.JobSpec]{
 		transformer: suite.transformer,
 		validator:   suite.validator,
 	}
