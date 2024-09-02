@@ -1,11 +1,11 @@
 # db
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -24,17 +24,17 @@ This package defines the local database functionality for the Device Management 
 
 - `clover`: which is a `NoSQL` or document oriented database implementation. 
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/db/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality. 
 
-* [db.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/db.go): This file defines the method which opens an SQlite database at a path set by the config parameter `work_dir`, applies migration and returns the `db` instance.
+* [db.go](https://gitlab.com/nunet/device-management-service/-/blob/main/db/db.go): This file defines the method which opens an SQlite database at a path set by the config parameter `work_dir`, applies migration and returns the `db` instance.
 
-* [repositories](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories): This folder contains the sub-packages of the `db` package.
+* [repositories](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories): This folder contains the sub-packages of the `db` package.
 
-* [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/specs): This folder contains the class diagram of the package.
+* [specs](https://gitlab.com/nunet/device-management-service/-/blob/main/db/specs): This folder contains the class diagram of the package.
 
 ### 3. Class Diagram
 
@@ -42,12 +42,12 @@ The class diagram for the `db` package is shown below.
 
 #### Source file
 
-[db Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/specs/class_diagram.puml)
+[db Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/db/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/db"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
@@ -55,4 +55,4 @@ The class diagram for the `db` package is shown below.
 ```
 
 ### 4. Package Specification
-Refer to the [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md) file defined in the repositories folder for specification of the package.
+Refer to the [README](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/README.md) file defined in the repositories folder for specification of the package.

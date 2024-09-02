@@ -1,11 +1,11 @@
 # validate
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -29,25 +29,25 @@ Utils specifically used for the validation of different types.
 
 Here is quick overview of the contents of this directory:
 
-- [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+- [README](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-- [numerics](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/numerics.go): This file contains method for conversion of numerical data to `float64` type.
+- [numerics](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/numerics.go): This file contains method for conversion of numerical data to `float64` type.
 
-- [strings](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/strings.go): This file contains method for validation check of data types.
+- [strings](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/strings.go): This file contains method for validation check of data types.
 
-- [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/specs): This folder contains the class diagram of the package.
+- [specs](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/specs): This folder contains the class diagram of the package.
 
 
 ### 3. Class Diagram
 
 #### Source File
 
-[cardano Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate/specs/class_diagram.puml)
+[cardano Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/utils/validate"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

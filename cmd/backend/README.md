@@ -1,18 +1,18 @@
 
 # backend
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -27,29 +27,29 @@
 
 The backend sub package contains the actual implementation of the Nunet CLI commands. 
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
 
-* [backend](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/backend.go): This file defines various interfaces DMS backend service. These interfaces provide abstractions for functionalities like resource management, peer management, network management, logging, and file system access.
+* [backend](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/backend.go): This file defines various interfaces DMS backend service. These interfaces provide abstractions for functionalities like resource management, peer management, network management, logging, and file system access.
 
-* [filesystem](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/filesystem.go): This file implements FileSystem functionality using the standard `os` package. It provides functions for basic file operations like creating, opening, reading, writing, and deleting files and directories. 
+* [filesystem](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/filesystem.go): This file implements FileSystem functionality using the standard `os` package. It provides functions for basic file operations like creating, opening, reading, writing, and deleting files and directories. 
 
-* [journal](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/journal.go): This file implements a wrapper to `go-systemd/sdjournal` functionality. It wraps the `sdjournal` functionality providing access to systemd journal entries like adding filters, retrieving entries, and iterating through them.
+* [journal](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/journal.go): This file implements a wrapper to `go-systemd/sdjournal` functionality. It wraps the `sdjournal` functionality providing access to systemd journal entries like adding filters, retrieving entries, and iterating through them.
 
-* [libp2p](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/libp2p.go): This file implements functionalites to clear incoming chat requests and decode a peer id.
+* [libp2p](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/libp2p.go): This file implements functionalites to clear incoming chat requests and decode a peer id.
 
-* [network](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/network.go): This file implements a method to get network connections data.
+* [network](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/network.go): This file implements a method to get network connections data.
 
-* [resources](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/resources.go): This file implements a method to get total capacity of the machine. 
+* [resources](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/resources.go): This file implements a method to get total capacity of the machine. 
 
-* [utils](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/utils.go): This file implements utitlity functions for backend functionality. 
+* [utils](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/utils.go): This file implements utitlity functions for backend functionality. 
 
-* [wallet](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/wallet.go): This file contains methods to get wallet address for the user. 
+* [wallet](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/wallet.go): This file contains methods to get wallet address for the user. 
 
-* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/develop/cmd/backend/websocket.go): This file implements a WebSocket Client for establishing and managing WebSocket connections. It provides functions to initialize the connection, send/receive messages, and handle pings for maintaining the connection. 
+* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/websocket.go): This file implements a WebSocket Client for establishing and managing WebSocket connections. It provides functions to initialize the connection, send/receive messages, and handle pings for maintaining the connection. 
 
 ### 3. Class Diagram
 
@@ -57,12 +57,12 @@ The class diagram for the `backend` package is shown below.
 
 #### Source file
 
-[backend Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/cmd/backend/specs/class_diagram.puml)
+[backend Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/backend/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/cmd/backend"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

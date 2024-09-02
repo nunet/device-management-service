@@ -1,11 +1,11 @@
 # orchestrator
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -61,9 +61,9 @@ See [References](#8-references) section for research blogs with more details on 
 
 Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality. 
 
-* [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/develop/orchestrator/specs): Directory containing package specifications, including package class diagram.
+* [specs](https://gitlab.com/nunet/device-management-service/-/tree/main/orchestrator/specs): Directory containing package specifications, including package class diagram.
 
 _Subpackages_
 
@@ -75,12 +75,12 @@ _Subpackages_
 
 #### Source
 
-[orchestrator class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/specs/class_diagram.puml)
+[orchestrator class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms/orchestrator"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

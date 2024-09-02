@@ -1,11 +1,11 @@
 # types
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -29,52 +29,52 @@
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/types/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [capability](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/capability.go): This file contains data structures to describe machine capability.
+* [capability](https://gitlab.com/nunet/device-management-service/-/tree/main/types/capability.go): This file contains data structures to describe machine capability.
 
-* [comparison](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/comparison.go): This file contains constans and types used for capability comparison.
+* [comparison](https://gitlab.com/nunet/device-management-service/-/tree/main/types/comparison.go): This file contains constans and types used for capability comparison.
 
-* [constants](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/constants.go): This file contains constants that are used across different packages.
+* [constants](https://gitlab.com/nunet/device-management-service/-/tree/main/types/constants.go): This file contains constants that are used across different packages.
 
-* [deployment](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/deployment.go): This file contains data structure related to job deployment.
+* [deployment](https://gitlab.com/nunet/device-management-service/-/tree/main/types/deployment.go): This file contains data structure related to job deployment.
 
-* [elk_stats](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/elk_stats.go): This file contains data structure to be sent to elasticsearch collector.
+* [elk_stats](https://gitlab.com/nunet/device-management-service/-/tree/main/types/elk_stats.go): This file contains data structure to be sent to elasticsearch collector.
 
-* [encryption](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/encryption.go): This file contains data structure related to encryption in DMS.
+* [encryption](https://gitlab.com/nunet/device-management-service/-/tree/main/types/encryption.go): This file contains data structure related to encryption in DMS.
 
-* [execution](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/execution.go): This file contains data structure related to executor functionality.
+* [execution](https://gitlab.com/nunet/device-management-service/-/tree/main/types/execution.go): This file contains data structure related to executor functionality.
 
-* [firecracker](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/firecracker.go): This file contains data structure related to firecracker.
+* [firecracker](https://gitlab.com/nunet/device-management-service/-/tree/main/types/firecracker.go): This file contains data structure related to firecracker.
 
-* [machine](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/machine.go): This file contains data structure related to the machine - resources, peer details, services etc.
+* [machine](https://gitlab.com/nunet/device-management-service/-/tree/main/types/machine.go): This file contains data structure related to the machine - resources, peer details, services etc.
 
-* [network](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/network.go): This file contains data structure related to networking functionality of DMS
+* [network](https://gitlab.com/nunet/device-management-service/-/tree/main/types/network.go): This file contains data structure related to networking functionality of DMS
 
-* [network_config](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/network_config.go): This file defines message types, network types (libp2p, NATS) with configurations, and libp2p specific configurations (DHT, keys, peers, scheduling etc).
+* [network_config](https://gitlab.com/nunet/device-management-service/-/tree/main/types/network_config.go): This file defines message types, network types (libp2p, NATS) with configurations, and libp2p specific configurations (DHT, keys, peers, scheduling etc).
 
-* [onboarding](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/onboarding.go): This file contains data structure related to compute provider onboarding.
+* [onboarding](https://gitlab.com/nunet/device-management-service/-/tree/main/types/onboarding.go): This file contains data structure related to compute provider onboarding.
 
-* [resource](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/resource.go): This file contains data structures of GPU and execution resources.
+* [resource](https://gitlab.com/nunet/device-management-service/-/tree/main/types/resource.go): This file contains data structures of GPU and execution resources.
 
-* [spec_config](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/spec_config.go): This file defines a `SpecConfig` struct for configuration data with type, parameters, normalization, validation, and type checking functionalities.
+* [spec_config](https://gitlab.com/nunet/device-management-service/-/tree/main/types/spec_config.go): This file defines a `SpecConfig` struct for configuration data with type, parameters, normalization, validation, and type checking functionalities.
 
-* [storage](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/storage.go): This file contains data structures related to storage.
+* [storage](https://gitlab.com/nunet/device-management-service/-/tree/main/types/storage.go): This file contains data structures related to storage.
 
-* [telemetry](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/telemetry_config.go): This file defines structs related to telemetry configuration and methods to load configuration from environment variables.
+* [telemetry](https://gitlab.com/nunet/device-management-service/-/tree/main/types/telemetry_config.go): This file defines structs related to telemetry configuration and methods to load configuration from environment variables.
 
-* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/types/types.go):  This file defines a base model for entities in the application with auto-generated UUIDs, timestamps, and soft delete functionality using GORM hooks.
+* [types](https://gitlab.com/nunet/device-management-service/-/tree/main/types/types.go):  This file defines a base model for entities in the application with auto-generated UUIDs, timestamps, and soft delete functionality using GORM hooks.
 
 ### 3. Class Diagram
 
 #### Source
 
-[types class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/types/specs/class_diagram.puml)
+[types class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/types/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/types"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

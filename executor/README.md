@@ -1,11 +1,11 @@
 # executor
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -28,24 +28,24 @@ The executor package is responsible for executing the jobs received by the devic
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/README.md): Current file which is aimed towards developers who wish to use and modify the executor functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/README.md): Current file which is aimed towards developers who wish to use and modify the executor functionality. 
 
-* [init](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/init.go): This file initializes a logger instance for the executor package.
+* [init](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/init.go): This file initializes a logger instance for the executor package.
 
-* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/types.go): This file contains the interfaces that other packages in the DMS call to utilise functionality offered by the executor package.
+* [types](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/types.go): This file contains the interfaces that other packages in the DMS call to utilise functionality offered by the executor package.
 
-* [docker](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/docker): This folder contains the implementation of docker executor.
+* [docker](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker): This folder contains the implementation of docker executor.
 
 ### 3. Class Diagram
 
 #### Source
 
-[executor class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/executor/specs/class_diagram.puml)
+[executor class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/executor/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/executor"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

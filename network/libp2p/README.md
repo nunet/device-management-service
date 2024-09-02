@@ -1,11 +1,11 @@
 # libp2p
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -62,21 +62,21 @@ For the network latency part, DMS should also be able to keep latency table betw
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [conn](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/conn.go): This file defines the method to ping a peer.
+* [conn](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/conn.go): This file defines the method to ping a peer.
 
-* [dht](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/dht.go): This file contains functionalities of a libp2p node. It includes functionalities for setting up libp2p hosts, performing pings between peers, fetching DHT content, checking the status of a peer and validating data against their signatures.
+* [dht](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/dht.go): This file contains functionalities of a libp2p node. It includes functionalities for setting up libp2p hosts, performing pings between peers, fetching DHT content, checking the status of a peer and validating data against their signatures.
 
-* [discover](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/discover.go): This file contains methods for peer discovery in a libp2p node. 
+* [discover](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/discover.go): This file contains methods for peer discovery in a libp2p node. 
 
-* [filter](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/filter.go): This file defines functionalities for peer filtering and connection management in a libp2p node. 
+* [filter](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/filter.go): This file defines functionalities for peer filtering and connection management in a libp2p node. 
 
-* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/init.go): This file defines configurations and initialization logic for a libp2p node.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/init.go): This file defines configurations and initialization logic for a libp2p node.
 
-* [libp2p](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/libp2p.go): This file defines stubs for Libp2p peer management functionalities, including configuration, initialization, events, status, stopping, cleanup, ping, and DHT dump.
+* [libp2p](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/libp2p.go): This file defines stubs for Libp2p peer management functionalities, including configuration, initialization, events, status, stopping, cleanup, ping, and DHT dump.
 
-* [p2p](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/p2p.go): This file defines a Libp2p node with core functionalities including discovery, peer management, DHT interaction, and communication channels, with several stub implementations.
+* [p2p](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/p2p.go): This file defines a Libp2p node with core functionalities including discovery, peer management, DHT interaction, and communication channels, with several stub implementations.
 
 ### 3. Class Diagram
 
@@ -84,12 +84,12 @@ The class diagram for the libp2p sub-package is shown below.
 
 #### Source file
 
-[libp2p Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/libp2p/specs/class_diagram.puml)
+[libp2p Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/network/libp2p"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

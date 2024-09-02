@@ -1,11 +1,11 @@
 # onboarding
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -30,17 +30,17 @@ This file explains the onboarding functionality of Device Management Service (DM
 
 Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/README.md): Current file which is aimed towards developers who wish to modify the onboarding functionality and build on top of it. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/README.md): Current file which is aimed towards developers who wish to modify the onboarding functionality and build on top of it. 
 
-* [handler](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/handler.go): This is main file where the code for onboarding functionality exists.
+* [handler](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/handler.go): This is main file where the code for onboarding functionality exists.
 
-* [addresses](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/addresses.go): This file houses functions to generate Ethereum and Cardano wallet addresses along with its private key. 
+* [addresses](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/addresses.go): This file houses functions to generate Ethereum and Cardano wallet addresses along with its private key. 
 
-* [addresses_test](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/addresses_test.go): This file houses functions to test the address generation functions defined in [addresses](addresses.go).
+* [addresses_test](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/addresses_test.go): This file houses functions to test the address generation functions defined in [addresses](addresses.go).
 
-* [available_resources](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/available_resources.go): This file houses functions to get the total capacity of the machine being onboarded. 
+* [available_resources](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/available_resources.go): This file houses functions to get the total capacity of the machine being onboarded. 
 
-* [init](https://gitlab.com/nunet/device-management-service/-/blob/461-populate-readme-s-for-dms-component-and-packages/dms/onboarding/init.go): This files initializes the loggers associated with onboarding package.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/init.go): This files initializes the loggers associated with onboarding package.
 
 ### 3. Class Diagram
 
@@ -48,12 +48,12 @@ The class diagram for the `onboarding` package is shown below.
 
 #### Source file
 
-[onboarding Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/onboarding/specs/class_diagram.puml)
+[onboarding Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms/onboarding"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

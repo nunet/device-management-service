@@ -1,11 +1,11 @@
 # network
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -29,15 +29,15 @@ This package contains all network related code such as p2p communication, ip ove
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/network/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [network](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/network.go): This file defines Network and Messenger interfaces and a method to create a new network.
+* [network](https://gitlab.com/nunet/device-management-service/-/tree/main/network/network.go): This file defines Network and Messenger interfaces and a method to create a new network.
 
-* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/types.go): This file defines the VPN interface. 
+* [types](https://gitlab.com/nunet/device-management-service/-/tree/main/network/types.go): This file defines the VPN interface. 
 
-* [libp2p](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/libp2p): This contains code related to libp2p functionality.
+* [libp2p](https://gitlab.com/nunet/device-management-service/-/tree/main/network/libp2p): This contains code related to libp2p functionality.
 
-* [specs](https://gitlab.com/nunet/device-management-service/-/tree/develop/network/specs): This contains class diagram of the package built in plantuml.
+* [specs](https://gitlab.com/nunet/device-management-service/-/tree/main/network/specs): This contains class diagram of the package built in plantuml.
 
 ### 3. Class Diagram
 
@@ -45,12 +45,12 @@ The class diagram for the network package is shown below.
 
 #### Source file
 
-[network Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/network/specs/class_diagram.puml)
+[network Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/network/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/network"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

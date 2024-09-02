@@ -1,11 +1,11 @@
 # storage
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -29,11 +29,11 @@ The storage package is responsible for disk storage management on each DMS (Devi
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [storage](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/storage.go): This file defines the interface responsible for handling input/output operations of files with remote storage providers.
+* [storage](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/storage.go): This file defines the interface responsible for handling input/output operations of files with remote storage providers.
 
-* [volumes](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/volumes.go): This file contains the interfaces and structs related to storage volumes.
+* [volumes](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/volumes.go): This file contains the interfaces and structs related to storage volumes.
 
 _subpackages_
 * [basic_controller](https://gitlab.com/nunet/device-management-service/-/tree/428-implementation-of-volumecontroller-2/storage/basic_controller): This folder contains the basic implementation of `VolumeController` interface.
@@ -46,12 +46,12 @@ The class diagram for the storage package is shown below.
 
 #### Source file
 
-[storage Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/specs/class_diagram.puml)
+[storage Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/storage"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

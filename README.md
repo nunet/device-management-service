@@ -2,12 +2,12 @@
 
 # Device Management Service (DMS)
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -231,7 +231,7 @@ The Nunet Ontology, which forms the basis of the design, is explained in the art
 Refer to the following items to understand **DMS architecture** at a high level.
 
 - [DMS Architecture -- Understanding I](https://nunet.gitlab.io/research/blog/posts/dms-architecture/)
-- [Entity Diagram - DMS High Level](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/entityDiagrams/New_DMS_Structure_Highlevel.drawio.svg)
+- [Entity Diagram - DMS High Level](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/entityDiagrams/New_DMS_Structure_Highlevel.drawio.svg)
 
 #### Research
 
@@ -245,7 +245,7 @@ Relevant research work that has informed the design of DMS can be found below:
 
 ### 3. Functionality
 
-`TBD`
+DMS is currently being refactored and new functionality will be added.
 
 ### 4. Data Types
 
@@ -275,12 +275,12 @@ The global class diagram for the DMS is shown below.
 
 #### Source File
 
-[Global Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/specs/class_diagram.puml?ref_type=heads)
+[Global Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/class_diagram.puml?ref_type=heads)
 
 #### Rendered from Source File
 
 ```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/develop/specs/class_diagram.puml
+!include https://gitlab.com/nunet/device-management-service/-/raw/main/specs/class_diagram.puml
 ```
 
 
@@ -337,11 +337,11 @@ Note: We're using `sudo` because the onboarding process writes some configuratio
 
 You don't necessarily need to onboard for development, but that depends on which part you're working on. To onboard during development, `/etc/nunet` needs to be manually created since it is created with the package during installation.
 
-Onboarding instructions can be found here: [Onboarding Instructions](https://gitlab.com/nunet/team-processes-and-guidelines/-/tree/main/onboarding_instructions).
+Refer to `dms/onboarding` package [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/README.md) for details of onboarding functionality for compute provider users. 
 
 #### REST Endpoints
 
-A [Postman collection](https://gitlab.com/nunet/device-management-service/-/snippets/2507804) is available to help you get started with REST endpoints exploration. Head over to project's issue section and create an issue with your question.
+Refer to the `api` package [README](https://gitlab.com/nunet/device-management-service/-/blob/main/api/README.md) for the list of all endpoints. Head over to project's issue section and create an issue with your question.
 
 ### 3. Configuration
 
@@ -380,7 +380,7 @@ The `dms_config.json` file can be used to modify these settings. Here is a sampl
 }
 ```
 
-Please use absolute paths to avoid trouble. Also, have a look at the [config structure](https://gitlab.com/nunet/device-management-service/-/blob/develop/internal/config/config.go).
+Please use absolute paths to avoid trouble. Also, have a look at the [config structure](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/config/config.go).
 
 3. You must also change the port number in the `nunet` shell script if you plan to use the `nunet` CLI.
 

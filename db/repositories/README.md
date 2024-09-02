@@ -1,17 +1,17 @@
 # db
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -26,37 +26,37 @@
 
 The `db` package contains the configuration and functionality of database used by the DMS
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
 _Files_ 
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/README.md): Current file which is aimed towards developers who wish to use and modify the database functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/README.md): Current file which is aimed towards developers who wish to use and modify the database functionality. 
 
-* [generic_repository](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/generic_repository.go): This file defines the interface defining the main methods for db pacakge. It is designed using generic types and can be adapted to specific data type as needed.
+* [generic_repository](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/generic_repository.go): This file defines the interface defining the main methods for db pacakge. It is designed using generic types and can be adapted to specific data type as needed.
 
-* [generic_entity_repository](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/generic_entity_repository.go): This file contains the interface for those databases which will hold only a single record.
+* [generic_entity_repository](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/generic_entity_repository.go): This file contains the interface for those databases which will hold only a single record.
 
-* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/deployment.go): This file specifies a database interface having `types.DeploymentRequestFlat` data type.
+* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/deployment.go): This file specifies a database interface having `types.DeploymentRequestFlat` data type.
 
-* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/elk_stats.go): This file specifies a database interface having `types.RequestTracker` data type.
+* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/elk_stats.go): This file specifies a database interface having `types.RequestTracker` data type.
 
-* [errors](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/errors.go): This file specifies the different types of errors.
+* [errors](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/errors.go): This file specifies the different types of errors.
 
-* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/firecracker.go): This file specifies a database interface having `types.VirtualMachine` data type.
+* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/firecracker.go): This file specifies a database interface having `types.VirtualMachine` data type.
 
-* [machine](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/machine.go): This file defines database interfaces of various data types. 
+* [machine](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/machine.go): This file defines database interfaces of various data types. 
 
-* [utils](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils.go): This file contains some utility functions with respect to database operations.
+* [utils](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/utils.go): This file contains some utility functions with respect to database operations.
 
-* [utils_test](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils_test.go): This file contains unit tests for functions defined in [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/utils.go) file. 
+* [utils_test](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/utils_test.go): This file contains unit tests for functions defined in [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/utils.go) file. 
 
 _Subpackages_
 
-* [gorm](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm): This folder contains SQlite database implementation using gorm.
+* [gorm](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm): This folder contains SQlite database implementation using gorm.
 
-* [clover](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/clover): This folder contains CloverDB database implementation.
+* [clover](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/clover): This folder contains CloverDB database implementation.
 
 ### 3. Class Diagram
 
@@ -64,12 +64,12 @@ The class diagram for the `db` package is shown below.
 
 #### Source file
 
-[db Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/specs/class_diagram.puml)
+[db Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/db/repositories"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
