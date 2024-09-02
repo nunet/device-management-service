@@ -151,7 +151,7 @@ Context / links:
 
 ### Implementation
 
-#### Actor model
+#### Actor model with Object/Security Capabilities
 
 | | |
 | --- | --- |
@@ -189,7 +189,7 @@ Context / links:
 | **Impacted functionality** | All functionality of the platform is fundamentally affected implementation of search and match related functionality; This is especially true for the future projected functionalities involving edge computing, IoT deployments and decentralized physical infrastructure in general. |
 | **Acceptance tests** | A valid compute job (described in eligible formats) demanded via exposed interfaces triggers finding suitable machines and their configurations for deploying the job and pics the most fitting hardware configuration. ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/138) |
 
-#### Dynamic method dispatch  
+#### Dynamic method dispatch / invocation
 
 | | |
 | --- | --- |
@@ -421,7 +421,7 @@ Context / links:
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: Submit a job described in NuNet job description format, observe its deployment and execution and returning results; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/127) |
 
 
-#### Capability model
+#### Hardware capability model
 
 | | |
 | --- | --- |
@@ -526,20 +526,8 @@ Both feature environment and CI/CD process are instrumental to reach release lev
 
 ### Release testing start
 
-Given that all prerequisites are launched and prepared, we aim at starting the release process September 15 by releasing the first release candidate and exposing it to testing. We will release at least 3 release candidates and then final release, but the process will be fluid as explained [here](https://gitlab.com/nunet/device-management-service/-/issues/542) and most probably fill feature more minor release candidate releases per the adopted branching strategy.
-
-### Release candidate 1
-
-Release candidate 1 will be built and released on September 15 and tested publicly until October 8 (this includes integration of bug reports and solving them);
-
-### Release candidate 2
-
-Release candidate 2 will be built and released on October 15 and tested publicly until November 1, which includes integration of bug reports and solving problems.
-
-### Release candidate 3
-
-Release candidate 3 will be built and released on November 15 and tested publicly until November 23, including integration of final bug reports and thorough testing via feature environment augmented by community provided hardware
+Given that all prerequisites are launched and prepared, we aim at starting the release process September 15 by releasing the first release candidate and exposing it to testing. We will release at least 3/4 release candidates and then final release, but the process will be fluid as explained [here](https://gitlab.com/nunet/device-management-service/-/issues/542) and most probably fill feature more minor release candidate releases per the adopted branching strategy.
 
 ### Release
 
-After testing the frozen feature scope of the release, we aim at releasing the 0.5.x version of device-management-service during the first half of December 2024.
+After testing the frozen feature scope of the release, we aim at releasing the 0.5.x version of device-management-service during the second half of December 2024. For current / updated scchedule and details, see [release process kick-start presenatation](https://docs.google.com/presentation/d/1lS6sI7-v5QyFf1xsM-y-SK8tHJ0rEzpjBQpb2lPQ7yI/edit#slide=id.g2f39a3f1c57_0_5).
