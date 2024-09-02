@@ -9,86 +9,78 @@ import (
 )
 
 func Test_OnboardCmdFlags(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
-	cmd := NewOnboardCmd(mockConn, mockUtils)
+	cmd := newOnboardCmd(ts.client)
 
-	assert := assert.New(t)
-	assert.True(cmd.HasAvailableFlags())
+	assert.True(t, cmd.HasAvailableFlags())
 
 	expectedFlags := []string{"memory", "cpu", "nunet-channel", "address", "plugin", "local-enable", "cardano", "unavailable", "ntx-price"}
 	flags := cmd.Flags()
 	flags.VisitAll(func(f *flag.Flag) {
-		assert.Contains(expectedFlags, f.Name)
+		assert.Contains(t, expectedFlags, f.Name)
 	})
 }
 
 func Test_OnboardCmdMissingMemory(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
-
-	assert := assert.New(t)
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
 
-	cmd := NewOnboardCmd(mockConn, mockUtils)
+	cmd := newOnboardCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
 	cmd.SetArgs([]string{"--memory=0", "--cpu=5000", "--nunet-channel=nunet-test", "--address=addr1_qtest123"})
 
 	err := cmd.Execute()
-	assert.ErrorContains(err, "memory must be provided and greater than 0")
+	assert.ErrorContains(t, err, "memory must be provided and greater than 0")
 }
 
 func Test_OnboardCmdMissingCpu(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
-
-	assert := assert.New(t)
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
 
-	cmd := NewOnboardCmd(mockConn, mockUtils)
+	cmd := newOnboardCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
 	cmd.SetArgs([]string{"--memory=3000", "--cpu=0", "--nunet-channel=nunet-test", "--address=addr1_qtest123"})
 
 	err := cmd.Execute()
-	assert.ErrorContains(err, "cpu must be provided and greater than 0")
+	assert.ErrorContains(t, err, "cpu must be provided and greater than 0")
 }
 
 func Test_OnboardCmdMissingAddress(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
-
-	assert := assert.New(t)
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
 
-	cmd := NewOnboardCmd(mockConn, mockUtils)
+	cmd := newOnboardCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
 	cmd.SetArgs([]string{"--memory=3000", "--cpu=5000", "--nunet-channel=nunet-test", "--address="})
 
 	err := cmd.Execute()
-	assert.ErrorContains(err, "address must be provided and non-empty")
+	assert.ErrorContains(t, err, "address must be provided and non-empty")
 }
 
 func Test_OnboardCmdSuccess(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
-	mockUtils.SetResponseFor("POST", "/api/v1/onboarding/onboard", []byte(`{ "message": "test" }`))
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
-	cmd := NewOnboardCmd(mockConn, mockUtils)
+	cmd := newOnboardCmd(ts.client)
 
 	outBuf := new(bytes.Buffer)
 	cmd.SetOut(outBuf)
@@ -100,24 +92,20 @@ func Test_OnboardCmdSuccess(t *testing.T) {
 	inBuf := bytes.NewBufferString("y\n")
 	cmd.SetIn(inBuf)
 
-	assert := assert.New(t)
-
 	err := cmd.Execute()
-	assert.NoError(err)
+	assert.NoError(t, err)
 
-	assert.Contains(outBuf.String(), "Successfully onboarded!")
+	assert.Contains(t, outBuf.String(), "Successfully onboarded!")
 }
 
 func Test_OnboardNegativeNtxValue(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
-
-	assert := assert.New(t)
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
 
-	cmd := NewOnboardCmd(mockConn, mockUtils)
+	cmd := newOnboardCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
@@ -130,6 +118,6 @@ func Test_OnboardNegativeNtxValue(t *testing.T) {
 	})
 
 	err := cmd.Execute()
-	assert.NotNil(err, "expected ''ntx-price' must be a positive value' error")
-	assert.ErrorContains(err, "'ntx-price' must be a positive value")
+	assert.NotNil(t, err, "expected ''ntx-price' must be a positive value' error")
+	assert.ErrorContains(t, err, "'ntx-price' must be a positive value")
 }

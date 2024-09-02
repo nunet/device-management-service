@@ -1,70 +1,75 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 
+	"github.com/buger/jsonparser"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	"gitlab.com/nunet/device-management-service/cmd/backend"
-	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var infoCmd = NewInfoCmd(networkService, utilsService)
-
-func NewInfoCmd(net backend.NetworkManager, utilsService backend.Utility) *cobra.Command {
+// NewInfoCmd is a constructor for `info` command
+func newInfoCmd(client *utils.HTTPClient) *cobra.Command {
 	return &cobra.Command{
-		Use:     "info",
-		Short:   "Display information about onboarded device",
-		Long:    "Display onboarding config of onboarded device on Nunet Device Management Service",
-		PreRunE: isDMSRunning(net),
+		Use:   "info",
+		Short: "Display information about onboarded device",
+		Long:  "Display onboarding config of onboarded device on Nunet Device Management Service",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := checkOnboarded(utilsService)
+			onboarded, err := checkOnboarded(client)
 			if err != nil {
-				return err
+				return fmt.Errorf("could not check onboard status: %w", err)
+			}
+			if !onboarded {
+				return fmt.Errorf("machine is not onboarded")
 			}
 
-			// XXX: don't leave me like this
-			db, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir)), &gorm.Config{})
+			resBody, resCode, err := client.MakeRequest("GET", "/onboarding/info", nil)
 			if err != nil {
-				return fmt.Errorf("failed to connect to database: %w", err)
+				return fmt.Errorf("could not make request: %w", err)
 			}
 
-			onboardR := gdb.NewOnboardingParams(db)
-			oConf, err := onboardR.Get(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("failed to get onboarding config: %w", err)
+			if resCode != 200 {
+				return fmt.Errorf("request failed with status code: %d", resCode)
 			}
 
-			displayInTable(cmd.OutOrStdout(), &oConf)
+			info, _, _, err := jsonparser.Get(resBody, "info")
+			if err != nil {
+				return fmt.Errorf("unable to parse JSON from key: %w", err)
+			}
 
+			var config types.OnboardingConfig
+			if err := json.Unmarshal(info, &config); err != nil {
+				return fmt.Errorf("could not unmarshal response body: %w", err)
+			}
+
+			displayInTable(cmd.OutOrStdout(), &config)
 			return nil
 		},
 	}
 }
 
-func displayInTable(w io.Writer, oConf *types.OnboardingConfig) {
+func displayInTable(w io.Writer, config *types.OnboardingConfig) {
 	table := tablewriter.NewWriter(w)
 	table.SetHeader([]string{"Info", "Value"})
 
-	table.Append([]string{"Name", oConf.Name})
-	table.Append([]string{"Update Timestamp", fmt.Sprintf("%d", oConf.UpdateTimestamp)})
-	table.Append([]string{"Memory Max", fmt.Sprintf("%d", oConf.TotalResources.RAM)})
-	table.Append([]string{"Total Core", fmt.Sprintf("%d", oConf.TotalResources.NumCores)})
-	table.Append([]string{"CPU Max", fmt.Sprintf("%.2f", oConf.TotalResources.CPU)})
-	table.Append([]string{"Reserved CPU", fmt.Sprintf("%.2f", oConf.OnboardedResources.CPU)})
-	table.Append([]string{"Reserved Memory", fmt.Sprintf("%d", oConf.OnboardedResources.RAM)})
-	table.Append([]string{"Network", oConf.Network})
-	table.Append([]string{"Public Key", oConf.PublicKey})
-	table.Append([]string{"Node ID", oConf.NodeID})
-	table.Append([]string{"Allow Cardano", fmt.Sprintf("%t", oConf.AllowCardano)})
-	table.Append([]string{"Dashboard", oConf.Dashboard})
-	table.Append([]string{"NTX Price Per Minute", fmt.Sprintf("%f", oConf.NTXPricePerMinute)})
+	table.Append([]string{"Name", config.Name})
+	table.Append([]string{"Update Timestamp", fmt.Sprintf("%d", config.UpdateTimestamp)})
+	table.Append([]string{"Memory Max", fmt.Sprintf("%d", config.TotalResources.RAM)})
+	table.Append([]string{"Total Core", fmt.Sprintf("%d", config.TotalResources.NumCores)})
+	table.Append([]string{"CPU Max", fmt.Sprintf("%.2f", config.TotalResources.CPU)})
+	table.Append([]string{"Reserved CPU", fmt.Sprintf("%.2f", config.OnboardedResources.CPU)})
+	table.Append([]string{"Reserved Memory", fmt.Sprintf("%d", config.OnboardedResources.RAM)})
+	table.Append([]string{"Network", config.Network})
+	table.Append([]string{"Public Key", config.PublicKey})
+	table.Append([]string{"Node ID", config.NodeID})
+	table.Append([]string{"Allow Cardano", fmt.Sprintf("%t", config.AllowCardano)})
+	table.Append([]string{"Dashboard", config.Dashboard})
+	table.Append([]string{"NTX Price Per Minute", fmt.Sprintf("%f", config.NTXPricePerMinute)})
 
 	table.Render()
 }

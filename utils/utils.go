@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/spf13/afero"
 	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/types"
 	"golang.org/x/exp/slices"
@@ -313,8 +314,8 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 }
 
 // CheckWSL check if running in WSL
-func CheckWSL() (bool, error) {
-	file, err := os.Open("/proc/version")
+func CheckWSL(afs afero.Afero) (bool, error) {
+	file, err := afs.Open("/proc/version")
 	if err != nil {
 		return false, err
 	}

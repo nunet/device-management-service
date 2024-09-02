@@ -21,7 +21,7 @@ func TestNewResourceManager(t *testing.T) {
 
 	repos := setupManagerRepos(t, mockDB)
 
-	rm := newResourceManager(repos)
+	rm := NewResourceManager(repos)
 	assert.NotNil(t, rm)
 }
 
@@ -55,7 +55,7 @@ func TestUpdateAndGetFreeResources(t *testing.T) {
 		mockUsageMonitor := NewMockUsageMonitor(ctrl)
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			repos:        repos,
 			usageMonitor: mockUsageMonitor,
 			systemSpecs:  mockSystemSpecs,
@@ -109,7 +109,7 @@ func TestOnboardedResources(t *testing.T) {
 		}
 		setUpOnboardedResources(repos.OnboardedResources, onboardedResources, t)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			repos: repos,
 		}
 
@@ -134,7 +134,7 @@ func TestOnboardedResources(t *testing.T) {
 		}
 		setUpOnboardedResources(repos.OnboardedResources, onboardedResources, t)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			repos: repos,
 		}
 
@@ -216,7 +216,7 @@ func TestRequiredResources(t *testing.T) {
 		setupMockRunningServices(repos.Services, mockServices, t)
 		setupMockRequiredResources(repos.RequiredResources, mockRequiredResources, t)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			repos: repos,
 		}
 
@@ -243,7 +243,7 @@ func TestSystemSpecs(t *testing.T) {
 		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			systemSpecs: mockSystemSpecs,
 		}
 
@@ -264,7 +264,7 @@ func TestSystemSpecs(t *testing.T) {
 		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			systemSpecs: mockSystemSpecs,
 		}
 
@@ -279,7 +279,7 @@ func TestSystemSpecs(t *testing.T) {
 		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			systemSpecs: mockSystemSpecs,
 		}
 
@@ -298,7 +298,7 @@ func TestSystemSpecs(t *testing.T) {
 		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			systemSpecs: mockSystemSpecs,
 		}
 
@@ -313,7 +313,7 @@ func TestSystemSpecs(t *testing.T) {
 		t.Parallel()
 		mockSystemSpecs := NewMockSystemSpecs(ctrl)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			systemSpecs: mockSystemSpecs,
 		}
 
@@ -342,7 +342,7 @@ func TestUsageMonitor(t *testing.T) {
 		t.Parallel()
 		mockUsageMonitor := NewMockUsageMonitor(ctrl)
 
-		rm := &defaultManager{
+		rm := &DefaultManager{
 			usageMonitor: mockUsageMonitor,
 		}
 

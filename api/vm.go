@@ -26,11 +26,6 @@ type DefaultVM struct {
 	NodeID          string `json:"node_id"`
 }
 
-// VMHandler is a controller for /vm endpoint functionalities
-// TODO: Create a service type for these functionalities
-// and embed inside the handler
-type VMHandler struct{}
-
 // StartCustom godoc
 //
 // @Summary		Start a VM with custom configuration.
@@ -49,7 +44,7 @@ type VMHandler struct{}
 // @Failure		500		{object}	string					"failed to pass MMDS message"
 // @Failure		500		{object}	string					"unable to start virtual machine"
 // @Router			/vm/start-custom [post]
-func (h *VMHandler) StartCustom(c *gin.Context) {
+func (rs RESTServer) StartCustom(c *gin.Context) {
 	reqCtx := c.Request.Context()
 	span := trace.SpanFromContext(reqCtx)
 	span.SetAttributes(attribute.String("URL", "/vm/start-custom"))
@@ -108,7 +103,7 @@ func (h *VMHandler) StartCustom(c *gin.Context) {
 //	@Failure		500		{object}	string					"failed to pass MMDS message"
 //	@Failure		500		{object}	string					"unable to start virtual machine"
 //	@Router			/vm/start-default [post]
-func (h *VMHandler) StartDefault(c *gin.Context) {
+func (rs RESTServer) StartDefault(c *gin.Context) {
 	reqCtx := c.Request.Context()
 	span := trace.SpanFromContext(reqCtx)
 	span.SetAttributes(attribute.String("URL", "/vm/start-default"))

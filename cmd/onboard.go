@@ -1,60 +1,33 @@
 package cmd
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 
-	"github.com/buger/jsonparser"
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
+	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var (
-	onboardCmd                                = NewOnboardCmd(networkService, utilsService)
-	flagCPU, flagMemory                       int64
-	flagChan, flagAddr, flagPlugin            string
-	flagCardano, flagLocal, flagIsUnavailable bool
-	flagNtxPrice                              float64
-)
+// NewOnboardCmd is a constructor for `onboard` command
+func newOnboardCmd(client *utils.HTTPClient) *cobra.Command {
+	fnCPU := "cpu"
+	fnMemory := "memory"
+	fnChannel := "nunet-channel"
+	fnAddr := "address"
+	fnPlugin := "plugin"
+	fnNTXPrice := "ntx-price"
+	fnLocal := "local-enable"
+	fnCardano := "cardano"
+	fnUnavailable := "unavailable"
 
-func NewOnboardCmd(net backend.NetworkManager, utilsService backend.Utility) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "onboard",
-		Short:   "Onboard current machine to NuNet",
-		PreRunE: isDMSRunning(net),
+		Use:   "onboard",
+		Short: "Onboard current machine to NuNet",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			memory, _ := cmd.Flags().GetInt64("memory")
-			cpu, _ := cmd.Flags().GetInt64("cpu")
-			channel, _ := cmd.Flags().GetString("nunet-channel")
-			address, _ := cmd.Flags().GetString("address")
-			ntxPrice, _ := cmd.Flags().GetFloat64("ntx-price")
-			local, _ := cmd.Flags().GetBool("local-enable")
-			cardano, _ := cmd.Flags().GetBool("cardano")
-			isUnavailable, _ := cmd.Flags().GetBool("unavailable")
-
-			if memory == 0 {
-				return fmt.Errorf("memory must be provided and greater than 0")
-			}
-
-			if cpu == 0 {
-				return fmt.Errorf("cpu must be provided and greater than 0")
-			}
-
-			if channel == "" {
-				return fmt.Errorf("nunet-channel must be provided and non-empty")
-			}
-
-			if address == "" {
-				return fmt.Errorf("address must be provided and non-empty")
-			}
-
-			if ntxPrice < 0 {
-				return fmt.Errorf("'ntx-price' must be a positive value")
-			}
-
 			fmt.Fprintln(cmd.OutOrStdout(), "Checking onboard status...")
 
-			onboarded, err := utilsService.IsOnboarded()
+			onboarded, err := checkOnboarded(client)
 			if err != nil {
 				return fmt.Errorf("could not check onboard status: %w", err)
 			}
@@ -66,34 +39,81 @@ func NewOnboardCmd(net backend.NetworkManager, utilsService backend.Utility) *co
 				}
 			}
 
-			onboardJSON, err := setOnboardData(memory, cpu, ntxPrice, channel, address, cardano, local, !isUnavailable)
+			memory, err := cmd.Flags().GetUint64(fnMemory)
 			if err != nil {
-				return fmt.Errorf("failed to set onboard data: %w", err)
+				fmt.Println("couldn't get 'memory' flag: %w", err)
+			}
+			cpu, err := cmd.Flags().GetInt64(fnCPU)
+			if err != nil {
+				fmt.Println("couldn't get 'cpu' flag: %w", err)
+			}
+			channel, err := cmd.Flags().GetString(fnChannel)
+			if err != nil {
+				fmt.Println("couldn't get 'channel' flag: %w", err)
+			}
+			addr, err := cmd.Flags().GetString(fnAddr)
+			if err != nil {
+				fmt.Println("couldn't get 'addr' flag: %w", err)
+			}
+			ntx, err := cmd.Flags().GetFloat64(fnNTXPrice)
+			if err != nil {
+				fmt.Println("couldn't get 'ntx' flag: %w", err)
+			}
+			local, err := cmd.Flags().GetBool(fnLocal)
+			if err != nil {
+				fmt.Println("couldn't get 'local' flag: %w", err)
+			}
+			unavailable, err := cmd.Flags().GetBool(fnUnavailable)
+			if err != nil {
+				fmt.Println("couldn't get 'unavailable' flag: %w", err)
+			}
+			cardano, err := cmd.Flags().GetBool(fnCardano)
+			if err != nil {
+				fmt.Println("couldn't get 'cardano' flag: %w", err)
 			}
 
-			body, err := utilsService.ResponseBody(nil, "POST", "/api/v1/onboarding/onboard", "", onboardJSON)
-			if err != nil {
-				return fmt.Errorf("could not get response body: %w", err)
+			reserved := types.CapacityForNunet{
+				Memory:            memory,
+				CPU:               cpu,
+				Channel:           channel,
+				PaymentAddress:    addr,
+				NTXPricePerMinute: ntx,
+				Cardano:           cardano,
+				ServerMode:        local,
+				IsAvailable:       unavailable, // TODO: Update this
 			}
 
-			errMsg, err := jsonparser.GetString(body, "error")
-			if err == nil {
-				return errors.New(errMsg)
+			onboardJSON, err := json.Marshal(reserved)
+			if err != nil {
+				return fmt.Errorf("unable to marshal JSON data: %w", err)
 			}
+
+			resBody, resCode, err := client.MakeRequest("POST", "/onboarding/onboard", onboardJSON)
+			if err != nil {
+				return fmt.Errorf("could not make request: %w", err)
+			}
+
+			if resCode != 201 {
+				return fmt.Errorf("request failed with status code: %d", resCode)
+			}
+
+			// TODO: what to do with the response body?
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", resBody)
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Successfully onboarded!")
 			return nil
 		},
 	}
 
-	cmd.Flags().Int64VarP(&flagMemory, "memory", "m", 0, "set value for memory usage")
-	cmd.Flags().Int64VarP(&flagCPU, "cpu", "c", 0, "set value for CPU usage")
-	cmd.Flags().StringVarP(&flagChan, "nunet-channel", "n", "", "set channel")
-	cmd.Flags().StringVarP(&flagAddr, "address", "a", "", "set wallet address")
-	cmd.Flags().Float64VarP(&flagNtxPrice, "ntx-price", "x", 0, "price in NTX per minute for onboarded compute resource")
-	cmd.Flags().StringVarP(&flagPlugin, "plugin", "p", "", "set plugin")
-	cmd.Flags().BoolVarP(&flagIsUnavailable, "unavailable", "u", false, "unavailable for job deployment (default: false)")
-	cmd.Flags().BoolVarP(&flagLocal, "local-enable", "l", true, "set server mode (enable for local)")
-	cmd.Flags().BoolVarP(&flagCardano, "cardano", "C", false, "set Cardano wallet")
+	cmd.Flags().Uint64P(fnMemory, "m", 0, "set value for memory usage")
+	cmd.Flags().Int64P(fnCPU, "c", 0, "set value for CPU usage")
+	cmd.Flags().StringP(fnChannel, "n", "", "set channel")
+	cmd.Flags().StringP(fnAddr, "a", "", "set wallet address")
+	cmd.Flags().Float64P(fnNTXPrice, "x", 0, "price in NTX per minute for onboarded compute resource")
+	cmd.Flags().StringP(fnPlugin, "p", "", "set plugin")
+	cmd.Flags().BoolP(fnUnavailable, "u", false, "unavailable for job deployment (default: false)")
+	cmd.Flags().BoolP(fnLocal, "l", true, "set server mode (enable for local)")
+	cmd.Flags().BoolP(fnCardano, "C", false, "set Cardano wallet")
+	cmd.MarkFlagsRequiredTogether("memory", "cpu", "nunet-channel", "address")
 	return cmd
 }

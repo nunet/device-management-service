@@ -31,83 +31,70 @@ func GetMockConn(open bool) []gonet.ConnectionStat {
 }
 
 func Test_ResourceConfigCmdHasFlags(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
-	cmd := NewResourceConfigCmd(mockConn, mockUtils)
+	cmd := newResourceConfigCmd(ts.client)
 
-	assert := assert.New(t)
-	assert.True(cmd.HasAvailableFlags())
+	assert.True(t, cmd.HasAvailableFlags())
 
 	expectedFlags := []string{"memory", "cpu", "ntx-price"}
 	flags := cmd.Flags()
 	flags.VisitAll(func(f *flag.Flag) {
-		assert.Contains(expectedFlags, f.Name)
+		assert.Contains(t, expectedFlags, f.Name)
 	})
 }
 
 func Test_ResourceConfigCmdMissingFlags(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-	mockUtils := &MockUtilsService{}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
-
-	cmd := NewResourceConfigCmd(mockConn, mockUtils)
+	cmd := newResourceConfigCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
 	cmd.SetArgs([]string{"--memory=0", "--cpu=0"})
 
-	assert := assert.New(t)
-
 	err := cmd.Execute()
-	assert.Error(err)
+	assert.Error(t, err)
 
-	assert.Contains(buf.String(), "all flag values must be specified")
+	assert.Contains(t, buf.String(), "all flag values must be specified")
 }
 
 func Test_ResourceConfigCmdSuccess(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-
-	mockUtils := &MockUtilsService{}
-	mockUtils.SetResponseFor("POST", "/api/v1/onboarding/resource-config", []byte(`{ "message": "resources updated" }`))
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
-
-	cmd := NewResourceConfigCmd(mockConn, mockUtils)
+	cmd := newResourceConfigCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"--memory=5000", "--cpu=4500"})
 
-	assert := assert.New(t)
-
 	err := cmd.Execute()
-	assert.NoError(err)
+	assert.NoError(t, err)
 
-	assert.Contains(buf.String(), "Resources updated successfully!")
+	assert.Contains(t, buf.String(), "Resources updated successfully!")
 }
 
 func Test_ResourceConfigCmdErrorMessage(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-
-	mockUtils := &MockUtilsService{}
-	mockUtils.SetResponseFor("POST", "/api/v1/onboarding/resource-config", []byte(`{ "error": "bad error" }`))
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
 
-	cmd := NewResourceConfigCmd(mockConn, mockUtils)
+	cmd := newResourceConfigCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"--memory=5000", "--cpu=4500"})
 
-	assert := assert.New(t)
-
 	err := cmd.Execute()
-	assert.Error(err)
+	assert.Error(t, err)
 
-	assert.Contains(buf.String(), "bad error")
+	assert.Contains(t, buf.String(), "bad error")
 }

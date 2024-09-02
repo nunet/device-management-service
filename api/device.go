@@ -8,11 +8,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// DeviceHandler is a controller for /device endpoint functionalities
-// TODO: Create a service type for these functionalities
-// and embed inside the handler
-type DeviceHandler struct{}
-
 // DeviceStatusHandler  godoc
 //
 //	@Summary		Retrieve device status
@@ -24,7 +19,7 @@ type DeviceHandler struct{}
 //	@Failure		500	{object}	object	"could not retrieve data from peer"
 //	@Failure		500	{object}	object	"failed to type assert peer data for peer ID"
 //	@Router			/device/status [get]
-func (h *DeviceHandler) DeviceStatus(c *gin.Context) {
+func (rs RESTServer) DeviceStatus(c *gin.Context) {
 	// TODO: handle this after refactor
 	// status, err := libp2p.DeviceStatus()
 	// if err != nil {
@@ -53,7 +48,7 @@ func (h *DeviceHandler) DeviceStatus(c *gin.Context) {
 //	@Success		200	{object}	object	"Device status successfully changed to offline"
 //	@Success		200	{object}	object	"no change in device status"
 //	@Router			/device/status [post]
-func (h *DeviceHandler) UpdateDeviceStatus(c *gin.Context) {
+func (rs RESTServer) UpdateDeviceStatus(c *gin.Context) {
 	span := trace.SpanFromContext(c.Request.Context())
 	span.SetAttributes(attribute.String("URL", "/device/status"))
 

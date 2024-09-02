@@ -8,19 +8,19 @@ import (
 )
 
 func Test_PeerCmdSubCommands(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
-	cmd := NewPeerCmd(mockConn)
+	cmd := newPeerCmd(ts.client)
 
-	assert := assert.New(t)
-	assert.True(cmd.HasAvailableSubCommands())
+	assert.True(t, cmd.HasAvailableSubCommands())
 
 	subcmd := []string{"list", "self", "default"}
 
 	cmds := cmd.Commands()
 	for _, child := range cmds {
-		assert.Contains(subcmd, child.Name())
+		assert.Contains(t, subcmd, child.Name())
 	}
 
 	buf := new(bytes.Buffer)
@@ -28,5 +28,5 @@ func Test_PeerCmdSubCommands(t *testing.T) {
 	cmd.SetErr(buf)
 
 	err := cmd.Execute()
-	assert.NoError(err)
+	assert.NoError(t, err)
 }

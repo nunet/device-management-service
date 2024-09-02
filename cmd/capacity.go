@@ -1,83 +1,82 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/olekukonko/tablewriter"
+	"github.com/buger/jsonparser"
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
+	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-// support for bitwise operations according to each flag
-const (
-	bitFullFlag      = 1 << iota // 1 (001)
-	bitAvailableFlag             // 2 (010)
-	bitOnboardedFlag             // 4 (100)
-)
+// NewCapacityCmd is a constructor for `capacity` command
+func newCapacityCmd(client *utils.HTTPClient) *cobra.Command {
+	fnAvailable := "available"
+	fnOnboarded := "onboarded"
+	fnFull := "full"
 
-var (
-	capacityCmd                            = NewCapacityCmd(networkService, resourceService, utilsService)
-	flagFull, flagAvailable, flagOnboarded bool
-)
-
-func NewCapacityCmd(net backend.NetworkManager, resources backend.ResourceManager, utilsService backend.Utility) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "capacity",
-		Short:   "Display capacity of device resources",
-		Long:    `Retrieve capacity of the machine, onboarded or available amount of resources`,
-		PreRunE: isDMSRunning(net),
+		Use:   "capacity",
+		Short: "Display capacity of device resources",
+		Long:  `Retrieve capacity of the machine, onboarded or available amount of resources`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			onboarded, _ := cmd.Flags().GetBool("onboarded")
-			full, _ := cmd.Flags().GetBool("full")
-			available, _ := cmd.Flags().GetBool("available")
+			table := setupTable(cmd.OutOrStdout())
+			defer table.Render()
 
-			// flagCombination stores the bitwise value of combined flags
-			var flagCombination int
+			resBody, resCode, err := client.MakeRequest("GET", "/onboarding/info", nil)
+			if err != nil {
+				return fmt.Errorf("could not make request: %w", err)
+			}
+
+			if resCode != 200 {
+				return fmt.Errorf("request failed with status code: %d", resCode)
+			}
+
+			info, _, _, err := jsonparser.Get(resBody, "info")
+			if err != nil {
+				return fmt.Errorf("could not get info value by key: %w", err)
+			}
+
+			var config *types.OnboardingConfig
+			if err := json.Unmarshal(info, &config); err != nil {
+				return fmt.Errorf("could not unmarshal response body: %w", err)
+			}
+
+			full, _ := cmd.Flags().GetBool(fnFull)
+			available, _ := cmd.Flags().GetBool(fnAvailable)
+			onboarded, _ := cmd.Flags().GetBool(fnOnboarded)
+
 			if full {
-				flagCombination |= bitFullFlag
+				table.Append(formatCapacityData("Full", &config.TotalResources.Resources))
 			}
-			if available {
-				flagCombination |= bitAvailableFlag
-			}
+
 			if onboarded {
-				flagCombination |= bitOnboardedFlag
+				table.Append(formatCapacityData("Onboarded", &config.OnboardedResources.Resources))
 			}
 
-			if flagCombination == 0 {
-				return cmd.Help()
-			}
-
-			var table *tablewriter.Table
-			// setups table in case of full, available or onboarded flags are passed
-			if flagCombination&bitFullFlag != 0 || flagCombination&bitAvailableFlag != 0 || flagCombination&bitOnboardedFlag != 0 {
-				table = setupTable(cmd.OutOrStdout())
-			}
-
-			if flagCombination&bitFullFlag != 0 {
-				handleFull(table, resources)
-			}
-
-			// nolint
-			if flagCombination&bitAvailableFlag != 0 {
-				// XXX done in !430
-			}
-			if flagCombination&bitOnboardedFlag != 0 {
-				err := handleOnboarded(table, utilsService)
-				if err != nil {
-					return fmt.Errorf("cannot fetch onboarded data: %w", err)
+			if available {
+				free := &types.Resources{
+					RAM:  config.TotalResources.RAM - config.OnboardedResources.RAM,
+					Disk: config.TotalResources.Disk - config.OnboardedResources.Disk,
 				}
+				table.Append(formatCapacityData("Available", free))
 			}
-
-			if table != nil {
-				table.Render()
-			}
-
 			return nil
 		},
 	}
-
-	cmd.Flags().BoolVarP(&flagFull, "full", "f", false, "display device ")
-	cmd.Flags().BoolVarP(&flagAvailable, "available", "a", false, "display amount of resources still available for onboarding")
-	cmd.Flags().BoolVarP(&flagOnboarded, "onboarded", "o", false, "display amount of onboarded resources")
+	cmd.Flags().BoolP(fnFull, "f", false, "display device capacity")
+	cmd.Flags().BoolP(fnAvailable, "a", false, "display amount of resources still available for onboarding")
+	cmd.Flags().BoolP(fnOnboarded, "o", false, "display amount of onboarded resources")
+	cmd.MarkFlagsOneRequired(fnAvailable, fnFull, fnOnboarded)
 	return cmd
+}
+
+func formatCapacityData(resourceType string, resources *types.Resources) []string {
+	return []string{
+		resourceType,
+		fmt.Sprintf("%d", resources.RAM),
+		fmt.Sprintf("%f", resources.CPU),
+		fmt.Sprintf("%d", resources.NumCores),
+	}
 }

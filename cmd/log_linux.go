@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/cmd/backend"
 )
@@ -16,55 +17,49 @@ const (
 	tarGzName = "nunet-log.tar.gz"
 )
 
-var logCmd *cobra.Command
-
-func NewLogCmd(net backend.NetworkManager, fs backend.FileSystem, journal backend.Logger) *cobra.Command {
+// NewLogCmd is a constructor for `log` command
+func newLogCmd(afs afero.Afero, logger backend.Logger) *cobra.Command {
 	return &cobra.Command{
-		Use:     "log",
-		Short:   "Gather all logs into a tarball. COMMAND MUST RUN AS ROOT WITH SUDO",
-		PreRunE: isDMSRunning(net),
+		Use:   "log",
+		Short: "Gather all logs into a tarball. COMMAND MUST RUN AS ROOT WITH SUDO",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dmsLogDir := filepath.Join(logDir, "dms-log")
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Collecting logs...")
 
-			err := fs.MkdirAll(dmsLogDir, 0o777)
+			err := afs.MkdirAll(dmsLogDir, 0o777)
 			if err != nil {
 				return fmt.Errorf("cannot create dms-log directory: %w", err)
 			}
 
-			if journal == nil {
-				return fmt.Errorf("journal service is not initialised")
+			if logger == nil {
+				return fmt.Errorf("logger service is not initialised")
 			}
-
-			// journal is initialized in init.go
-			defer journal.Close()
+			defer logger.Close()
 
 			// filter by service unit name
 			match := fmt.Sprintf("_SYSTEMD_UNIT=%s", dmsUnit)
 
-			err = journal.AddMatch(match)
+			err = logger.AddMatch(match)
 			if err != nil {
 				return fmt.Errorf("cannot add unit match: %w", err)
 			}
 
-			var count int
-
-			// loop through journal entries
+			var counter int
 			for {
-				c, err := journal.Next()
+				count, err := logger.Next()
 				if err != nil {
-					fmt.Fprintf(cmd.OutOrStderr(), "Error reading next journal entry: %v\n", err)
+					fmt.Fprintf(cmd.OutOrStderr(), "Error reading next logger entry: %v\n", err)
 					continue
 				}
 
-				if c == 0 {
+				if count == 0 {
 					break
 				}
 
-				entry, err := journal.GetEntry()
+				entry, err := logger.GetEntry()
 				if err != nil {
-					fmt.Fprintf(cmd.OutOrStderr(), "Error getting journal entry %d: %v\n", count, err)
+					fmt.Fprintf(cmd.OutOrStderr(), "Error getting logger entry %d: %v\n", count, err)
 					continue
 				}
 
@@ -77,27 +72,25 @@ func NewLogCmd(net backend.NetworkManager, fs backend.FileSystem, journal backen
 
 				logFilePath := filepath.Join(dmsLogDir, fmt.Sprintf("dms_log.%d", count))
 
-				err = appendToFile(fs, logFilePath, logData)
+				err = appendToFile(afs, logFilePath, logData)
 				if err != nil {
 					fmt.Fprintf(cmd.OutOrStderr(), "Error writing log file for boot %d: %v\n", count, err)
 				}
-
-				count++
+				counter++
 			}
 
-			if count == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No log entries")
-				return nil
+			if counter == 0 {
+				return fmt.Errorf("no log entries for %s", dmsUnit)
 			}
 
 			tarGzFile := filepath.Join(logDir, tarGzName)
 
-			err = createTar(fs, tarGzFile, dmsLogDir)
+			err = createTar(afs, tarGzFile, dmsLogDir)
 			if err != nil {
 				return fmt.Errorf("cannot create tar.gz file: %w", err)
 			}
 
-			err = fs.RemoveAll(dmsLogDir)
+			err = afs.RemoveAll(dmsLogDir)
 			if err != nil {
 				return fmt.Errorf("remove dms-log directory failed: %w", err)
 			}

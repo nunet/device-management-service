@@ -5,16 +5,17 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"gitlab.com/nunet/device-management-service/api"
+	"gitlab.com/nunet/device-management-service/db"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/internal"
+	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	// "gitlab.com/nunet/device-management-service/internal/messaging"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
@@ -22,6 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 )
 
@@ -34,38 +36,50 @@ func NewP2P() libp2p.Libp2p {
 // QUESTION(dms-initialization): should the db instance be constructed here?
 func Run() {
 	ctx := context.Background()
-	log.Println("WARNING: Most parts commented out in dms.Run()")
 	config.LoadConfig()
 
-	// XXX: wait for server to start properly before sending requests below
-	// TODO: should be removed
-	time.Sleep(time.Second * 5)
-
-	// check if onboarded
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir)), &gorm.Config{})
+	db, err := db.ConnectDatabase(config.GetConfig().General.WorkDir)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		zlog.Sugar().Fatalf("unable to connect to database: %w", err)
 	}
+
+	repos := resources.ManagerRepos{
+		FreeResources:      gdb.NewFreeResources(db),
+		OnboardedResources: gdb.NewOnboardedResources(db),
+		RequiredResources:  gdb.NewRequiredResources(db),
+		VirtualMachine:     gdb.NewVirtualMachine(db),
+		Services:           gdb.NewServices(db),
+	}
+	resourceManager := resources.NewResourceManager(repos)
 
 	onboardR := gdb.NewOnboardingParams(db)
 	p2pR := gdb.NewLibp2pInfo(db)
 	uuidR := gdb.NewMachineUUID(db)
 	avResR := gdb.NewAvailableResources(db)
 
+	// check if onboarded
 	oConf, err := onboardR.Get(ctx)
 	if err != nil {
-		log.Fatalf("Failed to get onboarding config: %v", err)
+		if err == repositories.ErrNotFound {
+			zlog.Info("machine not onboarded")
+		} else {
+			zlog.Sugar().Errorf("no onboarding config: %w", err)
+		}
 	}
 
-	onboard := onboarding.New(onboarding.Config{
-		Fs:             afero.Afero{Fs: afero.NewOsFs()},
-		P2PRepo:        p2pR,
-		UUIDRepo:       uuidR,
-		AvResourceRepo: avResR,
-		WorkDir:        config.GetConfig().WorkDir,
-		DatabasePath:   fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir),
-		Channels:       []string{"nunet", "nunet-test", "nunet-team", "nunet-edge"},
+	onboard := onboarding.New(&onboarding.Config{
+		Fs:              afero.Afero{Fs: afero.NewOsFs()},
+		ParamsRepo:      onboardR,
+		P2PRepo:         p2pR,
+		UUIDRepo:        uuidR,
+		ResourceManager: resourceManager,
+		AvResourceRepo:  avResR,
+		WorkDir:         config.GetConfig().WorkDir,
+		DatabasePath:    fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir),
+		Channels:        []string{"nunet", "nunet-test", "nunet-team", "nunet-edge"},
 	})
+
+	var p2pNet *libp2p.Libp2p
 
 	if onboarded, _ := onboard.IsOnboarded(ctx); onboarded {
 		ValidateOnboarding(&oConf)
@@ -75,22 +89,57 @@ func Run() {
 			log.Fatalf("Failed to get libp2p info: %v", err)
 		}
 
-		_, err = crypto.UnmarshalPrivateKey(p2pParams.PrivateKey)
+		bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
+		for i, addr := range config.GetConfig().P2P.BootstrapPeers {
+			bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
+		}
+
+		priv, err := crypto.UnmarshalPrivateKey(p2pParams.PrivateKey)
 		if err != nil {
 			zlog.Sugar().Fatalf("unable to unmarshal private key: %v", err)
 		}
+
+		cfg := &types.Libp2pConfig{
+			PrivateKey:              priv,
+			BootstrapPeers:          bootstrapPeers,
+			Rendezvous:              "nunet-test",
+			Server:                  false,
+			Scheduler:               backgroundtasks.NewScheduler(10),
+			CustomNamespace:         "/nunet-dht-1/",
+			ListenAddress:           config.GetConfig().ListenAddress,
+			PeerCountDiscoveryLimit: 40,
+			PrivateNetwork: types.PrivateNetworkConfig{
+				WithSwarmKey: false,
+			},
+		}
+
+		p2p, err := libp2p.New(cfg, afero.NewMemMapFs())
+		if err != nil {
+			zlog.Sugar().Errorf("unable to create libp2p instance: %v", err)
+		}
+
+		if err = p2p.Init(ctx); err != nil {
+			zlog.Sugar().Errorf("unable to initialize libp2p: %v", err)
+		}
+
+		if err = p2p.Start(ctx); err != nil {
+			zlog.Sugar().Errorf("unable to start libp2p: %v", err)
+		}
+
+		p2pNet = p2p
 	}
 
 	// initialize rest api server
 	restConfig := api.RESTServerConfig{
-		P2p:        nil,
-		Onboarding: nil,
+		P2P:        p2pNet,
+		Onboarding: onboard,
 		Logger:     logger.New("rest-server"),
+		Resource:   resourceManager,
 		MidW:       nil,
 		Port:       config.GetConfig().Rest.Port,
 		Addr:       config.GetConfig().Rest.Addr,
 	}
-	rServer := api.NewRESTServer(restConfig)
+	rServer := api.NewRESTServer(&restConfig)
 	rServer.InitializeRoutes()
 
 	go func() {

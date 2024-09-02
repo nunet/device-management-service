@@ -9,7 +9,6 @@ import (
 	"gitlab.com/nunet/device-management-service/db"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/types"
-	"gitlab.com/nunet/device-management-service/utils"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -51,7 +50,7 @@ func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
 		DatabasePath:   "/test/db.sqlite",
 		Channels:       []string{"test1", "test2", "test3"},
 	}
-	o := New(oConfig)
+	o := New(&oConfig)
 	return o
 }
 
@@ -65,24 +64,8 @@ func (ts *TestSuite) savePrivateKey(ctx context.Context) error {
 	p2p := types.Libp2pInfo{
 		PrivateKey: []byte("1234"),
 	}
-	_, err := ts.service.config.P2PRepo.Save(ctx, p2p)
+	_, err := ts.service.P2PRepo.Save(ctx, p2p)
 	return err
-}
-
-func (ts *TestSuite) saveMachineUUID(ctx context.Context) error {
-	uuid, err := utils.GenerateMachineUUID()
-	if err != nil {
-		return err
-	}
-	mUUID := types.MachineUUID{
-		UUID: uuid,
-	}
-	_, err = ts.service.config.UUIDRepo.Save(ctx, mUUID)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func TestIsOnboarded(t *testing.T) {
@@ -100,27 +83,6 @@ func TestIsOnboarded(t *testing.T) {
 		onboarded, err := ts.service.IsOnboarded(ctx)
 		assert.NoError(t, err)
 		assert.True(t, onboarded)
-	})
-}
-
-func TestStatus(t *testing.T) {
-	ts := NewTestSuite(t)
-
-	ts.setupDB()
-
-	ctx := context.Background()
-	if err := ts.savePrivateKey(ctx); err != nil {
-		t.Errorf("unable to save private key: %v", err)
-	}
-	if err := ts.saveMachineUUID(ctx); err != nil {
-		t.Errorf("unable to save machine UUID: %v", err)
-	}
-
-	// TODO: Add more test cases
-	t.Run("happy case", func(t *testing.T) {
-		status, err := ts.service.Status(ctx)
-		assert.NoError(t, err)
-		assert.NotNil(t, status)
 	})
 }
 
@@ -166,11 +128,11 @@ func TestOnboard(t *testing.T) {
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
 	}
-	service := New(oConfig)
+	service := New(&oConfig)
 
 	t.Run("unhappy case - invalid cardano wallet", func(t *testing.T) {
 		// Call the Onboard method
-		_, err := service.Onboard(ctx, capacity)
+		_, _, err := service.Onboard(ctx, capacity)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid cardano wallet address")
 	})
@@ -180,7 +142,7 @@ func TestOnboard(t *testing.T) {
 		capacity.PaymentAddress = "addr_test1vzgxkngaw5dayp8xqzpmajrkm7f7fleyzqrjj8l8fp5e8jcc2p2dk"
 
 		// TODO: update after onbaording implementation
-		_, err := service.Onboard(ctx, capacity)
+		_, _, err := service.Onboard(ctx, capacity)
 		assert.Error(t, err)
 		assert.Equal(t, "NOT YET IMPLEMENTED", err.Error())
 	})
@@ -227,7 +189,7 @@ func TestResourceConfig(t *testing.T) {
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
 	}
-	service := New(oConfig)
+	service := New(&oConfig)
 
 	t.Run("unhappy case - not onboarded", func(t *testing.T) {
 		// Call the ResourceConfig method
@@ -256,7 +218,7 @@ func TestOffboard(t *testing.T) {
 		DatabasePath:   tmpDir,
 		Channels:       []string{"test"},
 	}
-	service := New(oConfig)
+	service := New(&oConfig)
 
 	t.Run("unhappy case - not onboarded", func(t *testing.T) {
 		err := service.Offboard(ctx, false)

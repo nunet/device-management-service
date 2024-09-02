@@ -1,58 +1,54 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 
-	"github.com/buger/jsonparser"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var flagForce bool
+// NewOffboardCmd is a constructor for `offboard` command
+func newOffboardCmd(client *utils.HTTPClient) *cobra.Command {
+	fnForce := "force"
+	cmd := &cobra.Command{
+		Use:   "offboard",
+		Short: "Offboard the device from NuNet",
+		Long:  ``,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			onboarded, err := checkOnboarded(client)
+			if err != nil {
+				return fmt.Errorf("could not check onboard status: %w", err)
+			}
+			if !onboarded {
+				return fmt.Errorf("machine is not onboarded")
+			}
 
-var offboardCmd = &cobra.Command{
-	Use:     "offboard",
-	Short:   "Offboard the device from NuNet",
-	Long:    ``,
-	PreRunE: isDMSRunning(networkService),
-	Run: func(cmd *cobra.Command, _ []string) {
-		err := checkOnboarded(utilsService)
-		if err != nil {
-			fmt.Println("Machine isn't onboarded:", err)
-			return
-		}
+			fmt.Println("Warning: Offboarding will remove all your data and you will not be able to onboard again with the same identity")
+			answer, err := utils.PromptYesNo(cmd.InOrStdin(), cmd.OutOrStdout(), "Are you sure you want to offboard?")
+			if err != nil {
+				return fmt.Errorf("unable to read response: %w", err)
+			}
+			if !answer {
+				return nil
+			}
 
-		fmt.Println("Warning: Offboarding will remove all your data and you will not be able to onboard again with the same identity")
-		answer, err := utils.PromptYesNo(cmd.InOrStdin(), cmd.OutOrStdout(), "Are you sure you want to offboard?")
-		if err != nil {
-			fmt.Println("Error reading answer for onboard prompt:", err)
-			return
-		}
+			force, _ := cmd.Flags().GetBool(fnForce)
+			query := fmt.Sprintf("?force=%t", force)
 
-		if !answer {
-			fmt.Println("Exiting...")
-			return
-		}
+			resBody, resCode, err := client.MakeRequest("DELETE", "/onboarding/offboard"+query, nil)
+			if err != nil {
+				return fmt.Errorf("could not make request: %w", err)
+			}
 
-		force, _ := cmd.Flags().GetBool("force")
-		query := bytes.NewBufferString(fmt.Sprintf(`{"force": %t}`, force))
+			if resCode != 200 {
+				return fmt.Errorf("request failed with status code: %d", resCode)
+			}
 
-		body, err := utils.ResponseBody(nil, "POST", "/api/v1/onboarding/offboard", "", query.Bytes())
-		if err != nil {
-			fmt.Println("Error getting response body:", err)
-			return
-		}
-
-		if errMsg, err := jsonparser.GetString(body, "error"); err == nil { // if field "error" IS found
-			fmt.Println("Error:", errMsg)
-			return
-		} else if err == jsonparser.KeyPathNotFoundError { // if field "error" is NOT found
-			msg, _ := jsonparser.GetString(body, "message")
-			fmt.Println(msg)
-		} else { // if another error occurred
-			fmt.Println("Error parsing response:", err)
-			return
-		}
-	},
+			// TODO:what to do with the response body?
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", resBody)
+			return nil
+		},
+	}
+	cmd.Flags().BoolP(fnForce, "f", false, "force offboarding")
+	return cmd
 }

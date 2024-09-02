@@ -16,6 +16,10 @@ var (
 
 // TODO: This needs to be initialized in `dms` package and removed from here
 // https://gitlab.com/nunet/device-management-service/-/issues/536
+// it is being initialized in `dms` package now but there is usage in executor
+// in executor/docker/executor.go:262:25 in function newDockerExecutionContainer
+// which heavily depends on this var and any attempt to fix it will involve
+// too many changes. Once that code moves to allocations, this can be removed.
 func init() {
 	zlog = logger.OtelZapLogger("resources")
 
@@ -26,5 +30,5 @@ func init() {
 		VirtualMachine:     gormRepo.NewVirtualMachine(db.DB),
 		Services:           gormRepo.NewServices(db.DB),
 	}
-	ManagerInstance = newResourceManager(repos)
+	ManagerInstance = NewResourceManager(repos)
 }

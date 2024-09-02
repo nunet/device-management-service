@@ -10,14 +10,14 @@ import (
 )
 
 // DEBUG
-func (p *P2PHandler) PingPeer(c *gin.Context) {
+func (rs RESTServer) PingPeer(c *gin.Context) {
 	reqCtx := c.Request.Context()
 	id := c.Query("peerID")
 	if id == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "peerID not provided"})
 		return
 	}
-	if id == p.p2p.Host.ID().String() {
+	if id == rs.config.P2P.Host.ID().String() {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "peerID can not be self peerID"})
 		return
 	}
@@ -29,7 +29,7 @@ func (p *P2PHandler) PingPeer(c *gin.Context) {
 		return
 	}
 
-	res, err := p.p2p.Ping(reqCtx, target.String(), time.Second*5)
+	res, err := rs.config.P2P.Ping(reqCtx, target.String(), time.Second*5)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not ping peer %s: %v", id, err)})
 		return
