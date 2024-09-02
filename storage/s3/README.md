@@ -1,11 +1,11 @@
 # s3
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -30,21 +30,21 @@ This sub package is an implementation of `StorageProvider` interface for S3 stor
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/README.md): Current file which is aimed towards developers who wish to use and modify the functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/README.md): Current file which is aimed towards developers who wish to use and modify the functionality.
 
-* [download](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/download.go): This file defines functionality to allow download of files and directories from S3 buckets.
+* [download](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/download.go): This file defines functionality to allow download of files and directories from S3 buckets.
 
-* [helpers](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/helpers.go): This file defines helper functions for working with AWS S3 storage.
+* [helpers](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/helpers.go): This file defines helper functions for working with AWS S3 storage.
 
-* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/init.go): This file initializes an Open Telemetry logger for the package.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/init.go): This file initializes an Open Telemetry logger for the package.
 
-* [s3_test](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/s3_test.go): This file contains unit tests for the package functionality.
+* [s3_test](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/s3_test.go): This file contains unit tests for the package functionality.
 
-* [s3](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/s3.go): This file defines methods to interact with S3 buckets using the AWS SDK. 
+* [s3](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/s3.go): This file defines methods to interact with S3 buckets using the AWS SDK. 
 
-* [specs_decoder](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/specs_decoder.go): This file defines S3 input source configuration with validation and decoding logic.
+* [specs_decoder](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/specs_decoder.go): This file defines S3 input source configuration with validation and decoding logic.
 
-* [upload](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/upload.go): This file defines S3 storage implementation for uploading files (including directories) from a local volume to an S3 bucket.
+* [upload](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/upload.go): This file defines S3 storage implementation for uploading files (including directories) from a local volume to an S3 bucket.
 
 
 ### 3. Class Diagram
@@ -53,12 +53,12 @@ The class diagram for the `s3` sub-package is shown below.
 
 #### Source file
 
-[s3 Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/s3/specs/class_diagram.puml)
+[s3 Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/storage/s3"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
@@ -81,7 +81,7 @@ The class diagram for the `s3` sub-package is shown below.
 
 #### Upload
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#upload)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#upload)
 
 `Upload` uploads all files (recursively) from a local volume to an S3 bucket. It returns an error when
 - there is error in decoding input specs
@@ -90,7 +90,7 @@ For function signature refer to the package [readme](https://gitlab.com/nunet/de
 
 #### Download
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#download)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#download)
 
 `Download` fetches files from a given S3 bucket. It can handle folders but except for x-directory. It depends on the file system provided by `storage.VolumeController`. It will return an error when
 * there is error in decoding input specs
@@ -102,7 +102,7 @@ For function signature refer to the package [readme](https://gitlab.com/nunet/de
 
 #### Size
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#size)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#size)
 
 `Size` determines the size of an object stored in an S3 bucket.
 

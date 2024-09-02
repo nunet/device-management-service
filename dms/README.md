@@ -1,11 +1,11 @@
 # dms
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -30,29 +30,29 @@ This package is responsible for starting the whole application. It also contains
 - Resource management
 - Actor implementation for each node 
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/README.md): Current file which is aimed towards developers who wish to use and modify the dms functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/README.md): Current file which is aimed towards developers who wish to use and modify the dms functionality. 
 
-* [dms](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/dms.go): This file contains code to initialize the DMS by loading configuration, starting REST API server etc
+* [dms](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/dms.go): This file contains code to initialize the DMS by loading configuration, starting REST API server etc
 
-* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/init.go): This file creates a new logger instance.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/init.go): This file creates a new logger instance.
 
-* [sanity_check](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/sanity_check.go): This file defines a method for performing consistency check before starting the DMS. `proposed` _Note that the functionality of this method needs to be developed as per refactored DMS design._
+* [sanity_check](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/sanity_check.go): This file defines a method for performing consistency check before starting the DMS. `proposed` _Note that the functionality of this method needs to be developed as per refactored DMS design._
 
 _Subpackages_
 
-* [jobs](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/jobs): Deals with the management of local jobs on the machine.
+* [jobs](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/jobs): Deals with the management of local jobs on the machine.
 
-* [node](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/node): Contains implementation of `Node` as an actor.
+* [node](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/node): Contains implementation of `Node` as an actor.
 
-* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/onboarding): Code related to onboarding of compute provider machines to the network.
+* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding): Code related to onboarding of compute provider machines to the network.
 
-* [orchestrator](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator): Contains job orchestration logic.
+* [orchestrator](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator): Contains job orchestration logic.
 
-* [resources](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources): Deals with the management of resources on the machine.
+* [resources](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources): Deals with the management of resources on the machine.
 
 `proposed`: All files with `*_test.go` naming convention contain unit tests with respect to the specific implementation.
 
@@ -62,12 +62,12 @@ The class diagram for the `dms` package is shown below.
 
 #### Source file
 
-[dms Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/specs/class_diagram.puml)
+[dms Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

@@ -1,11 +1,11 @@
 # basic_controller
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -30,11 +30,11 @@ This sub package offers a default implementation of the volume controller.
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/basic_controller/README.md): Current file which is aimed towards developers who wish to use and modify the functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/basic_controller/README.md): Current file which is aimed towards developers who wish to use and modify the functionality.
 
-* [basic_controller](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/basic_controller/basic_controller.go): This file implements the methods for `VolumeController` interface.
+* [basic_controller](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/basic_controller/basic_controller.go): This file implements the methods for `VolumeController` interface.
 
-* [basic_controller_test](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/basic_controller/basic_controller_test.go): This file contains the unit tests for the methods of `VolumeController` interface.
+* [basic_controller_test](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/basic_controller/basic_controller_test.go): This file contains the unit tests for the methods of `VolumeController` interface.
 
 ### 3. Class Diagram
 
@@ -42,12 +42,12 @@ The class diagram for the `basic_controller` sub-package is shown below.
 
 #### Source file
 
-[basic_controller Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/basic_controller/specs/class_diagram.puml?ref_type=heads)
+[basic_controller Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/basic_controller/specs/class_diagram.puml?ref_type=heads)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/storage/basic_controller"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
@@ -72,7 +72,7 @@ The class diagram for the `basic_controller` sub-package is shown below.
 
 #### CreateVolume
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#createvolume)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#createvolume)
 
 `CreateVolume` creates a new storage volume given a storage source (S3, IPFS, job, etc). The creation of a storage volume effectively creates an empty directory in the local filesystem and writes a record in the database.
 
@@ -84,7 +84,7 @@ The directory name follows the format: `<volSource> + "-" + <name>`  where `name
 
 #### LockVolume
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#lockvolume)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#lockvolume)
 
 `LockVolume` makes the volume read-only, not only changing the field value but also changing file permissions. It should be used after all necessary data has been written to the volume. It optionally can also set the CID and mark the volume as private
 
@@ -95,7 +95,7 @@ For function signature refer to the package [readme](https://gitlab.com/nunet/de
 
 #### DeleteVolume
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#deletevolume)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#deletevolume)
 
 `DeleteVolume` deletes a given storage volume record from the database. The identifier can be a path of a volume or a Content ID (CID). Therefore, records for both will be deleted.
 
@@ -106,7 +106,7 @@ It will return an error when
 
 #### ListVolumes
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#listvolumes)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#listvolumes)
 
 `ListVolumes` function returns a list of all storage volumes stored on the database.
 
@@ -114,7 +114,7 @@ It will return an error when no storage volumes exist.
 
 #### GetSize
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/develop/storage/README.md#getsize)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/README.md#getsize)
 
 `GetSize` returns the size of a volume. The input can be a path or a Content ID (CID).
 

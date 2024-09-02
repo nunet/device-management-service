@@ -1,11 +1,11 @@
 # utils
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -28,27 +28,27 @@ This package contains utility tools and functionalities used by other packages
 
 Here is quick overview of the contents of this directory:
 
-- [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+- [README](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-- [blockchain](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/blockchain.go): This file contains methods and data types related to interaction with blockchain.
+- [blockchain](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/blockchain.go): This file contains methods and data types related to interaction with blockchain.
 
-- [file_system](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/file_system.go): This file contains a method to retrieve the size of the volume.
+- [file_system](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/file_system.go): This file contains a method to retrieve the size of the volume.
 
-- [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/init.go): This file initializes an Open Telemetry logger for this package. It also defines constants to reflect the status of transaction. 
+- [init](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/init.go): This file initializes an Open Telemetry logger for this package. It also defines constants to reflect the status of transaction. 
 
-- [network](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/network.go): This file contains helper methods for DMS API calls and responses.
+- [network](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/network.go): This file contains helper methods for DMS API calls and responses.
 
-- [progress_io](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/progress_io.go): This file defines wrapper functions for readers and writers with progress tracking capabilities.
+- [progress_io](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/progress_io.go): This file defines wrapper functions for readers and writers with progress tracking capabilities.
 
-- [syncmap](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/syncmap.go): This file defines a `SyncMap` type which is a thread-safe version of the standard Go `map` with strongly-typed methods and functions for managing key-value pairs concurrently.
+- [syncmap](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/syncmap.go): This file defines a `SyncMap` type which is a thread-safe version of the standard Go `map` with strongly-typed methods and functions for managing key-value pairs concurrently.
 
-- [utils](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/utils.go): This file contains various utility functions for the DMS functionality.
+- [utils](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/utils.go): This file contains various utility functions for the DMS functionality.
 
-- [cardano](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/cardano): This contains basic functionality to interact with Cardano blockchain.
+- [cardano](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/cardano): This contains basic functionality to interact with Cardano blockchain.
 
-- [validate](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/validate): This contains helper functions that perform different kinds of validation checks and numeric conversions.
+- [validate](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate): This contains helper functions that perform different kinds of validation checks and numeric conversions.
 
-- [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/specs): This folder contains the class diagram for the package. 
+- [specs](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/specs): This folder contains the class diagram for the package. 
 
 Files with `*_test.go` naming contains unit tests of the specified functionality.
 
@@ -56,12 +56,12 @@ Files with `*_test.go` naming contains unit tests of the specified functionality
 
 #### Source File
 
-[utils Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/specs/class_diagram.puml)
+[utils Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/utils"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
@@ -70,7 +70,7 @@ Files with `*_test.go` naming contains unit tests of the specified functionality
 
 ### 4. Functionality
 
-`utils` package defines various helper methods for functionality defined in the different packages of DMS. Refer to [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/utils/utils.go) for details.
+`utils` package defines various helper methods for functionality defined in the different packages of DMS. Refer to [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/utils.go) for details.
 
 ### 5. Data Types
 

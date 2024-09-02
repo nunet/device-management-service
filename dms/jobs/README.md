@@ -1,11 +1,11 @@
 # jobs
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -25,7 +25,7 @@
 
 This pacakge manages local jobs and their allocation, including relation to execution environments, etc. It will manage jobs through whatever executor it's running (Vontainer, VM, Direct_exe, Java etc).
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -37,12 +37,12 @@ The class diagram for the `jobs` package is shown below.
 
 #### Source file
 
-[jobs Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/jobs/specs/class_diagram.puml)
+[jobs Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/jobs/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms/jobs"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

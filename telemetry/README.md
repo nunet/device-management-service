@@ -1,11 +1,11 @@
 # telemetry 
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -29,25 +29,25 @@ The Telemetry package is designed to handle and manage telemetry data collection
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/README.md): Current file which is aimed towards developers who wish to use and modify the functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/README.md): Current file which is aimed towards developers who wish to use and modify the functionality.
 
-* [collector.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/collector.go): `TBD`
+* [collector.go](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/collector.go): `TBD`
 
-* [collector_factory.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/collector_factory.go): `TBD`
+* [collector_factory.go](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/collector_factory.go): `TBD`
 
-* [observable.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/observable.go): `TBD`
+* [observable.go](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/observable.go): `TBD`
 
-* [observable_factory.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/observable_factory.go): `TBD`
+* [observable_factory.go](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/observable_factory.go): `TBD`
 
-* [event.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/event.go): `TBD`
+* [event.go](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/event.go): `TBD`
 
-* [telemetry.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/telemetry.go): `TBD`
+* [telemetry.go](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/telemetry.go): `TBD`
 
-* [logger](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/logger): `TBD`
+* [logger](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/logger): `TBD`
 
-* [otel](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/otel): `TBD`
+* [otel](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/otel): `TBD`
 
-* [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/specs): `TBD`
+* [specs](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/specs): `TBD`
 
 ### 3. Class Diagram
 
@@ -55,12 +55,12 @@ The class diagram for the `telemetry` sub-package is shown below.
 
 #### Source file
 
-[telemetry Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/telemetry/specs/class_diagram.puml)
+[telemetry Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/telemetry/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/telemetry"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

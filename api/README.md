@@ -1,17 +1,17 @@
 # api
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -26,33 +26,33 @@
 
 The api package contains all API functionality of Device Management Service (DMS). DMS exposes various endpoints through which its different functionalities can be accessed.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/README.md?ref_type=heads): Current file which is aimed towards developers who wish to use and modify the api functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/api/README.md?ref_type=heads): Current file which is aimed towards developers who wish to use and modify the api functionality. 
 
-* [api](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/api.go): This file contains router setup using Gin framework. It also applies Cross-Origin Resource Sharing (CORS) middleware and OpenTelemetry middleware for tracing. Further it lists down the endpoint URLs and the associated handler functions.
+* [api](https://gitlab.com/nunet/device-management-service/-/blob/main/api/api.go): This file contains router setup using Gin framework. It also applies Cross-Origin Resource Sharing (CORS) middleware and OpenTelemetry middleware for tracing. Further it lists down the endpoint URLs and the associated handler functions.
 
-* [debug](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/debug.go): This file contains endpoints which are only available when `DEBUG` mode is enabled.
+* [debug](https://gitlab.com/nunet/device-management-service/-/blob/main/api/debug.go): This file contains endpoints which are only available when `DEBUG` mode is enabled.
 
-* [device](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/device.go): This file contains endpoints to retrieve and modify the device status.
+* [device](https://gitlab.com/nunet/device-management-service/-/blob/main/api/device.go): This file contains endpoints to retrieve and modify the device status.
 
-* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/onboarding.go): This file contains endpoints related to the onboarding functionality catered towards compute providers.
+* [onboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/api/onboarding.go): This file contains endpoints related to the onboarding functionality catered towards compute providers.
 
-* [peers](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/peers.go): This file contains various endpoints related to the p2p functionality of DMS. 
+* [peers](https://gitlab.com/nunet/device-management-service/-/blob/main/api/peers.go): This file contains various endpoints related to the p2p functionality of DMS. 
 
-* [run](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/run.go): This file contains various endpoints related to the deployment and execution of jobs.
+* [run](https://gitlab.com/nunet/device-management-service/-/blob/main/api/run.go): This file contains various endpoints related to the deployment and execution of jobs.
 
-* [telemetry](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/telemetry.go): This file contains the endpoint to calculate available free resources in a machine.
+* [telemetry](https://gitlab.com/nunet/device-management-service/-/blob/main/api/telemetry.go): This file contains the endpoint to calculate available free resources in a machine.
 
-* [transactions](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/transactions.go): This file contains the endpoints related to blockchain transactions.
+* [transactions](https://gitlab.com/nunet/device-management-service/-/blob/main/api/transactions.go): This file contains the endpoints related to blockchain transactions.
 
-* [vm](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/vm.go): This file contains the endpoints related to starting a [firecracker VM](https://firecracker-microvm.github.io/) with custom or default configuration.
+* [vm](https://gitlab.com/nunet/device-management-service/-/blob/main/api/vm.go): This file contains the endpoints related to starting a [firecracker VM](https://firecracker-microvm.github.io/) with custom or default configuration.
 
-* [docs](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/docs): This directory contains the swagger documentation of the API.
+* [docs](https://gitlab.com/nunet/device-management-service/-/blob/main/api/docs): This directory contains the swagger documentation of the API.
 
-* [specs](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/specs): This directory contains specifications of the package
+* [specs](https://gitlab.com/nunet/device-management-service/-/blob/main/api/specs): This directory contains specifications of the package
 
 All of these files have a counterpart named as `*_test.go` which contains the unit tests for the corresponding endpoints.
 
@@ -62,12 +62,12 @@ The class diagram for the `api` package is shown below.
 
 #### Source file
 
-[api Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/api/specs/class_diagram.puml)
+[api Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/api/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/api"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
@@ -92,7 +92,7 @@ You can use the following format to construct the URL for accessing API endpoint
 http://localhost:<port>/api/v1/<endpoint>
 ```
 
-The following sections describe the different endpoints of the DMS covered in the `api` package. You can also refer to the [Swagger docs](https://nunet.gitlab.io/open-api/device-management-api-spec/develop/swagger/#/) for the various endpoints.
+The following sections describe the different endpoints of the DMS covered in the `api` package. You can also refer to the [Swagger docs](https://nunet.gitlab.io/open-api/device-management-api-spec/main/swagger/#/) for the various endpoints.
 
 #### Device Status
 
@@ -535,7 +535,7 @@ All unit tests for various functionalities can be found in files with `_test` in
 
 #### Functional tests
 
-Reference is made to the [test-suite](https://gitlab.com/nunet/test-suite/-/tree/develop/stages/functional_tests/features/device-management-service) repository for functional tests for DMS API functionality.
+Reference is made to the [test-suite](https://gitlab.com/nunet/test-suite/-/tree/main/stages/functional_tests/features/device-management-service) repository for functional tests for DMS API functionality.
 
 ### 7. Proposed Functionality / Requirements 
 

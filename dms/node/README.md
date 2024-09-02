@@ -1,11 +1,11 @@
 # node
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -39,7 +39,7 @@ The `Node` is responsible for:
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/node/README.md): Current file which is aimed towards developers who wish to use and modify the DMS functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/node/README.md): Current file which is aimed towards developers who wish to use and modify the DMS functionality. 
 
 ### 3. Class Diagram
 
@@ -47,12 +47,12 @@ The class diagram for the `node` package is shown below.
 
 #### Source file
 
-[node Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/node/specs/class_diagram.puml)
+[node Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/node/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms/node"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

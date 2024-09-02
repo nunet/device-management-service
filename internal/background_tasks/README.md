@@ -1,11 +1,11 @@
 # background_tasks
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -40,15 +40,15 @@ It contains a scheduler that registers tasks and run them according to the sched
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/background_tasks/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
-* [init](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/init.go): This file initializes OpenTelemetry-based Zap logger.
+* [init](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/background_tasks/init.go): This file initializes OpenTelemetry-based Zap logger.
 
-* [scheduler](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/scheduler.go): This file This file defines a background task scheduler that manages task execution based on triggers, priority, and retry policies.
+* [scheduler](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/background_tasks/scheduler.go): This file This file defines a background task scheduler that manages task execution based on triggers, priority, and retry policies.
 
-* [task](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/task.go): This file contains background task structs and their properties.
+* [task](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/background_tasks/task.go): This file contains background task structs and their properties.
 
-* [trigger](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks/trigger.go): This file defines various trigger types (PeriodicTrigger, EventTrigger, OneTimeTrigger) for background tasks, allowing execution based on time intervals, cron expressions, or external events
+* [trigger](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/background_tasks/trigger.go): This file defines various trigger types (PeriodicTrigger, EventTrigger, OneTimeTrigger) for background tasks, allowing execution based on time intervals, cron expressions, or external events
 
 Files with `*_test.go` naming convention contain unit tests of the functionality in corresponding file.
 
@@ -56,12 +56,12 @@ Files with `*_test.go` naming convention contain unit tests of the functionality
 
 #### Source
 
-[background_tasks class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/internal/background_tasks/specs/class_diagram.puml)
+[background_tasks class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/background_tasks/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/internal/background_tasks"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

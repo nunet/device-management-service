@@ -1,17 +1,17 @@
 # gorm
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -25,25 +25,25 @@
 
 This sub package contains Gorm implementation of the database interfaces.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/README.md): Current file which is aimed towards developers who wish to use and modify the database functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/README.md): Current file which is aimed towards developers who wish to use and modify the database functionality. 
 
-* [generic_repository](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/generic_repository.go): This file implements the methods of `GenericRepository` interface.
+* [generic_repository](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/generic_repository.go): This file implements the methods of `GenericRepository` interface.
 
-* [generic_entity_repository](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/generic_entity_repository.go): This file implements the methods of `GenericEntityRepository` interface.
+* [generic_entity_repository](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/generic_entity_repository.go): This file implements the methods of `GenericEntityRepository` interface.
 
-* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/deployment.go): This file contains implementation of `DeploymentRequestFlat` interface. 
+* [deployment](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/deployment.go): This file contains implementation of `DeploymentRequestFlat` interface. 
 
-* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/elk_stats.go): This file contains implementation of `RequestTracker` interface.
+* [elk_stats](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/elk_stats.go): This file contains implementation of `RequestTracker` interface.
 
-* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/firecracker.go): This file contains implementation of `VirtualMachine` interface.
+* [firecracker](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/firecracker.go): This file contains implementation of `VirtualMachine` interface.
 
-* [machine](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/machine.go): This file contains implementation of interfaces defined in [machine.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/machine.go).  
+* [machine](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/machine.go): This file contains implementation of interfaces defined in [machine.go](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/machine.go).  
 
-* [utils](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/utils.go): This file contains utility functions with respect to Gorm implementation.
+* [utils](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/utils.go): This file contains utility functions with respect to Gorm implementation.
 
 All files with `*_test.go` naming convention contain unit tests with respect to the specific implementation.
 
@@ -53,12 +53,12 @@ The class diagram for the `gorm` package is shown below.
 
 #### Source file
 
-[gorm Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/db/repositories/gorm/specs/class_diagram.puml)
+[gorm Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/db/repositories/gorm"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
@@ -81,7 +81,7 @@ The class diagram for the `gorm` package is shown below.
 
 ##### Interface Methods
 
-See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/db/repositories?ref_type=heads#genericrepository-interface) for methods of `GenericRepository` interface.
+See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/main/db/repositories?ref_type=heads#genericrepository-interface) for methods of `GenericRepository` interface.
 
 #### GenericEntityRepository
 
@@ -97,7 +97,7 @@ See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/t
 
 ##### Interface Methods
 
-See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/db/repositories?ref_type=heads#genericentityrepository-interface) for methods of `GenericEntityRepository` interface.
+See `db` package [readme](https://gitlab.com/nunet/device-management-service/-/tree/main/db/repositories?ref_type=heads#genericentityrepository-interface) for methods of `GenericEntityRepository` interface.
 
 
 ### 5. Data Types

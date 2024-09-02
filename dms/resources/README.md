@@ -1,17 +1,17 @@
 # resources
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
 1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
+2. [Structure and Organisation](#2-structure-and-organisation)
 3. [Class Diagram](#3-class-diagram)
 4. [Functionality](#4-functionality)
 5. [Data Types](#5-data-types)
@@ -26,23 +26,23 @@
 
 `resources` deals with resource management for the machine. This includes calculation of available resources for new jobs or bid requests.
 
-### 2. Structure and organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/README.md): Current file which is aimed towards developers who wish to use and modify the DMS functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/README.md): Current file which is aimed towards developers who wish to use and modify the DMS functionality.
 
-* [init](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/init.go): Contains the initialization of the package.
+* [init](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/init.go): Contains the initialization of the package.
 
-* [resource_manager](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/resource_manager.go): Contains the resource manager which is responsible for managing the resources of dms.
+* [resource_manager](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/resource_manager.go): Contains the resource manager which is responsible for managing the resources of dms.
 
-* [system_specs_linux](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/system_specs_linux.go): Contains the implementation of the `SystemSpecs` interface for linux.
+* [system_specs_linux](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/system_specs_linux.go): Contains the implementation of the `SystemSpecs` interface for linux.
 
-* [system_specs_amd64_darwin](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/system_specs_amd64_darwin.go): Contains the implementation of the `SystemSpecs` interface for amd64 darwin.
+* [system_specs_amd64_darwin](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/system_specs_amd64_darwin.go): Contains the implementation of the `SystemSpecs` interface for amd64 darwin.
 
-* [system_specs_arm64_darwin](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/system_specs_arm64_darwin.go): Contains the implementation of the `SystemSpecs` interface for arm64 darwin.
+* [system_specs_arm64_darwin](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/system_specs_arm64_darwin.go): Contains the implementation of the `SystemSpecs` interface for arm64 darwin.
 
-* [usage_monitor](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/usage_monitor.go): Contains the implementation of the `UsageMonitor` interface.
+* [usage_monitor](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/usage_monitor.go): Contains the implementation of the `UsageMonitor` interface.
 
 All files with `*_test.go` contains unit tests for the corresponding functionality.
 
@@ -52,12 +52,12 @@ The class diagram for the `resources` package is shown below.
 
 #### Source file
 
-[resources Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/resources/specs/class_diagram.puml)
+[resources Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms/resources"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

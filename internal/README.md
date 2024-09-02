@@ -1,11 +1,11 @@
 # internal
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -29,27 +29,27 @@ This package contains all code that is very specific to the whole of the dms, wh
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality. 
 
-* [init](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/init.go): This file handles controlled shutdown and initializes OpenTelemetry-based Zap logger.
+* [init](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/init.go): This file handles controlled shutdown and initializes OpenTelemetry-based Zap logger.
 
-* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/websocket.go): This file contains communication protocols for a websocket server including message handling and command execution.
+* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/websocket.go): This file contains communication protocols for a websocket server including message handling and command execution.
 
 _subpackages_
-* [config](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/config): This sub-package contains the configuration related data for the whole dms.
+* [config](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/config): This sub-package contains the configuration related data for the whole dms.
 
-* [background_tasks](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/background_tasks): This sub-package contains functionality that runs in the background.
+* [background_tasks](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/background_tasks): This sub-package contains functionality that runs in the background.
 
 ### 3. Class Diagram
 
 #### Source
 
-[internal class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/internal/specs/class_diagram.puml)
+[internal class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/internal"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

@@ -1,11 +1,11 @@
 # tokenomics
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -29,7 +29,7 @@ This repository contains implementations for managing contracts, proofs, and pay
 
 Here is quick overview of the contents of this directory:
 
-- [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/tokenomics/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
+- [README](https://gitlab.com/nunet/device-management-service/-/blob/main/tokenomics/README.md): Current file which is aimed towards developers who wish to use and modify the package functionality.
 
 - [Contract.go:](https://gitlab.com/nunet/open-api/platform-data-model/-/blob/tokenomics-proposed/device-management-service/tokenomics/Contract.go?ref_type=heads) Defines the main interface for managing and executing contracts within the tokenomics system.
 
@@ -41,7 +41,7 @@ Here is quick overview of the contents of this directory:
 
 *Subpackages*
 
-- [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/develop/tokenomics/specs): Directory containing package specifications, including package class diagram.
+- [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/main/tokenomics/specs): Directory containing package specifications, including package class diagram.
 
 - [./Sequences/:](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/proposed/device-management-service/tokenomics/sequences?ref_type=heads) Contains the sequence diagram for the tokenomics package
 
@@ -49,12 +49,12 @@ Here is quick overview of the contents of this directory:
 
 #### Source File
 
-[tokenomics Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/tokenomics/specs/class_diagram.puml)
+[tokenomics Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/tokenomics/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/tokenomics"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  

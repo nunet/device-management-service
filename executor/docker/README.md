@@ -1,11 +1,11 @@
 # docker
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
@@ -28,17 +28,17 @@ This sub-package contains functionality including drivers and api for the Docker
 
 Here is quick overview of the contents of this pacakge:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/docker/README.md): Current file which is aimed towards developers who wish to use and modify the docker functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker/README.md): Current file which is aimed towards developers who wish to use and modify the docker functionality. 
 
-* [client](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/docker/client.go): This file provides a high level wrapper around the docker library.
+* [client](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker/client.go): This file provides a high level wrapper around the docker library.
 
-* [executor](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/docker/executor.go): This is the main implementation of the executor interface for docker. It is the entry point of the sub-package. It is intended to be used as a singleton.
+* [executor](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker/executor.go): This is the main implementation of the executor interface for docker. It is the entry point of the sub-package. It is intended to be used as a singleton.
 
-* [handler](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/docker/handler.go): This file contains a handler implementation to manage the lifecycle of a single job.
+* [handler](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker/handler.go): This file contains a handler implementation to manage the lifecycle of a single job.
 
-* [init](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/docker/init.go): This file is responsible for initialization of the package. Currently it only initializes a logger to be used through out the sub-package.
+* [init](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker/init.go): This file is responsible for initialization of the package. Currently it only initializes a logger to be used through out the sub-package.
 
-* [types](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor/docker/types.go): This file contains Models that are specifically related to the docker executor. Mainly it contains the engine spec model that describes a docker job.
+* [types](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker/types.go): This file contains Models that are specifically related to the docker executor. Mainly it contains the engine spec model that describes a docker job.
 
 Files with `*_test.go` suffix contain unit tests for the functionality in corresponding file.
 
@@ -46,12 +46,12 @@ Files with `*_test.go` suffix contain unit tests for the functionality in corres
 
 #### Source
 
-[docker class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/executor/docker/specs/class_diagram.puml)
+[docker class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/executor/docker/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/executor/docker"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
@@ -80,7 +80,7 @@ It is expecte that `NewExecutor` would be called prior to calling any other exec
 
 #### Start
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#start) 
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/main/executor#start) 
 
 `Start` function begins the execution of a request by starting a Docker container. It creates the container based on the configuration parameters provided in the execution request. It returns an error message if
 * container is already started
@@ -90,7 +90,7 @@ For function signature refer to the package [readme](https://gitlab.com/nunet/de
 
 #### Wait
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#wait)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/main/executor#wait)
 
 `Wait` initiates a wait for the completion of a specific execution using its `executionID`. The function returns two channels: one for the result and another for any potential error. 
 
@@ -100,14 +100,14 @@ Otherwise, an internal goroutine is spawned to handle the asynchronous waiting. 
 
 #### Cancel
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#cancel)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/main/executor#cancel)
 
 `Cancel` tries to terminate an ongoing execution identified by its `executionID`. It returns an error if the execution does not exist.
 
 
 #### GetLogStream
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#getlogstream)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/main/executor#getlogstream)
 
 `GetLogStream` provides a stream of output logs for a specific execution. Parameters `tail` and `follow` specified in `executor.LogStreamRequest` provided as input control whether to include past logs and whether to keep the stream open for new logs, respectively.
 
@@ -115,7 +115,7 @@ It returns an error if the execution is not found.
 
 #### Run
 
-For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/develop/executor#run)
+For function signature refer to the package [readme](https://gitlab.com/nunet/device-management-service/-/tree/main/executor#run)
 
 `Run` initiates and waits for the completion of an execution in one call. This method serves as a higher-level convenience function that internally calls `Start` and `Wait` methods. It returns the result of the execution as `executor.ExecutionResult` type. 
 
