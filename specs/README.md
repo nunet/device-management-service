@@ -10,9 +10,10 @@
       - [Specification and documentation system](#specification-and-documentation-system)
       - [Project management portal](#project-management-portal)
     - [Implementation](#implementation)
-      - [Actor model](#actor-model)
+      - [Actor model with Object/Security Capabilities](#actor-model-with-objectsecurity-capabilities)
+      - [Object/Security Capabilities (UCAN)](#objectsecurity-capabilities-ucan)
       - [Decentralized search and matching model](#decentralized-search-and-matching-model)
-      - [Dynamic method dispatch](#dynamic-method-dispatch)
+      - [Dynamic method dispatch / invocation](#dynamic-method-dispatch--invocation)
       - [Local access (API and CMD)](#local-access-api-and-cmd)
       - [Local database interface and implementation](#local-database-interface-and-implementation)
       - [Executor interface and implementation](#executor-interface-and-implementation)
@@ -24,7 +25,7 @@
       - [Observability and Telemetry](#observability-and-telemetry)
       - [Definition of compute workflows / recursive jobs](#definition-of-compute-workflows--recursive-jobs)
       - [Job deployment and orchestration model](#job-deployment-and-orchestration-model)
-      - [Capability model](#capability-model)
+      - [Hardware capability model](#hardware-capability-model)
       - [Supervision model](#supervision-model)
       - [Tokenomics interface](#tokenomics-interface)
   - [Release management](#release-management)
@@ -35,9 +36,6 @@
     - [Project management portal launch](#project-management-portal-launch)
     - [Test management system launch](#test-management-system-launch)
     - [Release testing start](#release-testing-start)
-    - [Release candidate 1](#release-candidate-1)
-    - [Release candidate 2](#release-candidate-2)
-    - [Release candidate 3](#release-candidate-3)
     - [Release](#release)
 
 
@@ -169,6 +167,25 @@ Context / links:
 | **Design** | [DMS architecture](https://nunet.gitlab.io/research/blog/posts/dms-architecture/) |
 | **Impacted functionality** | All functionality of the platform is fundamentally affected implementation of actor model; This is especially true for the future projected functionalities involving edge computing, IoT deployments and decentralized physical infrastructure in general. |
 | **Acceptance tests** | Functional and integration tests defined in node package, dms package related to Actor interface and jobs package related to Allocation interface; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/122) |
+
+#### Object/Security Capabilities (UCAN)
+
+| | |
+| --- | --- |
+| **Feature name** | Actor model and interface; Node and Allocation actors implementations; |
+| **Work packages** | [actor](https://nunet.gitlab.io/publisher/project-management-portal/device-management-service-version-0-5-x/work_packages/actor-package-implementation_technical_dependencies.html) |
+| **Code reference** |  |
+| **Description / definition of done** | | 
+| **Timing** | Closely integrated with the Actor system implementation; Every message requires UCAN tokens to be included and verified;  |
+| **Status** | Close to completion |
+| **Team** | Lead: @vyzo |
+| **Strategic alignment** |  |
+| **Who it benefits** |  |
+| **User challenge** |  |
+| **Value score** | n/a |
+ |
+| **Impacted functionality** | Implementation of the fundamental zero trust security model. |
+| **Acceptance tests** |  |
 
 #### Decentralized search and matching model
 
