@@ -6,21 +6,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newTestDeviceHandler() *DeviceHandler {
-	return &DeviceHandler{}
-}
-
 func TestDeviceStatus(t *testing.T) {
 	tests := []struct {
 		name           string
-		setupMock      func(*DeviceHandler)
+		setupMock      func(*RESTServer)
 		expectedStatus int
 		expectedBody   string
 	}{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := newTestDeviceHandler()
+			handler := &RESTServer{}
 			if tt.setupMock != nil {
 				tt.setupMock(handler)
 			}
@@ -39,14 +35,14 @@ func TestDeviceStatus(t *testing.T) {
 func TestUpdateDeviceStatus(t *testing.T) {
 	tests := []struct {
 		name           string
-		setupMock      func(*DeviceHandler)
+		setupMock      func(*RESTServer)
 		expectedStatus int
 		expectedBody   string
 	}{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := newTestDeviceHandler()
+			handler := &RESTServer{}
 			if tt.setupMock != nil {
 				tt.setupMock(handler)
 			}

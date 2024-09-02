@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -18,7 +19,7 @@ import (
 )
 
 // setupTestP2P creates a new P2PHandler with a mock Libp2p instance
-func setupTestP2P() (*P2PHandler, error) {
+func setupTestP2P() (*RESTServer, error) {
 	ctx := context.Background()
 	priv, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
 	if err != nil {
@@ -56,16 +57,17 @@ func setupTestP2P() (*P2PHandler, error) {
 		return nil, fmt.Errorf("unable to initialise libp2p host")
 	}
 
-	return &P2PHandler{p2p: p2p}, nil
+	return &RESTServer{config: &RESTServerConfig{P2P: p2p}}, nil
 }
 
+// XXX: non-deterministic test - depends on network conditions by waiting for discovery
 func TestListPeers(t *testing.T) {
 	ctx := context.Background()
 	router := setupTestRouter()
 
-	p2p := &P2PHandler{p2p: nil}
+	p2pRC := &RESTServer{config: &RESTServerConfig{P2P: nil}}
 	var err error
-	router.GET("/peers", p2p.ListPeers)
+	router.GET("/peers", p2pRC.ListPeers)
 
 	// host not initialised
 	w := performRequest(router, "GET", "/peers")
@@ -74,7 +76,7 @@ func TestListPeers(t *testing.T) {
 
 	np2p, err := setupTestP2P()
 	assert.NoError(t, err)
-	p2p.p2p = np2p.p2p
+	p2pRC.config.P2P = np2p.config.P2P
 
 	// test no peers - host not started
 	w = performRequest(router, "GET", "/peers")
@@ -82,9 +84,13 @@ func TestListPeers(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "no peers yet")
 
 	// start host - discover peers
-	err = p2p.p2p.Start(ctx)
+	err = p2pRC.config.P2P.Start(ctx)
 	assert.NoError(t, err)
+
+	// wait for discovery
+	time.Sleep(5 * time.Second)
 	w = performRequest(router, "GET", "/peers")
+
 	assert.Equal(t, 200, w.Code)
 
 	// check fomat is in {ID: ..., Addr: ...}
@@ -96,9 +102,9 @@ func TestListPeers(t *testing.T) {
 func TestKnownPeers(t *testing.T) {
 	router := setupTestRouter()
 
-	p2p := &P2PHandler{p2p: nil}
+	p2pRC := &RESTServer{config: &RESTServerConfig{P2P: nil}}
 	var err error
-	router.GET("/peers/dht", p2p.KnownPeers)
+	router.GET("/peers/dht", p2pRC.KnownPeers)
 
 	// host not initialised
 	w := performRequest(router, "GET", "/peers/dht")
@@ -107,7 +113,7 @@ func TestKnownPeers(t *testing.T) {
 
 	np2p, err := setupTestP2P()
 	assert.NoError(t, err)
-	p2p.p2p = np2p.p2p
+	p2pRC.config.P2P = np2p.config.P2P
 
 	// test peers - host not started but should at least have it's own id
 	w = performRequest(router, "GET", "/peers/dht")
@@ -117,14 +123,14 @@ func TestKnownPeers(t *testing.T) {
 	data := []peer.AddrInfo{}
 	err = json.Unmarshal(w.Body.Bytes(), &data)
 	assert.NoError(t, err)
-	assert.Equal(t, p2p.p2p.Host.ID().String(), data[0].ID.String())
+	assert.Equal(t, p2pRC.config.P2P.Host.ID().String(), data[0].ID.String())
 }
 
 func TestSelfPeerInfo(t *testing.T) {
-	p2p := &P2PHandler{p2p: nil}
+	p2pRC := &RESTServer{config: &RESTServerConfig{P2P: nil}}
 	var err error
 	router := setupTestRouter()
-	router.GET("/peers/self", p2p.SelfPeerInfo)
+	router.GET("/peers/self", p2pRC.SelfPeerInfo)
 
 	// host not initialised
 	w := performRequest(router, "GET", "/peers/self")
@@ -133,16 +139,16 @@ func TestSelfPeerInfo(t *testing.T) {
 
 	np2p, err := setupTestP2P()
 	assert.NoError(t, err)
-	p2p.p2p = np2p.p2p
+	p2pRC.config.P2P = np2p.config.P2P
 
 	w = performRequest(router, "GET", "/peers/self")
 	assert.Equal(t, 200, w.Code)
-	assert.Contains(t, w.Body.String(), p2p.p2p.Host.ID().String())
+	assert.Contains(t, w.Body.String(), p2pRC.config.P2P.Host.ID().String())
 }
 
 func TestDumpDHT(t *testing.T) {
 	ctx := context.Background()
-	p2p := &P2PHandler{p2p: nil}
+	p2p := &RESTServer{config: &RESTServerConfig{P2P: nil}}
 	var err error
 	router := setupTestRouter()
 	router.GET("/peers/dht/dump", p2p.DumpDHT)
@@ -154,7 +160,7 @@ func TestDumpDHT(t *testing.T) {
 
 	np2p, err := setupTestP2P()
 	assert.NoError(t, err)
-	p2p.p2p = np2p.p2p
+	p2p.config.P2P = np2p.config.P2P
 
 	// test no peers - host not started
 	w = performRequest(router, "GET", "/peers/dht/dump")
@@ -162,7 +168,7 @@ func TestDumpDHT(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "empty DHT")
 
 	// start host - discover peers
-	err = p2p.p2p.Start(ctx)
+	err = p2p.config.P2P.Start(ctx)
 	assert.NoError(t, err)
 	w = performRequest(router, "GET", "/peers/dht/dump")
 	assert.Equal(t, 200, w.Code)

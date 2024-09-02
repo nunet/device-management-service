@@ -3,43 +3,12 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/coreos/go-systemd/sdjournal"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
 )
-
-type MockOS struct {
-	Fs afero.Fs
-}
-
-func (mo *MockOS) Create(name string) (backend.FileHandler, error) {
-	return mo.Fs.Create(name)
-}
-
-func (mo *MockOS) MkdirAll(path string, perm os.FileMode) error {
-	return mo.Fs.MkdirAll(path, perm)
-}
-
-func (mo *MockOS) OpenFile(name string, flag int, perm os.FileMode) (backend.FileHandler, error) {
-	return mo.Fs.OpenFile(name, flag, perm)
-}
-
-func (mo *MockOS) ReadFile(filename string) ([]byte, error) {
-	return afero.ReadFile(mo.Fs, filename)
-}
-
-func (mo *MockOS) RemoveAll(path string) error {
-	return mo.Fs.RemoveAll(path)
-}
-
-func (mo *MockOS) Walk(root string, walkFn filepath.WalkFunc) error {
-	return afero.Walk(mo.Fs, root, walkFn)
-}
 
 type MockLogger struct {
 	errRead   uint64
@@ -80,10 +49,9 @@ func (ml *MockLogger) Next() (uint64, error) {
 }
 
 func Test_LogLinuxCmdSuccess(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-
-	mockOS := &MockOS{Fs: afero.NewMemMapFs()}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	/*  ENTRY is a struct with 3 fields
 	One of the fields of ENTRY is "Fields"
@@ -96,7 +64,6 @@ func Test_LogLinuxCmdSuccess(t *testing.T) {
 	has some fields. One of the fields, "Fields", is
 	a map containing many key-value pairs.
 	*/
-
 	logs := []map[string]string{
 		{
 			"_BOOT_ID": "1",
@@ -124,26 +91,23 @@ func Test_LogLinuxCmdSuccess(t *testing.T) {
 		entries:   entries,
 	}
 
-	cmd := NewLogCmd(mockConn, mockOS, mockJournal)
+	cmd := newLogCmd(ts.afs, mockJournal)
 
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
-	assert := assert.New(t)
-
 	err := cmd.Execute()
-	assert.NoError(err)
+	assert.NoError(t, err)
 
 	expected := filepath.Join(logDir, tarGzName)
-	assert.Contains(buf.String(), expected)
+	assert.Contains(t, buf.String(), expected)
 }
 
 func Test_LogLinuxCmdNoEntries(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-
-	mockOS := &MockOS{Fs: afero.NewMemMapFs()}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	entries := make([]sdjournal.JournalEntry, 0)
 	mockJournal := &MockLogger{
@@ -151,25 +115,22 @@ func Test_LogLinuxCmdNoEntries(t *testing.T) {
 		entries:   entries,
 	}
 
-	cmd := NewLogCmd(mockConn, mockOS, mockJournal)
+	cmd := newLogCmd(ts.afs, mockJournal)
 
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
-	assert := assert.New(t)
-
 	err := cmd.Execute()
-	assert.NoError(err)
+	assert.NoError(t, err)
 
-	assert.Contains(buf.String(), "No log entries")
+	assert.Contains(t, buf.String(), "No log entries")
 }
 
 func Test_LogLinuxCmdReadError(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-
-	mockOS := &MockOS{Fs: afero.NewMemMapFs()}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	logs := []map[string]string{
 		{
@@ -199,7 +160,7 @@ func Test_LogLinuxCmdReadError(t *testing.T) {
 		entries:   entries,
 	}
 
-	cmd := NewLogCmd(mockConn, mockOS, mockJournal)
+	cmd := newLogCmd(ts.afs, mockJournal)
 
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
@@ -213,10 +174,9 @@ func Test_LogLinuxCmdReadError(t *testing.T) {
 }
 
 func Test_LogLinuxCmdNoMessageField(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
-
-	mockOS := &MockOS{Fs: afero.NewMemMapFs()}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	logs := []map[string]string{
 		{
@@ -244,7 +204,7 @@ func Test_LogLinuxCmdNoMessageField(t *testing.T) {
 		entries:   entries,
 	}
 
-	cmd := NewLogCmd(mockConn, mockOS, mockJournal)
+	cmd := newLogCmd(ts.afs, mockJournal)
 
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)

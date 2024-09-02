@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -51,27 +52,69 @@ func NewTestSuite(t *testing.T) *TestSuite {
 	}
 }
 
-func (s *TestSuite) newTestOnboardingHandler() *OnboardingHandler {
+func (s *TestSuite) newTestOnboardingHandler() *RESTServer {
+	resourceManager := resources.NewResourceManager(resources.ManagerRepos{
+		FreeResources:      repositories_gorm.NewFreeResources(s.db),
+		OnboardedResources: repositories_gorm.NewOnboardedResources(s.db),
+		RequiredResources:  repositories_gorm.NewRequiredResources(s.db),
+		VirtualMachine:     repositories_gorm.NewVirtualMachine(s.db),
+		Services:           repositories_gorm.NewServices(s.db),
+	})
 	oConfig := onboarding.Config{
-		Fs:             s.afs,
-		P2PRepo:        repositories_gorm.NewLibp2pInfo(s.db),
-		UUIDRepo:       repositories_gorm.NewMachineUUID(s.db),
-		AvResourceRepo: repositories_gorm.NewAvailableResources(s.db),
-		WorkDir:        s.WorkDir,
-		DatabasePath:   s.dbPath,
-		Channels:       s.channels,
+		Fs:              s.afs,
+		P2PRepo:         repositories_gorm.NewLibp2pInfo(s.db),
+		UUIDRepo:        repositories_gorm.NewMachineUUID(s.db),
+		AvResourceRepo:  repositories_gorm.NewAvailableResources(s.db),
+		ParamsRepo:      repositories_gorm.NewOnboardingParams(s.db),
+		ResourceManager: resourceManager,
+		WorkDir:         s.WorkDir,
+		DatabasePath:    s.dbPath,
+		Channels:        s.channels,
 	}
-	service := onboarding.New(oConfig)
-	return &OnboardingHandler{service: service}
+	service := onboarding.New(&oConfig)
+	return &RESTServer{config: &RESTServerConfig{Onboarding: service, Resource: resourceManager}}
 }
 
 func (s *TestSuite) setupDB() error {
 	if s.db == nil {
 		return fmt.Errorf("db not set")
 	}
-	_ = s.db.AutoMigrate(&types.Libp2pInfo{})
-	_ = s.db.AutoMigrate(&types.AvailableResources{})
-	_ = s.db.AutoMigrate(&types.MachineUUID{})
+	err := s.db.AutoMigrate(&types.Libp2pInfo{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.AvailableResources{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.MachineUUID{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.Libp2pInfo{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.FreeResources{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.OnboardedResources{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.RequiredResources{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.VirtualMachine{})
+	if err != nil {
+		return err
+	}
+	err = s.db.AutoMigrate(&types.Services{})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -95,7 +138,6 @@ func TestOnboardStatus(t *testing.T) {
 		setupMock    func(*TestSuite)
 		expectedCode int
 		expectedBody []byte
-		wantErr      bool
 	}{
 		{
 			name: "success",
@@ -115,8 +157,8 @@ func TestOnboardStatus(t *testing.T) {
 				err := ts.setupDB()
 				assert.NoError(t, err)
 			},
-			expectedCode: 500,
-			wantErr:      true,
+			expectedCode: 200,
+			expectedBody: []byte(`{"onboarded":false}`),
 		},
 	}
 	for _, tt := range tests {
@@ -130,7 +172,7 @@ func TestOnboardStatus(t *testing.T) {
 
 			router := gin.New()
 			endpoint := "/api/v1/onboarding/status"
-			router.GET(endpoint, handler.OnboardStatus)
+			router.GET(endpoint, handler.Status)
 
 			req := httptest.NewRequest("GET", endpoint, nil)
 			w := httptest.NewRecorder()
@@ -140,13 +182,6 @@ func TestOnboardStatus(t *testing.T) {
 
 			if tt.expectedBody != nil {
 				assert.Equal(t, tt.expectedBody, w.Body.Bytes())
-			}
-
-			if tt.wantErr {
-				var response map[string]any
-				err := json.Unmarshal(w.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				assert.Contains(t, response, "error")
 			}
 		})
 	}
@@ -158,7 +193,6 @@ func TestProvisionedCapacity(t *testing.T) {
 
 	handler := ts.newTestOnboardingHandler()
 	endpoint := "/api/v1/onboarding/provisioned"
-
 	router.GET(endpoint, handler.ProvisionedCapacity)
 	req := httptest.NewRequest("GET", endpoint, nil)
 	w := httptest.NewRecorder()
@@ -377,7 +411,7 @@ func TestResourceConfig(t *testing.T) {
 				err := ts.setupDB()
 				assert.NoError(t, err)
 			},
-			expectedCode: 500,
+			expectedCode: 409,
 			wantErr:      true,
 		},
 		// TODO: Add more error cases

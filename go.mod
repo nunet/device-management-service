@@ -208,7 +208,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jaypipes/ghw v0.12.0
 	github.com/shoenig/go-m1cpu v0.1.6
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.17.0
 	github.com/uptrace/opentelemetry-go-extra/otelzap v0.1.21
 )

@@ -5,23 +5,22 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
 )
 
 func Test_DeviceCmdSubCommands(t *testing.T) {
-	conns := GetMockConn(true)
-	mockConn := &MockConnection{conns: conns}
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
-	cmd := NewDeviceCmd(mockConn)
+	cmd := newDeviceCmd(ts.client)
 
-	assert := assert.New(t)
-	assert.True(cmd.HasAvailableSubCommands())
+	assert.True(t, cmd.HasAvailableSubCommands())
 
 	subcmd := []string{"status", "set"}
 
 	cmds := cmd.Commands()
 	for _, child := range cmds {
-		assert.Contains(subcmd, child.Name())
+		assert.Contains(t, subcmd, child.Name())
 	}
 
 	buf := new(bytes.Buffer)
@@ -29,59 +28,48 @@ func Test_DeviceCmdSubCommands(t *testing.T) {
 	cmd.SetErr(buf)
 
 	err := cmd.Execute()
-	assert.NoError(err)
+	assert.NoError(t, err)
 }
 
 func Test_DeviceStatusCmd(t *testing.T) {
-	assert := assert.New(t)
-
-	err := setupMockDB()
-	assert.NoError(err)
-
-	mockUtils := &MockUtilsService{}
-
-	selfResponse := []byte(`{"online":false}`)
-	mockUtils.SetResponseFor("GET", "/api/v1/device/status", selfResponse)
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	buf := new(bytes.Buffer)
-	cmd := NewDeviceStatusCmd(&backend.Utils{})
+	cmd := newDeviceStatusCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
-	err = cmd.Execute()
-	assert.NoError(err)
+	err := cmd.Execute()
+	assert.NoError(t, err)
 
-	assert.Contains(buf.String(), "Status: offline")
+	assert.Contains(t, buf.String(), "Status: offline")
 }
 
 func Test_DeviceSetCmd(t *testing.T) {
-	assert := assert.New(t)
-
-	err := setupMockDB()
-	assert.NoError(err)
-
-	mockUtils := &MockUtilsService{}
-
-	postResponse := []byte(`{"message":"Device status successfully changed to online"}`)
-	mockUtils.SetResponseFor("POST", "/api/v1/device/status", postResponse)
+	ts := NewTestSuite()
+	assert.NoError(t, ts.setup())
+	defer ts.teardown()
 
 	// no argument
 	buf := new(bytes.Buffer)
-	cmd := NewDeviceSetCmd(&backend.Utils{})
+	cmd := newDeviceSetCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
-	err = cmd.Execute()
-	assert.Error(err)
-	assert.Contains(buf.String(), "Error: invalid number of arguments")
+
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, buf.String(), "Error: invalid number of arguments")
 
 	// with argument
 	buf = new(bytes.Buffer)
-	cmd = NewDeviceSetCmd(&backend.Utils{})
+	cmd = newDeviceSetCmd(ts.client)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"online"})
 	err = cmd.Execute()
-	assert.NoError(err)
+	assert.NoError(t, err)
 
-	assert.Contains(buf.String(), "Device status successfully changed to online")
+	assert.Contains(t, buf.String(), "Device status successfully changed to online")
 }

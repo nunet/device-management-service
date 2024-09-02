@@ -9,7 +9,7 @@ import (
 func TestPingPeer(t *testing.T) {
 	tests := []struct {
 		name           string
-		setupMock      func(*P2PHandler)
+		setupMock      func(*RESTServer)
 		expectedStatus int
 		expectedBody   string
 	}{}

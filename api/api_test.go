@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 	"gitlab.com/nunet/device-management-service/types"
@@ -38,23 +39,44 @@ func TestInitializeRoutes(t *testing.T) {
 	p2p := &libp2p.Libp2p{}
 	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	assert.NoError(t, err)
-	_ = mockDB.AutoMigrate(&types.Libp2pInfo{})
+	err = mockDB.AutoMigrate(&types.Libp2pInfo{})
+	assert.NoError(t, err)
+	err = mockDB.AutoMigrate(&types.FreeResources{})
+	assert.NoError(t, err)
+	err = mockDB.AutoMigrate(&types.OnboardedResources{})
+	assert.NoError(t, err)
+	err = mockDB.AutoMigrate(&types.RequiredResources{})
+	assert.NoError(t, err)
+	err = mockDB.AutoMigrate(&types.VirtualMachine{})
+	assert.NoError(t, err)
+	err = mockDB.AutoMigrate(&types.Services{})
+	assert.NoError(t, err)
+
+	resourceManager := resources.NewResourceManager(resources.ManagerRepos{
+		FreeResources:      repositories_gorm.NewFreeResources(mockDB),
+		OnboardedResources: repositories_gorm.NewOnboardedResources(mockDB),
+		RequiredResources:  repositories_gorm.NewRequiredResources(mockDB),
+		VirtualMachine:     repositories_gorm.NewVirtualMachine(mockDB),
+		Services:           repositories_gorm.NewServices(mockDB),
+	})
 
 	oConf := onboarding.Config{
-		Fs:             afero.Afero{Fs: afero.NewMemMapFs()},
-		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
-		WorkDir:        "/test",
-		DatabasePath:   "/test/db.sqlite",
-		Channels:       []string{"test1", "test2", "test3"},
+		Fs:              afero.Afero{Fs: afero.NewMemMapFs()},
+		P2PRepo:         repositories_gorm.NewLibp2pInfo(mockDB),
+		ResourceManager: resourceManager,
+		UUIDRepo:        repositories_gorm.NewMachineUUID(mockDB),
+		AvResourceRepo:  repositories_gorm.NewAvailableResources(mockDB),
+		WorkDir:         "/test",
+		DatabasePath:    "/test/db.sqlite",
+		Channels:        []string{"test1", "test2", "test3"},
 	}
-	ob := onboarding.New(oConf)
+	ob := onboarding.New(&oConf)
 	mid := []gin.HandlerFunc{}
 	port := uint32(8080)
-	server := NewRESTServer(RESTServerConfig{
-		P2p:        p2p,
+	server := NewRESTServer(&RESTServerConfig{
+		P2P:        p2p,
 		Onboarding: ob,
+		Resource:   resourceManager,
 		Logger:     logger,
 		MidW:       mid,
 		Port:       port,

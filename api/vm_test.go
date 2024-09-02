@@ -6,21 +6,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newTestVMHandler() *VMHandler {
-	return &VMHandler{}
-}
-
 func TestStartCustom(t *testing.T) {
 	tests := []struct {
 		name           string
-		setupMock      func(*VMHandler)
+		setupMock      func(*RESTServer)
 		expectedStatus int
 		expectedBody   string
 	}{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := newTestVMHandler()
+			handler := &RESTServer{}
 			if tt.setupMock != nil {
 				tt.setupMock(handler)
 			}
@@ -39,14 +35,14 @@ func TestStartCustom(t *testing.T) {
 func TestStartDefault(t *testing.T) {
 	tests := []struct {
 		name           string
-		setupMock      func(*VMHandler)
+		setupMock      func(*RESTServer)
 		expectedStatus int
 		expectedBody   string
 	}{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := newTestVMHandler()
+			handler := &RESTServer{}
 			if tt.setupMock != nil {
 				tt.setupMock(handler)
 			}

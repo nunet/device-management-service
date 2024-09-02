@@ -6,19 +6,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// OnboardingHandler is a controller for /onboarding endpoint functionalities
-type OnboardingHandler struct {
-	service *onboarding.Onboarding
-}
+// // OnboardingHandler is a controller for /onboarding endpoint functionalities
+// type OnboardingHandler struct {
+// 	service *onboarding.Onboarding
+// }
 
-// NewOnboardingHandler is a constructor for OnboardingHandler
-func NewOnboardingHandler(s *onboarding.Onboarding) OnboardingHandler {
-	return OnboardingHandler{service: s}
-}
+// // NewOnboardingHandler is a constructor for OnboardingHandler
+// func NewOnboardingHandler(s *onboarding.Onboarding) OnboardingHandler {
+// 	return OnboardingHandler{service: s}
+// }
 
 // ProvisionedCapacity      godoc
 //
@@ -28,8 +27,8 @@ func NewOnboardingHandler(s *onboarding.Onboarding) OnboardingHandler {
 //	@Produce		json
 //	@Success		200	{object}	types.Provisioned
 //	@Router			/onboarding/provisioned [get]
-func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
-	provisionedResources, err := resources.ManagerInstance.SystemSpecs().GetProvisionedResources()
+func (rs *RESTServer) ProvisionedCapacity(c *gin.Context) {
+	provisionedResources, err := rs.config.Resource.SystemSpecs().GetProvisionedResources()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -37,7 +36,7 @@ func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
 	c.JSON(http.StatusOK, provisionedResources)
 }
 
-// CreatePaymentAddressHandler      godoc
+// CreatePaymentAddress      godoc
 //
 //	@Summary		Create a new payment address.
 //	@Description	Create a payment address from public key. Return payment address and private key.
@@ -45,14 +44,14 @@ func (h OnboardingHandler) ProvisionedCapacity(c *gin.Context) {
 //	@Produce		json
 //	@Success		200	{object}	types.BlockchainAddressPrivKey
 //	@Router			/onboarding/address/new [get]
-func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
+func (rs RESTServer) CreatePaymentAddress(c *gin.Context) {
 	wallet := c.DefaultQuery("blockchain", "cardano")
 	pair, err := onboarding.CreatePaymentAddress(wallet)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, pair)
+	c.JSON(http.StatusOK, pair)
 }
 
 // Onboard      godoc
@@ -75,7 +74,7 @@ func (h OnboardingHandler) CreatePaymentAddress(c *gin.Context) {
 //	@Failure		500			{object}	object	"could not calculate free resources and update database"
 //	@Failure		500			{object}	object	"could not register and run new node"
 //	@Router			/onboarding/onboard [post]
-func (h OnboardingHandler) Onboard(c *gin.Context) {
+func (rs *RESTServer) Onboard(c *gin.Context) {
 	capacity := types.CapacityForNunet{
 		ServerMode:  true,
 		IsAvailable: true,
@@ -86,11 +85,14 @@ func (h OnboardingHandler) Onboard(c *gin.Context) {
 		return
 	}
 
-	oConfig, err := h.service.Onboard(c.Request.Context(), capacity)
+	oConfig, p2p, err := rs.config.Onboarding.Onboard(c.Request.Context(), capacity)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	rs.config.P2P = p2p
+
 	c.JSON(http.StatusCreated, oConfig)
 }
 
@@ -109,7 +111,7 @@ func (h OnboardingHandler) Onboard(c *gin.Context) {
 //	@Failure		500		{object}	object	"unable to delete available resources on database"
 //	@Failure		500		{object}	object	"could not remove payment address"
 //	@Router			/onboarding/offboard [post]
-func (h OnboardingHandler) Offboard(c *gin.Context) {
+func (rs RESTServer) Offboard(c *gin.Context) {
 	query := c.DefaultQuery("force", "false")
 	force, err := strconv.ParseBool(query)
 	if err != nil {
@@ -117,7 +119,7 @@ func (h OnboardingHandler) Offboard(c *gin.Context) {
 		return
 	}
 
-	err = h.service.Offboard(c.Request.Context(), force)
+	err = rs.config.Onboarding.Offboard(c.Request.Context(), force)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -126,26 +128,36 @@ func (h OnboardingHandler) Offboard(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "device successfully offboarded"})
 }
 
-// OnboardStatus      godoc
+// Status      godoc
 //
-//	@Summary		Onboarding status and additional info.
-//	@Description	Returns json with 5 parameters: onboarded, error, machine_uuid, work_dir, database_path.
-//	@Description	`onboarded` is true if the device is onboarded, false otherwise.
-//	@Description	`error` is the error message if any related to onboarding status check
-//	@Description	`machine_uuid` is the UUID of the machine
-//	@Description	`work_dir` is the path to DMS's working directory
-//	@Description	`database_path` is the path to nunet.db only if it exists
+//	@Summary		Returns whether device is onboarded or not.
 //	@Tags			onboarding
 //	@Produce		json
-//	@Success		200	{object}	types.OnboardingStatus
+//	@Success		200	{boolean}
 //	@Router			/onboarding/status [get]
-func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
-	status, err := h.service.Status(c.Request.Context())
+func (rs RESTServer) Status(c *gin.Context) {
+	status, err := rs.config.Onboarding.IsOnboarded(c.Request.Context())
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, status)
+	c.JSON(http.StatusOK, gin.H{"onboarded": status})
+}
+
+// Info      godoc
+//
+//	@Summary		Returns additional information about onboarded device.
+//	@Tags			onboarding
+//	@Produce		json
+//	@Success		200	{object} 	types.OnboardingConfig
+//	@Router			/onboarding/info [get]
+func (rs RESTServer) Info(c *gin.Context) {
+	info, err := rs.config.Onboarding.Info(c.Request.Context())
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"info": info})
 }
 
 // ResourceConfig        godoc
@@ -155,7 +167,7 @@ func (h OnboardingHandler) OnboardStatus(c *gin.Context) {
 //	@Produce	json
 //	@Success	200	{object}	types.OnboardingConfig
 //	@Router		/onboarding/resource-config [post]
-func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
+func (rs RESTServer) ResourceConfig(c *gin.Context) {
 	if c.Request.ContentLength == 0 {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "request body is empty"})
 		return
@@ -168,7 +180,7 @@ func (h OnboardingHandler) ResourceConfig(c *gin.Context) {
 		return
 	}
 
-	oConfig, err := h.service.ResourceConfig(c.Request.Context(), capacity)
+	oConfig, err := rs.config.Onboarding.ResourceConfig(c.Request.Context(), capacity)
 	if err != nil {
 		switch err {
 		case onboarding.ErrMachineNotOnboarded:

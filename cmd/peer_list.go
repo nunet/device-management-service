@@ -4,29 +4,28 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var (
-	peerListCmd = NewPeerListCmd(utilsService)
-	flagD       bool
-)
-
-func NewPeerListCmd(utilsService backend.Utility) *cobra.Command {
+// NewPeerListCmd is a constructor for `peer list` subcommand
+func newPeerListCmd(client *utils.HTTPClient) *cobra.Command {
+	fnDHT := "dht"
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "Display list of peers in the network",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := checkOnboarded(utilsService)
+			onboarded, err := checkOnboarded(client)
 			if err != nil {
-				return err
+				return fmt.Errorf("could not check onboard status: %w", err)
+			}
+			if !onboarded {
+				return fmt.Errorf("machine is not onboarded")
 			}
 
-			dhtFlag, _ := cmd.Flags().GetBool("dht")
-
-			if !dhtFlag {
-				bootPeer, err := getBootstrapPeers(cmd.OutOrStderr(), utilsService)
+			dht, _ := cmd.Flags().GetBool(fnDHT)
+			if !dht {
+				bootPeer, err := getBootstrapPeers(cmd.OutOrStdout(), client)
 				if err != nil {
 					return fmt.Errorf("could not fetch bootstrap peers: %w", err)
 				}
@@ -39,7 +38,7 @@ func NewPeerListCmd(utilsService backend.Utility) *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "\n")
 			}
 
-			dhtPeer, err := getDHTPeers(utilsService)
+			dhtPeer, err := getDHTPeers(client)
 			if err != nil {
 				return fmt.Errorf("could not fetch DHT peers: %w", err)
 			}
@@ -52,7 +51,6 @@ func NewPeerListCmd(utilsService backend.Utility) *cobra.Command {
 			return nil
 		},
 	}
-
-	cmd.Flags().BoolVarP(&flagD, "dht", "d", false, "list only DHT peers")
+	cmd.Flags().BoolP(fnDHT, "d", false, "list only DHT peers")
 	return cmd
 }

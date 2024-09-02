@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
@@ -19,97 +19,89 @@ const (
 	nvidiaDriverPath = "maint-scripts/install_nvidia_drivers"
 )
 
-var gpuOnboardCmd = &cobra.Command{
-	Use:     "onboard",
-	Short:   "Install GPU drivers and Container Runtime",
-	Long:    ``,
-	PreRunE: isDMSRunning(networkService),
-	Run: func(cmd *cobra.Command, _ []string) {
-		wsl, err := utils.CheckWSL()
-		if err != nil {
-			zlog.Sugar().Errorf("Error checking WSL: %v", err)
-			return
-		}
-
-		mining, err := checkMiningOS()
-		if err != nil {
-			zlog.Sugar().Errorf("Error checking Mining OS: %v", err)
-			return
-		}
-
-		vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
-		if err != nil {
-			zlog.Sugar().Errorf("Error trying to detect GPU(s): %v", err)
-			return
-		}
-
-		hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
-		hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
-		hasIntel := containsVendor(vendors, types.GPUVendorIntel)
-
-		if !hasAMD && !hasNVIDIA && !hasIntel {
-			zlog.Sugar().Error("No NVIDIA/AMD/Intel GPU(s) detected...")
-			return
-		}
-
-		switch {
-		case wsl:
-			zlog.Warn("You are running on Windows Subsystem for Linux (WSL). AMD GPUs are not supported.")
-			if !hasNVIDIA {
-				zlog.Warn("No NVIDIA GPU(s) detected")
-				return
+func newGPUOnboardCmd(afs afero.Afero) *cobra.Command {
+	return &cobra.Command{
+		Use:   "onboard",
+		Short: "Install GPU drivers and Container Runtime",
+		Long:  ``,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			wsl, err := utils.CheckWSL(afs)
+			if err != nil {
+				return fmt.Errorf("could not check WSL: %w", err)
 			}
 
-			if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
-				fmt.Println("Error during Container Runtime installation:", err)
-				return
+			mining, err := checkMiningOS(afs)
+			if err != nil {
+				return fmt.Errorf("couldn't check if Mining OS: %w", err)
 			}
 
-		case mining:
-			zlog.Warn("You are likely running a Mining OS. Skipping driver installation...")
-
-			if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
-				zlog.Sugar().Errorf("Error during Container Runtime installation: %v", err)
-				return
+			// TODO: Define API endpoint for this
+			vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
+			if err != nil {
+				return fmt.Errorf("couldn't check presence of a GPU: %w", err)
 			}
 
-		default:
-			if hasNVIDIA {
-				nvidiaGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorNvidia)
-				if err != nil {
-					fmt.Println("Error while fetching NVIDIA info:", err)
-					return
+			hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
+			hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
+			hasIntel := containsVendor(vendors, types.GPUVendorIntel)
+
+			if !hasAMD && !hasNVIDIA && !hasIntel {
+				return fmt.Errorf("no NVIDIA/AMD/Intel GPU(s) detected")
+			}
+
+			switch {
+			case wsl:
+				fmt.Fprintf(cmd.OutOrStdout(), "You are running on Windows Subsystem for Linux (WSL). AMD GPUs are not supported.")
+
+				if !hasNVIDIA {
+					return fmt.Errorf("no NVIDIA GPU(s) detected")
 				}
-
-				printGPUs(nvidiaGPUs)
 
 				if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
-					zlog.Sugar().Errorf("Error during Container Runtime installation: %v", err)
-					return
+					return fmt.Errorf("couldn't install container runtime: %w", err)
 				}
 
-				if err := promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorNvidia, nvidiaDriverPath); err != nil {
-					zlog.Sugar().Errorf("Error during NVIDIA drivers installation: %v", err)
-					return
+			case mining:
+				fmt.Fprintf(cmd.OutOrStdout(), "You are likely running a Mining OS. Skipping driver installation...")
+
+				if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
+					return fmt.Errorf("couldn't install container runtime: %w", err)
+				}
+
+			default:
+				if hasNVIDIA {
+					nvidiaGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorNvidia)
+					if err != nil {
+						return fmt.Errorf("couldn't fetch Nvidia info: %w", err)
+					}
+
+					printGPUs(nvidiaGPUs)
+
+					if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
+						return fmt.Errorf("couldn't install container runtime: %w", err)
+					}
+
+					if err := promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorNvidia, nvidiaDriverPath); err != nil {
+						return fmt.Errorf("couldn't install Nvidia driver: %w", err)
+					}
+				}
+
+				if hasAMD {
+					AMDGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorAMDATI)
+					if err != nil {
+						return fmt.Errorf("couldn't fetch AMD driver info: %w", err)
+					}
+
+					printGPUs(AMDGPUs)
+
+					if err := promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorAMDATI, amdDriverPath); err != nil {
+						return fmt.Errorf("couldn't install AMD driver: %w", err)
+					}
 				}
 			}
-
-			if hasAMD {
-				AMDGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorAMDATI)
-				if err != nil {
-					zlog.Sugar().Errorf("Error while fetching AMD info: %v", err)
-					return
-				}
-
-				printGPUs(AMDGPUs)
-
-				if err := promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorAMDATI, amdDriverPath); err != nil {
-					zlog.Sugar().Errorf("Error during AMD drivers installation: %v", err)
-					return
-				}
-			}
-		}
-	},
+			return nil
+		},
+	}
 }
 
 // containsVendor takes a slice of GPUVendor structs that were detected in the system
@@ -144,13 +136,13 @@ func runScript(scriptPath string) error {
 func promptContainer(in io.Reader, out io.Writer, containerPath string) error {
 	proceed, err := utils.PromptYesNo(in, out, "Do you want to proceed with Container Runtime installation? (y/N)")
 	if err != nil {
-		return fmt.Errorf("could not read answer from prompt: %v", err)
+		return fmt.Errorf("could not read answer from prompt: %w", err)
 	}
 
 	if proceed {
 		err := runScript(containerPath)
 		if err != nil {
-			return fmt.Errorf("cannot run container runtime installation script: %v", err)
+			return fmt.Errorf("cannot run container runtime installation script: %w", err)
 		}
 	}
 
@@ -164,13 +156,13 @@ func promptDriverInstallation(in io.Reader, out io.Writer, vendor types.GPUVendo
 
 	proceed, err := utils.PromptYesNo(in, out, prompt)
 	if err != nil {
-		return fmt.Errorf("could not read answer from prompt: %v", err)
+		return fmt.Errorf("could not read answer from prompt: %w", err)
 	}
 
 	if proceed {
 		err := runScript(scriptPath)
 		if err != nil {
-			return fmt.Errorf("cannot run driver installation script: %v", err)
+			return fmt.Errorf("cannot run driver installation script: %w", err)
 		}
 	}
 
@@ -198,13 +190,13 @@ func printGPUs(gpus []types.GPU) {
 
 // checkMiningOS detects if host is running a mining OS.
 // It reads from /etc/os-release file and look for common distros inside of it, if any is found it returns true.
-func checkMiningOS() (bool, error) {
+func checkMiningOS(afs afero.Afero) (bool, error) {
 	miningOSes := []string{"Hive", "Rave", "PiMP", "Minerstat", "SimpleMining", "NH", "Miner", "SM", "MMP"}
 	osFile := "/etc/os-release"
 
-	info, err := os.ReadFile(osFile)
+	info, err := afs.ReadFile(osFile)
 	if err != nil {
-		return false, fmt.Errorf("cannot read file %s: %v", osFile, err)
+		return false, fmt.Errorf("cannot read file %s: %w", osFile, err)
 	}
 
 	infoStr := string(info)

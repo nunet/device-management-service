@@ -11,77 +11,97 @@ import (
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 )
 
 var ErrMachineNotOnboarded = errors.New("machine is not onboarded")
 
 type Config struct {
-	Fs             afero.Afero
-	WorkDir        string
-	DatabasePath   string
-	OnboardingRepo repositories.OnboardingParams
-	P2PRepo        repositories.Libp2pInfo
-	AvResourceRepo repositories.AvailableResources
-	UUIDRepo       repositories.MachineUUID
-	Channels       []string // supported channels such as nunet-test and nunet-team
+	Fs              afero.Afero
+	WorkDir         string
+	DatabasePath    string
+	ParamsRepo      repositories.OnboardingParams
+	P2PRepo         repositories.Libp2pInfo
+	ResourceManager resources.Manager
+	AvResourceRepo  repositories.AvailableResources
+	UUIDRepo        repositories.MachineUUID
+	Channels        []string // supported channels such as nunet-test and nunet-team
 }
 
+// NewConfig is a constructor for Config
+func NewConfig(
+	fs afero.Afero,
+	workDir, dbPath string,
+	onboardingRepo repositories.OnboardingParams,
+	p2pRepo repositories.Libp2pInfo,
+	avResourceRepo repositories.AvailableResources,
+	uuidRepo repositories.MachineUUID,
+	channels []string,
+) *Config {
+	return &Config{
+		Fs:             fs,
+		WorkDir:        workDir,
+		DatabasePath:   dbPath,
+		ParamsRepo:     onboardingRepo,
+		P2PRepo:        p2pRepo,
+		AvResourceRepo: avResourceRepo,
+		UUIDRepo:       uuidRepo,
+		Channels:       channels,
+	}
+}
+
+// Onboarding acts a receiver for methods related to onboarding
 type Onboarding struct {
-	config Config
+	Config
 }
 
-func New(config Config) *Onboarding {
-	return &Onboarding{config: config}
+// New is a constructor for Onboarding
+func New(config *Config) *Onboarding {
+	return &Onboarding{Config: *config}
 }
 
 // IsOnboarded checks whether the machine is onboarded or not
 func (o *Onboarding) IsOnboarded(ctx context.Context) (bool, error) {
-	_, err := o.config.OnboardingRepo.Get(ctx)
+	_, err := o.ParamsRepo.Get(ctx)
 	if err != nil {
 		return false, nil
 	}
-	// TODO: validate onbaording params
+	// TODO: validate onboarding params
 	return true, nil
 }
 
-// Status returns onbaording status and any error if encountered
-func (o *Onboarding) Status(ctx context.Context) (*types.OnboardingStatus, error) {
-	onboarded, err := o.IsOnboarded(ctx)
+// Info returns additional info from onboarding
+func (o *Onboarding) Info(ctx context.Context) (*types.OnboardingConfig, error) {
+	info, err := o.ParamsRepo.Get(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("could not check onboard status: %w", err)
+		return nil, err
 	}
-	machine, err := o.config.UUIDRepo.Get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("could not get machine UUID: %w", err)
-	}
-	resp := types.OnboardingStatus{
-		Onboarded:    onboarded,
-		Error:        err,
-		MachineUUID:  machine.UUID,
-		DatabasePath: o.config.WorkDir,
-	}
-	return &resp, nil
+	return &info, err
 }
 
 // Onboard validates the onboarding params and onboards the machine to the network
 // It returns a *types.OnboardingConfig and any error if encountered
-func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNunet) (*types.OnboardingConfig, error) {
+func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNunet) (*types.OnboardingConfig, *libp2p.Libp2p, error) {
 	if err := o.validateOnboardingPrerequisites(capacity); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, fmt.Errorf("unable to get hostname: %v", err)
+		return nil, nil, fmt.Errorf("unable to get hostname: %v", err)
 	}
 
-	provisionedResources, err := resources.ManagerInstance.SystemSpecs().GetProvisionedResources()
+	provisionedResources, err := o.ResourceManager.SystemSpecs().GetProvisionedResources()
 	if err != nil {
-		return nil, fmt.Errorf("cannot get provisioned resources: %w", err)
+		return nil, nil, fmt.Errorf("cannot get provisioned resources: %w", err)
 	}
 
 	var oConf types.OnboardingConfig
@@ -95,12 +115,12 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	oConf.AllowCardano = false
 	if capacity.Cardano {
 		if capacity.Memory < 10000 || capacity.CPU < 6000 {
-			return nil, fmt.Errorf("cardano node requires 10000MB of RAM and 6000MHz CPU")
+			return nil, nil, fmt.Errorf("cardano node requires 10000MB of RAM and 6000MHz CPU")
 		}
 		oConf.AllowCardano = true
 	}
 
-	gpuInfo, err := resources.ManagerInstance.SystemSpecs().GetGPUs()
+	gpuInfo, err := o.ResourceManager.SystemSpecs().GetGPUs()
 	if err != nil {
 		zlog.Sugar().Errorf("unable to detect GPU: %v ", err.Error())
 	}
@@ -113,17 +133,74 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	oConf.PublicKey = capacity.PaymentAddress
 	oConf.NTXPricePerMinute = capacity.NTXPricePerMinute
 
-	savedOConf, err := o.config.OnboardingRepo.Save(context.Background(), oConf)
+	savedConfig, err := o.ParamsRepo.Save(context.Background(), oConf)
 	if err != nil {
-		return nil, fmt.Errorf("could not save onboarding params: %w", err)
+		return nil, nil, fmt.Errorf("could not save onboarding params: %w", err)
 	}
 
 	if err := o.updateAvailableResources(ctx, capacity); err != nil {
-		return nil, fmt.Errorf("failed to update available resources: %w", err)
+		return nil, nil, fmt.Errorf("failed to update available resources: %w", err)
 	}
 
-	// TODO: START NETWORKING AND OTHER WORKERS FOR THE NODE
-	return &savedOConf, errors.New("NOT YET IMPLEMENTED")
+	// initialize libp2p
+	priv, pub, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to generate key pair: %v", err)
+	}
+
+	rawPriv, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to marshal private key: %w", err)
+	}
+
+	rawPub, err := crypto.MarshalPublicKey(pub)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to marshal public key: %w", err)
+	}
+
+	_, err = o.P2PRepo.Save(ctx, types.Libp2pInfo{
+		PrivateKey: rawPriv,
+		PublicKey:  rawPub,
+		ServerMode: capacity.ServerMode,
+		Available:  capacity.IsAvailable,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to save libp2pInfo: %w", err)
+	}
+
+	bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
+	for i, addr := range config.GetConfig().P2P.BootstrapPeers {
+		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
+	}
+
+	cfg := &types.Libp2pConfig{
+		PrivateKey:              priv,
+		BootstrapPeers:          bootstrapPeers,
+		Rendezvous:              "nunet-test",
+		Server:                  false,
+		Scheduler:               backgroundtasks.NewScheduler(10),
+		CustomNamespace:         "/nunet-dht-1/",
+		ListenAddress:           config.GetConfig().ListenAddress,
+		PeerCountDiscoveryLimit: 40,
+		PrivateNetwork: types.PrivateNetworkConfig{
+			WithSwarmKey: false,
+		},
+	}
+
+	p2p, err := libp2p.New(cfg, afero.NewMemMapFs())
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to create libp2p instance: %v", err)
+	}
+
+	if err = p2p.Init(ctx); err != nil {
+		return nil, nil, fmt.Errorf("unable to initialize libp2p: %v", err)
+	}
+
+	if err = p2p.Start(ctx); err != nil {
+		return nil, nil, fmt.Errorf("unable to start libp2p: %v", err)
+	}
+
+	return &savedConfig, p2p, nil
 }
 
 // ResourceConfig allows changing onboarding parameters
@@ -136,20 +213,20 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, ErrMachineNotOnboarded
 	}
 
-	if err := validateCapacityForNunet(capacity); err != nil {
+	if err := o.validateCapacityForNunet(capacity); err != nil {
 		return nil, fmt.Errorf("could not validate capacity data: %w", err)
 	}
 
-	oParams, err := o.config.OnboardingRepo.Get(ctx)
+	params, err := o.ParamsRepo.Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not read onboarding params from db: %w", err)
 	}
 
-	oParams.OnboardedResources.CPU = float64(capacity.CPU)
-	oParams.OnboardedResources.RAM = capacity.Memory
-	oParams.NTXPricePerMinute = capacity.NTXPricePerMinute
+	params.OnboardedResources.CPU = float64(capacity.CPU)
+	params.OnboardedResources.RAM = capacity.Memory
+	params.NTXPricePerMinute = capacity.NTXPricePerMinute
 
-	available, err := o.config.AvResourceRepo.Get(ctx)
+	available, err := o.AvResourceRepo.Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not get available resources info: %w", err)
 	}
@@ -158,20 +235,20 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 	available.RAM = capacity.Memory
 	available.NTXPricePerMinute = capacity.NTXPricePerMinute
 
-	if _, err := o.config.AvResourceRepo.Save(ctx, available); err != nil {
+	if _, err := o.AvResourceRepo.Save(ctx, available); err != nil {
 		return nil, fmt.Errorf("could not save available resources info: %w", err)
 	}
 
-	if _, err := o.config.OnboardingRepo.Save(ctx, oParams); err != nil {
+	if _, err := o.ParamsRepo.Save(ctx, params); err != nil {
 		return nil, fmt.Errorf("could not save onboarding params in db: %w", err)
 	}
 
-	_, err = resources.ManagerInstance.UpdateFreeResources(ctx)
+	_, err = o.ResourceManager.UpdateFreeResources(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not calculate free resources and update database: %w", err)
 	}
 
-	return &oParams, nil
+	return &params, nil
 }
 
 // Offboard deletes all onboarding information if already set
@@ -191,7 +268,7 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 
 	// TODO: shutdown routine to stop networking etc... here
 
-	err = o.config.OnboardingRepo.Clear(ctx)
+	err = o.ParamsRepo.Clear(ctx)
 	if err != nil && !force {
 		return fmt.Errorf("failed to remove onboarding params from db: %w", err)
 	} else if err != nil && force {
@@ -200,7 +277,7 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 	}
 
 	// delete the available resources from database
-	err = o.config.AvResourceRepo.Clear(ctx)
+	err = o.AvResourceRepo.Clear(ctx)
 	if err != nil && !force {
 		return fmt.Errorf("failed to remove reserved resource from db: %w", err)
 	} else if err != nil && force {
@@ -211,8 +288,8 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 	return nil
 }
 
-func validateCapacityForNunet(capacity types.CapacityForNunet) error {
-	provisionedResources, err := resources.ManagerInstance.SystemSpecs().GetProvisionedResources()
+func (o *Onboarding) validateCapacityForNunet(capacity types.CapacityForNunet) error {
+	provisionedResources, err := o.ResourceManager.SystemSpecs().GetProvisionedResources()
 	if err != nil {
 		return fmt.Errorf("could not get provisioned resources: %w", err)
 	}
@@ -230,7 +307,7 @@ func validateCapacityForNunet(capacity types.CapacityForNunet) error {
 }
 
 func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForNunet) error {
-	ok, err := o.config.Fs.DirExists(o.config.WorkDir)
+	ok, err := o.Fs.DirExists(o.WorkDir)
 	if err != nil {
 		return fmt.Errorf("could not check if config directory exists: %w", err)
 	}
@@ -242,11 +319,11 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForN
 		return fmt.Errorf("could not validate payment address: %w", err)
 	}
 
-	if err := validateCapacityForNunet(capacity); err != nil {
+	if err := o.validateCapacityForNunet(capacity); err != nil {
 		return fmt.Errorf("could not validate capacity data: %w", err)
 	}
 
-	if !slices.Contains(o.config.Channels, capacity.Channel) {
+	if !slices.Contains(o.Channels, capacity.Channel) {
 		return fmt.Errorf("invalid channel data: '%s' channel does not exist", capacity.Channel)
 	}
 
@@ -254,12 +331,12 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForN
 }
 
 func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity types.CapacityForNunet) error {
-	totalProvisioned, err := resources.ManagerInstance.SystemSpecs().GetProvisionedResources()
+	totalProvisioned, err := o.ResourceManager.SystemSpecs().GetProvisionedResources()
 	if err != nil {
 		return fmt.Errorf("could not get provisioned resources: %w", err)
 	}
 
-	cpuInfo, err := resources.ManagerInstance.SystemSpecs().GetCPUInfo()
+	cpuInfo, err := o.ResourceManager.SystemSpecs().GetCPUInfo()
 	if err != nil {
 		return fmt.Errorf("could not get CPU info: %w", err)
 	}
@@ -277,12 +354,12 @@ func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity type
 		NTXPricePerMinute: capacity.NTXPricePerMinute,
 	}
 
-	_, err = o.config.AvResourceRepo.Save(ctx, avalRes)
+	_, err = o.AvResourceRepo.Save(ctx, avalRes)
 	if err != nil {
 		return fmt.Errorf("failed to save available resources: %w", err)
 	}
 
-	if _, err := resources.ManagerInstance.UpdateFreeResources(ctx); err != nil {
+	if _, err := o.ResourceManager.UpdateFreeResources(ctx); err != nil {
 		zlog.Sugar().Errorf("could not calculate free resources and update database: %w", err)
 	}
 	return nil

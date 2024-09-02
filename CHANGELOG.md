@@ -21,6 +21,15 @@ Types of changes
 
 -->
 
+## [0.4.185](#541)
+
+### Changed
+- Refactored cmd and api package
+- Included dependency instantiation in dms start up
+- Get db instance returned in addition to global var set until deprecation
+- Fix onboarding
+- Simplify http client and other utilities
+
 ## [0.4.184](#530)
 
 ### Added

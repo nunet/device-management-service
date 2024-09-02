@@ -12,14 +12,16 @@ import (
 	"github.com/swaggo/gin-swagger/swaggerFiles"
 
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
 
 type RESTServerConfig struct {
-	P2p        *libp2p.Libp2p
+	P2P        *libp2p.Libp2p
 	Onboarding *onboarding.Onboarding
 	Logger     *logger.Logger
+	Resource   resources.Manager
 	MidW       []gin.HandlerFunc
 	Port       uint32
 	Addr       string
@@ -28,12 +30,12 @@ type RESTServerConfig struct {
 // RESTServer represents a HTTP server
 type RESTServer struct {
 	router *gin.Engine
-	config RESTServerConfig
+	config *RESTServerConfig
 }
 
 // NewRESTServer is a constructor function for RESTServer
 // It returns a pointer to RESTServer
-func NewRESTServer(config RESTServerConfig) *RESTServer {
+func NewRESTServer(config *RESTServerConfig) *RESTServer {
 	return &RESTServer{
 		router: setupRouter(config.MidW),
 		config: config,
@@ -48,55 +50,56 @@ func setupRouter(mid []gin.HandlerFunc) *gin.Engine {
 }
 
 // InitializeRoutes sets up all the endpoint routes
-func (s *RESTServer) InitializeRoutes() {
-	v1 := s.router.Group("/api/v1")
+func (rs *RESTServer) InitializeRoutes() {
+	v1 := rs.router.Group("/api/v1")
 
-	onboardHandler := NewOnboardingHandler(s.config.Onboarding)
+	// onboardHandler := NewOnboardingHandler(s.config.Onboarding)
 	onboarding := v1.Group("/onboarding")
 	{
-		onboarding.GET("/provisioned", onboardHandler.ProvisionedCapacity)
-		onboarding.GET("/address/new", onboardHandler.CreatePaymentAddress)
-		onboarding.GET("/status", onboardHandler.OnboardStatus)
-		onboarding.POST("/onboard", onboardHandler.Onboard)
-		onboarding.POST("/resource-config", onboardHandler.ResourceConfig)
-		onboarding.DELETE("/offboard", onboardHandler.Offboard)
+		onboarding.GET("/provisioned", rs.ProvisionedCapacity)
+		onboarding.GET("/address/new", rs.CreatePaymentAddress)
+		onboarding.GET("/status", rs.Status)
+		onboarding.GET("/info", rs.Info)
+		onboarding.POST("/onboard", rs.Onboard)
+		onboarding.POST("/resource-config", rs.ResourceConfig)
+		onboarding.DELETE("/offboard", rs.Offboard)
 	}
 
-	deviceHandler := DeviceHandler{}
+	// deviceHandler := DeviceHandler{}
 	device := v1.Group("/device")
 	{
-		device.GET("/status", deviceHandler.DeviceStatus)
-		device.POST("/status", deviceHandler.UpdateDeviceStatus)
+		device.GET("/status", rs.DeviceStatus)
+		device.POST("/status", rs.UpdateDeviceStatus)
 	}
 
-	vmHandler := VMHandler{}
+	// vmHandler := VMHandler{}
 	vm := v1.Group("/vm")
 	{
-		vm.POST("/start-default", vmHandler.StartDefault)
-		vm.POST("/start-custom", vmHandler.StartCustom)
+		vm.POST("/start-default", rs.StartDefault)
+		vm.POST("/start-custom", rs.StartCustom)
 	}
 
-	ph := P2PHandler{p2p: s.config.P2p}
+	// ph := P2PHandler{p2p: rs.config.P2P}
 	p2p := v1.Group("/peers")
 	{
-		p2p.GET("", ph.ListPeers)
-		p2p.GET("/self", ph.SelfPeerInfo)
+		p2p.GET("", rs.ListPeers)
+		p2p.GET("/self", rs.SelfPeerInfo)
 
 		// DEBUGGING ONLY
 		if _, debugMode := os.LookupEnv("NUNET_DEBUG"); debugMode {
-			p2p.GET("/ping", ph.PingPeer)
-			p2p.GET("/dht", ph.KnownPeers)
+			p2p.GET("/ping", rs.PingPeer)
+			p2p.GET("/dht", rs.KnownPeers)
 			// p2p.GET("/dht/dump", ph.DumpDHTHandler)
 		}
 	}
 
 	// Swagger API documentation
-	s.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	rs.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
 
 // Run starts the server on the specified port
-func (s *RESTServer) Run() error {
-	return s.router.Run(fmt.Sprintf("%s:%d", s.config.Addr, s.config.Port))
+func (rs *RESTServer) Run() error {
+	return rs.router.Run(fmt.Sprintf("%s:%d", rs.config.Addr, rs.config.Port))
 }
 
 func getCustomCorsConfig() cors.Config {

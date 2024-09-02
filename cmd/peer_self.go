@@ -1,59 +1,55 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/buger/jsonparser"
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var peerSelfCmd = NewPeerSelfCmd(utilsService)
-
-func NewPeerSelfCmd(utilsService backend.Utility) *cobra.Command {
+// NewPeerSelfCmd is a constructor for `peer self` subcommand
+func newPeerSelfCmd(client *utils.HTTPClient) *cobra.Command {
 	return &cobra.Command{
 		Use:   "self",
 		Short: "Display self peer info",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := checkOnboarded(utilsService)
+			onboarded, err := checkOnboarded(client)
 			if err != nil {
-				return err
+				return fmt.Errorf("could not check onboard status: %w", err)
+			}
+			if !onboarded {
+				return fmt.Errorf("machine is not onboarded")
 			}
 
-			body, err := utilsService.ResponseBody(nil, "GET", "/api/v1/peers/self", "", nil)
+			resBody, resCode, err := client.MakeRequest("GET", "/peers/self", nil)
 			if err != nil {
-				return fmt.Errorf("unable to get response body: %w", err)
+				return fmt.Errorf("unable to make internal request: %w", err)
 			}
 
-			id, err := selfPeerID(body)
-			if err != nil {
-				return fmt.Errorf("failed to fetch self peer ID: %w", err)
+			if resCode != 200 {
+				return fmt.Errorf("request failed with status code: %d", resCode)
 			}
 
-			addrsByte, err := selfPeerAddrs(body)
-			if err != nil {
-				return fmt.Errorf("failed to fetch self peer addresses: %w", err)
+			var response map[string]any
+			if err := json.Unmarshal(resBody, &response); err != nil {
+				return fmt.Errorf("could not unmarshal response body: %w", err)
 			}
 
-			var addrs []string
+			id, ok := response["id"]
+			if !ok {
+				return fmt.Errorf("no self peer ID returned")
+			}
 
-			// iterate through array and append each value to slice
-			_, err = jsonparser.ArrayEach(addrsByte, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
-				addrs = append(addrs, string(value))
-			})
+			addrsByte, _, _, err := jsonparser.Get(resBody, "listen_addr")
 			if err != nil {
-				return fmt.Errorf("failed to itterate through parser: %w", err)
+				return fmt.Errorf("failed to get addresses field: %w", err)
 			}
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Host ID:", id)
-			for index, addr := range addrs {
-				if index+1 == len(addrs) { // if element is the last one
-					fmt.Fprintf(cmd.OutOrStdout(), "%s\n", addr)
-				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s, ", addr)
-				}
-			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Listening Addresses:", string(addrsByte))
 
 			return nil
 		},

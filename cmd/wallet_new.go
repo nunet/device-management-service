@@ -1,45 +1,45 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
+
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var (
-	walletNewCmd     = NewWalletNewCmd(walletService)
-	flagEth, flagAda bool
-)
+// NewWalletNewCmd is a constructor for `wallet new` command
+func newWalletNewCmd(client *utils.HTTPClient) *cobra.Command {
+	fnEth := "ethereum"
+	fnCardano := "cardano"
 
-func NewWalletNewCmd(wallet backend.WalletManager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "new",
 		Short: "Create new wallet",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			eth, _ := cmd.Flags().GetBool("ethereum")
-			ada, _ := cmd.Flags().GetBool("cardano")
+			eth, _ := cmd.Flags().GetBool(fnEth)
 
-			var pair *types.BlockchainAddressPrivKey
-			var err error
+			var (
+				pair  *types.BlockchainAddressPrivKey
+				query string
+			)
 
-			// limit wallet creation to one at a time
-			switch {
-			case ada && eth:
-				return fmt.Errorf("cannot create both wallets")
-			case ada:
-				pair, err = wallet.GetCardanoAddressAndMnemonic()
-			case eth:
-				pair, err = wallet.GetEthereumAddressAndPrivateKey()
-			default:
-				_ = cmd.Help()
-				return fmt.Errorf("no wallet flag specified")
+			if eth {
+				query = "?blockchain=ethereum"
+			}
+			resBody, resCode, err := client.MakeRequest("GET", "/onboarding/address/new"+query, nil)
+			if err != nil {
+				return fmt.Errorf("could not make request: %w", err)
 			}
 
-			// share error handling for both addresses
-			if err != nil {
-				return fmt.Errorf("generate wallet address failed: %w", err)
+			if resCode != 200 {
+				return fmt.Errorf("request failed with status code: %d", resCode)
+			}
+
+			if err := json.Unmarshal(resBody, &pair); err != nil {
+				return fmt.Errorf("could not unmarshal response body: %w", err)
 			}
 
 			printWallet(cmd.OutOrStdout(), pair)
@@ -47,8 +47,10 @@ func NewWalletNewCmd(wallet backend.WalletManager) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&flagEth, "ethereum", "e", false, "create Ethereum wallet")
-	cmd.Flags().BoolVarP(&flagAda, "cardano", "c", false, "create Cardano wallet")
+	cmd.Flags().BoolP(fnEth, "e", false, "create Ethereum wallet")
+	cmd.Flags().BoolP(fnCardano, "c", false, "create Cardano wallet")
+	cmd.MarkFlagsOneRequired(fnEth, fnCardano)
+	cmd.MarkFlagsMutuallyExclusive(fnEth, fnCardano)
 
 	return cmd
 }
