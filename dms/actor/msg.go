@@ -1,0 +1,112 @@
+package actor
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+const (
+	heartbeatBehavior     = "/dms/actor/heartbeat"
+	defaultMessageTimeout = 30 * time.Second
+)
+
+var signaturePrefix = []byte("dms:")
+
+type HeartbeatMessage struct{}
+
+// Message constructs a new message envelope and applies the options
+func Message(src Handle, dest Handle, behavior string, payload interface{}, opt ...MessageOption) (Envelope, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return Envelope{}, fmt.Errorf("marshaling payload: %w", err)
+	}
+
+	msg := Envelope{
+		To:       dest,
+		Behavior: behavior,
+		From:     src,
+		Message:  data,
+		Options: EnvelopeOptions{
+			Expire: uint64(time.Now().Add(defaultMessageTimeout).UnixNano()),
+		},
+	}
+
+	for _, f := range opt {
+		if err := f(&msg); err != nil {
+			return Envelope{}, fmt.Errorf("setting message option: %w", err)
+		}
+	}
+
+	return msg, nil
+}
+
+// WithMessageContext provides the necessary envelope and signs it.
+//
+// NOTE: If this option must be passed last, otherwise the signature will be invalidated by further modifications.
+//
+// NOTE: Signing is implicit in Send.
+func WithMessageSignature(sctx SecurityContext, cap ...Capability) MessageOption {
+	return func(msg *Envelope) error {
+		if !msg.From.ID.Equals(sctx.ID()) {
+			return ErrInvalidSecurityContext
+		}
+
+		msg.Nonce = sctx.Nonce()
+		return sctx.Provide(msg, cap...)
+	}
+}
+
+// WithMessageTimeout sets the message expiration from a relative timeout
+//
+// NOTE: messages created with Message have an implicit timeout of DefaultMessageTimeout
+func WithMessageTimeout(timeo time.Duration) MessageOption {
+	return func(msg *Envelope) error {
+		msg.Options.Expire = uint64(time.Now().Add(timeo).UnixNano())
+		return nil
+	}
+}
+
+// WithMessageExpiry sets the message expiry
+//
+// NOTE: created with Message message have an implicit timeout of DefaultMessageTimeout
+func WithMessageExpiry(expiry uint64) MessageOption {
+	return func(msg *Envelope) error {
+		msg.Options.Expire = expiry
+		return nil
+	}
+}
+
+// WithMessageReplyTo sets the message replyto behavior
+//
+// NOTE: ReplyTo is set implicitly in Invoke and the appropriate capability
+//
+//	tokens are delegated by Provide.
+func WithMessageReplyTo(replyto string) MessageOption {
+	return func(msg *Envelope) error {
+		msg.Options.ReplyTo = replyto
+		return nil
+	}
+}
+
+func (msg *Envelope) signatureData() ([]byte, error) {
+	msgCopy := *msg
+	msgCopy.Signature = nil
+	data, err := json.Marshal(&msgCopy)
+	if err != nil {
+		return nil, fmt.Errorf("signature data: %w", err)
+	}
+
+	result := make([]byte, len(signaturePrefix)+len(data))
+	copy(result, signaturePrefix)
+	copy(result[len(signaturePrefix):], data)
+
+	return result, nil
+}
+
+func (msg *Envelope) Expired() bool {
+	if msg.Options.Expire > 0 {
+		return uint64(time.Now().UnixNano()) > msg.Options.Expire
+	}
+	return false
+}

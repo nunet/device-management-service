@@ -1,0 +1,260 @@
+package actor
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+)
+
+var (
+	DefaultDispatchGCInterval = 120 * time.Second
+	DefaultDispatchWorkers    = 1
+)
+
+// DispatchLimiter implements a (potentially) stateful resource access limiter
+// This is necessary to combat spam attacks and ensure that our system does not
+// become overloaded with too many goroutines.
+type DispatchLimiter interface {
+	Acquire(msg Envelope) error
+	Release(msg Envelope)
+}
+
+// NoDispatchLimiter is the null limiter, that does not rate limit
+type NoDispatchLimiter struct{}
+
+// Dispatch provides a reaction kernel with multithreaded dispatch and oneshot
+// continuations.
+type Dispatch struct {
+	ctx   context.Context
+	close func()
+
+	sctx SecurityContext
+
+	mx        sync.Mutex
+	q         chan Envelope // incoming message queue
+	vq        chan Envelope // verified message queue
+	behaviors map[string]*BehaviorState
+	started   bool
+
+	options DispatchOptions
+}
+
+type DispatchOptions struct {
+	Limiter    DispatchLimiter
+	GCInterval time.Duration
+	Workers    int
+}
+
+type BehaviorState struct {
+	cont Behavior
+	opt  BehaviorOptions
+}
+
+type DispatchOption func(o *DispatchOptions)
+
+func WithDispatchWorkers(count int) DispatchOption {
+	return func(o *DispatchOptions) {
+		o.Workers = count
+	}
+}
+
+func WithDispatchGCInterval(dt time.Duration) DispatchOption {
+	return func(o *DispatchOptions) {
+		o.GCInterval = dt
+	}
+}
+
+func WithDispatchLimiter(limiter DispatchLimiter) DispatchOption {
+	return func(o *DispatchOptions) {
+		o.Limiter = limiter
+	}
+}
+
+func (l NoDispatchLimiter) Acquire(_ Envelope) error { return nil }
+
+func (l NoDispatchLimiter) Release(_ Envelope) {}
+
+func NewDispatch(sctx SecurityContext, opt ...DispatchOption) *Dispatch {
+	ctx, cancel := context.WithCancel(context.Background())
+	k := &Dispatch{
+		sctx:      sctx,
+		ctx:       ctx,
+		close:     cancel,
+		q:         make(chan Envelope),
+		vq:        make(chan Envelope),
+		behaviors: make(map[string]*BehaviorState),
+		options: DispatchOptions{
+			GCInterval: DefaultDispatchGCInterval,
+			Workers:    DefaultDispatchWorkers,
+			Limiter:    NoDispatchLimiter{},
+		},
+	}
+
+	for _, f := range opt {
+		f(&k.options)
+	}
+
+	return k
+}
+
+func (k *Dispatch) Start() {
+	k.mx.Lock()
+	defer k.mx.Unlock()
+
+	if !k.started {
+		for i := 0; i < k.options.Workers; i++ {
+			go k.recv()
+		}
+		go k.dispatch()
+		go k.gc()
+		k.started = true
+	}
+}
+
+func (k *Dispatch) AddBehavior(behavior string, continuation Behavior, opt ...BehaviorOption) error {
+	st := &BehaviorState{
+		cont: continuation,
+		opt: BehaviorOptions{
+			Capability: []Capability{Capability(behavior)},
+		},
+	}
+
+	for _, f := range opt {
+		if err := f(&st.opt); err != nil {
+			return fmt.Errorf("adding behavior: %w", err)
+		}
+	}
+
+	k.mx.Lock()
+	defer k.mx.Unlock()
+	k.behaviors[behavior] = st
+
+	return nil
+}
+
+func (k *Dispatch) RemoveBehavior(behavior string) {
+	k.mx.Lock()
+	defer k.mx.Unlock()
+
+	delete(k.behaviors, behavior)
+}
+
+func (k *Dispatch) Receive(msg Envelope) error {
+	select {
+	case k.q <- msg:
+		return nil
+	case <-k.ctx.Done():
+		return k.ctx.Err()
+	}
+}
+
+func (k *Dispatch) Context() context.Context {
+	return k.ctx
+}
+
+func (k *Dispatch) recv() {
+	for {
+		select {
+		case msg := <-k.q:
+			if err := k.sctx.Verify(msg); err != nil {
+				// TODO log debug
+				fmt.Println("vefieid failed", err.Error())
+				return
+			}
+
+			k.vq <- msg
+		case <-k.ctx.Done():
+			return
+		}
+	}
+}
+
+func (k *Dispatch) dispatch() {
+	for {
+		select {
+		case msg := <-k.vq:
+			k.mx.Lock()
+			b, ok := k.behaviors[msg.Behavior]
+
+			if !ok {
+				// TODO log debug
+				k.mx.Unlock()
+				continue
+			}
+
+			if b.Expired(time.Now()) {
+				delete(k.behaviors, msg.Behavior)
+				// TODO log debug
+				k.mx.Unlock()
+				continue
+			}
+
+			if err := k.sctx.Require(msg, b.opt.Capability...); err != nil {
+				// TODO log warn
+				k.mx.Unlock()
+				continue
+			}
+
+			if b.opt.OneShot {
+				delete(k.behaviors, msg.Behavior)
+			}
+			k.mx.Unlock()
+
+			if err := k.options.Limiter.Acquire(msg); err != nil {
+				// TODO log warn
+				continue
+			}
+
+			go func() {
+				defer k.options.Limiter.Release(msg)
+				b.cont(msg)
+			}()
+
+		case <-k.ctx.Done():
+			return
+		}
+	}
+}
+
+func (k *Dispatch) gc() {
+	ticker := time.NewTicker(k.options.GCInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			k.mx.Lock()
+			now := time.Now()
+			for x, b := range k.behaviors {
+				if b.Expired(now) {
+					delete(k.behaviors, x)
+				}
+			}
+			k.mx.Unlock()
+		case <-k.ctx.Done():
+			return
+		}
+	}
+}
+
+func (b *BehaviorState) Expired(now time.Time) bool {
+	if b.opt.Expire > 0 {
+		return uint64(now.UnixNano()) > b.opt.Expire
+	}
+	return false
+}
+
+func WithBehaviorExpiry(expire uint64) BehaviorOption {
+	return func(opt *BehaviorOptions) error {
+		opt.Expire = expire
+		return nil
+	}
+}
+
+func WithBehaviorCapability(cap ...Capability) BehaviorOption {
+	return func(opt *BehaviorOptions) error {
+		opt.Capability = cap
+		return nil
+	}
+}

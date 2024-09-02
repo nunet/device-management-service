@@ -14,6 +14,8 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+// TODO this file will be removed in favor of actor package
+
 // Actor defines the functionalities of actor.
 type Actor interface {
 	// Address of actor.

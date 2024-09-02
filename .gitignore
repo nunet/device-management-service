@@ -19,3 +19,6 @@ docker-compose.yml
 
 # others
 .aider*
+
+# emacs
+*~

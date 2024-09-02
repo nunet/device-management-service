@@ -1,0 +1,54 @@
+package actor
+
+import (
+	"crypto/rand"
+	"fmt"
+
+	"github.com/libp2p/go-libp2p/core/crypto"
+)
+
+const KeyTypeEd25519 = crypto.Ed25519
+
+type Key = crypto.Key
+
+type PrivKey = crypto.PrivKey
+
+type PubKey = crypto.PubKey
+
+func GenerateKeyPair(t int) (PrivKey, PubKey, error) {
+	switch t {
+	case KeyTypeEd25519:
+		return crypto.GenerateEd25519Key(rand.Reader)
+	default:
+		return nil, nil, fmt.Errorf("unsupported key type %d: %w", t, ErrUnsupportedKeyType)
+	}
+}
+
+func PublicKeyToBytes(k PubKey) ([]byte, error) {
+	return crypto.MarshalPublicKey(k)
+}
+
+func BytesToPublicKey(data []byte) (PubKey, error) {
+	return crypto.UnmarshalPublicKey(data)
+}
+
+func PrivateKeyToBytes(k PrivKey) ([]byte, error) {
+	return crypto.MarshalPrivateKey(k)
+}
+
+func BytesToPrivateKey(data []byte) (PrivKey, error) {
+	return crypto.UnmarshalPrivateKey(data)
+}
+
+func IDFromPublicKey(k PubKey) (ID, error) {
+	data, err := PublicKeyToBytes(k)
+	if err != nil {
+		return ID{}, fmt.Errorf("id from public key: %w", err)
+	}
+
+	return ID{PublicKey: data}, nil
+}
+
+func PublicKeyFromID(id ID) (PubKey, error) {
+	return BytesToPublicKey(id.PublicKey)
+}

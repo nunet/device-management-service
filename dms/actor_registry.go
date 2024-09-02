@@ -1,5 +1,7 @@
 package dms
 
+// TODO this file will be removed in favor of actor package
+
 // ActorRegistry represents an actor registry.
 type ActorRegistry struct {
 	actors map[string]*actorInfo
