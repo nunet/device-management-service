@@ -1,10 +1,11 @@
 package config
 
 type Config struct {
-	General `mapstructure:"general"`
-	Rest    `mapstructure:"rest"`
-	P2P     `mapstructure:"p2p"`
-	Job     `mapstructure:"job"`
+	General   `mapstructure:"general"`
+	Rest      `mapstructure:"rest"`
+	P2P       `mapstructure:"p2p"`
+	Job       `mapstructure:"job"`
+	Telemetry `mapstructure:"telemetry"`
 }
 
 type General struct {
@@ -27,4 +28,11 @@ type Job struct {
 	LogUpdateInterval int    `mapstructure:"log_update_interval"` // in minutes
 	TargetPeer        string `mapstructure:"target_peer"`         // specific peer to send deployment requests to - XXX probably not a good idea. Remove after testing stage.
 	CleanupInterval   int    `mapstructure:"cleanup_interval"`    // docker container and images clean up interval in days
+}
+
+type Telemetry struct {
+	ServiceName        string `mapstructure:"service_name"`
+	GlobalEndpoint     string `mapstructure:"global_endpoint"`
+	ObservabilityLevel string `mapstructure:"observability_level"`
+	TelemetryMode      string `mapstructure:"telemetry_mode"`
 }

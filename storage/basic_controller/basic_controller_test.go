@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -25,8 +26,10 @@ func TestVolumeControllerTestSuite(t *testing.T) {
 }
 
 func (s *VolumeControllerTestSuite) SetupTest() {
-	basePath := "/home/.nunet/volumes/"
+	// Initialize telemetry in test mode, replacing the global st
+	st = telemetry.NewTelemetry(nil, nil, true)
 
+	basePath := "/home/.nunet/volumes/"
 	volumes := map[string]*types.StorageVolume{
 		"volume1": {
 			Path:           basePath + "volume1",
