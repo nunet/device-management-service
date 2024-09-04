@@ -1,4 +1,4 @@
-package actor
+package crypto
 
 import (
 	"crypto/rand"
@@ -7,17 +7,17 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
 
-const KeyTypeEd25519 = crypto.Ed25519
+const Ed25519 = crypto.Ed25519
 
-type Key = crypto.Key
-
-type PrivKey = crypto.PrivKey
-
-type PubKey = crypto.PubKey
+type (
+	Key     = crypto.Key
+	PrivKey crypto.PrivKey
+	PubKey  = crypto.PubKey
+)
 
 func GenerateKeyPair(t int) (PrivKey, PubKey, error) {
 	switch t {
-	case KeyTypeEd25519:
+	case Ed25519:
 		return crypto.GenerateEd25519Key(rand.Reader)
 	default:
 		return nil, nil, fmt.Errorf("unsupported key type %d: %w", t, ErrUnsupportedKeyType)

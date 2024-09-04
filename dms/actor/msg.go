@@ -11,7 +11,7 @@ const (
 	defaultMessageTimeout = 30 * time.Second
 )
 
-var signaturePrefix = []byte("dms:")
+var signaturePrefix = []byte("dms:msg:")
 
 type HeartbeatMessage struct{}
 
@@ -28,8 +28,10 @@ func Message(src Handle, dest Handle, behavior string, payload interface{}, opt 
 		From:     src,
 		Message:  data,
 		Options: EnvelopeOptions{
+			// nolint
 			Expire: uint64(time.Now().Add(defaultMessageTimeout).UnixNano()),
 		},
+		Discard: func() {},
 	}
 
 	for _, f := range opt {
@@ -46,14 +48,14 @@ func Message(src Handle, dest Handle, behavior string, payload interface{}, opt 
 // NOTE: If this option must be passed last, otherwise the signature will be invalidated by further modifications.
 //
 // NOTE: Signing is implicit in Send.
-func WithMessageSignature(sctx SecurityContext, cap ...Capability) MessageOption {
+func WithMessageSignature(sctx SecurityContext, cap []Capability, delegate []Capability) MessageOption {
 	return func(msg *Envelope) error {
-		if !msg.From.ID.Equals(sctx.ID()) {
+		if !msg.From.ID.Equal(sctx.ID()) {
 			return ErrInvalidSecurityContext
 		}
 
 		msg.Nonce = sctx.Nonce()
-		return sctx.Provide(msg, cap...)
+		return sctx.Provide(msg, cap, delegate)
 	}
 }
 
@@ -89,7 +91,7 @@ func WithMessageReplyTo(replyto string) MessageOption {
 	}
 }
 
-func (msg *Envelope) signatureData() ([]byte, error) {
+func (msg *Envelope) SignatureData() ([]byte, error) {
 	msgCopy := *msg
 	msgCopy.Signature = nil
 	data, err := json.Marshal(&msgCopy)
@@ -105,8 +107,12 @@ func (msg *Envelope) signatureData() ([]byte, error) {
 }
 
 func (msg *Envelope) Expired() bool {
-	if msg.Options.Expire > 0 {
-		return uint64(time.Now().UnixNano()) > msg.Options.Expire
-	}
-	return false
+	return uint64(time.Now().UnixNano()) > msg.Options.Expire
+}
+
+// convert the expiration to a time.Time object
+func (msg *Envelope) Expiry() time.Time {
+	sec := msg.Options.Expire / uint64(time.Second)
+	nsec := msg.Options.Expire % uint64(time.Second)
+	return time.Unix(int64(sec), int64(nsec)) //nolint
 }

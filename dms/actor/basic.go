@@ -116,7 +116,7 @@ func (a *BasicActor) handleMessage(data []byte) {
 		return
 	}
 
-	if !a.self.ID.Equals(msg.To.ID) {
+	if !a.self.ID.Equal(msg.To.ID) {
 		// TODO log warn
 		return
 	}
@@ -125,12 +125,7 @@ func (a *BasicActor) handleMessage(data []byte) {
 }
 
 func (a *BasicActor) handleHeartbeat(_ Envelope) {
-	// Note: we don't need a capability token for heartbeats, we verify
-	//       that the origin is one of our children or supervised actors.
-
-	// TODO check that the heartbeat origin is one of our children or supervised
-	//      actors.
-	// TODO handle heartbeat statistics
+	// TODO
 }
 
 func (a *BasicActor) sendHeartbeat(parent Handle) error {
@@ -168,7 +163,7 @@ func (a *BasicActor) RemoveBehavior(behavior string) {
 }
 
 func (a *BasicActor) Receive(msg Envelope) error {
-	if !a.self.ID.Equals(msg.To.ID) {
+	if !a.self.ID.Equal(msg.To.ID) {
 		return fmt.Errorf("bad receiver: %w", ErrInvalidMessage)
 	}
 
@@ -176,7 +171,7 @@ func (a *BasicActor) Receive(msg Envelope) error {
 }
 
 func (a *BasicActor) Send(msg Envelope) error {
-	if msg.To.ID.Equals(a.self.ID) {
+	if msg.To.ID.Equal(a.self.ID) {
 		return a.Receive(msg)
 	}
 
@@ -185,8 +180,13 @@ func (a *BasicActor) Send(msg Envelope) error {
 			msg.Nonce = a.security.Nonce()
 		}
 
-		if err := a.security.Provide(&msg); err != nil {
-			return fmt.Errorf("providing implicit behavior capability for %s: %w", msg.Behavior, err)
+		invoke := []Capability{Capability(msg.Behavior)}
+		var delegate []Capability
+		if msg.Options.ReplyTo != "" {
+			delegate = append(delegate, Capability(msg.Options.ReplyTo))
+		}
+		if err := a.security.Provide(&msg, invoke, delegate); err != nil {
+			return fmt.Errorf("providing behavior capability for %s: %w", msg.Behavior, err)
 		}
 	}
 
@@ -226,7 +226,10 @@ func (a *BasicActor) Invoke(msg Envelope, opt ...BehaviorOption) (<-chan Envelop
 
 	result := make(chan Envelope, 1)
 
-	opt = append([]BehaviorOption{WithBehaviorExpiry(msg.Options.Expire)}, opt...)
+	opt = append([]BehaviorOption{
+		WithBehaviorExpiry(msg.Options.Expire),
+		WithBehaviorOneShot(true),
+	}, opt...)
 	if err := a.dispatch.AddBehavior(
 		msg.Options.ReplyTo,
 		func(reply Envelope) {
