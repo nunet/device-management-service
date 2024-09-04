@@ -45,6 +45,11 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("job.target_peer", "")
 	v.SetDefault("job.cleanup_interval", 3)
 
+	v.SetDefault("telemetry.service_name", "NunetDMS")
+	v.SetDefault("telemetry.global_endpoint", "otel-collector.telemetry.nunet.io:4318")
+	v.SetDefault("telemetry.observability_level", "INFO")
+	v.SetDefault("telemetry.telemetry_mode", "production")
+
 	return v
 }
 
@@ -60,11 +65,13 @@ func LoadConfig() {
 	config, err := findConfig(paths, configFile)
 	if err != nil {
 		_ = setDefaultConfig().Unmarshal(&cfg)
+		return
 	}
 
 	modifiedConfig := removeComments(config)
-	if err = v.ReadConfig(bytes.NewBuffer(modifiedConfig)); err != nil { // Viper only reads buffer, keeping comments in original config
+	if err = v.ReadConfig(bytes.NewBuffer(modifiedConfig)); err != nil {
 		_ = setDefaultConfig().Unmarshal(&cfg)
+		return
 	}
 
 	if err = v.Unmarshal(&cfg); err != nil {

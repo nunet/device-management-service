@@ -22,8 +22,13 @@ import (
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
 func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinationSpecs *types.SpecConfig) error {
+	ctx, cancel := st.SpanContext(ctx, "s3", "s3_upload_duration", "opentelemetry", "log")
+	defer cancel()
+
 	target, err := DecodeInputSpec(destinationSpecs)
 	if err != nil {
+		ctx = context.WithValue(ctx, errorKey, err.Error())
+		st.Error(ctx, "s3_upload_decode_spec_failure", nil)
 		return fmt.Errorf("failed to decode input spec: %v", err)
 	}
 
@@ -38,6 +43,8 @@ func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinati
 	zlog.Sugar().Debugf("Uploading files from %s to s3://%s/%s", vol.Path, target.Bucket, sanitizedKey)
 	err = afero.Walk(fs, vol.Path, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
+			ctx = context.WithValue(ctx, errorKey, err.Error())
+			st.Error(ctx, "s3_upload_walk_failure", nil)
 			return err
 		}
 
@@ -48,6 +55,8 @@ func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinati
 
 		relPath, err := filepath.Rel(vol.Path, filePath)
 		if err != nil {
+			ctx = context.WithValue(ctx, errorKey, err.Error())
+			st.Error(ctx, "s3_upload_relative_path_failure", nil)
 			return fmt.Errorf("failed to get relative path: %v", err)
 		}
 
@@ -56,9 +65,15 @@ func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinati
 
 		file, err := fs.Open(filePath)
 		if err != nil {
+			ctx = context.WithValue(ctx, errorKey, err.Error())
+			st.Error(ctx, "s3_upload_open_file_failure", nil)
 			return fmt.Errorf("failed to open file: %v", err)
 		}
 		defer file.Close()
+
+		// Add file path and S3 key to context
+		ctx = context.WithValue(ctx, FilePathKey, filePath)
+		ctx = context.WithValue(ctx, S3KeyKey, s3Key)
 
 		zlog.Sugar().Debugf("Uploading %s to s3://%s/%s", filePath, target.Bucket, s3Key)
 		_, err = s.uploader.Upload(ctx, &s3.PutObjectInput{
@@ -67,14 +82,20 @@ func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinati
 			Body:   file,
 		})
 		if err != nil {
+			ctx = context.WithValue(ctx, errorKey, err.Error())
+			st.Error(ctx, "s3_upload_put_object_failure", nil)
 			return fmt.Errorf("failed to upload file to S3: %v", err)
 		}
 
+		st.Info(ctx, "s3_upload_file_success", nil)
 		return nil
 	})
 	if err != nil {
+		ctx = context.WithValue(ctx, errorKey, err.Error())
+		st.Error(ctx, "s3_upload_failure", nil)
 		return fmt.Errorf("upload failed. It's possible that some files were uploaded; Error: %v", err)
 	}
 
+	st.Info(ctx, "s3_upload_success", nil)
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/afero"
 
 	rclover "gitlab.com/nunet/device-management-service/db/repositories/clover"
+	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -24,6 +25,13 @@ type VolControllerTestSuiteHelper struct {
 // SetupVolControllerTestSuite sets up a volume controller with 0-n volumes given a base path.
 // If volumes are inputed, directories will be created and volumes will be stored in the database
 func SetupVolControllerTestSuite(t *testing.T, basePath string, volumes map[string]*types.StorageVolume) (*VolControllerTestSuiteHelper, error) {
+	// Initialize telemetry in test mode, replacing the global st
+	// It's initiated here too, besides on basic_controller_test.go, because
+	// s3 tests depend on basicController (which in turn depends on telemetry instantiation).
+	// S3 are calling this SetupVolControllerTestSuite, so it's one way to initialize telemetry
+	// for basic controller
+	st = telemetry.NewTelemetry(nil, nil, true)
+
 	tempDir, err := os.MkdirTemp("", "clover-test-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)

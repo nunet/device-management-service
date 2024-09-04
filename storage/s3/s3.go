@@ -29,22 +29,36 @@ type s3Object struct {
 // NewClient creates a new S3Storage which includes a S3-SDK client.
 // It depends on a VolumeController to manage the volumes being acted upon.
 func NewClient(config aws.Config, volController storage.VolumeController) (*Storage, error) {
+	ctx, cancel := st.SpanContext(context.Background(), "s3", "new_client_duration", "opentelemetry", "log")
+	defer cancel()
+
 	if !hasValidCredentials(config) {
-		return nil, fmt.Errorf("invalid credentials")
+		err := fmt.Errorf("invalid credentials")
+		ctx = context.WithValue(ctx, errorKey, err.Error())
+		st.Error(ctx, "new_client_invalid_credentials", nil)
+		return nil, err
 	}
 
 	s3Client := s3.NewFromConfig(config)
-	return &Storage{
+	storage := &Storage{
 		s3Client,
 		volController,
 		s3Manager.NewDownloader(s3Client),
 		s3Manager.NewUploader(s3Client),
-	}, nil
+	}
+
+	st.Info(ctx, "new_client_success", nil)
+	return storage, nil
 }
 
 func (s *Storage) Size(ctx context.Context, source *types.SpecConfig) (uint64, error) {
+	ctx, cancel := st.SpanContext(ctx, "s3", "s3_size_duration", "opentelemetry", "log")
+	defer cancel()
+
 	inputSource, err := DecodeInputSpec(source)
 	if err != nil {
+		ctx = context.WithValue(ctx, errorKey, err.Error())
+		st.Error(ctx, "s3_size_decode_input_spec_failure", nil)
 		return 0, fmt.Errorf("failed to decode input spec: %v", err)
 	}
 
@@ -55,9 +69,12 @@ func (s *Storage) Size(ctx context.Context, source *types.SpecConfig) (uint64, e
 
 	output, err := s.HeadObject(ctx, input)
 	if err != nil {
+		ctx = context.WithValue(ctx, errorKey, err.Error())
+		st.Error(ctx, "s3_size_head_object_failure", nil)
 		return 0, fmt.Errorf("failed to get object size: %v", err)
 	}
 
+	st.Info(ctx, "s3_size_success", nil)
 	return uint64(*output.ContentLength), nil
 }
 

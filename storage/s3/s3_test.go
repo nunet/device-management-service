@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	basiccontroller "gitlab.com/nunet/device-management-service/storage/basic_controller"
+	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -55,6 +56,9 @@ type S3ProviderTestSuite struct {
 
 // SetupTest is mainly setting up a volume controller based on its test suite and a S3 client.
 func (s *S3ProviderTestSuite) SetupTest() {
+	// Initialize telemetry in test mode, replacing the global st
+	st = telemetry.NewTelemetry(nil, nil, true)
+
 	volumes := map[string]*types.StorageVolume{
 		"volume1": {
 			Path:           filepath.Join(basePath, "volume1"),
