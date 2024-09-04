@@ -2,46 +2,49 @@ package actor
 
 import (
 	"context"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-// ActorID is the encoding of the actor's public key
-type ID struct{ PublicKey []byte }
-
-// ActorDID is the actor's unique distributed identifier
-type DID struct{ PublicKey []byte }
-
-// ActorCapability is a capability identifier
-type Capability string
+type (
+	ID         = crypto.ID
+	DID        = did.DID
+	Capability = ucan.Capability
+)
 
 // ActorHandle is a handle for naming an actor reachable in the network
 type Handle struct {
-	ID      ID
-	DID     DID
-	Address Address
+	ID      ID      `json:"id"`
+	DID     DID     `json:"did"`
+	Address Address `json:"addr"`
 }
 
 // ActorAddress is a raw actor address representation
 type Address struct {
-	HostID       string
-	InboxAddress string
+	HostID       string `json:"host"`
+	InboxAddress string `json:"inbox"`
 }
 
 // Envelope is the envelope for messages in the actor system
 type Envelope struct {
-	To         Handle
-	Behavior   string
-	From       Handle
-	Nonce      uint64
-	Options    EnvelopeOptions
-	Message    []byte
-	Capability []byte
-	Signature  []byte
+	To         Handle          `json:"to"`
+	Behavior   string          `json:"be"`
+	From       Handle          `json:"from"`
+	Nonce      uint64          `json:"nonce"`
+	Options    EnvelopeOptions `json:"opt"`
+	Message    []byte          `json:"msg"`
+	Capability []byte          `json:"cap,omitempty"`
+	Signature  []byte          `json:"sig"`
+
+	Discard func() `json:"-"`
 }
 
 // EnvelopeOptions are sender specified options for processing an envelope
 type EnvelopeOptions struct {
-	Expire  uint64
-	ReplyTo string
+	Expire  uint64 `json:"exp"`
+	ReplyTo string `json:"cont,omitempty"`
 }
 
 // Actor is the local interface to the actor system
@@ -77,15 +80,18 @@ type SecurityContext interface {
 	// - the signature is valid
 	// - the capability token(s) in the envelope grants the origin actor ID/DID
 	//   any of the specified capabilities.
-	Require(msg Envelope, cap ...Capability) error
+	Require(msg Envelope, cap []Capability) error
 	// Provide populates the envelope with necessary capability tokens and signs it.
 	// the envelope is modified in place
-	Provide(msg *Envelope, cap ...Capability) error
+	Provide(msg *Envelope, cap []Capability, delegate []Capability) error
 
 	// Verify verifies the message signature in an envelope
 	Verify(msg Envelope) error
 	// Sign signs an envelope; the envelope is modified in place.
 	Sign(msg *Envelope) error
+
+	// Disparcrd discards unwanted tokens from a consumed envelope
+	Discard(msg Envelope)
 }
 
 type Behavior func(msg Envelope)

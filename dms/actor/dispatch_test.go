@@ -4,9 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
 func TestNewDispatch(t *testing.T) {
@@ -49,7 +51,7 @@ func TestDispatchReceive(t *testing.T) {
 		behaviorExecuted <- true
 	}
 
-	err := d.AddBehavior("test", behavior)
+	err := d.AddBehavior("/test/1", behavior)
 	assert.NoError(t, err)
 
 	me := Handle{
@@ -61,7 +63,7 @@ func TestDispatchReceive(t *testing.T) {
 		},
 	}
 
-	msg, err := Message(me, me, "test", nil, WithMessageSignature(sc))
+	msg, err := Message(me, me, "/test/1", nil, WithMessageSignature(sc, []ucan.Capability{ucan.Capability("/test/1")}, nil))
 	assert.NoError(t, err)
 
 	err = d.Receive(msg)
@@ -88,11 +90,14 @@ func TestDispatchGC(t *testing.T) {
 }
 
 func generateSecurityContext(t *testing.T) *BasicSecurityContext {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
+	priv, pub, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	assert.NoError(t, err)
-	pubKeyBytes, err := priv.GetPublic().Raw()
-	assert.NoError(t, err)
-	sc, err := NewBasicSecurityContext(priv.GetPublic(), priv, DID{PublicKey: pubKeyBytes})
+
+	rootDID, rootTrust := makeRootTrustContext(t)
+	actorDID, actorTrust := makeRootTrustContext(t)
+	actorCap := makeCapabilityContext(t, actorDID, rootDID, actorTrust, rootTrust)
+
+	sc, err := NewBasicSecurityContext(pub, priv, actorCap)
 	assert.NoError(t, err)
 	return sc
 }

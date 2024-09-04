@@ -251,6 +251,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.6 // indirect
 	github.com/aws/smithy-go v1.20.2 // indirect
+	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
@@ -272,8 +273,11 @@ require (
 	github.com/google/orderedcode v0.0.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/libp2p/go-libp2p-core v0.7.0 // indirect
 	github.com/libp2p/go-libp2p-routing-helpers v0.7.2 // indirect
+	github.com/libp2p/go-openssl v0.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.11 // indirect
@@ -293,7 +297,9 @@ require (
 	github.com/pion/webrtc/v3 v3.2.40 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
+	github.com/spacemonkeygo/spacelog v0.0.0-20180420211403-2296661a0572 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/ucan-wg/go-ucan v0.0.0-20240801013346-bc81dedafce7 // indirect
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5 // indirect
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	github.com/vmihailenco/msgpack/v5 v5.3.5 // indirect

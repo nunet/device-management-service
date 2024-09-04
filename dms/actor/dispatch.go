@@ -158,8 +158,7 @@ func (k *Dispatch) recv() {
 		select {
 		case msg := <-k.q:
 			if err := k.sctx.Verify(msg); err != nil {
-				// TODO log debug
-				fmt.Println("vefieid failed", err.Error())
+				log.Debugf("failed to verify message from %s: %s", msg.From.ID, err)
 				return
 			}
 
@@ -178,21 +177,21 @@ func (k *Dispatch) dispatch() {
 			b, ok := k.behaviors[msg.Behavior]
 
 			if !ok {
-				// TODO log debug
 				k.mx.Unlock()
+				log.Debugf("unknown behavior %s", msg.Behavior)
 				continue
 			}
 
 			if b.Expired(time.Now()) {
 				delete(k.behaviors, msg.Behavior)
-				// TODO log debug
 				k.mx.Unlock()
+				log.Debugf("expired behavior %s", msg.Behavior)
 				continue
 			}
 
-			if err := k.sctx.Require(msg, b.opt.Capability...); err != nil {
-				// TODO log warn
+			if err := k.sctx.Require(msg, b.opt.Capability); err != nil {
 				k.mx.Unlock()
+				log.Warnf("message from %s does not have the required capability %s: %s", msg.From.ID, b.opt.Capability, err)
 				continue
 			}
 
@@ -202,8 +201,13 @@ func (k *Dispatch) dispatch() {
 			k.mx.Unlock()
 
 			if err := k.options.Limiter.Acquire(msg); err != nil {
-				// TODO log warn
+				k.sctx.Discard(msg)
+				log.Debugf("limiter rejected message from %s: %s", msg.From.ID, err)
 				continue
+			}
+
+			msg.Discard = func() {
+				k.sctx.Discard(msg)
 			}
 
 			go func() {
@@ -255,6 +259,13 @@ func WithBehaviorExpiry(expire uint64) BehaviorOption {
 func WithBehaviorCapability(cap ...Capability) BehaviorOption {
 	return func(opt *BehaviorOptions) error {
 		opt.Capability = cap
+		return nil
+	}
+}
+
+func WithBehaviorOneShot(oneShot bool) BehaviorOption {
+	return func(opt *BehaviorOptions) error {
+		opt.OneShot = oneShot
 		return nil
 	}
 }

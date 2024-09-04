@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
 type BasicSecurityContext struct {
 	id    ID
-	did   DID
-	privk PrivKey
+	privk crypto.PrivKey
+
+	cap ucan.CapabilityContext
 
 	mx    sync.Mutex
 	nonce uint64
@@ -17,15 +21,15 @@ type BasicSecurityContext struct {
 
 var _ SecurityContext = (*BasicSecurityContext)(nil)
 
-func NewBasicSecurityContext(pubk PubKey, privk PrivKey, did DID) (*BasicSecurityContext, error) {
+func NewBasicSecurityContext(pubk crypto.PubKey, privk crypto.PrivKey, cap ucan.CapabilityContext) (*BasicSecurityContext, error) {
 	sctx := &BasicSecurityContext{
-		did:   did,
 		privk: privk,
+		cap:   cap,
 		nonce: uint64(time.Now().UnixNano()),
 	}
 
 	var err error
-	sctx.id, err = IDFromPublicKey(pubk)
+	sctx.id, err = crypto.IDFromPublicKey(pubk)
 	if err != nil {
 		return nil, fmt.Errorf("creating security context: %w", err)
 	}
@@ -38,7 +42,7 @@ func (s *BasicSecurityContext) ID() ID {
 }
 
 func (s *BasicSecurityContext) DID() DID {
-	return s.did
+	return s.cap.DID()
 }
 
 func (s *BasicSecurityContext) Nonce() uint64 {
@@ -51,17 +55,38 @@ func (s *BasicSecurityContext) Nonce() uint64 {
 	return nonce
 }
 
-func (s *BasicSecurityContext) Require(_ Envelope, _ ...Capability) error {
-	//
-	// TODO check capability tokens for required capabilities
-	//      we do nothing for now, will be implemented in follow up
+func (s *BasicSecurityContext) Require(msg Envelope, cap []Capability) error {
+	// if we are sending to self, nothing to do, signature is alredady verified
+	if s.id.Equal(msg.From.ID) && s.id.Equal(msg.To.ID) {
+		return nil
+	}
+
+	// first consume the capability tokens in the envelope
+	if err := s.cap.Consume(msg.From.DID, msg.Capability); err != nil {
+		return fmt.Errorf("consuming capabilities: %w", err)
+	}
+
+	// check if any of the requested invocation capabilities are delegated
+	if err := s.cap.Require(s.DID(), msg.From.ID, s.id, cap); err != nil {
+		s.cap.Discard(msg.Capability)
+		return fmt.Errorf("requiring capabilities: %w", err)
+	}
 
 	return nil
 }
 
-func (s *BasicSecurityContext) Provide(msg *Envelope, _ ...Capability) error {
-	// TODO provide capability tokes for the required capabilities
-	//      we do nothing for now, will be implemented in follow up
+func (s *BasicSecurityContext) Provide(msg *Envelope, cap []Capability, delegate []Capability) error {
+	// if we are sending to self, nothing to do, just Sign
+	if s.id.Equal(msg.From.ID) && s.id.Equal(msg.To.ID) {
+		return s.Sign(msg)
+	}
+
+	tokens, err := s.cap.Provide(msg.To.DID, s.id, msg.To.ID, msg.Options.Expire, cap, delegate)
+	if err != nil {
+		return fmt.Errorf("providing capabilities: %w", err)
+	}
+
+	msg.Capability = tokens
 
 	return s.Sign(msg)
 }
@@ -71,12 +96,12 @@ func (s *BasicSecurityContext) Verify(msg Envelope) error {
 		return ErrMessageExpired
 	}
 
-	pubk, err := PublicKeyFromID(msg.From.ID)
+	pubk, err := crypto.PublicKeyFromID(msg.From.ID)
 	if err != nil {
 		return fmt.Errorf("public key from id: %w", err)
 	}
 
-	data, err := msg.signatureData()
+	data, err := msg.SignatureData()
 	if err != nil {
 		return fmt.Errorf("signature data: %w", err)
 	}
@@ -93,7 +118,11 @@ func (s *BasicSecurityContext) Verify(msg Envelope) error {
 }
 
 func (s *BasicSecurityContext) Sign(msg *Envelope) error {
-	data, err := msg.signatureData()
+	if !s.id.Equal(msg.From.ID) {
+		return ErrBadSender
+	}
+
+	data, err := msg.SignatureData()
 	if err != nil {
 		return fmt.Errorf("signature data: %w", err)
 	}
@@ -105,4 +134,8 @@ func (s *BasicSecurityContext) Sign(msg *Envelope) error {
 
 	msg.Signature = sig
 	return nil
+}
+
+func (s *BasicSecurityContext) Discard(msg Envelope) {
+	s.cap.Discard(msg.Capability)
 }

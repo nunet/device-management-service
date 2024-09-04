@@ -11,7 +11,6 @@ func TestNewBasicSecurityContext(t *testing.T) {
 	sctx := generateSecurityContext(t)
 	assert.NotNil(t, sctx)
 	assert.NotEmpty(t, sctx.id.PublicKey)
-	assert.NotEmpty(t, sctx.did.PublicKey)
 }
 
 func TestBasicSecurityContextNonce(t *testing.T) {
@@ -35,7 +34,7 @@ func TestBasicSecurityContext_SignAndVerify(t *testing.T) {
 		},
 	}
 
-	msg, err := Message(me, me, "test", nil, WithMessageSignature(sctx))
+	msg, err := Message(me, me, "test", nil, WithMessageSignature(sctx, nil, nil))
 	assert.NoError(t, err)
 
 	err = sctx.Sign(&msg)
