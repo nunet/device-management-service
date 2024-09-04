@@ -21,10 +21,10 @@
 
 ## Specification
 
-### 1. Description
+### Description
 This sub-package contains functionality including drivers and api for the Firecracker executor.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -42,7 +42,7 @@ Here is quick overview of the contents of this pacakge:
 
 Files with `*_test.go` suffix contain unit tests for the functionality in corresponding file.
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
@@ -58,7 +58,7 @@ Files with `*_test.go` suffix contain unit tests for the functionality in corres
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 Below methods have been implemented in this package:
 
@@ -126,7 +126,7 @@ It returns an error in case of:
 
 `Cleanup` removes all firecracker resources associated with the executor. This includes stopping and removing all running VMs and deleting their socket paths. It returns an error it it is unable to remove the containers.
 
-### 5. Data Types
+### Data Types
 
 `executor.firecracker.Executor`: This is the instance of the executor created by `NewExecutor` function. It contains the firecracker client and other resources required to execute requests.
 
@@ -189,11 +189,11 @@ type executionHandler struct {
 
 Refer to package readme for other data types.
 
-### 6. Testing
+### Testing
 
 Unit tests for each functionality are defined in files with `*_test.go` naming convention.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -202,4 +202,4 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 8. References
+### References

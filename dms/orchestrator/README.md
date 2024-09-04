@@ -10,18 +10,18 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 The orchestrator is responsible for job scheduling and management (manages jobs on other DMSs). 
 
@@ -57,7 +57,7 @@ The proposed lifecyle of a job on Nunet platform consists of various operations 
 
 See [References](#8-references) section for research blogs with more details on this topic.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -71,7 +71,7 @@ _Subpackages_
 
 * [matching](matching): Defines and implements `Comparator` logic for compute capabilities and by that the *Search and Match* operation.
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
@@ -87,23 +87,23 @@ _Subpackages_
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 `TBD`
 
 **Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
 
-### 5. Data Types
+### Data Types
 
 `TBD`
 
 **Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.**
 
-### 6. Testing
+### Testing
 
 `TBD`
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -386,7 +386,7 @@ type Mailbox struct {
 
 Data types related to allocation, contract settlement, job updates etc are currently omitted. These should be added as applicable while implementation.
 
-### 8. References
+### References
 
 #### Orchestration steps research blogs
 

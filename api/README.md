@@ -10,23 +10,23 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)  
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)  
 
 
 ## Specification
 
-### 1. Description
+### Description
 
 The api package contains all API functionality of Device Management Service (DMS). DMS exposes various endpoints through which its different functionalities can be accessed.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -56,7 +56,7 @@ Here is quick overview of the contents of this directory:
 
 All of these files have a counterpart named as `*_test.go` which contains the unit tests for the corresponding endpoints.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `api` package is shown below.
 
@@ -74,7 +74,7 @@ The class diagram for the `api` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 #### Configuration
 The default server address for the REST API is `127.0.0.1` which means that the API can only be accessed from the same machine. Also note that REST API functionality runs on port `9999` by default. 
@@ -507,7 +507,7 @@ This endpoint pings a peer and checks the peer's presence in the DHT. It also re
 
 This endpoint returns the DHT contents. 
 
-### 4. Data Types
+### Data Types
 
 The API functionality of DMS consists of following data types:
 
@@ -527,7 +527,7 @@ The API functionality of DMS consists of following data types:
 
 **Note: More data types are expected to be added as per DMS refactoring**
 
-### 6. Testing
+### Testing
 
 #### Unit Tests
 
@@ -537,7 +537,7 @@ All unit tests for various functionalities can be found in files with `_test` in
 
 Reference is made to the [test-suite](https://gitlab.com/nunet/test-suite/-/tree/main/stages/functional_tests/features/device-management-service) repository for functional tests for DMS API functionality.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -545,6 +545,6 @@ All issues that are related to the design of API package can be found below. The
 
 - [API package design](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A12&first_page_size=20)
 
-### 8. References
+### References
 
 

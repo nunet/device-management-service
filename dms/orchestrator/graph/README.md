@@ -2,13 +2,13 @@
 
 This whole package is `proposed` status and therefore documentation is missing, save for the proposed functionality part.
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
@@ -16,62 +16,62 @@ This whole package is `proposed` status and therefore documentation is missing, 
 - [graph](#graph)
   - [Table of Contents](#table-of-contents)
   - [Specification](#specification)
-    - [1. Description](#1-description)
-    - [2. Structure and organisation](#2-structure-and-organisation)
-    - [3. Class Diagram](#3-class-diagram)
+    - [1. Description](#description)
+    - [2. Structure and organisation](#structure-and-organisation)
+    - [3. Class Diagram](#class-diagram)
       - [Source](#source)
       - [Rendered from source file](#rendered-from-source-file)
-    - [4. Functionality](#4-functionality)
-    - [5. Types](#5-types)
-    - [6. Testing](#6-testing)
-    - [7. Proposed Functionality / Requirements](#7-proposed-functionality--requirements)
+    - [4. Functionality](#functionality)
+    - [5. Types](#types)
+    - [6. Testing](#testing)
+    - [7. Proposed Functionality / Requirements](#proposed-functionality--requirements)
       - [List of issues](#list-of-issues)
       - [Proposed functionalities](#proposed-functionalities)
       - [Data types](#data-types)
-    - [8. References](#8-references)
+    - [8. References](#references)
       - [Related research blogs](#related-research-blogs)
       
 
 
 ## Specification
 
-### 1. Description
+### Description
 
 `TBD`
 
-### 2. Structure and organisation
+### Structure and organisation
 `TBD`
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
-[graph class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/graph/specs/class_diagram.puml)
+[graph class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/graph/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms/orchestrator/graph"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
 !include $packageUrlGitlab/specs/class_diagram.puml
-````
+```
 
-### 4. Functionality
-
-`TBD`
-
-### 5. Types
+### Functionality
 
 `TBD`
 
-### 6. Testing
+### Types
+
+`TBD`
+
+### Testing
 
 `TBD`
 
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -88,7 +88,7 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 
 - `proposed` `LocalNetworkTopology` more complex deployments may need a data structure, which considers local network topology of a node / dms -- i.e. for reasoning about speed of connection (as well as capabilities) between neighbors.
 
-### 8. References
+### References
 
 
 #### Related research blogs 

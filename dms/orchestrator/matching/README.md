@@ -1,27 +1,27 @@
 # matching
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/develop/README.md)
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/develop/CHANGELOG.md)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
 - [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution guidelines](https://gitlab.com/nunet/device-management-service/-/blob/develop/CONTRIBUTING.md)
-- [Code of conduct](https://gitlab.com/nunet/device-management-service/-/blob/develop/CODE_OF_CONDUCT.md)
-- [Secure coding guidelines](https://gitlab.com/nunet/documentation/-/wikis/secure-coding-guidelines)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 The `matching` package (subpackage of `dms/orchestrator`) is responsible for the logic of matching requirements of compute workflows deployed and orchestrated on the platform and machine capabilities of compute providers.
 
@@ -33,17 +33,17 @@ The main goal of the package is to define and express the `Comparator` logic for
 
 3. `Comparator` logic will also be used in sorting `bid`s or `bidRequest`s in order to choose a preferred one (e.g. if and when a `dms` acting as 'service provider' will receive multiple `bid`s for the same `bidRequest`, it will have to choose the best in the list). This aspect is not yet implemented but proposed.
 
-The `matching` sub-package should be considered in the context of `orchestrator` functionality and general 'proposed' Job Orchestration logic (see [`orchestrator` package README.md](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/README.md)).
+The `matching` sub-package should be considered in the context of `orchestrator` functionality and general 'proposed' Job Orchestration logic (see [`orchestrator` package README.md](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/README.md)).
 
 Provided implementation of `Capability` and `Comparison` model is designed in a way that should allow developers to update and upgrade comparison semantics of each complex type  (e.g. `types.GPU`s comparison may involve pulling information about GPU benchmarking from external sources and adjusting comparison operators to use it or involve new hardware (e.g. TPUs)). Type comparators that can be updated separately and plugged at runtime into generic comparator operator were conceived for this purpose.
 
-### 2. Structure and organisation
+### Structure and organisation
 
 Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality.
+* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/matching/README.md): Current file which is aimed towards developers who wish to use and modify the `orchestrator` functionality.
 
-* [Comparator.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/Comparator.go): implements generic comparison function for comparing two variables of a custom type; the function detects the type of parameters and uses an appropriate type comparator for comparing them.
+* [Comparator.go](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/matching/Comparator.go): implements generic comparison function for comparing two variables of a custom type; the function detects the type of parameters and uses an appropriate type comparator for comparing them.
 
 * *type comparators*: separate '.go' file for each type-specific `Comparator` that can be picked by the generic comparison function defined in `Comparator.go`:
 
@@ -69,27 +69,27 @@ Here is quick overview of the contents of this directory:
   * `PriceInformationsComparator` : Comparator for slices of `model.PriceInformation` typed variables, which is a field in `models.Capability`;
   * `KYCComparator` : Comparator for variables of `models.KYC` type;
   * `KYCsComparator` : Comparator for slices of `model.KYC` typed variables, which is a field in `models.Capability`;
-* [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/develop/orchestrator/matching/specs): Directory containing package specifications, including package class diagram.
+* [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/main/orchestrator/matching/specs): Directory containing package specifications, including package class diagram.
 
-* [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/utils.go): Utility methods specific to this package only.
+* [utils.go](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/matching/utils.go): Utility methods specific to this package only.
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
-[matching class diagram](https://gitlab.com/nunet/device-management-service/-/blob/develop/dms/orchestrator/matching/specs/class_diagram.puml)
+[matching class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/orchestrator/matching/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/dms/orchestrator/matching"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
 
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 #### Generic type comparison
 
@@ -221,7 +221,7 @@ It is not yet clear how are we will be defining localities in our model therefor
 
 **Note: the functionality of the package is currently being developed; please see description for details and developed / proposed aspects.**
 
-### 5. Data Types
+### Data Types
 
 Most of the data types used by this package are defined in other packages. Here is the list of important types used by this package, indicating whether or not they are defined here or elsewhere. Note that the `matching` package potentially will deal with comparison of most of the complex types defined within the whole `dms`, therefore it does not make sense to list them all here, but they are mentioned / explained as needed in functionality description of each type comparator (see above).
 
@@ -235,11 +235,11 @@ Most of the data types used by this package are defined in other packages. Here 
 
 * `matching.ComparatorMap` is used for registering (and then retrieving by type name) each type comparator. `Compare()` operator of `matching.Comparator` is currently constructed in a way that it detects input type and then pulls the required type comparator from the comparatorMap by name.
 
-### 6. Testing
+### Testing
 
 All unit tests for the package are implemented in `comparator_test.go`. This file includes at least one test for each type comparator. Currently unit tests are implemented using assertions on manually constructed types. This approach allows to check the logic of comparison, but also limits the input domain of tests. In the future these manually constructed tests maybe augmented by a more elaborate complex type mocking code.
 
-### 7. Proposed Functionality / Requirements
+### Proposed Functionality / Requirements
 
 #### List of issues
 
@@ -264,7 +264,7 @@ All issues that are filed in GitLab related to the implementation of `dms/orches
 
 - `proposed` `LocalNetworkTopology` more complex deployments may need a data structure, which considers local network topology of a node / dms -- i.e. for reasoning about speed of connection (as well as capabilities) between neighbors.
 
-### 8. References
+### References
 
 
 #### Related research blogs

@@ -1,7 +1,7 @@
 ' START PREAMBLE
 
 !$rootUrlLocal = ".."
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 
 ' package relative path: change this for each package
 !$packageRelativePath = "/dms"
@@ -16,6 +16,10 @@
 ' END PREAMBLE
 
 ' START SUBPACKAGES
+
+'package dms.actor {
+    !include $rootUrl/actor/specs/class_diagram.puml
+'}
 
 'package dms.jobs {
     !include $rootUrl/jobs/specs/class_diagram.puml

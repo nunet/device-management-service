@@ -10,23 +10,23 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 
 ## Specification
 
-### 1. Description
+### Description
 
 This file explains the onboarding functionality of Device Management Service (DMS). This functionality is catered towards compute providers who wish provide their hardware resources to Nunet for running computational tasks as well as developers who are contributing to platform development.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -42,7 +42,7 @@ Here is quick overview of the contents of this directory:
 
 * [init](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/init.go): This files initializes the loggers associated with onboarding package.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `onboarding` package is shown below.
 
@@ -60,7 +60,7 @@ The class diagram for the `onboarding` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 #### Onboard Compute Provider
 
@@ -146,7 +146,7 @@ The class diagram for the `onboarding` package is shown below.
 `Offboard` removes the resources onboarded to Nunet. If the `force` parameter is `True`, then offboarding process will continue even in the presence of errors. 
 
 
-### 5. Data Types
+### Data Types
 
 - `types.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
 
@@ -160,11 +160,11 @@ The class diagram for the `onboarding` package is shown below.
 
 - `types.AvailableResources`: This has the available capacity that has been onboarded to Nunet.
 
-### 6. Testing
+### Testing
 
 `TBD`
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -173,5 +173,5 @@ All issues that are related to the implementation of `dms` package can be found 
 - [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
 
 
-### 8. References
+### References
 

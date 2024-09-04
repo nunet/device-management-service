@@ -10,22 +10,22 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 This repository contains implementations for managing contracts, proofs, and payments in tokenomics. Initiated within milestone [Device Management Service Version 0.5.x](https://gitlab.com/groups/nunet/-/milestones/44#tab-issues), it offers a comprehensive set of interfaces and methods. To implement these functions, we first define key datatypes and interfaces.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -45,7 +45,7 @@ Here is quick overview of the contents of this directory:
 
 - [./Sequences/:](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/proposed/device-management-service/tokenomics/sequences?ref_type=heads) Contains the sequence diagram for the tokenomics package
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source File
 
@@ -61,15 +61,15 @@ Here is quick overview of the contents of this directory:
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 Note: the functionality of Tokenomics is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.
 
-### 5. Data Types
+### Data Types
 
 Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.
 
-### 6. Testing
+### Testing
 
 #### Unit Tests
 
@@ -79,7 +79,7 @@ Note: the functionality of DMS is being currently developed. See the [proposed](
 
 To be determined (`TBD`).
 
-### 7. Proposed Functionality / Requirements
+### Proposed Functionality / Requirements
 
 List of issues related to the design of the tokenomics package can be found below. These include proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
@@ -276,7 +276,7 @@ type OffChainData struct {
 ```
 
 
-### 8. References
+### References
 
 - [proposed design](https://www.notion.so/Tokenomics-2e3696cde66a4179b96e9a3a9daeaa10?pvs=21)
 
