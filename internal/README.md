@@ -10,22 +10,22 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 This package contains all code that is very specific to the whole of the dms, which will not be imported by any other packages and used only on the running instance of dms (like config and background task).
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -40,7 +40,7 @@ _subpackages_
 
 * [background_tasks](https://gitlab.com/nunet/device-management-service/-/tree/main/internal/background_tasks): This sub-package contains functionality that runs in the background.
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
@@ -56,11 +56,11 @@ _subpackages_
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 `TBD`
 
-### 5. Data Types
+### Data Types
 
 - `internal.WebSocketConnection`
 
@@ -85,11 +85,11 @@ type Command struct {
 
 **Note: The data types are expected to change during refactoring of DMS**
 
-### 6. Testing
+### Testing
 
 `TBD`
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -98,5 +98,5 @@ All issues that are related to the implementation of `internal` package can be f
 - [internal package implementation]() `TBD`
 
 
-### 8. References
+### References
 

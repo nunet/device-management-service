@@ -9,14 +9,14 @@
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
 ## Table of Contents
-
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Functionality](#3-functionality)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
 
 ## Specification
 
-### 1. Description
+### Description
 
 This package contains any tests that are not unit tests (at least this is how it was defined when Obsidian built these tests)
 
@@ -26,7 +26,7 @@ _Note by Dagim: suggest if security.go is deleted entirely with utils/cardano be
 
 `./test` directory of the package contains full test suite of DMS. 
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -46,7 +46,7 @@ Here is quick overview of the contents of this pacakge:
 * [tester.vk](tester.vk): `TBD`
 
 
-### 3. Functionality
+### Functionality
 
 #### Run CLI Test Suite
 

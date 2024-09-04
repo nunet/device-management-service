@@ -11,23 +11,23 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 
 ## Specification
 
-### 1. Description
+### Description
 
 The backend sub package contains the actual implementation of the Nunet CLI commands. 
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -51,7 +51,7 @@ Here is quick overview of the contents of this directory:
 
 * [websocket](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/websocket.go): This file implements a WebSocket Client for establishing and managing WebSocket connections. It provides functions to initialize the connection, send/receive messages, and handle pings for maintaining the connection. 
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `backend` package is shown below.
 
@@ -69,7 +69,7 @@ The class diagram for the `backend` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 #### ResourceManager interface
 
@@ -451,7 +451,7 @@ The class diagram for the `backend` package is shown below.
 
 `WriteString` writes the content of the provided string to the file.
 
-### 5. Data Types
+### Data Types
 
 `ConnectionStat`: This is a data type defined in `Go` `net` package. It consists of network connection data. See [here](https://pkg.go.dev/github.com/shirou/gopsutil/net#ConnectionStat) for more details.
 
@@ -484,11 +484,11 @@ type FileInfo interface {
 
 Refer to `cmd` package for all other data types applicable.
 
-### 6. Testing
+### Testing
 
 The methods and interfaces in the `backend` subpacakge can be used to test the functionality of the `cmd` pacakge commands. Currently no unit test are defined since the implementaton is mostly wrappers around functions that should be tested somewhere else.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -496,7 +496,7 @@ All issues that are related to the design of `cmd` package can be found below. T
 
 - [cmd package design]() `TBD`
 
-### 8. References
+### References
 
 
 

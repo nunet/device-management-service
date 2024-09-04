@@ -10,23 +10,23 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 
 ## Specification
 
-### 1. Description
+### Description
 
 The `db` package contains the configuration and functionality of database used by the DMS
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -58,7 +58,7 @@ _Subpackages_
 
 * [clover](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/clover): This folder contains CloverDB database implementation.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `db` package is shown below.
 
@@ -76,7 +76,7 @@ The class diagram for the `db` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 There are two types of interfaces defined to cover database operations:
 
@@ -259,7 +259,7 @@ The methods of `GenericEntityRepository` are as follows:
 
 `GetQuery` function returns an empty query instance for the repository's type.
 
-### 5. Data Types
+### Data Types
 
 - `db.Query`: This contains parameters related to a query that is passed to the database.
 
@@ -301,11 +301,11 @@ type QueryCondition struct {
 - `types.MachineUUID`
 
 
-### 6. Testing
+### Testing
 
 The unit tests for utility functions are defined in `utils_test.go`. Refer to `*_test.go` files for unit tests of various implementations covered in subpackages.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -313,4 +313,4 @@ All issues that are related to the implementation of `db` package can be found b
 
 - [db package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A36&first_page_size=20)
 
-### 8. References
+### References

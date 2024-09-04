@@ -10,28 +10,28 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 This pacakge manages local jobs and their allocation, including relation to execution environments, etc. It will manage jobs through whatever executor it's running (Vontainer, VM, Direct_exe, Java etc).
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
 `TBD`
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `jobs` package is shown below.
 
@@ -49,23 +49,23 @@ The class diagram for the `jobs` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 `TBD`
 
 **Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
 
-### 5. Data Types
+### Data Types
 
 `TBD`
 
 **Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.**
 
-### 6. Testing
+### Testing
 
 `TBD`
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -241,7 +241,7 @@ type AllocationID struct {
 
 ```
 
-### 8. References
+### References
 
 **Allocation as an Actor**: As per initial [specification of NuNet ontology / nomenclature](https://nunet.gitlab.io/research/blog/posts/ontology-and-nomenclature/#actors), `Allocation` is considered as an Actor. That makes a running job a first class citizen of NuNet's Actor model, so being able to send and receive messages and maintain state.
 

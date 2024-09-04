@@ -10,23 +10,23 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 
 ## Specification
 
-### 1. Description
+### Description
 
 This sub package is an implementation of `StorageProvider` interface for S3 storage.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -47,7 +47,7 @@ Here is quick overview of the contents of this pacakge:
 * [upload](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/s3/upload.go): This file defines S3 storage implementation for uploading files (including directories) from a local volume to an S3 bucket.
 
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `s3` sub-package is shown below.
 
@@ -66,7 +66,7 @@ The class diagram for the `s3` sub-package is shown below.
 ```
 
 
-### 4. Functionality
+### Functionality
 
 #### NewClient
 
@@ -110,7 +110,7 @@ It will return an error when
 - there is error in decoding input specs
 - there is an issue in AWS API call to retrieve the object size
 
-### 5. Data Types
+### Data Types
 
 - `storage.s3.S3Storage`: `TBD`
 ```
@@ -147,10 +147,10 @@ type S3InputSource struct {
 Refer to package readme for other data types.
 
 
-### 6. Testing
+### Testing
 The various unit tests for the package functionality are defined in `s3_test.go` file.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -159,7 +159,7 @@ All issues that are related to the implementation of `storage` package can be fo
 - [storage package implementation]() `TBD`
 
 
-### 8. References
+### References
 
 
 

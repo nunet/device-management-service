@@ -10,22 +10,22 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 `types` package defines and keeps data structures and interfaces that are used across the whole DMS component by different packages. 
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -65,7 +65,7 @@ Here is quick overview of the contents of this pacakge:
 
 * [types](https://gitlab.com/nunet/device-management-service/-/tree/main/types/types.go):  This file defines a base model for entities in the application with auto-generated UUIDs, timestamps, and soft delete functionality using GORM hooks.
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
@@ -81,7 +81,7 @@ Here is quick overview of the contents of this pacakge:
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 `types` package holds interfaces and methods that are used by multiple packages. The functionality of these interfaces/methods are typically implemented in other packages.
 
@@ -233,7 +233,7 @@ type Config interface {
 
 
 
-### 5. Data Types
+### Data Types
 
 #### Deployment
 
@@ -1238,11 +1238,11 @@ type BaseDBModel struct {
 }
 ```
 
-### 6. Testing
+### Testing
 
 Test are defined in other packages where functionality is implemented.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -1374,4 +1374,4 @@ type PrivateNetworkConfig struct {
 }
 ```
 
-### 8. References
+### References

@@ -11,22 +11,22 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)  
 
 ## Specification
 
-### 1. Description
+### Description
 
 The cmd package contains all functionality of Device Management Service (DMS) available via command line interface (CLI). 
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -104,7 +104,7 @@ Here is quick overview of the contents of this directory:
 
 All of the files named as `*_test.go` contains the unit tests for the corresponding functionality.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `cmd` package is shown below.
 
@@ -122,7 +122,7 @@ The class diagram for the `cmd` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 The following sections describe the command line options that can be used with the Nunet CLI.
 
@@ -414,11 +414,11 @@ nunet wallet new --cardano
 nunet wallet new --ethereum
 ```
 
-### 5. Data Types
+### Data Types
 
 Refer to `api` package for all the data types applicable for the `cmd` package functionality. 
 
-### 6. Testing
+### Testing
 
 #### Unit Tests
 
@@ -428,7 +428,7 @@ All unit tests for various functionalities can be found in files with `_test` in
 
 Reference is made to the [test-suite](https://gitlab.com/nunet/test-suite/-/tree/develop/stages/functional_tests/features/device-management-service) repository for functional tests for DMS CLI functionality.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -436,6 +436,6 @@ All issues that are related to the design of `cmd` package can be found below. T
 
 - [cmd package design]() `TBD`
 
-### 8. References
+### References
 
 

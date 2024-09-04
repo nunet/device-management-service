@@ -10,22 +10,22 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 The storage package is responsible for disk storage management on each DMS (Device Management Service) for data related to DMS and jobs deployed by DMS. It primarily handles storage access to remote storage providers such as [AWS S3](https://aws.amazon.com/s3/), [IPFS](https://ipfs.tech/) etc. It also handles the control of storage volumes.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -40,7 +40,7 @@ _subpackages_
 
 * [s3](s3): This contains implementation of storage functionality for S3 storage bucket.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the storage package is shown below.
 
@@ -58,7 +58,7 @@ The class diagram for the storage package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 The functionality with respect to `storage` package is offered by two main interfaces:
 1. `StorageProvider`
@@ -199,7 +199,7 @@ The input can be a path or a Content ID (CID) depending on the identifier type p
 
 `IDType` contains predefined integer values for different types of identifiers. 
 
-### 5. Data Types
+### Data Types
 
 - `storage.StorageVolume`: This struct contains parameters related to a storage volume such as path, CID etc.
 
@@ -300,10 +300,10 @@ const (
 )
 ```
 
-### 6. Testing
+### Testing
 `TBD`
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -312,7 +312,7 @@ All issues that are related to the implementation of `storage` package can be fo
 - [storage package implementation]() `TBD`
 
 
-### 8. References
+### References
 
 
 

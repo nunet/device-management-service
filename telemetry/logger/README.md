@@ -10,26 +10,26 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 `TBD`
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 `TBD`
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the otel sub-package is shown below.
 
@@ -47,17 +47,17 @@ The class diagram for the otel sub-package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 `TBD`
 
-### 5. Data Types
+### Data Types
 `TBD`
 
-### 6. Testing
+### Testing
 `TBD`
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 `TBD`
 
-### 8. References
+### References
 `TBD`

@@ -1,0 +1,120 @@
+ ' START PREAMBLE
+
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
+
+' package relative path: change this for each package
+!$packageRelativePath = "/telemetry"
+
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+
+' uncomment the following line to render all locally
+' !$rootUrl = $rootUrlLocal
+' uncomment the following line to render all from gitlab
+!$rootUrl = $packageUrlGitlab
+
+' END PREAMBLE
+
+' START DIAGRAM
+
+    interface telemetry.Collector {
+        +initialize()
+        +handleEvent()
+        +shutdown()
+        +getObserverdLevel()
+        +getEndpoint()
+    }
+
+    class telemetry.FileCollector {
+        +String logFile
+    }
+
+    class telemetry.DatabaseCollector {
+        +String databaseEndpoint
+    }
+
+    class telemetry.OpenTelemetryCollector {
+        +*.traceTracerProvider TracerProvider
+        +String otEndpoint
+    }
+
+    class telemetry.ReputationCollector
+    class telemetry.ActorCollector
+
+    class telemetry.Event {
+        +observeEvent()
+        +Time timestamp
+        +Context context
+        +EventCategory category
+        +String message
+        +Slice[Collector] collectors
+    }
+
+    class telemetry.EventCategory {
+        +ACCOUNTING
+        +LOGGING
+        +TRACING
+        +HEARTBEAT
+    }
+
+    class telemetry.Observable {
+        +getObservabilityLevel() ObservabilityLevel
+        +getCollectors() Slice[Collector]
+        +registerCollector(Collector)
+    }
+
+    class telemetry.ObservabilityLevel {
+        +TRACE
+        +DEBUG
+        +INFO
+        +WARN
+        +ERROR
+        +FATAL
+    }
+
+    class telemetry.Message {
+        +models.ID sender
+        +models.ID receiver
+        +MessageHeaders headers
+        +models.SpecConfig payload
+    }
+
+    class telemetry.Heartbeat {
+        +models.SpecConfig config
+        +Time frequency
+        +Time duration
+        +register()
+        +start()
+        +trigger()
+        +stop()
+        +validateConfig()
+    }
+' END DIAGRAM
+
+' START SUBPACKAGES
+
+'package logger {
+    !include $rootUrl/logger/specs/class_diagram.puml
+'}
+
+'package otel {
+    !include $rootUrl/otel/specs/class_diagram.puml
+'}
+
+
+' END SUBPACKAGES
+
+
+' START IN-PACKAGE RELATIONS
+    telemetry.Observable .. telemetry.Collector
+    telemetry.Collector ..|> telemetry.FileCollector
+    telemetry.Collector ..|> telemetry.DatabaseCollector
+    telemetry.Collector ..|> telemetry.OpenTelemetryCollector
+    telemetry.Collector ..|> telemetry.ReputationCollector
+    telemetry.Collector ..|> telemetry.ActorCollector
+    telemetry.Event <.. telemetry.EventCategory
+    telemetry.Event --|> telemetry.Heartbeat
+    telemetry.Event --|> telemetry.Message
+    telemetry.Observable ..|> telemetry.Event
+    telemetry.Observable <.. telemetry.ObservabilityLevel
+' END IN-PACKAGE RELATIONS

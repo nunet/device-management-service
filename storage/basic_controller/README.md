@@ -10,23 +10,23 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 
 ## Specification
 
-### 1. Description
+### Description
 
 This sub package offers a default implementation of the volume controller.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -36,7 +36,7 @@ Here is quick overview of the contents of this pacakge:
 
 * [basic_controller_test](https://gitlab.com/nunet/device-management-service/-/blob/main/storage/basic_controller/basic_controller_test.go): This file contains the unit tests for the methods of `VolumeController` interface.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `basic_controller` sub-package is shown below.
 
@@ -55,7 +55,7 @@ The class diagram for the `basic_controller` sub-package is shown below.
 ```
 
 
-### 4. Functionality
+### Functionality
 
 #### NewDefaultVolumeController
 
@@ -132,7 +132,7 @@ Both `CreateVolume` and `LockVolume` allow for custom configuration of storage v
 
 `WithCID(cid string)` - This can be used as an input parameter to set the CID of a given volume during the lock volume operation.
 
-### 5. Data Types
+### Data Types
 
 `storage.basic_controller.BasicVolumeController`: This struct manages implementation of `VolumeController` interface methods. 
 
@@ -154,10 +154,10 @@ type BasicVolumeController struct {
 Refer to package readme for other data types.
 
 
-### 6. Testing
+### Testing
 The unit tests for the package functionality are defined in `*_test.go` file.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -166,7 +166,7 @@ All issues that are related to the implementation of `storage` package can be fo
 - [storage package implementation]() `TBD`
 
 
-### 8. References
+### References
 
 
 

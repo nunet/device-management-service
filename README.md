@@ -1,4 +1,4 @@
-![latest release version](https://gitlab.com/nunet/device-management-service/-/badges/main/coverage.svg)
+![latest release version](https://gitlab.com/nunet/device-management-service/-/badges/release.svg) ![unit tests](https://gitlab.com/nunet/device-management-service/badges/main/pipeline.svg) ![coverage](https://gitlab.com/nunet/device-management-service/badges/main/coverage.svg)
 
 # Device Management Service (DMS)
 
@@ -13,28 +13,28 @@
 ## Table of Contents
 
 **Usage**
-1. [About](#1-about)
-2. [Installation](#2-installation)
+1. [About](#about)
+2. [Installation](#installation)
 
 **Specification**
-1. [Description](#1-description)
-2. [Design and Architecture](#2-design-and-architecture)
-3. [Functionality](#3-functionality)
-4. [Data Types](#4-data-types)
-5. [Testing](#5-testing)
-6. [References](#6-references)
-7. [Class Diagram](#7-class-diagram)
+1. [Description](#description)
+2. [Design and Architecture](#design-and-architecture)
+3. [Functionality](#functionality)
+4. [Data Types](#data-types)
+5. [Testing](#testing)
+6. [References](#references)
+7. [Class Diagram](#class-diagram)
 
 **Getting Started for Developers**
-1. [Installation](#1-installation)
-2. [Usage](#2-usage)
-3. [Configuration](#3-configuration)
-4. [Tests](#4-tests)
+1. [Installation](#installation-1)
+2. [Usage](#usage-1)
+3. [Configuration](#configuration)
+4. [Tests](#tests)
 
 
 ## Usage
 
-### 1. About
+### About
 
 **Device Management Service** or **DMS** is a program that allows users to run various computational workloads on a distributed set of machines. These machines are CPU/GPU-enabled devices that are part of the Nunet network. Think of this as a cloud service, but provided by multiple providers instead of a single entity like Amazon or Google.
 
@@ -46,9 +46,9 @@ To summarize, DMS connects users needing computational resources with those who 
 
 All transactions on the Nunet network are expected to be conducted using the platform's utility token [NTX](https://docs.nunet.io/infohub/tokenomics/ntx-utility-token-overview). However, DMS is currently in development, and NTX payments are expected to be implemented in the [Public Alpha Mainnet](https://gitlab.com/groups/nunet/-/milestones/46#tab-issues) milestone.
 
-**Note**: If you are a developer, please check out the [DMS specifications](#specification-for-developers) and [Getting Started](#getting-started-for-developers) sections of this document.
+**Note**: If you are a developer, please check out the [DMS specifications](#specification) and [Getting Started](#getting-started-for-developers) sections of this document.
 
-### 2. Installation
+### Installation
 
 Before diving into the installation process, let’s take a quick look at the system requirements and a few things to keep in mind.
 
@@ -188,7 +188,7 @@ Here is a step-by-step process to install the Device Management Service (DMS) on
 
 ## Specification
 
-### 1. Description
+### Description
 
 NuNet is a computing platform that provides globally distributed and optimized computing power and storage for decentralized networks, by connecting data owners and computing resources with computational processes in demand of these resources. NuNet provides a layer of intelligent interoperability between computational processes and physical computing infrastructures in an ecosystem which intelligently harnesses latent computing resources of the community into the global network of computations.
 
@@ -212,11 +212,11 @@ DMS (Device Management Service) acts as the foundation of the NuNet platform, or
 - **`utils`**: Utility tools and functionalities.
 - **`tokenomics`**: Interaction with blockchain for the crypto-micropayments layer of the platform.
 
-### 2. Design and Architecture
+### Design and Architecture
 
 #### Conceptual Basis
 
-Main concepts of the architecture of DMS, the main component of the NuNet platform, can be found in this [Yellow Paper](https://gitlab.com/nunet/publisher/platform-yellow-paper/-/tree/main).
+Main concepts of the architecture of DMS, the main component of the NuNet platform, can be found in the [Yellow Paper](https://gitlab.com/nunet/publisher/platform-yellow-paper/-/tree/main).
 
 #### Ontology
 
@@ -243,15 +243,15 @@ Relevant research work that has informed the design of DMS can be found below:
 - [Parent-Child Hierarchy, Allocations, and Failure Tolerance](https://nunet.gitlab.io/research/blog/posts/parent-child-relations/)
 - [Kubernetes Integration Specs](https://nunet.gitlab.io/research/blog/posts/kubernetes-integration/)
 
-### 3. Functionality
+### Functionality
 
 DMS is currently being refactored and new functionality will be added.
 
-### 4. Data Types
+### Data Types
 
-Refer to the DMS global class diagram in [this](#7-class-diagram) section and various packages for data models.
+Refer to the DMS global class diagram in [this](#class-diagram) section and various packages for data models.
 
-### 5. Testing
+### Testing
 
 Some packages contain tests, and it is always best to run them to ensure there are no broken tests before submitting any changes. Before running the tests, the Firecracker executor requires some test data, such as a kernel file, which can be downloaded with:
 
@@ -265,28 +265,22 @@ After the download is complete, all unit tests can be run with:
 go test ./...
 ```
 
-### 6. References
+### References
 
 In addition to the relevant links added in the sections above, you can also find useful links here: [NuNet Links](https://www.nunet.io/links).
 
-### 7. Class Diagram
+### Class Diagram
 
 The global class diagram for the DMS is shown below.
 
 #### Source File
 
-[Global Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/class_diagram.puml?ref_type=heads)
-
-#### Rendered from Source File
-
-```plantuml
-!include https://gitlab.com/nunet/device-management-service/-/raw/main/specs/class_diagram.puml
-```
+[Global Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/class_diagram.puml)
 
 
 ## Getting Started for Developers
 
-### 1. Installation
+### Installation
 
 The cleanest way to set up a development environment is to build a .deb package out of this repository and let the installer do the work for you.
 
@@ -323,7 +317,7 @@ Once the environment is set up, build the DMS as follows:
 go build -o nunet
 ```
 
-### 2. Usage
+### Usage
 
 To run the DMS:
 
@@ -343,7 +337,7 @@ Refer to `dms/onboarding` package [README](https://gitlab.com/nunet/device-manag
 
 Refer to the `api` package [README](https://gitlab.com/nunet/device-management-service/-/blob/main/api/README.md) for the list of all endpoints. Head over to project's issue section and create an issue with your question.
 
-### 3. Configuration
+### Configuration
 
 #### Run Two DMS Instances Side by Side
 
@@ -392,7 +386,7 @@ Onboard both DMS instances.
 
 Check if both can discover each other.
 
-### 4. Tests
+### Tests
 
 **Running Functional Tests with Python-Behave Framework**
 

@@ -10,18 +10,18 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 This package implements `Network` interface defined in root level network dir.
 
@@ -58,7 +58,7 @@ For the network latency part, DMS should also be able to keep latency table betw
 * CP connects to same kind of CP.
 * Can use gossipsub.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -78,7 +78,7 @@ Here is quick overview of the contents of this pacakge:
 
 * [p2p](https://gitlab.com/nunet/device-management-service/-/blob/main/network/libp2p/p2p.go): This file defines a Libp2p node with core functionalities including discovery, peer management, DHT interaction, and communication channels, with several stub implementations.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the libp2p sub-package is shown below.
 
@@ -96,7 +96,7 @@ The class diagram for the libp2p sub-package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 As soon as DMS starts, and if it is onboarded to the network, `libp2p.RunNode` is executed. This gets up entire thing related to libp2p. Let's run down through it to see what it does.
 
@@ -191,7 +191,7 @@ type PeerFilter interface {
 ```
 
 
-### 5. Data Types
+### Data Types
 
 - `types.DeploymentResponse`: DeploymentResponse is initial response from the Compute Provider (CP) to Service Provider (SP). It tells the SP that if deployment was successful or was declined due to operational or validational reasons. Most of the validation is just error check at stream handling or executor level.
 
@@ -270,11 +270,11 @@ type OpenStream struct {
 
 **Note: Data types are expected to change due to DMS refactoring**
 
-### 6. Testing
+### Testing
 
 `TBD`
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -282,7 +282,7 @@ All issues that are related to the implementation of `network` package can be fo
 
 - [network package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A39&first_page_size=20)
 
-### 8. References
+### References
 
 
 

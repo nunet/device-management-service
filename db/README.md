@@ -10,21 +10,21 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Package Specification](#4-package-specification)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Package Specification](#package-specification)
 
 ## Specification
 
-### 1. Description
+### Description
 This package defines the local database functionality for the Device Management Service (DMS). Currently two repository structures have been implemented:
 
 - `gorm`: which is a [SQlite](https://www.sqlite.org/) database implementation.
 
 - `clover`: which is a `NoSQL` or document oriented database implementation. 
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -36,7 +36,7 @@ Here is quick overview of the contents of this pacakge:
 
 * [specs](https://gitlab.com/nunet/device-management-service/-/blob/main/db/specs): This folder contains the class diagram of the package.
 
-### 3. Class Diagram
+### Class Diagram
 
 The class diagram for the `db` package is shown below.
 
@@ -54,5 +54,5 @@ The class diagram for the `db` package is shown below.
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Package Specification
+### Package Specification
 Refer to the [README](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/README.md) file defined in the repositories folder for specification of the package.

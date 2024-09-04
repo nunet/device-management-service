@@ -1,6 +1,4 @@
-# plugins
-
-The whole package is `TBD`
+# actor
 
 - [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
 - [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
@@ -24,41 +22,54 @@ The whole package is `TBD`
 ## Specification
 
 ### Description
-This package will contain defined entry points and specs for third party plugins, registration and execution of plugin code
 
+`TBD`
 
 ### Structure and Organisation
+
+Here is quick overview of the contents of this directory:
+
 `TBD`
 
 ### Class Diagram
 
-The class diagram for the plugins sub-package is shown below.
+The class diagram for the `actor` package is shown below.
 
 #### Source file
 
-[plugins Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/plugins/specs/class_diagram.puml)
+[actor Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/actor/specs/class_diagram.puml)
 
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
-!$packageRelativePath = "/plugins"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/documentation-bug-fix"
+!$packageRelativePath = "/dms/actor"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
 ### Functionality
+
 `TBD`
 
 ### Data Types
+
 `TBD`
 
 ### Testing
+
 `TBD`
 
 ### Proposed Functionality / Requirements 
-`TBD`
+
+#### List of issues
+
+All issues that are related to the implementation of `dms` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
+
+- [dms package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A33&first_page_size=20)
+
 
 ### References
-`TBD`
+
+

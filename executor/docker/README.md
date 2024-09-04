@@ -10,21 +10,21 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 This sub-package contains functionality including drivers and api for the Docker executor.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -42,7 +42,7 @@ Here is quick overview of the contents of this pacakge:
 
 Files with `*_test.go` suffix contain unit tests for the functionality in corresponding file.
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
@@ -58,7 +58,7 @@ Files with `*_test.go` suffix contain unit tests for the functionality in corres
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 Below methods have been implemented in this package:
 
@@ -170,7 +170,7 @@ The function ensures that the appropriate resources and device paths are allocat
 
 `Cleanup` removes all Docker resources associated with the executor. This includes removing containers including networks and volumes with the executor's label. It returns an error it if unable to remove the containers.
 
-### 5. Data Types
+### Data Types
 
 - `executor.docker.Executor`: This is the instance of the executor created by `NewExecutor` function. It contains the Docker client and other resources required to execute requests. 
 
@@ -236,11 +236,11 @@ type executionHandler struct {
 
 Refer to package readme for other data types.
 
-### 6. Testing
+### Testing
 
 Unit tests for each functionality are defined in files with `*_test.go` naming convention.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -249,5 +249,5 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 8. References
+### References
 

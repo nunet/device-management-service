@@ -10,18 +10,18 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 
 This package contains all configuration related code such as reading config file and functions to configure at runtime.
 
@@ -39,7 +39,7 @@ Dynamic configuration would use the same `internal.config.Config` variable, but 
 
 The mechanism of dynamic configuration will enable to override or change default values. For enabling this functionality, the `internal.config.Config` variable will have a synchronized copy in the local DMS database, defined with `db` package. 
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -49,7 +49,7 @@ Here is quick overview of the contents of this pacakge:
 
 * [load](https://gitlab.com/nunet/device-management-service/-/tree/develop/internal/config/load.go): This file establishes a configuration loader using `Viper`, supports loading JSON files from various locations, applies defaults, and exposes functions to manage and obtain the loaded configuration.
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source
 
@@ -58,14 +58,14 @@ Here is quick overview of the contents of this pacakge:
 #### Rendered from source file
 
 ```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/internal/config"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
  
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 The methods of this package are explained below:
 
@@ -146,7 +146,7 @@ Sets default values for various configuration options in a `viper.Viper` instanc
 
 `removeComments` Removes comments from the configuration file content using a regular expression.
 
-### 5. Data Types
+### Data Types
 
 - `internal.config.Config`: holds the overall configuration with nested structs for specific sections
 
@@ -196,11 +196,11 @@ type Job struct {
 }
 ```
 
-### 6. Testing
+### Testing
 
 `proposed` Unit tests for each functionality are defined in files with `*_test.go` naming convention.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -218,7 +218,7 @@ Following Gherkin feature files describe the proposed functionality for `config`
 
 3. **Load existing DMS configuration**: see [scenario definition](https://gitlab.com/nunet/test-suite/-/blob/proposed/stages/functional_tests/features/device-management-service/internal/config/configurationManagement.feature?ref_type=heads#L28)
 
-### 8. References
+### References
 
 
 

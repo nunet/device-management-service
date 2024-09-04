@@ -10,21 +10,21 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description
+### Description
 The executor package is responsible for executing the jobs received by the device management service (DMS). It provides an unified interface to run various executors such as docker, firecracker etc
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this pacakge:
 
@@ -36,7 +36,9 @@ Here is quick overview of the contents of this pacakge:
 
 * [docker](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker): This folder contains the implementation of docker executor.
 
-### 3. Class Diagram
+* [firecracker](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/firecracker): This folder contains the implementation of firecracker executor.
+
+### Class Diagram
 
 #### Source
 
@@ -53,7 +55,7 @@ Here is quick overview of the contents of this pacakge:
 ```
 
 
-### 4. Functionality
+### Functionality
 
 The main functionality offered by the `executor` package is defined via the `Executor` interface. 
 
@@ -146,7 +148,7 @@ Its methods are explained below:
 
 It returns an `io.ReadCloser` object to read the output stream and an error if the operation fails. Specifically, it will return an error if the execution does not exist.
 
-### 5. Data Types
+### Data Types
 
 - `types.ExecutionRequest`: This is the input that `executor` receives to initiate a job execution. 
 
@@ -208,11 +210,11 @@ type GPU struct {
 
 - `storage.StorageVolume`: This contains parameters of storage volume used during execution. 
 
-### 6. Testing
+### Testing
 
 Unit tests are defined in subpackages which implement the interface defined in this package.
 
-### 7. Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements 
 
 #### List of issues
 
@@ -221,4 +223,4 @@ All issues that are related to the implementation of `executor` package can be f
 - [executor package implementation](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&label_name%5B%5D=collaboration_group_24%3A%3A31&first_page_size=20)
 
 
-### 8. References
+### References

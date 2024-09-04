@@ -10,22 +10,22 @@
 
 ## Table of Contents
 
-1. [Description](#1-description)
-2. [Structure and Organisation](#2-structure-and-organisation)
-3. [Class Diagram](#3-class-diagram)
-4. [Functionality](#4-functionality)
-5. [Data Types](#5-data-types)
-6. [Testing](#6-testing)
-7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
-8. [References](#8-references)
+1. [Description](#description)
+2. [Structure and Organisation](#structure-and-organisation)
+3. [Class Diagram](#class-diagram)
+4. [Functionality](#functionality)
+5. [Data Types](#data-types)
+6. [Testing](#testing)
+7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
+8. [References](#references)
 
 ## Specification
 
-### 1. Description `TBD`
+### Description `TBD`
 
 Utils specifically used for the validation of different types.
 
-### 2. Structure and Organisation
+### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -38,11 +38,11 @@ Here is quick overview of the contents of this directory:
 - [specs](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/specs): This folder contains the class diagram of the package.
 
 
-### 3. Class Diagram
+### Class Diagram
 
 #### Source File
 
-[cardano Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/specs/class_diagram.puml)
+[validate Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/utils/validate/specs/class_diagram.puml)
 
 #### Rendered from source file
 
@@ -54,22 +54,22 @@ Here is quick overview of the contents of this directory:
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### 4. Functionality
+### Functionality
 
 This package contains helper methods that perform validation check for different data types. Refer to `strings.go` file for more details.
 
-### 5. Data Types
+### Data Types
 
 This package does not define any new data types.
 
-### 6. Testing
+### Testing
 
 Unit tests for the functionality are defined in files with `*_test.go` in their names.
 
-### 7. Proposed Functionality / Requirements
+### Proposed Functionality / Requirements
 
 List of issues related to the implementation of the `utils` package can be found below. These include proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
 - [utils Package Issues]() `TBD`
 
-### 8. References
+### References

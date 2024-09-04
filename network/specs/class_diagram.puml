@@ -1,7 +1,7 @@
  ' START PREAMBLE
 
 !$rootUrlLocal = ".."
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 
 ' package relative path: change this for each package
 !$packageRelativePath = "/network"
