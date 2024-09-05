@@ -2,6 +2,7 @@ package libp2p
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -36,9 +37,6 @@ func TestNew(t *testing.T) {
 				CustomNamespace:         "/nunet-dht-1/",
 				ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 				PeerCountDiscoveryLimit: 40,
-				PrivateNetwork: types.PrivateNetworkConfig{
-					WithSwarmKey: false,
-				},
 			},
 			expErr: "scheduler is nil",
 		},
@@ -52,9 +50,6 @@ func TestNew(t *testing.T) {
 				CustomNamespace:         "/nunet-dht-1/",
 				ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 				PeerCountDiscoveryLimit: 40,
-				PrivateNetwork: types.PrivateNetworkConfig{
-					WithSwarmKey: false,
-				},
 			},
 		},
 	}
@@ -299,4 +294,18 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	assert.NoError(t, err)
 
 	return peer1, peer2, peer3
+}
+func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr, withSwarmKey bool) *types.Libp2pConfig {
+	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	assert.NoError(t, err)
+	return &types.Libp2pConfig{
+		PrivateKey:              priv,
+		BootstrapPeers:          bootstrapPeers,
+		Rendezvous:              "nunet-randevouz",
+		Server:                  false,
+		Scheduler:               backgroundtasks.NewScheduler(10),
+		CustomNamespace:         "/nunet-dht-1/",
+		ListenAddress:           []string{fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic-v1/", libp2pPort)},
+		PeerCountDiscoveryLimit: 40,
+	}
 }

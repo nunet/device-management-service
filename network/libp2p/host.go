@@ -2,7 +2,6 @@ package libp2p
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/pnet"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
@@ -63,24 +61,6 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, fs afero.Fs) (host
 		dht.Mode(dht.ModeServer),
 	}
 
-	if config.PrivateNetwork.WithSwarmKey {
-		psk, err := configureSwarmKey(fs)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to configure swarm key: %v", err)
-		}
-		libp2pOpts = append(libp2pOpts, libp2p.PrivateNetwork(psk))
-
-		// guarantee that outer connection will be refused
-		pnet.ForcePrivateNetwork = true
-	} else {
-		// enable quic (it does not work with pnet enabled)
-		libp2pOpts = append(libp2pOpts, libp2p.Transport(quic.NewTransport))
-		libp2pOpts = append(libp2pOpts, libp2p.Transport(webtransport.New))
-
-		// for some reason, ForcePrivateNetwork was equal to true even without being set to true
-		pnet.ForcePrivateNetwork = false
-	}
-
 	libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings(config.ListenAddress...),
 		libp2p.Identity(config.PrivateKey),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
@@ -90,9 +70,13 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, fs afero.Fs) (host
 		libp2p.Peerstore(ps),
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.Security(noise.ID, noise.New),
-		// Do not use DefaulTransports as we can not enable Quic when pnet
-		libp2p.Transport(tcp.NewTCPTransport),
-		libp2p.Transport(ws.New),
+		// libp2p.NoListenAddrs,
+		libp2p.ChainOptions(
+			libp2p.Transport(tcp.NewTCPTransport),
+			libp2p.Transport(quic.NewTransport),
+			libp2p.Transport(webtransport.New),
+			libp2p.Transport(ws.New),
+		),
 		libp2p.EnableNATService(),
 		libp2p.ConnectionManager(connmgr),
 		libp2p.EnableRelay(),
