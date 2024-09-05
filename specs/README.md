@@ -21,7 +21,6 @@
       - [p2p network and routing](#p2p-network-and-routing)
       - [Storage interface](#storage-interface)
       - [IP over Libp2p](#ip-over-libp2p)
-      - [Private Swarm](#private-swarm)
       - [Observability and Telemetry](#observability-and-telemetry)
       - [Definition of compute workflows / recursive jobs](#definition-of-compute-workflows--recursive-jobs)
       - [Job deployment and orchestration model](#job-deployment-and-orchestration-model)
@@ -359,25 +358,6 @@ Context / links:
 | **Impacted functionality** | Ability to integrate with third party frameworks for orchestration (e.g. Kubernetes, others) as well as run distributed software (database clusters, etc.); Will be mostly used for the [Public Alpha Solutions milestone](https://app.gitbook.com/o/HmQiiAfFnBUd24KadDsO/s/UoAe47nbLYU9lZHCUSJH/public-alpha-solutions)  |
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: (1) spawn a ipv4 network for containers running on different machines to directly interact with each other; (2) Access compute providers via Kubernetes cluster / orchestrate jobs via Kubernetes cluster (advanced);  <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/131)|
 
-
-#### Private Swarm
-
-| | |
-| --- | --- |
-| **Feature name** | Private Swarm  |
-| **Work packages** | Within the scope of [network implementation work package](https://nunet.gitlab.io/publisher/project-management-portal/device-management-service-version-0-5-x/work_packages/network-package-implementation_technical_dependencies.html) |
-| **Code reference** | [design issue](https://gitlab.com/nunet/device-management-service/-/issues/229); <br>[implementation issue](https://gitlab.com/nunet/device-management-service/-/issues/350) <br>[related merge request](https://gitlab.com/nunet/device-management-service/-/merge_requests/354) |
-| **Description / definition of done** | [description and comments on design issue](https://gitlab.com/nunet/device-management-service/-/issues/344#note_1734240838) | 
-| **Timing** |  |
-| **Status** | Finished |
-| **Team** | |
-| **Strategic alignment** |  |
-| **Who it benefits** |  |
-| **User challenge** | Users are able to create private swarms on libp2p for secure communication |
-| **Value score** | n/a |
-| **Design** |    |
-| **Impacted functionality** | Ability to create private swarms for connecting dedicated DMSs. Will be mostly used for  the [Public Alpha Solutions milestone](https://app.gitbook.com/o/HmQiiAfFnBUd24KadDsO/s/UoAe47nbLYU9lZHCUSJH/public-alpha-solutions) |
-| **Acceptance tests** | Unit tests; Functional tests / integration tests: (1) a dms is able to create a new private swarm network during onboarding; (2) other dms's are able to connect to the network by manually configuring swarm key (via config or onboarding parameter) (the key is shared externally between machine owners); <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/130)  |
 
 #### Observability and Telemetry
 
