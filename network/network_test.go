@@ -43,9 +43,6 @@ func TestNewNetwork(t *testing.T) {
 					CustomNamespace:         "/nunet-dht-1/",
 					ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 					PeerCountDiscoveryLimit: 40,
-					PrivateNetwork: types.PrivateNetworkConfig{
-						WithSwarmKey: false,
-					},
 				},
 			},
 		},
@@ -78,9 +75,6 @@ func TestLibp2pNetwork(t *testing.T) {
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/localhost/tcp/10219"},
 			PeerCountDiscoveryLimit: 40,
-			PrivateNetwork: types.PrivateNetworkConfig{
-				WithSwarmKey: false,
-			},
 		},
 	}
 

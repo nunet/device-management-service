@@ -266,9 +266,6 @@ func newLibp2pNetwork(t *testing.T, port string, bootstrap []multiaddr.Multiaddr
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/127.0.0.1/tcp/" + port},
 			PeerCountDiscoveryLimit: 40,
-			PrivateNetwork: types.PrivateNetworkConfig{
-				WithSwarmKey: false,
-			},
 		},
 	}, afero.NewMemMapFs())
 	assert.NoError(t, err)

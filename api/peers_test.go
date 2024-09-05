@@ -43,9 +43,6 @@ func setupTestP2P() (*RESTServer, error) {
 			"/ip4/0.0.0.0/udp/0/quic",
 		},
 		PeerCountDiscoveryLimit: 5,
-		PrivateNetwork: types.PrivateNetworkConfig{
-			WithSwarmKey: false,
-		},
 	}
 
 	p2p, err := libp2p.New(cfg, afero.NewMemMapFs())

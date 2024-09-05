@@ -249,7 +249,7 @@ func TestSendMessageAndHandlers(t *testing.T) {
 
 func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp2p) {
 	// setup peer1
-	peer1Config := setupPeerConfig(t, port1, []multiaddr.Multiaddr{}, false)
+	peer1Config := setupPeerConfig(t, port1, []multiaddr.Multiaddr{})
 	peer1, err := New(peer1Config, afero.NewMemMapFs())
 	assert.NoError(t, err)
 	assert.NotNil(t, peer1)
@@ -264,7 +264,7 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	// setup peer2 to connect to peer 1
 	peer1p2pAddrs, err := peer1.GetMultiaddr()
 	assert.NoError(t, err)
-	peer2Config := setupPeerConfig(t, port2, peer1p2pAddrs, false)
+	peer2Config := setupPeerConfig(t, port2, peer1p2pAddrs)
 	peer2, err := New(peer2Config, afero.NewMemMapFs())
 	assert.NoError(t, err)
 	assert.NotNil(t, peer2)
@@ -283,7 +283,7 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	// peer3 will connect to peer2 in a ring setup.
 	peer2p2pAddrs, err := peer2.GetMultiaddr()
 	assert.NoError(t, err)
-	peer3Config := setupPeerConfig(t, port3, peer2p2pAddrs, false)
+	peer3Config := setupPeerConfig(t, port3, peer2p2pAddrs)
 	peer3, err := New(peer3Config, afero.NewMemMapFs())
 	assert.NoError(t, err)
 	assert.NotNil(t, peer3)
@@ -295,7 +295,8 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 
 	return peer1, peer2, peer3
 }
-func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr, withSwarmKey bool) *types.Libp2pConfig {
+
+func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr) *types.Libp2pConfig {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
 	assert.NoError(t, err)
 	return &types.Libp2pConfig{
