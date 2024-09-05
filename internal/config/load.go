@@ -34,7 +34,7 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("rest.port", 9999)
 	v.SetDefault("p2p.listen_address", []string{
 		"/ip4/0.0.0.0/tcp/9000",
-		"/ip4/0.0.0.0/udp/9000/quic",
+		"/ip4/0.0.0.0/udp/9000/quic-v1",
 	})
 	v.SetDefault("p2p.bootstrap_peers", []string{
 		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",

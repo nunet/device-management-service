@@ -41,16 +41,6 @@ type Libp2pConfig struct {
 	CustomNamespace         string
 	ListenAddress           []string
 	PeerCountDiscoveryLimit int
-	PrivateNetwork          PrivateNetworkConfig
 	GracePeriodMs           int
 	GossipMaxMessageSize    int
-}
-
-type PrivateNetworkConfig struct {
-	// WithSwarmKey if true, DMS will try to fetch the key from
-	// `<config_path>/swarm.key`.
-	WithSwarmKey bool
-
-	// ACL defines the access control list for the private network.
-	ACL []multiaddr.Multiaddr
 }
