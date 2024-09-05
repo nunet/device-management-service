@@ -100,7 +100,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 
 // Init initializes a libp2p host with its dependencies.
 func (l *Libp2p) Init(context context.Context) error {
-	host, dht, pubsub, err := NewHost(context, l.config, l.fs)
+	host, dht, pubsub, err := NewHost(context, l.config)
 	if err != nil {
 		zlog.Sugar().Error(err)
 		return err

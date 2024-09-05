@@ -182,9 +182,6 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           config.GetConfig().ListenAddress,
 		PeerCountDiscoveryLimit: 40,
-		PrivateNetwork: types.PrivateNetworkConfig{
-			WithSwarmKey: false,
-		},
 	}
 
 	p2p, err := libp2p.New(cfg, afero.NewMemMapFs())
