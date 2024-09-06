@@ -75,19 +75,59 @@ func (s *BasicSecurityContext) Require(msg Envelope, cap []Capability) error {
 	return nil
 }
 
-func (s *BasicSecurityContext) Provide(msg *Envelope, cap []Capability, delegate []Capability) error {
+func (s *BasicSecurityContext) Provide(msg *Envelope, invoke []Capability, delegate []Capability) error {
 	// if we are sending to self, nothing to do, just Sign
 	if s.id.Equal(msg.From.ID) && s.id.Equal(msg.To.ID) {
 		return s.Sign(msg)
 	}
 
-	tokens, err := s.cap.Provide(msg.To.DID, s.id, msg.To.ID, msg.Options.Expire, cap, delegate)
+	tokens, err := s.cap.Provide(msg.To.DID, s.id, msg.To.ID, msg.Options.Expire, invoke, delegate)
 	if err != nil {
 		return fmt.Errorf("providing capabilities: %w", err)
 	}
 
 	msg.Capability = tokens
+	return s.Sign(msg)
+}
 
+func (s *BasicSecurityContext) RequireBroadcast(msg Envelope, topic string, broadcast []Capability) error {
+	if !msg.IsBroadcast() {
+		return fmt.Errorf("not a broadcast message: %w", ErrInvalidMessage)
+	}
+
+	if topic != msg.Options.Topic {
+		return fmt.Errorf("broadcast topic mismatch: %w", ErrInvalidMessage)
+	}
+
+	// first consume the capability tokens in the envelope
+	if err := s.cap.Consume(msg.From.DID, msg.Capability); err != nil {
+		return fmt.Errorf("consuming capabilities: %w", err)
+	}
+
+	// check if any of the requested invocation capabilities are delegated
+	if err := s.cap.RequireBroadcast(s.DID(), msg.From.ID, topic, broadcast); err != nil {
+		s.cap.Discard(msg.Capability)
+		return fmt.Errorf("requiring capabilities: %w", err)
+	}
+
+	return nil
+}
+
+func (s *BasicSecurityContext) ProvideBroadcast(msg *Envelope, topic string, broadcast []Capability) error {
+	if !msg.IsBroadcast() {
+		return fmt.Errorf("not a broadcast message: %w", ErrInvalidMessage)
+	}
+
+	if topic != msg.Options.Topic {
+		return fmt.Errorf("broadcast topic mismatch: %w", ErrInvalidMessage)
+	}
+
+	tokens, err := s.cap.ProvideBroadcast(msg.From.ID, topic, msg.Options.Expire, broadcast)
+	if err != nil {
+		return fmt.Errorf("providing capabilities: %w", err)
+	}
+
+	msg.Capability = tokens
 	return s.Sign(msg)
 }
 

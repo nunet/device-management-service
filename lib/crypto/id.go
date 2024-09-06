@@ -14,6 +14,10 @@ func (id ID) Equal(other ID) bool {
 	return bytes.Equal(id.PublicKey, other.PublicKey)
 }
 
+func (id ID) Empty() bool {
+	return len(id.PublicKey) == 0
+}
+
 // IDJsonView is the on the wire json reprsentation of an ID
 type IDJSONView struct {
 	Pub string `json:"pub"`

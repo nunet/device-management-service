@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
+	"sync"
 
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/network"
@@ -22,15 +22,11 @@ type BasicActor struct {
 	params BasicActorParams
 	self   Handle
 
-	addedTaskID int
+	mx            sync.Mutex
+	subscriptions map[string]uint64
 }
 
-type BasicActorParams struct {
-	Heartbeat struct {
-		Interval time.Duration
-		Jitter   float64
-	}
-}
+type BasicActorParams struct{}
 
 var _ Actor = (*BasicActor)(nil)
 
@@ -53,13 +49,14 @@ func New(dispatch *Dispatch, scheduler *bt.Scheduler, net network.Network, secur
 	}
 
 	actor := &BasicActor{
-		dispatch:  dispatch,
-		scheduler: scheduler,
-		registry:  &registry{},
-		network:   net,
-		security:  security,
-		params:    params,
-		self:      self,
+		dispatch:      dispatch,
+		scheduler:     scheduler,
+		registry:      &registry{},
+		network:       net,
+		security:      security,
+		params:        params,
+		self:          self,
+		subscriptions: make(map[string]uint64),
 	}
 
 	return actor, nil
@@ -74,35 +71,6 @@ func (a *BasicActor) Start() error {
 		return fmt.Errorf("starting actor: %s: %w", a.self.ID, err)
 	}
 
-	// Heartbeat
-	err := a.dispatch.AddBehavior(heartbeatBehavior, a.handleHeartbeat)
-	if err != nil {
-		return fmt.Errorf("failed to add heartbeat behaviour: %w", err)
-	}
-
-	if parent, ok := a.registry.GetParent(a.self); ok {
-		task := &bt.Task{
-			Name:        "actor heartbeat",
-			Description: "send heartbeat to parent actor",
-			Triggers: []bt.Trigger{
-				&bt.PeriodicTriggerWithJitter{
-					Interval: a.params.Heartbeat.Interval,
-					Jitter: func() time.Duration {
-						return jitter(
-							a.params.Heartbeat.Interval,
-							a.params.Heartbeat.Jitter,
-						)
-					},
-				},
-			},
-			Function: func(_ interface{}) error {
-				return a.sendHeartbeat(*parent)
-			},
-		}
-		addedTask := a.scheduler.AddTask(task)
-		a.addedTaskID = addedTask.ID
-	}
-
 	// and start the internal goroutines
 	a.dispatch.Start()
 	a.scheduler.Start()
@@ -112,34 +80,16 @@ func (a *BasicActor) Start() error {
 func (a *BasicActor) handleMessage(data []byte) {
 	var msg Envelope
 	if err := json.Unmarshal(data, &msg); err != nil {
-		// TODO log debug
+		log.Debugf("error unmarshaling message: %s", err)
 		return
 	}
 
 	if !a.self.ID.Equal(msg.To.ID) {
-		// TODO log warn
+		log.Warnf("message is not for ourselves: %s %s", a.self.ID, msg.To.ID)
 		return
 	}
 
 	_ = a.dispatch.Receive(msg)
-}
-
-func (a *BasicActor) handleHeartbeat(_ Envelope) {
-	// TODO
-}
-
-func (a *BasicActor) sendHeartbeat(parent Handle) error {
-	msg, err := Message(
-		a.self,
-		parent,
-		heartbeatBehavior,
-		HeartbeatMessage{},
-	)
-	if err != nil {
-		return fmt.Errorf("constructing heartbeat message: %w", err)
-	}
-
-	return a.Send(msg)
 }
 
 func (a *BasicActor) Context() context.Context {
@@ -163,11 +113,15 @@ func (a *BasicActor) RemoveBehavior(behavior string) {
 }
 
 func (a *BasicActor) Receive(msg Envelope) error {
-	if !a.self.ID.Equal(msg.To.ID) {
-		return fmt.Errorf("bad receiver: %w", ErrInvalidMessage)
+	if a.self.ID.Equal(msg.To.ID) {
+		return a.dispatch.Receive(msg)
 	}
 
-	return a.dispatch.Receive(msg)
+	if msg.IsBroadcast() {
+		return a.dispatch.Receive(msg)
+	}
+
+	return fmt.Errorf("bad receiver: %w", ErrInvalidMessage)
 }
 
 func (a *BasicActor) Send(msg Envelope) error {
@@ -249,8 +203,110 @@ func (a *BasicActor) Invoke(msg Envelope, opt ...BehaviorOption) (<-chan Envelop
 	return result, nil
 }
 
+func (a *BasicActor) Publish(msg Envelope) error {
+	if !msg.IsBroadcast() {
+		return ErrInvalidMessage
+	}
+
+	if msg.Signature == nil {
+		if msg.Nonce == 0 {
+			msg.Nonce = a.security.Nonce()
+		}
+
+		broadcast := []Capability{Capability(msg.Behavior)}
+		if err := a.security.ProvideBroadcast(&msg, msg.Options.Topic, broadcast); err != nil {
+			return fmt.Errorf("providing behavior capability for %s: %w", msg.Behavior, err)
+		}
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %w", err)
+	}
+
+	if err := a.network.Publish(a.Context(), msg.Options.Topic, data); err != nil {
+		return fmt.Errorf("publishing message: %w", err)
+	}
+
+	return nil
+}
+
+func (a *BasicActor) Subscribe(topic string) error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	_, ok := a.subscriptions[topic]
+	if ok {
+		return nil
+	}
+
+	subID, err := a.network.Subscribe(
+		a.Context(),
+		topic,
+		a.handleBroadcast,
+		func(data []byte, validatorData interface{}) (network.ValidationResult, interface{}) {
+			return a.validateBroadcast(topic, data, validatorData)
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("subscribe: %w", err)
+	}
+
+	a.subscriptions[topic] = subID
+	return nil
+}
+
+func (a *BasicActor) validateBroadcast(topic string, data []byte, validatorData interface{}) (network.ValidationResult, interface{}) {
+	var msg Envelope
+	if validatorData != nil {
+		if _, ok := validatorData.(Envelope); !ok {
+			log.Warnf("bogus pubsub validation data: %v", validatorData)
+			return network.ValidationReject, nil
+		}
+		// we have already validated the message, just short-circuit
+		return network.ValidationAccept, validatorData
+	} else if err := json.Unmarshal(data, &msg); err != nil {
+		return network.ValidationReject, nil
+	}
+
+	if !msg.IsBroadcast() {
+		return network.ValidationReject, nil
+	}
+
+	if msg.Options.Topic != topic {
+		return network.ValidationReject, nil
+	}
+
+	if msg.Expired() {
+		return network.ValidationIgnore, nil
+	}
+
+	if err := a.security.Verify(msg); err != nil {
+		return network.ValidationReject, nil
+	}
+
+	return network.ValidationAccept, msg
+}
+
+func (a *BasicActor) handleBroadcast(data []byte) {
+	var msg Envelope
+	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Debugf("error unmarshaling broadcast message: %s", err)
+		return
+	}
+
+	if err := a.Receive(msg); err != nil {
+		log.Warnf("error receiving broadcast message: %s", err)
+	}
+}
+
 func (a *BasicActor) Stop() error {
 	a.dispatch.close()
-	a.scheduler.RemoveTask(a.addedTaskID)
+	for topic, subID := range a.subscriptions {
+		err := a.network.Unsubscribe(topic, subID)
+		if err != nil {
+			log.Debugf("error unsubscribing from %s: %s", topic, err)
+		}
+	}
 	return nil
 }

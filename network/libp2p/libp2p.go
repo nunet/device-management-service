@@ -43,6 +43,15 @@ import (
 const (
 	MB                 = 1024 * 1024
 	MaxMessageLengthMB = 10
+
+	ValidationAccept = pubsub.ValidationAccept
+	ValidationReject = pubsub.ValidationReject
+	ValidationIgnore = pubsub.ValidationIgnore
+)
+
+type (
+	ValidationResult = pubsub.ValidationResult
+	Validator        func([]byte, interface{}) (ValidationResult, interface{})
 )
 
 // Libp2p contains the configuration for a Libp2p instance.
@@ -55,7 +64,9 @@ type Libp2p struct {
 	PS                peerstore.Peerstore
 	pubsub            *pubsub.PubSub
 	pubsubTopics      map[string]*pubsub.Topic
-	topicSubscription map[string]*pubsub.Subscription
+	topicValidators   map[string]map[uint64]Validator
+	topicSubscription map[string]map[uint64]*pubsub.Subscription
+	nextTopicSubID    uint64
 	topicMux          sync.RWMutex
 
 	// a list of peers discovered by discovery
@@ -93,7 +104,8 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		config:            config,
 		discoveredPeers:   make([]peer.AddrInfo, 0),
 		pubsubTopics:      make(map[string]*pubsub.Topic),
-		topicSubscription: make(map[string]*pubsub.Subscription),
+		topicSubscription: make(map[string]map[uint64]*pubsub.Subscription),
+		topicValidators:   make(map[string]map[uint64]Validator),
 		fs:                fs,
 	}, nil
 }
@@ -518,19 +530,38 @@ func (l *Libp2p) Publish(ctx context.Context, topic string, data []byte) error {
 }
 
 // Subscribe subscribes to a topic and sends the messages to the handler.
-func (l *Libp2p) Subscribe(ctx context.Context, topic string, handler func(data []byte)) error {
+func (l *Libp2p) Subscribe(ctx context.Context, topic string, handler func(data []byte), validator Validator) (uint64, error) {
 	topicHandler, err := l.getOrJoinTopicHandler(topic)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to topic: %w", err)
+		return 0, fmt.Errorf("failed to subscribe to topic: %w", err)
 	}
 
 	sub, err := topicHandler.Subscribe()
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to topic %s: %w", topic, err)
+		return 0, fmt.Errorf("failed to subscribe to topic %s: %w", topic, err)
 	}
 
 	l.topicMux.Lock()
-	l.topicSubscription[topic] = sub
+	subID := l.nextTopicSubID
+	l.nextTopicSubID++
+	topicMap, ok := l.topicSubscription[topic]
+	if !ok {
+		topicMap = make(map[uint64]*pubsub.Subscription)
+		l.topicSubscription[topic] = topicMap
+	}
+	if validator != nil {
+		validatorMap, ok := l.topicValidators[topic]
+		if !ok {
+			if err := l.pubsub.RegisterTopicValidator(topic, l.validate); err != nil {
+				sub.Cancel()
+				return 0, fmt.Errorf("failed to register topic validator: %w", err)
+			}
+			validatorMap = make(map[uint64]Validator)
+			l.topicValidators[topic] = validatorMap
+		}
+		validatorMap[subID] = validator
+	}
+	topicMap[subID] = sub
 	l.topicMux.Unlock()
 
 	go func() {
@@ -543,7 +574,27 @@ func (l *Libp2p) Subscribe(ctx context.Context, topic string, handler func(data 
 		}
 	}()
 
-	return nil
+	return subID, nil
+}
+
+func (l *Libp2p) validate(_ context.Context, _ peer.ID, msg *pubsub.Message) ValidationResult {
+	l.topicMux.Lock()
+	validators, ok := l.topicValidators[msg.GetTopic()]
+	l.topicMux.Unlock()
+
+	if !ok {
+		return ValidationAccept
+	}
+
+	for _, validator := range validators {
+		result, validatorData := validator(msg.Data, msg.ValidatorData)
+		if result != ValidationAccept {
+			return result
+		}
+		msg.ValidatorData = validatorData
+	}
+
+	return ValidationAccept
 }
 
 func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg types.MessageEnvelope) error {
@@ -610,7 +661,7 @@ func (l *Libp2p) getOrJoinTopicHandler(topic string) (*pubsub.Topic, error) {
 }
 
 // Unsubscribe cancels the subscription to a topic
-func (l *Libp2p) Unsubscribe(topic string) error {
+func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 	l.topicMux.Lock()
 	defer l.topicMux.Unlock()
 
@@ -619,18 +670,27 @@ func (l *Libp2p) Unsubscribe(topic string) error {
 		return fmt.Errorf("not subscribed to topic: %s", topic)
 	}
 
-	// delete subscription handler and subscription
-	sub, ok := l.topicSubscription[topic]
+	topicValidators, ok := l.topicValidators[topic]
 	if ok {
-		sub.Cancel()
-		delete(l.topicSubscription, topic)
+		delete(topicValidators, subID)
 	}
 
-	if err := topicHandler.Close(); err != nil {
-		return fmt.Errorf("failed to close topic handler: %w", err)
+	// delete subscription handler and subscription
+	topicSubscriptions, ok := l.topicSubscription[topic]
+	if ok {
+		sub, ok := topicSubscriptions[subID]
+		if ok {
+			sub.Cancel()
+			delete(topicSubscriptions, subID)
+		}
 	}
 
-	delete(l.pubsubTopics, topic)
+	if len(topicSubscriptions) == 0 {
+		delete(l.pubsubTopics, topic)
+		if err := topicHandler.Close(); err != nil {
+			return fmt.Errorf("failed to close topic handler: %w", err)
+		}
+	}
 
 	return nil
 }
