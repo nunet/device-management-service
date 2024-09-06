@@ -1,4 +1,4 @@
-package docker
+package docker_test
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 )
 
 func TestGPUDeployment(t *testing.T) {
+	ensureDockerSetup(t)
 	t.Log("Starting GPU Deployment Test")
 
 	// Get the GPU with the highest free VRAM

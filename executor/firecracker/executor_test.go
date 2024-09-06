@@ -30,6 +30,7 @@ func (s *ExecutorTestSuite) SetupTest() {
 
 // TestExecutorTestSuite runs the test suite for the Firecracker executor.
 func TestExecutorTestSuite(t *testing.T) {
+	ensureFirecrackerSetup(t)
 	suite.Run(t, new(ExecutorTestSuite))
 }
 

@@ -30,13 +30,13 @@ type Executor struct {
 }
 
 // NewExecutor initializes a new executor for Firecracker VMs.
-func NewExecutor(_ context.Context, id string) (*Executor, error) {
+func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	firecrackerClient, err := NewFirecrackerClient()
 	if err != nil {
 		return nil, err
 	}
 
-	if !firecrackerClient.IsInstalled() {
+	if !firecrackerClient.IsInstalled(ctx) {
 		return nil, fmt.Errorf("firecracker is not installed")
 	}
 	fe := &Executor{
