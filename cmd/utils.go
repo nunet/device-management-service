@@ -142,7 +142,6 @@ func setupTable(w io.Writer) *tablewriter.Table {
 
 // appendToFile opens filename and write string data to it
 func appendToFile(afs afero.Afero, filename, data string) error {
-	// nolint:gofumpt
 	f, err := afs.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("open %s file failed: %w", filename, err)

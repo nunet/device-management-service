@@ -1,13 +1,13 @@
 package crypto
 
-// nolint
-func ReadVault(path string, passphrase string) ([]byte, error) {
+// ReadVault
+func ReadVault(path string, passphrase string) ([]byte, error) { //nolint:revive // its a todo
 	// TODO
 	return nil, ErrTODO
 }
 
-// nolint
-func WriteVault(path string, passphrase string, data []byte) error {
+// WriteVault
+func WriteVault(path string, passphrase string, data []byte) error { //nolint:revive // its a todo
 	// TODO
 	return ErrTODO
 }
