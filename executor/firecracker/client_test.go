@@ -2,6 +2,8 @@ package firecracker_test
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
 )
 
@@ -32,8 +35,33 @@ func (s *ClientTestSuite) SetupTest() {
 	s.client = c
 }
 
+func ensureFirecrackerSetup(t *testing.T) {
+	isPipeline, _ := strconv.ParseBool(os.Getenv("GITLAB_CI"))
+	errMsg := "Firecracker is not installed or running. Skipping Firecracker tests."
+
+	c, err := firecracker.NewFirecrackerClient()
+
+	if err != nil || !c.IsInstalled(context.Background()) {
+		if isPipeline {
+			t.Fatal(errMsg)
+		} else {
+			t.Skip(errMsg)
+		}
+	}
+
+	// Check if test data exists.
+	testDataErrMsg := "%s not found (%s). Run \"make testdata\" before running tests."
+	if _, err := os.Stat(rootDrivePath); os.IsNotExist(err) {
+		t.Fatalf(testDataErrMsg, "root drive image", rootDrivePath)
+	}
+	if _, err := os.Stat(kernelImagePath); os.IsNotExist(err) {
+		t.Fatalf(testDataErrMsg, "kernel image", kernelImagePath)
+	}
+}
+
 // TestClientTestSuite runs the test suite for the Firecracker client.
 func TestClientTestSuite(t *testing.T) {
+	ensureFirecrackerSetup(t)
 	suite.Run(t, new(ClientTestSuite))
 }
 
@@ -69,7 +97,7 @@ func (s *ClientTestSuite) createTestVM(socketPath string) *firecrackerSdk.Machin
 
 // TestIsInstalled tests the IsInstalled method of the Firecracker client.
 func (s *ClientTestSuite) TestIsInstalled() {
-	assert.True(s.T(), s.client.IsInstalled())
+	assert.True(s.T(), s.client.IsInstalled(context.Background()))
 }
 
 // TestCreateVM tests the CreateVM method of the Firecracker client.

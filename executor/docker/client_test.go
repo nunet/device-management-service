@@ -2,6 +2,8 @@ package docker_test
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -34,8 +36,24 @@ func (s *ClientTestSuite) SetupTest() {
 	s.client = c
 }
 
+func ensureDockerSetup(t *testing.T) {
+	isPipeline, _ := strconv.ParseBool(os.Getenv("GITLAB_CI"))
+	errMsg := "Docker is not installed or running. Skipping Docker client tests"
+
+	c, err := docker.NewDockerClient()
+
+	if err != nil || !c.IsInstalled(context.Background()) {
+		if isPipeline {
+			t.Fatal(errMsg)
+		} else {
+			t.Skip(errMsg)
+		}
+	}
+}
+
 // TestClientTestSuite runs the test suite for the Docker client.
 func TestClientTestSuite(t *testing.T) {
+	ensureDockerSetup(t)
 	suite.Run(t, new(ClientTestSuite))
 }
 

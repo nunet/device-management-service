@@ -29,6 +29,7 @@ func (s *ExecutorTestSuite) SetupTest() {
 
 // TestExecutorTestSuite runs the test suite for the Docker executor.
 func TestExecutorTestSuite(t *testing.T) {
+	ensureDockerSetup(t)
 	suite.Run(t, new(ExecutorTestSuite))
 }
 

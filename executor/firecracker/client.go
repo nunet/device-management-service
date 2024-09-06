@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"syscall"
 	"time"
 
@@ -21,11 +20,19 @@ func NewFirecrackerClient() (*Client, error) {
 }
 
 // IsInstalled checks if Firecracker is installed on the host.
-func (c *Client) IsInstalled() bool {
-	// LookPath searches for an executable named file in the directories named by the PATH environment variable.
-	// There might be a better way to check if Firecracker is installed.
-	_, err := exec.LookPath("firecracker")
-	return err == nil
+func (c *Client) IsInstalled(ctx context.Context) bool {
+	// Check if the Firecracker binary is installed.
+	// This implementation sends a version request to the Firecracker binary.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	cmd := firecracker.VMCommandBuilder{}.WithArgs([]string{"--version"}).Build(ctx)
+
+	version, err := cmd.Output()
+	if err != nil || !cmd.ProcessState.Success() {
+		return false
+	}
+
+	return string(version) != ""
 }
 
 // CreateVM creates a new Firecracker VM with the specified configuration.
