@@ -107,7 +107,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	var oConf types.OnboardingConfig
 	oConf.Name = hostname
 	oConf.UpdateTimestamp = time.Now().Unix()
-	// nolint TODO: 553
+	// TODO: 553
 	oConf.TotalResources.RAM = provisionedResources.RAM
 	oConf.TotalResources.NumCores = provisionedResources.NumCores
 	oConf.TotalResources.CPU = provisionedResources.CPU
@@ -128,7 +128,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 
 	oConf.OnboardedResources.RAM = capacity.Memory
 	oConf.OnboardedResources.CPU = float64(capacity.CPU)
-	// nolint TODO: 553
+	// TODO: 553
 	oConf.Network = capacity.Channel
 	oConf.PublicKey = capacity.PaymentAddress
 	oConf.NTXPricePerMinute = capacity.NTXPricePerMinute
@@ -295,7 +295,7 @@ func (o *Onboarding) validateCapacityForNunet(capacity types.CapacityForNunet) e
 		return fmt.Errorf("CPU should be between 10%% and 90%% of the available CPU (%d and %d)", int64(provisionedResources.CPU/10), int64(provisionedResources.CPU*9/10))
 	}
 
-	// nolint TODO: 553
+	//nolint:gosec // to be fixed in TODO: 553
 	if capacity.Memory > provisionedResources.RAM*9/10 || capacity.Memory < provisionedResources.RAM/10 {
 		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory (%d and %d)", int64(provisionedResources.RAM/10), int64(provisionedResources.RAM*9/10))
 	}

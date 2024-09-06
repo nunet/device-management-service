@@ -28,7 +28,6 @@ func Message(src Handle, dest Handle, behavior string, payload interface{}, opt 
 		From:     src,
 		Message:  data,
 		Options: EnvelopeOptions{
-			// nolint
 			Expire: uint64(time.Now().Add(defaultMessageTimeout).UnixNano()),
 		},
 		Discard: func() {},

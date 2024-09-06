@@ -27,7 +27,6 @@ func TimeInformationComparator(lraw interface{}, rraw interface{}, _ ...Preferen
 	lTotalTime := totalTime(l)
 	rTotalTime := totalTime(r)
 
-	//nolint
 	if lTotalTime == rTotalTime {
 		return types.Equal
 	} else if lTotalTime < rTotalTime {
