@@ -1,45 +1,45 @@
 # Feature scope freezes for milestone releases
 
 - [Feature scope freezes for milestone releases](#feature-scope-freezes-for-milestone-releases)
-  - [Milestone: Device Management Service Version 0.5.x](#milestone-device-management-service-version-05x)
-    - [Infrastructure](#infrastructure)
-      - [Feature environment](#feature-environment)
-      - [CI/CD pipeline](#cicd-pipeline)
-      - [Test management](#test-management)
-    - [Documentation](#documentation)
-      - [Specification and documentation system](#specification-and-documentation-system)
-      - [Project management portal](#project-management-portal)
-    - [Implementation](#implementation)
-      - [Actor model with Object/Security Capabilities](#actor-model-with-objectsecurity-capabilities)
-      - [Object/Security Capabilities (UCAN)](#objectsecurity-capabilities-ucan)
-      - [Decentralized search and matching model](#decentralized-search-and-matching-model)
-      - [Dynamic method dispatch / invocation](#dynamic-method-dispatch--invocation)
-      - [Local access (API and CMD)](#local-access-api-and-cmd)
-      - [Local database interface and implementation](#local-database-interface-and-implementation)
-      - [Executor interface and implementation](#executor-interface-and-implementation)
-      - [Machine benchmarking](#machine-benchmarking)
-      - [p2p network and routing](#p2p-network-and-routing)
-      - [Storage interface](#storage-interface)
-      - [IP over Libp2p](#ip-over-libp2p)
-      - [Observability and Telemetry](#observability-and-telemetry)
-      - [Definition of compute workflows / recursive jobs](#definition-of-compute-workflows--recursive-jobs)
-      - [Job deployment and orchestration model](#job-deployment-and-orchestration-model)
-      - [Hardware capability model](#hardware-capability-model)
-      - [Supervision model](#supervision-model)
-      - [Tokenomics interface](#tokenomics-interface)
-  - [Release management](#release-management)
-    - [Branching strategy](#branching-strategy)
-    - [Release process](#release-process)
-      - [Feature scope freeze](#feature-scope-freeze)
-      - [Specification and documentation portal launch](#specification-and-documentation-portal-launch)
-    - [Project management portal launch](#project-management-portal-launch)
-    - [Test management system launch](#test-management-system-launch)
-    - [Release testing start](#release-testing-start)
-    - [Release](#release)
+- [Milestone: Device Management Service Version 0.5.x](#milestone-device-management-service-version-05x)
+  - [Infrastructure](#infrastructure)
+    - [Feature environment](#feature-environment)
+    - [CI/CD pipeline](#cicd-pipeline)
+    - [Test management](#test-management)
+  - [Documentation](#documentation)
+    - [Specification and documentation system](#specification-and-documentation-system)
+    - [Project management portal](#project-management-portal)
+  - [Implementation](#implementation)
+    - [Actor model with Object/Security Capabilities](#actor-model-with-objectsecurity-capabilities)
+    - [Object/Security Capabilities (UCAN)](#objectsecurity-capabilities-ucan)
+    - [Decentralized search and matching model](#decentralized-search-and-matching-model)
+    - [Dynamic method dispatch/invocation](#dynamic-method-dispatchinvocation)
+    - [Local access (API and CMD)](#local-access-api-and-cmd)
+    - [Local database interface and implementation](#local-database-interface-and-implementation)
+    - [Executor interface and implementation](#executor-interface-and-implementation)
+    - [Machine benchmarking](#machine-benchmarking)
+    - [p2p network and routing](#p2p-network-and-routing)
+    - [Storage interface](#storage-interface)
+    - [IP over Libp2p](#ip-over-libp2p)
+    - [Observability and Telemetry](#observability-and-telemetry)
+    - [Definition of compute workflows/recursive jobs](#definition-of-compute-workflowsrecursive-jobs)
+    - [Job deployment and orchestration model](#job-deployment-and-orchestration-model)
+    - [Hardware capability model](#hardware-capability-model)
+    - [Supervision model](#supervision-model)
+    - [Tokenomics interface](#tokenomics-interface)
+- [Release management](#release-management)
+  - [Branching strategy](#branching-strategy)
+  - [Release process](#release-process)
+    - [Feature scope freeze](#feature-scope-freeze)
+    - [Specification and documentation portal launch](#specification-and-documentation-portal-launch)
+  - [Project management portal launch](#project-management-portal-launch)
+  - [Test management system launch](#test-management-system-launch)
+  - [Release testing start](#release-testing-start)
+  - [Release](#release)
 
 
 
-## Milestone: Device Management Service Version 0.5.x
+# <a id="milestone-device-management-service-version-05x"></a>Milestone: Device Management Service Version 0.5.x
 
 Context / links:
 1. Project management portal page for the milestone: https://docs.nunet.io/project-management-portal/device-management-service-version-0-5-x
@@ -48,9 +48,9 @@ Context / links:
 3. Tracking issue: https://gitlab.com/nunet/device-management-service/-/issues/519
 4. [Tech board agreement on issues for implementing the dms 0.5.x architecture](https://gitlab.com/nunet/architecture/-/issues/344#note_1962052105)
 
-### Infrastructure
+## Infrastructure
 
-#### Feature environment
+### Feature environment
 
 | | |
 | --- | --- |
@@ -69,7 +69,7 @@ Context / links:
 | **Impacted functionality** | This does not affect any feature (except possibly ability to launch testnet in the future) but rather deals with quality assurance of the whole platform, therefore indirectly but fundamentally affects quality of all features now and in the future.|
 | **Acceptance tests** | Developers are able to spawn and tear down testing networks on demand for testing custom platform builds and complex functionalities involving more than one machine; CI/CD pipeline incorporates complex functional and integration tests which run on automatically spawned and teared down small (but geographically distributed) real networks of virtual machines |
 
-#### CI/CD pipeline
+### <a id="#cicd-pipeline"></a>CI/CD pipeline
 
 | | |
 | --- | --- |
@@ -88,7 +88,7 @@ Context / links:
 | **Impacted functionality** | This does not affect any feature (except possibly ability to launch testnet in the future) but rather deals with quality assurance of the whole platform, therefore indirectly but fundamentally affects quality of all features now and in the future.|
 | **Acceptance tests** | n/a |
 
-#### Test management
+### Test management
 
 | | |
 | --- | --- |
@@ -107,9 +107,9 @@ Context / links:
 | **Acceptance tests** | n/a |
 
 
-### Documentation
+## Documentation
 
-#### Specification and documentation system
+### Specification and documentation system
 
 | | |
 | --- | --- |
@@ -128,7 +128,7 @@ Context / links:
 | **Acceptance tests** | [documentation portal launch issue and deliverables](https://gitlab.com/nunet/publisher/documentation/-/issues/4) |
 
 
-#### Project management portal
+### Project management portal
 
 | | |
 | --- | --- |
@@ -146,9 +146,9 @@ Context / links:
 | **Impacted functionality** | This does not affect any feature directly but fundamentally enables alignment with the business goals, use-case based platform development model and evolvability of the software.|
 | **Acceptance tests** | [Project management portal launch issue and deliverables](https://gitlab.com/nunet/publisher/project-management-portal/-/issues/17) |
 
-### Implementation
+## Implementation
 
-#### Actor model with Object/Security Capabilities
+### <a id="#actor-model-with-objectsecurity-capabilities"></a>Actor model with Object/Security Capabilities
 
 | | |
 | --- | --- |
@@ -167,7 +167,7 @@ Context / links:
 | **Impacted functionality** | All functionality of the platform is fundamentally affected implementation of actor model; This is especially true for the future projected functionalities involving edge computing, IoT deployments and decentralized physical infrastructure in general. |
 | **Acceptance tests** | Functional and integration tests defined in node package, dms package related to Actor interface and jobs package related to Allocation interface; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/122) |
 
-#### Object/Security Capabilities (UCAN)
+### <a id="#objectsecurity-capabilities-ucan"></a>Object/Security Capabilities (UCAN)
 
 | | |
 | --- | --- |
@@ -186,7 +186,7 @@ Context / links:
 | **Impacted functionality** | Implementation of the fundamental zero trust security model. |
 | **Acceptance tests** |  |
 
-#### Decentralized search and matching model
+### Decentralized search and matching model
 
 | | |
 | --- | --- |
@@ -205,7 +205,7 @@ Context / links:
 | **Impacted functionality** | All functionality of the platform is fundamentally affected implementation of search and match related functionality; This is especially true for the future projected functionalities involving edge computing, IoT deployments and decentralized physical infrastructure in general. |
 | **Acceptance tests** | A valid compute job (described in eligible formats) demanded via exposed interfaces triggers finding suitable machines and their configurations for deploying the job and pics the most fitting hardware configuration. ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/138) |
 
-#### Dynamic method dispatch / invocation
+### <a id="#dynamic-method-dispatchinvocation"></a>Dynamic method dispatch/invocation
 
 | | |
 | --- | --- |
@@ -224,7 +224,7 @@ Context / links:
 | **Impacted functionality** | Fundamental functionality that enables the full realization of the Actor model potential |
 | **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: sending rpc call from one actor (node or allocation) on different network configuration to another Actor (node or allocation); and initiate chosen method; ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/137) |
 
-#### Local access (API and CMD)
+### <a id="#local-access-api-and-cmd"></a>Local access (API and CMD)
 
 | | |
 | --- | --- |
@@ -243,7 +243,7 @@ Context / links:
 | **Impacted functionality** | Configuration of dms; Access to NuNet network from external applications via REST-API; |
 | **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: api responds to locally issued commands; api does not respond to remotely issued commands; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/123) |
 
-#### Local database interface and implementation
+### Local database interface and implementation
 
 | | |
 | --- | --- |
@@ -262,7 +262,7 @@ Context / links:
 | **Impacted functionality** | Configuration management; Local telemetry and logging management; |
 | **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: Arbitrary information can be stored, retrieved and searched via the implemented interface; ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/136) |
 
-#### Executor interface and implementation
+### Executor interface and implementation
 
 | | |
 | --- | --- |
@@ -281,7 +281,7 @@ Context / links:
 | **Impacted functionality** | Definition of generic interface for easy plugging third party developed executables to dms; Full implementation of docker and firecracker executables; |
 | **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: starting a compute job with docker / firecracker executables; observing the runtime; finishing and receiving results;  ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/135)|
 
-#### Machine benchmarking
+### Machine benchmarking
 
 | | |
 | --- | --- |
@@ -301,7 +301,7 @@ Context / links:
 | **Acceptance tests** | Unit tests; Functional tests: Machines are benchmarked while onboarding, the benchmarking data is stored / accessed via database interface; ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/134)|
 
 
-#### p2p network and routing
+### p2p network and routing
 
 | | |
 | --- | --- |
@@ -320,7 +320,7 @@ Context / links:
 | **Impacted functionality** | Fundamental functionality of NuNet -- connecting dms's into p2p neworks and subnetworks; |
 | **Acceptance tests** | Unit tests; Functional tests: Actors (nodes and allocations) are able to see peers / neighbours; It is possible to send and receive messages from other Actors (nodes and allocations) either directly (addressed) or via gossip routing indirectly; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/133) |
 
-#### Storage interface
+### Storage interface
 
 | | |
 | --- | --- |
@@ -339,7 +339,7 @@ Context / links:
 | **Impacted functionality** | Fundamental functionality of NuNet -- providing input and output data storage for computation processes |
 | **Acceptance tests** | Unit tests; Functional tests: all executors are able to read and write data to the provided storage, as allowed and via the interface; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/132) |
 
-#### IP over Libp2p
+### IP over Libp2p
 
 | | |
 | --- | --- |
@@ -359,7 +359,7 @@ Context / links:
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: (1) spawn a ipv4 network for containers running on different machines to directly interact with each other; (2) Access compute providers via Kubernetes cluster / orchestrate jobs via Kubernetes cluster (advanced);  <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/131)|
 
 
-#### Observability and Telemetry
+### Observability and Telemetry
 
 | | |
 | --- | --- |
@@ -378,7 +378,7 @@ Context / links:
 | **Impacted functionality** | Logging, tracing and monitoring of decentralized computing framework on any level of granularity; Constitutes a part of developer tooling of NuNet, which will be used by both internal team as well as community contributors |
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: after logging is implemented via telemetry interface and default logging is elasticsearch collector; all telemetry events are stored in elasticsearch database and can be analyzed via API / Kibana dashboard; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/129) |
 
-#### Definition of compute workflows / recursive jobs
+### <a id="#definition-of-compute-workflowsrecursive-jobs"></a>Definition of compute workflows/recursive jobs
 
 | | |
 | --- | --- |
@@ -398,7 +398,7 @@ Context / links:
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: Ability to represent any job that can be represented via kubernetes / nomad in nunet job fomat / convert to inner type and orchestrate its execution; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/128) |
 
 
-#### Job deployment and orchestration model
+### Job deployment and orchestration model
 
 | | |
 | --- | --- |
@@ -418,7 +418,7 @@ Context / links:
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: Submit a job described in NuNet job description format, observe its deployment and execution and returning results; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/127) |
 
 
-#### Hardware capability model
+### Hardware capability model
 
 | | |
 | --- | --- |
@@ -438,7 +438,7 @@ Context / links:
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: via job orchestration integration tests; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/126) |
 
 
-#### Supervision model
+### Supervision model
 
 | | |
 | --- | --- |
@@ -457,7 +457,7 @@ Context / links:
 | **Impacted functionality** | Ability to build a 'decentralized' control plane on NuNet; error propagation between Actors participating in the same compute workflow; heartbeat and health-check functionalities; conceptually, supervisor model enables failure recovery and fault tolerance features in the network; related to 'remote procedure calls' functionality; |
 | **Acceptance tests** | Unit tests; Functional tests / integration tests: build hierarchies of actors (nodes and allocations) that can observe each other; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/125)|
 
-#### Tokenomics interface
+### Tokenomics interface
 
 | | |
 | --- | --- |
@@ -476,18 +476,18 @@ Context / links:
 | **Impacted functionality** | Ability to conclude peer to peer contracts between machines requesting a job and machines accepting job execution (eventually); Ability to include explicit contract information into each job invocation request, independently of the type of contract and micro-payment channels  implementation |
 | **Acceptance tests** | Unit tests; Functional tests / integration tests as part of job orchestration; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/124)|
 
-## Release management
+# Release management
 
 The goal of the process is to expose all developed functionalities with frozen scope, as described above, to a rigorous internal and community testing via succession of release candidate builds. 
 
-### Branching strategy
+## Branching strategy
 
 In preparation for this release process we will be changing the branching strategy as discussed and agreed in this [issue](https://gitlab.com/nunet/device-management-service/-/issues/542) and tracked by this [issue](https://gitlab.com/nunet/device-management-service/-/issues/547). In summary:
 
 * We will operate on two branches: `main` (for trunk development) and `release` (for minor / final releases and patches).
 * The public dms binaries will be built from `release` branch tags in the form of v{version_number}-{suffix}, e.g. `v0.5-rc1`, etc. and released via [gitlab release page](https://gitlab.com/nunet/device-management-service/-/releases) as usual.
 
-### Release process
+## Release process
 
 The release process of [Device Management Service Version 0.5.x](https://gitlab.com/groups/nunet/-/milestones/44#tab-issues) is scheduled to start September 15, 2024 and finish December 15, 2024. It involves the following steps in chronological order:
 
@@ -497,19 +497,19 @@ The release process of [Device Management Service Version 0.5.x](https://gitlab.
 4. Test management system launch (feature environment, CI/CD pipeline and QA visibility)
 8. Release candidates testing and delivering full feature scope
 
-#### Feature scope freeze
+### Feature scope freeze
 
 We first define the final scope of the dms features that we are releasing within this milestone, which is done within [this section](#implementation) of the document. The scope of each feature should defined by functional test cases / scenarios associated with each feature and linked in **Acceptance tests** row of each table. All required test cases and scenarios pertaining to the feature scope freeze shall be written by September 15, 2024. The work is tracked by the work package [dms/tests](https://nunet.gitlab.io/publisher/project-management-portal/device-management-service-version-0-5-x/work_packages/tests_technical_dependencies.html) integrated into the test management system. Until then we will be continuing to implement all the features as they are explained in this document.
 
-#### Specification and documentation portal launch
+### Specification and documentation portal launch
 
 Documentation portal was operating internally since end of 2023, but was not fully aligned with the specification and documentation process that involves the whole team and including updates of documentation into acceptance criteria of each pull request. Documentation portal shall be launched in August. The work involving finishing and launching documentation portal are tracked by [this issue](https://gitlab.com/nunet/publisher/documentation/-/issues/4). 
 
-### Project management portal launch
+## Project management portal launch
 
 Project management portal has been operating internally since Q4 2023, but was not exposed publicly as of yet. It will be launched publicly by the end of August 2024. The work involved in finishing and launching the project management portal for the dms v.0.5 milestone is tracked by [this issue](https://gitlab.com/nunet/publisher/project-management-portal/-/issues/17)
 
-### Test management system launch
+## Test management system launch
 
 NuNet test management system consists of three main components, which have been developed for months now and are close to completion, but need to be finally coordinated and aligned in the preparation for the start of the DMS v0.5 release process and release candidate testing internally as well as via the community contributions. The components of the test management system are:
 
@@ -521,10 +521,10 @@ All three components are tightly coupled and will be internally released in quic
 
 Both feature environment and CI/CD process are instrumental to reach release level quality of the developed features. Both have been in development for months prior to current moment and are close to completion. Both are moving targets as they will develop together with the platform. Nevertheless, we aim to launch them as described above in the first half of August.
 
-### Release testing start
+## Release testing start
 
 Given that all prerequisites are launched and prepared, we aim at starting the release process September 15 by releasing the first release candidate and exposing it to testing. We will release at least 3/4 release candidates and then final release, but the process will be fluid as explained [here](https://gitlab.com/nunet/device-management-service/-/issues/542) and most probably fill feature more minor release candidate releases per the adopted branching strategy.
 
-### Release
+## Release
 
 After testing the frozen feature scope of the release, we aim at releasing the 0.5.x version of device-management-service during the second half of December 2024. For current / updated scchedule and details, see [release process kick-start presenatation](https://docs.google.com/presentation/d/1lS6sI7-v5QyFf1xsM-y-SK8tHJ0rEzpjBQpb2lPQ7yI/edit#slide=id.g2f39a3f1c57_0_5).
