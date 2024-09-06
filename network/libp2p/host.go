@@ -135,7 +135,11 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig) (host.Host, *dht.I
 		return nil, nil, nil, err
 	}
 
-	optsPS := []pubsub.Option{pubsub.WithMessageSigning(true), pubsub.WithMaxMessageSize(config.GossipMaxMessageSize)}
+	optsPS := []pubsub.Option{
+		pubsub.WithFloodPublish(true),
+		pubsub.WithMessageSigning(true),
+		pubsub.WithMaxMessageSize(config.GossipMaxMessageSize),
+	}
 	gossip, err := pubsub.NewGossipSub(ctx, host, optsPS...)
 	// gossip, err := pubsub.NewGossipSubWithRouter(ctx, host, pubsub.DefaultGossipSubRouter(host), optsPS...)
 	if err != nil {

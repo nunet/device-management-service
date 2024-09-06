@@ -23,8 +23,8 @@ type Handle struct {
 
 // ActorAddress is a raw actor address representation
 type Address struct {
-	HostID       string `json:"host"`
-	InboxAddress string `json:"inbox"`
+	HostID       string `json:"host,omitempty"`
+	InboxAddress string `json:"inbox,omitempty"`
 }
 
 // Envelope is the envelope for messages in the actor system
@@ -36,7 +36,7 @@ type Envelope struct {
 	Options    EnvelopeOptions `json:"opt"`
 	Message    []byte          `json:"msg"`
 	Capability []byte          `json:"cap,omitempty"`
-	Signature  []byte          `json:"sig"`
+	Signature  []byte          `json:"sig,omitempty"`
 
 	Discard func() `json:"-"`
 }
@@ -45,6 +45,7 @@ type Envelope struct {
 type EnvelopeOptions struct {
 	Expire  uint64 `json:"exp"`
 	ReplyTo string `json:"cont,omitempty"`
+	Topic   string `json:"topic,omitempty"`
 }
 
 // Actor is the local interface to the actor system
@@ -59,6 +60,9 @@ type Actor interface {
 	Receive(msg Envelope) error
 	Send(msg Envelope) error
 	Invoke(msg Envelope, opt ...BehaviorOption) (<-chan Envelope, error)
+
+	Publish(msg Envelope) error
+	Subscribe(topic string) error
 
 	Stop() error
 }
@@ -75,15 +79,24 @@ type SecurityContext interface {
 	DID() DID
 	Nonce() uint64
 
-	// Require verifies the envelope and checks the capability token(s).
+	// Require checks the capability token(s).
 	// It succeeds if and only if
 	// - the signature is valid
 	// - the capability token(s) in the envelope grants the origin actor ID/DID
 	//   any of the specified capabilities.
-	Require(msg Envelope, cap []Capability) error
+	Require(msg Envelope, invoke []Capability) error
+
 	// Provide populates the envelope with necessary capability tokens and signs it.
 	// the envelope is modified in place
-	Provide(msg *Envelope, cap []Capability, delegate []Capability) error
+	Provide(msg *Envelope, invoke []Capability, delegate []Capability) error
+
+	// Require verifies the envelope and checks the capability tokens
+	// for a broadcast topic
+	RequireBroadcast(msg Envelope, topic string, broadcast []Capability) error
+
+	// ProvideBroadcast populates the envelope with the necessary capability tokens
+	// for broadcast in the topic and signs it
+	ProvideBroadcast(msg *Envelope, topic string, broadcast []Capability) error
 
 	// Verify verifies the message signature in an envelope
 	Verify(msg Envelope) error
@@ -104,4 +117,5 @@ type BehaviorOptions struct {
 	Capability []Capability
 	Expire     uint64
 	OneShot    bool
+	Topic      string
 }

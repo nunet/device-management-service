@@ -136,7 +136,7 @@ func TestActorMessaging(t *testing.T) {
 		err = actor1.Send(reply)
 		assert.NoError(t, err)
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	msg, err := Message(
 		actor2.self,
@@ -144,13 +144,13 @@ func TestActorMessaging(t *testing.T) {
 		testBehavior1,
 		payload{Name: "random name", Type: "x"},
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = actor2.Send(msg)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	received := <-envChan
-	assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
+	require.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
 
 	// invoke
 	msg, err = Message(
@@ -163,7 +163,73 @@ func TestActorMessaging(t *testing.T) {
 	replyChan, err := actor2.Invoke(msg)
 	assert.NoError(t, err)
 	reply := <-replyChan
-	assert.Equal(t, msg.Message, reply.Message)
+	require.Equal(t, msg.Message, reply.Message)
+}
+
+func TestActorBroadcast(t *testing.T) {
+	topic := "test"
+	behavior := "/broadcast/test"
+
+	addrs1, priv1, peer1 := newLibp2pNetwork(t, "15219", []multiaddr.Multiaddr{})
+	_, priv2, peer2 := newLibp2pNetwork(t, "15220", addrs1)
+
+	res, err := peer2.Ping(context.Background(), peer1.Host.ID().String(), time.Second)
+	assert.NoError(t, err)
+	assert.True(t, res.Success)
+
+	time.Sleep(500 * time.Millisecond)
+	assert.Equal(t, 2, peer2.Host.Peerstore().Peers().Len())
+	assert.Equal(t, 2, peer1.Host.Peerstore().Peers().Len())
+
+	// create trust and capability contexts that allow the two separately rooted
+	// actors to interact
+	root1DID, root1Trust := makeRootTrustContext(t)
+	root2DID, root2Trust := makeRootTrustContext(t)
+	actor1DID, actor1Trust := makeTrustContext(t, priv1)
+	actor2DID, actor2Trust := makeTrustContext(t, priv2)
+	actor1Cap := makeCapabilityContext(t, actor1DID, root1DID, actor1Trust, root1Trust)
+	actor2Cap := makeCapabilityContext(t, actor2DID, root2DID, actor2Trust, root2Trust)
+	allowBroadcast(t, actor1Cap, actor2Cap, root1Trust, root2Trust, root1DID, root2DID, topic, Capability(behavior))
+
+	// create actors
+	actor1 := createActor(t, peer1, actor1Cap)
+	err = actor1.Start()
+	assert.NoError(t, err)
+	actor2 := createActor(t, peer2, actor2Cap)
+	err = actor2.Start()
+	assert.NoError(t, err)
+
+	type payload struct{ Name, Type string }
+
+	mch := make(chan Envelope)
+	err = actor2.AddBehavior(behavior, func(msg Envelope) {
+		defer msg.Discard()
+		mch <- msg
+	},
+		WithBehaviorTopic(topic),
+	)
+	require.NoError(t, err)
+
+	err = actor2.Subscribe(topic)
+	require.NoError(t, err)
+
+	time.Sleep(2 * time.Second)
+
+	msg, err := Message(
+		actor1.self,
+		Handle{},
+		behavior,
+		payload{Name: "random name", Type: "x"},
+		WithMessageTopic(topic),
+	)
+	require.NoError(t, err)
+	require.Equal(t, true, msg.IsBroadcast())
+
+	err = actor1.Publish(msg)
+	require.NoError(t, err)
+
+	result := <-mch
+	assert.Equal(t, string(result.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
 }
 
 func makeRootTrustContext(t *testing.T) (did.DID, did.TrustContext) {
@@ -193,6 +259,7 @@ func makeCapabilityContext(t *testing.T, actorDID, rootDID did.DID, trust, root 
 		ucan.Delegate,
 		actorDID,
 		did.DID{},
+		nil,
 		makeExpiry(time.Hour),
 		[]ucan.Capability{ucan.Root},
 	)
@@ -216,6 +283,7 @@ func allowReciprocal(t *testing.T, actorCap ucan.CapabilityContext, rootTrust di
 		ucan.Delegate,
 		otherRootDID,
 		did.DID{},
+		nil,
 		makeExpiry(time.Hour),
 		[]ucan.Capability{ucan.Capability(cap)},
 	)
@@ -223,6 +291,39 @@ func allowReciprocal(t *testing.T, actorCap ucan.CapabilityContext, rootTrust di
 
 	err = actorCap.AddRoots(nil, tokens, ucan.TokenList{})
 	require.NoError(t, err)
+}
+
+func allowBroadcast(t *testing.T, actor1, actor2 ucan.CapabilityContext, root1, root2 did.TrustContext, root1DID, root2DID did.DID, topic string, actorCap ...Capability) {
+	root1Cap, err := ucan.NewCapabilityContext(root1, root1DID, nil, ucan.TokenList{}, ucan.TokenList{})
+	require.NoError(t, err)
+	root2Cap, err := ucan.NewCapabilityContext(root2, root2DID, nil, ucan.TokenList{}, ucan.TokenList{})
+	require.NoError(t, err)
+
+	tokens, err := root1Cap.Grant(
+		ucan.Delegate,
+		actor1.DID(),
+		did.DID{},
+		[]string{topic},
+		makeExpiry(120*time.Second),
+		actorCap,
+	)
+	require.NoError(t, err, "granting broadcast capability")
+
+	err = actor1.AddRoots(nil, ucan.TokenList{}, tokens)
+	require.NoError(t, err, "add roots")
+
+	tokens, err = root2Cap.Grant(
+		ucan.Delegate,
+		actor1.DID(),
+		did.DID{},
+		[]string{topic},
+		makeExpiry(120*time.Second),
+		actorCap,
+	)
+	require.NoError(t, err, "grant broadcast capability")
+
+	err = actor2.AddRoots(nil, tokens, ucan.TokenList{})
+	require.NoError(t, err, "add roots")
 }
 
 func createActor(t *testing.T, peer *libp2p.Libp2p, cap ucan.CapabilityContext) *BasicActor {
@@ -266,6 +367,7 @@ func newLibp2pNetwork(t *testing.T, port string, bootstrap []multiaddr.Multiaddr
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/127.0.0.1/tcp/" + port},
 			PeerCountDiscoveryLimit: 40,
+			GossipMaxMessageSize:    2 << 16,
 		},
 	}, afero.NewMemMapFs())
 	assert.NoError(t, err)

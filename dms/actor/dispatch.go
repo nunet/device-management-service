@@ -189,15 +189,22 @@ func (k *Dispatch) dispatch() {
 				continue
 			}
 
-			if err := k.sctx.Require(msg, b.opt.Capability); err != nil {
+			if msg.IsBroadcast() {
+				if err := k.sctx.RequireBroadcast(msg, b.opt.Topic, b.opt.Capability); err != nil {
+					k.mx.Unlock()
+					log.Warnf("broadcast message from %s does not have the required capability %s: %s", msg.From, b.opt.Capability, err)
+					continue
+				}
+			} else if err := k.sctx.Require(msg, b.opt.Capability); err != nil {
 				k.mx.Unlock()
-				log.Warnf("message from %s does not have the required capability %s: %s", msg.From.ID, b.opt.Capability, err)
+				log.Warnf("message from %s does not have the required capability %s: %s", msg.From, b.opt.Capability, err)
 				continue
 			}
 
 			if b.opt.OneShot {
 				delete(k.behaviors, msg.Behavior)
 			}
+
 			k.mx.Unlock()
 
 			if err := k.options.Limiter.Acquire(msg); err != nil {
@@ -256,9 +263,9 @@ func WithBehaviorExpiry(expire uint64) BehaviorOption {
 	}
 }
 
-func WithBehaviorCapability(cap ...Capability) BehaviorOption {
+func WithBehaviorCapability(require ...Capability) BehaviorOption {
 	return func(opt *BehaviorOptions) error {
-		opt.Capability = cap
+		opt.Capability = require
 		return nil
 	}
 }
@@ -266,6 +273,13 @@ func WithBehaviorCapability(cap ...Capability) BehaviorOption {
 func WithBehaviorOneShot(oneShot bool) BehaviorOption {
 	return func(opt *BehaviorOptions) error {
 		opt.OneShot = oneShot
+		return nil
+	}
+}
+
+func WithBehaviorTopic(topic string) BehaviorOption {
+	return func(opt *BehaviorOptions) error {
+		opt.Topic = topic
 		return nil
 	}
 }

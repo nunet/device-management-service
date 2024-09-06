@@ -1,7 +1,7 @@
 package actor
 
 type BasicDispatchLimiter struct {
-	// TODO
+	// TODO we can leave this for follow up
 }
 
 func (l *BasicDispatchLimiter) Reserve(_ Envelope) error {

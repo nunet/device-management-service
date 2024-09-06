@@ -13,6 +13,17 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+type (
+	Validator        = libp2p.Validator
+	ValidationResult = libp2p.ValidationResult
+)
+
+const (
+	ValidationAccept = libp2p.ValidationAccept
+	ValidationReject = libp2p.ValidationReject
+	ValidationIgnore = libp2p.ValidationIgnore
+)
+
 // Messenger defines the interface for sending messages.
 type Messenger interface {
 	// SendMessage sends a message to the given address.
@@ -48,9 +59,9 @@ type Network interface {
 	Publish(ctx context.Context, topic string, data []byte) error
 	// Subscribe subscribes to the given topic and calls the handler function
 	// if the network type allows it similar to Publish()
-	Subscribe(ctx context.Context, topic string, handler func(data []byte)) error
+	Subscribe(ctx context.Context, topic string, handler func(data []byte), validator libp2p.Validator) (uint64, error)
 	// Unsubscribe from a topic
-	Unsubscribe(topic string) error
+	Unsubscribe(topic string, subID uint64) error
 	// Stop stops the network including any existing advertisements and subscriptions
 	Stop() error
 }

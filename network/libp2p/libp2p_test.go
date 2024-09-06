@@ -139,9 +139,9 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	// and this makes the test flaky. To solve the flakiness we use the peer one for
 	// both publishing and subscribing.
 	subscribeData := make(chan []byte)
-	err := peer1.Subscribe(context.TODO(), "blocks", func(data []byte) {
+	subID, err := peer1.Subscribe(context.TODO(), "blocks", func(data []byte) {
 		subscribeData <- data
-	})
+	}, nil)
 	assert.NoError(t, err)
 
 	// calling one time publish doesnt guarantee that the message has been sent.
@@ -157,7 +157,7 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	assert.EqualValues(t, []byte(`{"block":"1"}`), receivedData)
 
 	// unsubscribe
-	err = peer1.Unsubscribe("blocks")
+	err = peer1.Unsubscribe("blocks", subID)
 	assert.NoError(t, err)
 }
 

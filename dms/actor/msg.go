@@ -90,6 +90,14 @@ func WithMessageReplyTo(replyto string) MessageOption {
 	}
 }
 
+// WithMessageTopic sets the broadcast topic
+func WithMessageTopic(topic string) MessageOption {
+	return func(msg *Envelope) error {
+		msg.Options.Topic = topic
+		return nil
+	}
+}
+
 func (msg *Envelope) SignatureData() ([]byte, error) {
 	msgCopy := *msg
 	msgCopy.Signature = nil
@@ -114,4 +122,8 @@ func (msg *Envelope) Expiry() time.Time {
 	sec := msg.Options.Expire / uint64(time.Second)
 	nsec := msg.Options.Expire % uint64(time.Second)
 	return time.Unix(int64(sec), int64(nsec)) //nolint
+}
+
+func (msg *Envelope) IsBroadcast() bool {
+	return msg.To.Empty() && msg.Options.Topic != ""
 }
