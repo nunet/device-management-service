@@ -44,6 +44,8 @@ type Network interface {
 	Ping(ctx context.Context, address string, timeout time.Duration) (types.PingResult, error)
 	// HandleMessage is responsible for registering a message type and its handler.
 	HandleMessage(messageType string, handler func(data []byte)) error
+	// UnregisterMessageHandler unregisters a stream handler for a specific protocol.
+	UnregisterMessageHandler(messageType string)
 	// ResolveAddress given an id it retruns the address of the peer.
 	// In libp2p, id represents the peerID and the response is the addrinfo
 	ResolveAddress(ctx context.Context, id string) ([]string, error)
