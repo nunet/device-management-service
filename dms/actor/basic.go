@@ -173,24 +173,21 @@ func (a *BasicActor) Send(msg Envelope) error {
 	return nil
 }
 
-func (a *BasicActor) Invoke(msg Envelope, opt ...BehaviorOption) (<-chan Envelope, error) {
+func (a *BasicActor) Invoke(msg Envelope) (<-chan Envelope, error) {
 	if msg.Options.ReplyTo == "" {
 		msg.Options.ReplyTo = fmt.Sprintf("/dms/actor/replyto/%d", a.security.Nonce())
 	}
 
 	result := make(chan Envelope, 1)
 
-	opt = append([]BehaviorOption{
-		WithBehaviorExpiry(msg.Options.Expire),
-		WithBehaviorOneShot(true),
-	}, opt...)
 	if err := a.dispatch.AddBehavior(
 		msg.Options.ReplyTo,
 		func(reply Envelope) {
 			result <- reply
 			close(result)
 		},
-		opt...,
+		WithBehaviorExpiry(msg.Options.Expire),
+		WithBehaviorOneShot(true),
 	); err != nil {
 		return nil, fmt.Errorf("adding reply behavior: %w", err)
 	}
