@@ -59,7 +59,7 @@ type Actor interface {
 
 	Receive(msg Envelope) error
 	Send(msg Envelope) error
-	Invoke(msg Envelope, opt ...BehaviorOption) (<-chan Envelope, error)
+	Invoke(msg Envelope) (<-chan Envelope, error)
 
 	Publish(msg Envelope) error
 	Subscribe(topic string) error
