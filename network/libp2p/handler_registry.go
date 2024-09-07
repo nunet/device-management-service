@@ -76,3 +76,14 @@ func (r *HandlerRegistry) SendMessageToLocalHandler(messageType types.MessageTyp
 	// we need this goroutine to avoid blocking the caller goroutine
 	go h(data)
 }
+
+// UnregisterHandler unregisters a stream handler for a specific protocol.
+func (r *HandlerRegistry) UnregisterHandler(messageType types.MessageType) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	protoID := protocol.ID(messageType)
+	delete(r.handlers, protoID)
+	delete(r.bytesHandlers, protoID)
+	r.host.RemoveStreamHandler(protoID)
+}

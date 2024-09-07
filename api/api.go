@@ -93,6 +93,15 @@ func (rs *RESTServer) InitializeRoutes() {
 		}
 	}
 
+	// /actor routes
+	actor := v1.Group("/actor")
+	{
+		actor.GET("/handle", rs.ActorHandle)
+		actor.POST("/send", rs.ActorSendMessage)
+		actor.POST("/invoke", rs.ActorInvoke)
+		actor.POST("/broadcast", rs.ActorBroadcast)
+	}
+
 	// Swagger API documentation
 	rs.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }

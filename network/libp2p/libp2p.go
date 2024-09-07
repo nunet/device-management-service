@@ -231,6 +231,11 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	callback(buf)
 }
 
+// UnregisterMessageHandler unregisters a stream handler for a specific protocol.
+func (l *Libp2p) UnregisterMessageHandler(messageType string) {
+	l.handlerRegistry.UnregisterHandler(types.MessageType(messageType))
+}
+
 // SendMessage sends a message to a list of peers.
 func (l *Libp2p) SendMessage(ctx context.Context, addrs []string, msg types.MessageEnvelope) error {
 	var wg sync.WaitGroup
