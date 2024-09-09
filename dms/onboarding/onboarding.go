@@ -9,17 +9,12 @@ import (
 	"slices"
 	"time"
 
+	"github.com/spf13/afero"
+
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
-
-	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/multiformats/go-multiaddr"
-	"github.com/spf13/afero"
 )
 
 var ErrMachineNotOnboarded = errors.New("machine is not onboarded")
@@ -89,19 +84,19 @@ func (o *Onboarding) Info(ctx context.Context) (*types.OnboardingConfig, error) 
 
 // Onboard validates the onboarding params and onboards the machine to the network
 // It returns a *types.OnboardingConfig and any error if encountered
-func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNunet) (*types.OnboardingConfig, *libp2p.Libp2p, error) {
+func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNunet) (*types.OnboardingConfig, error) {
 	if err := o.validateOnboardingPrerequisites(capacity); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to get hostname: %v", err)
+		return nil, fmt.Errorf("unable to get hostname: %v", err)
 	}
 
 	provisionedResources, err := o.ResourceManager.SystemSpecs().GetProvisionedResources()
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot get provisioned resources: %w", err)
+		return nil, fmt.Errorf("cannot get provisioned resources: %w", err)
 	}
 
 	var oConf types.OnboardingConfig
@@ -115,14 +110,14 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	oConf.AllowCardano = false
 	if capacity.Cardano {
 		if capacity.Memory < 10000 || capacity.CPU < 6000 {
-			return nil, nil, fmt.Errorf("cardano node requires 10000MB of RAM and 6000MHz CPU")
+			return nil, fmt.Errorf("cardano node requires 10000MB of RAM and 6000MHz CPU")
 		}
 		oConf.AllowCardano = true
 	}
 
 	gpuInfo, err := o.ResourceManager.SystemSpecs().GetGPUs()
 	if err != nil {
-		zlog.Sugar().Errorf("unable to detect GPU: %v ", err.Error())
+		return nil, fmt.Errorf("unable to detect GPU: %v ", err.Error())
 	}
 	oConf.GpuInfo = gpuInfo
 
@@ -135,69 +130,22 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 
 	savedConfig, err := o.ParamsRepo.Save(context.Background(), oConf)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not save onboarding params: %w", err)
+		return nil, fmt.Errorf("could not save onboarding params: %w", err)
 	}
 
 	if err := o.updateAvailableResources(ctx, capacity); err != nil {
-		return nil, nil, fmt.Errorf("failed to update available resources: %w", err)
-	}
-
-	// initialize libp2p
-	priv, pub, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to generate key pair: %v", err)
-	}
-
-	rawPriv, err := crypto.MarshalPrivateKey(priv)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to marshal private key: %w", err)
-	}
-
-	rawPub, err := crypto.MarshalPublicKey(pub)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to marshal public key: %w", err)
+		return nil, fmt.Errorf("failed to update available resources: %w", err)
 	}
 
 	_, err = o.P2PRepo.Save(ctx, types.Libp2pInfo{
-		PrivateKey: rawPriv,
-		PublicKey:  rawPub,
 		ServerMode: capacity.ServerMode,
 		Available:  capacity.IsAvailable,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to save libp2pInfo: %w", err)
+		return nil, fmt.Errorf("unable to save libp2pInfo: %w", err)
 	}
 
-	bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
-	for i, addr := range config.GetConfig().P2P.BootstrapPeers {
-		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
-	}
-
-	cfg := &types.Libp2pConfig{
-		PrivateKey:              priv,
-		BootstrapPeers:          bootstrapPeers,
-		Rendezvous:              "nunet-test",
-		Server:                  false,
-		Scheduler:               backgroundtasks.NewScheduler(10),
-		CustomNamespace:         "/nunet-dht-1/",
-		ListenAddress:           config.GetConfig().ListenAddress,
-		PeerCountDiscoveryLimit: 40,
-	}
-
-	p2p, err := libp2p.New(cfg, afero.NewMemMapFs())
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to create libp2p instance: %v", err)
-	}
-
-	if err = p2p.Init(ctx); err != nil {
-		return nil, nil, fmt.Errorf("unable to initialize libp2p: %v", err)
-	}
-
-	if err = p2p.Start(ctx); err != nil {
-		return nil, nil, fmt.Errorf("unable to start libp2p: %v", err)
-	}
-
-	return &savedConfig, p2p, nil
+	return &savedConfig, nil
 }
 
 // ResourceConfig allows changing onboarding parameters

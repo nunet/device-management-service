@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+
 	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/resources"
@@ -14,19 +15,12 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
-	"gitlab.com/nunet/device-management-service/types"
 )
-
-// TODO: remove after resource manager MR is merged
-type benchmarker interface {
-	Benchmark(ctx context.Context) (*types.Capability, error)
-}
 
 // Node is the structure that holds the node's dependencies.
 type Node struct {
 	rootCap         ucan.CapabilityContext
 	actor           actor.Actor
-	benchmark       benchmarker
 	scheduler       *bt.Scheduler
 	network         network.Network
 	resourceManager resources.Manager
@@ -38,7 +32,7 @@ type Node struct {
 }
 
 // New creates a new node, attaches an actor to the node.
-func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, benchmark benchmarker, resourceManager resources.Manager, scheduler *bt.Scheduler) (*Node, error) {
+func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager resources.Manager, scheduler *bt.Scheduler) (*Node, error) {
 	if rootCap == nil {
 		return nil, errors.New("root capability context is nil")
 	}
@@ -49,10 +43,6 @@ func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, ben
 
 	if net == nil {
 		return nil, errors.New("network is nil")
-	}
-
-	if benchmark == nil {
-		return nil, errors.New("benchmarker is nil")
 	}
 
 	if resourceManager == nil {
@@ -92,7 +82,6 @@ func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, ben
 		hostID:          hostID,
 		network:         net,
 		allocations:     make(map[string]*jobs.Allocation),
-		benchmark:       benchmark,
 		resourceManager: resourceManager,
 		actor:           actor,
 		rootCap:         rootCap,
@@ -194,11 +183,6 @@ func (n *Node) Stop() error {
 
 	n.running = false
 	return nil
-}
-
-// GetAllocation gets an allocation by id.
-func (n *Node) BenchmarkCapability(ctx context.Context) (*types.Capability, error) {
-	return n.benchmark.Benchmark(ctx)
 }
 
 // createActor creates an actor.

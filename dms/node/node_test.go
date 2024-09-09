@@ -4,16 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
@@ -29,7 +29,6 @@ func TestNew(t *testing.T) {
 		rootCap         ucan.CapabilityContext
 		hostID          string
 		net             network.Network
-		benchmarker     benchmarker
 		resourceManager resources.Manager
 		scheduler       *bt.Scheduler
 
@@ -47,24 +46,16 @@ func TestNew(t *testing.T) {
 			hostID:  "123",
 			expErr:  "network is nil",
 		},
-		"no benchmarker": {
+		"no resource manager": {
 			rootCap: rootCap,
 			hostID:  "123",
-			net:     &libp2p.Libp2p{},
-			expErr:  "benchmarker is nil",
-		},
-		"no resource manager": {
-			rootCap:     rootCap,
-			hostID:      "123",
-			net:         createNetwork(t, nil, "14950"),
-			benchmarker: &benchmarkerStub{},
-			expErr:      "resource manager is nil",
+			net:     createNetwork(t, nil, "14950"),
+			expErr:  "resource manager is nil",
 		},
 		"no scheduler": {
 			rootCap:         rootCap,
 			hostID:          "123",
 			net:             createNetwork(t, nil, "14950"),
-			benchmarker:     &benchmarkerStub{},
 			resourceManager: &resourceManagerMock{},
 			expErr:          "scheduler is nil",
 		},
@@ -72,7 +63,6 @@ func TestNew(t *testing.T) {
 			rootCap:         rootCap,
 			hostID:          "123",
 			net:             createNetwork(t, nil, "14950"),
-			benchmarker:     &benchmarkerStub{},
 			resourceManager: &resourceManagerMock{},
 			scheduler:       bt.NewScheduler(1),
 		},
@@ -82,7 +72,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			act, err := New(tt.rootCap, tt.hostID, tt.net, tt.benchmarker, tt.resourceManager, tt.scheduler)
+			act, err := New(tt.rootCap, tt.hostID, tt.net, tt.resourceManager, tt.scheduler)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -97,7 +87,7 @@ func TestNew(t *testing.T) {
 func TestNodeAllocationMessaging(t *testing.T) {
 	rootCap := createRootCapabilityContext(t)
 	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
-	node1, err := New(rootCap, net.Host.ID().String(), net, &benchmarkerStub{}, &resourceManagerMock{}, bt.NewScheduler(1))
+	node1, err := New(rootCap, net.Host.ID().String(), net, &resourceManagerMock{}, bt.NewScheduler(1))
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)
 	err = node1.Start()
@@ -130,15 +120,6 @@ func TestNodeAllocationMessaging(t *testing.T) {
 
 	received := <-envChan
 	assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
-}
-
-type benchmarkerStub struct {
-	cap *types.Capability
-	err error
-}
-
-func (r *benchmarkerStub) Benchmark(_ context.Context) (*types.Capability, error) {
-	return r.cap, r.err
 }
 
 func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {

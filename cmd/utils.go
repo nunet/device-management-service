@@ -34,22 +34,6 @@ func checkOnboarded(client *utils.HTTPClient) (bool, error) {
 	return onboarded, nil
 }
 
-// promptReonboard is a wrapper of utils.PromptYesNo with custom prompt that return error if user declines reonboard
-func promptReonboard(r io.Reader, w io.Writer) error {
-	prompt := "Looks like your machine is already onboarded. Proceed with reonboarding?"
-
-	confirmed, err := utils.PromptYesNo(r, w, prompt)
-	if err != nil {
-		return fmt.Errorf("could not confirm reonboarding: %w", err)
-	}
-
-	if !confirmed {
-		return fmt.Errorf("reonboarding aborted by user")
-	}
-
-	return nil
-}
-
 // getDHTPeers fetches API to retrieve info from DHT peers
 func getDHTPeers(client *utils.HTTPClient) ([]string, error) {
 	resBody, resCode, err := client.MakeRequest("GET", "/peers/dht", nil)

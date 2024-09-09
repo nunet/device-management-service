@@ -1,0 +1,177 @@
+package keystore
+
+import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	libp2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"golang.org/x/crypto/scrypt"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+)
+
+var (
+	// KDF parameters
+	nameKDF      = "scrypt"
+	scryptKeyLen = 64
+	scryptN      = 1 << 18
+	scryptR      = 8
+	scryptP      = 1
+	ksVersion    = 3
+	ksCipher     = "aes-256-ctr"
+)
+
+// Key represents a keypair to be stored in a keystore
+type Key struct {
+	ID   string
+	Data []byte
+}
+
+// NewKey creates new Key
+func NewKey(id string, data []byte) (*Key, error) {
+	return &Key{
+		ID:   id,
+		Data: data,
+	}, nil
+}
+
+// PrivKey acts upon a Key which its `Data` is a private key.
+// The method unmarshals the raw pvkey bytes.
+func (key *Key) PrivKey() (crypto.PrivKey, error) {
+	priv, err := libp2pCrypto.UnmarshalPrivateKey(key.Data)
+	if err != nil {
+		return nil, fmt.Errorf("unable to unmarshal private key: %v", err)
+	}
+	return priv, nil
+}
+
+// MarshalToJSON encrypts and marshals a key to json byte array.
+func (key *Key) MarshalToJSON(passphrase string) ([]byte, error) {
+	if passphrase == "" {
+		return nil, ErrEmptyPassphrase
+	}
+	salt, err := crypto.RandomEntropy(64)
+	if err != nil {
+		return nil, err
+	}
+	dk, err := scrypt.Key([]byte(passphrase), salt, scryptN, scryptR, scryptP, scryptKeyLen)
+	if err != nil {
+		return nil, err
+	}
+	iv, err := crypto.RandomEntropy(aes.BlockSize)
+	if err != nil {
+		return nil, err
+	}
+	enckey := dk[:32]
+
+	aesBlock, err := aes.NewCipher(enckey)
+	if err != nil {
+		return nil, err
+	}
+	stream := cipher.NewCTR(aesBlock, iv)
+	cipherText := make([]byte, len(key.Data))
+	stream.XORKeyStream(cipherText, key.Data)
+
+	mac, err := crypto.Sha3(dk[32:64], cipherText)
+	if err != nil {
+		return nil, err
+	}
+	cipherParamsJSON := cipherparamsJSON{
+		IV: hex.EncodeToString(iv),
+	}
+
+	sp := ScryptParams{
+		N:          scryptN,
+		R:          scryptR,
+		P:          scryptP,
+		DKeyLength: scryptKeyLen,
+		Salt:       hex.EncodeToString(salt),
+	}
+
+	keyjson := cryptoJSON{
+		Cipher:       ksCipher,
+		CipherText:   hex.EncodeToString(cipherText),
+		CipherParams: cipherParamsJSON,
+		KDF:          nameKDF,
+		KDFParams:    sp,
+		MAC:          hex.EncodeToString(mac),
+	}
+
+	encjson := encryptedKeyJSON{
+		Crypto:  keyjson,
+		ID:      key.ID,
+		Version: ksVersion,
+	}
+	data, err := json.MarshalIndent(&encjson, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// UnmarshalKey decrypts and unmarhals the private key
+func UnmarshalKey(data []byte, passphrase string) (*Key, error) {
+	if passphrase == "" {
+		return nil, ErrEmptyPassphrase
+	}
+	encjson := encryptedKeyJSON{}
+	if err := json.Unmarshal(data, &encjson); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal key data: %w", err)
+	}
+	if encjson.Version != ksVersion {
+		return nil, ErrVersionMismatch
+	}
+	if encjson.Crypto.Cipher != ksCipher {
+		return nil, ErrCipherMismatch
+	}
+	mac, err := hex.DecodeString(encjson.Crypto.MAC)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode mac: %w", err)
+	}
+	iv, err := hex.DecodeString(encjson.Crypto.CipherParams.IV)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode cipher params iv: %w", err)
+	}
+	salt, err := hex.DecodeString(encjson.Crypto.KDFParams.Salt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode salt: %w", err)
+	}
+	ciphertext, err := hex.DecodeString(encjson.Crypto.CipherText)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode cipher text: %w", err)
+	}
+	dk, err := scrypt.Key([]byte(passphrase), salt, encjson.Crypto.KDFParams.N, encjson.Crypto.KDFParams.R, encjson.Crypto.KDFParams.P, encjson.Crypto.KDFParams.DKeyLength)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive key: %w", err)
+	}
+	hash, err := crypto.Sha3(dk[32:64], ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash key and ciphertext: %w", err)
+	}
+	if !bytes.Equal(hash, mac) {
+		return nil, ErrMACMismatch
+	}
+	aesBlock, err := aes.NewCipher(dk[:32])
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher block: %w", err)
+	}
+	stream := cipher.NewCTR(aesBlock, iv)
+	outputkey := make([]byte, len(ciphertext))
+	stream.XORKeyStream(outputkey, ciphertext)
+
+	return &Key{
+		ID:   encjson.ID,
+		Data: outputkey,
+	}, nil
+}
+
+func removeFileExtension(filename string) string {
+	ext := filepath.Ext(filename)
+	return strings.TrimSuffix(filename, ext)
+}
