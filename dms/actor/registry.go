@@ -24,7 +24,7 @@ type registry struct {
 	actors map[string]Info
 }
 
-func NewRegistry() Registry {
+func newRegistry() *registry {
 	return &registry{
 		actors: make(map[string]Info),
 	}

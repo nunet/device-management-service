@@ -4,14 +4,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/dms"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/nunet/device-management-service/dms/actor"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
@@ -20,37 +24,57 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
+	rootCap := createRootCapabilityContext(t)
 	cases := map[string]struct {
-		id              string
+		rootCap         ucan.CapabilityContext
+		hostID          string
 		net             network.Network
 		benchmarker     benchmarker
 		resourceManager resources.Manager
+		scheduler       *bt.Scheduler
 
 		expErr string
 	}{
-		"no id": {
-			expErr: "id is nil",
+		"no root capability": {
+			expErr: "root capability context is nil",
 		},
-		"no network": {
-			id:     "123",
-			expErr: "network is nil",
+		"no id": {
+			rootCap: rootCap,
+			expErr:  "host id is nil",
+		},
+		"no key": {
+			rootCap: rootCap,
+			hostID:  "123",
+			expErr:  "network is nil",
 		},
 		"no benchmarker": {
-			id:     "123",
-			net:    &libp2p.Libp2p{},
-			expErr: "benchmarker is nil",
+			rootCap: rootCap,
+			hostID:  "123",
+			net:     &libp2p.Libp2p{},
+			expErr:  "benchmarker is nil",
 		},
 		"no resource manager": {
-			id:          "123",
+			rootCap:     rootCap,
+			hostID:      "123",
 			net:         createNetwork(t, nil, "14950"),
 			benchmarker: &benchmarkerStub{},
 			expErr:      "resource manager is nil",
 		},
-		"success": {
-			id:              "123",
+		"no scheduler": {
+			rootCap:         rootCap,
+			hostID:          "123",
 			net:             createNetwork(t, nil, "14950"),
 			benchmarker:     &benchmarkerStub{},
 			resourceManager: &resourceManagerMock{},
+			expErr:          "scheduler is nil",
+		},
+		"success": {
+			rootCap:         rootCap,
+			hostID:          "123",
+			net:             createNetwork(t, nil, "14950"),
+			benchmarker:     &benchmarkerStub{},
+			resourceManager: &resourceManagerMock{},
+			scheduler:       bt.NewScheduler(1),
 		},
 	}
 
@@ -58,43 +82,54 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			act, err := New(context.TODO(), tt.id, tt.net, tt.benchmarker, tt.resourceManager)
+			act, err := New(tt.rootCap, tt.hostID, tt.net, tt.benchmarker, tt.resourceManager, tt.scheduler)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
 			} else {
 				assert.NotNil(t, act)
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
 
-func TestNodeSendMessage(t *testing.T) {
-	net := createNetwork(t, nil, "14951")
-	node, err := New(context.TODO(), net.Host.ID().String(), net, &benchmarkerStub{}, &resourceManagerMock{})
+func TestNodeAllocationMessaging(t *testing.T) {
+	rootCap := createRootCapabilityContext(t)
+	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
+	node1, err := New(rootCap, net.Host.ID().String(), net, &benchmarkerStub{}, &resourceManagerMock{}, bt.NewScheduler(1))
 	assert.NoError(t, err)
-	assert.NotNil(t, node)
+	assert.NotNil(t, node1)
+	err = node1.Start()
+	assert.NoError(t, err)
 
-	// send a message to itself
-	err = node.SendMessage(context.TODO(), node.actor.Address(), &dms.Message{
-		Type:   "GenericAction1",
-		Sender: node.actor.Address().InboxAddress,
-		Data:   []byte("nunet actor"),
+	alloc, err := node1.CreateAllocation(jobs.Job{ID: "123"})
+	assert.NoError(t, err)
+	assert.NotNil(t, alloc)
+	err = alloc.Start()
+	assert.NoError(t, err)
+
+	envChan := make(chan actor.Envelope)
+	err = node1.actor.AddBehavior("/test/ping", func(msg actor.Envelope) {
+		defer msg.Discard()
+		envChan <- msg
 	})
+	type payload struct{ Name, Type string }
+
+	assert.NoError(t, err)
+	msg, err := actor.Message(
+		alloc.Actor.Handle(),
+		node1.actor.Handle(),
+		"/test/ping",
+		payload{Name: "random name", Type: "x"},
+	)
 	assert.NoError(t, err)
 
-	msg1 := <-node.actor.Messages()
-	assert.Equal(t, "nunet actor", string(msg1.Data))
-
-	err = node.SendMessage(context.TODO(), node.actor.Address(), &dms.Message{
-		Type:   "Hello",
-		Sender: node.actor.Address().InboxAddress,
-		Data:   []byte("nunet node"),
-	})
+	err = alloc.Actor.Send(msg)
 	assert.NoError(t, err)
 
-	msg2 := <-node.actor.Messages()
-	assert.Equal(t, "nunet node", string(msg2.Data))
+	received := <-envChan
+	assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
 }
 
 type benchmarkerStub struct {
@@ -106,8 +141,24 @@ func (r *benchmarkerStub) Benchmark(_ context.Context) (*types.Capability, error
 	return r.cap, r.err
 }
 
+func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {
+	privk, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
+	require.NoError(t, err, "generate key")
+
+	provider, err := did.ProviderFromPrivateKey(privk)
+	require.NoError(t, err, "provider from public key")
+
+	trustCtx := did.NewTrustContext()
+	trustCtx.AddProvider(provider)
+
+	capCtx, err := ucan.NewCapabilityContext(trustCtx, provider.DID(), nil, ucan.TokenList{}, ucan.TokenList{})
+	require.NoError(t, err, "make capability context")
+
+	return capCtx
+}
+
 func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *libp2p.Libp2p {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	assert.NoError(t, err)
 	net, err := network.NewNetwork(&types.NetworkConfig{
 		Type: types.Libp2pNetwork,
@@ -116,7 +167,7 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 			BootstrapPeers:          bootstrap,
 			Rendezvous:              "nunet-randevouz",
 			Server:                  false,
-			Scheduler:               backgroundtasks.NewScheduler(1),
+			Scheduler:               bt.NewScheduler(1),
 			CustomNamespace:         "/nunet-dht-1/",
 			ListenAddress:           []string{"/ip4/127.0.0.1/tcp/" + port},
 			PeerCountDiscoveryLimit: 40,

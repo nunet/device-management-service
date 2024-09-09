@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -15,7 +15,7 @@ import (
 func TestNewAllocation(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
-		actor           *dms.BasicActor
+		actor           *actor.BasicActor
 		alloc           AllocationDetails
 		resourceManager resources.Manager
 		expErr          string
@@ -24,7 +24,7 @@ func TestNewAllocation(t *testing.T) {
 			expErr: "resource manager is nil",
 		},
 		"success": {
-			actor:           &dms.BasicActor{},
+			actor:           &actor.BasicActor{},
 			alloc:           AllocationDetails{},
 			resourceManager: &resourceManagerMock{},
 		},
@@ -55,7 +55,7 @@ func TestAllocationRunStatus(t *testing.T) {
 	}{
 		"issue getting resource manager": {
 			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{}, &resourceManagerMock{
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{
 					err: errors.New("internal error"),
 				})
 				assert.NoError(t, err)
@@ -78,7 +78,7 @@ func TestAllocationRunStatus(t *testing.T) {
 					},
 				}
 
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
 					Resources: types.Resources{
 						CPU:      1,
 						NumCores: 1,
@@ -106,7 +106,7 @@ func TestAllocationRunStatus(t *testing.T) {
 					},
 				}
 
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
 					Resources: types.Resources{
 						CPU:      100,
 						NumCores: 6,
@@ -138,7 +138,7 @@ func TestAllocationRunStatus(t *testing.T) {
 					},
 				}
 
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
 					Resources: types.Resources{
 						CPU:      100,
 						NumCores: 6,
@@ -179,22 +179,9 @@ func TestAllocationStop(t *testing.T) {
 		status            AllocationStatus
 		expErr            string
 	}{
-		"stop non running allocation": {
-			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{}, &resourceManagerMock{})
-				assert.NoError(t, err)
-
-				// mocket executor
-				alloc.executor = &mockExecutor{err: errors.New("cancel failed")}
-
-				return alloc
-			},
-			status: running,
-			expErr: "allocation is not running",
-		},
 		"execution failed to cancel": {
 			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{}, &resourceManagerMock{})
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{})
 				assert.NoError(t, err)
 
 				// mocket executor
@@ -208,7 +195,7 @@ func TestAllocationStop(t *testing.T) {
 		},
 		"failed to update free resources after stoping allocation": {
 			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{}, &resourceManagerMock{
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{
 					err: errors.New("failed to update resources"),
 				})
 				assert.NoError(t, err)
@@ -224,7 +211,7 @@ func TestAllocationStop(t *testing.T) {
 		},
 		"success": {
 			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&dms.BasicActor{}, AllocationDetails{}, &resourceManagerMock{})
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{})
 				assert.NoError(t, err)
 
 				alloc.executor = &mockExecutor{}

@@ -4,16 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
+	"sync"
 
 	"github.com/google/uuid"
-	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+const (
+	pending AllocationStatus = "pending"
+	running AllocationStatus = "running"
+	stopped AllocationStatus = "stopped"
+)
+
+// AllocationStatus is a representation of the execution status
+type AllocationStatus string
 
 // Status holds the status of an allocation.
 type Status struct {
@@ -28,31 +37,28 @@ type AllocationDetails struct {
 	SourceID string
 }
 
-// AllocationStatus is a representation of the execution status
-type AllocationStatus string
-
-const (
-	pending AllocationStatus = "pending"
-	running AllocationStatus = "running"
-	stopped AllocationStatus = "stopped"
-)
-
 // Allocation represents an allocation
 type Allocation struct {
-	ID          string
-	Job         Job
+	ID string
+
+	mx sync.Mutex
+
 	status      AllocationStatus
-	NodeID      string
-	SourceID    string
+	nodeID      string
+	sourceID    string
 	executionID string
 
-	actor           *dms.BasicActor
+	Actor           *actor.BasicActor
 	executor        executor.Executor
 	resourceManager resources.Manager
+
+	actorRunning bool
+
+	Job Job
 }
 
 // NewAllocation creates a new allocation given the actor.
-func NewAllocation(actor *dms.BasicActor, details AllocationDetails, resourceManager resources.Manager) (*Allocation, error) {
+func NewAllocation(actor *actor.BasicActor, details AllocationDetails, resourceManager resources.Manager) (*Allocation, error) {
 	if resourceManager == nil {
 		return nil, errors.New("resource manager is nil")
 	}
@@ -70,9 +76,9 @@ func NewAllocation(actor *dms.BasicActor, details AllocationDetails, resourceMan
 	return &Allocation{
 		ID:              id.String(),
 		Job:             details.Job,
-		NodeID:          details.NodeID,
-		SourceID:        details.SourceID,
-		actor:           actor,
+		nodeID:          details.NodeID,
+		sourceID:        details.SourceID,
+		Actor:           actor,
 		executionID:     executorID.String(),
 		resourceManager: resourceManager,
 		status:          pending,
@@ -81,6 +87,13 @@ func NewAllocation(actor *dms.BasicActor, details AllocationDetails, resourceMan
 
 // Run creates the executor based on the execution engine configuration.
 func (a *Allocation) Run(ctx context.Context) error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	if a.status == running {
+		return nil
+	}
+
 	freeResources, err := a.resourceManager.UpdateFreeResources(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get free resources: %w", err)
@@ -112,8 +125,7 @@ func (a *Allocation) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	_, err = a.resourceManager.UpdateFreeResources(ctx)
-	if err != nil {
+	if _, err = a.resourceManager.UpdateFreeResources(ctx); err != nil {
 		return fmt.Errorf("failed to update resources after running allocation's executor: %w", err)
 	}
 
@@ -124,19 +136,29 @@ func (a *Allocation) Run(ctx context.Context) error {
 
 // Stop stops the running executor
 func (a *Allocation) Stop(ctx context.Context) error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	defer func() {
+		if a.actorRunning {
+			if err := a.Actor.Stop(); err != nil {
+				log.Warnf("error stopping allocation actor: %s", err)
+			}
+			a.actorRunning = false
+		}
+	}()
+
 	if a.status != running {
-		return errors.New("allocation is not running")
+		return nil
 	}
 
-	err := a.executor.Cancel(ctx, a.executionID)
-	if err != nil {
+	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
 		return fmt.Errorf("failed to stop execution: %w", err)
 	}
 
 	a.status = stopped
 
-	_, err = a.resourceManager.UpdateFreeResources(ctx)
-	if err != nil {
+	if _, err := a.resourceManager.UpdateFreeResources(ctx); err != nil {
 		return fmt.Errorf("failed to update resources after stoping allocation's executor: %w", err)
 	}
 
@@ -151,46 +173,23 @@ func (a *Allocation) Status(_ context.Context) Status {
 	}
 }
 
-// StartActor starts the actor of the allocation.
-func (a *Allocation) StartActor() error {
-	err := a.actor.Start()
+// Start the actor of the allocation.
+func (a *Allocation) Start() error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	if a.actorRunning {
+		return nil
+	}
+
+	err := a.Actor.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start allocation actor: %w", err)
 	}
 
+	a.actorRunning = true
+
 	return nil
-}
-
-// ProcessMessages processes actor messages.
-func (a *Allocation) ProcessMessages() {
-	for msg := range a.actor.Messages() {
-		a.dispatchMethod(msg.Type, msg.Data)
-	}
-}
-
-// SendMessage sends a message through the actor.
-func (a *Allocation) SendMessage(ctx context.Context, destination *dms.ActorAddrInfo, m *dms.Message) error {
-	return a.actor.SendMessage(ctx, destination, m)
-}
-
-func (a *Allocation) dispatchMethod(methodName string, args ...any) {
-	handlerMethod := fmt.Sprintf("Handle%s", methodName)
-
-	arguments := make([]reflect.Value, 0)
-	for _, v := range args {
-		arguments = append(arguments, reflect.ValueOf(v))
-	}
-	method := reflect.ValueOf(a).MethodByName(handlerMethod)
-	if method.IsValid() {
-		method.Call(arguments)
-		return
-	}
-
-	// check if actor has the method
-	actorMethod := reflect.ValueOf(a.actor).MethodByName(handlerMethod)
-	if actorMethod.IsValid() {
-		actorMethod.Call(arguments)
-	}
 }
 
 func (a *Allocation) createExecutor(ctx context.Context, conf types.SpecConfig) error {

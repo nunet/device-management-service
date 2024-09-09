@@ -64,6 +64,7 @@ type Actor interface {
 	Publish(msg Envelope) error
 	Subscribe(topic string) error
 
+	Start() error
 	Stop() error
 }
 
