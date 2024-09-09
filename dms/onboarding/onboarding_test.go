@@ -6,11 +6,12 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
 	"gitlab.com/nunet/device-management-service/db"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/types"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 const tmpDir = "/tmp/test"
@@ -132,7 +133,7 @@ func TestOnboard(t *testing.T) {
 
 	t.Run("unhappy case - invalid cardano wallet", func(t *testing.T) {
 		// Call the Onboard method
-		_, _, err := service.Onboard(ctx, capacity)
+		_, err := service.Onboard(ctx, capacity)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid cardano wallet address")
 	})
@@ -142,7 +143,7 @@ func TestOnboard(t *testing.T) {
 		capacity.PaymentAddress = "addr_test1vzgxkngaw5dayp8xqzpmajrkm7f7fleyzqrjj8l8fp5e8jcc2p2dk"
 
 		// TODO: update after onbaording implementation
-		_, _, err := service.Onboard(ctx, capacity)
+		_, err := service.Onboard(ctx, capacity)
 		assert.Error(t, err)
 		assert.Equal(t, "NOT YET IMPLEMENTED", err.Error())
 	})

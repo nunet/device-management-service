@@ -1,13 +1,18 @@
 package dms
 
 import (
-	// "context"
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/multiformats/go-multiaddr"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/api"
 	"gitlab.com/nunet/device-management-service/db"
-	"gitlab.com/nunet/device-management-service/db/repositories"
 	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
@@ -15,18 +20,18 @@ import (
 	"gitlab.com/nunet/device-management-service/internal"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/telemetry/logger"
-
-	// "gitlab.com/nunet/device-management-service/internal/messaging"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/telemetry/logger"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
+)
 
-	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/multiformats/go-multiaddr"
-	"github.com/spf13/afero"
+const (
+	KeyIDPrivKey = "dms"
+	KeystoreDir  = "key/"
 )
 
 // NewP2P is stub, real implementation is needed in order to pass it to
@@ -36,13 +41,38 @@ func NewP2P() libp2p.Libp2p {
 }
 
 // QUESTION(dms-initialization): should the db instance be constructed here?
-func Run() {
+func Run(ksPassphrase string) error {
 	ctx := context.Background()
-	config.LoadConfig()
+	fs := afero.NewOsFs()
+
+	keyStoreDir := filepath.Join(config.GetConfig().General.WorkDir, KeystoreDir)
+	keyStore, err := keystore.New(fs, keyStoreDir)
+	if err != nil {
+		return fmt.Errorf("unable to create keystore: %w", err)
+	}
+
+	var priv crypto.PrivKey
+	ksPrivKey, err := keyStore.Get(KeyIDPrivKey, ksPassphrase)
+	if err != nil {
+		if errors.Is(err, keystore.ErrKeyNotFound) {
+			priv, err = GenerateAndStorePrivKey(keyStore, ksPassphrase, KeyIDPrivKey)
+			if err != nil {
+				return fmt.Errorf("couldn't generate and store priv key into keystore: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to get private key from keystore; Error: %v", err)
+		}
+	} else {
+		priv, err = ksPrivKey.PrivKey()
+		if err != nil {
+			return fmt.Errorf("unable to convert key from keystore to private key: %v", err)
+		}
+	}
+	pubKey := priv.GetPublic()
 
 	db, err := db.ConnectDatabase(config.GetConfig().General.WorkDir)
 	if err != nil {
-		zlog.Sugar().Fatalf("unable to connect to database: %w", err)
+		return fmt.Errorf("unable to connect to database: %w", err)
 	}
 
 	repos := resources.ManagerRepos{
@@ -59,18 +89,8 @@ func Run() {
 	uuidR := gdb.NewMachineUUID(db)
 	avResR := gdb.NewAvailableResources(db)
 
-	// check if onboarded
-	oConf, err := onboardR.Get(ctx)
-	if err != nil {
-		if err == repositories.ErrNotFound {
-			zlog.Info("machine not onboarded")
-		} else {
-			zlog.Sugar().Errorf("no onboarding config: %w", err)
-		}
-	}
-
 	onboard := onboarding.New(&onboarding.Config{
-		Fs:              afero.Afero{Fs: afero.NewOsFs()},
+		Fs:              afero.Afero{Fs: fs},
 		ParamsRepo:      onboardR,
 		P2PRepo:         p2pR,
 		UUIDRepo:        uuidR,
@@ -83,80 +103,56 @@ func Run() {
 
 	var p2pNet *libp2p.Libp2p
 
-	if onboarded, _ := onboard.IsOnboarded(ctx); onboarded {
-		ValidateOnboarding(&oConf)
+	bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
+	for i, addr := range config.GetConfig().P2P.BootstrapPeers {
+		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
+	}
 
-		p2pParams, err := p2pR.Get(ctx)
-		if err != nil {
-			log.Fatalf("Failed to get libp2p info: %v", err)
-		}
+	cfg := &types.Libp2pConfig{
+		PrivateKey:              priv,
+		BootstrapPeers:          bootstrapPeers,
+		Rendezvous:              "nunet-test",
+		Server:                  false,
+		Scheduler:               backgroundtasks.NewScheduler(10),
+		CustomNamespace:         "/nunet-dht-1/",
+		ListenAddress:           config.GetConfig().ListenAddress,
+		PeerCountDiscoveryLimit: 40,
+	}
 
-		bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
-		for i, addr := range config.GetConfig().P2P.BootstrapPeers {
-			bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
-		}
+	p2p, err := libp2p.New(cfg, fs)
+	if err != nil {
+		return fmt.Errorf("unable to create libp2p instance: %v", err)
+	}
 
-		priv, err := crypto.UnmarshalPrivateKey(p2pParams.PrivateKey)
-		if err != nil {
-			zlog.Sugar().Fatalf("unable to unmarshal private key: %v", err)
-		}
+	if err = p2p.Init(ctx); err != nil {
+		return fmt.Errorf("unable to initialize libp2p: %v", err)
+	}
 
-		cfg := &types.Libp2pConfig{
-			PrivateKey:              priv,
-			BootstrapPeers:          bootstrapPeers,
-			Rendezvous:              "nunet-test",
-			Server:                  false,
-			Scheduler:               backgroundtasks.NewScheduler(10),
-			CustomNamespace:         "/nunet-dht-1/",
-			ListenAddress:           config.GetConfig().ListenAddress,
-			PeerCountDiscoveryLimit: 40,
-		}
+	if err = p2p.Start(ctx); err != nil {
+		return fmt.Errorf("unable to start libp2p: %v", err)
+	}
 
-		p2p, err := libp2p.New(cfg, afero.NewMemMapFs())
-		if err != nil {
-			zlog.Sugar().Errorf("unable to create libp2p instance: %v", err)
-		}
+	p2pNet = p2p
 
-		if err = p2p.Init(ctx); err != nil {
-			zlog.Sugar().Errorf("unable to initialize libp2p: %v", err)
-		}
+	// TODO: load the capability context, given the trust context and root did
+	rootDID := did.FromPublicKey(pubKey)
+	trustCtx := did.NewTrustContext()
+	trustCtx.AddProvider(did.NewProvider(rootDID, priv))
+	trustCtx.AddAnchor(did.NewAnchor(rootDID, pubKey))
+	capCtx, err := ucan.NewCapabilityContext(trustCtx, did.DID{URI: rootDID.URI}, nil, ucan.TokenList{}, ucan.TokenList{})
+	if err != nil {
+		return fmt.Errorf("failed to create capability context: %s", err)
+	}
 
-		if err = p2p.Start(ctx); err != nil {
-			zlog.Sugar().Errorf("unable to start libp2p: %v", err)
-		}
+	hostID := p2p.Host.ID().String()
+	node, err := node.New(capCtx, hostID, p2p, resourceManager, cfg.Scheduler)
+	if err != nil {
+		return fmt.Errorf("failed to create node: %s", err)
+	}
 
-		p2pNet = p2p
-
-		// TODO load the key to create a trust context
-		//      load the capability context, given the trust context and root did
-		trustCtx := did.NewTrustContext()
-		capCtx, err := ucan.NewCapabilityContext(trustCtx, did.DID{}, nil, ucan.TokenList{}, ucan.TokenList{})
-		if err != nil {
-			log.Fatalf("failed to create capability context: %s", err)
-		}
-
-		hostID := p2p.Host.ID().String()
-		node, err := node.New(capCtx, hostID, p2p, nil, resourceManager, cfg.Scheduler)
-		if err != nil {
-			log.Fatalf("failed to create node: %s", err)
-		}
-
-		err = node.Start()
-		if err != nil {
-			log.Fatalf("failed to start node: %s", err)
-		}
-
-		// TODO what is this?
-		defer func() {
-			err = node.Stop()
-			if err != nil {
-				log.Errorf("failed to stop node: %s", err)
-			}
-			err = p2p.Stop()
-			if err != nil {
-				log.Errorf("failed to stop libp2p network: %s", err)
-			}
-		}()
+	err = node.Start()
+	if err != nil {
+		return fmt.Errorf("failed to start node: %s", err)
 	}
 
 	// initialize rest api server
@@ -181,10 +177,50 @@ func Run() {
 
 	// wait for SIGINT or SIGTERM
 	sig := <-internal.ShutdownChan
-	fmt.Printf("Shutting down after receiving %v...\n", sig)
 
-	// add cleanup code here
-	fmt.Println("Cleaning up before shutting down")
+	// clean up
+	go func() {
+		err = node.Stop()
+		if err != nil {
+			log.Errorf("failed to stop node: %s", err)
+		}
+		err = p2p.Stop()
+		if err != nil {
+			log.Errorf("failed to stop libp2p network: %s", err)
+		}
+		log.Infof("Shutting down after receiving %v...\n", sig)
+		os.Exit(0)
+	}()
+
+	sig = <-internal.ShutdownChan
+	log.Infof("Shutting down after receiving %v...\n", sig)
+	os.Exit(1)
+	return nil
+}
+
+// GenerateAndStorePrivKey generates a new key pair using Secp256k1,
+// storing the private key into user's keystore.
+func GenerateAndStorePrivKey(ks keystore.KeyStore, passphrase string, keyID string) (crypto.PrivKey, error) {
+	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	if err != nil {
+		return nil, fmt.Errorf("unable to generate key pair: %w", err)
+	}
+
+	rawPriv, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal private key: %w", err)
+	}
+
+	_, err = ks.Save(
+		keyID,
+		rawPriv,
+		passphrase,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to save private key into the keystore: %w", err)
+	}
+
+	return priv, nil
 }
 
 func ValidateOnboarding(oConf *types.OnboardingConfig) {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -85,13 +86,11 @@ func (rs *RESTServer) Onboard(c *gin.Context) {
 		return
 	}
 
-	oConfig, p2p, err := rs.config.Onboarding.Onboard(c.Request.Context(), capacity)
+	oConfig, err := rs.config.Onboarding.Onboard(c.Request.Context(), capacity)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	rs.config.P2P = p2p
 
 	c.JSON(http.StatusCreated, oConfig)
 }

@@ -53,6 +53,7 @@ func setDefaultConfig() *viper.Viper {
 	return v
 }
 
+// TODO: add error handling!!!
 func LoadConfig() {
 	paths := []string{
 		".",
