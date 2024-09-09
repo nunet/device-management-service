@@ -4,12 +4,12 @@ import (
 	// "context"
 	"context"
 	"fmt"
-	"log"
 
 	"gitlab.com/nunet/device-management-service/api"
 	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/internal"
@@ -18,6 +18,8 @@ import (
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 
 	// "gitlab.com/nunet/device-management-service/internal/messaging"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -124,6 +126,37 @@ func Run() {
 		}
 
 		p2pNet = p2p
+
+		// TODO load the key to create a trust context
+		//      load the capability context, given the trust context and root did
+		trustCtx := did.NewTrustContext()
+		capCtx, err := ucan.NewCapabilityContext(trustCtx, did.DID{}, nil, ucan.TokenList{}, ucan.TokenList{})
+		if err != nil {
+			log.Fatalf("failed to create capability context: %s", err)
+		}
+
+		hostID := p2p.Host.ID().String()
+		node, err := node.New(capCtx, hostID, p2p, nil, resourceManager, cfg.Scheduler)
+		if err != nil {
+			log.Fatalf("failed to create node: %s", err)
+		}
+
+		err = node.Start()
+		if err != nil {
+			log.Fatalf("failed to start node: %s", err)
+		}
+
+		// TODO what is this?
+		defer func() {
+			err = node.Stop()
+			if err != nil {
+				log.Errorf("failed to stop node: %s", err)
+			}
+			err = p2p.Stop()
+			if err != nil {
+				log.Errorf("failed to stop libp2p network: %s", err)
+			}
+		}()
 	}
 
 	// initialize rest api server

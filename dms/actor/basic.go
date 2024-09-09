@@ -51,7 +51,7 @@ func New(dispatch *Dispatch, scheduler *bt.Scheduler, net network.Network, secur
 	actor := &BasicActor{
 		dispatch:      dispatch,
 		scheduler:     scheduler,
-		registry:      &registry{},
+		registry:      newRegistry(),
 		network:       net,
 		security:      security,
 		params:        params,
