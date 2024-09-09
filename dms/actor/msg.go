@@ -47,14 +47,18 @@ func Message(src Handle, dest Handle, behavior string, payload interface{}, opt 
 // NOTE: If this option must be passed last, otherwise the signature will be invalidated by further modifications.
 //
 // NOTE: Signing is implicit in Send.
-func WithMessageSignature(sctx SecurityContext, cap []Capability, delegate []Capability) MessageOption {
+func WithMessageSignature(sctx SecurityContext, invoke []Capability, delegate []Capability) MessageOption {
 	return func(msg *Envelope) error {
 		if !msg.From.ID.Equal(sctx.ID()) {
 			return ErrInvalidSecurityContext
 		}
 
 		msg.Nonce = sctx.Nonce()
-		return sctx.Provide(msg, cap, delegate)
+		if msg.IsBroadcast() {
+			return sctx.ProvideBroadcast(msg, msg.Options.Topic, invoke)
+		}
+
+		return sctx.Provide(msg, invoke, delegate)
 	}
 }
 
