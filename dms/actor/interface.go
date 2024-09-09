@@ -66,6 +66,8 @@ type Actor interface {
 
 	Start() error
 	Stop() error
+
+	Limiter() RateLimiter
 }
 
 // ActorSecurityContext provides a context for which to perform cryptographic operations
@@ -106,6 +108,27 @@ type SecurityContext interface {
 
 	// Disparcrd discards unwanted tokens from a consumed envelope
 	Discard(msg Envelope)
+}
+
+// RateLimiter implements a stateful resource access limiter
+// This is necessary to combat spam attacks and ensure that our system does not
+// become overloaded with too many goroutines.
+type RateLimiter interface {
+	Allow(msg Envelope) bool
+	Acquire(msg Envelope) error
+	Release(msg Envelope)
+
+	Config() RateLimiterConfig
+	SetConfig(cfg RateLimiterConfig)
+}
+
+type RateLimiterConfig struct {
+	PublicLimitAllow      int
+	PublicLimitAcquire    int
+	BroadcastLimitAllow   int
+	BroadcastLimitAcquire int
+	TopicDefaultLimit     int
+	TopicLimit            map[string]int
 }
 
 type Behavior func(msg Envelope)

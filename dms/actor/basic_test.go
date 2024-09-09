@@ -26,7 +26,6 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		dispatch  *Dispatch
 		scheduler *backgroundtasks.Scheduler
 		net       network.Network
 		security  *BasicSecurityContext
@@ -34,26 +33,19 @@ func TestNew(t *testing.T) {
 		self      Handle
 		expErr    string
 	}{
-		"nil dispatch": {
-			expErr: "dispatch is nil",
-		},
 		"nil scheduler": {
-			dispatch: &Dispatch{},
-			expErr:   "scheduler is nil",
+			expErr: "scheduler is nil",
 		},
 		"nil network": {
-			dispatch:  &Dispatch{},
 			scheduler: &backgroundtasks.Scheduler{},
 			expErr:    "network is nil",
 		},
 		"nil security": {
-			dispatch:  &Dispatch{},
 			scheduler: &backgroundtasks.Scheduler{},
 			net:       &libp2p.Libp2p{},
 			expErr:    "security is nil",
 		},
 		"success": {
-			dispatch:  &Dispatch{},
 			scheduler: &backgroundtasks.Scheduler{},
 			net:       &libp2p.Libp2p{},
 			security:  &BasicSecurityContext{},
@@ -66,7 +58,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			act, err := New(tt.dispatch, tt.scheduler, tt.net, tt.security, tt.params, tt.self)
+			act, err := New(tt.scheduler, tt.net, tt.security, NoRateLimiter{}, tt.params, tt.self)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -125,13 +117,7 @@ func TestActorMessaging(t *testing.T) {
 
 	err = actor1.AddBehavior(testBehavior2, func(msg Envelope) {
 		defer msg.Discard()
-		reply, err := Message(
-			actor1.self,
-			msg.From,
-			msg.Options.ReplyTo,
-			payload{Name: "random name", Type: "x"},
-			WithMessageExpiry(msg.Options.Expire),
-		)
+		reply, err := ReplyTo(msg, payload{Name: "random name", Type: "x"})
 		assert.NoError(t, err)
 		err = actor1.Send(reply)
 		assert.NoError(t, err)
@@ -174,7 +160,16 @@ func TestActorBroadcast(t *testing.T) {
 	_, priv2, peer2 := newLibp2pNetwork(t, "15220", addrs1)
 
 	res, err := peer2.Ping(context.Background(), peer1.Host.ID().String(), time.Second)
-	assert.NoError(t, err)
+	if err != nil {
+		for i := 1; i <= 3; i++ {
+			time.Sleep(time.Duration(i) * time.Second)
+			res, err = peer2.Ping(context.Background(), peer1.Host.ID().String(), time.Second)
+			if err == nil {
+				break
+			}
+		}
+		require.NoError(t, err)
+	}
 	assert.True(t, res.Success)
 
 	time.Sleep(500 * time.Millisecond)
@@ -346,7 +341,7 @@ func createActor(t *testing.T, peer *libp2p.Libp2p, cap ucan.CapabilityContext) 
 			InboxAddress: uuid.String(),
 		},
 	}
-	actor, err := New(NewDispatch(sctx), backgroundtasks.NewScheduler(1), peer, sctx, params, handle)
+	actor, err := New(backgroundtasks.NewScheduler(1), peer, sctx, NewRateLimiter(DefaultRateLimiterConfig()), params, handle)
 	assert.NoError(t, err)
 	assert.NotNil(t, actor)
 
