@@ -42,7 +42,7 @@ import (
 
 const (
 	MB                 = 1024 * 1024
-	MaxMessageLengthMB = 10
+	maxMessageLengthMB = 1
 
 	ValidationAccept = pubsub.ValidationAccept
 	ValidationReject = pubsub.ValidationReject
@@ -220,6 +220,14 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 
 	// create a buffer with the size of the message and then read until its full
 	lengthPrefix := binary.LittleEndian.Uint64(msgLengthBuffer)
+
+	// check if the message length is greater than max allowed
+	if lengthPrefix > maxMessageLengthMB*MB {
+		zlog.Sugar().Errorf("received a big message: %d", lengthPrefix)
+		s.Close()
+		return
+	}
+
 	buf := make([]byte, lengthPrefix)
 
 	// read the full message
@@ -631,8 +639,8 @@ func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg types.Message
 	defer stream.Close()
 
 	requestBufferSize := 8 + len(msg.Data)
-	if requestBufferSize > MaxMessageLengthMB*MB {
-		return fmt.Errorf("message size %d is greater than limit %d bytes", requestBufferSize, MaxMessageLengthMB*MB)
+	if requestBufferSize > maxMessageLengthMB*MB {
+		return fmt.Errorf("message size %d is greater than limit %d bytes", requestBufferSize, maxMessageLengthMB*MB)
 	}
 
 	requestPayloadWithLength := make([]byte, requestBufferSize)
