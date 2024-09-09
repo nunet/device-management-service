@@ -18,6 +18,7 @@ type BasicActor struct {
 	registry  *registry
 	network   network.Network
 	security  SecurityContext
+	limiter   RateLimiter
 
 	params BasicActorParams
 	self   Handle
@@ -31,11 +32,7 @@ type BasicActorParams struct{}
 var _ Actor = (*BasicActor)(nil)
 
 // New creates a new basic actor.
-func New(dispatch *Dispatch, scheduler *bt.Scheduler, net network.Network, security *BasicSecurityContext, params BasicActorParams, self Handle) (*BasicActor, error) {
-	if dispatch == nil {
-		return nil, errors.New("dispatch is nil")
-	}
-
+func New(scheduler *bt.Scheduler, net network.Network, security *BasicSecurityContext, limiter RateLimiter, params BasicActorParams, self Handle, opt ...DispatchOption) (*BasicActor, error) {
 	if scheduler == nil {
 		return nil, errors.New("scheduler is nil")
 	}
@@ -48,12 +45,17 @@ func New(dispatch *Dispatch, scheduler *bt.Scheduler, net network.Network, secur
 		return nil, errors.New("security is nil")
 	}
 
+	dispatchOptions := []DispatchOption{WithRateLimiter(limiter)}
+	dispatchOptions = append(dispatchOptions, opt...)
+	dispatch := NewDispatch(security, dispatchOptions...)
+
 	actor := &BasicActor{
 		dispatch:      dispatch,
 		scheduler:     scheduler,
 		registry:      newRegistry(),
 		network:       net,
 		security:      security,
+		limiter:       limiter,
 		params:        params,
 		self:          self,
 		subscriptions: make(map[string]uint64),
@@ -86,6 +88,11 @@ func (a *BasicActor) handleMessage(data []byte) {
 
 	if !a.self.ID.Equal(msg.To.ID) {
 		log.Warnf("message is not for ourselves: %s %s", a.self.ID, msg.To.ID)
+		return
+	}
+
+	if !a.limiter.Allow(msg) {
+		log.Warnf("incoming message invoking %s not allowed by limiter", msg.Behavior)
 		return
 	}
 
@@ -282,6 +289,11 @@ func (a *BasicActor) validateBroadcast(topic string, data []byte, validatorData 
 		return network.ValidationReject, nil
 	}
 
+	if !a.limiter.Allow(msg) {
+		log.Warnf("incoming broadcast message in %s not allowed by limiter", topic)
+		return network.ValidationIgnore, nil
+	}
+
 	return network.ValidationAccept, msg
 }
 
@@ -306,4 +318,8 @@ func (a *BasicActor) Stop() error {
 		}
 	}
 	return nil
+}
+
+func (a *BasicActor) Limiter() RateLimiter {
+	return a.limiter
 }

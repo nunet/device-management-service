@@ -73,7 +73,7 @@ func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, res
 		return nil, fmt.Errorf("failed to create security context: %w", err)
 	}
 
-	actor, err := createActor(rootSec, hostID, "root", net, scheduler)
+	nodeActor, err := createActor(rootSec, actor.NewRateLimiter(actor.DefaultRateLimiterConfig()), hostID, "root", net, scheduler)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node actor: %w", err)
 	}
@@ -83,9 +83,19 @@ func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, res
 		network:         net,
 		allocations:     make(map[string]*jobs.Allocation),
 		resourceManager: resourceManager,
-		actor:           actor,
+		actor:           nodeActor,
 		rootCap:         rootCap,
 		scheduler:       scheduler,
+	}
+
+	if err := nodeActor.AddBehavior(PublicHelloBehavior, n.publicHelloBehavior); err != nil {
+		return nil, fmt.Errorf("adding public hello behavior: %w", err)
+	}
+	if err := nodeActor.AddBehavior(PublicStatusBehavior, n.publicStatusBehavior); err != nil {
+		return nil, fmt.Errorf("adding public status behavior: %w", err)
+	}
+	if err := nodeActor.AddBehavior(BroadcastHelloBehavior, n.broadcastHelloBehavior, actor.WithBehaviorTopic(BroadcastHelloTopic)); err != nil {
+		return nil, fmt.Errorf("adding broadcast status behavior: %w", err)
 	}
 
 	return n, nil
@@ -109,7 +119,7 @@ func (n *Node) CreateAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
 	}
 
-	actor, err := createActor(security, n.hostID, allocationInbox.String(), n.network, n.scheduler)
+	actor, err := createActor(security, n.actor.Limiter(), n.hostID, allocationInbox.String(), n.network, n.scheduler)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
@@ -186,7 +196,7 @@ func (n *Node) Stop() error {
 }
 
 // createActor creates an actor.
-func createActor(sctx *actor.BasicSecurityContext, hostID, inboxAddress string, net network.Network, scheduler *bt.Scheduler) (*actor.BasicActor, error) {
+func createActor(sctx *actor.BasicSecurityContext, limiter actor.RateLimiter, hostID, inboxAddress string, net network.Network, scheduler *bt.Scheduler) (*actor.BasicActor, error) {
 	self := actor.Handle{
 		ID:  sctx.ID(),
 		DID: sctx.DID(),
@@ -195,7 +205,7 @@ func createActor(sctx *actor.BasicSecurityContext, hostID, inboxAddress string, 
 			InboxAddress: inboxAddress,
 		},
 	}
-	actor, err := actor.New(actor.NewDispatch(sctx), scheduler, net, sctx, actor.BasicActorParams{}, self)
+	actor, err := actor.New(scheduler, net, sctx, limiter, actor.BasicActorParams{}, self)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create actor: %w", err)
 	}

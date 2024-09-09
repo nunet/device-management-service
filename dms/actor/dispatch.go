@@ -12,17 +12,6 @@ var (
 	DefaultDispatchWorkers    = 1
 )
 
-// DispatchLimiter implements a (potentially) stateful resource access limiter
-// This is necessary to combat spam attacks and ensure that our system does not
-// become overloaded with too many goroutines.
-type DispatchLimiter interface {
-	Acquire(msg Envelope) error
-	Release(msg Envelope)
-}
-
-// NoDispatchLimiter is the null limiter, that does not rate limit
-type NoDispatchLimiter struct{}
-
 // Dispatch provides a reaction kernel with multithreaded dispatch and oneshot
 // continuations.
 type Dispatch struct {
@@ -41,7 +30,7 @@ type Dispatch struct {
 }
 
 type DispatchOptions struct {
-	Limiter    DispatchLimiter
+	Limiter    RateLimiter
 	GCInterval time.Duration
 	Workers    int
 }
@@ -65,15 +54,11 @@ func WithDispatchGCInterval(dt time.Duration) DispatchOption {
 	}
 }
 
-func WithDispatchLimiter(limiter DispatchLimiter) DispatchOption {
+func WithRateLimiter(limiter RateLimiter) DispatchOption {
 	return func(o *DispatchOptions) {
 		o.Limiter = limiter
 	}
 }
-
-func (l NoDispatchLimiter) Acquire(_ Envelope) error { return nil }
-
-func (l NoDispatchLimiter) Release(_ Envelope) {}
 
 func NewDispatch(sctx SecurityContext, opt ...DispatchOption) *Dispatch {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,7 +72,7 @@ func NewDispatch(sctx SecurityContext, opt ...DispatchOption) *Dispatch {
 		options: DispatchOptions{
 			GCInterval: DefaultDispatchGCInterval,
 			Workers:    DefaultDispatchWorkers,
-			Limiter:    NoDispatchLimiter{},
+			Limiter:    NoRateLimiter{},
 		},
 	}
 

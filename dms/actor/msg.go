@@ -42,6 +42,16 @@ func Message(src Handle, dest Handle, behavior string, payload interface{}, opt 
 	return msg, nil
 }
 
+func ReplyTo(msg Envelope, payload interface{}, opt ...MessageOption) (Envelope, error) {
+	if msg.Options.ReplyTo == "" {
+		return Envelope{}, fmt.Errorf("no behavior to reply to: %w", ErrInvalidMessage)
+	}
+
+	msgOptions := []MessageOption{WithMessageExpiry(msg.Options.Expire)}
+	msgOptions = append(msgOptions, opt...)
+	return Message(msg.To, msg.From, msg.Options.ReplyTo, payload, msgOptions...)
+}
+
 // WithMessageContext provides the necessary envelope and signs it.
 //
 // NOTE: If this option must be passed last, otherwise the signature will be invalidated by further modifications.
