@@ -64,7 +64,7 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 				}
 			}
 
-			passphrase, err := promptForPassphrase()
+			passphrase, err := promptForPassphrase(true)
 			if err != nil {
 				return fmt.Errorf("failed to get passphrase: %w", err)
 			}
@@ -96,7 +96,7 @@ func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
 				return fmt.Errorf("failed to open keystore: %w", err)
 			}
 
-			passphrase, err := promptForPassphrase()
+			passphrase, err := promptForPassphrase(false)
 			if err != nil {
 				return fmt.Errorf("failed to get passphrase: %w", err)
 			}
