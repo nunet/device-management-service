@@ -34,7 +34,7 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 		Long:  `Generate a new keypair, saving the private key into user's local keystore. Optionally specify a name for the key.`,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			keyStoreDir := filepath.Join(config.GetConfig().General.WorkDir, dms.KeystoreDir)
+			keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir)
 			if err != nil {
 				return fmt.Errorf("failed to create keystore: %w", err)
@@ -90,7 +90,7 @@ func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			keyName := args[0]
 
-			keyStoreDir := filepath.Join(config.GetConfig().General.WorkDir, dms.KeystoreDir)
+			keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir)
 			if err != nil {
 				return fmt.Errorf("failed to open keystore: %w", err)
