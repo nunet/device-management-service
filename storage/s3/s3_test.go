@@ -5,19 +5,23 @@ package s3
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3_types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	s3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 
-	basiccontroller "gitlab.com/nunet/device-management-service/storage/basic_controller"
+	basicController "gitlab.com/nunet/device-management-service/storage/basic_controller"
 	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 /*
@@ -26,6 +30,8 @@ I considered it was not worth to mock it.
 
 Therefore, the tests here considers the use of environment variables or shared
 credentials files (~/.aws/config and etc). These should be set up on our pipeline.
+
+(If failed to get credentials, the tests will be skipped)
 
 If it's not preferable to run them in any scenario, use `-tag=unit` when running `go test`.
 
@@ -45,17 +51,19 @@ const (
 	object003Content = "testintegration003"
 
 	vol1File = "file.txt"
+	vol1Data = "hello world"
 )
 
 type S3ProviderTestSuite struct {
 	suite.Suite
 	ctx       context.Context
 	s3Storage *Storage
-	vcHelper  *basiccontroller.VolControllerTestSuiteHelper
+	vcHelper  *basicController.VolumeControllerTestKit
 }
 
 // SetupTest is mainly setting up a volume controller based on its test suite and a S3 client.
 func (s *S3ProviderTestSuite) SetupTest() {
+	s.ctx = context.Background()
 	// Initialize telemetry in test mode, replacing the global st
 	st = telemetry.NewTelemetry(nil, nil, true)
 
@@ -68,11 +76,11 @@ func (s *S3ProviderTestSuite) SetupTest() {
 		},
 	}
 
-	vcHelper, err := basiccontroller.SetupVolControllerTestSuite(s.T(), basePath, volumes)
+	vcHelper, err := basicController.SetupVolumeControllerTestKit(basePath, volumes)
 	s.NoError(err)
 
 	// Write a file in volume1 to be later used to upload
-	err = afero.WriteFile(vcHelper.Fs, filepath.Join(vcHelper.Volumes["volume1"].Path, vol1File), []byte("hello world"), 0o644)
+	err = afero.WriteFile(vcHelper.Fs, filepath.Join(vcHelper.Volumes["volume1"].Path, vol1File), []byte(vol1Data), 0o644)
 	s.NoError(err)
 
 	config, err := GetAWSDefaultConfig()
@@ -81,7 +89,29 @@ func (s *S3ProviderTestSuite) SetupTest() {
 	s3Client, err := NewClient(config, vcHelper.BasicVolController)
 	s.NoError(err)
 
-	s.ctx = context.Background()
+	// Make sure all uploaded files by the tests are deleted after one day.
+	_, err = s3Client.PutBucketLifecycleConfiguration(
+		s.ctx,
+		&s3.PutBucketLifecycleConfigurationInput{
+			Bucket: aws.String(bucketTest),
+			LifecycleConfiguration: &s3Types.BucketLifecycleConfiguration{
+				Rules: []s3Types.LifecycleRule{
+					{
+						ID:     aws.String("Delete old test objects"),
+						Status: s3Types.ExpirationStatusEnabled,
+						Filter: &s3Types.LifecycleRuleFilterMemberPrefix{
+							Value: "upload-test-",
+						},
+						Expiration: &s3Types.LifecycleExpiration{
+							Days: aws.Int32(1),
+						},
+					},
+				},
+			},
+		},
+	)
+	s.NoError(err)
+
 	s.s3Storage = s3Client
 	s.vcHelper = vcHelper
 }
@@ -147,45 +177,47 @@ func (s *S3ProviderTestSuite) TestDownload() {
 	}
 }
 
-// TestUpload checks only if the file exists, it does not check if the content is equal to the expected one.
-// Also, we try to delete files before testing in case they already exist within the bucket.
+// TestUpload checks if the file exists and its content is equal to the expected one.
+// It uses a random key for upload and deletes the object at the end of the test.
 //
-// # Tested based on Volume1 set up in SetupTest() with a file written within
-//
-// TODO: test different scenarios, mainly one with nested directories being uploaded
+// Important: Tested based on Volume1 set up in SetupTest() with a file written within
 func (s *S3ProviderTestSuite) TestUpload() {
-	// inputKey is the key received by the S3Provider.Upload() method
-	inputKey := "upload/"
-	// keyUploadedAs is the key resolved based on file path relative to its vol
-	keyUploadedAs := filepath.Join(inputKey, vol1File)
+	key, err := utils.RandomString(8)
+	s.NoError(err)
 
-	_, err := s.s3Storage.Client.DeleteObject(s.ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(bucketTest),
-		Key:    aws.String(keyUploadedAs),
-	})
-	if err != nil {
-		if s3Err, ok := err.(*s3_types.NoSuchKey); !(ok && s3Err.ErrorCode() == "NoSuchKey") {
-			s.NoError(err)
-		}
-	}
+	randomKey := fmt.Sprintf("upload-test-%s/", key)
+	keyUploadedAs := filepath.Join(randomKey, vol1File)
 
 	destination := &types.SpecConfig{
 		Type: types.StorageProviderS3,
 		Params: map[string]interface{}{
 			"Bucket": bucketTest,
-			"Key":    inputKey,
+			"Key":    randomKey,
 		},
 	}
 
 	err = s.s3Storage.Upload(s.ctx, *s.vcHelper.Volumes["volume1"], destination)
 	s.NoError(err)
 
-	// Check if the uploaded file exists in the S3 bucket
-	_, err = s.s3Storage.Client.HeadObject(s.ctx, &s3.HeadObjectInput{
+	defer func() {
+		_, err := s.s3Storage.Client.DeleteObject(s.ctx, &s3.DeleteObjectInput{
+			Bucket: aws.String(bucketTest),
+			Key:    aws.String(keyUploadedAs),
+		})
+		s.NoError(err)
+	}()
+
+	// Check if the uploaded file exists and has the correct content
+	getObjectOutput, err := s.s3Storage.Client.GetObject(s.ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketTest),
 		Key:    aws.String(keyUploadedAs),
 	})
 	s.NoError(err)
+	defer getObjectOutput.Body.Close()
+
+	content, err := io.ReadAll(getObjectOutput.Body)
+	s.NoError(err)
+	s.Equal(vol1Data, string(content))
 }
 
 func (s *S3ProviderTestSuite) TestSize() {
@@ -205,5 +237,25 @@ func (s *S3ProviderTestSuite) TestSize() {
 }
 
 func TestS3ProviderTestSuite(t *testing.T) {
+	isPipeline, _ := strconv.ParseBool(os.Getenv("GITLAB_CI"))
+	errMsg := "Error getting S3 credentials for S3 integration tests"
+
+	config, err := GetAWSDefaultConfig()
+	if err != nil {
+		if isPipeline {
+			t.Fatal(errMsg)
+		} else {
+			t.Skip(errMsg)
+		}
+	}
+
+	if valid := hasValidCredentials(config); !valid {
+		if isPipeline {
+			t.Fatal(errMsg)
+		} else {
+			t.Skip(errMsg)
+		}
+	}
+
 	suite.Run(t, new(S3ProviderTestSuite))
 }

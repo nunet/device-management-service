@@ -17,6 +17,10 @@ Dockerfile
 docker-compose.yml
 .DS_Store
 
+# generated test coverage files
+cover.html
+cover.out
+
 # others
 .aider*
 

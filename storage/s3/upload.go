@@ -6,12 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/afero"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/spf13/afero"
 
-	basiccontroller "gitlab.com/nunet/device-management-service/storage/basic_controller"
+	basicController "gitlab.com/nunet/device-management-service/storage/basic_controller"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -36,7 +35,7 @@ func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinati
 
 	// set file system to act upon based on the volume controller implementation
 	var fs afero.Fs
-	if basicVolController, ok := s.volController.(*basiccontroller.BasicVolumeController); ok {
+	if basicVolController, ok := s.volController.(*basicController.BasicVolumeController); ok {
 		fs = basicVolController.FS
 	}
 

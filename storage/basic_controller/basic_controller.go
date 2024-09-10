@@ -151,9 +151,8 @@ func WithCID(cid string) storage.LockVolOpt {
 	}
 }
 
-// DeleteVolume deletes a given storage volume record from the database.
-// Identifier is either a CID or a path of a volume. Therefore, records for both
-// will be deleted.
+// DeleteVolume deletes a given storage volume record from the database and removes the corresponding directory.
+// Identifier is either a CID or a path of a volume.
 //
 // Note [CID]: if we start to type CID as cid.CID, we may have to use generics here
 // as in `[T string | cid.CID]`
@@ -188,8 +187,13 @@ func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.
 		return fmt.Errorf("failed to find volume: %w", err)
 	}
 
-	err = vc.repo.Delete(ctx, vol.ID)
-	if err != nil {
+	// Remove the directory
+	if err := vc.FS.RemoveAll(vol.Path); err != nil {
+		return fmt.Errorf("failed to remove volume directory: %w", err)
+	}
+
+	// Delete the record from the database
+	if err := vc.repo.Delete(context.Background(), vol.ID); err != nil {
 		ctx = context.WithValue(ctx, errorKey, err.Error())
 		st.Error(ctx, "volume_delete_failure", nil)
 		return fmt.Errorf("failed to delete volume: %w", err)
@@ -280,5 +284,4 @@ func (vc *BasicVolumeController) DecryptVolume(path string, _ types.Decryptor, _
 	return fmt.Errorf("not implemented")
 }
 
-// TODO-minor: compiler-time check for interface implementation
 var _ storage.VolumeController = (*BasicVolumeController)(nil)

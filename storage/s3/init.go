@@ -8,7 +8,7 @@ import (
 
 var (
 	zlog *otelzap.Logger
-	st   = telemetry.GetTelemetry()
+	st   = telemetry.NewTelemetry(nil, nil, true)
 )
 
 // Context keys used for tracing

@@ -3,28 +3,26 @@ package basiccontroller
 import (
 	"context"
 	"fmt"
-	"os"
-	"testing"
 
-	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
-	rclover "gitlab.com/nunet/device-management-service/db/repositories/clover"
+	rGorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type VolControllerTestSuiteHelper struct {
+type VolumeControllerTestKit struct {
 	BasicVolController *BasicVolumeController
 	Fs                 afero.Fs
-	DB                 *clover.DB
 	Volumes            map[string]*types.StorageVolume
-	TempDBDir          string
 }
 
-// SetupVolControllerTestSuite sets up a volume controller with 0-n volumes given a base path.
+// SetupVolumeControllerTestKit sets up a volume controller with 0-n volumes given a base path.
 // If volumes are inputed, directories will be created and volumes will be stored in the database
-func SetupVolControllerTestSuite(t *testing.T, basePath string, volumes map[string]*types.StorageVolume) (*VolControllerTestSuiteHelper, error) {
+func SetupVolumeControllerTestKit(basePath string, volumes map[string]*types.StorageVolume) (*VolumeControllerTestKit, error) {
 	// Initialize telemetry in test mode, replacing the global st
 	// It's initiated here too, besides on basic_controller_test.go, because
 	// s3 tests depend on basicController (which in turn depends on telemetry instantiation).
@@ -32,31 +30,29 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string, volumes map[stri
 	// for basic controller
 	st = telemetry.NewTelemetry(nil, nil, true)
 
-	tempDir, err := os.MkdirTemp("", "clover-test-*")
+	db, err := gorm.Open(
+		sqlite.Open("file:?mode=memory&cache=shared"),
+		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)},
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return nil, fmt.Errorf("failed to create in-memory mock database: %w", err)
 	}
 
-	db, err := rclover.NewDB(tempDir, []string{"storage_volume"})
+	err = db.AutoMigrate(&types.StorageVolume{})
 	if err != nil {
-		os.RemoveAll(tempDir)
-		return nil, fmt.Errorf("failed to open clover db: %w", err)
+		return nil, fmt.Errorf("failed to automigrate: %w", err)
 	}
 
 	fs := afero.NewMemMapFs()
 
 	err = fs.MkdirAll(basePath, 0o755)
 	if err != nil {
-		db.Close()
-		os.RemoveAll(tempDir)
 		return nil, fmt.Errorf("failed to create base path: %w", err)
 	}
 
-	repo := rclover.NewStorageVolume(db)
+	repo := rGorm.NewStorageVolume(db)
 	vc, err := NewDefaultVolumeController(repo, basePath, fs)
 	if err != nil {
-		db.Close()
-		os.Remove(tempDir)
 		return nil, fmt.Errorf("failed to create volume controller: %w", err)
 	}
 
@@ -64,35 +60,19 @@ func SetupVolControllerTestSuite(t *testing.T, basePath string, volumes map[stri
 		// create root volume dir
 		err = fs.MkdirAll(vol.Path, 0o755)
 		if err != nil {
-			db.Close()
-			os.Remove(tempDir)
 			return nil, fmt.Errorf("failed to create volume dir: %w", err)
 		}
 
 		// create volume record in db
 		_, err = repo.Create(context.Background(), *vol)
 		if err != nil {
-			db.Close()
-			os.Remove(tempDir)
 			return nil, fmt.Errorf("failed to create volume record: %w", err)
 		}
 	}
 
-	helper := &VolControllerTestSuiteHelper{vc, fs, db, volumes, tempDir}
-
-	t.Cleanup(func() {
-		TearDownVolControllerTestSuite(helper)
-	})
-
-	return helper, nil
-}
-
-// TearDownVolControllerTestSuite cleans up resources created during setup
-func TearDownVolControllerTestSuite(helper *VolControllerTestSuiteHelper) {
-	if helper.DB != nil {
-		helper.DB.Close()
-	}
-	if helper.TempDBDir != "" {
-		os.RemoveAll(helper.TempDBDir)
-	}
+	return &VolumeControllerTestKit{
+		BasicVolController: vc,
+		Fs:                 fs,
+		Volumes:            volumes,
+	}, nil
 }
