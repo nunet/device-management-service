@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/storage"
-	basiccontroller "gitlab.com/nunet/device-management-service/storage/basic_controller"
+	basicController "gitlab.com/nunet/device-management-service/storage/basic_controller"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -76,7 +76,7 @@ func (s *Storage) downloadObject(ctx context.Context, source *InputSource, objec
 
 	// use the same file system instance used by the Volume Controller
 	var fs afero.Fs
-	if basicVolController, ok := s.volController.(*basiccontroller.BasicVolumeController); ok {
+	if basicVolController, ok := s.volController.(*basicController.BasicVolumeController); ok {
 		fs = basicVolController.FS
 	}
 

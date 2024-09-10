@@ -16,15 +16,22 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+const (
+	mockFileData = "hello world"
+	mockFileSize = 11
+)
+
 type VolumeControllerTestSuite struct {
 	suite.Suite
-	vcHelper *VolControllerTestSuiteHelper
+	vcKit *VolumeControllerTestKit
 }
 
 func TestVolumeControllerTestSuite(t *testing.T) {
 	suite.Run(t, new(VolumeControllerTestSuite))
 }
 
+// SetupTest prepares a VolumeController with two volumes (with db
+// and fs configured) in which data is written to the second volume.
 func (s *VolumeControllerTestSuite) SetupTest() {
 	// Initialize telemetry in test mode, replacing the global st
 	st = telemetry.NewTelemetry(nil, nil, true)
@@ -47,27 +54,26 @@ func (s *VolumeControllerTestSuite) SetupTest() {
 	}
 
 	var err error
-	s.vcHelper, err = SetupVolControllerTestSuite(s.T(), basePath, volumes)
+	s.vcKit, err = SetupVolumeControllerTestKit(basePath, volumes)
 	assert.NoError(s.T(), err)
 
 	// Write a file in volume2
-	err = afero.WriteFile(s.vcHelper.Fs, s.vcHelper.Volumes["volume2"].Path+"/file.txt", []byte("hello world"), 0o644)
+	err = afero.WriteFile(s.vcKit.Fs, s.vcKit.Volumes["volume2"].Path+"/file.txt", []byte(mockFileData), 0o644)
 	assert.NoError(s.T(), err)
 }
 
 func (s *VolumeControllerTestSuite) TearDownTest() {
 	// Clean up the test environment
-	TearDownVolControllerTestSuite(s.vcHelper)
-	s.vcHelper = nil
+	s.vcKit = nil
 }
 
 func (s *VolumeControllerTestSuite) TestCreateVolume() {
 	// Test case 1: Create a volume without options
-	vol1, err := s.vcHelper.BasicVolController.CreateVolume(storage.VolumeSourceS3)
+	vol1, err := s.vcKit.BasicVolController.CreateVolume(storage.VolumeSourceS3)
 	assert.NoError(s.T(), err)
 
 	// Test case 2: Create a volume with private option
-	vol2, err := s.vcHelper.BasicVolController.CreateVolume(storage.VolumeSourceS3, WithPrivate[storage.CreateVolOpt]())
+	vol2, err := s.vcKit.BasicVolController.CreateVolume(storage.VolumeSourceS3, WithPrivate[storage.CreateVolOpt]())
 	assert.NoError(s.T(), err)
 
 	// Verify returned volume details for test case 1
@@ -85,43 +91,45 @@ func (s *VolumeControllerTestSuite) TestCreateVolume() {
 	assert.Equal(s.T(), types.EncryptionTypeNull, vol2.EncryptionType)
 
 	// Verify that the volumes are stored in the database
-	volumes, err := s.vcHelper.BasicVolController.repo.FindAll(
+	volumes, err := s.vcKit.BasicVolController.repo.FindAll(
 		context.Background(),
-		s.vcHelper.BasicVolController.repo.GetQuery(),
+		s.vcKit.BasicVolController.repo.GetQuery(),
 	)
 	assert.NoError(s.T(), err)
 	assert.Len(s.T(), volumes, 4) // there are already 2 volumes created in the suite
 	// TODO-maybe: should we also check the DB content for each volume?
 
 	// check if directories were created based on volumes path
-	fileInfoVol1, err := s.vcHelper.Fs.Stat(vol1.Path)
+	fileInfoVol1, err := s.vcKit.Fs.Stat(vol1.Path)
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), fileInfoVol1.IsDir())
 
-	fileInfoVol2, err := s.vcHelper.Fs.Stat(vol2.Path)
+	fileInfoVol2, err := s.vcKit.Fs.Stat(vol2.Path)
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), fileInfoVol2.IsDir())
 }
 
 func (s *VolumeControllerTestSuite) TestLockVolume() {
 	testCases := []struct {
-		name        string
-		volumePath  string
-		cid         string
-		private     bool
-		expectError bool
+		name         string
+		volumePath   string
+		cid          string
+		private      bool
+		expectError  bool
+		setupFunc    func()
+		teardownFunc func()
 	}{
 		{
 			name:        "Lock volume with CID",
-			volumePath:  s.vcHelper.Volumes["volume1"].Path,
+			volumePath:  s.vcKit.Volumes["volume1"].Path,
 			cid:         "abcdef",
 			private:     false,
 			expectError: false,
 		},
 		{
 			name:        "Lock volume with private option",
-			volumePath:  s.vcHelper.Volumes["volume2"].Path,
-			cid:         s.vcHelper.Volumes["volume2"].CID,
+			volumePath:  s.vcKit.Volumes["volume2"].Path,
+			cid:         s.vcKit.Volumes["volume2"].CID,
 			private:     true,
 			expectError: false,
 		},
@@ -144,24 +152,25 @@ func (s *VolumeControllerTestSuite) TestLockVolume() {
 				opts = append(opts, WithPrivate[storage.LockVolOpt]())
 			}
 
-			err := s.vcHelper.BasicVolController.LockVolume(tc.volumePath, opts...)
+			err := s.vcKit.BasicVolController.LockVolume(tc.volumePath, opts...)
 			if tc.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 
 				// verify database fields (readOnly must be true)
-				query := s.vcHelper.BasicVolController.repo.GetQuery()
+				query := s.vcKit.BasicVolController.repo.GetQuery()
 				query.Conditions = append(query.Conditions, repositories.EQ("Path", tc.volumePath))
-				vol, err := s.vcHelper.BasicVolController.repo.Find(context.Background(), query)
+				vol, err := s.vcKit.BasicVolController.repo.Find(context.Background(), query)
 				assert.NoError(t, err)
 				assert.True(t, vol.ReadOnly)
+
 				// checking CID and Private as some test cases inputed them
 				assert.Equal(t, tc.cid, vol.CID)
 				assert.Equal(t, tc.private, vol.Private)
 
 				// verifying volume dir is read-only
-				fileInfo, err := s.vcHelper.Fs.Stat(tc.volumePath)
+				fileInfo, err := s.vcKit.Fs.Stat(tc.volumePath)
 				assert.NoError(t, err)
 				assert.Equal(t, os.FileMode(0o400), fileInfo.Mode().Perm())
 			}
@@ -175,16 +184,18 @@ func (s *VolumeControllerTestSuite) TestDeleteVolume() {
 		identifier     string
 		identifierType storage.IDType
 		expectError    bool
+		setupFunc      func()
+		teardownFunc   func()
 	}{
 		{
 			name:           "Delete volume by path",
-			identifier:     s.vcHelper.Volumes["volume1"].Path,
+			identifier:     s.vcKit.Volumes["volume1"].Path,
 			identifierType: storage.IDTypePath,
 			expectError:    false,
 		},
 		{
 			name:           "Delete volume by CID",
-			identifier:     s.vcHelper.Volumes["volume2"].CID,
+			identifier:     s.vcKit.Volumes["volume2"].CID,
 			identifierType: storage.IDTypeCID,
 			expectError:    false,
 		},
@@ -200,33 +211,54 @@ func (s *VolumeControllerTestSuite) TestDeleteVolume() {
 			identifierType: storage.IDTypeCID,
 			expectError:    true,
 		},
+		{
+			name:           "Delete with unsupported identifier type",
+			identifier:     "some-identifier",
+			identifierType: storage.IDType(999), // An unsupported type
+			expectError:    true,
+		},
 	}
 
 	for _, tc := range testCases {
-		err := s.vcHelper.BasicVolController.DeleteVolume(tc.identifier, tc.identifierType)
-		if tc.expectError {
-			assert.Error(s.T(), err)
-		} else {
-			assert.NoError(s.T(), err)
-		}
+		s.T().Run(tc.name, func(t *testing.T) {
+			err := s.vcKit.BasicVolController.DeleteVolume(tc.identifier, tc.identifierType)
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Verify that the volume is deleted from the filesystem
+				_, err = s.vcKit.Fs.Stat(tc.identifier)
+				assert.True(t, os.IsNotExist(err), "Volume directory should not exist after deletion")
+
+				// Verify that the volume is deleted from the database
+				query := s.vcKit.BasicVolController.repo.GetQuery()
+				if tc.identifierType == storage.IDTypeCID {
+					query.Conditions = append(query.Conditions, repositories.EQ("CID", tc.identifier))
+				} else {
+					query.Conditions = append(query.Conditions, repositories.EQ("Path", tc.identifier))
+				}
+				_, err = s.vcKit.BasicVolController.repo.Find(context.Background(), query)
+				assert.Equal(t, repositories.ErrNotFound, err, "Volume should not exist in the database after deletion")
+			}
+		})
 	}
 
-	// Verify that the volumes are deleted from the database
-	volumes, err := s.vcHelper.BasicVolController.repo.FindAll(context.Background(), s.vcHelper.BasicVolController.repo.GetQuery())
+	// Verify that all volumes are deleted from the database
+	volumes, err := s.vcKit.BasicVolController.repo.FindAll(context.Background(), s.vcKit.BasicVolController.repo.GetQuery())
 	assert.NoError(s.T(), err)
 	assert.Len(s.T(), volumes, 0)
 }
 
 func (s *VolumeControllerTestSuite) TestListVolumes() {
-	volumes, err := s.vcHelper.BasicVolController.ListVolumes()
+	volumes, err := s.vcKit.BasicVolController.ListVolumes()
 	assert.NoError(s.T(), err)
 
-	assert.Len(s.T(), volumes, len(s.vcHelper.Volumes))
+	assert.Len(s.T(), volumes, len(s.vcKit.Volumes))
 
 	// assert details of returned volumes
 	for _, retVol := range volumes {
 		// Find the corresponding volume in the test suite's volumes map
-		expectedVol, ok := s.vcHelper.Volumes[filepath.Base(retVol.Path)]
+		expectedVol, ok := s.vcKit.Volumes[filepath.Base(retVol.Path)]
 		assert.True(s.T(), ok, "Unexpected volume returned: %s", retVol.Path)
 
 		// Assert the properties of the returned volume
@@ -239,7 +271,53 @@ func (s *VolumeControllerTestSuite) TestListVolumes() {
 }
 
 func (s *VolumeControllerTestSuite) TestGetSize() {
-	size, err := s.vcHelper.BasicVolController.GetSize(s.vcHelper.Volumes["volume1"].Path, storage.IDTypePath)
-	assert.NoError(s.T(), err)
-	assert.Equal(s.T(), int64(0), size)
+	testCases := []struct {
+		name         string
+		identifier   string
+		idType       storage.IDType
+		expectedSize int64
+		expectErr    bool
+	}{
+		{
+			name:         "Get size by path",
+			identifier:   s.vcKit.Volumes["volume1"].Path,
+			idType:       storage.IDTypePath,
+			expectedSize: 0,
+			expectErr:    false,
+		},
+		{
+			name:         "Get size by CID",
+			identifier:   s.vcKit.Volumes["volume2"].CID,
+			idType:       storage.IDTypeCID,
+			expectedSize: mockFileSize,
+			expectErr:    false,
+		},
+		{
+			name:         "Get size with unsupported ID type",
+			identifier:   "some-identifier",
+			idType:       storage.IDType(999),
+			expectedSize: 0,
+			expectErr:    true,
+		},
+		{
+			name:         "Get size of non-existent volume",
+			identifier:   "non-existent-path",
+			idType:       storage.IDTypePath,
+			expectedSize: 0,
+			expectErr:    true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			size, err := s.vcKit.BasicVolController.GetSize(tc.identifier, tc.idType)
+
+			if tc.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedSize, size)
+			}
+		})
+	}
 }

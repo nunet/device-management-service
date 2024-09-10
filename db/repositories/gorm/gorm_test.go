@@ -3,9 +3,10 @@ package gorm
 import (
 	"log"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var db *gorm.DB
@@ -38,6 +39,7 @@ func setup() {
 		&types.VirtualMachine{},
 		&types.OnboardedResources{},
 		&types.RequiredResources{},
+		&types.StorageVolume{},
 	)
 	if err != nil {
 		log.Fatal(err)
