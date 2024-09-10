@@ -13,21 +13,21 @@ import (
 
 var cfg Config
 
-var home = os.Getenv("HOME")
+var homeDir, _ = os.UserHomeDir()
 
 func getViper() *viper.Viper {
 	v := viper.New()
 	v.SetConfigName("dms_config")
 	v.SetConfigType("json")
-	v.AddConfigPath(".")            // config file reading order starts with current working directory
-	v.AddConfigPath("$HOME/.nunet") // then home directory
-	v.AddConfigPath("/etc/nunet/")  // finally /etc/nunet
+	v.AddConfigPath(".")                               // config file reading order starts with current working directory
+	v.AddConfigPath(fmt.Sprintf("%s/.nunet", homeDir)) // then home directory
+	v.AddConfigPath("/etc/nunet/")                     // finally /etc/nunet
 	return v
 }
 
 func setDefaultConfig() *viper.Viper {
 	v := getViper()
-	v.SetDefault("general.user_dir", "$HOME/.nunet")
+	v.SetDefault("general.user_dir", fmt.Sprintf("%s/.nunet", homeDir))
 	v.SetDefault("general.work_dir", "/etc/nunet")
 	v.SetDefault("general.data_dir", "/var/nunet")
 	v.SetDefault("general.debug", false)
@@ -58,7 +58,7 @@ func setDefaultConfig() *viper.Viper {
 func LoadConfig() {
 	paths := []string{
 		".",
-		home + "/.nunet",
+		homeDir + "/.nunet",
 		"/etc/nunet",
 	}
 	configFile := "dms_config.json"
