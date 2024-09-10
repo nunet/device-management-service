@@ -20,7 +20,7 @@ func newRunCmd() *cobra.Command {
 			var err error
 			if passphrase == "" {
 				fmt.Print("Please enter the DMS passphrase. This will be used to encrypt/decrypt the keystore containing necessary secrets for DMS:\n")
-				passphrase, err = promptForPassphrase()
+				passphrase, err = promptForPassphrase(false)
 				if err != nil {
 					return fmt.Errorf("error reading passphrase from stdin: %w", err)
 				}

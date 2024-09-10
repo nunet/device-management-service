@@ -29,7 +29,7 @@ func promptReonboard(r io.Reader, w io.Writer) error {
 	return nil
 }
 
-func promptForPassphrase() (string, error) {
+func promptForPassphrase(confirm bool) (string, error) {
 	maxTries := 3
 
 	sigChan := make(chan os.Signal, 1)
@@ -42,30 +42,33 @@ func promptForPassphrase() (string, error) {
 	// Start a goroutine to handle passphrase input
 	go func() {
 		defer close(done)
+		var bytePassphrase, byteConfirmation []byte
 		for i := 0; i < maxTries; i++ {
 			fmt.Print("Passphrase: ")
-			bytePassphrase, err := gopass.GetPasswdMasked()
+			bytePassphrase, err = gopass.GetPasswdMasked()
 			if err != nil {
-				//nolint
 				err = fmt.Errorf("failed to read passphrase: %w", err)
 				return
 			}
 
-			fmt.Print("Please confirm your passphrase: ")
-			byteConfirmation, err := gopass.GetPasswdMasked()
-			if err != nil {
-				//nolint
-				err = fmt.Errorf("failed to read passphrase confirmation: %w", err)
-				return
-			}
-			fmt.Print("\n")
+			if confirm {
+				fmt.Print("Please confirm your passphrase: ")
+				byteConfirmation, err = gopass.GetPasswdMasked()
+				if err != nil {
+					err = fmt.Errorf("failed to read passphrase confirmation: %w", err)
+					return
+				}
 
-			if string(bytePassphrase) == string(byteConfirmation) {
+				if string(bytePassphrase) != string(byteConfirmation) {
+					err = fmt.Errorf("passphrases do not match")
+				}
+			}
+			if err == nil {
 				passphrase = string(bytePassphrase)
 				return
 			}
-
-			fmt.Print("Passphrases do not match. Please try again.\n\n")
+			fmt.Println(err)
+			fmt.Println("")
 		}
 
 		err = fmt.Errorf("user failed to input passphrase")
