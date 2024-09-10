@@ -143,7 +143,7 @@ func (k *Dispatch) recv() {
 		select {
 		case msg := <-k.q:
 			if err := k.sctx.Verify(msg); err != nil {
-				log.Debugf("failed to verify message from %s: %s", msg.From.ID, err)
+				log.Debugf("failed to verify message from %s: %s", msg.From, err)
 				return
 			}
 
@@ -194,7 +194,7 @@ func (k *Dispatch) dispatch() {
 
 			if err := k.options.Limiter.Acquire(msg); err != nil {
 				k.sctx.Discard(msg)
-				log.Debugf("limiter rejected message from %s: %s", msg.From.ID, err)
+				log.Debugf("limiter rejected message from %s: %s", msg.From, err)
 				continue
 			}
 
