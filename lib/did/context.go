@@ -62,6 +62,17 @@ func NewTrustContext() TrustContext {
 	}
 }
 
+func NewTrustContextWithPrivateKey(privk crypto.PrivKey) (TrustContext, error) {
+	ctx := NewTrustContext()
+	provider, err := ProviderFromPrivateKey(privk)
+	if err != nil {
+		return nil, fmt.Errorf("provide from private key: %w", err)
+	}
+
+	ctx.AddProvider(provider)
+	return ctx, nil
+}
+
 func (ctx *BasicTrustContext) Anchors() []DID {
 	ctx.mx.Lock()
 	defer ctx.mx.Unlock()

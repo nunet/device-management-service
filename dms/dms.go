@@ -30,8 +30,10 @@ import (
 )
 
 const (
-	KeyIDPrivKey = "dms"
-	KeystoreDir  = "key/"
+	KeyIDPrivKey   = "dms"
+	CapContextName = "dms"
+	KeystoreDir    = "key/"
+	CapstoreDir    = "cap/"
 )
 
 // NewP2P is stub, real implementation is needed in order to pass it to
@@ -45,7 +47,7 @@ func Run(ksPassphrase string) error {
 	ctx := context.Background()
 	fs := afero.NewOsFs()
 
-	keyStoreDir := filepath.Join(config.GetConfig().General.WorkDir, KeystoreDir)
+	keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, KeystoreDir)
 	keyStore, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
 		return fmt.Errorf("unable to create keystore: %w", err)
@@ -134,14 +136,47 @@ func Run(ksPassphrase string) error {
 
 	p2pNet = p2p
 
-	// TODO: load the capability context, given the trust context and root did
-	rootDID := did.FromPublicKey(pubKey)
-	trustCtx := did.NewTrustContext()
-	trustCtx.AddProvider(did.NewProvider(rootDID, priv))
-	trustCtx.AddAnchor(did.NewAnchor(rootDID, pubKey))
-	capCtx, err := ucan.NewCapabilityContext(trustCtx, did.DID{URI: rootDID.URI}, nil, ucan.TokenList{}, ucan.TokenList{})
+	trustCtx, err := did.NewTrustContextWithPrivateKey(priv)
 	if err != nil {
-		return fmt.Errorf("failed to create capability context: %s", err)
+		return fmt.Errorf("unable to create trust context: %w", err)
+	}
+
+	capStoreDir := filepath.Join(config.GetConfig().General.UserDir, CapstoreDir)
+	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", CapContextName))
+	var capCtx ucan.CapabilityContext
+
+	if _, err := os.Stat(capStoreFile); err != nil {
+		// does not exist; create it
+		rootDID := did.FromPublicKey(pubKey)
+		capCtx, err = ucan.NewCapabilityContext(trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{})
+		if err != nil {
+			return fmt.Errorf("unable to create capability context: %w", err)
+		}
+
+		// Save it!
+		f, err := os.Create(capStoreFile)
+		if err != nil {
+			return fmt.Errorf("unable to create capability context file: %w", err)
+		}
+
+		err = ucan.SaveCapabilityContext(capCtx, f)
+		_ = f.Close()
+
+		if err != nil {
+			return fmt.Errorf("unable to save capability context: %w", err)
+		}
+	} else {
+		f, err := os.Open(capStoreFile)
+		if err != nil {
+			return fmt.Errorf("unable to open capability context: %w", err)
+		}
+
+		capCtx, err = ucan.LoadCapabilityContext(trustCtx, f)
+		_ = f.Close()
+
+		if err != nil {
+			return fmt.Errorf("unable to load capability context: %w", err)
+		}
 	}
 
 	hostID := p2p.Host.ID().String()

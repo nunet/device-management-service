@@ -9,6 +9,7 @@ type Config struct {
 }
 
 type General struct {
+	UserDir string `mapstructure:"user_dir"`
 	WorkDir string `mapstructure:"work_dir"`
 	DataDir string `mapstructure:"data_dir"`
 	Debug   bool   `mapstructure:"debug"`
