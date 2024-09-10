@@ -129,6 +129,11 @@ func FormatKeyURI(pubk crypto.PubKey) string {
 	}
 
 	// TODO other supported key types (secp?)
+	if t := pubk.Type(); t != crypto.Ed25519 {
+		// we don't support those yet
+		log.Errorf("unsupported key type: %d", t)
+		return ""
+	}
 	t := multicodecKindEd25519PubKey
 	size := varint.UvarintSize(t)
 	data := make([]byte, size+len(raw))

@@ -28,7 +28,7 @@ func getViper() *viper.Viper {
 func setDefaultConfig() *viper.Viper {
 	v := getViper()
 	v.SetDefault("general.user_dir", fmt.Sprintf("%s/.nunet", homeDir))
-	v.SetDefault("general.work_dir", "/etc/nunet")
+	v.SetDefault("general.work_dir", fmt.Sprintf("%s/nunet", homeDir))
 	v.SetDefault("general.data_dir", "/var/nunet")
 	v.SetDefault("general.debug", false)
 	v.SetDefault("rest.addr", "127.0.0.1")

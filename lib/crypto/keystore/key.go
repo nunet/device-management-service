@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	libp2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	libp2p_crypto "github.com/libp2p/go-libp2p/core/crypto"
 	"golang.org/x/crypto/scrypt"
 
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -44,7 +44,7 @@ func NewKey(id string, data []byte) (*Key, error) {
 // PrivKey acts upon a Key which its `Data` is a private key.
 // The method unmarshals the raw pvkey bytes.
 func (key *Key) PrivKey() (crypto.PrivKey, error) {
-	priv, err := libp2pCrypto.UnmarshalPrivateKey(key.Data)
+	priv, err := libp2p_crypto.UnmarshalPrivateKey(key.Data)
 	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal private key: %v", err)
 	}
