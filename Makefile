@@ -2,15 +2,18 @@ PROTO_DIR := proto/v1/common
 GO_OUT_DIR := proto/generated/v1/common
 
 PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
-
 PROTOC := protoc
 
-generate:
-	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
+UNAME=$(shell uname)
 
 .PHONY: all clean linux_amd64 darwin_arm64
 
-all: linux_amd64 darwin_arm64
+all:
+	@if [ $(UNAME) = Linux ]; then\
+		make linux_amd64;\
+	elif [ $(UNAME) = Darwin ]; then\
+		make darwin_amd64;\
+	fi
 
 linux_amd64:
 	@echo "Building for Linux AMD64..."
@@ -30,6 +33,9 @@ lint:
 clean:
 	@echo "Cleaning up..."
 	rm -rf builds/
+
+generate:
+	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
 
 arch=$(shell uname -m)
 FC_TEST_DATA_PATH = ./executor/firecracker/testdata
