@@ -2,6 +2,8 @@ package actor
 
 import (
 	"fmt"
+
+	"gitlab.com/nunet/device-management-service/lib/did"
 )
 
 func (h *Handle) Empty() bool {
@@ -11,7 +13,12 @@ func (h *Handle) Empty() bool {
 }
 
 func (h *Handle) String() string {
-	return fmt.Sprintf("%s[%s]@%s", h.ID, h.DID, h.Address)
+	var idStr string
+	idDID, err := did.FromID(h.ID)
+	if err == nil {
+		idStr = idDID.String()
+	}
+	return fmt.Sprintf("%s[%s]@%s", idStr, h.DID, h.Address)
 }
 
 func HandleFromString(_ string) (Handle, error) {

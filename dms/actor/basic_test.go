@@ -256,6 +256,7 @@ func makeCapabilityContext(t *testing.T, actorDID, rootDID did.DID, trust, root 
 		did.DID{},
 		nil,
 		makeExpiry(time.Hour),
+		0,
 		[]ucan.Capability{ucan.Root},
 	)
 	require.NoError(t, err)
@@ -280,6 +281,7 @@ func allowReciprocal(t *testing.T, actorCap ucan.CapabilityContext, rootTrust di
 		did.DID{},
 		nil,
 		makeExpiry(time.Hour),
+		0,
 		[]ucan.Capability{ucan.Capability(cap)},
 	)
 	require.NoError(t, err)
@@ -300,6 +302,7 @@ func allowBroadcast(t *testing.T, actor1, actor2 ucan.CapabilityContext, root1, 
 		did.DID{},
 		[]string{topic},
 		makeExpiry(120*time.Second),
+		0,
 		actorCap,
 	)
 	require.NoError(t, err, "granting broadcast capability")
@@ -313,6 +316,7 @@ func allowBroadcast(t *testing.T, actor1, actor2 ucan.CapabilityContext, root1, 
 		did.DID{},
 		[]string{topic},
 		makeExpiry(120*time.Second),
+		0,
 		actorCap,
 	)
 	require.NoError(t, err, "grant broadcast capability")
