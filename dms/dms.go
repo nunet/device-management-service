@@ -146,6 +146,9 @@ func Run(ksPassphrase string) error {
 	var capCtx ucan.CapabilityContext
 
 	if _, err := os.Stat(capStoreFile); err != nil {
+		if err := fs.MkdirAll(capStoreDir, os.FileMode(0o700)); err != nil {
+			return fmt.Errorf("unable to create capability context directory: %w", err)
+		}
 		// does not exist; create it
 		rootDID := did.FromPublicKey(pubKey)
 		capCtx, err = ucan.NewCapabilityContext(trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{})
@@ -236,7 +239,7 @@ func Run(ksPassphrase string) error {
 // GenerateAndStorePrivKey generates a new key pair using Secp256k1,
 // storing the private key into user's keystore.
 func GenerateAndStorePrivKey(ks keystore.KeyStore, passphrase string, keyID string) (crypto.PrivKey, error) {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
 	if err != nil {
 		return nil, fmt.Errorf("unable to generate key pair: %w", err)
 	}
@@ -262,8 +265,8 @@ func ValidateOnboarding(oConf *types.OnboardingConfig) {
 	// Check 1: Check if payment address is valid
 	err := utils.ValidateAddress(oConf.PublicKey)
 	if err != nil {
-		zlog.Sugar().Errorf("the payment address %s is not valid", oConf.PublicKey)
-		zlog.Sugar().Error("exiting DMS")
+		log.Errorf("the payment address %s is not valid", oConf.PublicKey)
+		log.Error("exiting DMS")
 		return
 	}
 }
