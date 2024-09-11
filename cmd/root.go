@@ -44,6 +44,7 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero, dockerExec *docker.Cl
 	cmd.AddCommand(newResourceConfigCmd(client))
 	cmd.AddCommand(newLogCmd(afs, logger))
 	cmd.AddCommand(newWalletCmd(client))
+	cmd.AddCommand(newConfigCmd(afs.Fs))
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(cap.NewCapCmd(afs))
@@ -53,8 +54,6 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero, dockerExec *docker.Cl
 // Execute is a wrapper for cobra.Command method with same name
 // It makes use of cobra.CheckErr to facilitate error handling
 func Execute() {
-	config.LoadConfig()
-
 	afs := afero.Afero{Fs: afero.NewOsFs()}
 
 	client := utils.NewHTTPClient(
