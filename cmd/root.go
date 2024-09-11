@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/api/docs"
 	"gitlab.com/nunet/device-management-service/cmd/backend"
+	"gitlab.com/nunet/device-management-service/cmd/cap"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -45,6 +46,7 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero, dockerExec *docker.Cl
 	cmd.AddCommand(newWalletCmd(client))
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newAutoCompleteCmd())
+	cmd.AddCommand(cap.NewCapCmd(afs))
 	return cmd
 }
 

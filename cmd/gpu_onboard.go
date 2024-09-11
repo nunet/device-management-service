@@ -8,9 +8,11 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
-	"gitlab.com/nunet/device-management-service/utils"
+	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
@@ -25,7 +27,7 @@ func newGPUOnboardCmd(afs afero.Afero) *cobra.Command {
 		Short: "Install GPU drivers and Container Runtime",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			wsl, err := utils.CheckWSL(afs)
+			wsl, err := dmsUtils.CheckWSL(afs)
 			if err != nil {
 				return fmt.Errorf("could not check WSL: %w", err)
 			}

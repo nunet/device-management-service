@@ -20,9 +20,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
+	"golang.org/x/exp/slices"
+
 	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/types"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -154,28 +155,6 @@ func ReadyForElastic() bool {
 	elasticToken := types.ElasticToken{}
 	db.DB.Find(&elasticToken)
 	return elasticToken.NodeID != "" && elasticToken.ChannelName != ""
-}
-
-// PromptYesNo loops on confirmation from user until valid answer
-func PromptYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
-	reader := bufio.NewReader(in)
-
-	for {
-		fmt.Fprintf(out, "%s (y/N): ", prompt)
-
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return false, fmt.Errorf("read response string failed: %w", err)
-		}
-
-		response = strings.ToLower(strings.TrimSpace(response))
-
-		if response == "y" || response == "yes" {
-			return true, nil
-		} else if response == "n" || response == "no" {
-			return false, nil
-		}
-	}
 }
 
 // CreateDirectoryIfNotExists creates a directory if it does not exist

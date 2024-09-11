@@ -4,11 +4,13 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/utils"
+
+	"gitlab.com/nunet/device-management-service/cmd/utils"
+	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
 // NewOffboardCmd is a constructor for `offboard` command
-func newOffboardCmd(client *utils.HTTPClient) *cobra.Command {
+func newOffboardCmd(client *dmsUtils.HTTPClient) *cobra.Command {
 	fnForce := "force"
 	cmd := &cobra.Command{
 		Use:   "offboard",

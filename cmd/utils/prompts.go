@@ -1,23 +1,23 @@
-package cmd
+package utils
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/howeyc/gopass"
-
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
-// promptReonboard is a wrapper of utils.PromptYesNo with custom prompt that return error if user declines reonboard
-func promptReonboard(r io.Reader, w io.Writer) error {
+// PromptReonboard is a wrapper of utils.PromptYesNo with custom prompt that return error if user declines reonboard
+func PromptReonboard(r io.Reader, w io.Writer) error {
 	prompt := "Looks like your machine is already onboarded. Proceed with reonboarding?"
 
-	confirmed, err := utils.PromptYesNo(r, w, prompt)
+	confirmed, err := PromptYesNo(r, w, prompt)
 	if err != nil {
 		return fmt.Errorf("could not confirm reonboarding: %w", err)
 	}
@@ -29,7 +29,7 @@ func promptReonboard(r io.Reader, w io.Writer) error {
 	return nil
 }
 
-func promptForPassphrase(confirm bool) (string, error) {
+func PromptForPassphrase(confirm bool) (string, error) {
 	maxTries := 3
 
 	sigChan := make(chan os.Signal, 1)
@@ -80,5 +80,27 @@ func promptForPassphrase(confirm bool) (string, error) {
 		return passphrase, err
 	case <-sigChan:
 		return "", errors.New("sigterm received")
+	}
+}
+
+// PromptYesNo loops on confirmation from user until valid answer
+func PromptYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
+	reader := bufio.NewReader(in)
+
+	for {
+		fmt.Fprintf(out, "%s (y/N): ", prompt)
+
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return false, fmt.Errorf("read response string failed: %w", err)
+		}
+
+		response = strings.ToLower(strings.TrimSpace(response))
+
+		if response == "y" || response == "yes" {
+			return true, nil
+		} else if response == "n" || response == "no" {
+			return false, nil
+		}
 	}
 }

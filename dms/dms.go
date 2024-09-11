@@ -30,10 +30,11 @@ import (
 )
 
 const (
-	KeyIDPrivKey   = "dms"
-	CapContextName = "dms"
-	KeystoreDir    = "key/"
-	CapstoreDir    = "cap/"
+	KeyIDPrivKey    = "dms"
+	CapContextName  = "dms"
+	UserContextName = "user"
+	KeystoreDir     = "key/"
+	CapstoreDir     = "cap/"
 )
 
 // NewP2P is stub, real implementation is needed in order to pass it to
