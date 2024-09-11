@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
@@ -19,8 +18,8 @@ func newGrantCmd(afs afero.Afero) *cobra.Command {
 		caps     []string
 		topics   []string
 		audience string
-		expire   int64
-		duration int64
+		expiry   time.Time
+		duration time.Duration
 		depth    uint64
 	)
 
@@ -34,10 +33,10 @@ func newGrantCmd(afs afero.Afero) *cobra.Command {
 
 			var expirationTime uint64
 			switch {
-			case expire != 0:
-				expirationTime = uint64(time.Duration(expire) * time.Second)
+			case !expiry.IsZero():
+				expirationTime = uint64(expiry.UnixNano())
 			case duration != 0:
-				expirationTime = uint64(time.Now().UnixNano() + int64(time.Duration(duration)*time.Second))
+				expirationTime = uint64(time.Now().Add(duration).UnixNano())
 			default:
 				return fmt.Errorf("either expiration or duration must be specified")
 			}
@@ -85,17 +84,16 @@ func newGrantCmd(afs afero.Afero) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&context, flagContext, dms.UserContextName, "Operation context; it specifies the key and capability context to use; defaults to user context")
-	cmd.Flags().StringVar(&audience, flagAudience, "", "Audience DID (optional)")
-	cmd.Flags().StringSliceVar(&caps, flagCap, []string{}, "Capabilities to grant (can be specified multiple times)")
-	cmd.Flags().StringSliceVar(&topics, flagTopic, []string{}, "Topics to grant (can be specified multiple times)")
-	// TODO parse dates; this is ugly
-	cmd.Flags().Int64Var(&expire, flagExpire, 0, "Expiration time as Unix timestamp")
-	// TODO parse duration; this is ugly
-	cmd.Flags().Int64Var(&duration, flagDuration, 0, "Duration in seconds from now")
-	cmd.Flags().Uint64Var(&depth, flagDepth, 0, "Delegation depth (optional, default=0)")
+	useFlagContext(cmd, &context)
+	useFlagAudience(cmd, &audience)
+	useFlagCap(cmd, &caps)
+	useFlagTopic(cmd, &topics)
+	useFlagExpiry(cmd, &expiry)
+	useFlagDuration(cmd, &duration)
+	useFlagDepth(cmd, &depth)
 
-	cmd.MarkFlagsOneRequired("expire", "duration")
+	_ = cmd.MarkFlagRequired(fnContext)
+	cmd.MarkFlagsOneRequired(fnExpiry, fnDuration)
 
 	return cmd
 }

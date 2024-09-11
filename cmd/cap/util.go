@@ -25,9 +25,12 @@ func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string) (did.Tru
 		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
 	}
 
-	passphrase, err := utils.PromptForPassphrase(false)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get passphrase: %w", err)
+	passphrase := os.Getenv("DMS_PASSPHRASE")
+	if passphrase == "" {
+		passphrase, err = utils.PromptForPassphrase(false)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get passphrase: %w", err)
+		}
 	}
 
 	ksPrivKey, err := ks.Get(contextKey, passphrase)
