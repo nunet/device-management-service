@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -31,28 +32,38 @@ func TestNew(t *testing.T) {
 		net             network.Network
 		resourceManager resources.Manager
 		scheduler       *bt.Scheduler
+		onboarder       *onboarding.Onboarding
 
 		expErr string
 	}{
+		"no onboarer": {
+			expErr: "onboarder is nil",
+		},
 		"no root capability": {
-			expErr: "root capability context is nil",
+			onboarder: &onboarding.Onboarding{},
+			expErr:    "root capability context is nil",
 		},
 		"no id": {
-			rootCap: rootCap,
-			expErr:  "host id is nil",
+			onboarder: &onboarding.Onboarding{},
+			rootCap:   rootCap,
+			expErr:    "host id is nil",
 		},
 		"no key": {
-			rootCap: rootCap,
-			hostID:  "123",
-			expErr:  "network is nil",
+			onboarder: &onboarding.Onboarding{},
+			rootCap:   rootCap,
+			hostID:    "123",
+			expErr:    "network is nil",
 		},
+
 		"no resource manager": {
-			rootCap: rootCap,
-			hostID:  "123",
-			net:     createNetwork(t, nil, "14950"),
-			expErr:  "resource manager is nil",
+			onboarder: &onboarding.Onboarding{},
+			rootCap:   rootCap,
+			hostID:    "123",
+			net:       createNetwork(t, nil, "14950"),
+			expErr:    "resource manager is nil",
 		},
 		"no scheduler": {
+			onboarder:       &onboarding.Onboarding{},
 			rootCap:         rootCap,
 			hostID:          "123",
 			net:             createNetwork(t, nil, "14950"),
@@ -60,6 +71,7 @@ func TestNew(t *testing.T) {
 			expErr:          "scheduler is nil",
 		},
 		"success": {
+			onboarder:       &onboarding.Onboarding{},
 			rootCap:         rootCap,
 			hostID:          "123",
 			net:             createNetwork(t, nil, "14950"),
@@ -72,7 +84,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			act, err := New(tt.rootCap, tt.hostID, tt.net, tt.resourceManager, tt.scheduler)
+			act, err := New(context.TODO(), tt.onboarder, tt.rootCap, tt.hostID, tt.net, tt.resourceManager, tt.scheduler)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -87,7 +99,8 @@ func TestNew(t *testing.T) {
 func TestNodeAllocationMessaging(t *testing.T) {
 	rootCap := createRootCapabilityContext(t)
 	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
-	node1, err := New(rootCap, net.Host.ID().String(), net, &resourceManagerMock{}, bt.NewScheduler(1))
+
+	node1, err := New(context.TODO(), &onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, &resourceManagerMock{}, bt.NewScheduler(1))
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)
 	err = node1.Start()

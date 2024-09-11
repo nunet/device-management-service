@@ -27,18 +27,9 @@ func (n *Node) broadcastHelloBehavior(msg actor.Envelope) {
 
 func (n *Node) handleHello(msg actor.Envelope) {
 	defer msg.Discard()
-
 	log.Debugf("hello from %s", msg.From)
 
-	reply, err := actor.ReplyTo(msg, nil)
-	if err != nil {
-		log.Debugf("error creating hello reply: %s", err)
-		return
-	}
-
-	if err := n.actor.Send(reply); err != nil {
-		log.Debugf("error sending hello reply: %s", err)
-	}
+	n.sendReply(msg, nil)
 }
 
 func (n *Node) publicStatusBehavior(msg actor.Envelope) {
@@ -53,13 +44,5 @@ func (n *Node) publicStatusBehavior(msg actor.Envelope) {
 		resp.Resources = rc
 	}
 
-	reply, err := actor.ReplyTo(msg, resp)
-	if err != nil {
-		log.Debugf("error creating status reply: %s", err)
-		return
-	}
-
-	if err = n.actor.Send(reply); err != nil {
-		log.Debugf("error sending status reply: %s", err)
-	}
+	n.sendReply(msg, resp)
 }

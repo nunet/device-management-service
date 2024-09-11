@@ -47,6 +47,25 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	return fe, nil
 }
 
+// List the current executions.
+func (e *Executor) List() []types.ExecutionListItem {
+	executions := make([]types.ExecutionListItem, 0)
+
+	e.handlers.Range(func(key, value any) bool {
+		strKey := key.(string)
+		val := value.(*executionHandler)
+
+		executions = append(executions, types.ExecutionListItem{
+			ExecutionID: strKey,
+			Running:     val.running.Load(),
+		})
+
+		return true
+	})
+
+	return executions
+}
+
 // start begins the execution of a request by starting a new Firecracker VM.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
 	zlog.Sugar().
