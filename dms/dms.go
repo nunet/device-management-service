@@ -184,7 +184,7 @@ func Run(ksPassphrase string) error {
 	}
 
 	hostID := p2p.Host.ID().String()
-	node, err := node.New(capCtx, hostID, p2p, resourceManager, cfg.Scheduler)
+	node, err := node.New(ctx, onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler)
 	if err != nil {
 		return fmt.Errorf("failed to create node: %s", err)
 	}

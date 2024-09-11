@@ -25,6 +25,12 @@ type ExecutionRequest struct {
 	ResultsDir  string                   // Directory to store the results
 }
 
+// ExecutionListItem is the result of the current executions.
+type ExecutionListItem struct {
+	ExecutionID string // ID of the execution
+	Running     bool
+}
+
 // ExecutionResult is the result of an execution
 type ExecutionResult struct {
 	STDOUT   string `json:"stdout"`    // STDOUT of the execution

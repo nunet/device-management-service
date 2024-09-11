@@ -10,7 +10,9 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/executor/firecracker"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -25,6 +27,8 @@ type Node struct {
 	network         network.Network
 	resourceManager resources.Manager
 	hostID          string
+	onboarder       *onboarding.Onboarding
+	executor        *firecracker.Executor
 
 	mx          sync.Mutex
 	allocations map[string]*jobs.Allocation
@@ -32,7 +36,11 @@ type Node struct {
 }
 
 // New creates a new node, attaches an actor to the node.
-func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager resources.Manager, scheduler *bt.Scheduler) (*Node, error) {
+func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager resources.Manager, scheduler *bt.Scheduler) (*Node, error) {
+	if onboarder == nil {
+		return nil, errors.New("onboarder is nil")
+	}
+
 	if rootCap == nil {
 		return nil, errors.New("root capability context is nil")
 	}
@@ -78,6 +86,11 @@ func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, res
 		return nil, fmt.Errorf("failed to create node actor: %w", err)
 	}
 
+	executor, err := firecracker.NewExecutor(ctx, "root")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create executor: %w", err)
+	}
+
 	n := &Node{
 		hostID:          hostID,
 		network:         net,
@@ -86,6 +99,8 @@ func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, res
 		actor:           nodeActor,
 		rootCap:         rootCap,
 		scheduler:       scheduler,
+		onboarder:       onboarder,
+		executor:        executor,
 	}
 
 	if err := nodeActor.AddBehavior(PublicHelloBehavior, n.publicHelloBehavior); err != nil {
@@ -96,6 +111,54 @@ func New(rootCap ucan.CapabilityContext, hostID string, net network.Network, res
 	}
 	if err := nodeActor.AddBehavior(BroadcastHelloBehavior, n.broadcastHelloBehavior, actor.WithBehaviorTopic(BroadcastHelloTopic)); err != nil {
 		return nil, fmt.Errorf("adding broadcast status behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(PeersListBehavior, n.handlePeersList); err != nil {
+		return nil, fmt.Errorf("adding peers list behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(PeerAddrInfoBehavior, n.handlePeerAddrInfo); err != nil {
+		return nil, fmt.Errorf("adding peers addr info behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(PeerPingBehavior, n.handlePeerPing); err != nil {
+		return nil, fmt.Errorf("adding peer ping behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(PeerDHTBehavior, n.handlePeerDHT); err != nil {
+		return nil, fmt.Errorf("adding peer dht behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(PeerConnectBehavior, n.handlePeerConnect); err != nil {
+		return nil, fmt.Errorf("adding peer connect behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(OnboardBehaviour, n.handleOnboard); err != nil {
+		return nil, fmt.Errorf("adding onboard behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(OffboardBehaviour, n.handleOffboard); err != nil {
+		return nil, fmt.Errorf("adding offboard behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(OnboardStatusBehaviour, n.handleOnboardStatus); err != nil {
+		return nil, fmt.Errorf("adding onboard status behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(OnboardResourceBehaviour, n.handleOnboardResource); err != nil {
+		return nil, fmt.Errorf("adding onboard resource behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(CustomVMStart, n.handleCustomVMStart); err != nil {
+		return nil, fmt.Errorf("adding custom vm start behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(VMStop, n.handleVMStop); err != nil {
+		return nil, fmt.Errorf("adding vm stop behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(VMList, n.handleListVM); err != nil {
+		return nil, fmt.Errorf("adding vm list behavior: %w", err)
 	}
 
 	return n, nil
@@ -193,6 +256,18 @@ func (n *Node) Stop() error {
 
 	n.running = false
 	return nil
+}
+
+func (n *Node) sendReply(envelope actor.Envelope, payload interface{}) {
+	reply, err := actor.ReplyTo(envelope, payload)
+	if err != nil {
+		log.Debugf("error creating peers list reply: %s", err)
+		return
+	}
+
+	if err := n.actor.Send(reply); err != nil {
+		log.Debugf("error sending peers list reply: %s", err)
+	}
 }
 
 // createActor creates an actor.
