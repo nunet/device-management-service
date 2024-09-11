@@ -7,11 +7,12 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/utils"
+	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
 func newKeyCmd(fs afero.Afero) *cobra.Command {
@@ -50,7 +51,7 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 				return fmt.Errorf("failed to list keys: %w", err)
 			}
 
-			if utils.SliceContains(keys, keyID) {
+			if dmsUtils.SliceContains(keys, keyID) {
 				confirmed, err := utils.PromptYesNo(
 					cmd.InOrStdin(),
 					cmd.OutOrStdout(),
@@ -64,7 +65,7 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 				}
 			}
 
-			passphrase, err := promptForPassphrase(true)
+			passphrase, err := utils.PromptForPassphrase(true)
 			if err != nil {
 				return fmt.Errorf("failed to get passphrase: %w", err)
 			}
@@ -75,7 +76,7 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 			}
 
 			did := did.FromPublicKey(priv.GetPublic())
-			fmt.Printf("New keypair generated and private key saved successfully with name '%s'\nDID: %s\n", keyID, did.String())
+			fmt.Println(did)
 			return nil
 		},
 	}
@@ -96,7 +97,7 @@ func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
 				return fmt.Errorf("failed to open keystore: %w", err)
 			}
 
-			passphrase, err := promptForPassphrase(false)
+			passphrase, err := utils.PromptForPassphrase(false)
 			if err != nil {
 				return fmt.Errorf("failed to get passphrase: %w", err)
 			}
@@ -112,7 +113,7 @@ func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
 			}
 
 			did := did.FromPublicKey(priv.GetPublic())
-			fmt.Println(did.String())
+			fmt.Println(did)
 			return nil
 		},
 	}

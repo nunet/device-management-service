@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/types"
-	"gitlab.com/nunet/device-management-service/utils"
+	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
 // NewOnboardCmd is a constructor for `onboard` command
-func newOnboardCmd(client *utils.HTTPClient) *cobra.Command {
+func newOnboardCmd(client *dmsUtils.HTTPClient) *cobra.Command {
 	fnCPU := "cpu"
 	fnMemory := "memory"
 	fnChannel := "nunet-channel"
@@ -33,7 +35,7 @@ func newOnboardCmd(client *utils.HTTPClient) *cobra.Command {
 			}
 
 			if onboarded {
-				err := promptReonboard(cmd.InOrStdin(), cmd.OutOrStdout())
+				err := utils.PromptReonboard(cmd.InOrStdin(), cmd.OutOrStdout())
 				if err != nil {
 					return err
 				}

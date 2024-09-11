@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
 )
 
@@ -20,7 +21,7 @@ func newRunCmd() *cobra.Command {
 			var err error
 			if passphrase == "" {
 				fmt.Print("Please enter the DMS passphrase. This will be used to encrypt/decrypt the keystore containing necessary secrets for DMS:\n")
-				passphrase, err = promptForPassphrase(false)
+				passphrase, err = utils.PromptForPassphrase(false)
 				if err != nil {
 					return fmt.Errorf("error reading passphrase from stdin: %w", err)
 				}
