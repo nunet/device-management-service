@@ -6,17 +6,17 @@ import (
 )
 
 const (
-	flagContext  = "context"
-	flagAudience = "audience"
-	flagAction   = "action"
-	flagCap      = "cap"
-	flagTopic    = "topic"
-	flagExpire   = "expire"
-	flagDuration = "duration"
-	flagDepth    = "depth"
-	flagProvide  = "provide"
-	flagRoot     = "root"
-	flagRequire  = "require"
+	fnContext  = "context"
+	fnAudience = "audience"
+	fnAction   = "action"
+	fnCap      = "cap"
+	fnTopic    = "topic"
+	fnExpiry   = "expiry"
+	fnDuration = "duration"
+	fnDepth    = "depth"
+	fnProvide  = "provide"
+	fnRoot     = "root"
+	fnRequire  = "require"
 )
 
 // NewCapCmd returns the cap command that adds other commands

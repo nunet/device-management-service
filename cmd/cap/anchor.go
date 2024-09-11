@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
@@ -84,11 +83,12 @@ func newAnchorCmd(afs afero.Afero) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&context, flagContext, dms.KeyIDPrivKey, "Operation context; it specifies the key and capability context to use; defaults to dms context")
-	cmd.Flags().StringVar(&root, flagRoot, "", "DID to add as root anchor")
-	cmd.Flags().StringVar(&provide, flagProvide, "", "Tokens to add as provide anchor (in JSON format)")
-	cmd.Flags().StringVar(&require, flagRequire, "", "Tokens to add as require anchor (in JSON format)")
+	useFlagContext(cmd, &context)
+	cmd.Flags().StringVar(&root, fnRoot, "", "DID to add as root anchor")
+	cmd.Flags().StringVar(&provide, fnProvide, "", "Tokens to add as provide anchor (in JSON format)")
+	cmd.Flags().StringVar(&require, fnRequire, "", "Tokens to add as require anchor (in JSON format)")
 
+	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire)
 	cmd.MarkFlagsMutuallyExclusive(fnProvide, fnRoot, fnRequire)
 

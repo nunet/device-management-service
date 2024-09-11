@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/afero"
@@ -32,8 +33,8 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 	return &cobra.Command{
 		Use:   "new <name>",
 		Short: "Generate a new keypair",
-		Long:  `Generate a new keypair, saving the private key into user's local keystore. Optionally specify a name for the key.`,
-		Args:  cobra.MaximumNArgs(1),
+		Long:  `Generate a new keypair, saving the private key into user's local keystore.`,
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir)
@@ -65,9 +66,12 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 				}
 			}
 
-			passphrase, err := utils.PromptForPassphrase(true)
-			if err != nil {
-				return fmt.Errorf("failed to get passphrase: %w", err)
+			passphrase := os.Getenv("DMS_PASSPHRASE")
+			if passphrase == "" {
+				passphrase, err = utils.PromptForPassphrase(true)
+				if err != nil {
+					return fmt.Errorf("failed to get passphrase: %w", err)
+				}
 			}
 
 			priv, err := dms.GenerateAndStorePrivKey(ks, passphrase, keyID)
@@ -97,9 +101,12 @@ func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
 				return fmt.Errorf("failed to open keystore: %w", err)
 			}
 
-			passphrase, err := utils.PromptForPassphrase(false)
-			if err != nil {
-				return fmt.Errorf("failed to get passphrase: %w", err)
+			passphrase := os.Getenv("DMS_PASSPHRASE")
+			if passphrase == "" {
+				passphrase, err = utils.PromptForPassphrase(false)
+				if err != nil {
+					return fmt.Errorf("failed to get passphrase: %w", err)
+				}
 			}
 
 			key, err := ks.Get(keyName, passphrase)
