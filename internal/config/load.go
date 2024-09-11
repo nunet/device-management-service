@@ -2,18 +2,19 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
-	"regexp"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 )
 
-var cfg Config
-
-var homeDir, _ = os.UserHomeDir()
+var (
+	cfg        Config
+	homeDir, _ = os.UserHomeDir()
+)
 
 func getViper() *viper.Viper {
 	v := viper.New()
@@ -54,67 +55,88 @@ func setDefaultConfig() *viper.Viper {
 	return v
 }
 
-// TODO: add error handling!!!
-func LoadConfig() {
-	paths := []string{
-		".",
-		homeDir + "/.nunet",
-		"/etc/nunet",
-	}
-	configFile := "dms_config.json"
+func LoadConfig() error {
 	v := setDefaultConfig()
-
-	config, err := findConfig(paths, configFile)
-	if err != nil {
-		_ = setDefaultConfig().Unmarshal(&cfg)
-		return
+	if err := v.ReadInConfig(); err != nil {
+		if err := setDefaultConfig().UnmarshalExact(&cfg); err != nil {
+			return fmt.Errorf("failed to unmarshal default config: %w", err)
+		}
+		return nil
 	}
-
-	modifiedConfig := removeComments(config)
-	if err = v.ReadConfig(bytes.NewBuffer(modifiedConfig)); err != nil {
-		_ = setDefaultConfig().Unmarshal(&cfg)
-		return
+	if err := v.UnmarshalExact(&cfg); err != nil {
+		return fmt.Errorf("failed to unmarshal config: %w", err)
 	}
-
-	if err = v.Unmarshal(&cfg); err != nil {
-		_ = setDefaultConfig().Unmarshal(&cfg)
-	}
-}
-
-func SetConfig(key string, value interface{}) {
-	v := getViper()
-	v.Set(key, value)
-	err := v.Unmarshal(&cfg)
-	if err != nil {
-		_ = setDefaultConfig().Unmarshal(&cfg)
-	}
+	return nil
 }
 
 func GetConfig() *Config {
 	if reflect.DeepEqual(cfg, Config{}) {
-		LoadConfig()
+		if err := LoadConfig(); err != nil {
+			return &cfg
+		}
 	}
 	return &cfg
 }
 
-func findConfig(paths []string, filename string) ([]byte, error) {
-	for _, path := range paths {
-		fullPath := filepath.Join(path, filename)
-		_, err := os.Stat(fullPath)
-		if err == nil {
-			config, err := os.ReadFile(fullPath)
-			if err == nil {
-				return config, nil
-			}
-			return nil, err
-		}
+func Get(key string) (interface{}, error) {
+	v := getViper()
+	loadedConfig, err := json.Marshal(GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal config: %w", err)
 	}
-
-	return nil, fmt.Errorf("file not found in any of the paths")
+	if err := v.ReadConfig(bytes.NewReader(loadedConfig)); err != nil {
+		return nil, fmt.Errorf("could not read config: %w", err)
+	}
+	if !v.IsSet(key) {
+		return nil, fmt.Errorf("key '%s' not found in configuration", key)
+	}
+	return v.Get(key), nil
 }
 
-func removeComments(configBytes []byte) []byte {
-	re := regexp.MustCompile("(?s)//.*?\n") // match all '//' until the end of the line
-	result := re.ReplaceAll(configBytes, nil)
-	return result
+func Set(fs afero.Fs, key string, value interface{}) error {
+	v := getViper()
+	v.SetFs(fs)
+
+	v.Set(key, value)
+	if err := v.UnmarshalExact(&cfg); err != nil {
+		return fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	loadedConfig, err := json.Marshal(GetConfig())
+	if err != nil {
+		return fmt.Errorf("could not marshal config: %w", err)
+	}
+	if err := v.MergeConfig(bytes.NewReader(loadedConfig)); err != nil {
+		return fmt.Errorf("failed to merge config: %w", err)
+	}
+
+	if err := v.WriteConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// Config file does not exist, create it.
+			return v.SafeWriteConfig()
+		}
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	return nil
+}
+
+func FileExists(fs afero.Fs) (bool, error) {
+	v := getViper()
+	v.SetFs(fs)
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			return false, nil
+		}
+		return false, fmt.Errorf("could not read config file: %w", err)
+	}
+	return true, nil
+}
+
+func GetPath() string {
+	v := getViper()
+	if err := v.ReadInConfig(); err != nil {
+		return setDefaultConfig().ConfigFileUsed()
+	}
+	return v.ConfigFileUsed()
 }
