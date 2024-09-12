@@ -6,27 +6,33 @@ import (
 	"io"
 	"testing"
 
+	"go.uber.org/mock/gomock"
+
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/dms/actor"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestNewAllocation(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
-		actor           *actor.BasicActor
-		alloc           AllocationDetails
-		resourceManager resources.Manager
-		expErr          string
+		actor                *actor.BasicActor
+		alloc                AllocationDetails
+		resourceManagerMocks func(ctrl *gomock.Controller) types.ResourceManager
+		expErr               string
 	}{
 		"no resource manager": {
 			expErr: "resource manager is nil",
+			resourceManagerMocks: func(_ *gomock.Controller) types.ResourceManager {
+				return nil
+			},
 		},
 		"success": {
-			actor:           &actor.BasicActor{},
-			alloc:           AllocationDetails{},
-			resourceManager: &resourceManagerMock{},
+			actor: &actor.BasicActor{},
+			alloc: AllocationDetails{},
+			resourceManagerMocks: func(ctrl *gomock.Controller) types.ResourceManager {
+				return NewMockResourceManager(ctrl)
+			},
 		},
 	}
 
@@ -34,7 +40,11 @@ func TestNewAllocation(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			allocation, err := NewAllocation(tt.actor, tt.alloc, tt.resourceManager)
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			resourceManager := tt.resourceManagerMocks(ctrl)
+			allocation, err := NewAllocation(tt.actor, tt.alloc, resourceManager)
 			if tt.expErr != "" {
 				assert.Nil(t, allocation)
 				assert.EqualError(t, err, tt.expErr)
@@ -49,28 +59,23 @@ func TestNewAllocation(t *testing.T) {
 func TestAllocationRunStatus(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
-		allocationBuilder func() *Allocation
-		status            AllocationStatus
-		expErr            string
+		allocationBuilder    func(resourceManager *MockResourceManager) *Allocation
+		status               AllocationStatus
+		expErr               string
+		resourceManagerMocks func(ctrl *gomock.Controller) *MockResourceManager
 	}{
-		"issue getting resource manager": {
-			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{
-					err: errors.New("internal error"),
-				})
-				assert.NoError(t, err)
-				return alloc
+		"no free resources - allocation fails": {
+			resourceManagerMocks: func(ctrl *gomock.Controller) *MockResourceManager {
+				resourceManager := NewMockResourceManager(ctrl)
+				resourceManager.EXPECT().AllocateResources(gomock.Any(), gomock.Any()).Return(errors.New("no available resources for job 123"))
+				return resourceManager
 			},
-			status: pending,
-			expErr: "failed to get free resources: internal error",
-		},
-		"no free resources": {
-			allocationBuilder: func() *Allocation {
+			allocationBuilder: func(resourceManager *MockResourceManager) *Allocation {
 				// job resources
 				wantJob := Job{
 					ID:   "123",
 					Name: "Job name",
-					Resources: types.ExecutionResources{
+					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores: 3,
 						},
@@ -78,27 +83,26 @@ func TestAllocationRunStatus(t *testing.T) {
 					},
 				}
 
-				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
-					Resources: types.Resources{
-						CPU:      1,
-						NumCores: 1,
-						RAM:      10,
-						Disk:     10,
-					},
-				}})
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, resourceManager)
 				assert.NoError(t, err)
 				return alloc
 			},
 			status: pending,
-			expErr: "no available resources for job 123",
+			expErr: "failed to allocate resources: no available resources for job 123",
 		},
 		"execution failed": {
-			allocationBuilder: func() *Allocation {
+			resourceManagerMocks: func(ctrl *gomock.Controller) *MockResourceManager {
+				resourceManager := NewMockResourceManager(ctrl)
+				resourceManager.EXPECT().AllocateResources(gomock.Any(), gomock.Any()).Return(nil)
+				resourceManager.EXPECT().DeallocateResources(gomock.Any(), gomock.Any()).Return(nil)
+				return resourceManager
+			},
+			allocationBuilder: func(resourceManager *MockResourceManager) *Allocation {
 				// job resources
 				wantJob := Job{
 					ID:   "123",
 					Name: "Job name",
-					Resources: types.ExecutionResources{
+					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores: 1,
 						},
@@ -106,14 +110,7 @@ func TestAllocationRunStatus(t *testing.T) {
 					},
 				}
 
-				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
-					Resources: types.Resources{
-						CPU:      100,
-						NumCores: 6,
-						RAM:      10000000000,
-						Disk:     100000000000,
-					},
-				}})
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, resourceManager)
 				assert.NoError(t, err)
 
 				// mocket executor
@@ -125,12 +122,17 @@ func TestAllocationRunStatus(t *testing.T) {
 			expErr: "failed to start executor: internal error",
 		},
 		"successful": {
-			allocationBuilder: func() *Allocation {
+			resourceManagerMocks: func(ctrl *gomock.Controller) *MockResourceManager {
+				resourceManager := NewMockResourceManager(ctrl)
+				resourceManager.EXPECT().AllocateResources(gomock.Any(), gomock.Any()).Return(nil)
+				return resourceManager
+			},
+			allocationBuilder: func(resourceManager *MockResourceManager) *Allocation {
 				// job resources
 				wantJob := Job{
 					ID:   "123",
 					Name: "Job name",
-					Resources: types.ExecutionResources{
+					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores: 1,
 						},
@@ -138,14 +140,7 @@ func TestAllocationRunStatus(t *testing.T) {
 					},
 				}
 
-				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, &resourceManagerMock{freeRes: types.FreeResources{
-					Resources: types.Resources{
-						CPU:      100,
-						NumCores: 6,
-						RAM:      10000000000,
-						Disk:     100000000000,
-					},
-				}})
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{Job: wantJob}, resourceManager)
 				assert.NoError(t, err)
 
 				// mocket executor
@@ -161,7 +156,11 @@ func TestAllocationRunStatus(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			alloc := tt.allocationBuilder()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			resourceManager := tt.resourceManagerMocks(ctrl)
+			alloc := tt.allocationBuilder(resourceManager)
 			err := alloc.Run(context.Background())
 			if tt.expErr != "" {
 				assert.EqualError(t, err, tt.expErr)
@@ -175,13 +174,14 @@ func TestAllocationRunStatus(t *testing.T) {
 func TestAllocationStop(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
-		allocationBuilder func() *Allocation
-		status            AllocationStatus
-		expErr            string
+		allocationBuilder    func(resourceManager *MockResourceManager) *Allocation
+		resourceManagerMocks func(ctrl *gomock.Controller) *MockResourceManager
+		status               AllocationStatus
+		expErr               string
 	}{
 		"execution failed to cancel": {
-			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{})
+			allocationBuilder: func(resourceManager *MockResourceManager) *Allocation {
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, resourceManager)
 				assert.NoError(t, err)
 
 				// mocket executor
@@ -190,14 +190,16 @@ func TestAllocationStop(t *testing.T) {
 
 				return alloc
 			},
+			//nolint:gocritic //we need to return the resource manager or change the test structure
+			resourceManagerMocks: func(ctrl *gomock.Controller) *MockResourceManager {
+				return NewMockResourceManager(ctrl)
+			},
 			status: running,
 			expErr: "failed to stop execution: cancel failed",
 		},
-		"failed to update free resources after stoping allocation": {
-			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{
-					err: errors.New("failed to update resources"),
-				})
+		"failed to deallocate resources after stoping allocation": {
+			allocationBuilder: func(resourceManager *MockResourceManager) *Allocation {
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, resourceManager)
 				assert.NoError(t, err)
 
 				// mocket executor
@@ -206,12 +208,22 @@ func TestAllocationStop(t *testing.T) {
 
 				return alloc
 			},
+			resourceManagerMocks: func(ctrl *gomock.Controller) *MockResourceManager {
+				resourceManager := NewMockResourceManager(ctrl)
+				resourceManager.EXPECT().DeallocateResources(gomock.Any(), gomock.Any()).Return(errors.New("failed to deallocate resources"))
+				return resourceManager
+			},
 			status: running,
-			expErr: "failed to update resources after stoping allocation's executor: failed to update resources",
+			expErr: "failed to deallocate resources: failed to deallocate resources",
 		},
 		"success": {
-			allocationBuilder: func() *Allocation {
-				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, &resourceManagerMock{})
+			resourceManagerMocks: func(ctrl *gomock.Controller) *MockResourceManager {
+				resourceManager := NewMockResourceManager(ctrl)
+				resourceManager.EXPECT().DeallocateResources(gomock.Any(), gomock.Any()).Return(nil)
+				return resourceManager
+			},
+			allocationBuilder: func(resourceManager *MockResourceManager) *Allocation {
+				alloc, err := NewAllocation(&actor.BasicActor{}, AllocationDetails{}, resourceManager)
 				assert.NoError(t, err)
 
 				alloc.executor = &mockExecutor{}
@@ -227,7 +239,11 @@ func TestAllocationStop(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			alloc := tt.allocationBuilder()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			resourceManager := tt.resourceManagerMocks(ctrl)
+			alloc := tt.allocationBuilder(resourceManager)
 			err := alloc.Stop(context.Background())
 			if tt.expErr != "" {
 				assert.EqualError(t, err, tt.expErr)
@@ -236,37 +252,6 @@ func TestAllocationStop(t *testing.T) {
 			assert.Equal(t, sts.Status, alloc.status)
 		})
 	}
-}
-
-type resourceManagerMock struct {
-	freeRes            types.FreeResources
-	onboardedResources types.OnboardedResources
-
-	err error
-}
-
-func (m *resourceManagerMock) UpdateFreeResources(context.Context) (types.FreeResources, error) {
-	return m.freeRes, m.err
-}
-
-func (m *resourceManagerMock) UpdateOnboardedResources(context.Context, types.OnboardedResources) error {
-	return m.err
-}
-
-func (m *resourceManagerMock) GetOnboardedResources(context.Context) (types.OnboardedResources, error) {
-	return m.onboardedResources, m.err
-}
-
-func (m *resourceManagerMock) GetRequiredResources(context.Context) (types.Resources, error) {
-	return m.freeRes.Resources, m.err
-}
-
-func (m *resourceManagerMock) SystemSpecs() resources.SystemSpecs {
-	return nil
-}
-
-func (m *resourceManagerMock) UsageMonitor() resources.UsageMonitor {
-	return nil
 }
 
 type mockExecutor struct {

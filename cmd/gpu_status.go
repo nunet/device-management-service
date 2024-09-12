@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,11 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/types"
+
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/types"
 )
 
 func newGPUStatusCmd() *cobra.Command {
@@ -22,33 +24,33 @@ func newGPUStatusCmd() *cobra.Command {
 		Short: "Check GPU status in real time",
 		Long:  ``,
 		Run: func(_ *cobra.Command, _ []string) {
-			vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
+			machineResources, err := resources.ManagerInstance.SystemSpecs().GetMachineResources()
 			if err != nil {
 				fmt.Println("Error trying to detect GPU(s):", err)
 				return
 			}
 
-			hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
-			hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
-			hasIntel := containsVendor(vendors, types.GPUVendorIntel)
+			if len(machineResources.GPUs) == 0 {
+				fmt.Println("no GPU detected")
+				return
+			}
 
-			if hasNVIDIA || hasAMD || hasIntel {
-				if hasNVIDIA {
-					// NVML initialization
-					retNVML := nvml.Init()
-					if retNVML != nvml.SUCCESS {
-						fmt.Println("Failed to initialize NVML:", nvml.ErrorString(retNVML))
-					}
-					defer func() {
-						retNVML := nvml.Shutdown()
-						if retNVML != nvml.SUCCESS {
-							fmt.Println("Failed to shutdown NVML:", nvml.ErrorString(retNVML))
-						}
-					}()
+			gpuVendorMap := getGPUVendorMap(machineResources.GPUs)
+			if len(gpuVendorMap[types.GPUVendorNvidia]) > 0 {
+				// NVML initialization
+				retNVML := nvml.Init()
+				if !errors.Is(retNVML, nvml.SUCCESS) {
+					fmt.Println("Failed to initialize NVML:", nvml.ErrorString(retNVML))
 				}
+				defer func() {
+					retNVML := nvml.Shutdown()
+					if !errors.Is(retNVML, nvml.SUCCESS) {
+						fmt.Println("Failed to shutdown NVML:", nvml.ErrorString(retNVML))
+					}
+				}()
 
 				countNVML, retNVML := nvml.DeviceGetCount()
-				if retNVML != nvml.SUCCESS {
+				if !errors.Is(retNVML, nvml.SUCCESS) {
 					fmt.Println("Failed to count NVIDIA GPU devices:", nvml.ErrorString(retNVML))
 					countNVML = 0
 				}

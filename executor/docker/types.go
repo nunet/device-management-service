@@ -41,7 +41,7 @@ func (c EngineSpec) Validate() error {
 // DecodeSpec decodes a spec config into a docker engine spec
 // It converts the params into a docker EngineSpec struct and validates it
 func DecodeSpec(spec *types.SpecConfig) (EngineSpec, error) {
-	if !spec.IsType(types.ExecutorTypeDocker) {
+	if !spec.IsType(string(types.ExecutorTypeDocker)) {
 		return EngineSpec{}, fmt.Errorf(
 			"invalid docker engine type. expected %s, but received: %s",
 			types.ExecutorTypeDocker,
@@ -77,7 +77,7 @@ type EngineBuilder struct {
 // NewDockerEngineBuilder function initializes a new DockerEngineBuilder instance.
 // It sets the engine type to model.EngineDocker.String() and image as per the input argument.
 func NewDockerEngineBuilder(image string) *EngineBuilder {
-	eb := types.NewSpecConfig(types.ExecutorTypeDocker)
+	eb := types.NewSpecConfig(string(types.ExecutorTypeDocker))
 	eb.WithParam(EngineKeyImage, image)
 	return &EngineBuilder{eb: eb}
 }

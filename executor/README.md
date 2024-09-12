@@ -175,38 +175,7 @@ type LogStreamRequest struct {
 
 - `types.SpecConfig`: This allows arbitrary configuration/parameters as needed during implementation of specific executor. 
 
-- `executor.ExecutionResources`: This contains resources to be used for execution.
-
-```
-type ExecutionResources struct {
-	// CPU units
-	CPU float64 `json:"cpu,omitempty"`
-
-	// Memory in bytes
-	Memory uint64 `json:"memory,omitempty"`
-
-	// Disk in bytes
-	Disk uint64 `json:"disk,omitempty"`
-
-	// GPU configurations
-	GPUs []GPU `json:"gpus,omitempty"`
-}
-
-type GPU struct {
-	// Self-reported index of the device in the system
-	Index uint64
-
-	// Model name of the GPU e.g. Tesla T4
-	Name string
-
-	// Maker of the GPU, e.g. NVidia, AMD, Intel
-	Vendor GPUVendor
-
-	// PCI address of the device, in the format AAAA:BB:CC.C
-	// Used to discover the correct device rendering cards
-	PCIAddress string
-}
-```
+- `types.Resources`: This contains resources to be used for execution.
 
 - `storage.StorageVolume`: This contains parameters of storage volume used during execution. 
 

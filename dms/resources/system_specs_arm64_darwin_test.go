@@ -4,105 +4,78 @@ import (
 	"testing"
 
 	"github.com/shoenig/go-m1cpu"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestArm64DarwinNewSystemSpecs(t *testing.T) {
 	t.Parallel()
-
 	if !m1cpu.IsAppleSilicon() {
 		t.Skip("wrong cpu type")
 	}
 
-	systemSpecs := newSystemSpecs()
-	assert.NotNil(t, systemSpecs)
+	systemSpecs := newSystemSpecs(newStore())
+	require.NotNil(t, systemSpecs)
 }
 
-func TestArm64DarwinSystemSpecs_GetTotalMemory(t *testing.T) {
+func TestArm64DarwinSystemSpecs_getDisk(t *testing.T) {
 	t.Parallel()
-
 	if !m1cpu.IsAppleSilicon() {
 		t.Skip("wrong cpu type")
 	}
 
-	systemSpecs := newSystemSpecs()
-	totalMemory, err := systemSpecs.GetTotalMemory()
-	assert.NoError(t, err)
-	assert.Greater(t, totalMemory, uint64(0))
+	diskInfo, err := getDisk()
+	require.NoError(t, err)
+	require.Greater(t, diskInfo.Size, uint64(0))
+	// other fields as needed
 }
 
-func TestArm64DarwinSystemSpecs_GetTotalStorage(t *testing.T) {
+func TestArm64DarwinSystemSpecs_getRam(t *testing.T) {
 	t.Parallel()
-
 	if !m1cpu.IsAppleSilicon() {
 		t.Skip("wrong cpu type")
 	}
 
-	systemSpecs := newSystemSpecs()
-	totalStorage, err := systemSpecs.GetTotalStorage()
-	assert.NoError(t, err)
-	assert.Greater(t, totalStorage, uint64(0))
+	ram, err := getRAM()
+	require.NoError(t, err)
+	require.Greater(t, ram.Size, uint64(0))
 }
 
-func TestArm64DarwinSystemSpecs_GetCPUInfo(t *testing.T) {
+func TestArm64DarwinSystemSpecs_getCPU(t *testing.T) {
 	t.Parallel()
-
 	if !m1cpu.IsAppleSilicon() {
 		t.Skip("wrong cpu type")
 	}
 
-	systemSpecs := newSystemSpecs()
-	cpuInfo, err := systemSpecs.GetCPUInfo()
-	assert.NoError(t, err)
-	assert.Greater(t, cpuInfo.NumCores, uint64(0))
-	assert.Greater(t, cpuInfo.MHzPerCore, float64(0))
-	assert.Equal(t, getArm64DarwinExpectedCompute(t), cpuInfo.Compute)
+	cpuInfo, err := getCPU()
+	require.NoError(t, err)
+	require.Greater(t, cpuInfo.Cores, float32(0))
+	require.Greater(t, cpuInfo.ClockSpeed, float64(0))
 }
 
-func TestArm64DarwinSystemSpecs_GetProvisionedResources(t *testing.T) {
+func TestArm64DarwinSystemSpecs_GetMachineResources(t *testing.T) {
 	t.Parallel()
-
 	if !m1cpu.IsAppleSilicon() {
 		t.Skip("wrong cpu type")
 	}
 
-	systemSpecs := newSystemSpecs()
-	resources, err := systemSpecs.GetProvisionedResources()
-	assert.NoError(t, err)
-	assert.Equal(t, getArm64DarwinExpectedCompute(t), resources.CPU)
-	assert.Greater(t, resources.RAM, uint64(0))
-	assert.Greater(t, resources.Disk, uint64(0))
+	systemSpecs := newSystemSpecs(newStore())
+	resources, err := systemSpecs.GetMachineResources()
+	require.NoError(t, err)
+	require.Greater(t, resources.CPU.Cores, float32(0))
+	require.Greater(t, resources.CPU.ClockSpeed, float64(0))
+	require.Greater(t, resources.CPU.Compute, float64(0))
+	require.Greater(t, resources.RAM.Size, uint64(0))
+	require.Greater(t, resources.Disk.Size, uint64(0))
 }
 
-func TestArm64DarwinSystemSpecs_GetGPUVendors(t *testing.T) {
+func TestArm64DarwinSystemSpecs_getGPUs(t *testing.T) {
 	t.Parallel()
-
 	if !m1cpu.IsAppleSilicon() {
 		t.Skip("wrong cpu type")
 	}
 
-	systemSpecs := newSystemSpecs()
-	gpuVendors, err := systemSpecs.GetGPUVendors()
-	assert.NoError(t, err)
-	assert.Empty(t, gpuVendors) // GPUs are not supported on Darwin yet
-}
-
-func TestArm64DarwinSystemSpecs_GetGPUs(t *testing.T) {
-	t.Parallel()
-
-	if !m1cpu.IsAppleSilicon() {
-		t.Skip("wrong cpu type")
-	}
-
-	systemSpecs := newSystemSpecs()
-	gpus, err := systemSpecs.GetGPUs()
-	assert.NoError(t, err)
-	assert.Empty(t, gpus) // GPUs are not supported on Darwin yet
-}
-
-// getArm64DarwinExpectedCompute returns the expected compute value for an arm64 darwin system
-func getArm64DarwinExpectedCompute(t *testing.T) float64 {
-	t.Helper()
-
-	return float64(m1cpu.ECoreCount())*m1cpu.ECoreGHz()*1000 + float64(m1cpu.PCoreCount())*m1cpu.PCoreGHz()*1000
+	systemSpecs := newSystemSpecs(newStore())
+	resources, err := systemSpecs.GetMachineResources()
+	require.NoError(t, err)
+	require.Empty(t, resources.GPUs) // GPUs are not supported on Darwin yet
 }

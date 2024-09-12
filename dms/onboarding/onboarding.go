@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"slices"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -25,7 +23,7 @@ type Config struct {
 	DatabasePath    string
 	ParamsRepo      repositories.OnboardingParams
 	P2PRepo         repositories.Libp2pInfo
-	ResourceManager resources.Manager
+	ResourceManager types.ResourceManager
 	AvResourceRepo  repositories.AvailableResources
 	UUIDRepo        repositories.MachineUUID
 	Channels        []string // supported channels such as nunet-test and nunet-team
@@ -94,7 +92,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 		return nil, fmt.Errorf("unable to get hostname: %v", err)
 	}
 
-	provisionedResources, err := o.ResourceManager.SystemSpecs().GetProvisionedResources()
+	machineResources, err := o.ResourceManager.SystemSpecs().GetMachineResources()
 	if err != nil {
 		return nil, fmt.Errorf("cannot get provisioned resources: %w", err)
 	}
@@ -103,9 +101,8 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	oConf.Name = hostname
 	oConf.UpdateTimestamp = time.Now().Unix()
 	// TODO: 553
-	oConf.TotalResources.RAM = provisionedResources.RAM
-	oConf.TotalResources.NumCores = provisionedResources.NumCores
-	oConf.TotalResources.CPU = provisionedResources.CPU
+	oConf.TotalResources.RAM = machineResources.RAM
+	oConf.TotalResources.CPU = machineResources.CPU
 
 	oConf.AllowCardano = false
 	if capacity.Cardano {
@@ -115,14 +112,10 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 		oConf.AllowCardano = true
 	}
 
-	gpuInfo, err := o.ResourceManager.SystemSpecs().GetGPUs()
-	if err != nil {
-		return nil, fmt.Errorf("unable to detect GPU: %v ", err.Error())
-	}
-	oConf.GpuInfo = gpuInfo
+	oConf.GpuInfo = machineResources.GPUs
 
-	oConf.OnboardedResources.RAM = capacity.Memory
-	oConf.OnboardedResources.CPU = float64(capacity.CPU)
+	oConf.OnboardedResources.RAM = types.RAM{Size: capacity.Memory}
+	oConf.OnboardedResources.CPU = types.CPU{Cores: float32(capacity.CPU)}
 	// TODO: 553
 	oConf.Network = capacity.Channel
 	oConf.PublicKey = capacity.PaymentAddress
@@ -133,6 +126,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 		return nil, fmt.Errorf("could not save onboarding params: %w", err)
 	}
 
+	// TODO: call the resource manager directly instead
 	if err := o.updateAvailableResources(ctx, capacity); err != nil {
 		return nil, fmt.Errorf("failed to update available resources: %w", err)
 	}
@@ -167,8 +161,8 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, fmt.Errorf("could not read onboarding params from db: %w", err)
 	}
 
-	params.OnboardedResources.CPU = float64(capacity.CPU)
-	params.OnboardedResources.RAM = capacity.Memory
+	params.OnboardedResources.CPU = types.CPU{Cores: float32(capacity.CPU)}
+	params.OnboardedResources.RAM = types.RAM{Size: capacity.Memory}
 	params.NTXPricePerMinute = capacity.NTXPricePerMinute
 
 	available, err := o.AvResourceRepo.Get(ctx)
@@ -188,10 +182,11 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, fmt.Errorf("could not save onboarding params in db: %w", err)
 	}
 
-	_, err = o.ResourceManager.UpdateFreeResources(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("could not calculate free resources and update database: %w", err)
-	}
+	// TODO: change the way the resources are being onboarded
+	// _, err = o.ResourceManager.UpdateFreeResources(ctx)
+	// if err != nil {
+	//	 return nil, fmt.Errorf("could not calculate free resources and update database: %w", err)
+	// }
 
 	return &params, nil
 }
@@ -234,18 +229,18 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 }
 
 func (o *Onboarding) validateCapacityForNunet(capacity types.CapacityForNunet) error {
-	provisionedResources, err := o.ResourceManager.SystemSpecs().GetProvisionedResources()
+	machineResources, err := o.ResourceManager.SystemSpecs().GetMachineResources()
 	if err != nil {
 		return fmt.Errorf("could not get provisioned resources: %w", err)
 	}
 
-	if capacity.CPU > int64(provisionedResources.CPU*9/10) || capacity.CPU < int64(provisionedResources.CPU/10) {
-		return fmt.Errorf("CPU should be between 10%% and 90%% of the available CPU (%d and %d)", int64(provisionedResources.CPU/10), int64(provisionedResources.CPU*9/10))
+	if capacity.CPU > int64(machineResources.CPU.Compute*9/10) || capacity.CPU < int64(machineResources.CPU.Compute/10) {
+		return fmt.Errorf("CPU should be between 10%% and 90%% of the available CPU (%d and %d)", int64(machineResources.CPU.Compute/10), int64(machineResources.CPU.Compute*9/10))
 	}
 
 	//nolint:gosec // to be fixed in TODO: 553
-	if capacity.Memory > provisionedResources.RAM*9/10 || capacity.Memory < provisionedResources.RAM/10 {
-		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory (%d and %d)", int64(provisionedResources.RAM/10), int64(provisionedResources.RAM*9/10))
+	if capacity.Memory > machineResources.RAM.Size*9/10 || capacity.Memory < machineResources.RAM.Size/10 {
+		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory (%d and %d)", int64(machineResources.RAM.Size/10), int64(machineResources.RAM.Size*9/10))
 	}
 
 	return nil
@@ -276,24 +271,19 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForN
 }
 
 func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity types.CapacityForNunet) error {
-	totalProvisioned, err := o.ResourceManager.SystemSpecs().GetProvisionedResources()
+	machineResources, err := o.ResourceManager.SystemSpecs().GetMachineResources()
 	if err != nil {
 		return fmt.Errorf("could not get provisioned resources: %w", err)
 	}
 
-	cpuInfo, err := o.ResourceManager.SystemSpecs().GetCPUInfo()
-	if err != nil {
-		return fmt.Errorf("could not get CPU info: %w", err)
-	}
-
 	avalRes := types.AvailableResources{
 		TotCPUHz:          capacity.CPU,
-		CPUNo:             totalProvisioned.NumCores,
-		CPUHz:             cpuInfo.MHzPerCore,
+		CPUNo:             int(machineResources.CPU.Cores),
+		CPUHz:             machineResources.CPU.ClockSpeed,
 		PriceCPU:          0, // TODO: Get price of CPU
 		RAM:               capacity.Memory,
 		PriceRAM:          0, // TODO: Get price of RAM
-		Vcpu:              int(math.Floor((float64(capacity.CPU)) / cpuInfo.MHzPerCore)),
+		Vcpu:              int(float64(capacity.CPU) / machineResources.CPU.ClockSpeed),
 		Disk:              0,
 		PriceDisk:         0,
 		NTXPricePerMinute: capacity.NTXPricePerMinute,
@@ -304,9 +294,9 @@ func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity type
 		return fmt.Errorf("failed to save available resources: %w", err)
 	}
 
-	if _, err := o.ResourceManager.UpdateFreeResources(ctx); err != nil {
-		zlog.Sugar().Errorf("could not calculate free resources and update database: %w", err)
-	}
+	// if _, err := o.ResourceManager.UpdateFreeResources(ctx); err != nil {
+	// 	 zlog.Sugar().Errorf("could not calculate free resources and update database: %w", err)
+	// }
 	return nil
 }
 

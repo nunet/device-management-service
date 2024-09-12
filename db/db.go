@@ -33,7 +33,7 @@ func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 	_ = database.AutoMigrate(&types.OnboardedResources{})
 	_ = database.AutoMigrate(&types.MachineResources{})
 	_ = database.AutoMigrate(&types.OnboardingConfig{})
-	_ = database.AutoMigrate(&types.RequiredResources{})
+	_ = database.AutoMigrate(&types.ResourceAllocation{})
 
 	// TODO remove once all DB usage is transitioned to the repos
 	DB = database

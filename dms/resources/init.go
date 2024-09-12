@@ -5,13 +5,14 @@ import (
 	"gitlab.com/nunet/device-management-service/db"
 	gormRepo "gitlab.com/nunet/device-management-service/db/repositories/gorm"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var (
 	// zlog is the logger for the resources package
 	zlog *otelzap.Logger
 	// ManagerInstance is the ResourceManager instance
-	ManagerInstance Manager
+	ManagerInstance types.ResourceManager
 )
 
 // TODO: This needs to be initialized in `dms` package and removed from here
@@ -26,9 +27,7 @@ func init() {
 	repos := ManagerRepos{
 		FreeResources:      gormRepo.NewFreeResources(db.DB),
 		OnboardedResources: gormRepo.NewOnboardedResources(db.DB),
-		RequiredResources:  gormRepo.NewRequiredResources(db.DB),
-		VirtualMachine:     gormRepo.NewVirtualMachine(db.DB),
-		Services:           gormRepo.NewServices(db.DB),
+		ResourceAllocation: gormRepo.NewResourceAllocation(db.DB),
 	}
 	ManagerInstance = NewResourceManager(repos)
 }

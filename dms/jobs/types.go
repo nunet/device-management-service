@@ -17,18 +17,18 @@ type JobLink struct {
 
 // Job represents a single job in the configuration
 type Job struct {
-	ID        string                   `json:"id" description:"Job ID"`
-	Instances int                      `json:"instances" description:"Number of instances"`
-	Name      string                   `json:"name" description:"Name of the job"`
-	Metadata  JobMetadata              `json:"metadata" description:"Metadata of the job"`
-	Locality  []string                 `json:"locality" description:"Deployment locality"`
-	Execution types.SpecConfig         `json:"execution" description:"Execution Engine configuration"`
-	Resources types.ExecutionResources `json:"resources" description:"Resources required"`
-	Volumes   []VolumeConfig           `json:"volumes" description:"List of volumes"`
-	Networks  []NetworkConfig          `json:"networks" description:"List of networks"`
-	Libraries []Library                `json:"libraries" description:"List of required libraries"`
-	Links     []JobLink                `json:"links" description:"List of links"`
-	Children  []Job                    `json:"children" description:"List of tasks"`
+	ID        string           `json:"id" description:"Job ID"`
+	Instances int              `json:"instances" description:"Number of instances"`
+	Name      string           `json:"name" description:"Name of the job"`
+	Metadata  JobMetadata      `json:"metadata" description:"Metadata of the job"`
+	Locality  []string         `json:"locality" description:"Deployment locality"`
+	Execution types.SpecConfig `json:"execution" description:"Execution Engine configuration"`
+	Resources types.Resources  `json:"resources" description:"Resources required"`
+	Volumes   []VolumeConfig   `json:"volumes" description:"List of volumes"`
+	Networks  []NetworkConfig  `json:"networks" description:"List of networks"`
+	Libraries []Library        `json:"libraries" description:"List of required libraries"`
+	Links     []JobLink        `json:"links" description:"List of links"`
+	Children  []Job            `json:"children" description:"List of tasks"`
 }
 
 // Metadata contains job metadata

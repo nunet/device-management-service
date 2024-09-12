@@ -75,7 +75,7 @@ This whole package is `proposed` status and therefore documentation is missing, 
 
 #### List of issues
 
-All issues that are filed in GitLab related to the implementation of `dms/orchestrator/matching` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
+All issues that are filed in GitLab related to the implementation of `dms/orchestrator` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
 - [All issues mentioning Graph in this milestone](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&search=Graph&milestone_title=Device%20Management%20Service%20Version%200.5.x&first_page_size=20)
 

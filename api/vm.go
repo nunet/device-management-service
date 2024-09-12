@@ -64,9 +64,9 @@ func (rs RESTServer) StartCustom(c *gin.Context) {
 		JobID:       "test_job",
 		ExecutionID: "test_execution",
 		EngineSpec:  fe,
-		Resources: &types.ExecutionResources{
-			CPU:    types.CPU{Cores: uint32(body.VCPUCount)},
-			Memory: types.RAM{Size: int64(body.MemSizeMib)},
+		Resources: &types.Resources{
+			CPU: types.CPU{Cores: float32(body.VCPUCount)},
+			RAM: types.RAM{Size: uint64(body.MemSizeMib)},
 		},
 	}
 
@@ -123,9 +123,9 @@ func (rs RESTServer) StartDefault(c *gin.Context) {
 		JobID:       "test_job",
 		ExecutionID: "test_execution",
 		EngineSpec:  fe,
-		Resources: &types.ExecutionResources{
-			CPU:    types.CPU{Cores: 1},
-			Memory: types.RAM{Size: 1024},
+		Resources: &types.Resources{
+			CPU: types.CPU{Cores: 1},
+			RAM: types.RAM{Size: 1024},
 		},
 	}
 

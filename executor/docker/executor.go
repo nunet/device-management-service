@@ -259,11 +259,15 @@ func (e *Executor) newDockerExecutionContainer(
 
 	// TODO: Move this code block ( L263-272) to the allocator in future
 	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
-	gpus, err := resources.ManagerInstance.SystemSpecs().GetGPUs()
+	machineResources, err := resources.ManagerInstance.SystemSpecs().GetMachineResources()
 	if err != nil {
-		return "", fmt.Errorf("failed to get GPU info: %w", err)
+		return "", fmt.Errorf("failed to get machine resources: %w", err)
 	}
-	maxFreeVRAMGpu, err := types.GPUList(gpus).GetGPUWithHighestFreeVRAM()
+	if len(machineResources.GPUs) == 0 {
+		return "", fmt.Errorf("no GPUs available on the machine")
+	}
+
+	maxFreeVRAMGpu, err := machineResources.GPUs.GetGPUWithHighestFreeVRAM()
 	if err != nil {
 		return "", fmt.Errorf("failed to get GPU with highest free VRAM: %w", err)
 	}
@@ -321,7 +325,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
+				NanoCPUs: int64(params.Resources.CPU.Cores),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				DeviceRequests: []container.DeviceRequest{
 					{
@@ -339,7 +343,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
+				NanoCPUs: int64(params.Resources.CPU.Cores),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -369,7 +373,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
+				NanoCPUs: int64(params.Resources.CPU.Cores),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -384,7 +388,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: params.Resources.CPU.ClockSpeedHz,
+				NanoCPUs: int64(params.Resources.CPU.Cores),
 				CPUCount: int64(params.Resources.CPU.Cores),
 			},
 		}

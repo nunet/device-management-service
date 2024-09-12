@@ -1,24 +1,18 @@
 package types
 
+// Comparison is a type for comparison results
 type Comparison string
 
 const (
-	Worse  Comparison = "Worse"  // left object is 'worse' than right object
-	Better Comparison = "Better" // left object is 'better' than right object
-	Equal  Comparison = "Equal"  // objects on the left and right are 'equally good'
-	Error  Comparison = "Error"  // error in comparison or objects incomparable
+	// Worse means left object is 'worse' than right object
+	Worse Comparison = "Worse"
+	// Better means left object is 'better' than right object
+	Better Comparison = "Better"
+	// Equal means objects on the left and right are 'equally good'
+	Equal Comparison = "Equal"
+	// Error means error in comparison or objects incomparable
+	Error Comparison = "Error"
 )
-
-// TODO: Consider comments in this thread: https://gitlab.com/nunet/device-management-service/-/merge_requests/356#note_1997854443
-// TODO: Consider comments in this thread: https://gitlab.com/nunet/device-management-service/-/merge_requests/356#note_1997875361
-
-// 'left' means 'this object' and 'right' means 'the supplied other object';
-// it makes sense when using the type in functions like Compare(left, right)
-
-// this type is unused but still reserved in case we will need it in the future
-// and still used in some tests that are left from previous versions of the package;
-// TOTO: remove / update after the package is finished and refactor
-type ComplexComparison map[string]Comparison
 
 // And returns the result of AND operation of two Comparison values
 // it respects the following table of truth:
@@ -44,6 +38,8 @@ func (c Comparison) And(cmp Comparison) Comparison {
 			return Better
 		case Worse:
 			return Worse
+		case Equal:
+			return Equal
 		default:
 			return Error
 		}
@@ -58,12 +54,21 @@ func (c Comparison) And(cmp Comparison) Comparison {
 			return Error
 		}
 	case Worse:
-		if cmp == Error {
-			return Error
-		}
 		return Worse
 
 	default:
 		return Error
 	}
+}
+
+// ComplexComparison is a map of string to Comparison
+type ComplexComparison map[string]Comparison
+
+// Result returns the result of AND operation of all Comparison values in the ComplexComparison
+func (c *ComplexComparison) Result() Comparison {
+	result := Equal
+	for _, comparison := range *c {
+		result = result.And(comparison)
+	}
+	return result
 }

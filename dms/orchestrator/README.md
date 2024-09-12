@@ -69,8 +69,6 @@ _Subpackages_
 
 * [graph](graph): Defines and implements interfaces of Graph logic for network topology awareness (_proposed_).
 
-* [matching](matching): Defines and implements `Comparator` logic for compute capabilities and by that the *Search and Match* operation.
-
 ### Class Diagram
 
 #### Source

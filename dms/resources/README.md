@@ -44,6 +44,8 @@ Here is quick overview of the contents of this pacakge:
 
 * [usage_monitor](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/usage_monitor.go): Contains the implementation of the `UsageMonitor` interface.
 
+* [store](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/store.go): Contains the implementation of the `store` for the resource manager.
+
 All files with `*_test.go` contains unit tests for the corresponding functionality.
 
 ### Class Diagram
@@ -70,41 +72,57 @@ The class diagram for the `resources` package is shown below.
 
 The interface methods are explained below.
 
-##### `UpdateFreeResources`
+##### `AllocateResources`
 
-- signature: `UpdateFreeResources(context.Context) (types.FreeResources, error)`
+- signature: `AllocateResources(context.Context, ResourceAllocation) error`
 - input: `Context`
-- output: `types.FreeResources`
 - output (error): Error message
 
-`UpdateFreeResources` calculates and returns the free resources of the machine. It also updates this value in the local database.  
+`AllocateResources` allocates the resources to the job.
 
-##### `GetOnboardedResources`
+##### `DeallocateResources`
 
-- signature: `GetOnboardedResources(context.Context) (types.OnboardedResources, error)`
+- signature: `DeallocateResources(context.Context, string) error`
 - input: `Context`
-- output: `types.OnboardedResources`
 - output (error): Error message
 
-`GetOnboardedResources` fetches the onboarded resources of the machine from the database.
+`DeallocateResources` deallocates the resources from the job.
 
-##### `GetRequiredResources`
+##### `GetTotalAllocation`
 
-- signature: `GetRequiredResources(context.Context) (types.Resource, error)`
+- signature: `GetTotalAllocation() (Resources, error)`
 - input: `Context`
 - output: `types.Resource`
 - output (error): Error message
 
-`GetRequiredResources` calculates and returns the resources required by all the jobs that are scheduled to be run on the machine.
+`GetTotalAllocation` returns the total resources allocated to the jobs.
+
+##### `GetFreeResources`
+
+- signature: `GetFreeResources() (FreeResources, error)`
+- input: None
+- output: `FreeResources`
+- output (error): Error message
+
+`GetFreeResources` returns the available resources in the allocation pool.
+
+##### `GetOnboardedResources`
+
+- signature: `GetOnboardedResources(context.Context) (OnboardedResources, error)`
+- input: `Context`
+- output: `OnboardedResources`
+- output (error): Error message
+
+`GetOnboardedResources` returns the resources onboarded to dms.
 
 ##### `UpdateOnboardedResources`
 
-- signature: `UpdateOnboardedResources(context.Context, types.OnboardedResources) error`
-- input: `Context`, `types.OnboardedResources`
-- output: None
+- signature: `UpdateOnboardedResources(context.Context, OnboardedResources) error`
+- input: `Context`
+- input: `OnboardedResources`
 - output (error): Error message
 
-`UpdateOnboardedResources` updates the onboarded resources of the machine in the database.
+`UpdateOnboardedResources` updates the resources onboarded to dms.
 
 ##### `SystemSpecs`
 
@@ -128,68 +146,14 @@ The interface methods are explained below.
 
 This interface defines the methods to get the system specifications of the machine. These methods are explained below.
 
-##### `GetSpecInfo`
+##### `GetMachineResources`
 
-- signature: `GetSpecInfo() (types.SpecInfo, error)`
-- input: None
-- output: `types.SpecInfo`
+- signature: `GetMachineResources(context.Context) (MachineResources, error)`
+- input: `Context`
+- output: `MachineResources`
 - output (error): Error message
 
-`GetSpecInfo` returns the detailed specifications of the machine
-
-##### `GetGPUVendors`
-
-- signature: `GetGPUVendors() ([]types.GPUVendor, error)`
-- input: None
-- output: `[]types.GPUVendor`
-- output (error): Error message
-
-`GetGPUVendors` returns the vendors for GPU installed on the machine
-
-##### `GetGPUs`
-
-- signature: `GetGPUs(vendor ...types.GPUVendor) ([]types.GPU, error)`
-- input: `[]types.GPUVendor`
-- output: `[]types.GPU`
-- output (error): Error message
-
-`GetGPUs` returns the GPU data of the machine for the specified vendor(s). If no vendor is provided as input, it returns the information of all the GPUs.
-
-##### `GetTotalMemory`
-
-- signature: `GetTotalMemory() (uint64, error)`
-- input: None
-- output: `uint64`
-- output (error): Error message
-
-`GetTotalMemory` returns the total memory of the machine in MB.
-
-##### `GetTotalStorage`
-
-- signature: `GetTotalStorage() (uint64, error)`
-- input: None
-- output: `uint64`
-- output (error): Error message
-
-`GetTotalStorage` returns the total storage of the machine in MB.
-
-##### `GetCPUInfo`
-
-- signature: `GetCPUInfo() (types.CPUInfo, error)`
-- input: None
-- output: `types.CPUInfo`
-- output (error): Error message
-
-`GetCPUInfo` returns the CPU information of the machine.
-
-##### `GetProvisionedResources`
-
-- signature: `GetProvisionedResources() (types.Resource, error)`
-- input: None
-- output: `types.Resource`
-- output (error): Error message
-
-`GetProvisionedResources` returns the total resources of the machine.
+`GetMachineResources` returns the resources available on the machine.
 
 ### UsageMonitor Interface
 
@@ -212,17 +176,15 @@ This interface defines methods to monitor the system usage. The methods are expl
 
 - `types.FreeResources`: resources currently available for new jobs.
 
-- `types.RequiredResources`: resources required by the jobs running on the machine.
+- `types.ResourceAllocation`: resources allocated to a job.
+
+- `types.MachineResources`: resources available on the machine.
 
 - `types.GPUVendor`: GPU vendors available on the machine.
 
 - `types.GPU`: GPU details.
 
-- `types.GPUList`: A slice of `GPU`.
-
-- `types.CPUInfo`: CPU information of the machine.
-
-- `types.SpecInfo`: detailed specifications of the machine.
+- `types.GPUs`: A slice of `GPU`.
 
 - `types.CPU`: CPU details.
 
@@ -231,17 +193,6 @@ This interface defines methods to monitor the system usage. The methods are expl
 - `types.Disk`: Disk details.
 
 - `types.NetworkInfo`: Network details.
-
-- `types.ExecutionResource`: resources resources required to execute a task
-
-- `dms.resources.negativeValueError`: It is used to return a custom error when result of resource operation is negative.
-
-```go
-type negativeValueError struct {
-	resource string
-	r1       any
-	r2       any
-}
 ```
 
 ### Testing

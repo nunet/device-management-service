@@ -3,155 +3,314 @@ package resources
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// SystemSpecs is an interface that defines the methods to get the system specifications of the machine
-type SystemSpecs interface {
-	// GetSpecInfo returns the detailed specifications of the machine
-	GetSpecInfo() (types.SpecInfo, error)
-	// GetGPUVendors returns the GPU vendors of the machine
-	GetGPUVendors() ([]types.GPUVendor, error)
-	// GetGPUs returns the GPUs of the machine for the given vendors
-	// If no vendors are provided, it returns the information of all the GPUs
-	GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error)
-	// GetTotalMemory returns the total memory of the machine in MB
-	GetTotalMemory() (uint64, error)
-	// GetTotalStorage returns the total storage of the machine in MB
-	GetTotalStorage() (uint64, error)
-	// GetCPUInfo returns the CPU information of the machine
-	GetCPUInfo() (types.CPUInfo, error)
-	// GetProvisionedResources returns the total resources of the machine
-	GetProvisionedResources() (types.Resources, error)
-}
-
-// Manager is an interface that defines the methods to manage the resources of the machine
-type Manager interface {
-	// UpdateFreeResources calculates, updates db and returns the free resources of the machine in the database
-	UpdateFreeResources(context.Context) (types.FreeResources, error)
-	// GetOnboardedResources returns the onboarded resources of the machine
-	GetOnboardedResources(context.Context) (types.OnboardedResources, error)
-	// GetRequiredResources returns the resources required by the jobs running on the machine
-	GetRequiredResources(context.Context) (types.Resources, error)
-	// UpdateOnboardedResources updates the onboarded resources of the machine in the database
-	UpdateOnboardedResources(context.Context, types.OnboardedResources) error
-	// SystemSpecs returns the SystemSpecs instance
-	SystemSpecs() SystemSpecs
-	// UsageMonitor returns the UsageMonitor instance
-	UsageMonitor() UsageMonitor
-
-	// ... other methods
-}
-
-// DefaultManager implements the Manager interface
-// TODO: do we want to have an in-memory cache for the resources instead of querying the DB every time?
-// TODO: Add telemetry for the methods https://gitlab.com/nunet/device-management-service/-/issues/535
-type DefaultManager struct {
-	usageMonitor UsageMonitor
-	systemSpecs  SystemSpecs
-	repos        ManagerRepos
+// gpuMetadata holds the metadata of the GPU
+type gpuMetadata struct {
+	PCIAddress string
 }
 
 // ManagerRepos holds all the repositories needed for resource management
 type ManagerRepos struct {
 	FreeResources      repositories.FreeResources
 	OnboardedResources repositories.OnboardedResources
-	RequiredResources  repositories.RequiredResources
-	VirtualMachine     repositories.VirtualMachine
-	Services           repositories.Services
+	ResourceAllocation repositories.ResourceAllocation
+}
+
+// DefaultManager implements the ResourceManager interface
+// TODO: Add telemetry for the methods https://gitlab.com/nunet/device-management-service/-/issues/535
+type DefaultManager struct {
+	usageMonitor types.UsageMonitor
+	systemSpecs  types.SystemSpecs
+	repos        ManagerRepos
+	store        *store
+
+	// allocationLock is used to synchronize access to the allocation pool during allocation and deallocation
+	// it ensures that resource allocation and deallocation are atomic operations
+	allocationLock sync.RWMutex
 }
 
 // NewResourceManager returns a new defaultResourceManager instance
 func NewResourceManager(repos ManagerRepos) *DefaultManager {
-	sysSpecs := newSystemSpecs()
+	rmStore := newStore()
+	sysSpecs := newSystemSpecs(rmStore)
 	return &DefaultManager{
-		usageMonitor: newUsageMonitor(
-			sysSpecs,
-			repos.VirtualMachine,
-			repos.Services,
-			repos.RequiredResources,
-		),
-		systemSpecs: sysSpecs,
-		repos:       repos,
+		usageMonitor: newUsageMonitor(),
+		systemSpecs:  sysSpecs,
+		repos:        repos,
+		store:        rmStore,
 	}
 }
 
-var _ Manager = (*DefaultManager)(nil)
+var _ types.ResourceManager = (*DefaultManager)(nil)
 
-// UpdateFreeResources calculates, updates db and returns the free resources of the machine in the database
-func (d DefaultManager) UpdateFreeResources(ctx context.Context) (types.FreeResources, error) {
-	usage, err := d.usageMonitor.GetUsage(ctx)
+// AllocateResources allocates resources for a job
+func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types.ResourceAllocation) error {
+	d.allocationLock.Lock()
+	defer d.allocationLock.Unlock()
+
+	// Check if resources are already allocated for the job
+	var ok bool
+	d.store.withAllocationsRLock(func() {
+		_, ok = d.store.allocations[allocation.JobID]
+	})
+	if ok {
+		return fmt.Errorf("resources already allocated for job %s", allocation.JobID)
+	}
+
+	// Check if the resources are available
+	freeResources, err := d.GetFreeResources(ctx)
 	if err != nil {
-		return types.FreeResources{}, fmt.Errorf("getting usage: %w", err)
+		return fmt.Errorf("getting free resources: %w", err)
 	}
 
-	onboardedResources, err := d.GetOnboardedResources(ctx)
+	// Allocate the resources
+	if err := freeResources.Subtract(allocation.Resources); err != nil {
+		return fmt.Errorf("subtracting resources: %w", err)
+	}
+
+	// Potential issue: if the free resources are updated in the db, the allocations should be updated as well
+	// If the allocations update fails, the free resources should not be updated
+	// Since we have no concept of transactions in the current implementation of db, we cannot handle this scenario
+	// without writing a custom transaction manager
+	if err := d.updateFreeResources(ctx, freeResources); err != nil {
+		return fmt.Errorf("updating free resources in db: %w", err)
+	}
+	if err := d.storeAllocation(ctx, allocation); err != nil {
+		return fmt.Errorf("storing allocations in db: %w", err)
+	}
+
+	return nil
+}
+
+// DeallocateResources deallocates resources for a job
+func (d *DefaultManager) DeallocateResources(ctx context.Context, jobID string) error {
+	d.allocationLock.Lock()
+	defer d.allocationLock.Unlock()
+	// Check if resources are already deallocated for the job
+	var (
+		allocation types.ResourceAllocation
+		ok         bool
+	)
+	d.store.withAllocationsRLock(func() {
+		allocation, ok = d.store.allocations[jobID]
+	})
+	if !ok {
+		return fmt.Errorf("resources not allocated for job %s", jobID)
+	}
+
+	// Get the free resources in order to update them
+	freeResources, err := d.GetFreeResources(ctx)
 	if err != nil {
-		return types.FreeResources{}, fmt.Errorf("getting total resources: %w", err)
+		return fmt.Errorf("getting free resources: %w", err)
 	}
 
-	freeResources, err := onboardedResources.Subtract(usage)
+	// Deallocate the resources
+
+	// Potential issue: if the free resources are updated in the db, the allocations should be updated as well
+	// If the allocations update fails, the free resources should not be updated
+	// Since we have no concept of transactions in the current implementation of db, we cannot handle this scenario
+	// without writing a custom transaction manager
+	if err := freeResources.Add(allocation.Resources); err != nil {
+		return fmt.Errorf("adding resources: %w", err)
+	}
+	if err := d.updateFreeResources(ctx, freeResources); err != nil {
+		return fmt.Errorf("updating free resources in db: %w", err)
+	}
+	if err := d.deleteAllocation(ctx, jobID); err != nil {
+		return fmt.Errorf("deleting allocations from db: %w", err)
+	}
+
+	return nil
+}
+
+// GetFreeResources returns the free resources in the allocation pool
+func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResources, error) {
+	var (
+		freeResources types.FreeResources
+		ok            bool
+	)
+
+	d.store.withFreeRLock(func() {
+		if d.store.freeResources != nil {
+			freeResources = *d.store.freeResources
+			ok = true
+		}
+	})
+	if ok {
+		return freeResources, nil
+	}
+
+	freeResources, err := d.repos.FreeResources.Get(ctx)
 	if err != nil {
-		return types.FreeResources{}, fmt.Errorf("calculating free resources: %w", err)
+		return types.FreeResources{}, fmt.Errorf("failed to get free resources: %w", err)
 	}
 
-	if err := d.updateDBFreeResources(ctx, types.FreeResources{Resources: freeResources}); err != nil {
-		return types.FreeResources{}, fmt.Errorf("updating free resources in db: %w", err)
+	d.store.withFreeLock(func() {
+		d.store.freeResources = &freeResources
+	})
+
+	return freeResources, nil
+}
+
+// GetTotalAllocation returns the total allocations of the jobs requiring resources
+func (d *DefaultManager) GetTotalAllocation() (types.Resources, error) {
+	if len(d.store.allocations) == 0 {
+		if err := d.getAllocationsFromDB(context.Background()); err != nil {
+			return types.Resources{}, fmt.Errorf("getting allocations from db: %w", err)
+		}
 	}
 
-	return types.FreeResources{Resources: freeResources}, nil
+	var (
+		totalAllocation types.Resources
+		err             error
+	)
+	d.store.withAllocationsRLock(func() {
+		for _, allocation := range d.store.allocations {
+			err = totalAllocation.Add(allocation.Resources)
+			if err != nil {
+				break
+			}
+		}
+	})
+	return totalAllocation, err
 }
 
 // GetOnboardedResources returns the onboarded resources of the machine
-func (d DefaultManager) GetOnboardedResources(ctx context.Context) (types.OnboardedResources, error) {
+func (d *DefaultManager) GetOnboardedResources(ctx context.Context) (types.OnboardedResources, error) {
+	var (
+		onboardedResources types.OnboardedResources
+		ok                 bool
+	)
+	d.store.withOnboardedRLock(func() {
+		if d.store.onboardedResources != nil {
+			onboardedResources = *d.store.onboardedResources
+			ok = true
+		}
+	})
+	if ok {
+		return onboardedResources, nil
+	}
+
 	onboardedResources, err := d.repos.OnboardedResources.Get(ctx)
 	if err != nil {
 		return types.OnboardedResources{}, fmt.Errorf("failed to get onboarded resources: %w", err)
 	}
+
+	_ = d.store.withOnboardedLock(func() error {
+		d.store.onboardedResources = &onboardedResources
+		return nil
+	})
 	return onboardedResources, nil
 }
 
-// GetRequiredResources returns the resources required by the jobs running on the machine
-func (d DefaultManager) GetRequiredResources(ctx context.Context) (types.Resources, error) {
-	jobRequirements, err := d.repos.RequiredResources.FindAll(ctx, d.repos.RequiredResources.GetQuery())
-	if err != nil {
-		return types.Resources{}, fmt.Errorf("unable to get resource requirements from db - %v", err)
-	}
-
-	var totalRequiredResources types.Resources
-	for _, req := range jobRequirements {
-		totalRequiredResources = totalRequiredResources.Add(req.Resources)
-	}
-
-	return totalRequiredResources, nil
-}
-
 // UpdateOnboardedResources updates the onboarded resources of the machine in the database
-func (d DefaultManager) UpdateOnboardedResources(ctx context.Context, resources types.OnboardedResources) error {
-	_, err := d.repos.OnboardedResources.Save(ctx, resources)
-	if err != nil {
-		return fmt.Errorf("failed to update onboarded resources: %w", err)
+func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources types.OnboardedResources) error {
+	if err := d.store.withOnboardedLock(func() error {
+		// calculate the new free resources based on the allocations
+		totalAllocation, err := d.GetTotalAllocation()
+		if err != nil {
+			return fmt.Errorf("getting total allocations: %w", err)
+		}
+
+		if err := resources.Resources.Subtract(totalAllocation); err != nil {
+			return fmt.Errorf("couldn't subtract allocation: %w. Demand too high", err)
+		}
+
+		// Potential issue: if the onboarded resources are updated in the db, the free resources should be updated as well
+		// If the free resources update fails, the onboarded resources should not be updated
+		// Since we have no concept of transactions in the current implementation of db, we cannot handle this scenario
+		// without writing a custom transaction manager
+		_, err = d.repos.OnboardedResources.Save(ctx, resources)
+		if err != nil {
+			return fmt.Errorf("failed to update onboarded resources: %w", err)
+		}
+
+		d.store.onboardedResources = &resources
+		if err := d.updateFreeResources(ctx, types.FreeResources{
+			Resources: resources.Resources,
+		}); err != nil {
+			return fmt.Errorf("updating free resources in db: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		return err
 	}
+
 	return nil
 }
 
 // SystemSpecs returns the SystemSpecs instance
-func (d DefaultManager) SystemSpecs() SystemSpecs {
+func (d *DefaultManager) SystemSpecs() types.SystemSpecs {
 	return d.systemSpecs
 }
 
 // UsageMonitor returns the UsageMonitor instance
-func (d DefaultManager) UsageMonitor() UsageMonitor {
+func (d *DefaultManager) UsageMonitor() types.UsageMonitor {
 	return d.usageMonitor
 }
 
-// updateDBFreeResources updates the free resources in the database
-func (d DefaultManager) updateDBFreeResources(ctx context.Context, freeResources types.FreeResources) error {
+// updateFreeResources updates the free resources in the database and the store
+func (d *DefaultManager) updateFreeResources(ctx context.Context, freeResources types.FreeResources) error {
 	_, err := d.repos.FreeResources.Save(ctx, freeResources)
 	if err != nil {
 		return fmt.Errorf("updating free resources: %w", err)
 	}
+
+	// update the free resources in the store
+	d.store.withFreeLock(func() {
+		d.store.freeResources = &freeResources
+	})
+	return nil
+}
+
+// getAllocationsFromDB fetches the allocations from the database
+func (d *DefaultManager) getAllocationsFromDB(ctx context.Context) error {
+	allocations, err := d.repos.ResourceAllocation.FindAll(ctx, d.repos.ResourceAllocation.GetQuery())
+	if err != nil {
+		return fmt.Errorf("getting allocations from db: %w", err)
+	}
+	d.store.withAllocationsLock(func() {
+		for _, allocation := range allocations {
+			d.store.allocations[allocation.JobID] = allocation
+		}
+	})
+	return nil
+}
+
+// storeAllocation stores the allocations in the database and the store
+func (d *DefaultManager) storeAllocation(ctx context.Context, allocation types.ResourceAllocation) error {
+	_, err := d.repos.ResourceAllocation.Create(ctx, allocation)
+	if err != nil {
+		return fmt.Errorf("storing allocations in db: %w", err)
+	}
+
+	d.store.withAllocationsLock(func() {
+		d.store.allocations[allocation.JobID] = allocation
+	})
+	return nil
+}
+
+// deleteAllocation deletes the allocations from the database and the store
+func (d *DefaultManager) deleteAllocation(ctx context.Context, jobID string) error {
+	query := d.repos.ResourceAllocation.GetQuery()
+	query.Conditions = append(query.Conditions, repositories.EQ("JobID", jobID))
+	allocation, err := d.repos.ResourceAllocation.Find(context.Background(), query)
+	if err != nil {
+		return fmt.Errorf("finding allocations in db: %w", err)
+	}
+
+	if err := d.repos.ResourceAllocation.Delete(ctx, allocation.ID); err != nil {
+		return fmt.Errorf("deleting allocations from db: %w", err)
+	}
+
+	d.store.withAllocationsLock(func() {
+		delete(d.store.allocations, jobID)
+	})
 	return nil
 }

@@ -5,6 +5,8 @@ import (
 	"os"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/types"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
@@ -12,7 +14,6 @@ import (
 	"github.com/swaggo/gin-swagger/swaggerFiles"
 
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/telemetry/logger"
 )
@@ -21,7 +22,7 @@ type RESTServerConfig struct {
 	P2P        *libp2p.Libp2p
 	Onboarding *onboarding.Onboarding
 	Logger     *logger.Logger
-	Resource   resources.Manager
+	Resource   types.ResourceManager
 	MidW       []gin.HandlerFunc
 	Port       uint32
 	Addr       string

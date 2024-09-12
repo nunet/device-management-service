@@ -8,13 +8,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"gitlab.com/nunet/device-management-service/types"
+
 	"github.com/docker/cli/opts"
 	docker_types "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/types"
 )
 
 // ContainerOptions set parameters for running a Docker container (NVIDIA/AMD/Intel)
@@ -48,26 +49,24 @@ func newGPUCapacityCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
+			machineResources, err := resources.ManagerInstance.SystemSpecs().GetMachineResources()
 			if err != nil {
 				fmt.Println("Error detecting GPU vendors:", err)
 				os.Exit(1)
 			}
 
-			hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
-			hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
-
-			if !hasAMD && !hasNVIDIA {
-				fmt.Println("No AMD or NVIDIA GPU(s) detected...")
-				os.Exit(1)
+			if len(machineResources.GPUs) == 0 {
+				fmt.Println("No GPU detected...")
+				return
 			}
 
+			gpuVendorMap := getGPUVendorMap(machineResources.GPUs)
 			ctx := context.Background()
 
 			if cuda {
-				if !hasNVIDIA {
+				if len(gpuVendorMap[types.GPUVendorNvidia]) == 0 {
 					fmt.Println("No NVIDIA GPU(s) detected...")
-					os.Exit(1)
+					return
 				}
 
 				cudaOpts := ContainerOptions{
@@ -105,7 +104,7 @@ func newGPUCapacityCmd() *cobra.Command {
 			}
 
 			if rocm {
-				if !hasAMD {
+				if len(gpuVendorMap[types.GPUVendorAMDATI]) == 0 {
 					fmt.Println("No AMD GPU(s) detected...")
 					os.Exit(1)
 				}

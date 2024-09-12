@@ -56,9 +56,7 @@ func (s *TestSuite) newTestOnboardingHandler() *RESTServer {
 	resourceManager := resources.NewResourceManager(resources.ManagerRepos{
 		FreeResources:      repositories_gorm.NewFreeResources(s.db),
 		OnboardedResources: repositories_gorm.NewOnboardedResources(s.db),
-		RequiredResources:  repositories_gorm.NewRequiredResources(s.db),
-		VirtualMachine:     repositories_gorm.NewVirtualMachine(s.db),
-		Services:           repositories_gorm.NewServices(s.db),
+		ResourceAllocation: repositories_gorm.NewResourceAllocation(s.db),
 	})
 	oConfig := onboarding.Config{
 		Fs:              s.afs,
@@ -103,7 +101,7 @@ func (s *TestSuite) setupDB() error {
 	if err != nil {
 		return err
 	}
-	err = s.db.AutoMigrate(&types.RequiredResources{})
+	err = s.db.AutoMigrate(&types.ResourceAllocation{})
 	if err != nil {
 		return err
 	}

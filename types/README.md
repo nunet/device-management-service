@@ -472,7 +472,7 @@ type ExecutionRequest struct {
 	EngineSpec types.SpecConfig
 
 	// Resources for the execution
-	Resources executor.ExecutionResources
+	Resources types.Resources
 
 	// Input volumes for the execution
 	Inputs []storage.StorageVolume
@@ -1142,20 +1142,7 @@ type NetworkInfo struct {
 }
 ```
 
-- `types.ExecutionResource`: resources resources required to execute a task
-
-```go
-type ExecutionResources struct {
-	// CPU configuration
-	CPU types.CPU `json:"cpu,omitempty" description:"CPU configuration"`
-	// Memory configuration
-	Memory types.RAM `json:"memory,omitempty" description:"Memory configuration"`
-	// Disk configuration
-	Disk types.Disk `json:"disk,omitempty" description:"Disk configuration"`
-	// GPU configuration
-	GPUs []types.GPU `json:"gpus,omitempty" description:"GPU configuration"`
-}
-```
+- `types.Resource`: resources resources required to execute a task
 
 #### Spec_config
 

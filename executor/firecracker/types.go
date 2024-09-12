@@ -43,7 +43,7 @@ func (c EngineSpec) Validate() error {
 // DecodeSpec decodes a spec config into a firecracker engine spec
 // It converts the params into a firecracker EngineSpec struct and validates it
 func DecodeSpec(spec *types.SpecConfig) (EngineSpec, error) {
-	if !spec.IsType(types.ExecutorTypeFirecracker) {
+	if !spec.IsType(types.ExecutorTypeFirecracker.String()) {
 		return EngineSpec{}, fmt.Errorf(
 			"invalid firecracker engine type. expected %s, but received: %s",
 			types.ExecutorTypeFirecracker,
@@ -80,7 +80,7 @@ type EngineBuilder struct {
 // NewFirecrackerEngineBuilder function initializes a new FirecrackerEngineBuilder instance.
 // It sets the engine type to EngineFirecracker.String() and kernel image path as per the input argument.
 func NewFirecrackerEngineBuilder(rootFileSystem string) *EngineBuilder {
-	eb := types.NewSpecConfig(types.ExecutorTypeFirecracker)
+	eb := types.NewSpecConfig(types.ExecutorTypeFirecracker.String())
 	eb.WithParam(EngineKeyRootFileSystem, rootFileSystem)
 	return &EngineBuilder{eb: eb}
 }

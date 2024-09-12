@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"sync"
 
+	"gitlab.com/nunet/device-management-service/types"
+
 	"github.com/google/uuid"
 
 	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -25,7 +26,7 @@ type Node struct {
 	actor           actor.Actor
 	scheduler       *bt.Scheduler
 	network         network.Network
-	resourceManager resources.Manager
+	resourceManager types.ResourceManager
 	hostID          string
 	onboarder       *onboarding.Onboarding
 	executor        *firecracker.Executor
@@ -36,11 +37,10 @@ type Node struct {
 }
 
 // New creates a new node, attaches an actor to the node.
-func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager resources.Manager, scheduler *bt.Scheduler) (*Node, error) {
+func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager types.ResourceManager, scheduler *bt.Scheduler) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
 	}
-
 	if rootCap == nil {
 		return nil, errors.New("root capability context is nil")
 	}

@@ -45,7 +45,7 @@ func TestInitializeRoutes(t *testing.T) {
 	assert.NoError(t, err)
 	err = mockDB.AutoMigrate(&types.OnboardedResources{})
 	assert.NoError(t, err)
-	err = mockDB.AutoMigrate(&types.RequiredResources{})
+	err = mockDB.AutoMigrate(&types.ResourceAllocation{})
 	assert.NoError(t, err)
 	err = mockDB.AutoMigrate(&types.VirtualMachine{})
 	assert.NoError(t, err)
@@ -55,9 +55,7 @@ func TestInitializeRoutes(t *testing.T) {
 	resourceManager := resources.NewResourceManager(resources.ManagerRepos{
 		FreeResources:      repositories_gorm.NewFreeResources(mockDB),
 		OnboardedResources: repositories_gorm.NewOnboardedResources(mockDB),
-		RequiredResources:  repositories_gorm.NewRequiredResources(mockDB),
-		VirtualMachine:     repositories_gorm.NewVirtualMachine(mockDB),
-		Services:           repositories_gorm.NewServices(mockDB),
+		ResourceAllocation: repositories_gorm.NewResourceAllocation(mockDB),
 	})
 
 	oConf := onboarding.Config{

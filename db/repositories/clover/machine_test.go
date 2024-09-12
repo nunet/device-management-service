@@ -141,58 +141,6 @@ func TestMachine(t *testing.T) {
 	_ = machineRepo.Delete(context.Background(), machine2.ID)
 }
 
-// TestFreeResources is a test suite for the FreeResources.
-// It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
-// This test suite ensures that the repository functions for the FreeResources model behave as expected.
-func TestFreeResources(t *testing.T) {
-	// Setup your database connection for testing
-	db, path := setup()
-	defer teardown(db, path)
-
-	// Initialize the repository
-	freeResourcesRepo := NewFreeResources(db)
-
-	// Test Save method
-	createdFreeResources, err := freeResourcesRepo.Save(
-		context.Background(),
-		types.FreeResources{
-			Resources: types.Resources{
-				CPU: 2,
-			},
-		},
-	)
-	assert.NoError(t, err)
-
-	// Test Get method
-	retrievedFreeResources, err := freeResourcesRepo.Get(context.Background())
-	assert.NoError(t, err)
-	assert.Equal(t, createdFreeResources.CPU, retrievedFreeResources.CPU)
-
-	// Test Save (update) method
-	updatedFreeResources := retrievedFreeResources
-	updatedFreeResources.CPU = 4
-
-	_, err = freeResourcesRepo.Save(context.Background(), updatedFreeResources)
-	assert.NoError(t, err)
-	retrievedFreeResources, err = freeResourcesRepo.Get(context.Background())
-	assert.NoError(t, err)
-	assert.Equal(t, updatedFreeResources.CPU, retrievedFreeResources.CPU)
-
-	// Test History method
-	query := freeResourcesRepo.GetQuery()
-	query.Limit = 3
-	history, err := freeResourcesRepo.History(context.Background(), query)
-	assert.NoError(t, err)
-	assert.Len(t, history, 2)
-
-	// Test Clear method
-	err = freeResourcesRepo.Clear(context.Background())
-	assert.NoError(t, err)
-	history, err = freeResourcesRepo.History(context.Background(), query)
-	assert.NoError(t, err)
-	assert.Len(t, history, 0)
-}
-
 // TestAvailableResources is a test suite for the AvailableResources.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the AvailableResources model behave as expected.

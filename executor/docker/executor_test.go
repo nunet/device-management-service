@@ -40,9 +40,9 @@ func (s *ExecutorTestSuite) newJobRequest() *types.ExecutionRequest {
 		JobID:       "test_job",
 		ExecutionID: "test_execution",
 		EngineSpec:  engine,
-		Resources: &types.ExecutionResources{
-			CPU:    types.CPU{ClockSpeedHz: 1024, Cores: 1},
-			Memory: types.RAM{Size: 1024},
+		Resources: &types.Resources{
+			CPU: types.CPU{ClockSpeed: 1024, Cores: 1},
+			RAM: types.RAM{Size: 1024},
 		},
 	}
 }

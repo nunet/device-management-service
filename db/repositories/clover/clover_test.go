@@ -29,10 +29,9 @@ func setup() (*clover.DB, string) {
 	collections := []string{
 		"peer_info", "machine", "free_resources", "available_resources",
 		"services", "service_resource_requirements", "libp_2_p_info",
-		"machine_uuid", "connection", "elastic_token", "log_bin_auth",
-		"deployment_request_flat", "request_tracker", "virtual_machine",
-		"storage_volume", "onboarded_resources", "required_resources",
-		"machine_resources",
+		"machine_uuid", "connection", "elastic_token", "deployment_request_flat",
+		"request_tracker", "virtual_machine", "storage_volume", "onboarded_resources",
+		"machine_resources", "resource_allocation",
 	}
 
 	for _, collection := range collections {

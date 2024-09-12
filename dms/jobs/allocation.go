@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/dms/actor"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
@@ -26,7 +25,7 @@ type AllocationStatus string
 
 // Status holds the status of an allocation.
 type Status struct {
-	JobResources types.ExecutionResources
+	JobResources types.Resources
 	Status       AllocationStatus
 }
 
@@ -50,7 +49,7 @@ type Allocation struct {
 
 	Actor           *actor.BasicActor
 	executor        executor.Executor
-	resourceManager resources.Manager
+	resourceManager types.ResourceManager
 
 	actorRunning bool
 
@@ -58,7 +57,7 @@ type Allocation struct {
 }
 
 // NewAllocation creates a new allocation given the actor.
-func NewAllocation(actor *actor.BasicActor, details AllocationDetails, resourceManager resources.Manager) (*Allocation, error) {
+func NewAllocation(actor *actor.BasicActor, details AllocationDetails, resourceManager types.ResourceManager) (*Allocation, error) {
 	if resourceManager == nil {
 		return nil, errors.New("resource manager is nil")
 	}
@@ -94,14 +93,18 @@ func (a *Allocation) Run(ctx context.Context) error {
 		return nil
 	}
 
-	freeResources, err := a.resourceManager.UpdateFreeResources(ctx)
+	resourceAllocation := types.ResourceAllocation{JobID: a.Job.ID, Resources: a.Job.Resources}
+	err := a.resourceManager.AllocateResources(ctx, resourceAllocation)
 	if err != nil {
-		return fmt.Errorf("failed to get free resources: %w", err)
+		return fmt.Errorf("failed to allocate resources: %w", err)
 	}
 
-	if !availableResources(a.Job.Resources, freeResources) {
-		return fmt.Errorf("no available resources for job %s", a.Job.ID)
-	}
+	defer func() {
+		if a.status != running {
+			// If not running, ensure deallocation of resources
+			err = a.resourceManager.DeallocateResources(ctx, a.Job.ID)
+		}
+	}()
 
 	// if executor is nil create it
 	if a.executor == nil {
@@ -125,12 +128,7 @@ func (a *Allocation) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	if _, err = a.resourceManager.UpdateFreeResources(ctx); err != nil {
-		return fmt.Errorf("failed to update resources after running allocation's executor: %w", err)
-	}
-
 	a.status = running
-
 	return nil
 }
 
@@ -158,8 +156,8 @@ func (a *Allocation) Stop(ctx context.Context) error {
 
 	a.status = stopped
 
-	if _, err := a.resourceManager.UpdateFreeResources(ctx); err != nil {
-		return fmt.Errorf("failed to update resources after stoping allocation's executor: %w", err)
+	if err := a.resourceManager.DeallocateResources(ctx, a.Job.ID); err != nil {
+		return fmt.Errorf("failed to deallocate resources: %w", err)
 	}
 
 	return nil
@@ -193,13 +191,13 @@ func (a *Allocation) Start() error {
 }
 
 func (a *Allocation) createExecutor(ctx context.Context, conf types.SpecConfig) error {
-	if conf.Type == types.ExecutorTypeFirecracker {
+	if conf.Type == string(types.ExecutorTypeFirecracker) {
 		executor, err := firecracker.NewExecutor(ctx, a.executionID)
 		if err != nil {
 			return fmt.Errorf("firecracker executor: %w", err)
 		}
 		a.executor = executor
-	} else if conf.Type == types.ExecutorTypeDocker {
+	} else if conf.Type == string(types.ExecutorTypeDocker) {
 		executor, err := docker.NewExecutor(ctx, a.executionID)
 		if err != nil {
 			return fmt.Errorf("docker executor: %w", err)
@@ -208,9 +206,4 @@ func (a *Allocation) createExecutor(ctx context.Context, conf types.SpecConfig) 
 	}
 
 	return nil
-}
-
-// TODO: ExecutionResources and FreeResources should be compatible
-func availableResources(jobResources types.ExecutionResources, fr types.FreeResources) bool {
-	return fr.RAM >= uint64(jobResources.Memory.Size) && fr.Disk >= jobResources.Disk.Size && fr.CPU > float64(jobResources.CPU.Cores)
 }
