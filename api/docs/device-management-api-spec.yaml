@@ -1,8 +1,0 @@
-asyncapi: 2.4.0
-info:
-  title: Device Management API
-  version: 0.1.0
-  description: Device Management API is in charge of all the communication between NuNet platform and blokchains that are enabled. The API itself is blockchain agnostic and defines only the functionality from the platfrom perspective. Blockchain specific implementations of this API are developed separately for each blockchain and hosted appropriately.
-channels: {}
-
-components: {}

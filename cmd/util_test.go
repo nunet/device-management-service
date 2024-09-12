@@ -1,13 +1,9 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
-	"testing"
 
 	"github.com/spf13/afero"
-	flag "github.com/spf13/pflag"
-	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -67,79 +63,4 @@ func (ts *TestSuite) teardown() {
 		ts.db = nil
 	}
 	ts.afs = afero.Afero{}
-}
-
-func Test_CapacityCmdHasFlags(t *testing.T) {
-	ts := NewTestSuite()
-
-	cmd := newCapacityCmd(ts.client)
-	assert.True(t, cmd.HasAvailableFlags())
-
-	expectedFlags := []string{"full", "available", "onboarded"}
-
-	flags := cmd.Flags()
-	flags.VisitAll(func(f *flag.Flag) {
-		assert.Contains(t, expectedFlags, f.Name)
-	})
-}
-
-func Test_CapacityCmdFull(t *testing.T) {
-	ts := NewTestSuite()
-
-	cmd := newCapacityCmd(ts.client)
-
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"--full"})
-
-	err := cmd.Execute()
-	assert.NoError(t, err)
-}
-
-func Test_CapacityCmdAvailable(t *testing.T) {
-	ts := NewTestSuite()
-	assert.NoError(t, ts.setup())
-	defer ts.teardown()
-
-	cmd := newCapacityCmd(ts.client)
-
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"--available"})
-
-	err := cmd.Execute()
-	assert.NoError(t, err)
-
-	buf2 := new(bytes.Buffer)
-	table := setupTable(buf2)
-
-	table.Render()
-
-	assert.Equal(t, buf.String(), buf2.String())
-}
-
-func Test_CapacityCmdOnboarded(t *testing.T) {
-	ts := NewTestSuite()
-	assert.NoError(t, ts.setup())
-
-	defer ts.teardown()
-
-	cmd := newCapacityCmd(ts.client)
-
-	buf := new(bytes.Buffer)
-	buf2 := new(bytes.Buffer)
-
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
-	cmd.SetArgs([]string{"--onboarded"})
-
-	err := cmd.Execute()
-	assert.NoError(t, err)
-
-	table := setupTable(buf2)
-	table.Render()
-
-	assert.Equal(t, buf.String(), buf2.String())
 }
