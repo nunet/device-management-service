@@ -29,12 +29,12 @@ import (
 //	@Success		200	{object}	types.Provisioned
 //	@Router			/onboarding/provisioned [get]
 func (rs *RESTServer) ProvisionedCapacity(c *gin.Context) {
-	provisionedResources, err := rs.config.Resource.SystemSpecs().GetProvisionedResources()
+	machineResources, err := rs.config.Resource.SystemSpecs().GetMachineResources()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, provisionedResources)
+	c.JSON(http.StatusOK, machineResources)
 }
 
 // CreatePaymentAddress      godoc

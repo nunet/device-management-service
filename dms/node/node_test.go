@@ -4,17 +4,19 @@ import (
 	"context"
 	"testing"
 
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"go.uber.org/mock/gomock"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/dms/actor"
-	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
@@ -27,12 +29,12 @@ func TestNew(t *testing.T) {
 
 	rootCap := createRootCapabilityContext(t)
 	cases := map[string]struct {
-		rootCap         ucan.CapabilityContext
-		hostID          string
-		net             network.Network
-		resourceManager resources.Manager
-		scheduler       *bt.Scheduler
-		onboarder       *onboarding.Onboarding
+		rootCap             ucan.CapabilityContext
+		hostID              string
+		net                 network.Network
+		mockResourceManager func(ctrl *gomock.Controller) types.ResourceManager
+		scheduler           *bt.Scheduler
+		onboarder           *onboarding.Onboarding
 
 		expErr string
 	}{
@@ -61,22 +63,23 @@ func TestNew(t *testing.T) {
 			hostID:    "123",
 			net:       createNetwork(t, nil, "14950"),
 			expErr:    "resource manager is nil",
+			mockResourceManager: func(_ *gomock.Controller) types.ResourceManager {
+				return nil
+			},
 		},
 		"no scheduler": {
-			onboarder:       &onboarding.Onboarding{},
-			rootCap:         rootCap,
-			hostID:          "123",
-			net:             createNetwork(t, nil, "14950"),
-			resourceManager: &resourceManagerMock{},
-			expErr:          "scheduler is nil",
+			onboarder: &onboarding.Onboarding{},
+			rootCap:   rootCap,
+			hostID:    "123",
+			net:       createNetwork(t, nil, "14950"),
+			expErr:    "scheduler is nil",
 		},
 		"success": {
-			onboarder:       &onboarding.Onboarding{},
-			rootCap:         rootCap,
-			hostID:          "123",
-			net:             createNetwork(t, nil, "14950"),
-			resourceManager: &resourceManagerMock{},
-			scheduler:       bt.NewScheduler(1),
+			onboarder: &onboarding.Onboarding{},
+			rootCap:   rootCap,
+			hostID:    "123",
+			net:       createNetwork(t, nil, "14950"),
+			scheduler: bt.NewScheduler(1),
 		},
 	}
 
@@ -84,7 +87,16 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			act, err := New(context.TODO(), tt.onboarder, tt.rootCap, tt.hostID, tt.net, tt.resourceManager, tt.scheduler)
+
+			ctrl := gomock.NewController(t)
+			var resourceManager types.ResourceManager
+			if tt.mockResourceManager == nil {
+				resourceManager = NewMockResourceManager(ctrl)
+			} else {
+				resourceManager = tt.mockResourceManager(ctrl)
+			}
+
+			act, err := New(context.TODO(), tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -100,7 +112,11 @@ func TestNodeAllocationMessaging(t *testing.T) {
 	rootCap := createRootCapabilityContext(t)
 	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
 
-	node1, err := New(context.TODO(), &onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, &resourceManagerMock{}, bt.NewScheduler(1))
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+	resourceManager := NewMockResourceManager(ctrl)
+
+	node1, err := New(context.TODO(), &onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1))
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)
 	err = node1.Start()
@@ -176,35 +192,4 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 
 	libp2pInstance, _ := net.(*libp2p.Libp2p)
 	return libp2pInstance
-}
-
-type resourceManagerMock struct {
-	freeRes            types.FreeResources
-	onboardedResources types.OnboardedResources
-
-	err error
-}
-
-func (m *resourceManagerMock) UpdateFreeResources(context.Context) (types.FreeResources, error) {
-	return m.freeRes, m.err
-}
-
-func (m *resourceManagerMock) UpdateOnboardedResources(context.Context, types.OnboardedResources) error {
-	return m.err
-}
-
-func (m *resourceManagerMock) GetOnboardedResources(context.Context) (types.OnboardedResources, error) {
-	return m.onboardedResources, m.err
-}
-
-func (m *resourceManagerMock) GetRequiredResources(context.Context) (types.Resources, error) {
-	return m.freeRes.Resources, m.err
-}
-
-func (m *resourceManagerMock) SystemSpecs() resources.SystemSpecs {
-	return nil
-}
-
-func (m *resourceManagerMock) UsageMonitor() resources.UsageMonitor {
-	return nil
 }

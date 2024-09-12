@@ -33,28 +33,28 @@ func NewFreeResources(db *gorm.DB) repositories.FreeResources {
 	}
 }
 
-// OnboardedResourcesRepositoryGORM is a GORM implementation of the OnboardedResources interface.
-type OnboardedResourcesRepositoryGORM struct {
+// OnboardedResourcesGORM is a GORM implementation of the OnboardedResources interface.
+type OnboardedResourcesGORM struct {
 	repositories.GenericEntityRepository[types.OnboardedResources]
 }
 
 // NewOnboardedResources creates a new instance of OnboardedResourcesGORM.
 // It initializes and returns a GORM-based repository for OnboardedResources entity.
 func NewOnboardedResources(db *gorm.DB) repositories.OnboardedResources {
-	return &OnboardedResourcesRepositoryGORM{
+	return &OnboardedResourcesGORM{
 		NewGenericEntityRepository[types.OnboardedResources](db),
 	}
 }
 
-// RequiredResourcesRepositoryGORM is a GORM implementation of the RequiredResources interface.
-type RequiredResourcesRepositoryGORM struct {
-	repositories.GenericRepository[types.RequiredResources]
+// ResourceAllocationGORM is a GORM implementation of the ResourceAllocation interface.
+type ResourceAllocationGORM struct {
+	repositories.GenericRepository[types.ResourceAllocation]
 }
 
-// NewRequiredResources creates a new instance of RequiredResourcesGORM.
-// It initializes and returns a GORM-based repository for RequiredResources entities.
-func NewRequiredResources(db *gorm.DB) repositories.RequiredResources {
-	return &RequiredResourcesRepositoryGORM{
-		NewGenericRepository[types.RequiredResources](db),
+// NewResourceAllocation creates a new instance of ResourceAllocationGORM.
+// It initializes and returns a GORM-based repository for ResourceAllocation entities.
+func NewResourceAllocation(db *gorm.DB) repositories.ResourceAllocation {
+	return &ResourceAllocationGORM{
+		NewGenericRepository[types.ResourceAllocation](db),
 	}
 }

@@ -29,17 +29,6 @@ func NewMachine(db *clover.DB) repositories.Machine {
 	return &MachineClover{NewGenericRepository[types.Machine](db)}
 }
 
-// FreeResourcesClover is a Clover implementation of the FreeResources interface.
-type FreeResourcesClover struct {
-	repositories.GenericEntityRepository[types.FreeResources]
-}
-
-// NewFreeResources creates a new instance of FreeResourcesClover.
-// It initializes and returns a Clover-based repository for FreeResources entity.
-func NewFreeResources(db *clover.DB) repositories.FreeResources {
-	return &FreeResourcesClover{NewGenericEntityRepository[types.FreeResources](db)}
-}
-
 // AvailableResourcesClover is a Clover implementation of the AvailableResources interface.
 type AvailableResourcesClover struct {
 	repositories.GenericEntityRepository[types.AvailableResources]

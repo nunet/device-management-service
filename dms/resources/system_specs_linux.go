@@ -9,160 +9,66 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/nunet/device-management-service/types"
-
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/jaypipes/ghw"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-type gpuMetadata struct {
-	PCIAddress string
-}
-
 // linuxSystemSpecs implements the SystemSpecs interface for Linux systems
-type linuxSystemSpecs struct{}
+type linuxSystemSpecs struct {
+	store *store
+}
 
 // newSystemSpecs returns a new instance of linuxSystemSpecs
-func newSystemSpecs() *linuxSystemSpecs {
-	return &linuxSystemSpecs{}
+func newSystemSpecs(store *store) *linuxSystemSpecs {
+	return &linuxSystemSpecs{
+		store: store,
+	}
 }
 
-var _ SystemSpecs = (*linuxSystemSpecs)(nil)
+var _ types.SystemSpecs = (*linuxSystemSpecs)(nil)
 
-// GetSpecInfo returns the detailed specifications of the system
-// TODO: implement the method
-// https://gitlab.com/nunet/device-management-service/-/issues/537
-func (l linuxSystemSpecs) GetSpecInfo() (types.SpecInfo, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-// GetGPUVendors returns the GPU vendors for the system
-func (l linuxSystemSpecs) GetGPUVendors() ([]types.GPUVendor, error) {
-	var vendors []types.GPUVendor
-	gpu, err := ghw.GPU()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, card := range gpu.GraphicsCards {
-		if card.DeviceInfo != nil {
-			class := card.DeviceInfo.Class
-			if class != nil {
-				className := strings.ToLower(class.Name)
-				if strings.Contains(className, "display controller") ||
-					strings.Contains(className, "vga compatible controller") ||
-					strings.Contains(className, "3d controller") ||
-					strings.Contains(className, "2d controller") {
-					vendor := card.DeviceInfo.Vendor
-					if vendor != nil {
-						switch {
-						case strings.Contains(strings.ToLower(vendor.Name), "nvidia"):
-							vendors = append(vendors, types.GPUVendorNvidia)
-						case strings.Contains(strings.ToLower(vendor.Name), "amd"):
-							vendors = append(vendors, types.GPUVendorAMDATI)
-						case strings.Contains(strings.ToLower(vendor.Name), "intel"):
-							vendors = append(vendors, types.GPUVendorIntel)
-						default:
-							vendors = append(vendors, types.GPUVendorUnknown)
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return vendors, nil
-}
-
-// GetGPUs returns the GPUs based on the specified vendors. If no vendors are provided, it returns the information of all the GPUs
-func (l linuxSystemSpecs) GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error) {
-	var gpus []types.GPU
-	gpuMetadataMap, err := l.fetchGPUMetadata()
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch GPU metadata: %w", err)
-	}
-
-	// Helper function to fetch and append GPU info
-	fetchAndAppendGPUs := func(fetchFunc func(metadata []gpuMetadata) ([]types.GPU, error), vendor types.GPUVendor) {
-		vendorMetadata, ok := gpuMetadataMap[vendor]
-		if !ok {
-			zlog.Sugar().Infof("No %s GPUs found", vendor)
-			return
-		}
-
-		gpuList, err := fetchFunc(vendorMetadata)
-		if err != nil {
-			zlog.Sugar().Warnf("Failed to retrieve %s GPU information: %v", vendor, err)
-			return
-		}
-		gpus = append(gpus, gpuList...)
-	}
-
-	if len(vendors) == 0 {
-		// No specific vendor requested, fetch all types of GPUs
-		fetchAndAppendGPUs(l.getIntelGPUInfo, types.GPUVendorIntel)
-		fetchAndAppendGPUs(l.getNVIDIAGPUInfo, types.GPUVendorNvidia)
-		fetchAndAppendGPUs(l.getAMDGPUInfo, types.GPUVendorAMDATI)
-	} else {
-		// Fetch GPUs for the specified vendor only
-		for _, vendor := range vendors {
-			switch vendor {
-			case types.GPUVendorIntel:
-				fetchAndAppendGPUs(l.getIntelGPUInfo, vendor)
-			case types.GPUVendorNvidia:
-				fetchAndAppendGPUs(l.getNVIDIAGPUInfo, vendor)
-			case types.GPUVendorAMDATI:
-				fetchAndAppendGPUs(l.getAMDGPUInfo, vendor)
-			default:
-				return nil, fmt.Errorf("unsupported GPU vendor: %v", vendor)
-			}
-		}
-	}
-
-	// Assign index to GPUs and return
-	// Note: The index is internal to dms and is not the same as the device index
-	return assignIndexToGPUs(gpus), nil
-}
-
-// GetTotalMemory returns the total memory available on the system
-func (l linuxSystemSpecs) GetTotalMemory() (uint64, error) {
+// getRAM returns the types.RAM information for the system
+func getRAM() (types.RAM, error) {
 	v, err := mem.VirtualMemory()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get total memory: %s", err)
+		return types.RAM{}, fmt.Errorf("failed to get total memory: %s", err)
 	}
 
-	ramInMB := v.Total / 1024 / 1024
-	return ramInMB, nil
+	return types.RAM{
+		Size: v.Total,
+	}, nil
 }
 
-// GetTotalStorage returns the total storage available on the system
-func (l linuxSystemSpecs) GetTotalStorage() (uint64, error) {
+// getDisk returns the types.Disk for the system
+func getDisk() (types.Disk, error) {
 	partitions, err := disk.PartitionsWithContext(context.Background(), false)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get partitions: %w", err)
+		return types.Disk{}, fmt.Errorf("failed to get partitions: %w", err)
 	}
 
 	var totalStorage uint64
 	for p := range partitions {
 		usage, err := disk.UsageWithContext(context.Background(), partitions[p].Mountpoint)
 		if err != nil {
-			return 0, fmt.Errorf("failed to get disk usage: %w", err)
+			return types.Disk{}, fmt.Errorf("failed to get disk usage: %w", err)
 		}
 		totalStorage += usage.Total
 	}
 
-	return totalStorage, nil
+	return types.Disk{
+		Size: totalStorage,
+	}, nil
 }
 
-// GetCPUInfo returns the CPU information for the system
-func (l linuxSystemSpecs) GetCPUInfo() (types.CPUInfo, error) {
+// GetCPU returns the CPU information for the system
+func getCPU() (types.CPU, error) {
 	cores, err := cpu.Info()
 	if err != nil {
-		return types.CPUInfo{}, fmt.Errorf("failed to get CPU info: %s", err)
+		return types.CPU{}, fmt.Errorf("failed to get CPU info: %s", err)
 	}
 
 	var totalCompute float64
@@ -170,45 +76,25 @@ func (l linuxSystemSpecs) GetCPUInfo() (types.CPUInfo, error) {
 		totalCompute += cores[i].Mhz
 	}
 
-	return types.CPUInfo{
+	return types.CPU{
 		Compute:    totalCompute,
-		NumCores:   uint64(len(cores)),
-		MHzPerCore: cores[0].Mhz,
+		Cores:      float32(len(cores)),
+		ClockSpeed: cores[0].Mhz * 1000000,
 	}, nil
 }
 
-// GetProvisionedResources returns the total resources available on the system
-func (l linuxSystemSpecs) GetProvisionedResources() (types.Resources, error) {
-	cpuInfo, err := l.GetCPUInfo()
-	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get CPU info: %s", err)
+// TODO: move the following functions to the `gpu` sub-package
+// https://gitlab.com/nunet/device-management-service/-/issues/546
+// assignIndexToGPUs assigns an index to each GPU in the list starting from 0
+func assignIndexToGPUs(gpus []types.GPU) []types.GPU {
+	for i := range gpus {
+		gpus[i].Index = i
 	}
-
-	totalMemory, err := l.GetTotalMemory()
-	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get total memory: %s", err)
-	}
-
-	gpus, err := l.GetGPUs()
-	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get GPU info: %s", err)
-	}
-
-	totalDisk, err := l.GetTotalStorage()
-	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get total storage: %s", err)
-	}
-
-	return types.Resources{
-		CPU:  cpuInfo.Compute,
-		RAM:  totalMemory,
-		Disk: totalDisk,
-		GPU:  gpus,
-	}, nil
+	return gpus
 }
 
 // getAMDGPUInfo returns the GPU information for AMD GPUs
-func (l linuxSystemSpecs) getAMDGPUInfo(metadata []gpuMetadata) ([]types.GPU, error) {
+func getAMDGPUInfo(metadata []gpuMetadata) ([]types.GPU, error) {
 	cmd := exec.Command("rocm-smi", "--showid", "--showproductname", "--showmeminfo", "vram")
 
 	output, err := cmd.CombinedOutput()
@@ -268,7 +154,7 @@ func (l linuxSystemSpecs) getAMDGPUInfo(metadata []gpuMetadata) ([]types.GPU, er
 }
 
 // getNVIDIAGPUInfo returns the GPU information for NVIDIA GPUs
-func (l linuxSystemSpecs) getNVIDIAGPUInfo(metadata []gpuMetadata) ([]types.GPU, error) {
+func getNVIDIAGPUInfo(metadata []gpuMetadata) ([]types.GPU, error) {
 	// Initialize NVML
 	ret := nvml.Init()
 	if !errors.Is(ret, nvml.SUCCESS) {
@@ -327,7 +213,7 @@ func (l linuxSystemSpecs) getNVIDIAGPUInfo(metadata []gpuMetadata) ([]types.GPU,
 }
 
 // getIntelGPUInfo returns the GPU information for Intel GPUs
-func (l linuxSystemSpecs) getIntelGPUInfo(metadata []gpuMetadata) ([]types.GPU, error) {
+func getIntelGPUInfo(metadata []gpuMetadata) ([]types.GPU, error) {
 	// Determine the number of discrete Intel GPUs
 	cmd := exec.Command("xpu-smi", "health", "-l")
 	output, err := cmd.CombinedOutput()
@@ -420,34 +306,139 @@ func (l linuxSystemSpecs) getIntelGPUInfo(metadata []gpuMetadata) ([]types.GPU, 
 	return gpuInfos, nil
 }
 
+// getGPUs returns the GPUs based on the specified vendors. If no vendors are provided, it returns the information of all the GPUs
+func getGPUs(metadata map[types.GPUVendor][]gpuMetadata, vendors ...types.GPUVendor) ([]types.GPU, error) {
+	var gpus []types.GPU
+
+	// Helper function to fetch and append GPU info
+	fetchAndAppendGPUs := func(fetchFunc func(metadata []gpuMetadata) ([]types.GPU, error), vendor types.GPUVendor) {
+		vendorMetadata, ok := metadata[vendor]
+		if !ok {
+			zlog.Sugar().Infof("No %s GPUs found", vendor)
+			return
+		}
+
+		gpuList, err := fetchFunc(vendorMetadata)
+		if err != nil {
+			zlog.Sugar().Warnf("Failed to retrieve %s GPU information: %v", vendor, err)
+			return
+		}
+		gpus = append(gpus, gpuList...)
+	}
+
+	if len(vendors) == 0 {
+		// No specific vendor requested, fetch all types of GPUs
+		fetchAndAppendGPUs(getIntelGPUInfo, types.GPUVendorIntel)
+		fetchAndAppendGPUs(getNVIDIAGPUInfo, types.GPUVendorNvidia)
+		fetchAndAppendGPUs(getAMDGPUInfo, types.GPUVendorAMDATI)
+	} else {
+		// Fetch GPUs for the specified vendor only
+		for _, vendor := range vendors {
+			switch vendor {
+			case types.GPUVendorIntel:
+				fetchAndAppendGPUs(getIntelGPUInfo, vendor)
+			case types.GPUVendorNvidia:
+				fetchAndAppendGPUs(getNVIDIAGPUInfo, vendor)
+			case types.GPUVendorAMDATI:
+				fetchAndAppendGPUs(getAMDGPUInfo, vendor)
+			default:
+				return nil, fmt.Errorf("unsupported GPU vendor: %v", vendor)
+			}
+		}
+	}
+
+	// Assign index to GPUs and return
+	// Note: The index is internal to dms and is not the same as the device index
+	return assignIndexToGPUs(gpus), nil
+}
+
 // fetchGPUMetadata fetches the GPU metadata for the system using `ghw.GPU()`
 // TODO: Use one single library to fetch GPU information or improve the match criteria
 // https://gitlab.com/nunet/device-management-service/-/issues/548
 // TODO: write tests by mocking the gpu snapshot
 // https://gitlab.com/nunet/device-management-service/-/issues/534
-func (l linuxSystemSpecs) fetchGPUMetadata() (map[types.GPUVendor][]gpuMetadata, error) {
+func (l *linuxSystemSpecs) fetchGPUMetadata() (map[types.GPUVendor][]gpuMetadata, error) {
+	metadata := make(map[types.GPUVendor][]gpuMetadata)
+	l.store.withGpuMetadataLock(func() {
+		if l.store.gpuMetadata != nil {
+			metadata = l.store.gpuMetadata
+			return
+		}
+	})
+	if len(metadata) > 0 {
+		return metadata, nil
+	}
+
 	gpuInfo, err := ghw.GPU()
 	if err != nil {
 		return nil, err
 	}
 
-	gpuDetails := make(map[types.GPUVendor][]gpuMetadata)
 	for _, card := range gpuInfo.GraphicsCards {
 		if card.DeviceInfo == nil {
 			continue
 		}
 		pciAddress := card.Address
 		vendor := types.ParseGPUVendor(card.DeviceInfo.Vendor.Name)
-		gpuDetails[vendor] = append(gpuDetails[vendor], gpuMetadata{PCIAddress: pciAddress})
+		metadata[vendor] = append(metadata[vendor], gpuMetadata{PCIAddress: pciAddress})
 	}
-
-	return gpuDetails, nil
+	l.store.withGpuMetadataLock(func() {
+		l.store.gpuMetadata = metadata
+	})
+	return metadata, nil
 }
 
-// assignIndexToGPUs assigns an index to each GPU in the list starting from 0
-func assignIndexToGPUs(gpus []types.GPU) []types.GPU {
-	for i := range gpus {
-		gpus[i].Index = i
+func (l *linuxSystemSpecs) GetMachineResources() (types.MachineResources, error) {
+	var (
+		ok               bool
+		machineResources types.MachineResources
+	)
+	l.store.withMachineResourcesRLock(func() {
+		if l.store.machineResources != nil {
+			machineResources = *l.store.machineResources
+			ok = true
+		}
+	})
+	if ok {
+		return machineResources, nil
 	}
-	return gpus
+
+	metadata, err := l.fetchGPUMetadata()
+	if err != nil {
+		return types.MachineResources{}, fmt.Errorf("failed to fetch GPU metadata: %s", err)
+	}
+
+	cpuDetails, err := getCPU()
+	if err != nil {
+		return types.MachineResources{}, fmt.Errorf("failed to get CPU: %s", err)
+	}
+
+	ram, err := getRAM()
+	if err != nil {
+		return types.MachineResources{}, fmt.Errorf("failed to get RAM: %s", err)
+	}
+
+	gpus, err := getGPUs(metadata)
+	if err != nil {
+		return types.MachineResources{}, fmt.Errorf("failed to get GPUs: %s", err)
+	}
+
+	diskDetails, err := getDisk()
+	if err != nil {
+		return types.MachineResources{}, fmt.Errorf("failed to get DISK: %s", err)
+	}
+
+	machineResources = types.MachineResources{
+		Resources: types.Resources{
+			CPU:  cpuDetails,
+			RAM:  ram,
+			Disk: diskDetails,
+			GPUs: gpus,
+		},
+	}
+	l.store.withMachineResourcesLock(func() {
+		l.store.machineResources = &machineResources
+	})
+	// TODO: do we wanna store it in the db?
+	return machineResources, nil
 }

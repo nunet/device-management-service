@@ -56,11 +56,11 @@ func newCapacityCmd(client *utils.HTTPClient) *cobra.Command {
 			}
 
 			if available {
-				free := &types.Resources{
-					RAM:  config.TotalResources.RAM - config.OnboardedResources.RAM,
-					Disk: config.TotalResources.Disk - config.OnboardedResources.Disk,
+				resources := config.TotalResources
+				if err := resources.Subtract(config.OnboardedResources.Resources); err != nil {
+					return fmt.Errorf("no available resources: %w", err)
 				}
-				table.Append(formatCapacityData("Available", free))
+				table.Append(formatCapacityData("Available", &resources.Resources))
 			}
 			return nil
 		},
@@ -75,8 +75,8 @@ func newCapacityCmd(client *utils.HTTPClient) *cobra.Command {
 func formatCapacityData(resourceType string, resources *types.Resources) []string {
 	return []string{
 		resourceType,
-		fmt.Sprintf("%d", resources.RAM),
-		fmt.Sprintf("%f", resources.CPU),
-		fmt.Sprintf("%d", resources.NumCores),
+		fmt.Sprintf("%d", resources.RAM.Size),
+		fmt.Sprintf("%f", resources.CPU.Compute),
+		fmt.Sprintf("%.2f", resources.CPU.Cores),
 	}
 }

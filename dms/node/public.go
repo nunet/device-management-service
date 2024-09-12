@@ -36,12 +36,12 @@ func (n *Node) publicStatusBehavior(msg actor.Envelope) {
 	defer msg.Discard()
 
 	var resp PublicStatusResponse
-	rc, err := n.resourceManager.SystemSpecs().GetProvisionedResources()
+	machineResources, err := n.resourceManager.SystemSpecs().GetMachineResources()
 	if err != nil {
 		resp.Status = "ERROR"
 	} else {
 		resp.Status = "OK"
-		resp.Resources = rc
+		resp.Resources = machineResources.Resources
 	}
 
 	n.sendReply(msg, resp)

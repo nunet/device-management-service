@@ -81,9 +81,7 @@ func Run(ksPassphrase string) error {
 	repos := resources.ManagerRepos{
 		FreeResources:      gdb.NewFreeResources(db),
 		OnboardedResources: gdb.NewOnboardedResources(db),
-		RequiredResources:  gdb.NewRequiredResources(db),
-		VirtualMachine:     gdb.NewVirtualMachine(db),
-		Services:           gdb.NewServices(db),
+		ResourceAllocation: gdb.NewResourceAllocation(db),
 	}
 	resourceManager := resources.NewResourceManager(repos)
 

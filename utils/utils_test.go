@@ -130,9 +130,9 @@ func TestIsExecutor(t *testing.T) {
 }
 
 func TestIsExecutorType(t *testing.T) {
-	var executorType1 types.ExecutorType = types.ExecutorTypeDocker
-	var executorType2 types.ExecutorType = types.ExecutorTypeFirecracker
-	var executorType3 types.ExecutorType = types.ExecutorTypeWasm
+	executorType1 := types.ExecutorTypeDocker
+	executorType2 := types.ExecutorTypeFirecracker
+	executorType3 := types.ExecutorTypeWasm
 
 	// positive assertions
 	assert.True(t, IsExecutorType(executorType1))
@@ -146,16 +146,16 @@ func TestIsExecutorType(t *testing.T) {
 
 func TestIsJobTypes(t *testing.T) {
 	var jobType1 types.JobTypes
-	jobType1 = append(jobType1, types.BATCH)
-	jobType1 = append(jobType1, types.SINGLERUN)
+	jobType1 = append(jobType1, types.Batch)
+	jobType1 = append(jobType1, types.SingleRun)
 
 	var jobType2 types.JobTypes
-	jobType2 = append(jobType2, types.BATCH)
-	jobType2 = append(jobType2, types.LONGRUNNING)
+	jobType2 = append(jobType2, types.Batch)
+	jobType2 = append(jobType2, types.LongRunning)
 
 	var jobType3 types.JobTypes
-	jobType3 = append(jobType3, types.RECURRING)
-	jobType3 = append(jobType3, types.SINGLERUN)
+	jobType3 = append(jobType3, types.Recurring)
+	jobType3 = append(jobType3, types.SingleRun)
 
 	// positive assertions
 	assert.True(t, IsJobTypes(jobType1))
@@ -168,9 +168,9 @@ func TestIsJobTypes(t *testing.T) {
 }
 
 func TestIsJobType(t *testing.T) {
-	jobType1 := types.BATCH
-	jobType2 := types.SINGLERUN
-	jobType3 := types.LONGRUNNING
+	jobType1 := types.Batch
+	jobType2 := types.SingleRun
+	jobType3 := types.LongRunning
 
 	// positive assertions
 	assert.True(t, IsJobType(jobType1))
@@ -184,28 +184,28 @@ func TestIsJobType(t *testing.T) {
 
 func TestConvertTypedSliceToUntypedSlice(t *testing.T) {
 	var jobType1 types.JobTypes
-	jobType1 = append(jobType1, types.BATCH)
-	jobType1 = append(jobType1, types.SINGLERUN)
+	jobType1 = append(jobType1, types.Batch)
+	jobType1 = append(jobType1, types.SingleRun)
 
 	var jobType2 types.JobTypes
-	jobType2 = append(jobType2, types.BATCH)
-	jobType2 = append(jobType2, types.LONGRUNNING)
+	jobType2 = append(jobType2, types.Batch)
+	jobType2 = append(jobType2, types.LongRunning)
 
 	var jobType3 types.JobTypes
-	jobType3 = append(jobType3, types.RECURRING)
-	jobType3 = append(jobType3, types.SINGLERUN)
+	jobType3 = append(jobType3, types.Recurring)
+	jobType3 = append(jobType3, types.SingleRun)
 
 	// positive assertions
 	actualValue := ConvertTypedSliceToUntypedSlice(jobType1)
-	expectedValue := []interface{}{types.BATCH, types.SINGLERUN}
+	expectedValue := []interface{}{types.Batch, types.SingleRun}
 	assert.Equal(t, expectedValue, actualValue)
 
 	actualValue = ConvertTypedSliceToUntypedSlice(jobType2)
-	expectedValue = []interface{}{types.BATCH, types.LONGRUNNING}
+	expectedValue = []interface{}{types.Batch, types.LongRunning}
 	assert.Equal(t, expectedValue, actualValue)
 
 	actualValue = ConvertTypedSliceToUntypedSlice(jobType3)
-	expectedValue = []interface{}{types.RECURRING, types.SINGLERUN}
+	expectedValue = []interface{}{types.Recurring, types.SingleRun}
 	assert.Equal(t, expectedValue, actualValue)
 }
 

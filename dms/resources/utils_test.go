@@ -2,16 +2,15 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/types"
+	"github.com/stretchr/testify/require"
 
-	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	gormRepo "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // setupManagerRepos prepares a full structure of ManagerRepos to be
@@ -20,82 +19,79 @@ func setupManagerRepos(t *testing.T, db *gorm.DB) ManagerRepos {
 	err := db.AutoMigrate(
 		&types.FreeResources{},
 		&types.OnboardedResources{},
-		&types.RequiredResources{},
-		&types.VirtualMachine{},
-		&types.Services{},
+		&types.ResourceAllocation{},
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return ManagerRepos{
 		FreeResources:      gormRepo.NewFreeResources(db),
 		OnboardedResources: gormRepo.NewOnboardedResources(db),
-		RequiredResources:  gormRepo.NewRequiredResources(db),
-		VirtualMachine:     gormRepo.NewVirtualMachine(db),
-		Services:           gormRepo.NewServices(db),
+		ResourceAllocation: gormRepo.NewResourceAllocation(db),
 	}
-}
-
-// setupMockRunningVMs sets up the mock running VMs using the repository
-func setupMockRunningVMs(repo repositories.VirtualMachine, vms []types.VirtualMachine, t *testing.T) {
-	t.Helper()
-
-	ctx := context.Background()
-	for _, vm := range vms {
-		_, err := repo.Create(ctx, vm)
-		assert.NoError(t, err)
-	}
-}
-
-// setupMockRunningServices sets up the mock running services using the repository
-func setupMockRunningServices(repo repositories.Services, services []types.Services, t *testing.T) {
-	t.Helper()
-
-	ctx := context.Background()
-	for _, service := range services {
-		_, err := repo.Create(ctx, service)
-		assert.NoError(t, err)
-	}
-}
-
-// setupMockRequiredResources sets up the mock required resources using the repository
-func setupMockRequiredResources(repo repositories.RequiredResources, requiredResources []types.RequiredResources, t *testing.T) {
-	t.Helper()
-
-	ctx := context.Background()
-	for _, reqRes := range requiredResources {
-		_, err := repo.Create(ctx, reqRes)
-		assert.NoError(t, err)
-	}
-}
-
-// setUpOnboardedResources sets up the mock onboarded resources using the repository
-func setUpOnboardedResources(repo repositories.OnboardedResources, onboardedResources types.OnboardedResources, t *testing.T) {
-	t.Helper()
-
-	ctx := context.Background()
-	_, err := repo.Save(ctx, onboardedResources)
-	assert.NoError(t, err)
 }
 
 // setUpFreeResources sets up the mock free resources using the repository
 func setUpFreeResources(repo repositories.FreeResources, freeResources types.FreeResources, t *testing.T) {
 	t.Helper()
-
-	ctx := context.Background()
-	_, err := repo.Save(ctx, freeResources)
-	assert.NoError(t, err)
+	_, err := repo.Save(context.Background(), freeResources)
+	require.NoError(t, err)
 }
 
 // getFreeResourcesFromDB gets the free resources using the repository
-func getFreeResourcesFromDB(repo repositories.FreeResources) (types.FreeResources, error) {
-	ctx := context.Background()
-	freeResources, err := repo.Get(ctx)
-	if err != nil {
-		return types.FreeResources{},
-			fmt.Errorf(
-				"error getting FreeRes from DB. Err: %w",
-				err,
-			)
+func getFreeResourcesFromDB(repo repositories.FreeResources, t *testing.T) types.FreeResources {
+	t.Helper()
+	freeResources, err := repo.Get(context.Background())
+	require.NoError(t, err)
+	return freeResources
+}
+
+// getOnboardedResourcesFromDB gets the onboarded resources using the repository
+func getOnboardedResourcesFromDB(repo repositories.OnboardedResources, t *testing.T) types.OnboardedResources {
+	t.Helper()
+	onboardedResources, err := repo.Get(context.Background())
+	require.NoError(t, err)
+	return onboardedResources
+}
+
+func assertResources(t *testing.T, expected, actual types.Resources) {
+	t.Helper()
+
+	require.Equal(t, expected.CPU.Cores, actual.CPU.Cores)
+	require.Equal(t, expected.CPU.ClockSpeed, actual.CPU.ClockSpeed)
+	require.Equal(t, expected.CPU.Compute, actual.CPU.Compute)
+	require.Equal(t, expected.RAM, actual.RAM)
+	require.Equal(t, expected.Disk, actual.Disk)
+	// TODO: GPU
+}
+
+// newMockResourceManager creates a new mockResourceManager
+func newMockResourceManager(
+	repos ManagerRepos,
+	mockUsageMonitor types.UsageMonitor, //nolint:unparam // will be removed after the implementation
+	mockSystemSpecs types.SystemSpecs,
+	t *testing.T,
+) *DefaultManager {
+	t.Helper()
+
+	return &DefaultManager{
+		repos:        repos,
+		usageMonitor: mockUsageMonitor,
+		systemSpecs:  mockSystemSpecs,
+		store:        newStore(),
 	}
-	return freeResources, nil
+}
+
+// newMockManagerRepos creates a new mock ManagerRepos
+func newMockManagerRepos(t *testing.T,
+	freeResources repositories.FreeResources,
+	onboardedResources repositories.OnboardedResources,
+	resourceAllocation repositories.ResourceAllocation,
+) ManagerRepos {
+	t.Helper()
+
+	return ManagerRepos{
+		FreeResources:      freeResources,
+		OnboardedResources: onboardedResources,
+		ResourceAllocation: resourceAllocation,
+	}
 }

@@ -37,17 +37,24 @@ func newGPUOnboardCmd(afs afero.Afero) *cobra.Command {
 				return fmt.Errorf("couldn't check if Mining OS: %w", err)
 			}
 
-			// TODO: Define API endpoint for this
-			vendors, err := resources.ManagerInstance.SystemSpecs().GetGPUVendors()
+			machineResources, err := resources.ManagerInstance.SystemSpecs().GetMachineResources()
 			if err != nil {
-				return fmt.Errorf("couldn't check presence of a GPU: %w", err)
+				return fmt.Errorf("get machine resources: %v", err)
 			}
 
-			hasAMD := containsVendor(vendors, types.GPUVendorAMDATI)
-			hasNVIDIA := containsVendor(vendors, types.GPUVendorNvidia)
-			hasIntel := containsVendor(vendors, types.GPUVendorIntel)
+			var nvidiaGPUs, amdGPUs, intelGPUs []types.GPU
+			for _, gpu := range machineResources.GPUs {
+				switch gpu.Vendor {
+				case types.GPUVendorNvidia:
+					nvidiaGPUs = append(nvidiaGPUs, gpu)
+				case types.GPUVendorAMDATI:
+					amdGPUs = append(amdGPUs, gpu)
+				case types.GPUVendorIntel:
+					intelGPUs = append(intelGPUs, gpu)
+				}
+			}
 
-			if !hasAMD && !hasNVIDIA && !hasIntel {
+			if len(nvidiaGPUs) == 0 && len(amdGPUs) == 0 && len(intelGPUs) == 0 {
 				return fmt.Errorf("no NVIDIA/AMD/Intel GPU(s) detected")
 			}
 
@@ -55,7 +62,7 @@ func newGPUOnboardCmd(afs afero.Afero) *cobra.Command {
 			case wsl:
 				fmt.Fprintf(cmd.OutOrStdout(), "You are running on Windows Subsystem for Linux (WSL). AMD GPUs are not supported.")
 
-				if !hasNVIDIA {
+				if len(nvidiaGPUs) == 0 {
 					return fmt.Errorf("no NVIDIA GPU(s) detected")
 				}
 
@@ -71,12 +78,7 @@ func newGPUOnboardCmd(afs afero.Afero) *cobra.Command {
 				}
 
 			default:
-				if hasNVIDIA {
-					nvidiaGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorNvidia)
-					if err != nil {
-						return fmt.Errorf("couldn't fetch Nvidia info: %w", err)
-					}
-
+				if len(nvidiaGPUs) > 0 {
 					printGPUs(nvidiaGPUs)
 
 					if err := promptContainer(cmd.InOrStdin(), cmd.OutOrStdout(), containerPath); err != nil {
@@ -88,13 +90,8 @@ func newGPUOnboardCmd(afs afero.Afero) *cobra.Command {
 					}
 				}
 
-				if hasAMD {
-					AMDGPUs, err := resources.ManagerInstance.SystemSpecs().GetGPUs(types.GPUVendorAMDATI)
-					if err != nil {
-						return fmt.Errorf("couldn't fetch AMD driver info: %w", err)
-					}
-
-					printGPUs(AMDGPUs)
+				if len(amdGPUs) > 0 {
+					printGPUs(amdGPUs)
 
 					if err := promptDriverInstallation(cmd.InOrStdin(), cmd.OutOrStdout(), types.GPUVendorAMDATI, amdDriverPath); err != nil {
 						return fmt.Errorf("couldn't install AMD driver: %w", err)
@@ -104,18 +101,6 @@ func newGPUOnboardCmd(afs afero.Afero) *cobra.Command {
 			return nil
 		},
 	}
-}
-
-// containsVendor takes a slice of GPUVendor structs that were detected in the system
-// and look for a specific vendor, returning true if it is found.
-func containsVendor(vendors []types.GPUVendor, target types.GPUVendor) bool {
-	for _, v := range vendors {
-		if v == target {
-			return true
-		}
-	}
-
-	return false
 }
 
 // runScript executes a bash script from a given path.

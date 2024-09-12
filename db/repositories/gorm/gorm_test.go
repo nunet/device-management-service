@@ -38,7 +38,7 @@ func setup() {
 		&types.RequestTracker{},
 		&types.VirtualMachine{},
 		&types.OnboardedResources{},
-		&types.RequiredResources{},
+		&types.ResourceAllocation{},
 		&types.StorageVolume{},
 	)
 	if err != nil {

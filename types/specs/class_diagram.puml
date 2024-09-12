@@ -18,7 +18,7 @@
 class models.Capability <<capability.go>> {
    Executors : Executors
    JobTypes : JobTypes
-   Resources : ExecutionResources
+   Resources : Resources
    Libraries : []Library
    Localities : []Locality
    Storage : []Storage
@@ -88,7 +88,7 @@ class models.Executors <<capability.go>> {
 ' START IN-PACKAGE RELATIONS
 models.Capability::Executors o-- models.Executors
 models.Capability::JobTypes o-- models.JobTypes
-models.Capability::Resources o-- models.ExecutionResources
+models.Capability::Resources o-- models.Resources
 models.Capability::Libraries o-- models.Library
 models.Capability::Localities o-- models.Locality
 models.Capability::Storage o-- models.Storage

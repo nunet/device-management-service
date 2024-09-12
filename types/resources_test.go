@@ -3,175 +3,309 @@ package types
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestResources_Add(t *testing.T) {
+func TestResources_Calculable_Add(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name string
-		r1   Resources
-		r2   Resources
-		want Resources
+		name    string
+		r       *Resources
+		other   Resources
+		wantErr bool
+		want    Resources
 	}{
 		{
-			name: "Add two resources",
-			r1: Resources{
-				CPU:  100,
-				RAM:  512,
-				Disk: 1024,
+			name: "Add",
+			r: &Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+					Compute:    1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:     "GTX 1080",
+						TotalVRAM: 8192,
+					},
+				},
 			},
-			r2: Resources{
-				CPU:  200,
-				RAM:  1024,
-				Disk: 2048,
+			other: Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+					Compute:    1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:     "GTX 1080",
+						TotalVRAM: 8192,
+					},
+				},
 			},
+			wantErr: false,
 			want: Resources{
-				CPU:  300,
-				RAM:  1536,
-				Disk: 3072,
-			},
-		},
-		{
-			name: "Add two resources with zero values",
-			r1: Resources{
-				CPU:  0,
-				RAM:  0,
-				Disk: 0,
-			},
-			r2: Resources{
-				CPU:  0,
-				RAM:  0,
-				Disk: 0,
+				CPU: CPU{
+					Cores:      2,
+					ClockSpeed: 1000,
+					Compute:    2000,
+				},
+				RAM: RAM{
+					Size: 2048,
+				},
+				Disk: Disk{
+					Size: 2048,
+				},
+				GPUs: GPUs{
+					{
+						Model:     "GTX 1080",
+						TotalVRAM: 16384,
+					},
+				},
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.r1.Add(tt.r2)
-			assert.Equal(t, tt.want, got)
+			t.Parallel()
+			if err := tt.r.Add(tt.other); (err != nil) != tt.wantErr {
+				t.Errorf("Resources.Add() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			assertResources(t, *tt.r, tt.want)
 		})
 	}
 }
 
-func TestResources_Subtract(t *testing.T) {
+func TestResources_Calculable_Subtract(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
-		r1      Resources
-		r2      Resources
-		want    Resources
+		r       Resources
+		other   Resources
 		wantErr bool
-		err     error
+		want    Resources
+		err     string
 	}{
 		{
-			name: "Subtract two resources",
-			r1: Resources{
-				CPU:  200,
-				RAM:  1024,
-				Disk: 2048,
+			name: "Subtract",
+			r: Resources{
+				CPU: CPU{
+					Cores:      2,
+					ClockSpeed: 1000,
+					Compute:    2000,
+				},
+				RAM: RAM{
+					Size: 2048,
+				},
+				Disk: Disk{
+					Size: 2048,
+				},
+				GPUs: GPUs{
+					{
+						Model:     "GTX 1080",
+						TotalVRAM: 16384,
+					},
+				},
 			},
-			r2: Resources{
-				CPU:  100,
-				RAM:  512,
-				Disk: 1024,
-			},
-			want: Resources{
-				CPU:  100,
-				RAM:  512,
-				Disk: 1024,
+			other: Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+					Compute:    1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:     "GTX 1080",
+						TotalVRAM: 8192,
+					},
+				},
 			},
 			wantErr: false,
-		},
-		{
-			name: "Subtract two resources with zero values",
-			r1: Resources{
-				CPU:  0,
-				RAM:  0,
-				Disk: 0,
-			},
-			r2: Resources{
-				CPU:  0,
-				RAM:  0,
-				Disk: 0,
-			},
 			want: Resources{
-				CPU:  0,
-				RAM:  0,
-				Disk: 0,
-			},
-			wantErr: false,
-		},
-		{
-			name: "Negative cpu value error",
-			r1: Resources{
-				CPU:  100,
-				RAM:  512,
-				Disk: 1024,
-			},
-			r2: Resources{
-				CPU:  200,
-				RAM:  512,
-				Disk: 1024,
-			},
-			want:    Resources{},
-			wantErr: true,
-			err: &negativeValueError{
-				resource: "CPU",
-				r1:       float64(100),
-				r2:       float64(200),
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+					Compute:    1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:     "GTX 1080",
+						TotalVRAM: 8192,
+					},
+				},
 			},
 		},
 		{
-			name: "Negative ram value error",
-			r1: Resources{
-				CPU:  200,
-				RAM:  512,
-				Disk: 1024,
+			name: "cpu underflow scenario",
+			r: Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+					Compute:    1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
 			},
-			r2: Resources{
-				CPU:  200,
-				RAM:  1024,
-				Disk: 1024,
+			other: Resources{
+				CPU: CPU{
+					Cores:      2,
+					ClockSpeed: 1000,
+					Compute:    2000,
+				},
+				RAM: RAM{
+					Size: 2048,
+				},
+				Disk: Disk{
+					Size: 2048,
+				},
 			},
-			want:    Resources{},
 			wantErr: true,
-			err: &negativeValueError{
-				resource: "RAM",
-				r1:       uint64(512),
-				r2:       uint64(1024),
-			},
+			err:     "error subtracting CPU",
 		},
 		{
-			name: "Negative disk value error",
-			r1: Resources{
-				CPU:  200,
-				RAM:  1024,
-				Disk: 1024,
+			name: "ram underflow scenario",
+			r: Resources{
+				RAM: RAM{
+					Size: 1024,
+				},
 			},
-			r2: Resources{
-				CPU:  200,
-				RAM:  1024,
-				Disk: 2048,
+			other: Resources{
+				RAM: RAM{
+					Size: 2048,
+				},
 			},
-			want:    Resources{},
 			wantErr: true,
-			err: &negativeValueError{
-				resource: "Disk",
-				r1:       uint64(1024),
-				r2:       uint64(2048),
+			err:     "error subtracting RAM",
+		},
+		{
+			name: "disk underflow scenario",
+			r: Resources{
+				Disk: Disk{
+					Size: 1024,
+				},
 			},
+			other: Resources{
+				Disk: Disk{
+					Size: 2048,
+				},
+			},
+			wantErr: true,
+			err:     "error subtracting Disk",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.r1.Subtract(tt.r2)
-			assert.Equal(t, tt.want, got)
-			assert.Equal(t, tt.err, err)
+			t.Parallel()
+			err := tt.r.Subtract(tt.other)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Resources.Subtract() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil {
+				require.ErrorContains(t, err, tt.err)
+			}
 
-			if tt.wantErr {
-				assert.NotEmpty(t, err.Error())
+			if !tt.wantErr {
+				assertResources(t, tt.r, tt.want)
 			}
 		})
+	}
+}
+
+func TestResources_Comparable_Compare(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		r     *Resources
+		other Resources
+		want  Comparison
+	}{
+		{
+			name:  "Equal",
+			r:     &Resources{},
+			other: Resources{},
+			want:  Equal,
+		},
+		{
+			name: "Equal",
+			r: &Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+					Compute:    1000,
+				},
+			},
+			other: Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+					Compute:    1000,
+				},
+			},
+			want: Equal,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.r.Compare(tt.other); got != tt.want {
+				t.Errorf("Resources.Compare() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func assertResources(t *testing.T, r1, r2 Resources) {
+	t.Helper()
+
+	// CPU
+	require.Equal(t, r1.CPU.Cores, r2.CPU.Cores)
+	require.Equal(t, r1.CPU.ClockSpeed, r2.CPU.ClockSpeed)
+	require.Equal(t, r1.CPU.Compute, r2.CPU.Compute)
+
+	// RAM
+	require.Equal(t, r1.RAM.Size, r2.RAM.Size)
+
+	// Disk
+	require.Equal(t, r1.Disk.Size, r2.Disk.Size)
+
+	// GPUs
+	require.Len(t, r1.GPUs, len(r2.GPUs))
+	for i := range r1.GPUs {
+		require.Equal(t, r1.GPUs[i].Model, r2.GPUs[i].Model)
+		require.Equal(t, r1.GPUs[i].TotalVRAM, r2.GPUs[i].TotalVRAM)
 	}
 }

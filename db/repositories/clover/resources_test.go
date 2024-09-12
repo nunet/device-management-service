@@ -7,8 +7,6 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/stretchr/testify/assert"
-
-	"gitlab.com/nunet/device-management-service/db/repositories"
 )
 
 // TestMachineResourcesRepository is a test suite for the MachineResourcesRepository.
@@ -27,9 +25,13 @@ func TestMachineResourcesRepository(t *testing.T) {
 		context.Background(),
 		types.MachineResources{
 			Resources: types.Resources{
-				CPU:  2.0,
-				RAM:  4096,
-				Disk: 100000,
+				CPU: types.CPU{
+					Cores:      2,
+					ClockSpeed: 10000,
+					Compute:    20000,
+				},
+				RAM:  types.RAM{Size: 4096},
+				Disk: types.Disk{Size: 1024},
 			},
 		},
 	)
@@ -42,7 +44,7 @@ func TestMachineResourcesRepository(t *testing.T) {
 
 	// Test Save (update) method
 	updatedMachineResources := retrievedMachineResources
-	updatedMachineResources.CPU = 4.0
+	updatedMachineResources.CPU.Cores = 4
 
 	_, err = machineResourcesRepo.Save(context.Background(), updatedMachineResources)
 	assert.NoError(t, err)
@@ -74,16 +76,24 @@ func TestFreeResourcesRepository(t *testing.T) {
 	defer teardown(db, path)
 
 	// Initialize the repository
-	freeResourcesRepo := NewFreeResourcesRepository(db)
+	freeResourcesRepo := NewFreeResources(db)
 
 	// Test Save method
 	createdFreeResources, err := freeResourcesRepo.Save(
 		context.Background(),
 		types.FreeResources{
 			Resources: types.Resources{
-				CPU:  2.0,
-				RAM:  4096,
-				Disk: 100000,
+				CPU: types.CPU{
+					Cores:      2,
+					ClockSpeed: 10000,
+					Compute:    20000,
+				},
+				RAM: types.RAM{
+					Size: 4096,
+				},
+				Disk: types.Disk{
+					Size: 100000,
+				},
 			},
 		},
 	)
@@ -96,7 +106,7 @@ func TestFreeResourcesRepository(t *testing.T) {
 
 	// Test Save (update) method
 	updatedFreeResources := retrievedFreeResources
-	updatedFreeResources.CPU = 4.0
+	updatedFreeResources.CPU.Cores = 4
 
 	_, err = freeResourcesRepo.Save(context.Background(), updatedFreeResources)
 	assert.NoError(t, err)
@@ -119,104 +129,6 @@ func TestFreeResourcesRepository(t *testing.T) {
 	assert.Len(t, history, 0)
 }
 
-// TestRequiredResourcesRepository is a test suite for the RequiredResourcesRepository.
-// It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
-// This test suite ensures that the repository functions for the RequiredResources model behave as expected.
-func TestRequiredResourcesRepository(t *testing.T) {
-	// Setup database connection for testing
-	db, path := setup()
-	defer teardown(db, path)
-
-	// Initialize the repository
-	requiredResourcesRepo := NewRequiredResourcesRepository(db)
-
-	// Test Create method
-	createdRequiredResources, err := requiredResourcesRepo.Create(
-		context.Background(),
-		types.RequiredResources{
-			JobID: 1,
-			Resources: types.Resources{
-				CPU: 2000,
-				RAM: 4096,
-			},
-		},
-	)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, createdRequiredResources.ID)
-
-	// Test Get method
-	retrievedRequiredResources, err := requiredResourcesRepo.Get(
-		context.Background(),
-		createdRequiredResources.ID,
-	)
-	assert.NoError(t, err)
-	assert.Equal(t, createdRequiredResources.ID, retrievedRequiredResources.ID)
-	assert.Equal(t, createdRequiredResources.JobID, retrievedRequiredResources.JobID)
-	assert.Equal(t, createdRequiredResources.CPU, retrievedRequiredResources.CPU)
-	assert.Equal(t, createdRequiredResources.RAM, retrievedRequiredResources.RAM)
-
-	// Test Update method
-	updatedRequiredResources := retrievedRequiredResources
-	updatedRequiredResources.CPU = 3000
-	updatedRequiredResources.RAM = 8192
-
-	_, err = requiredResourcesRepo.Update(
-		context.Background(),
-		updatedRequiredResources.ID,
-		updatedRequiredResources,
-	)
-	assert.NoError(t, err)
-	retrievedRequiredResources, err = requiredResourcesRepo.Get(
-		context.Background(),
-		createdRequiredResources.ID,
-	)
-	assert.NoError(t, err)
-	assert.Equal(t, updatedRequiredResources.CPU, retrievedRequiredResources.CPU)
-	assert.Equal(t, updatedRequiredResources.RAM, retrievedRequiredResources.RAM)
-
-	// Test Delete method
-	err = requiredResourcesRepo.Delete(context.Background(), updatedRequiredResources.ID)
-	assert.NoError(t, err)
-
-	// Test Find method
-	requiredResources1, err := requiredResourcesRepo.Create(
-		context.Background(),
-		types.RequiredResources{JobID: 2, Resources: types.Resources{CPU: 1000, RAM: 2048}},
-	)
-	assert.NoError(t, err)
-
-	query := requiredResourcesRepo.GetQuery()
-	query.Conditions = append(
-		query.Conditions,
-		repositories.EQ("JobID", requiredResources1.JobID),
-	)
-	foundRequiredResources, err := requiredResourcesRepo.Find(context.Background(), query)
-	assert.NoError(t, err)
-	assert.Equal(t, requiredResources1.JobID, foundRequiredResources.JobID)
-	assert.Equal(t, requiredResources1.CPU, foundRequiredResources.CPU)
-	assert.Equal(t, requiredResources1.RAM, foundRequiredResources.RAM)
-
-	// Test FindAll method
-	requiredResources2, err := requiredResourcesRepo.Create(
-		context.Background(),
-		types.RequiredResources{JobID: 3, Resources: types.Resources{CPU: 4000, RAM: 16384}},
-	)
-	assert.NoError(t, err)
-
-	allRequiredResources, err := requiredResourcesRepo.FindAll(
-		context.Background(),
-		requiredResourcesRepo.GetQuery(),
-	)
-	assert.NoError(t, err)
-	assert.Len(t, allRequiredResources, 2)
-
-	// Clean up created records
-	err = requiredResourcesRepo.Delete(context.Background(), requiredResources1.ID)
-	assert.NoError(t, err)
-	err = requiredResourcesRepo.Delete(context.Background(), requiredResources2.ID)
-	assert.NoError(t, err)
-}
-
 // TestOnboardedResourcesRepository is a test suite for the OnboardedResourcesRepository.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the OnboardedResources model behave as expected.
@@ -226,16 +138,20 @@ func TestOnboardedResourcesRepository(t *testing.T) {
 	defer teardown(db, path)
 
 	// Initialize the repository
-	onboardedResourcesRepo := NewOnboardedResourcesRepository(db)
+	onboardedResourcesRepo := NewOnboardedResources(db)
 
 	// Test Save method
 	createdOnboardedResources, err := onboardedResourcesRepo.Save(
 		context.Background(),
 		types.OnboardedResources{
 			Resources: types.Resources{
-				CPU:  2.0,
-				RAM:  4096,
-				Disk: 100000,
+				CPU: types.CPU{
+					Cores:      2,
+					ClockSpeed: 10000,
+					Compute:    20000,
+				},
+				RAM:  types.RAM{Size: 4096},
+				Disk: types.Disk{Size: 100000},
 			},
 		},
 	)
@@ -248,7 +164,7 @@ func TestOnboardedResourcesRepository(t *testing.T) {
 
 	// Test Save (update) method
 	updatedOnboardedResources := retrievedOnboardedResources
-	updatedOnboardedResources.CPU = 4.0
+	updatedOnboardedResources.CPU.Cores = 4
 
 	_, err = onboardedResourcesRepo.Save(context.Background(), updatedOnboardedResources)
 	assert.NoError(t, err)
@@ -267,6 +183,64 @@ func TestOnboardedResourcesRepository(t *testing.T) {
 	err = onboardedResourcesRepo.Clear(context.Background())
 	assert.NoError(t, err)
 	history, err = onboardedResourcesRepo.History(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Len(t, history, 0)
+}
+
+// TestResourceAllocationRepository is a test suite for the ResourceAllocationRepository.
+// It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
+// This test suite ensures that the repository functions for the ResourceAllocation model behave as expected.
+func TestResourceAllocationRepository(t *testing.T) {
+	// Setup your database connection for testing
+	db, path := setup()
+	defer teardown(db, path)
+
+	// Initialize the repository
+	resourceAllocationRepo := NewResourceAllocation(db)
+
+	// Test Save method
+	createdResourceAllocation, err := resourceAllocationRepo.Create(
+		context.Background(),
+		types.ResourceAllocation{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      2,
+					ClockSpeed: 10000,
+					Compute:    20000,
+				},
+				RAM:  types.RAM{Size: 4096},
+				Disk: types.Disk{Size: 100000},
+			},
+		},
+	)
+	assert.NoError(t, err)
+
+	// Test Get method
+	retrievedResourceAllocation, err := resourceAllocationRepo.Get(context.Background(), createdResourceAllocation.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, createdResourceAllocation.CPU, retrievedResourceAllocation.CPU)
+
+	// Test Save (update) method
+	updatedResourceAllocation := retrievedResourceAllocation
+	updatedResourceAllocation.CPU.Cores = 4
+
+	_, err = resourceAllocationRepo.Update(context.Background(), updatedResourceAllocation.ID, updatedResourceAllocation)
+	assert.NoError(t, err)
+	retrievedResourceAllocation, err = resourceAllocationRepo.Get(context.Background(), updatedResourceAllocation.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, updatedResourceAllocation.CPU, retrievedResourceAllocation.CPU)
+
+	// Test History method
+	query := resourceAllocationRepo.GetQuery()
+	query.Limit = 3
+	history, err := resourceAllocationRepo.FindAll(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Len(t, history, 2)
+
+	// Test Clear method
+	err = resourceAllocationRepo.Delete(context.Background(), updatedResourceAllocation.ID)
+	assert.NoError(t, err)
+	history, err = resourceAllocationRepo.FindAll(context.Background(), query)
 	assert.NoError(t, err)
 	assert.Len(t, history, 0)
 }

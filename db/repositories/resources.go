@@ -19,9 +19,9 @@ type OnboardedResources interface {
 	GenericEntityRepository[types.OnboardedResources]
 }
 
-// RequiredResources represents a repository for CRUD operations on RequiredResources entities.
-type RequiredResources interface {
-	GenericRepository[types.RequiredResources]
+// ResourceAllocation represents a repository for CRUD operations on ResourceAllocation entity.
+type ResourceAllocation interface {
+	GenericRepository[types.ResourceAllocation]
 }
 
 // AvailableResources represents a repository for CRUD operations on AvailableResources entity.

@@ -191,3 +191,12 @@ func createTar(afs afero.Afero, tarGzPath string, sourceDir string) error {
 		return nil
 	})
 }
+
+// getGPUVendorMap returns a map of GPU vendor to their respective slice of types.GPU
+func getGPUVendorMap(gpus []types.GPU) map[types.GPUVendor][]types.GPU {
+	gpuMap := make(map[types.GPUVendor][]types.GPU)
+	for _, gpu := range gpus {
+		gpuMap[gpu.Vendor] = append(gpuMap[gpu.Vendor], gpu)
+	}
+	return gpuMap
+}

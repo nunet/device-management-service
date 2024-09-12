@@ -48,7 +48,7 @@ func (ts *TestSuite) setup() error {
 	_ = db.AutoMigrate(&types.MachineUUID{})
 	_ = db.AutoMigrate(&types.Connection{})
 	_ = db.AutoMigrate(&types.OnboardedResources{})
-	_ = db.AutoMigrate(&types.RequiredResources{})
+	_ = db.AutoMigrate(&types.ResourceAllocation{})
 
 	ts.db = db
 	return nil

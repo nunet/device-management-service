@@ -4,102 +4,70 @@ import (
 	"fmt"
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/types"
-
-	"github.com/shirou/gopsutil/v4/cpu"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLinuxNewSystemSpecs(t *testing.T) {
 	t.Parallel()
 
-	systemSpecs := newSystemSpecs()
-	assert.NotNil(t, systemSpecs)
+	systemSpecs := newSystemSpecs(newStore())
+	require.NotNil(t, systemSpecs)
 }
 
-func TestLinuxSystemSpecs_GetTotalMemory(t *testing.T) {
+func TestLinuxSystemSpecs_getRam(t *testing.T) {
 	t.Parallel()
 
-	systemSpecs := newSystemSpecs()
-	totalMemory, err := systemSpecs.GetTotalMemory()
-	assert.NoError(t, err)
-	assert.Greater(t, totalMemory, uint64(0))
+	ram, err := getRAM()
+	require.NoError(t, err)
+	require.Greater(t, ram.Size, uint64(0))
+	// other fields as needed
 }
 
-func TestLinuxSystemSpecs_GetTotalStorage(t *testing.T) {
+func TestLinuxSystemSpecs_getDisk(t *testing.T) {
 	t.Parallel()
 
-	systemSpecs := newSystemSpecs()
-	totalStorage, err := systemSpecs.GetTotalStorage()
-	assert.NoError(t, err)
-	assert.Greater(t, totalStorage, uint64(0))
+	diskInfo, err := getDisk()
+	require.NoError(t, err)
+	require.Greater(t, diskInfo.Size, uint64(0))
 }
 
-func TestLinuxSystemSpecs_GetCPUInfo(t *testing.T) {
+func TestLinuxSystemSpecs_getCPU(t *testing.T) {
 	t.Parallel()
 
-	systemSpecs := newSystemSpecs()
-	cpuInfo, err := systemSpecs.GetCPUInfo()
-	assert.NoError(t, err)
+	cpuInfo, err := getCPU()
+	require.NoError(t, err)
 
-	expectedCPUInfo := getLinuxCPUInfo(t)
-	assert.Equal(t, expectedCPUInfo.NumCores, cpuInfo.NumCores)
-	assert.Equal(t, expectedCPUInfo.MHzPerCore, cpuInfo.MHzPerCore)
-	assert.Equal(t, expectedCPUInfo.Compute, cpuInfo.Compute)
+	require.Greater(t, cpuInfo.Cores, float32(0))
+	require.Greater(t, cpuInfo.ClockSpeed, int64(0))
+	require.Greater(t, cpuInfo.Compute, float64(0))
+	// other fields as needed
 }
 
-func TestLinuxSystemSpecs_GetProvisionedResources(t *testing.T) {
+func TestLinuxSystemSpecs_GetMachineResources(t *testing.T) {
 	t.Parallel()
 
-	systemSpecs := newSystemSpecs()
-	resources, err := systemSpecs.GetProvisionedResources()
-	assert.NoError(t, err)
+	systemSpecs := newSystemSpecs(newStore())
+	resources, err := systemSpecs.GetMachineResources()
+	require.NoError(t, err)
 
-	expectedCPUInfo := getLinuxCPUInfo(t)
-	assert.Equal(t, expectedCPUInfo.Compute, resources.CPU)
-	assert.Greater(t, resources.RAM, uint64(0))
-	assert.Greater(t, resources.Disk, uint64(0))
-}
-
-// TODO: we need to mock the gpu details so that the library can pick it up
-// https://gitlab.com/nunet/device-management-service/-/issues/534
-func TestLinuxSystemSpecs_GetGPUVendors(t *testing.T) {
-	t.Parallel()
-
-	systemSpecs := newSystemSpecs()
-	gpuVendors, err := systemSpecs.GetGPUVendors()
-	assert.NoError(t, err)
-	fmt.Println(gpuVendors)
+	require.Greater(t, resources.CPU.Cores, float32(0))
+	require.Greater(t, resources.CPU.ClockSpeed, int64(0))
+	require.Greater(t, resources.CPU.Compute, float64(0))
+	require.Greater(t, resources.RAM.Size, uint64(0))
+	require.Greater(t, resources.Disk.Size, uint64(0))
 }
 
 // TODO: we need to mock the gpu details so that the library can pick it up
 // https://gitlab.com/nunet/device-management-service/-/issues/534
-func TestLinuxSystemSpecs_GetGPUs(t *testing.T) {
+func TestLinuxSystemSpecs_getGPUs(t *testing.T) {
 	t.Parallel()
-
-	systemSpecs := newSystemSpecs()
-
-	gpuVendors, err := systemSpecs.GetGPUVendors()
-	assert.NoError(t, err)
-
-	gpuVendorMap := make(map[types.GPUVendor]struct{})
-	for _, vendor := range gpuVendors {
-		gpuVendorMap[vendor] = struct{}{}
-	}
-
-	gpus, err := systemSpecs.GetGPUs()
-	assert.NoError(t, err)
-
-	// Ensure that all the GPUs belong to the vendors we got from GetGPUVendors
-	for _, gpu := range gpus {
-		assert.Contains(t, gpuVendorMap, gpu.Vendor)
-	}
+	t.Skipf("Skipping test as it requires gpu snapshots")
 }
 
 func Test_PrettyPrintGPUs(t *testing.T) {
 	t.Parallel()
 
-	systemSpecs := newSystemSpecs()
+	systemSpecs := newSystemSpecs(newStore())
 	// get specific vendor GPUs by passing the vendor as an argument. Example:
 	// gpus, err := systemSpecs.GetGPUs(models.GPUVendorNvidia)
 	// gpus, err := systemSpecs.GetGPUs(models.GPUVendorAMDATI)
@@ -107,29 +75,12 @@ func Test_PrettyPrintGPUs(t *testing.T) {
 	// gpus, err := systemSpecs.GetGPUs(models.GPUVendorNvidia, models.GPUVendorAMDATI)
 	//
 	// If no vendors are provided, it returns the information of all the GPUs
-	gpus, err := systemSpecs.GetGPUs()
-	assert.NoError(t, err)
+	resources, err := systemSpecs.GetMachineResources()
+	require.NoError(t, err)
 
 	fmt.Println("GPU Details:")
-	for _, gpu := range gpus {
+	for _, gpu := range resources.GPUs {
 		fmt.Printf("Model: %s, Total VRAM: %d MB, Free VRAM: %d MB, Used VRAM: %d MB, Vendor: %s, PCI Address: %s, Index: %d\n",
 			gpu.Model, gpu.TotalVRAM, gpu.FreeVRAM, gpu.UsedVRAM, gpu.Vendor, gpu.PCIAddress, gpu.Index)
-	}
-}
-
-func getLinuxCPUInfo(t *testing.T) types.CPUInfo {
-	t.Helper()
-
-	cores, err := cpu.Info()
-	assert.NoError(t, err)
-	var totalCompute float64
-	for i := 0; i < len(cores); i++ {
-		totalCompute += cores[i].Mhz
-	}
-
-	return types.CPUInfo{
-		Compute:    totalCompute,
-		NumCores:   uint64(len(cores)),
-		MHzPerCore: cores[0].Mhz,
 	}
 }

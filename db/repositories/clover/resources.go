@@ -20,41 +20,41 @@ func NewMachineResourcesRepository(db *clover.DB) repositories.MachineResources 
 	}
 }
 
-// FreeResourcesRepositoryClover is a Clover implementation of the FreeResourcesRepository interface.
-type FreeResourcesRepositoryClover struct {
+// FreeResourcesClover is a Clover implementation of the FreeResources interface.
+type FreeResourcesClover struct {
 	repositories.GenericEntityRepository[types.FreeResources]
 }
 
-// NewFreeResourcesRepository creates a new instance of FreeResourcesRepositoryClover.
+// NewFreeResources creates a new instance of FreeResourcesClover.
 // It initializes and returns a Clover-based repository for FreeResources entity.
-func NewFreeResourcesRepository(db *clover.DB) repositories.FreeResources {
-	return &FreeResourcesRepositoryClover{
+func NewFreeResources(db *clover.DB) repositories.FreeResources {
+	return &FreeResourcesClover{
 		NewGenericEntityRepository[types.FreeResources](db),
 	}
 }
 
-// OnboardedResourcesRepositoryClover is a Clover implementation of the OnboardedResourcesRepository interface.
-type OnboardedResourcesRepositoryClover struct {
+// OnboardedResourcesClover is a Clover implementation of the OnboardedResources interface.
+type OnboardedResourcesClover struct {
 	repositories.GenericEntityRepository[types.OnboardedResources]
 }
 
-// NewOnboardedResourcesRepository creates a new instance of OnboardedResourcesRepositoryClover.
+// NewOnboardedResources creates a new instance of OnboardedResourcesClover.
 // It initializes and returns a Clover-based repository for OnboardedResources entity.
-func NewOnboardedResourcesRepository(db *clover.DB) repositories.OnboardedResources {
-	return &OnboardedResourcesRepositoryClover{
+func NewOnboardedResources(db *clover.DB) repositories.OnboardedResources {
+	return &OnboardedResourcesClover{
 		NewGenericEntityRepository[types.OnboardedResources](db),
 	}
 }
 
-// RequiredResourcesRepositoryClover is a Clover implementation of the RequiredResourcesRepository interface.
-type RequiredResourcesRepositoryClover struct {
-	repositories.GenericRepository[types.RequiredResources]
+// ResourceAllocationClover is a Clover implementation of the ResourceAllocation interface.
+type ResourceAllocationClover struct {
+	repositories.GenericRepository[types.ResourceAllocation]
 }
 
-// NewRequiredResourcesRepository creates a new instance of RequiredResourcesRepositoryClover.
-// It initializes and returns a Clover-based repository for RequiredResources entities.
-func NewRequiredResourcesRepository(db *clover.DB) repositories.RequiredResources {
-	return &RequiredResourcesRepositoryClover{
-		NewGenericRepository[types.RequiredResources](db),
+// NewResourceAllocation creates a new instance of ResourceAllocationClover.
+// It initializes and returns a Clover-based repository for ResourceAllocation entity.
+func NewResourceAllocation(db *clover.DB) repositories.ResourceAllocation {
+	return &ResourceAllocationClover{
+		NewGenericRepository[types.ResourceAllocation](db),
 	}
 }
