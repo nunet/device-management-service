@@ -28,7 +28,7 @@ import (
 )
 
 // NewHost returns a new libp2p host with dht and other related settings.
-func NewHost(ctx context.Context, config *types.Libp2pConfig) (host.Host, *dht.IpfsDHT, *pubsub.PubSub, error) {
+func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p peer.ID) float64, scoreInspect pubsub.ExtendedPeerScoreInspectFn) (host.Host, *dht.IpfsDHT, *pubsub.PubSub, error) {
 	var idht *dht.IpfsDHT
 	connmgr, err := connmgr.NewConnManager(
 		100,
@@ -139,6 +139,27 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig) (host.Host, *dht.I
 		pubsub.WithFloodPublish(true),
 		pubsub.WithMessageSigning(true),
 		pubsub.WithMaxMessageSize(config.GossipMaxMessageSize),
+		pubsub.WithPeerScore(
+			&pubsub.PeerScoreParams{
+				SkipAtomicValidation: true,
+				Topics:               make(map[string]*pubsub.TopicScoreParams),
+				TopicScoreCap:        10,
+				AppSpecificScore:     appScore,
+				AppSpecificWeight:    1,
+				DecayInterval:        time.Hour,
+				DecayToZero:          0.001,
+				RetainScore:          6 * time.Hour,
+			},
+			&pubsub.PeerScoreThresholds{
+				GossipThreshold:             -500,
+				PublishThreshold:            -1000,
+				GraylistThreshold:           -2500,
+				AcceptPXThreshold:           0, // TODO for public mainnet we should limit to botostrappers and set them up without a mesh
+				OpportunisticGraftThreshold: 2.5,
+			},
+		),
+		pubsub.WithPeerExchange(true),
+		pubsub.WithPeerScoreInspect(scoreInspect, time.Second),
 	}
 	gossip, err := pubsub.NewGossipSub(ctx, host, optsPS...)
 	// gossip, err := pubsub.NewGossipSubWithRouter(ctx, host, pubsub.DefaultGossipSubRouter(host), optsPS...)

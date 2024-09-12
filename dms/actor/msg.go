@@ -112,6 +112,14 @@ func WithMessageTopic(topic string) MessageOption {
 	}
 }
 
+// WithMessageSource sets the message source
+func WithMessageSource(source Handle) MessageOption {
+	return func(msg *Envelope) error {
+		msg.From = source
+		return nil
+	}
+}
+
 func (msg *Envelope) SignatureData() ([]byte, error) {
 	msgCopy := *msg
 	msgCopy.Signature = nil

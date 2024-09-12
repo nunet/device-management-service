@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
@@ -182,6 +183,9 @@ func Run(ksPassphrase string) error {
 			return fmt.Errorf("unable to load capability context: %w", err)
 		}
 	}
+
+	trustCtx.Start(time.Hour)
+	capCtx.Start(5 * time.Minute)
 
 	hostID := p2p.Host.ID().String()
 	node, err := node.New(ctx, onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler)

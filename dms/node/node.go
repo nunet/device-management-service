@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"gitlab.com/nunet/device-management-service/dms/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
@@ -15,6 +18,7 @@ import (
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 )
@@ -31,8 +35,14 @@ type Node struct {
 	executor        *firecracker.Executor
 
 	mx          sync.Mutex
+	peers       map[peer.ID]*peerState
 	allocations map[string]*jobs.Allocation
 	running     bool
+}
+
+type peerState struct {
+	conns             int
+	helloIn, helloOut bool
 }
 
 // New creates a new node, attaches an actor to the node.
@@ -133,6 +143,10 @@ func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.Cap
 		return nil, fmt.Errorf("adding peer connect behavior: %w", err)
 	}
 
+	if err := nodeActor.AddBehavior(PeerScoreBehavior, n.handlePeerScore); err != nil {
+		return nil, fmt.Errorf("adding peer score behavior: %w", err)
+	}
+
 	if err := nodeActor.AddBehavior(OnboardBehaviour, n.handleOnboard); err != nil {
 		return nil, fmt.Errorf("adding onboard behavior: %w", err)
 	}
@@ -225,13 +239,154 @@ func (n *Node) Start() error {
 		return nil
 	}
 
-	err := n.actor.Start()
-	if err != nil {
+	if err := n.actor.Start(); err != nil {
 		return fmt.Errorf("failed to start node actor: %w", err)
+	}
+
+	if err := n.subscribe(BroadcastHelloTopic); err != nil {
+		_ = n.actor.Stop()
+		return err
 	}
 
 	n.running = true
 	return nil
+}
+
+func (n *Node) subscribe(topics ...string) error {
+	for _, topic := range topics {
+		if err := n.actor.Subscribe(topic, n.setupBroadcast); err != nil {
+			return fmt.Errorf("error subscribing to %s: %w", topic, err)
+		}
+	}
+
+	n.network.SetBroadcastAppScore(n.broadcastScore)
+	if err := n.network.Notify(n.actor.Context(), n.peerConnected, n.peerDisconnected); err != nil {
+		return fmt.Errorf("error setting up peer notifications: %w", err)
+	}
+
+	return nil
+}
+
+func (n *Node) setupBroadcast(topic string) error {
+	return n.network.SetupBroadcastTopic(topic, func(t *network.Topic) error {
+		return t.SetScoreParams(&pubsub.TopicScoreParams{
+			SkipAtomicValidation:           true,
+			TopicWeight:                    1.0,
+			TimeInMeshWeight:               0.00027, // ~1/3600
+			TimeInMeshQuantum:              time.Second,
+			TimeInMeshCap:                  1.0,
+			InvalidMessageDeliveriesWeight: -1000,
+			InvalidMessageDeliveriesDecay:  pubsub.ScoreParameterDecay(time.Hour),
+		})
+	})
+}
+
+func (n *Node) broadcastScore(p peer.ID) float64 {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	st, ok := n.peers[p]
+	if ok && st.helloIn && st.helloOut {
+		return 0.01
+	}
+
+	return -100
+}
+
+func (n *Node) peerConnected(p peer.ID) {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	st, ok := n.peers[p]
+	if !ok {
+		st := &peerState{}
+		n.peers[p] = st
+	}
+
+	if !st.helloOut {
+		go n.sayHello(p)
+	}
+	st.conns++
+}
+
+func (n *Node) peerDisconnected(p peer.ID) {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	st, ok := n.peers[p]
+	if !ok {
+		return
+	}
+	st.conns--
+
+	if st.conns <= 0 {
+		delete(n.peers, p)
+	}
+}
+
+func (n *Node) sayHello(p peer.ID) {
+	pubk, err := p.ExtractPublicKey()
+	if err != nil {
+		log.Debugf("failed to extract public key: %s", err)
+		return
+	}
+
+	if pubk.Type() != crypto.Ed25519 {
+		log.Debugf("unexpected key type: %d", pubk.Type())
+		return
+	}
+
+	actorID, err := crypto.IDFromPublicKey(pubk)
+	if err != nil {
+		log.Debugf("failed to extract actor ID: %s", err)
+		return
+	}
+
+	actorDID := did.FromPublicKey(pubk)
+	handle := actor.Handle{
+		ID:  actorID,
+		DID: actorDID,
+		Address: actor.Address{
+			HostID:       p.String(),
+			InboxAddress: "root",
+		},
+	}
+
+	msg, err := actor.Message(
+		n.actor.Handle(),
+		handle,
+		PublicHelloBehavior,
+		nil,
+		actor.WithMessageTimeout(time.Second),
+	)
+	if err != nil {
+		log.Debugf("failed to construct hello message: %s", err)
+		return
+	}
+
+	replyCh, err := n.actor.Invoke(msg)
+	if err != nil {
+		log.Debugf("error invoking hello: %s", err)
+		return
+	}
+
+	select {
+	case reply := <-replyCh:
+		reply.Discard()
+		n.mx.Lock()
+		if st, ok := n.peers[p]; ok {
+			st.helloOut = true
+		} else if n.network.PeerConnected(p) {
+			// rance with connected notification
+			st = &peerState{helloOut: true}
+			n.peers[p] = st
+		}
+		n.mx.Unlock()
+		log.Infof("got hello from %s", handle)
+
+	case <-time.After(time.Until(msg.Expiry())):
+		log.Debugf("hello timeout for %s", handle)
+	}
 }
 
 // Stop node
@@ -250,6 +405,10 @@ func (n *Node) Stop() error {
 		}
 	}
 
+	// clear the broadcast app score
+	n.network.SetBroadcastAppScore(nil)
+
+	// stop the actor
 	if err := n.actor.Stop(); err != nil {
 		return fmt.Errorf("failed to stop node actor: %w", err)
 	}
@@ -258,8 +417,13 @@ func (n *Node) Stop() error {
 	return nil
 }
 
-func (n *Node) sendReply(envelope actor.Envelope, payload interface{}) {
-	reply, err := actor.ReplyTo(envelope, payload)
+func (n *Node) sendReply(msg actor.Envelope, payload interface{}) {
+	var opt []actor.MessageOption
+	if msg.IsBroadcast() {
+		opt = append(opt, actor.WithMessageSource(n.actor.Handle()))
+	}
+
+	reply, err := actor.ReplyTo(msg, payload, opt...)
 	if err != nil {
 		log.Debugf("error creating peers list reply: %s", err)
 		return
