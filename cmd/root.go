@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/api/docs"
+	"gitlab.com/nunet/device-management-service/cmd/actor"
 	"gitlab.com/nunet/device-management-service/cmd/backend"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
 	"gitlab.com/nunet/device-management-service/executor/docker"
@@ -48,6 +49,8 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero, dockerExec *docker.Cl
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(cap.NewCapCmd(afs))
+	cmd.AddCommand(actor.NewActorCmd(client, afs))
+
 	return cmd
 }
 

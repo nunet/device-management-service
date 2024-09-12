@@ -50,7 +50,7 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 		DID: did,
 		Address: actor.Address{
 			HostID:       p2p.Host.ID().String(),
-			InboxAddress: "actor/root/messages/0.0.1",
+			InboxAddress: "root",
 		},
 	}
 
@@ -80,8 +80,9 @@ func (rs RESTServer) ActorSendMessage(c *gin.Context) {
 	}
 
 	p2p := rs.config.P2P
-	if p2p != nil {
+	if p2p == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
+		return
 	}
 
 	err := SendMessage(c.Request.Context(), p2p, msg)
@@ -116,14 +117,20 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 	}
 
 	p2p := rs.config.P2P
-	if p2p != nil {
+	if p2p == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
+		return
 	}
 
 	// Register a message handler for the responseCh
-	responseCh := make(chan []byte)
-	err := p2p.HandleMessage(msg.From.Address.InboxAddress, func(data []byte) {
-		responseCh <- data
+	protocol := fmt.Sprintf("actor/%s/messages/0.0.1", msg.From.Address.InboxAddress)
+	responseCh := make(chan actor.Envelope)
+	err := p2p.HandleMessage(protocol, func(data []byte) {
+		var envelope actor.Envelope
+		if err := json.Unmarshal(data, &envelope); err != nil {
+			return
+		}
+		responseCh <- envelope
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -131,7 +138,7 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 	}
 
 	// Unregister the message handler before returning
-	defer p2p.UnregisterMessageHandler(msg.From.Address.InboxAddress)
+	defer p2p.UnregisterMessageHandler(protocol)
 
 	err = SendMessage(c.Request.Context(), p2p, msg)
 	if err != nil {
@@ -140,8 +147,8 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 	}
 
 	select {
-	case data := <-responseCh:
-		c.JSON(http.StatusOK, gin.H{"response": string(data)})
+	case responseMsg := <-responseCh:
+		c.JSON(http.StatusOK, responseMsg)
 		return
 	case <-time.After(time.Until(msg.Expiry())):
 		c.JSON(http.StatusRequestTimeout, gin.H{"error": "request timeout"})
@@ -174,7 +181,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 	}
 
 	p2p := rs.config.P2P
-	if p2p != nil {
+	if p2p == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 	}
 
@@ -190,11 +197,16 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 	}
 
 	// register message handler to collect responses
-	var messages []string // Collect responses as strings
+	protocol := fmt.Sprintf("actor/%s/messages/0.0.1", msg.From.Address.InboxAddress)
+	var messages []actor.Envelope
 	var mu sync.Mutex
-	err = p2p.HandleMessage(msg.From.Address.InboxAddress, func(data []byte) {
+	err = p2p.HandleMessage(protocol, func(data []byte) {
+		var envelope actor.Envelope
+		if err = json.Unmarshal(data, &envelope); err != nil {
+			return
+		}
 		mu.Lock()
-		messages = append(messages, string(data))
+		messages = append(messages, envelope)
 		mu.Unlock()
 	})
 	if err != nil {
@@ -203,7 +215,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 	}
 
 	// Unregister the message handler before returning
-	defer p2p.UnregisterMessageHandler(msg.From.Address.InboxAddress)
+	defer p2p.UnregisterMessageHandler(protocol)
 
 	// Publish the message
 	if err := p2p.Publish(c.Request.Context(), msg.Options.Topic, data); err != nil {
@@ -218,7 +230,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 	case <-c.Request.Context().Done():
 		// request context done
 	}
-	c.JSON(http.StatusOK, gin.H{"responses": messages})
+	c.JSON(http.StatusOK, messages)
 }
 
 func SendMessage(ctx context.Context, net *libp2p.Libp2p, msg actor.Envelope) (err error) {
