@@ -2,16 +2,12 @@ package api
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-
-	ginSwagger "github.com/swaggo/gin-swagger"
-	"github.com/swaggo/gin-swagger/swaggerFiles"
 
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
@@ -54,46 +50,6 @@ func setupRouter(mid []gin.HandlerFunc) *gin.Engine {
 func (rs *RESTServer) InitializeRoutes() {
 	v1 := rs.router.Group("/api/v1")
 
-	// onboardHandler := NewOnboardingHandler(s.config.Onboarding)
-	onboarding := v1.Group("/onboarding")
-	{
-		onboarding.GET("/provisioned", rs.ProvisionedCapacity)
-		onboarding.GET("/address/new", rs.CreatePaymentAddress)
-		onboarding.GET("/status", rs.Status)
-		onboarding.GET("/info", rs.Info)
-		onboarding.POST("/onboard", rs.Onboard)
-		onboarding.POST("/resource-config", rs.ResourceConfig)
-		onboarding.DELETE("/offboard", rs.Offboard)
-	}
-
-	// deviceHandler := DeviceHandler{}
-	device := v1.Group("/device")
-	{
-		device.GET("/status", rs.DeviceStatus)
-		device.POST("/status", rs.UpdateDeviceStatus)
-	}
-
-	// vmHandler := VMHandler{}
-	vm := v1.Group("/vm")
-	{
-		vm.POST("/start-default", rs.StartDefault)
-		vm.POST("/start-custom", rs.StartCustom)
-	}
-
-	// ph := P2PHandler{p2p: rs.config.P2P}
-	p2p := v1.Group("/peers")
-	{
-		p2p.GET("", rs.ListPeers)
-		p2p.GET("/self", rs.SelfPeerInfo)
-
-		// DEBUGGING ONLY
-		if _, debugMode := os.LookupEnv("NUNET_DEBUG"); debugMode {
-			p2p.GET("/ping", rs.PingPeer)
-			p2p.GET("/dht", rs.KnownPeers)
-			// p2p.GET("/dht/dump", ph.DumpDHTHandler)
-		}
-	}
-
 	// /actor routes
 	actor := v1.Group("/actor")
 	{
@@ -102,9 +58,6 @@ func (rs *RESTServer) InitializeRoutes() {
 		actor.POST("/invoke", rs.ActorInvoke)
 		actor.POST("/broadcast", rs.ActorBroadcast)
 	}
-
-	// Swagger API documentation
-	rs.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
 
 // Run starts the server on the specified port

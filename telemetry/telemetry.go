@@ -6,8 +6,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"gitlab.com/nunet/device-management-service/api/docs"
-
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -139,7 +137,7 @@ func (t *Telemetry) logEvent(ctx context.Context, level types.ObservabilityLevel
 	}
 
 	// Add the version to the context
-	ctx = context.WithValue(ctx, versionKey, docs.SwaggerInfo.Version)
+	ctx = context.WithValue(ctx, versionKey, "v0.5")
 
 	event := types.Event{
 		Context: ctx,
