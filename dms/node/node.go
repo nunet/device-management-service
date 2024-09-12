@@ -5,9 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -22,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // Node is the structure that holds the node's dependencies.
@@ -38,7 +38,7 @@ type Node struct {
 	mx          sync.Mutex
 	peers       map[peer.ID]*peerState
 	allocations map[string]*jobs.Allocation
-	running     bool
+	running     int32
 }
 
 type peerState struct {
@@ -105,6 +105,7 @@ func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.Cap
 		hostID:          hostID,
 		network:         net,
 		allocations:     make(map[string]*jobs.Allocation),
+		peers:           make(map[peer.ID]*peerState),
 		resourceManager: resourceManager,
 		actor:           nodeActor,
 		rootCap:         rootCap,
@@ -233,9 +234,7 @@ func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
 
 // Start node
 func (n *Node) Start() error {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-	if n.running {
+	if !atomic.CompareAndSwapInt32(&n.running, 0, 1) {
 		return nil
 	}
 
@@ -248,7 +247,6 @@ func (n *Node) Start() error {
 		return err
 	}
 
-	n.running = true
 	return nil
 }
 
@@ -299,7 +297,7 @@ func (n *Node) peerConnected(p peer.ID) {
 
 	st, ok := n.peers[p]
 	if !ok {
-		st := &peerState{}
+		st = &peerState{}
 		n.peers[p] = st
 	}
 
@@ -394,7 +392,7 @@ func (n *Node) Stop() error {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
-	if !n.running {
+	if !atomic.CompareAndSwapInt32(&n.running, 1, 0) {
 		return nil
 	}
 
@@ -413,7 +411,6 @@ func (n *Node) Stop() error {
 		return fmt.Errorf("failed to stop node actor: %w", err)
 	}
 
-	n.running = false
 	return nil
 }
 
