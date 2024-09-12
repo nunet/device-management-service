@@ -9,7 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/dms/actor"
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/types"
 )
 

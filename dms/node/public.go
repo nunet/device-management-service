@@ -3,7 +3,7 @@ package node
 import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"gitlab.com/nunet/device-management-service/dms/actor"
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/types"
 )
