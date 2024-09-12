@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"gitlab.com/nunet/device-management-service/dms/actor"
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
