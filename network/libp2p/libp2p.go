@@ -28,6 +28,7 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 
 	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peerstore"
@@ -50,8 +51,12 @@ const (
 )
 
 type (
-	ValidationResult = pubsub.ValidationResult
-	Validator        func([]byte, interface{}) (ValidationResult, interface{})
+	PeerID            = peer.ID
+	Topic             = pubsub.Topic
+	PubSub            = pubsub.PubSub
+	ValidationResult  = pubsub.ValidationResult
+	Validator         func([]byte, interface{}) (ValidationResult, interface{})
+	PeerScoreSnapshot = pubsub.PeerScoreSnapshot
 )
 
 // Libp2p contains the configuration for a Libp2p instance.
@@ -59,15 +64,20 @@ type (
 // TODO-suggestion: maybe we should call it something else like Libp2pPeer,
 // Libp2pHost or just Peer (callers would use libp2p.Peer...)
 type Libp2p struct {
-	Host              host.Host
-	DHT               *dht.IpfsDHT
-	PS                peerstore.Peerstore
-	pubsub            *pubsub.PubSub
-	pubsubTopics      map[string]*pubsub.Topic
+	Host   host.Host
+	DHT    *dht.IpfsDHT
+	PS     peerstore.Peerstore
+	pubsub *PubSub
+
+	mx             sync.Mutex
+	pubsubAppScore func(peer.ID) float64
+	pubsubScore    map[peer.ID]*PeerScoreSnapshot
+
+	topicMux          sync.RWMutex
+	pubsubTopics      map[string]*Topic
 	topicValidators   map[string]map[uint64]Validator
 	topicSubscription map[string]map[uint64]*pubsub.Subscription
 	nextTopicSubID    uint64
-	topicMux          sync.RWMutex
 
 	// a list of peers discovered by discovery
 	discoveredPeers []peer.AddrInfo
@@ -112,7 +122,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 
 // Init initializes a libp2p host with its dependencies.
 func (l *Libp2p) Init(context context.Context) error {
-	host, dht, pubsub, err := NewHost(context, l.config)
+	host, dht, pubsub, err := NewHost(context, l.config, l.broadcastAppScore, l.broadcastScoreInspect)
 	if err != nil {
 		zlog.Sugar().Error(err)
 		return err
@@ -591,9 +601,9 @@ func (l *Libp2p) Subscribe(ctx context.Context, topic string, handler func(data 
 }
 
 func (l *Libp2p) validate(_ context.Context, _ peer.ID, msg *pubsub.Message) ValidationResult {
-	l.topicMux.Lock()
+	l.topicMux.RLock()
 	validators, ok := l.topicValidators[msg.GetTopic()]
-	l.topicMux.Unlock()
+	l.topicMux.RUnlock()
 
 	if !ok {
 		return ValidationAccept
@@ -608,6 +618,90 @@ func (l *Libp2p) validate(_ context.Context, _ peer.ID, msg *pubsub.Message) Val
 	}
 
 	return ValidationAccept
+}
+
+func (l *Libp2p) SetupBroadcastTopic(topic string, setup func(*Topic) error) error {
+	t, ok := l.pubsubTopics[topic]
+	if !ok {
+		return fmt.Errorf("not subscribed to %s", topic)
+	}
+
+	return setup(t)
+}
+
+func (l *Libp2p) SetBroadcastAppScore(f func(peer.ID) float64) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	l.pubsubAppScore = f
+}
+
+func (l *Libp2p) broadcastAppScore(p peer.ID) float64 {
+	f := func(peer.ID) float64 { return 0 }
+
+	l.mx.Lock()
+	if l.pubsubAppScore != nil {
+		f = l.pubsubAppScore
+	}
+	l.mx.Unlock()
+
+	return f(p)
+}
+
+func (l *Libp2p) GetBroadcastScore() map[peer.ID]*PeerScoreSnapshot {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	return l.pubsubScore
+}
+
+func (l *Libp2p) broadcastScoreInspect(score map[peer.ID]*PeerScoreSnapshot) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	l.pubsubScore = score
+}
+
+func (l *Libp2p) Notify(ctx context.Context, connected, disconnected func(peer.ID)) error {
+	sub, err := l.Host.EventBus().Subscribe([]interface{}{
+		&event.EvtPeerConnectednessChanged{},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to event bus: %w", err)
+	}
+
+	for _, p := range l.Host.Network().Peers() {
+		if l.Host.Network().Connectedness(p) == network.Connected {
+			connected(p)
+		}
+	}
+
+	go func() {
+		defer sub.Close()
+
+		for ctx.Err() == nil {
+			var ev any
+			select {
+			case <-ctx.Done():
+				return
+			case ev = <-sub.Out():
+				if c, ok := ev.(*event.EvtPeerConnectednessChanged); ok {
+					switch c.Connectedness {
+					case network.Connected:
+						connected(c.Peer)
+					case network.NotConnected:
+						disconnected(c.Peer)
+					}
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (l *Libp2p) PeerConnected(p PeerID) bool {
+	return l.Host.Network().Connectedness(p) == network.Connected
 }
 
 func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg types.MessageEnvelope) error {

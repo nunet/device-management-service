@@ -62,7 +62,7 @@ type Actor interface {
 	Invoke(msg Envelope) (<-chan Envelope, error)
 
 	Publish(msg Envelope) error
-	Subscribe(topic string) error
+	Subscribe(topic string, setup ...BroadcastSetup) error
 
 	Start() error
 	Stop() error
@@ -143,3 +143,5 @@ type BehaviorOptions struct {
 	OneShot    bool
 	Topic      string
 }
+
+type BroadcastSetup func(topic string) error

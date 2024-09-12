@@ -14,8 +14,11 @@ import (
 )
 
 type (
-	Validator        = libp2p.Validator
-	ValidationResult = libp2p.ValidationResult
+	PeerID            = libp2p.PeerID
+	Topic             = libp2p.Topic
+	Validator         = libp2p.Validator
+	ValidationResult  = libp2p.ValidationResult
+	PeerScoreSnapshot = libp2p.PeerScoreSnapshot
 )
 
 const (
@@ -64,6 +67,18 @@ type Network interface {
 	Subscribe(ctx context.Context, topic string, handler func(data []byte), validator libp2p.Validator) (uint64, error)
 	// Unsubscribe from a topic
 	Unsubscribe(topic string, subID uint64) error
+	// SetupBroadcastTopic allows the application to configure pubsub topic directly
+	SetupBroadcastTopic(topic string, setup func(*Topic) error) error
+	// SetupBroadcastAppScore allows the application to configure application level
+	// scoring for pubsub
+	SetBroadcastAppScore(func(PeerID) float64)
+	// GetBroadcastScore returns the latest broadcast score snapshot
+	GetBroadcastScore() map[PeerID]*PeerScoreSnapshot
+	// Notify allows the application to receive notifications about peer connections
+	// and disconnecions
+	Notify(ctx context.Context, connected, disconnected func(PeerID)) error
+	// PeerConnected returs true if the peer is currently connected
+	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
 	Stop() error
 }

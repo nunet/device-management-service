@@ -235,7 +235,7 @@ func (a *BasicActor) Publish(msg Envelope) error {
 	return nil
 }
 
-func (a *BasicActor) Subscribe(topic string) error {
+func (a *BasicActor) Subscribe(topic string, setup ...BroadcastSetup) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
@@ -254,6 +254,13 @@ func (a *BasicActor) Subscribe(topic string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("subscribe: %w", err)
+	}
+
+	for _, f := range setup {
+		if err := f(topic); err != nil {
+			_ = a.network.Unsubscribe(topic, subID)
+			return fmt.Errorf("setup broadcast topic: %w", err)
+		}
 	}
 
 	a.subscriptions[topic] = subID

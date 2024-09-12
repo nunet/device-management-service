@@ -9,6 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/nunet/device-management-service/dms/actor"
+	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -19,6 +20,7 @@ const (
 	PeerPingBehavior         = "/dms/node/peers/ping"
 	PeerDHTBehavior          = "/dms/node/peers/dht"
 	PeerConnectBehavior      = "/dms/node/peers/connect"
+	PeerScoreBehavior        = "/dms/node/peers/score"
 	OnboardBehaviour         = "/dms/node/onboarding/onboard"
 	OffboardBehaviour        = "/dms/node/onboarding/offboard"
 	OnboardStatusBehaviour   = "/dms/node/onboarding/status"
@@ -350,5 +352,16 @@ func (n *Node) handleListVM(msg actor.Envelope) {
 		VMS: n.executor.List(),
 	}
 
+	n.sendReply(msg, resp)
+}
+
+type PeerScoreResponse struct {
+	Score map[peer.ID]*network.PeerScoreSnapshot
+}
+
+func (n *Node) handlePeerScore(msg actor.Envelope) {
+	defer msg.Discard()
+
+	resp := PeerScoreResponse{Score: n.network.GetBroadcastScore()}
 	n.sendReply(msg, resp)
 }
