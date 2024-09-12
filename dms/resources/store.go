@@ -68,7 +68,7 @@ func (s *store) withFreeLock(fn func()) {
 // withGpuMetadataLock locks the gpu metadata lock and executes the function
 func (s *store) withGpuMetadataLock(fn func()) {
 	s.locks.allocations.RLock()
-	defer s.locks.allocations.Unlock()
+	defer s.locks.allocations.RUnlock()
 	fn()
 }
 
