@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/spf13/pflag"
 )
 
 // TimeValue adapts time.Time for use as a flag.
@@ -31,7 +33,7 @@ func NewTimeValue(t *time.Time, formats ...string) *TimeValue {
 }
 
 // Set time.Time value from string based on accepted formats.
-func (t *TimeValue) Set(s string) error {
+func (t TimeValue) Set(s string) error {
 	s = strings.TrimSpace(s)
 	for _, format := range t.Formats {
 		v, err := time.Parse(format, s)
@@ -44,14 +46,27 @@ func (t *TimeValue) Set(s string) error {
 }
 
 // Type name for time.Time flags.
-func (t *TimeValue) Type() string {
+func (t TimeValue) Type() string {
 	return "time"
 }
 
 // String returns the string representation of the time.Time value.
-func (t *TimeValue) String() string {
+func (t TimeValue) String() string {
 	if t.Time == nil || t.Time.IsZero() {
 		return ""
 	}
 	return t.Time.String()
+}
+
+func GetTime(f *pflag.FlagSet, name string) (time.Time, error) {
+	t := time.Time{}
+	flag := f.Lookup(name)
+	if flag == nil {
+		return t, fmt.Errorf("flag %s not found", name)
+	}
+	if flag.Value == nil || flag.Value.Type() != new(TimeValue).Type() {
+		return t, fmt.Errorf("flag %s has wrong type or no value", name)
+	}
+	val := flag.Value.(*TimeValue)
+	return *val.Time, nil
 }

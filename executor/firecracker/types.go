@@ -12,6 +12,7 @@ const (
 	EngineKeyKernelImage    = "kernel_image"
 	EngineKeyKernelArgs     = "kernel_args"
 	EngineKeyRootFileSystem = "root_file_system"
+	EngineKeyInitrd         = "initrd"
 	EngineKeyMMDSMessage    = "mmds_message"
 )
 
@@ -96,6 +97,13 @@ func (b *EngineBuilder) WithRootFileSystem(e string) *EngineBuilder {
 // It returns the FirecrackerEngineBuilder for further chaining of builder methods.
 func (b *EngineBuilder) WithKernelImage(e string) *EngineBuilder {
 	b.eb.WithParam(EngineKeyKernelImage, e)
+	return b
+}
+
+// WithInitrd is a builder method that sets the Firecracker init ram disk.
+// It returns the FirecrackerEngineBuilder for further chaining of builder methods.
+func (b *EngineBuilder) WithInitrd(e string) *EngineBuilder {
+	b.eb.WithParam(EngineKeyInitrd, e)
 	return b
 }
 
