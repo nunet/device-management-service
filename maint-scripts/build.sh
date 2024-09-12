@@ -14,25 +14,28 @@ set -euo pipefail
 # UNINSTALLATION PROCESS
 # 1. Stop services and remove service files.
 
-
 # Both INSTALLATION PROCESS and UNINSTALLATION PROCESS are done by the package created in the build process.
 
 # Requirements
 
 # golang is required to build the nunet binary
-# gcc is required to build go-ethereum
-# dpkg-deb is required to build go-ethereum
+# gcc is required to build the nunet-tap-config binary
+# dpkg-deb is required to create the .deb package
+# pandoc is required to convert the markdown into a man page
 
 projectRoot=$(pwd)
 outputDir="$projectRoot/dist"
-version=$(cat main.go | grep @version | awk {'print $3'})
+
+# TODO: Update version number from git describe after release
+fullVersion="v0.5.0-boot"
+version=$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
 
 mkdir -p $outputDir
 
 for arch in amd64 # arm64
 do
     # echo .deb file will be written to: $outputDir
-    archDir=$projectRoot/maint-scripts/nunet-dms_$version\_$arch
+    archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_$arch
     cp -r $projectRoot/maint-scripts/nunet-dms $archDir
     sed -i "s/Version:.*/Version: $version/g" $archDir/DEBIAN/control
     sed -i "s/Architecture:.*/Architecture: $arch/g" $archDir/DEBIAN/control
