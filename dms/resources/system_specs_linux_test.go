@@ -38,7 +38,7 @@ func TestLinuxSystemSpecs_getCPU(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Greater(t, cpuInfo.Cores, float32(0))
-	require.Greater(t, cpuInfo.ClockSpeed, int64(0))
+	require.Greater(t, cpuInfo.ClockSpeed, float64(0))
 	require.Greater(t, cpuInfo.Compute, float64(0))
 	// other fields as needed
 }
@@ -51,7 +51,7 @@ func TestLinuxSystemSpecs_GetMachineResources(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Greater(t, resources.CPU.Cores, float32(0))
-	require.Greater(t, resources.CPU.ClockSpeed, int64(0))
+	require.Greater(t, resources.CPU.ClockSpeed, float64(0))
 	require.Greater(t, resources.CPU.Compute, float64(0))
 	require.Greater(t, resources.RAM.Size, uint64(0))
 	require.Greater(t, resources.Disk.Size, uint64(0))
