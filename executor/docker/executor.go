@@ -209,6 +209,13 @@ func (e *Executor) GetLogStream(
 	return nil, fmt.Errorf("execution (%s) not found", request.ExecutionID)
 }
 
+// List returns a slice of ExecutionListItem containing information about current executions.
+// This implementation currently returns an empty list and should be updated in the future.
+func (e *Executor) List() []types.ExecutionListItem {
+	// TODO: list dms containers
+	return nil
+}
+
 // Run initiates and waits for the completion of an execution in one call.
 // This method serves as a higher-level convenience function that
 // internally calls Start and Wait methods.

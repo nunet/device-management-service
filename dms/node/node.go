@@ -15,7 +15,9 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
+	"gitlab.com/nunet/device-management-service/executor/null"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -33,7 +35,7 @@ type Node struct {
 	resourceManager types.ResourceManager
 	hostID          string
 	onboarder       *onboarding.Onboarding
-	executor        *firecracker.Executor
+	executor        executor.Executor
 
 	mx          sync.Mutex
 	peers       map[peer.ID]*peerState
@@ -96,9 +98,17 @@ func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.Cap
 		return nil, fmt.Errorf("failed to create node actor: %w", err)
 	}
 
-	executor, err := firecracker.NewExecutor(ctx, "root")
+	var executor executor.Executor
+	executor, err = firecracker.NewExecutor(ctx, "root")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create executor: %w", err)
+		if errors.Is(err, firecracker.ErrNotInstalled) {
+			executor, err = null.NewExecutor(ctx, "root")
+			if err != nil {
+				return nil, fmt.Errorf("failed to setup null executor: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to create executor: %w", err)
+		}
 	}
 
 	n := &Node{

@@ -2,6 +2,7 @@ package firecracker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +22,8 @@ const (
 	socketDir = "/tmp"
 )
 
+var ErrNotInstalled = errors.New("firecracker is not installed")
+
 // Executor manages the lifecycle of Firecracker VMs for execution requests.
 type Executor struct {
 	ID string
@@ -37,7 +40,7 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	}
 
 	if !firecrackerClient.IsInstalled(ctx) {
-		return nil, fmt.Errorf("firecracker is not installed")
+		return nil, ErrNotInstalled
 	}
 	fe := &Executor{
 		ID:     id,

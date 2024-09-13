@@ -6,9 +6,9 @@ import (
 	"io"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
-	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -281,6 +281,10 @@ func (m *mockExecutor) Wait(_ context.Context, _ string) (<-chan *types.Executio
 
 func (m *mockExecutor) Cancel(_ context.Context, _ string) error {
 	return m.err
+}
+
+func (m *mockExecutor) List() []types.ExecutionListItem {
+	return nil
 }
 
 func (m *mockExecutor) GetLogStream(_ context.Context, _ types.LogStreamRequest) (io.ReadCloser, error) {
