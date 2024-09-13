@@ -7,11 +7,14 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
 
-const Ed25519 = crypto.Ed25519
+const (
+	Ed25519   = crypto.Ed25519
+	Secp256k1 = crypto.Secp256k1
+)
 
 type (
 	Key     = crypto.Key
-	PrivKey crypto.PrivKey
+	PrivKey = crypto.PrivKey
 	PubKey  = crypto.PubKey
 )
 
@@ -19,6 +22,8 @@ func GenerateKeyPair(t int) (PrivKey, PubKey, error) {
 	switch t {
 	case Ed25519:
 		return crypto.GenerateEd25519Key(rand.Reader)
+	case Secp256k1:
+		return crypto.GenerateSecp256k1Key(rand.Reader)
 	default:
 		return nil, nil, fmt.Errorf("unsupported key type %d: %w", t, ErrUnsupportedKeyType)
 	}
