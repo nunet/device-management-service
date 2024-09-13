@@ -21,7 +21,7 @@ func newNewCmd(afs afero.Afero) *cobra.Command {
 		Long:  `Create a new persistent capability context for DMS or personal usage`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			context := dms.CapContextName
+			context := dms.UserContextName
 			if len(args) > 0 {
 				context = args[0]
 			}

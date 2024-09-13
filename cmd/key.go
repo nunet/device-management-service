@@ -42,7 +42,7 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 				return fmt.Errorf("failed to create keystore: %w", err)
 			}
 
-			keyID := dms.KeyIDPrivKey
+			keyID := dms.UserContextName
 			if len(args) > 0 {
 				keyID = args[0]
 			}
