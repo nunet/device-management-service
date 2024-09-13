@@ -117,7 +117,8 @@ func ProviderFromPrivateKey(privk crypto.PrivKey) (Provider, error) {
 // Copyright applies; some superficial modifications by vyzo.
 
 const (
-	multicodecKindEd25519PubKey uint64 = 0xed
+	multicodecKindEd25519PubKey   uint64 = 0xed
+	multicodecKindSecp256k1PubKey uint64 = 0xe7
 
 	keyPrefix = "did:key"
 )
@@ -128,13 +129,18 @@ func FormatKeyURI(pubk crypto.PubKey) string {
 		return ""
 	}
 
-	// TODO other supported key types (secp?)
-	if t := pubk.Type(); t != crypto.Ed25519 {
+	var t uint64
+	switch pubk.Type() {
+	case crypto.Ed25519:
+		t = multicodecKindEd25519PubKey
+	case crypto.Secp256k1:
+		t = multicodecKindSecp256k1PubKey
+	default:
 		// we don't support those yet
 		log.Errorf("unsupported key type: %d", t)
 		return ""
 	}
-	t := multicodecKindEd25519PubKey
+
 	size := varint.UvarintSize(t)
 	data := make([]byte, size+len(raw))
 	n := varint.PutUvarint(data, t)
@@ -172,6 +178,13 @@ func ParseKeyURI(uri string) (crypto.PubKey, error) {
 	switch keyType {
 	case multicodecKindEd25519PubKey:
 		pubk, err := libp2p_crypto.UnmarshalEd25519PublicKey(data[n:])
+		if err != nil {
+			return nil, err
+		}
+		return pubk, nil
+
+	case multicodecKindSecp256k1PubKey:
+		pubk, err := libp2p_crypto.UnmarshalSecp256k1PublicKey(data[n:])
 		if err != nil {
 			return nil, err
 		}
