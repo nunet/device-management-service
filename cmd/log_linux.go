@@ -13,7 +13,7 @@ import (
 
 const (
 	logDir    = "/tmp/nunet-log"
-	dmsUnit   = "nunet-dms.service"
+	dmsUnit   = "nunet.service"
 	tarGzName = "nunet-log.tar.gz"
 )
 

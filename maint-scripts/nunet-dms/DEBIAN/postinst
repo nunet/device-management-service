@@ -11,16 +11,10 @@ adduser $USER $USER
 adduser $USER docker
 
 # Give above user access to write to /etc/nunet
-chown -R $USER:$USER /etc/nunet
 chown -R $USER:$USER /var/nunet
 
 # Start the services.
 systemctl daemon-reload
-systemctl enable --now nunet-dms.service  # enable --now == enable and start
-
-# Add SUID on nunet-tap-config which is currently owned by root
-# so that nunet user can run it without requiring password
-chmod 4755 /usr/bin/nunet-tap-config
 
 if command -v mandb > /dev/null; then
     echo Adding man page.

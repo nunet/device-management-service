@@ -148,12 +148,6 @@ Here is a step-by-step process to install the Device Management Service (DMS) on
    ps aux | grep nunet
    ```
 
-   Or use systemd:
-
-   ```bash
-   sudo systemctl status nunet-dms.service
-   ```
-
    If it is not running and you notice errors, submit a bug report by following [these](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/contributing_guidelines/README.md#how-to-report-a-bug) guidelines.
 
 3. **Uninstall DMS** (if needed):
@@ -285,7 +279,7 @@ The global class diagram for the DMS is shown below.
 The cleanest way to set up a development environment is to build a .deb package out of this repository and let the installer do the work for you.
 
 ```bash
-sudo apt install build-essential curl jq iproute2 libsystemd-dev
+sudo apt install build-essential iproute2 libsystemd-dev
 ```
 
 #### Prerequisites
