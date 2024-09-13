@@ -2,7 +2,8 @@ variables:
   # https://hub.docker.com/r/alpine/git/tags
   GIT_VERSION: v2.30.1
   BUILD_DISABLED: "yes"
-  DMS_BUILDER_VERSION: "0.5"
+  DMS_BUILDER_VERSION: "0.5-boot"
+  BUILD_IMAGE_ONLY: false
   # CODE_QUALITY_DISABLED: true
   # SKIP_UNIT_TESTS: true
   # INTEGRATION_TESTS_DISABLED: true
@@ -18,11 +19,17 @@ include:
   project: nunet/test-suite
   file: cicd/Auto-DevOps.gitlab-ci.yml
   ref: release
+  rules:
+    - if: $BUILD_IMAGE_ONLY == "true"
+      when: never
+    - when: always
 
-image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:0.4
+image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:$DMS_BUILDER_VERSION
 
 Build:
   stage: build
+  dependencies: []
+  needs: []
   script:
     - echo "Building debian archives..."
     - bash maint-scripts/build.sh
@@ -33,11 +40,14 @@ Build:
     paths:
       - dist/
   rules:
+    - if: $BUILD_IMAGE_ONLY == "true"
+      when: never
     - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
       when: never
-    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
       when: never
-    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)&/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
+    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
     - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
       when: manual
     - when: never
@@ -50,11 +60,12 @@ Build DMS Builder:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD registry.gitlab.com
   script:
-    - docker build -f maint-scripts/Dockerfile.builder -t ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION}
+    - docker build -f maint-scripts/Dockerfile.builder -t ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION} maint-scripts/
     - docker push ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION}
   rules:
     - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
       when: never
+    - if: $BUILD_IMAGE_ONLY == "true"
     - changes: 
         - maint-scripts/Dockerfile.builder
       if: $CI_COMMIT_BRANCH == "main"
@@ -113,5 +124,7 @@ Deploy:
   rules:
     - when: never
     - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
+      when: never
+    - if: $BUILD_IMAGE_ONLY == "true"
       when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "staging"
