@@ -11,7 +11,8 @@ import (
 )
 
 func newRunCmd() *cobra.Command {
-	return &cobra.Command{
+	var context string
+	cmd := &cobra.Command{
 		Use:   "run",
 		Short: "Start the Device Management Service",
 		Long:  `The Device Management Service (DMS) is a system application for computing and service providers. It handles networking and device management.`,
@@ -32,7 +33,9 @@ func newRunCmd() *cobra.Command {
 				}
 			}
 
-			return dms.Run(passphrase)
+			return dms.Run(passphrase, context)
 		},
 	}
+	cmd.Flags().StringVarP(&context, "context", "c", dms.DefaultContextName, "Operation context; it specifies the key and capability context to use; defaults to user context")
+	return cmd
 }

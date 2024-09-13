@@ -31,11 +31,10 @@ import (
 )
 
 const (
-	KeyIDPrivKey    = "dms"
-	CapContextName  = "dms"
-	UserContextName = "user"
-	KeystoreDir     = "key/"
-	CapstoreDir     = "cap/"
+	DefaultContextName = "dms"
+	UserContextName    = "user"
+	KeystoreDir        = "key/"
+	CapstoreDir        = "cap/"
 )
 
 // NewP2P is stub, real implementation is needed in order to pass it to
@@ -45,7 +44,11 @@ func NewP2P() libp2p.Libp2p {
 }
 
 // QUESTION(dms-initialization): should the db instance be constructed here?
-func Run(ksPassphrase string) error {
+func Run(ksPassphrase string, contextName string) error {
+	if contextName == "" {
+		contextName = DefaultContextName
+	}
+
 	ctx := context.Background()
 	fs := afero.NewOsFs()
 
@@ -56,10 +59,10 @@ func Run(ksPassphrase string) error {
 	}
 
 	var priv crypto.PrivKey
-	ksPrivKey, err := keyStore.Get(KeyIDPrivKey, ksPassphrase)
+	ksPrivKey, err := keyStore.Get(contextName, ksPassphrase)
 	if err != nil {
 		if errors.Is(err, keystore.ErrKeyNotFound) {
-			priv, err = GenerateAndStorePrivKey(keyStore, ksPassphrase, KeyIDPrivKey)
+			priv, err = GenerateAndStorePrivKey(keyStore, ksPassphrase, contextName)
 			if err != nil {
 				return fmt.Errorf("couldn't generate and store priv key into keystore: %w", err)
 			}
@@ -142,7 +145,7 @@ func Run(ksPassphrase string) error {
 	}
 
 	capStoreDir := filepath.Join(config.GetConfig().General.UserDir, CapstoreDir)
-	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", CapContextName))
+	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", contextName))
 	var capCtx ucan.CapabilityContext
 
 	if _, err := os.Stat(capStoreFile); err != nil {
