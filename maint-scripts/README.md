@@ -2,6 +2,8 @@
 
 This directory contains utility scripts for building / development assistance and runtime; It is included into final build;
 
+There is a systmed unit file in the debian package but it's not enabled or started by the post installation script because the DMS daemon requires a passphrase on `run`. It is possible to assign the passphrase to env var $DMS_PASSPHRASE and add it to the unit file but that's not recommended.
+
 _Note: lets see if this functionality can be split to relevant packages and leave only the functionality that cannot be moved elsewhere;_
 
 # Summary

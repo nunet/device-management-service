@@ -1,7 +1,7 @@
 Package: nunet-dms
 Version: version
 Architecture: architecture
-Depends: curl, docker.io | docker-ce, jq, bc, bsdmainutils, libsystemd-dev
+Depends: docker.io | docker-ce, libsystemd-dev
 Installed-Size: DMS_INST_SIZE
 Section: utils
 Maintainer: Santosh Kumar<santosh.kumar@nunet.io>, Olakunle Oladimeji<olakunle.oladimeji@nunet.io>

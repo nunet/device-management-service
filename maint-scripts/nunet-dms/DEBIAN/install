@@ -1,0 +1,3 @@
+nunet /usr/bin/
+nunet.1.gz /usr/share/man/man1/
+nunet.service /etc/systemd/system/
