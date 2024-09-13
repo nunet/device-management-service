@@ -37,4 +37,8 @@ type Executor interface {
 	// Returns an io.ReadCloser to read the output stream and an error if the operation fails.
 	// Specifically, it will return an error if the execution does not exist.
 	GetLogStream(ctx context.Context, request types.LogStreamRequest) (io.ReadCloser, error)
+
+	// List returns a slice of ExecutionListItem containing information about current executions.
+	// This includes the execution ID and whether it's currently running.
+	List() []types.ExecutionListItem
 }
