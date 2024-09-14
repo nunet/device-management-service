@@ -58,7 +58,9 @@ func (n *Node) handlePeerPing(msg actor.Envelope) {
 		return
 	}
 
-	resp.Error = res.Error.Error()
+	if res.Error != nil {
+		resp.Error = res.Error.Error()
+	}
 	resp.RTT = res.RTT.Milliseconds()
 	n.sendReply(msg, resp)
 }
