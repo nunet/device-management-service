@@ -100,7 +100,6 @@ func TestOnboard(t *testing.T) {
 		Channel:           "test",
 		PaymentAddress:    "0x1234567890abcdef",
 		NTXPricePerMinute: 10,
-		Cardano:           false,
 	}
 
 	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
@@ -160,7 +159,6 @@ func TestResourceConfig(t *testing.T) {
 		Channel:           "test",
 		PaymentAddress:    "0x1234567890abcdef",
 		NTXPricePerMinute: 10,
-		Cardano:           false,
 	}
 
 	testFS := afero.Afero{Fs: afero.NewMemMapFs()}

@@ -15,7 +15,6 @@ type CapacityForNunet struct {
 	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
 	Channel           string  `json:"channel,omitempty"`
 	PaymentAddress    string  `json:"payment_addr,omitempty"`
-	Cardano           bool    `json:"cardano,omitempty"`
 	ServerMode        bool    `json:"server_mode,omitempty,"`
 	IsAvailable       bool    `json:"is_available"`
 }
@@ -38,7 +37,6 @@ type OnboardingConfig struct {
 	Network            string             `json:"network,omitempty"`
 	PublicKey          string             `json:"public_key,omitempty"`
 	NodeID             string             `json:"node_id,omitempty"`
-	AllowCardano       bool               `json:"allow_cardano,omitempty"`
 	GpuInfo            []GPU              `json:"gpu_info,omitempty" gorm:"foreignKey:ResourceID"`
 	Dashboard          string             `json:"dashboard,omitempty"`
 	NTXPricePerMinute  float64            `json:"ntx_price,omitempty"`

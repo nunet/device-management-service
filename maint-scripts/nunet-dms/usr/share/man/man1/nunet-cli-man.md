@@ -77,7 +77,6 @@ For example,
 nunet onboard -m 4000 -c 15000 -n nunet-test -a addr1q8pakf7kuac2fupvvwym4nq9rvu80vd5cvdtp2h0gpg8ppeetw8gxhrfckc4q3gjdg2eprnezpyx6sjauqj4mevleavql8n8kd 
 ```
 
-- The `-C` option is optional and allows deployment of a Cardano node. Your device must have at least 10,000 MB of memory and 6,000 MHz of compute capacity to be eligible.
 - The `-l` option is optional but important. Use `-l` when running the DMS on a local machine (e.g., a laptop or desktop computer) to enable advertisement and discovery on a local network address. Do not use `-l` when running the DMS on a machine from a datacenter.
 
 4. Onboard your NVIDIA GPU

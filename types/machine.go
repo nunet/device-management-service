@@ -105,7 +105,6 @@ type PeerData struct {
 	PeerID               string        `json:"peer_id"`
 	IsAvailable          bool          `json:"is_available"`
 	HasGpu               bool          `json:"has_gpu"`
-	AllowCardano         bool          `json:"allow_cardano"`
 	GpuInfo              []GPU         `json:"gpu_info"`
 	TokenomicsAddress    string        `json:"tokenomics_addrs"`
 	TokenomicsBlockchain string        `json:"tokenomics_blockchain"`

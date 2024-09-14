@@ -802,7 +802,6 @@ type PeerData struct {
 	PeerID               string        `json:"peer_id"`
 	IsAvailable          bool          `json:"is_available"`
 	HasGpu               bool          `json:"has_gpu"`
-	AllowCardano         bool          `json:"allow_cardano"`
 	GpuInfo              []Gpu         `json:"gpu_info"`
 	TokenomicsAddress    string        `json:"tokenomics_addrs"`
 	TokenomicsBlockchain string        `json:"tokenomics_blockchain"`
@@ -882,7 +881,6 @@ type CapacityForNunet struct {
 	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
 	Channel           string  `json:"channel,omitempty"`
 	PaymentAddress    string  `json:"payment_addr,omitempty"`
-	Cardano           bool    `json:"cardano,omitempty"`
 	ServerMode        bool    `json:"server_mode,omitempty,"`
 	IsAvailable       bool    `json:"is_available"`
 }
@@ -923,7 +921,6 @@ type Metadata struct {
 	Network           string  `json:"network,omitempty"`
 	PublicKey         string  `json:"public_key,omitempty"`
 	NodeID            string  `json:"node_id,omitempty"`
-	AllowCardano      bool    `json:"allow_cardano,omitempty"`
 	GpuInfo           []Gpu   `json:"gpu_info,omitempty"`
 	Dashboard         string  `json:"dashboard,omitempty"`
 	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
