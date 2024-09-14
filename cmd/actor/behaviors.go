@@ -112,7 +112,6 @@ var behaviors = map[string]behaviorConfig{
 			cmd.Flags().Float64VarP(&p.Config.NTXPricePerMinute, "ntx-price", "x", 0, "price in NTX per minute for onboarded compute resource")
 			cmd.Flags().BoolVarP(&p.Config.IsAvailable, "available", "a", false, "unavailable for job deployment (default: false)")
 			cmd.Flags().BoolVarP(&p.Config.ServerMode, "local-enable", "l", true, "set server mode (enable for local)")
-			cmd.Flags().BoolVarP(&p.Config.Cardano, "cardano", "C", false, "set Cardano wallet")
 			cmd.MarkFlagsRequiredTogether("memory", "cpu", "nunet-channel", "wallet")
 		},
 		PayloadEnc: func(_ *Command, payload any) (any, error) {

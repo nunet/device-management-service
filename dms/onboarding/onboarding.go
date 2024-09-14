@@ -100,23 +100,13 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	var oConf types.OnboardingConfig
 	oConf.Name = hostname
 	oConf.UpdateTimestamp = time.Now().Unix()
-	// TODO: 553
 	oConf.TotalResources.RAM = machineResources.RAM
 	oConf.TotalResources.CPU = machineResources.CPU
-
-	oConf.AllowCardano = false
-	if capacity.Cardano {
-		if capacity.Memory < 10000 || capacity.CPU < 6000 {
-			return nil, fmt.Errorf("cardano node requires 10000MB of RAM and 6000MHz CPU")
-		}
-		oConf.AllowCardano = true
-	}
 
 	oConf.GpuInfo = machineResources.GPUs
 
 	oConf.OnboardedResources.RAM = types.RAM{Size: capacity.Memory}
 	oConf.OnboardedResources.CPU = types.CPU{Cores: float32(capacity.CPU)}
-	// TODO: 553
 	oConf.Network = capacity.Channel
 	oConf.PublicKey = capacity.PaymentAddress
 	oConf.NTXPricePerMinute = capacity.NTXPricePerMinute
