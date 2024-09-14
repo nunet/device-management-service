@@ -339,7 +339,7 @@ func (n *Node) sayHello(p peer.ID) {
 		return
 	}
 
-	if pubk.Type() != crypto.Ed25519 {
+	if !crypto.AllowedKey(int(pubk.Type())) {
 		log.Debugf("unexpected key type: %d", pubk.Type())
 		return
 	}

@@ -18,6 +18,17 @@ type (
 	PubKey  = crypto.PubKey
 )
 
+func AllowedKey(t int) bool {
+	switch t {
+	case Ed25519:
+		return true
+	case Secp256k1:
+		return true
+	default:
+		return false
+	}
+}
+
 func GenerateKeyPair(t int) (PrivKey, PubKey, error) {
 	switch t {
 	case Ed25519:

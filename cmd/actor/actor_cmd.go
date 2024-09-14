@@ -17,6 +17,7 @@ const (
 	fnTimeout     = "timeout"
 	fnExpiry      = "expiry"
 	fnContextName = "context"
+	fnDest        = "dest"
 
 	bBroadcast = "broadcast"
 	bInvoke    = "invoke"
@@ -54,6 +55,7 @@ func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero) *cobra.Comman
 	cmd.PersistentFlags().StringP(fnContextName, "c", "", "capability context name")
 	cmd.PersistentFlags().DurationP(fnTimeout, "t", 0, "timeout duration")
 	cmd.PersistentFlags().VarP(utils.NewTimeValue(&time.Time{}), fnExpiry, "e", "expiration time")
+	cmd.PersistentFlags().StringP(fnDest, "d", "", "destination DMS DID, peer ID or handle")
 	cmd.MarkFlagsMutuallyExclusive(fnTimeout, fnExpiry)
 	return cmd
 }
@@ -74,9 +76,11 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 			timeout, _ := cmd.Flags().GetDuration(fnTimeout)
 			expiry, _ := utils.GetTime(cmd.Flags(), fnExpiry)
 			contextName, _ := cmd.Flags().GetString(fnContextName)
+			dest, _ := cmd.Flags().GetString(fnDest)
+
 			dmsHandle, err := getDMSHandle(client)
 			if err != nil {
-				return fmt.Errorf("could not get source handle: %w", err)
+				return fmt.Errorf("could not get source DMS handle: %w", err)
 			}
 
 			topic := ""
@@ -93,7 +97,7 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 
 			invocation := behaviorCfg.Type == bInvoke
 
-			msg, err := newActorMessage(afs, dmsHandle, "", topic, behavior, payload.val, timeout, expiry, invocation, contextName)
+			msg, err := newActorMessage(afs, dmsHandle, dest, topic, behavior, payload.val, timeout, expiry, invocation, contextName)
 			if err != nil {
 				return fmt.Errorf("could not create message: %w", err)
 			}
@@ -106,6 +110,7 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 			endpoint := fmt.Sprintf("/actor/%s", behaviorCfg.Type)
 			resBody, resCode, err := client.MakeRequest("POST", endpoint, msgData)
 			if err != nil {
+				fmt.Println("err", err)
 				return fmt.Errorf("unable to make internal request: %w", err)
 			}
 			if resCode != 200 {
