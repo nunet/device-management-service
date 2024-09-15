@@ -277,6 +277,11 @@ $ nunet key did ledger
 ```
 
 ##### Setup your DMS for the public testnet
+0. **The NuNet DID**
+
+```
+did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
+```
 
 1. **Create a capability anchor for public behaviors**
 
