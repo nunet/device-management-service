@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package cmd
 
 import (
@@ -122,9 +125,9 @@ func Test_LogLinuxCmdNoEntries(t *testing.T) {
 	cmd.SetErr(buf)
 
 	err := cmd.Execute()
-	assert.NoError(t, err)
+	assert.Error(t, err)
 
-	assert.Contains(t, buf.String(), "No log entries")
+	assert.Contains(t, buf.String(), "no log entries")
 }
 
 func Test_LogLinuxCmdReadError(t *testing.T) {

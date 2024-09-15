@@ -5,7 +5,6 @@ go 1.21
 toolchain go1.21.7
 
 require (
-	github.com/docker/cli v20.10.23+incompatible
 	github.com/docker/docker v20.10.18+incompatible
 	github.com/ethereum/go-ethereum v1.10.18
 	github.com/fivebinaries/go-cardano-serialization v0.0.0-20220907134105-ec9b85086588
@@ -19,14 +18,12 @@ require (
 	github.com/shirou/gopsutil/v4 v4.24.6
 	github.com/spf13/afero v1.10.0
 	github.com/stretchr/testify v1.9.0
-	github.com/swaggo/gin-swagger v1.3.2
-	github.com/swaggo/swag v1.16.1
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/whyrusleeping/multiaddr-filter v0.0.0-20160516205228-e903e4adabd7
 	go.opentelemetry.io/otel v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.28.0
 	go.opentelemetry.io/otel/sdk v1.28.0
-	go.opentelemetry.io/otel/trace v1.28.0
+	go.opentelemetry.io/otel/trace v1.28.0 // indirect
 	go.uber.org/zap v1.27.0
 	google.golang.org/protobuf v1.34.2
 	gorm.io/driver/sqlite v1.1.4
@@ -36,7 +33,6 @@ require (
 replace gorm.io/gorm => gorm.io/gorm v1.23.8
 
 require (
-	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
@@ -45,16 +41,13 @@ require (
 	github.com/bytedance/sonic v1.9.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
-	github.com/containerd/cgroups v1.1.0 // indirect
-	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
-	github.com/coreos/pkg v0.0.0-20230601102743-20bbbf26f4d8 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dustin/go-humanize v1.0.1
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
@@ -119,7 +112,6 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mattn/go-sqlite3 v1.14.17 // indirect
 	github.com/miekg/dns v1.1.58 // indirect
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
@@ -141,7 +133,6 @@ require (
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/multiformats/go-multistream v0.5.0 // indirect
 	github.com/multiformats/go-varint v0.0.7
-	github.com/olekukonko/tablewriter v0.0.5
 	github.com/onsi/ginkgo/v2 v2.15.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.2
@@ -160,7 +151,6 @@ require (
 	github.com/quic-go/quic-go v0.44.0 // indirect
 	github.com/quic-go/webtransport-go v0.8.0 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sagikazarmark/locafero v0.3.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
@@ -201,8 +191,8 @@ require (
 
 require (
 	github.com/NVIDIA/go-nvml v0.12.4-0
-	github.com/buger/jsonparser v1.1.1
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
+	//-microvm/firecracker-go-sdk v1.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jaypipes/ghw v0.12.0
 	github.com/shoenig/go-m1cpu v0.1.6
@@ -218,6 +208,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.53.1
 	github.com/cosmos/btcutil v1.0.5
 	github.com/fatih/structs v1.1.0
+	//-microvm/firecracker-go-sdk v1.0.0
 	github.com/hashicorp/go-version v1.7.0
 	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef
 	github.com/libp2p/go-libp2p-pubsub v0.11.0
@@ -226,7 +217,7 @@ require (
 )
 
 require (
-	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
+	//-microvm/firecracker-go-sdk v1.0.0
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/ostafen/clover/v2 v2.0.0-alpha.3
@@ -254,9 +245,12 @@ require (
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
-	github.com/containerd/fifo v1.0.0 // indirect
-	github.com/containernetworking/cni v1.0.1 // indirect
-	github.com/containernetworking/plugins v1.0.1 // indirect
+	///cgroups v1.1.0 // indirect
+	///fifo v1.0.0 // indirect
+	///cni v1.0.1 // indirect
+	///plugins v1.0.1 // indirect
+	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
+	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dgraph-io/badger/v3 v3.2103.2 // indirect
 	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/go-openapi/analysis v0.21.2 // indirect
@@ -308,4 +302,13 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20240701130421-f6361c86f094 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240701130421-f6361c86f094 // indirect
 	google.golang.org/grpc v1.64.0 // indirect
+)
+
+require github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
+
+require (
+	github.com/containerd/cgroups v1.1.0 // indirect
+	github.com/containerd/fifo v1.0.0 // indirect
+	github.com/containernetworking/cni v1.0.1 // indirect
+	github.com/containernetworking/plugins v1.0.1 // indirect
 )

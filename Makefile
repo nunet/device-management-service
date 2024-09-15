@@ -8,7 +8,7 @@ UNAME=$(shell uname)
 
 DMS_VERSION := "v0.5.0-boot"
 GO_VERSION := $(shell go version | awk '{print $$3}' | sed 's/go//')
-BUILD_DATE := $(shell date --iso=seconds)
+BUILD_DATE := $(shell date -Iseconds)
 BUILD_HASH := $(shell git rev-parse HEAD)
 
 LDFLAGS := "-X 'gitlab.com/nunet/device-management-service/cmd.GoVersion=$(GO_VERSION)' -X 'gitlab.com/nunet/device-management-service/cmd.BuildDate=$(BUILD_DATE)' -X 'gitlab.com/nunet/device-management-service/cmd.Commit=$(BUILD_HASH)'"
@@ -19,19 +19,22 @@ all:
 	@if [ $(UNAME) = Linux ]; then\
 		make linux_amd64;\
 	elif [ $(UNAME) = Darwin ]; then\
-		make darwin_amd64;\
+		make darwin_arm64;\
 	fi
 
 linux_amd64:
 	@echo "Building for Linux AMD64..."
+	go mod tidy
 	GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) .
 
 darwin_arm64:
 	@echo "Building for Darwin ARM64..."
+	go mod tidy
 	GOOS=darwin GOARCH=arm64 go build -o builds/dms_darwin_arm64 -ldflags=$(LDFLAGS) .
 
 darwin_amd64:
 	@echo "Building for Darwin AMD64..."
+	go mod tidy
 	GOOS=darwin GOARCH=amd64 go build -o builds/dms_darwin_amd64 -ldflags=$(LDFLAGS) .
 
 lint:

@@ -32,7 +32,7 @@ func getGPUs(vendor ...types.GPUVendor) ([]types.GPU, error) {
 func getRAM() (types.RAM, error) {
 	v, err := mem.VirtualMemory()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get total memory: %w", err)
+		return types.RAM{}, fmt.Errorf("failed to get total memory: %w", err)
 	}
 
 	return types.RAM{Size: v.Total}, nil
@@ -54,7 +54,7 @@ func getDisk() (types.Disk, error) {
 		totalStorage += usage.Total
 	}
 
-	return totalStorage, nil
+	return types.Disk{Size: totalStorage}, nil
 }
 
 // getCPU returns the types.CPU information for the system
@@ -75,7 +75,7 @@ func getCPU() (types.CPU, error) {
 
 	cpuInfo := types.CPU{
 		Cores:      float32(totalCores),
-		ClockSpeed: int64(cpus[0].Mhz) * 1000000,
+		ClockSpeed: float64(cpus[0].Mhz) * 1000000,
 		Compute:    totalCompute,
 	}
 	return cpuInfo, nil
@@ -83,19 +83,19 @@ func getCPU() (types.CPU, error) {
 
 // GetMachineResources returns the total resources available on the system
 func (d darwinSystemSpecs) GetMachineResources() (types.MachineResources, error) {
-	cpuInfo, err := d.GetCPU()
+	cpuInfo, err := getCPU()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get CPU info: %w", err)
+		return types.MachineResources{}, fmt.Errorf("failed to get CPU info: %w", err)
 	}
 
 	ram, err := getRAM()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get total memory: %w", err)
+		return types.MachineResources{}, fmt.Errorf("failed to get total memory: %w", err)
 	}
 
 	diskInfo, err := getDisk()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get total storage: %w", err)
+		return types.MachineResources{}, fmt.Errorf("failed to get total storage: %w", err)
 	}
 
 	resources := types.MachineResources{
@@ -105,5 +105,5 @@ func (d darwinSystemSpecs) GetMachineResources() (types.MachineResources, error)
 			Disk: diskInfo,
 		},
 	}
-	return totalResources, nil
+	return resources, nil
 }

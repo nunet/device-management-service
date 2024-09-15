@@ -5,10 +5,11 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
-func newLogCmd() *cobra.Command {
+func newLogCmd(afs afero.Afero, loggerArg interface{}) *cobra.Command {
 	return &cobra.Command{
 		Use:   "log",
 		Short: "Gather all logs into a tarball",
