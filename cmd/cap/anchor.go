@@ -30,9 +30,21 @@ func newAnchorCmd(afs afero.Afero) *cobra.Command {
 		Short: "Manage capability anchors",
 		Long:  `Add or modify capability anchors in a capability context`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			trustCtx, _, err := CreateTrustContextFromKeyStore(afs, context)
-			if err != nil {
-				return fmt.Errorf("failed to create trust context: %w", err)
+			var trustCtx did.TrustContext
+			if isLedger(context) {
+				provider, err := did.NewLedgerWalletProvider(0)
+				if err != nil {
+					return err
+				}
+
+				trustCtx = did.NewTrustContextWithProvider(provider)
+				context = ledgerContext(context)
+			} else {
+				var err error
+				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
+				if err != nil {
+					return fmt.Errorf("failed to create trust context: %w", err)
+				}
 			}
 
 			capCtx, err := LoadCapabilityContext(trustCtx, context)
