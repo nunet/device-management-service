@@ -1,20 +1,15 @@
 package cmd
 
 import (
-	"fmt"
-
-	"github.com/coreos/go-systemd/sdjournal"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/cmd/actor"
-	"gitlab.com/nunet/device-management-service/cmd/backend"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-func newRootCmd(client *utils.HTTPClient, afs afero.Afero, logger backend.Logger) *cobra.Command {
+func newRootCmd(client *utils.HTTPClient, afs afero.Afero, logger interface{}) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "nunet",
 		Short: "NuNet Device Management Service",
@@ -38,23 +33,4 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero, logger backend.Logger
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(newVersionCmd())
 	return cmd
-}
-
-// Execute is a wrapper for cobra.Command method with same name
-// It makes use of cobra.CheckErr to facilitate error handling
-func Execute() {
-	afs := afero.Afero{Fs: afero.NewOsFs()}
-
-	client := utils.NewHTTPClient(
-		fmt.Sprintf("http://%s:%d",
-			config.GetConfig().Addr,
-			config.GetConfig().Port),
-		"/api/v1",
-	)
-
-	journal, err := sdjournal.NewJournal()
-	if err != nil {
-		cobra.CheckErr(fmt.Errorf("failed to get new sdjournal; Error: %w", err))
-	}
-	cobra.CheckErr(newRootCmd(client, afs, journal).Execute())
 }

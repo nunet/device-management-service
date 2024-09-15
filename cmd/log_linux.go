@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+
 	"gitlab.com/nunet/device-management-service/cmd/backend"
 )
 
@@ -18,7 +19,7 @@ const (
 )
 
 // NewLogCmd is a constructor for `log` command
-func newLogCmd(afs afero.Afero, logger backend.Logger) *cobra.Command {
+func newLogCmd(afs afero.Afero, loggerArg interface{}) *cobra.Command {
 	return &cobra.Command{
 		Use:   "log",
 		Short: "Gather all logs into a tarball. COMMAND MUST RUN AS ROOT WITH SUDO",
@@ -32,9 +33,11 @@ func newLogCmd(afs afero.Afero, logger backend.Logger) *cobra.Command {
 				return fmt.Errorf("cannot create dms-log directory: %w", err)
 			}
 
-			if logger == nil {
-				return fmt.Errorf("logger service is not initialised")
+			logger, ok := loggerArg.(backend.Logger)
+			if !ok {
+				return fmt.Errorf("unknown logger: %v", loggerArg)
 			}
+
 			defer logger.Close()
 
 			// filter by service unit name
@@ -57,18 +60,18 @@ func newLogCmd(afs afero.Afero, logger backend.Logger) *cobra.Command {
 					break
 				}
 
-				entry, err := logger.GetEntry()
+				logEntry, err := logger.GetEntry()
 				if err != nil {
 					fmt.Fprintf(cmd.OutOrStderr(), "Error getting logger entry %d: %v\n", count, err)
 					continue
 				}
 
-				msg, ok := entry.Fields["MESSAGE"]
+				msg, ok := logEntry.Fields["MESSAGE"]
 				if !ok {
 					fmt.Fprintf(cmd.OutOrStderr(), "Error: no message field in entry %d\n", count)
 				}
 
-				logData := fmt.Sprintf("%d: %s\n", entry.RealtimeTimestamp, msg)
+				logData := fmt.Sprintf("%d: %s\n", logEntry.RealtimeTimestamp, msg)
 
 				logFilePath := filepath.Join(dmsLogDir, fmt.Sprintf("dms_log.%d", count))
 

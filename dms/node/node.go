@@ -16,8 +16,6 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/executor"
-	"gitlab.com/nunet/device-management-service/executor/firecracker"
-	"gitlab.com/nunet/device-management-service/executor/null"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -102,17 +100,9 @@ func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.Cap
 		return nil, fmt.Errorf("failed to create node actor: %w", err)
 	}
 
-	var executor executor.Executor
-	executor, err = firecracker.NewExecutor(ctx, "root")
+	executor, err := NewExecutor(ctx)
 	if err != nil {
-		if errors.Is(err, firecracker.ErrNotInstalled) {
-			executor, err = null.NewExecutor(ctx, "root")
-			if err != nil {
-				return nil, fmt.Errorf("failed to setup null executor: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("failed to create executor: %w", err)
-		}
+		return nil, fmt.Errorf("new executor: %w", err)
 	}
 
 	n := &Node{

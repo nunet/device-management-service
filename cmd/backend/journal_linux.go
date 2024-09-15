@@ -1,6 +1,17 @@
+//go:build linux
+// +build linux
+
 package backend
 
 import "github.com/coreos/go-systemd/sdjournal"
+
+// Logger abstracts systemd journal entries
+type Logger interface {
+	AddMatch(match string) error
+	Close() error
+	GetEntry() (*sdjournal.JournalEntry, error)
+	Next() (uint64, error)
+}
 
 type Journal struct {
 	journal *sdjournal.Journal
