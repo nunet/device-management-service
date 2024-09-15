@@ -95,6 +95,16 @@ func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			keyName := args[0]
 
+			if keyName == "ledger" {
+				provider, err := did.NewLedgerWalletProvider(0)
+				if err != nil {
+					return err
+				}
+
+				fmt.Println(provider.DID())
+				return nil
+			}
+
 			keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir)
 			if err != nil {

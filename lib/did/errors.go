@@ -10,6 +10,7 @@ var (
 	ErrInvalidSignature = errors.New("signature verification failed")
 	ErrNoProvider       = errors.New("no provider")
 	ErrNoAnchorMethod   = errors.New("no anchor method")
+	ErrHardwareKey      = errors.New("hardware key")
 
 	ErrTODO = errors.New("TODO")
 )

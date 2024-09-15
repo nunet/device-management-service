@@ -86,7 +86,11 @@ func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.Cap
 	if err != nil {
 		return nil, fmt.Errorf("failed to get root DID provider: %w", err)
 	}
-	privk := provider.PrivateKey()
+
+	privk, err := provider.PrivateKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get root private key: %w", err)
+	}
 
 	rootSec, err := actor.NewBasicSecurityContext(pubk, privk, rootCap)
 	if err != nil {
