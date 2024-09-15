@@ -59,9 +59,20 @@ func newGrantCmd(afs afero.Afero) *cobra.Command {
 				capabilities[i] = ucan.Capability(cap)
 			}
 
-			trustCtx, _, err := CreateTrustContextFromKeyStore(afs, context)
-			if err != nil {
-				return fmt.Errorf("failed to create trust context: %w", err)
+			var trustCtx did.TrustContext
+			if isLedger(context) {
+				provider, err := did.NewLedgerWalletProvider(0)
+				if err != nil {
+					return err
+				}
+
+				trustCtx = did.NewTrustContextWithProvider(provider)
+				context = ledgerContext(context)
+			} else {
+				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
+				if err != nil {
+					return fmt.Errorf("failed to create trust context: %w", err)
+				}
 			}
 
 			capCtx, err := LoadCapabilityContext(trustCtx, context)

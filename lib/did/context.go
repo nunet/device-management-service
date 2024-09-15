@@ -25,7 +25,7 @@ type Provider interface {
 	DID() DID
 	Sign(data []byte) ([]byte, error)
 	Anchor() Anchor
-	PrivateKey() crypto.PrivKey
+	PrivateKey() (crypto.PrivKey, error)
 }
 
 type TrustContext interface {
@@ -71,6 +71,12 @@ func NewTrustContextWithPrivateKey(privk crypto.PrivKey) (TrustContext, error) {
 
 	ctx.AddProvider(provider)
 	return ctx, nil
+}
+
+func NewTrustContextWithProvider(p Provider) TrustContext {
+	ctx := NewTrustContext()
+	ctx.AddProvider(p)
+	return ctx
 }
 
 func (ctx *BasicTrustContext) Anchors() []DID {

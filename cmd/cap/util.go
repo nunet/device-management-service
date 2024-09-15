@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/afero"
@@ -16,6 +17,21 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
+
+const ledger = "ledger"
+
+func isLedger(context string) bool {
+	return strings.HasPrefix(context, ledger)
+}
+
+func ledgerContext(context string) string {
+	parts := strings.Split(context, ":")
+	if len(parts) == 2 {
+		return parts[1]
+	}
+
+	return ledger
+}
 
 func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string) (did.TrustContext, crypto.PrivKey, error) {
 	keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)

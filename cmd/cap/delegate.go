@@ -72,9 +72,20 @@ func newDelegateCmd(afs afero.Afero) *cobra.Command {
 				return fmt.Errorf("invalid self-sign option: %s", selfSign)
 			}
 
-			trustCtx, _, err := CreateTrustContextFromKeyStore(afs, context)
-			if err != nil {
-				return fmt.Errorf("failed to create trust context: %w", err)
+			var trustCtx did.TrustContext
+			if isLedger(context) {
+				provider, err := did.NewLedgerWalletProvider(0)
+				if err != nil {
+					return err
+				}
+
+				trustCtx = did.NewTrustContextWithProvider(provider)
+				context = ledgerContext(context)
+			} else {
+				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
+				if err != nil {
+					return fmt.Errorf("failed to create trust context: %w", err)
+				}
 			}
 
 			capCtx, err := LoadCapabilityContext(trustCtx, context)

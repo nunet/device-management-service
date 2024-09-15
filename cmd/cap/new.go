@@ -10,6 +10,7 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
@@ -26,9 +27,25 @@ func newNewCmd(afs afero.Afero) *cobra.Command {
 				context = args[0]
 			}
 
-			trustCtx, priv, err := CreateTrustContextFromKeyStore(afs, context)
-			if err != nil {
-				return fmt.Errorf("failed to create trust context: %w", err)
+			var trustCtx did.TrustContext
+			var rootDID did.DID
+			if isLedger(context) {
+				provider, err := did.NewLedgerWalletProvider(0)
+				if err != nil {
+					return err
+				}
+
+				trustCtx = did.NewTrustContextWithProvider(provider)
+				rootDID = provider.DID()
+				context = ledgerContext(context)
+			} else {
+				var priv crypto.PrivKey
+				var err error
+				trustCtx, priv, err = CreateTrustContextFromKeyStore(afs, context)
+				if err != nil {
+					return fmt.Errorf("failed to create trust context: %w", err)
+				}
+				rootDID = did.FromPublicKey(priv.GetPublic())
 			}
 
 			capStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.CapstoreDir)
@@ -60,7 +77,6 @@ func newNewCmd(afs afero.Afero) *cobra.Command {
 				}
 			}
 
-			rootDID := did.FromPublicKey(priv.GetPublic())
 			capCtx, err := ucan.NewCapabilityContext(trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{})
 			if err != nil {
 				return fmt.Errorf("unable to create capability context: %w", err)
