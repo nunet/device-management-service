@@ -32,5 +32,6 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero, logger interface{}) *
 	cmd.AddCommand(newConfigCmd(afs.Fs))
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(newVersionCmd())
+	cmd.AddCommand(newTapCommand())
 	return cmd
 }
