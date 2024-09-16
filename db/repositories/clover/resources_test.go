@@ -226,21 +226,44 @@ func TestResourceAllocationRepository(t *testing.T) {
 
 	_, err = resourceAllocationRepo.Update(context.Background(), updatedResourceAllocation.ID, updatedResourceAllocation)
 	assert.NoError(t, err)
+
 	retrievedResourceAllocation, err = resourceAllocationRepo.Get(context.Background(), updatedResourceAllocation.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, updatedResourceAllocation.CPU, retrievedResourceAllocation.CPU)
 
-	// Test History method
+	// Test multiple entries/records with FindAll method
+	// Create another record
+	createdSecondResourceAllocation, err := resourceAllocationRepo.Create(
+		context.Background(),
+		types.ResourceAllocation{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      3,
+					ClockSpeed: 40000,
+					Compute:    50000,
+				},
+				RAM:  types.RAM{Size: 4096},
+				Disk: types.Disk{Size: 100000},
+			},
+		},
+	)
+	assert.NoError(t, err)
 	query := resourceAllocationRepo.GetQuery()
 	query.Limit = 3
-	history, err := resourceAllocationRepo.FindAll(context.Background(), query)
+	records, err := resourceAllocationRepo.FindAll(context.Background(), query)
 	assert.NoError(t, err)
-	assert.Len(t, history, 2)
+	assert.Len(t, records, 2)
 
 	// Test Clear method
 	err = resourceAllocationRepo.Delete(context.Background(), updatedResourceAllocation.ID)
 	assert.NoError(t, err)
-	history, err = resourceAllocationRepo.FindAll(context.Background(), query)
+	records, err = resourceAllocationRepo.FindAll(context.Background(), query)
 	assert.NoError(t, err)
-	assert.Len(t, history, 0)
+	assert.Len(t, records, 1)
+
+	err = resourceAllocationRepo.Delete(context.Background(), createdSecondResourceAllocation.ID)
+	assert.NoError(t, err)
+	records, err = resourceAllocationRepo.FindAll(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Len(t, records, 0)
 }

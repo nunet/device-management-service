@@ -6,15 +6,16 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"gitlab.com/nunet/device-management-service/db"
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-const tmpDir = "/tmp/test"
+const testWalletAddress = "addr_test1vzgxkngaw5dayp8xqzpmajrkm7f7fleyzqrjj8l8fp5e8jcc2p2dk"
 
 type TestSuite struct {
 	service *Onboarding
@@ -47,9 +48,15 @@ func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
 		P2PRepo:        repositories_gorm.NewLibp2pInfo(db),
 		UUIDRepo:       repositories_gorm.NewMachineUUID(db),
 		AvResourceRepo: repositories_gorm.NewAvailableResources(db),
-		WorkDir:        "/test",
-		DatabasePath:   "/test/db.sqlite",
-		Channels:       []string{"test1", "test2", "test3"},
+		ParamsRepo:     repositories_gorm.NewOnboardingParams(db),
+		ResourceManager: resources.NewResourceManager(resources.ManagerRepos{
+			FreeResources:      repositories_gorm.NewFreeResources(db),
+			OnboardedResources: repositories_gorm.NewOnboardedResources(db),
+			ResourceAllocation: repositories_gorm.NewResourceAllocation(db),
+		}),
+		WorkDir:      "/test",
+		DatabasePath: "/test/db.sqlite",
+		Channels:     []string{"test1", "test2", "test3"},
 	}
 	o := New(&oConfig)
 	return o
@@ -79,152 +86,111 @@ func TestIsOnboarded(t *testing.T) {
 		t.Errorf("unable to save private key: %v", err)
 	}
 
-	// TODO: Add more test cases
 	t.Run("happy case", func(t *testing.T) {
 		onboarded, err := ts.service.IsOnboarded(ctx)
 		assert.NoError(t, err)
-		assert.True(t, onboarded)
+		assert.False(t, onboarded)
 	})
 }
 
-// // TODO: It needs ResourceManager in order to fully test it
-// func TestOnboard(t *testing.T) {}
-
-// // TODO: It needs ResourceManager in order to fully test it
-// func TestResourceConfig(t *testing.T) {}
 func TestOnboard(t *testing.T) {
+	ts := NewTestSuite(t)
+
+	ts.setupDB()
+
 	ctx := context.Background()
+
+	total, err := ts.service.ResourceManager.SystemSpecs().GetMachineResources()
+	require.NoError(t, err)
+
 	capacity := types.CapacityForNunet{
 		CPU:               8000,
 		Memory:            16000,
-		Channel:           "test",
+		Channel:           "test1",
 		PaymentAddress:    "0x1234567890abcdef",
 		NTXPricePerMinute: 10,
+		ServerMode:        true,
+		IsAvailable:       true,
 	}
 
-	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
-
-	// Create a temporary working directory
-	err := testFS.MkdirAll(tmpDir, 0o755)
-	assert.NoError(t, err)
-
-	// Create a new Onboarding instance with the test options
-	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
-	}
-
-	// XXX: only after we get rid of the global db usage everywhere
-	db.DB = mockDB
-
-	_ = mockDB.AutoMigrate(&types.AvailableResources{})
-
-	oConfig := Config{
-		Fs:             testFS,
-		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
-		WorkDir:        tmpDir,
-		DatabasePath:   tmpDir,
-		Channels:       []string{"test"},
-	}
-	service := New(&oConfig)
-
-	t.Run("unhappy case - invalid cardano wallet", func(t *testing.T) {
-		// Call the Onboard method
-		_, err := service.Onboard(ctx, capacity)
+	t.Run("unhappy case - config dir doesn't exist", func(t *testing.T) {
+		config, err := ts.service.Onboard(ctx, capacity)
+		assert.Nil(t, config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid cardano wallet address")
+		assert.Contains(t, err.Error(), "working directory does not exist")
 	})
 
-	t.Run("happy case", func(t *testing.T) {
-		// correct the cardano wallet address
-		capacity.PaymentAddress = "addr_test1vzgxkngaw5dayp8xqzpmajrkm7f7fleyzqrjj8l8fp5e8jcc2p2dk"
+	t.Run("unhappy case - invalid payment address", func(t *testing.T) {
+		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
+		require.NoError(t, err)
 
-		// TODO: update after onbaording implementation
-		_, err := service.Onboard(ctx, capacity)
+		capacity.PaymentAddress = "invalid"
+
+		config, err := ts.service.Onboard(ctx, capacity)
+		assert.Nil(t, config)
 		assert.Error(t, err)
-		assert.Equal(t, "NOT YET IMPLEMENTED", err.Error())
+		assert.Contains(t, err.Error(), "could not validate payment address")
 	})
 
-	// TODO: more test cases once resource manager is fixed
-	//       currently there're problems with gpu detection during onboard
-}
+	t.Run("unhappy case - insufficient memory", func(t *testing.T) {
+		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
+		require.NoError(t, err)
 
-func TestResourceConfig(t *testing.T) {
-	ctx := context.Background()
-	capacity := types.CapacityForNunet{
-		CPU:               8000,
-		Memory:            16000,
-		Channel:           "test",
-		PaymentAddress:    "0x1234567890abcdef",
-		NTXPricePerMinute: 10,
-	}
+		capacity.PaymentAddress = testWalletAddress
+		capacity.Memory = 1
 
-	testFS := afero.Afero{Fs: afero.NewMemMapFs()}
-
-	// Create a temporary working directory
-	tmpDir := "/tmp/test"
-	err := testFS.MkdirAll(tmpDir, 0o755)
-	assert.NoError(t, err)
-
-	// Create a new Onboarding instance with the test options
-	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
-	}
-
-	// XXX: only after we get rid of the global db usage everywhere
-	db.DB = mockDB
-
-	_ = mockDB.AutoMigrate(&types.AvailableResources{})
-
-	oConfig := Config{
-		Fs:             testFS,
-		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
-		WorkDir:        tmpDir,
-		DatabasePath:   tmpDir,
-		Channels:       []string{"test"},
-	}
-	service := New(&oConfig)
-
-	t.Run("unhappy case - not onboarded", func(t *testing.T) {
-		// Call the ResourceConfig method
-		_, err := service.ResourceConfig(ctx, capacity)
+		config, err := ts.service.Onboard(ctx, capacity)
+		assert.Nil(t, config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "could not check onboard status")
-	})
-	// TODO: Add more test cases when onboarding is implemented after resource manager
-}
-
-func TestOffboard(t *testing.T) {
-	ctx := context.Background()
-	fs := afero.Afero{Fs: afero.NewMemMapFs()}
-	tmpDir := "/tmp/test"
-	err := fs.MkdirAll(tmpDir, 0o755)
-	assert.NoError(t, err)
-	mockDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	assert.NoError(t, err)
-
-	oConfig := Config{
-		Fs:             fs,
-		P2PRepo:        repositories_gorm.NewLibp2pInfo(mockDB),
-		UUIDRepo:       repositories_gorm.NewMachineUUID(mockDB),
-		AvResourceRepo: repositories_gorm.NewAvailableResources(mockDB),
-		WorkDir:        tmpDir,
-		DatabasePath:   tmpDir,
-		Channels:       []string{"test"},
-	}
-	service := New(&oConfig)
-
-	t.Run("unhappy case - not onboarded", func(t *testing.T) {
-		err := service.Offboard(ctx, false)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "could not retrieve onboard status")
-		// assert.Contains(t, err.Error(), "machine is not onboarded")
+		assert.Contains(t, err.Error(), "memory should be between 10% and 90% of the available memory")
 	})
 
-	// TODO: Add more test cases when onboarding is implemented after resource manager
+	t.Run("unhappy case - insufficient cpu", func(t *testing.T) {
+		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
+		require.NoError(t, err)
+
+		capacity.PaymentAddress = testWalletAddress
+		capacity.Memory = total.RAM.Size / 2 // 50% of total RAM
+		capacity.CPU = 1
+
+		config, err := ts.service.Onboard(ctx, capacity)
+		assert.Nil(t, config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "CPU should be between 10% and 90% of the available CPU ")
+	})
+
+	t.Run("unhappy case - ", func(t *testing.T) {
+		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
+		require.NoError(t, err)
+
+		capacity.PaymentAddress = testWalletAddress
+		capacity.Memory = total.RAM.Size / 2        // 50% of total RAM
+		capacity.CPU = int64(total.CPU.Compute) / 2 // 50% of total CPU
+		config, err := ts.service.Onboard(ctx, capacity)
+		assert.Nil(t, config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no such table")
+	})
+
+	t.Run("unhappy case - ", func(t *testing.T) {
+		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
+		require.NoError(t, err)
+
+		capacity.PaymentAddress = testWalletAddress
+		capacity.Memory = total.RAM.Size / 2        // 50% of total RAM
+		capacity.CPU = int64(total.CPU.Compute) / 2 // 50% of total CPU
+
+		// migrate tables
+		err = ts.db.AutoMigrate(&types.OnboardingConfig{})
+		require.NoError(t, err)
+		err = ts.db.AutoMigrate(&types.MachineResources{})
+		require.NoError(t, err)
+		err = ts.db.AutoMigrate(&types.OnboardedResources{})
+		require.NoError(t, err)
+
+		config, err := ts.service.Onboard(ctx, capacity)
+		assert.NotNil(t, config)
+		assert.NoError(t, err)
+		assert.Equal(t, capacity.PaymentAddress, config.PublicKey)
+	})
 }

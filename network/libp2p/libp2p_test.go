@@ -3,6 +3,7 @@ package libp2p
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -203,7 +204,8 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	err = peer1.RegisterStreamMessageHandler(customMessageProtocol, func(stream network.Stream) {
 		bytesToRead := make([]byte, len([]byte(helloWorlPayload))+8)
 		_, err = stream.Read(bytesToRead)
-		assert.NoError(t, err)
+		assert.ErrorIs(t, err, io.EOF)
+		assert.Equal(t, helloWorlPayload, string(bytesToRead[8:]))
 		payloadReceived <- string(bytesToRead[8:])
 	})
 	assert.NoError(t, err)
