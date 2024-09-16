@@ -1,441 +1,218 @@
+# Introduction to Nunet Command-Line Interface (CLI)
 
-# cmd
+The Nunet Command-Line Interface (CLI) serves as a powerful tool for interacting with the Nunet ecosystem, enabling you to manage network configurations, control capabilities, and handle cryptographic keys. It provides a comprehensive set of commands to streamline various tasks and operations within the Nunet network.
 
-- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
-- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
-- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
-- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
-- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
-- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
-- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
+## Top-Level Commands
 
-## Table of Contents
+## Nunet Actor System CLI Documentation
 
-1. [Description](#description)
-2. [Structure and Organisation](#structure-and-organisation)
-3. [Class Diagram](#class-diagram)
-4. [Functionality](#functionality)
-5. [Data Types](#data-types)
-6. [Testing](#testing)
-7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
-8. [References](#references)  
+This command provides a suite of operations tailored for interacting with the Nunet Actor System. It enables you to communicate with actors within the network, facilitating actions like sending messages, invoking specific behaviors, and broadcasting information to multiple actors simultaneously.
 
-## Specification
+Detailed documentation can be found [here](./actor/README.md).
 
-### Description
+## Nunet Capability Management CLI Documentation
 
-The cmd package contains all functionality of Device Management Service (DMS) available via command line interface (CLI). 
+This command focuses on capability management within the Nunet ecosystem. It allows you to define, delegate, and control the permissions and authorizations granted to different entities, ensuring secure and controlled interactions within the network.
 
-### Structure and Organisation
+Detailed documentation can be found [here](./cap/README.md).
 
-Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
+## Nunet Configuration Management CLI Documentation
 
-* [amd](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/amd.go): This file contains methods to collect information about AMD GPUs.
+The `nunet config` command provides a streamlined way to interact with and manage your Nunet configuration file directly from the command line. This allows you to view existing settings, modify them as needed, and ensure your Nunet environment is tailored to your preferences.
 
-* [autocomplete](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/autocomplete.go): This file defines a command that allows users to generate shell autocompletion scripts for the Nunet CLI tool. It supports generating scripts for both Bash and Zsh shells.
+### Usage
 
-* [capacity](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/capacity.go): This file defines the `capacity` command for the nunet CLI tool.
-
-* [chat](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/chat.go): This file contains implementation of `chat` functionality.
-
-* [chat_clear](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/chat_clear.go): This file contains implementation of `clear chat` functionality.
-
-* [chat_join](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/chat_join.go): This file contains implementation of `join chat` functionality.
-
-* [chat_list](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/chat_list.go): This file contains implementation of `list chat` functionality.
-
-* [chat_start](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/chat_start.go): This file contains implementation of `start chat` functionality.
-
-* [device](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/device.go): This file contains implementation of device related operations.
-
-* [gpu](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/gpu.go): This file defines the `gpu` command.
-
-* [gpu_capacity](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/gpu_capacity.go): This file defines the `gpu capacity` command and its flags.
-
-* [gpu_interface](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/gpu_interface.go): This file defines GPU interface for accessing information about GPUs.
-
-* [gpu_onboard](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/gpu_onboard.go): This file defines the `gpu onboard` command.
-
-* [gpu_status](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/gpu_status.go): This file defines the `gpu status` command.
-
-* [info](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/info.go): This file defines the `info` command which displays the information about onboarded device
-
-* [init](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/init.go): This file initializes services for the nunet CLI tool and defines top-level commands and sub-commands. It also sets flags for some commands.
-
-* [log_darwin](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/log_darwin.go): This file defines `log` command for MacOS.
-
-* [log_linux](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/log_linux.go): This file defines `log` command for Linux.
-
-* [nvidia](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/nvidia.go): This file contains implementation of `GPU` interface for NVIDIA GPUs.
-
-* [offboard](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/offboard.go): This file defines the `offboard` command. 
-
-* [onboard-ml](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/onboard-ml.go): This file defines the `onboard-ml` command.
-
-* [onboard](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/onboard.go): This file defines the `onboard` command.
-
-* [peer](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/peer.go): This file defines the `peer` command.
-
-* [peer_default](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/peer_default.go): This file defines command to set a default peer for job deployment. Note that this is expected to be deprecated.
-
-* [peer_list](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/peer_list.go): This file defines the list sub-command for `peer` command.
-
-* [peer_self](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/peer_self.go): This file defines the self sub-command for `peer` command.
-
-* [resource-config](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/resource-config.go): This file defines the `resource-config` command.
-
-* [root](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/root.go): This file defines the root command `nunet`.
-
-* [run](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/run.go): This file defines the `run` command.
-
-* [shell](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/shell.go): This file defines the `shell` command
-
-* [utils](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/utils.go): This file contains utility functions for the CLI functionality.
-
-* [version](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/version.go): This file defines the `version` command.
-
-* [wallet](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/wallet.go): This file defines the `wallet` command.
-
-* [wallet_new](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/wallet_new.go): This file defines the subcommand `new` for the `wallet` command.
-
-* [backend](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/backend): This directory contains files related to the actual implementation of the Nunet CLI commands.
-
-All of the files named as `*_test.go` contains the unit tests for the corresponding functionality.
-
-### Class Diagram
-
-The class diagram for the `cmd` package is shown below.
-
-#### Source file
-
-[cmd Class diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/specs/class_diagram.puml)
-
-#### Rendered from source file
-
-```plantuml
-!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
-!$packageRelativePath = "/cmd"
-!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
- 
-!include $packageUrlGitlab/specs/class_diagram.puml
+```bash
+nunet config [command]
 ```
 
-### Functionality
+### Available Commands
 
-The following sections describe the command line options that can be used with the Nunet CLI.
+* `edit`: Open the configuration file in your default text editor for manual adjustments.
+* `get`: Retrieve and display the current value associated with a specific configuration key.
+* `set`: Modify the configuration file by assigning a new value to a specified key.
 
-#### capacity
+### Flags
 
-This command displays the capacity of the machine.
-
-Usage:
-
-```
-nunet capacity --pretty
-```
-
-It has three flags that can be used along with this command
-
-1. `full`: displays the full capacity of the machine.
-
-```
-nunet capacity --pretty --full
-```
-
-2. `onboarded`: displays the onboarded capacity of the machine.
-
-```
-nunet capacity --pretty --onboarded
-```
-
-3.  `available`: displays the resources still available for onboarding
-
-```
-nunet capacity --pretty --available
-```
+* `-h, --help`: Display help information for the `config` command and its subcommands.
 
 
-#### chat
-
-**Note: this is expected to be deprecated after DMS refactoring**
-
-This command allows users to chat with each other. The usage is explained below:
-
-`start`: start a chat with a peer 
-
-```
-nunet chat start <node-id>
-```
-
-`list`: list open chat requests
-
-```
-nunet chat list
-```
-
-`clear`: clear open chat requests
-
-```
-nunet chat clear
-```
-
-`join`: join a chat stream using the request ID
-
-```
-nunet chat join <request-id>
-```
-
-The request-id mentioned above can be obtained from the `nunet chat list` command stated earlier.
+## Nunet Key Management CLI Documentation 
 
 
-#### device
-
-This command allows users to perform device related operations. The usage is explained below:
-
-`status`: get the current status of the device (online / offline)
-
-```
-nunet device status
-```
-
-`set`: set the status of the device (online/offline)
-
-```
-nunet device set <status>
-```
+The Nunet Key Management CLI provides commands to manage keys within the Nunet Device Management Service (DMS). It allows you to generate new keypairs and retrieve the Decentralized Identifier (DID) associated with a specific key.
 
 
-#### gpu
+### Main Command
 
-These commands allows users to perform GPU related operations. The usage is explained below:
 
-`gpu capacity`: check the GPU capacity of the machine
+* `nunet key` 
 
-``` 
-nunet gpu capacity
-```
 
-The gpu capacity command has three flags:
+  * **Description:** The primary command to manage keys within the Nunet DMS
 
-1. `cuda-tensor`: check the availability of CUDA and Tensor Cores 
 
-``` 
-nunet gpu capacity --cuda-tensor
+  * **Usage:** `nunet key [command]`
 
-or 
 
-nunet gpu capacity -c
+  * **Available Commands:**
+
+     * `did`: Retrieve the DID for a specified key
+
+     * `new`: Generate a new keypair
+
+
+  * **Flags:**
+
+    * `-h, --help`: Display help information for the main `key` command.
+
+
+### Subcommands
+
+
+* `nunet key did`
+
+
+   * **Description:** Retrieves and displays the DID associated with a specified key. This DID uniquely identifies the key within the Nunet ecosystem.
+
+
+   * **Usage:** `nunet key did <key-name> [flags]`
+
+
+   * **Arguments:**
+
+     * `<key-name>`: The name of the key whose DID you want to retrieve
+
+
+   * **Flags:**
+
+     * `-h, --help`: Display help information for the `did` command
+
+
+* `nunet key new`
+
+
+   * **Description:** Generates a new keypair and securely stores the private key in the user's local keystore. The corresponding public key can be used for various cryptographic operations within the Nunet DMS
+
+
+   * **Usage:** `nunet key new <name> [flags]`
+
+
+   * **Arguments:**
+
+     * `<name>`:  A name to identify the newly generated keypair
+
+
+   * **Flags:**
+
+     * `-h, --help`: Display help information for the `new` command.
+
+
+**Important Considerations:**
+
+
+* Keep your private keys secure, as they provide access to your identity and associated capabilities within the Nunet DMS
+
+* Choose descriptive names for your keypairs to easily identify their purpose or associated devices.
+
+
+## Nunet Run Command Documentation
+
+### `nunet run`
+
+**Purpose:** Starts the Nunet Device Management Service (DMS), responsible for handling network operations and device management.
+
+**Usage:**
+
+```bash
+nunet run [flags]
 ```
 
-2. `rocm-hip`: check the availability of ROCm and HIP (AMD GPUs)
+**Flags:**
 
-``` 
-nunet gpu capacity --rocm-hip
+* `-c, --context string`: Specifies the key and capability context to use (default: "dms").
+* `-h, --help`: Displays help information for the `run` command.
 
-or 
+**Example:**
 
-nunet gpu capacity -r
-
-```
-
-3. `intel-xpu`: check the availability of Intel XPU
-
-``` 
-nunet gpu capacity --intel-xpu
-
-or
-
-nunet gpu capacity -i
-
-```
-
-
-`gpu onboard`: install GPU drivers and Container Runtime
-
-``` 
-nunet gpu onboard
-```
-
-`gpu status`: check GPU status in real time
-
-``` 
-nunet gpu status
-```
-
-#### info
-
-This command displays the metadata (`types.Metadata`) of the onboarded device. 
-
-``` 
-nunet info
-```
-
-#### log
-
-This command gathers all the logs into a tarball. The command must be run as root with `SUDO` access. Note that currently MacOS is not supported.
-
-``` 
-nunet log
-```
-
-#### offboard
-
-This command offboards the device from Nunet. 
-
-``` 
-nunet offboard
-```
-
-Use of flag `force` will force the offboarding process despite encountering any errors.
-
-``` 
-nunet offboard --force 
-
-or 
-
-nunet offboard -f
-```
-
-#### onboard-ml
-
-This command is used to setup the environment for Machine Learning with GPU. It checks for WSL (Windows Subsystem for Linux) and detects available GPU vendors (AMD or NVIDIA). Note that it requires at least one type of GPU (AMD or NVIDIA) to be present.
-
-It will create a Docker client and list existing images. Based on the OS (WSL or not) and detected GPU vendors, it pulls the required Docker images from a predefined list for either NVIDIA or AMD. It checks if the image already exists before pulling and provides informative messages during the process.
-
-```
-nunet onboard-ml
-```
-
-#### onboard
-
-This command is used to onboard a compute provider machine onto Nunet. It expects input parameters specified in `types.CapacityForNunet`. The machine metadata (`types.Metadata`) is displayed once the onboarding process is completed.
-
-Example usage: 
-
-```
-nunet onboard -m <memory in MB> -c <cpu in MHz> -n <channel> -a <address> [-C] [-l]
-```
-
-The various flags are explained below:
-
-`-m <memory in MB>`: RAM of the machine provided to Nunet
-
-`-c <cpu in MHz>`: CPU capacity provided to Nunet
-
-`-n <channel>`: channel on which the onboarding it to be done. For example - `nunet-test`
-
-`-a <address>`: this is the wallet address of the user
-
-`[-C]`: optional flag that allows deployment of a Cardano node on the machine. 
-
-`[-l]`: optional flag which sets server mode to be true. This is needed when running the DMS on a local machine to enable advertisement and discovery on a local network address.
-
-`-x <Price>`: price of the machine is NTX/min
-
-`-u`: to state that machine is not available for job deployment
-
-#### peer
-
-This command allows users to perform peer related operations. The usage is explained below:
-
-`list`: display list of peers in the network. Use of `-d` flag will list only DHT peers.
-
-```
-nunet peer list 
-```
-
-`self`: display the peer info of the machine 
-
-```
-nunet peer self
-```
-
-`default`: Retrieve or set a peer as default for job deployment. **Note: This is expected to be deprecated**
-
-```
-nunet peer default [peerID]
-```
-
-Use <peerID> parameter as '0' to remove default deployment request receiver. Using the command without any <peerID> parameter will give the peer currently set as default deployment request receiver.
-
-#### resource-config
-
-This command is used to update the configuration of onboarded device. The machine metadata (`types.Metadata`) is displayed upon update.
-
-```
-nunet resource-config -m <memory in MB> -c <cpu in MHz> -x <Price in NTX/min>
-```
-
-#### run
-
-This command start the Device Management Service (DMS).
-
-```
+```bash
 nunet run
 ```
 
-#### shell
+This starts the Nunet DMS with the default "dms" context.
 
-**Note: This is expected to be deprecated** 
 
-```
-nunet shell
-```
+## Nunet TAP Command Documentation
 
-#### version
 
-This command prints the version of DMS installed.
+### `nunet tap`
 
-```
-nunet version
-```
 
-#### wallet
+**Purpose:** Creates a TAP (network tap) interface to bridge the host network with a virtual machine (VM) or container. It also configures essential network settings like IP forwarding and iptables rules to enable seamless communication.
 
-This command can be used to create a new wallet.
 
-```
-nunet wallet new
-```
+**Key Points:**
 
-There are two flags
 
-1. `--cardano or -c`: create wallet address on Cardano blockchain. This is the default option if no flag is provided
+* **Root Privileges Required:** This command necessitates root or administrator privileges for execution due to its manipulation of network interfaces and system-level settings.
 
-```
-nunet wallet new --cardano
+
+**Usage:**
+
+
+```bash
+nunet tap [main_interface] [vm_interface] [CIDR] [flags]
 ```
 
-2. `--ethereum or -e`: create wallet address on Ethereum blockchain. Note: currently Ethererum blockchain is **not** supported
+**Arguments:**
 
+
+* **`main_interface`:** (e.g., eth0) The name of the existing network interface on your host machine that you want to bridge with the TAP interface.
+
+* **`vm_interface`:** (e.g., tap0) The name you want to assign to the newly created TAP interface.
+
+* **`CIDR`:** (e.g., 172.16.0.1/24) The Classless Inter-Domain Routing (CIDR) notation specifying the IP address range and subnet mask for the TAP interface. This ensures that the VM or container connected to the TAP has its own IP address within the specified network.
+
+
+**Flags:**
+
+
+* `-h, --help`: Displays help information for the `tap` command.
+
+
+**Example:**
+```bash
+
+sudo nunet tap eth0 tap0 172.16.0.1/24
 ```
-nunet wallet new --ethereum
+
+This command will create a TAP interface named 'tap0' bridged to your host's 'eth0' interface. The 'tap0' interface will be assigned an IP address of '172.16.0.1' with a subnet mask of '/24'. This configuration allows a VM or container connected to 'tap0' to access the network through your host's 'eth0' interface.
+
+
+**Important Notes:**
+
+
+* Ensure you have the necessary permissions to execute this command.
+
+* Be cautious when configuring network settings, as incorrect configurations can disrupt your network connectivity.
+
+
+## Nunet Log Collection CLI Documentation
+
+### `nunet log`
+
+**Purpose:** Gathers all Nunet logs into a compressed archive (tarball) for troubleshooting and analysis.
+
+**Important:** Requires root privileges (`sudo`).
+
+**Usage:**
+
+```bash
+sudo nunet log [flags]
 ```
 
-### Data Types
+**Flags:**
 
-Refer to `api` package for all the data types applicable for the `cmd` package functionality. 
-
-### Testing
-
-#### Unit Tests
-
-All unit tests for various functionalities can be found in files with `_test` in their name.
-
-#### Functional tests
-
-Reference is made to the [test-suite](https://gitlab.com/nunet/test-suite/-/tree/develop/stages/functional_tests/features/device-management-service) repository for functional tests for DMS CLI functionality.
-
-### Proposed Functionality / Requirements 
-
-#### List of issues
-
-All issues that are related to the design of `cmd` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
-
-- [cmd package design]() `TBD`
-
-### References
-
+* `-h, --help`: Displays help information.
 
