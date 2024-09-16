@@ -133,9 +133,6 @@ func TestOnboard(t *testing.T) {
 	})
 
 	t.Run("unhappy case - insufficient memory", func(t *testing.T) {
-		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
-		require.NoError(t, err)
-
 		capacity.PaymentAddress = testWalletAddress
 		capacity.Memory = 1
 
@@ -146,10 +143,6 @@ func TestOnboard(t *testing.T) {
 	})
 
 	t.Run("unhappy case - insufficient cpu", func(t *testing.T) {
-		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
-		require.NoError(t, err)
-
-		capacity.PaymentAddress = testWalletAddress
 		capacity.Memory = total.RAM.Size / 2 // 50% of total RAM
 		capacity.CPU = 1
 
@@ -159,11 +152,7 @@ func TestOnboard(t *testing.T) {
 		assert.Contains(t, err.Error(), "CPU should be between 10% and 90% of the available CPU ")
 	})
 
-	t.Run("unhappy case - ", func(t *testing.T) {
-		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
-		require.NoError(t, err)
-
-		capacity.PaymentAddress = testWalletAddress
+	t.Run("unhappy case - unmigrated schema", func(t *testing.T) {
 		capacity.Memory = total.RAM.Size / 2        // 50% of total RAM
 		capacity.CPU = int64(total.CPU.Compute) / 2 // 50% of total CPU
 		config, err := ts.service.Onboard(ctx, capacity)
@@ -172,11 +161,7 @@ func TestOnboard(t *testing.T) {
 		assert.Contains(t, err.Error(), "no such table")
 	})
 
-	t.Run("unhappy case - ", func(t *testing.T) {
-		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
-		require.NoError(t, err)
-
-		capacity.PaymentAddress = testWalletAddress
+	t.Run("happy case", func(t *testing.T) {
 		capacity.Memory = total.RAM.Size / 2        // 50% of total RAM
 		capacity.CPU = int64(total.CPU.Compute) / 2 // 50% of total CPU
 
