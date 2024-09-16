@@ -31,6 +31,8 @@ func NewCapCmd(afs afero.Afero) *cobra.Command {
 	cmd.AddCommand(newAnchorCmd(afs))
 	cmd.AddCommand(newNewCmd(afs))
 	cmd.AddCommand(newDelegateCmd(afs))
+	cmd.AddCommand(newListCmd(afs))
+	cmd.AddCommand(newRemoveCmd(afs))
 
 	return cmd
 }
