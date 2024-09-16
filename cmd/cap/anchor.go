@@ -31,14 +31,14 @@ func newAnchorCmd(afs afero.Afero) *cobra.Command {
 		Long:  `Add or modify capability anchors in a capability context`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var trustCtx did.TrustContext
-			if isLedger(context) {
+			if IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
 				}
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = ledgerContext(context)
+				context = LedgerContext(context)
 			} else {
 				var err error
 				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)

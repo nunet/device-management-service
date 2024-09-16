@@ -29,7 +29,7 @@ func newNewCmd(afs afero.Afero) *cobra.Command {
 
 			var trustCtx did.TrustContext
 			var rootDID did.DID
-			if isLedger(context) {
+			if IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
@@ -37,7 +37,7 @@ func newNewCmd(afs afero.Afero) *cobra.Command {
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
 				rootDID = provider.DID()
-				context = ledgerContext(context)
+				context = LedgerContext(context)
 			} else {
 				var priv crypto.PrivKey
 				var err error

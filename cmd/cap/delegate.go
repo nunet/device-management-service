@@ -73,14 +73,14 @@ func newDelegateCmd(afs afero.Afero) *cobra.Command {
 			}
 
 			var trustCtx did.TrustContext
-			if isLedger(context) {
+			if IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
 				}
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = ledgerContext(context)
+				context = LedgerContext(context)
 			} else {
 				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
 				if err != nil {

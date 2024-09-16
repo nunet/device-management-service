@@ -20,11 +20,11 @@ import (
 
 const ledger = "ledger"
 
-func isLedger(context string) bool {
+func IsLedgerContext(context string) bool {
 	return strings.HasPrefix(context, ledger)
 }
 
-func ledgerContext(context string) string {
+func LedgerContext(context string) string {
 	parts := strings.Split(context, ":")
 	if len(parts) == 2 {
 		return parts[1]
