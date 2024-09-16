@@ -14,19 +14,13 @@
 
 ## About
 
-**Device Management Service** or **DMS** is a program that allows users to run various computational workloads on a distributed set of machines. These machines are CPU/GPU-enabled devices that are part of the Nunet network. Think of this as a cloud service, but provided by multiple providers instead of a single entity like Amazon or Google.
-
-For those with available hardware resources, they can earn rewards by onboarding their machines to NuNet. Each time their machine is used to run a computational job, they are eligible to receive compensation for their service.
-
-To summarize, DMS connects users needing computational resources with those who can provide them, enabling the execution of computational work in a distributed setting.
+**Device Management Service** or **DMS** enables a machine to join the decentralized NuNet network both as a compute provider, offering its resources to the network, or to leverage the compute power of other machines in the network for processing tasks. Users with available hardware resources can get compensated whenever their machine is utilized for a computational job by other users in the network. The ultimate goal is to create a decentralized compute economy that is able sustains itself.
 
 ### Payment
 
-All transactions on the Nunet network are expected to be conducted using the platform's utility token [NTX](https://docs.nunet.io/infohub/tokenomics/ntx-utility-token-overview). However, DMS is currently in development, and NTX payments are expected to be implemented in the [Public Alpha Mainnet](https://gitlab.com/groups/nunet/-/milestones/46#tab-issues) milestone.
+All transactions on the Nunet network are expected to be conducted using the platform's utility token [NTX](https://docs.nunet.io/docs/v/getting-ntx). However, DMS is currently in development, and payment isn't part of `v0.5.0-boot` release. NTX payments are expected to be implemented in the [Public Alpha Mainnet](https://gitlab.com/groups/nunet/-/milestones/46#tab-issues) milestone within later release cycles.
 
-**Note**: If you are a developer, please check out the [DMS specifications](#specification) and [Getting Started](#getting-started-for-developers) sections of this document.
-
-**Note**: Payment is not yet enabled in the `v0.5.0-boot` release, we will enable it later in the `v0.5.0` release cycle.
+**Note**: If you are a developer, please check out the [DMS specifications](#specification) and [Building from Source](#building-from-source) sections of this document.
 
 ## Installation
 
@@ -34,21 +28,20 @@ You can install Device Management Service (DMS) via [binary releases](#binary-re
 
 ### Binary releases
 
-You can find all binary releases [here](https://gitlab.com/nunet/device-management-service/-/releases).
+You can find all binary releases [here](https://gitlab.com/nunet/device-management-service/-/releases) and other builds in-between releases in the [package registry](https://gitlab.com/nunet/device-management-service/-/packages)
 
-#### Ubuntu
+#### Ubuntu/Debian
 
-1. Download the latest binary:
-
-```shell
-wget https://d.nunet.io/nunet-dms-latest.deb -O nunet-dms-latest.deb
-```
-
-2. Install it:
+1. Download the latest .deb pacakge from the package registry:
+2. Install the debian package with `apt` or `dpkg`:
 
 ```shell
 sudo apt update
-sudo apt install ./nunet-dms-latest.deb -y
+sudo apt install ./nunet-dms_0.5.0_amd64.deb -y
+```
+3. Some dependencies such as docker and libsystemd-dev might be missing so it's recommended to fix install by running:
+```shell
+sudo apt -f install
 ```
 
 ### Building from source
@@ -64,7 +57,7 @@ We currently support Linux and MacOS (Darwin).
 Clone the repository:
 
 ```
-git clone https://gitlab.com/nunet/device-management-service
+git clone https://gitlab.com/nunet/device-management-service.git
 ```
 
 Build the CLI:
@@ -74,27 +67,9 @@ cd device-management-service
 make
 ```
 
+This will result in a binary file in builds/ folder named as `dms_linux_amd64` or `dms_darwin_arm64` depending on the platform.
+
 You can add the compiled binary to a directory in your `$PATH`. See the [Usage](#usage) section for more information.
-
-#### Development Builds
-
-We also provide a `dev-setup` shell script to ease the process of getting started. It does the following:
-
-1. Sets up `pre-commit` hook, which runs tests before every commit.
-2. Builds the .deb file and installs it.
-3. Stops the `nunet-dms` service so that we can run `main.go` directly.
-
-Run the script:
-
-```bash
-bash maint-scripts/dev-setup.sh
-```
-
-Once the environment is set up, build the DMS as follows:
-
-```bash
-make
-```
 
 ### Installation on VMs
 
@@ -113,7 +88,7 @@ make
 - Enable [systemd on Ubuntu WSL](https://www.xda-developers.com/how-enable-systemd-in-wsl).
 - ML Jobs deployed on Linux cannot be resumed on WSL.
 
-Though it is possible to run ML jobs on Windows machines with WSL, using Ubuntu 20.04 natively is highly recommended. The reason is that our development is centered around the Linux operating system. Additionally, the system requirements when using WSL would increase by at least around 25%.
+Though it is possible to run ML jobs on Windows machines with WSL, using Ubuntu 20.04 natively is highly recommended to avoid unpredictability and performance losses. 
 
 If you are using a dual-boot machine, make sure to use the `wsl --shutdown` command before shutting down Windows and running Linux for ML jobs. Also, ensure your Windows machine is not in a hibernated state when you reboot into Linux.
 
@@ -165,10 +140,9 @@ This quick start guide will walk you through the process of setting up a Device 
 
 #### Creating identities
 
-The first necessary step is to generate identity keys and capability contexts using the command-line.
-It's recommended to setup *at least* **two** identities, one for *personal* user (by default the `user` context) and one for use by the *dms* instance (by default the `dms` context)
+The first step is to generate identities/keys and capability contexts. It is recommended that two keys are setup: one for the user (default name `user`) and another for the dms (default name `dms`)
 
-To set up a new identity, run the command:
+To set up a new identity/create a new key, run the command:
 
 ```
 $ nunet key new <identity>
@@ -223,25 +197,19 @@ $ nunet key did ledger
 
 #### Setting up Capabilities
 
-NuNet's network communications are implemented using the [NuActor System](actor/README.md). NuActor is a zero trust system that makes extensive use of fine grained capabilities anchored on [DIDs](https://www.w3.org/TR/did-core/), following the model of [UCANs](https://github.com/ucan-wg/).
+NuNet's network communication is powered by the [NuActor System](actor/README.md), a zero-trust system that utilizes fine-grained capabilities, anchored on [DIDs](https://www.w3.org/TR/did-core/), following the [UCAN model](https://github.com/ucan-wg/).
 
-With both identities are created, it's necessary to set up some capabilities.
-Specifically:
-1. You need to create capability contexts for both the user and each of your DMS instances.
-2. The user's DID must be added as a _root anchor_ for the DMS capability context.
-   Operationally this means that the DMS instance absolutely trusts the user, and
-   confers complete control of the DMS (the root capability).
-3. If you want your DMS to be part of the public NuNet testnet (and eventually the mainnet), you will need some capability anchors for your DMS:
-  1. Create a capability anchor for your DMS to accept _public behavior invocations_
-     from users and DMSs owned by users authorized by NuNet.
-  2. Add this token to your DMS as a _require anchor_.
-  3. Ask NuNet for a capability token that allows you to invoke public behaviors
-     on the network.
-  4. Add the token you got as a _provide anchor_ into your personal capability token.
-  5. Delegate to your DMS the capability to make public invocations using your token.
-  6. Add the delegation token to your DMS as a provide anchor.
+Once both identities are created, you'll need to set up capabilities. Specifically:
 
-Let's make things more concrete.
+1. Create capability contexts for both the user and each of your DMS instances.
+2. Add the user's DID as a _root anchor_ for the DMS capability context. This ensures that the DMS instance fully trusts the user, granting complete control over the DMS (the root capability).
+3. If you want your DMS to participate in the public NuNet testnet (and eventually the mainnet), you'll need to set up capability anchors for your DMS:
+   1. Create a capability anchor to allow your DMS to accept _public behavior invocations_ from authorized users and DMSs in the NuNet ecosystem.
+   2. Add this token to your DMS as a _require anchor_.
+   3. Request a capability token from NuNet to invoke public behaviors on the network.
+   4. Add the token as a _provide anchor_ in your personal capability context.
+   5. Delegate to your DMS the ability to make public invocations using your token.
+   6. Add the delegation token as a _provide anchor_ in your DMS.
 
 ##### Create capability contexts
 
