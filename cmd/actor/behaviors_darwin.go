@@ -10,7 +10,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func newCustomVMStartRequest(opts *vmStartOpts) (node.CustomVMStartRequest, error) {
+func newCustomVMStartRequest(_ *vmStartOpts) (node.CustomVMStartRequest, error) {
 	return node.CustomVMStartRequest{}, fmt.Errorf("VMs not supported in this system")
 }
 
