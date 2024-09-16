@@ -25,5 +25,5 @@ func Execute() {
 		"/api/v1",
 	)
 
-	cobra.CheckErr(newRootCmd(client, afs, nil).Execute())
+	cobra.CheckErr(newRootCmd(client, afs).Execute())
 }
