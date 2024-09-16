@@ -138,6 +138,18 @@ If the above CPU has 4 cores, your available CPU would be around 8000 MHz. So if
 
 This quick start guide will walk you through the process of setting up a Device Management Service (DMS) instance for the first time and getting it running. We'll cover creating identities, setting up capabilities, and running the DMS.
 
+**The NuNet CLI**
+
+The Nunet CLI is the command-line interface for interacting with the Nunet Device Management Service (DMS). It provides commands for managing keys, capabilities, configuration, running the DMS, and more. It's essential for setting up and administering your DMS instance.
+
+**Key Concepts**
+
+* **Actor:** An independent entity in the Nunet system capable of performing actions and communicating with other actors.
+* **Capability:**  Defines the permissions and restrictions granted to actors within the system.
+* **Key:** A cryptographic key pair used for authentication and authorization within the DMS.
+
+You can find a detailed documentation [here](./cmd/README.md).
+
 #### Creating identities
 
 The first step is to generate identities/keys and capability contexts. It is recommended that two keys are setup: one for the user (default name `user`) and another for the dms (default name `dms`)
