@@ -861,23 +861,3 @@ func createCIDFromKey(key string) (cid.Cid, error) {
 	}
 	return cid.NewCidV1(cid.Raw, mh), nil
 }
-
-func CleanupPeer(_ peer.ID) error {
-	zlog.Warn("CleanupPeer: Stub")
-	return nil
-}
-
-func PingPeer(_ context.Context, _ peer.ID) (bool, *ping.Result) {
-	zlog.Warn("PingPeer: Stub")
-	return false, nil
-}
-
-func DumpKademliaDHT(_ context.Context) ([]types.PeerData, error) {
-	zlog.Warn("DumpKademliaDHT: Stub")
-	return nil, nil
-}
-
-func OldPingPeer(_ context.Context, _ peer.ID) (bool, *types.PingResult) {
-	zlog.Warn("OldPingPeer: Stub")
-	return false, nil
-}

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
@@ -94,15 +93,3 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 	return nil
 }
 func (dhtValidator) Select(_ string, _ [][]byte) (int, error) { return 0, nil }
-
-// TODO remove the below when network package is fully implemented
-// UpdateKadDHT is a stub
-func (l *Libp2p) UpdateKadDHT() {
-	zlog.Warn("UpdateKadDHT: Stub")
-}
-
-// ListKadDHTPeers is a stub
-func (l *Libp2p) ListKadDHTPeers(_ context.Context, _ *gin.Context) ([]string, error) {
-	zlog.Warn("ListKadDHTPeers: Stub")
-	return nil, nil
-}
