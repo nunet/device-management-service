@@ -16,6 +16,7 @@ import (
 )
 
 func TestGPUDeployment(t *testing.T) {
+	t.Skip("Skipping GPU deployment test because of large docker image pull")
 	ensureDockerSetup(t)
 	t.Log("Starting GPU Deployment Test")
 

@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -27,7 +29,7 @@ func ExecuteCommandC(root *cobra.Command, args ...string) (c *cobra.Command, out
 	return c, buf.String(), err
 }
 
-func Test_ConfigGetCmd(t *testing.T) {
+func TestConfigGetCmd(t *testing.T) {
 	tests := []struct {
 		name         string
 		args         []string
@@ -72,7 +74,7 @@ func Test_ConfigGetCmd(t *testing.T) {
 	}
 }
 
-func Test_ConfigSetCmd(t *testing.T) {
+func TestConfigSetCmd(t *testing.T) {
 	tests := []struct {
 		name         string
 		args         []string
@@ -124,6 +126,48 @@ func Test_ConfigSetCmd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := newConfigSetCmd(afero.NewMemMapFs())
 			_, err := ExecuteCommand(cmd, tt.args...)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfigEditCmd(t *testing.T) {
+	tests := []struct {
+		name    string
+		editor  string
+		wantErr bool
+	}{
+		{
+			name:    "editor not set",
+			editor:  "",
+			wantErr: true,
+		},
+		{
+			name:    "editor set",
+			editor:  "true", // maybe this is not the best way to test this
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		if path, err := exec.LookPath(tt.editor); tt.editor != "" && (err != nil || path == "") {
+			t.Skipf("%s bin not found to simulate editor:", tt.editor)
+		}
+
+		t.Run(tt.name, func(t *testing.T) {
+			// Set the EDITOR environment variable for the test
+			if tt.editor != "" {
+				t.Setenv("EDITOR", tt.editor)
+			} else {
+				os.Unsetenv("EDITOR")
+			}
+
+			cmd := newConfigEditCmd()
+			_, err := ExecuteCommand(cmd)
 
 			if tt.wantErr {
 				assert.Error(t, err)

@@ -242,7 +242,7 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForN
 		return fmt.Errorf("could not check if config directory exists: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("config directory does not exist")
+		return fmt.Errorf("working directory does not exist")
 	}
 
 	if err := utils.ValidateAddress(capacity.PaymentAddress); err != nil {

@@ -125,7 +125,7 @@ func Test_LogLinuxCmdNoEntries(t *testing.T) {
 	cmd.SetErr(buf)
 
 	err := cmd.Execute()
-	assert.Error(t, err)
+	assert.Error(t, err) // expect error because no log entries
 
 	assert.Contains(t, buf.String(), "no log entries")
 }
