@@ -68,9 +68,9 @@ func newUserHandle(id crypto.ID, did did.DID, dmsHandle actor.Handle, inbox stri
 	}
 }
 
-func newSecurityContext(fs afero.Afero, contextName string) (actor.SecurityContext, error) {
-	if contextName == "" {
-		contextName = DefaultUserContextName
+func newSecurityContext(fs afero.Afero, context string) (actor.SecurityContext, error) {
+	if context == "" {
+		context = DefaultUserContextName
 	}
 
 	// Generate ephemeral key pair
@@ -80,13 +80,25 @@ func newSecurityContext(fs afero.Afero, contextName string) (actor.SecurityConte
 	}
 
 	// Create trust context
-	trustCtx, _, err := cap.CreateTrustContextFromKeyStore(fs, contextName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create trust context: %w", err)
+	var trustCtx did.TrustContext
+	if cap.IsLedgerContext(context) {
+		provider, err := did.NewLedgerWalletProvider(0)
+		if err != nil {
+			return nil, err
+		}
+
+		trustCtx = did.NewTrustContextWithProvider(provider)
+		context = cap.LedgerContext(context)
+	} else {
+		var err error
+		trustCtx, _, err = cap.CreateTrustContextFromKeyStore(fs, context)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create trust context: %w", err)
+		}
 	}
 
 	// Load capability context
-	capCtx, err := cap.LoadCapabilityContext(trustCtx, contextName)
+	capCtx, err := cap.LoadCapabilityContext(trustCtx, context)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load capability context: %w", err)
 	}
@@ -94,12 +106,12 @@ func newSecurityContext(fs afero.Afero, contextName string) (actor.SecurityConte
 	return actor.NewBasicSecurityContext(pubk, privk, capCtx)
 }
 
-func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, topic, behavior string, payload interface{}, timeout time.Duration, expiry time.Time, invocation bool, contextName string) (actor.Envelope, error) {
+func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, topic, behavior string, payload interface{}, timeout time.Duration, expiry time.Time, invocation bool, context string) (actor.Envelope, error) {
 	var msg actor.Envelope
 	var src actor.Handle
 	var dest actor.Handle
 
-	sctx, err := newSecurityContext(fs, contextName)
+	sctx, err := newSecurityContext(fs, context)
 	if err != nil {
 		return msg, fmt.Errorf("failed to create security context: %w", err)
 	}
