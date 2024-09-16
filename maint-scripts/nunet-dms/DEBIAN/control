@@ -1,9 +1,9 @@
 Package: nunet-dms
 Version: version
 Architecture: architecture
-Depends: docker.io | docker-ce, libsystemd-dev
+Depends: docker.io | docker-ce, iproute2, libsystemd-dev
 Installed-Size: DMS_INST_SIZE
 Section: utils
-Maintainer: Santosh Kumar<santosh.kumar@nunet.io>, Olakunle Oladimeji<olakunle.oladimeji@nunet.io>
+Maintainer: Santosh Kumar<santosh.kumar@nunet.io>, Dagim Sisay<dagim@nunet.io>
 Homepage: https://gitlab.com/nunet/device-management-service
-Description: NuNet Device Management Service is the service which runs on the user machine.
+Description: NuNet Device Management Service enables a machine to join the decentralized NuNet network both as a compute provider, offering its resources to the network, or to leverage the compute power of other machines in the network for processing tasks.
