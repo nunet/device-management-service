@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 var (
@@ -90,13 +91,17 @@ func (s *ClientTestSuite) TestIsInstalled() {
 
 // TestCreateContainer tests the CreateContainer method of the Docker client.
 func (s *ClientTestSuite) TestCreateContainer() {
-	id := s.createTestContainer(defaultName, defaultImage, defaultCmd)
+	randomSuffix, err := utils.RandomString(10)
+	require.NoError(s.T(), err)
+	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
 	assert.NotEmpty(s.T(), id)
 }
 
 // TestInspectContainer tests the InspectContainer method of the Docker client.
 func (s *ClientTestSuite) TestInspectContainer() {
-	id := s.createTestContainer(defaultName, defaultImage, defaultCmd)
+	randomSuffix, err := utils.RandomString(10)
+	require.NoError(s.T(), err)
+	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
 	assert.NotEmpty(s.T(), id)
 
 	container, err := s.client.InspectContainer(context.Background(), id)
@@ -106,19 +111,23 @@ func (s *ClientTestSuite) TestInspectContainer() {
 
 // TestStartContainer tests the StartContainer method of the Docker client.
 func (s *ClientTestSuite) TestStartContainer() {
-	id := s.createTestContainer(defaultName, defaultImage, defaultCmd)
+	randomSuffix, err := utils.RandomString(10)
+	require.NoError(s.T(), err)
+	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
 	assert.NotEmpty(s.T(), id)
 
-	err := s.client.StartContainer(context.Background(), id)
+	err = s.client.StartContainer(context.Background(), id)
 	require.NoError(s.T(), err)
 }
 
 // TestStopContainer tests the StopContainer method of the Docker client.
 func (s *ClientTestSuite) TestStopContainer() {
-	id := s.createTestContainer(defaultName, defaultImage, defaultCmd)
+	randomSuffix, err := utils.RandomString(10)
+	require.NoError(s.T(), err)
+	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
 	assert.NotEmpty(s.T(), id)
 
-	err := s.client.StartContainer(context.Background(), id)
+	err = s.client.StartContainer(context.Background(), id)
 	require.NoError(s.T(), err)
 
 	err = s.client.StopContainer(context.Background(), id, time.Second*5)
@@ -127,9 +136,11 @@ func (s *ClientTestSuite) TestStopContainer() {
 
 // TestRemoveContainer tests the RemoveContainer method of the Docker client.
 func (s *ClientTestSuite) TestRemoveContainer() {
-	id := s.createTestContainer(defaultName, defaultImage, defaultCmd)
+	randomSuffix, err := utils.RandomString(10)
+	require.NoError(s.T(), err)
+	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
 	assert.NotEmpty(s.T(), id)
 
-	err := s.client.RemoveContainer(context.Background(), id)
+	err = s.client.RemoveContainer(context.Background(), id)
 	require.NoError(s.T(), err)
 }
