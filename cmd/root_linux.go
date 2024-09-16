@@ -1,12 +1,10 @@
 //go:build linux
-// +build linux
 
 package cmd
 
 import (
 	"fmt"
 
-	"github.com/coreos/go-systemd/sdjournal"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
@@ -26,9 +24,5 @@ func Execute() {
 		"/api/v1",
 	)
 
-	journal, err := sdjournal.NewJournal()
-	if err != nil {
-		cobra.CheckErr(fmt.Errorf("failed to get new sdjournal; Error: %w", err))
-	}
-	cobra.CheckErr(newRootCmd(client, afs, journal).Execute())
+	cobra.CheckErr(newRootCmd(client, afs).Execute())
 }

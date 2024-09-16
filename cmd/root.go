@@ -9,7 +9,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-func newRootCmd(client *utils.HTTPClient, afs afero.Afero, logger interface{}) *cobra.Command {
+func newRootCmd(client *utils.HTTPClient, afs afero.Afero) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "nunet",
 		Short: "NuNet Device Management Service",
@@ -28,7 +28,6 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero, logger interface{}) *
 	cmd.AddCommand(newKeyCmd(afs))
 	cmd.AddCommand(cap.NewCapCmd(afs))
 	cmd.AddCommand(actor.NewActorCmd(client, afs))
-	cmd.AddCommand(newLogCmd(afs, logger))
 	cmd.AddCommand(newConfigCmd(afs.Fs))
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(newVersionCmd())

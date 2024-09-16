@@ -27,6 +27,16 @@ linux_amd64:
 	go mod tidy
 	GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) .
 
+linux_arm64:
+	@echo "Building for Linux ARM64..."
+	go mod tidy
+	GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .
+
+linux_arm32:
+	@echo "Building for Linux ARM32..."
+	go mod tidy
+	GOOS=linux GOARCH=arm go build -o builds/dms_linux_arm32 -ldflags=$(LDFLAGS) .
+
 darwin_arm64:
 	@echo "Building for Darwin ARM64..."
 	go mod tidy

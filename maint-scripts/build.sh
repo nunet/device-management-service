@@ -20,10 +20,10 @@ version=$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
 
 mkdir -p $outputDir
 
-for arch in amd64 # arm64
+for arch in amd64 arm64 arm32
 do
     # echo .deb file will be written to: $outputDir
-    archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_$arch
+    archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$arch
     cp -r $projectRoot/maint-scripts/nunet-dms $archDir
     sed -i "s/Version:.*/Version: $version/g" $archDir/DEBIAN/control
     sed -i "s/Architecture:.*/Architecture: $arch/g" $archDir/DEBIAN/control
@@ -32,7 +32,7 @@ do
     make linux_$arch
 
     # create bin only zip release
-    zip -j $outputDir/nunet-dms_${version}_${arch}.zip builds/dms_linux_$arch
+    zip -j $outputDir/nunet-dms_${fullVersion}_${arch}.zip builds/dms_linux_$arch
 
     cp builds/dms_linux_$arch $archDir/usr/bin/nunet
     ls -R $archDir/usr # to allow checking all files are where they're supposed to be
@@ -47,17 +47,18 @@ do
 
     find $archDir -name .gitkeep | xargs rm
     chmod -R 755 $archDir
+
     dpkg-deb --build --root-owner-group $archDir $outputDir
     rm -r $archDir
 
     if [[ ! -z ${GITLAB_CI+x} ]]  ; then
         # upload artifact from build.sh to GitLab Package Registry.
-        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${projectRoot}/dist/nunet-dms_${version}_${arch}.deb ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${version}/nunet-dms_${version}_${arch}.deb
-        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${version}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${version}/nunet-dms_${version}_${arch}.zip
+        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${projectRoot}/dist/nunet-dms_${version}_${arch}.deb ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${version}_${arch}.deb
+        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${fullVersion}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_${arch}.zip
     fi
 
     if [[ ! -z ${NUNETBOT_BUILD_ENDPOINT+x} ]] ; then
         # notify the bot about the build
-        curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$version\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${version}/nunet-dms_${version}_${arch}.zip\"}" $NUNETBOT_BUILD_ENDPOINT
+        curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$version\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${version}_${arch}.deb\"}" $NUNETBOT_BUILD_ENDPOINT
     fi
 done
