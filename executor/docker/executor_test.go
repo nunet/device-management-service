@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 // ExecutorTestSuite is the test suite for the Docker executor.
@@ -19,7 +20,9 @@ type ExecutorTestSuite struct {
 
 // SetupTest sets up the test suite by initializing a new Docker executor.
 func (s *ExecutorTestSuite) SetupTest() {
-	e, err := docker.NewExecutor(context.Background(), "test_docker_executor")
+	randomSuffix, err := utils.RandomString(10)
+	require.NoError(s.T(), err)
+	e, err := docker.NewExecutor(context.Background(), "test_docker_executor"+randomSuffix)
 	require.NoError(s.T(), err)
 	s.executor = e
 	s.T().Cleanup(func() {
