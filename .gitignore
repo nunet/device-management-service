@@ -6,6 +6,7 @@ maint-scripts/inventory.yaml
 !test/*.json
 .env
 .idea
+device-management-service
 
 # Holds local development files. These files are used to develop
 # features separately then merging into main code before commit.

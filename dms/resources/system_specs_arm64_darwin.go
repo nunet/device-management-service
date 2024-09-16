@@ -23,7 +23,7 @@ func newSystemSpecs(_ *store) *darwinSystemSpecs {
 var _ types.SystemSpecs = (*darwinSystemSpecs)(nil)
 
 // getGPUs returns the GPUs for the system
-func getGPUs(vendor ...types.GPUVendor) ([]types.GPU, error) {
+func getGPUs(_ ...types.GPUVendor) ([]types.GPU, error) {
 	zlog.Warn("GPUs are not supported on Darwin yet")
 	return []types.GPU{}, nil
 }
