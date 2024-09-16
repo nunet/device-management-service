@@ -10,7 +10,51 @@
 
 ## Table of Contents
 
-[[_TOC_]]
+- [Device Management Service (DMS)](#device-management-service-dms)
+  - [Table of Contents](#table-of-contents)
+  - [About](#about)
+    - [Payment](#payment)
+  - [Installation](#installation)
+    - [Binary releases](#binary-releases)
+      - [Ubuntu/Debian](#ubuntudebian)
+    - [Building from source](#building-from-source)
+      - [Dependencies](#dependencies)
+    - [Installation on VMs](#installation-on-vms)
+    - [Installation on WSL](#installation-on-wsl)
+    - [System Requirements](#system-requirements)
+      - [CPU-only machines](#cpu-only-machines)
+        - [Minimum System Requirements](#minimum-system-requirements)
+        - [Recommended System Requirements](#recommended-system-requirements)
+      - [GPU Machines](#gpu-machines)
+        - [Minimum System Requirements](#minimum-system-requirements-1)
+        - [Recommended System Requirements](#recommended-system-requirements-1)
+  - [Usage](#usage)
+    - [Quick Start](#quick-start)
+      - [Creating identities](#creating-identities)
+      - [Using a Ledger Wallet](#using-a-ledger-wallet)
+      - [Setting up Capabilities](#setting-up-capabilities)
+        - [Create capability contexts](#create-capability-contexts)
+          - [Add a root anchor for your DMS context](#add-a-root-anchor-for-your-dms-context)
+        - [Setup your DMS for the public testnet](#setup-your-dms-for-the-public-testnet)
+      - [Running DMS](#running-dms)
+    - [Onboarding](#onboarding)
+    - [REST Endpoints](#rest-endpoints)
+  - [Configuration](#configuration)
+    - [Config file](#config-file)
+      - [Run Two DMS Instances Side by Side](#run-two-dms-instances-side-by-side)
+  - [Tests](#tests)
+  - [Specification](#specification)
+    - [Description](#description)
+    - [Design and Architecture](#design-and-architecture)
+      - [Conceptual Basis](#conceptual-basis)
+      - [Ontology](#ontology)
+      - [Architecture](#architecture)
+      - [Research](#research)
+    - [Functionality](#functionality)
+    - [Data Types](#data-types)
+    - [References](#references)
+    - [Class Diagram](#class-diagram)
+      - [Source File](#source-file)
 
 ## About
 
@@ -35,12 +79,12 @@ You can find all binary releases [here](https://gitlab.com/nunet/device-manageme
 1. Download the latest .deb pacakge from the package registry:
 2. Install the debian package with `apt` or `dpkg`:
 
-```shell
+```
 sudo apt update
 sudo apt install ./nunet-dms_0.5.0_amd64.deb -y
 ```
 3. Some dependencies such as docker and libsystemd-dev might be missing so it's recommended to fix install by running:
-```shell
+```
 sudo apt -f install
 ```
 
@@ -88,7 +132,7 @@ You can add the compiled binary to a directory in your `$PATH`. See the [Usage](
 - Enable [systemd on Ubuntu WSL](https://www.xda-developers.com/how-enable-systemd-in-wsl).
 - ML Jobs deployed on Linux cannot be resumed on WSL.
 
-Though it is possible to run ML jobs on Windows machines with WSL, using Ubuntu 20.04 natively is highly recommended to avoid unpredictability and performance losses. 
+Though it is possible to run ML jobs on Windows machines with WSL, using Ubuntu 20.04 natively is highly recommended to avoid unpredictability and performance losses.
 
 If you are using a dual-boot machine, make sure to use the `wsl --shutdown` command before shutting down Windows and running Linux for ML jobs. Also, ensure your Windows machine is not in a hibernated state when you reboot into Linux.
 
@@ -154,6 +198,8 @@ You can find a detailed documentation [here](./cmd/README.md).
 
 The first step is to generate identities/keys and capability contexts. It is recommended that two keys are setup: one for the user (default name `user`) and another for the dms (default name `dms`)
 
+A capability context is created with the `dms cap new <context>` command and it is anchored on a key with the context name.
+
 To set up a new identity/create a new key, run the command:
 
 ```
@@ -174,6 +220,12 @@ $ nunet cap new user
 
 $ nunet key new dms // returns did
 $ nunet cap new dms
+```
+
+If you use a ledger wallet for your personal key, you can create the user context as follows:
+```
+$ nunet key did ledger
+$ nunet cap new ledger:user
 ```
 
 You can create as many identities as you want, specially if you want
@@ -223,24 +275,6 @@ Once both identities are created, you'll need to set up capabilities. Specifical
    5. Delegate to your DMS the ability to make public invocations using your token.
    6. Add the delegation token as a _provide anchor_ in your DMS.
 
-##### Create capability contexts
-
-A capability context is created with the `dms cap new <context>`
-command and it is anchored on a key with the context name.
-
-So, if you have created `user` and `dms` identities, you can create the capability contexts as follows:
-```
-$ nunet cap new user
-$ nunet cap new dms
-```
-
-If you use a ledger wallet for your personal key, you can create the user context as follows:
-```
-$ nunet cap new ledger:user
-```
-
-This will create a `user` context anchored on your ledger wallet.
-
 ###### Add a root anchor for your DMS context
 
 You can do this by invoking the `dms cap anchor` command:
@@ -248,11 +282,11 @@ You can do this by invoking the `dms cap anchor` command:
 $ nunet cap anchor --context dms --root <user-did>
 ```
 
-Where the user DID is the did of your personal key. You can get this with this command:
+Where `<user-did>` is the user did created above in [Creating identities](#creating-identities) and can be obtained by:
 ```
-$ nunet key did user
+$ nunet key did <user>
 
-## or if you are using a Ledger Wallet
+## or if you are using a Ledger Wallet:
 $ nunet key did ledger
 ```
 
@@ -278,7 +312,9 @@ $ nunet cap anchor --context dms --require <the-grant-output>
 ```
 
 The first command grants nunet authorized users the capability to invoke public behaviors until December 31, 2024, and outputs a token.
-The second command consumes the token and adds the require anchor for your DMS>
+
+The second command consumes the token and adds the require anchor for your DMS
+
 
 2. **Ask NuNet for a public network capability token**
 
@@ -312,13 +348,7 @@ If everything was setup properly, you should be able to run:
 $ nunet run
 ```
 
-By default, DMS runs on port 9999. DMS looks for a configuration file on the following paths (in order):
-
-1. `.` (current directory)
-2. `$HOME/.nunet`
-2. `/etc/nunet`
-
-It's possible configure DMS by creating a `dms_config.json` in one of these locations or running `nunet config` to edit the configuration from the command-line.
+By default, DMS runs on port 9999.
 
 ### Onboarding
 
@@ -332,7 +362,18 @@ Refer to the `api` package [README](https://gitlab.com/nunet/device-management-s
 
 ## Configuration
 
-### Run Two DMS Instances Side by Side
+### Config file
+The DMS searches for a configuration file `dms_config.json` in the following locations, in order of priority whenever it's started:
+
+1. The current directory (`.`)
+2. `$HOME/.nunet`
+3. `/etc/nunet`
+
+The configuration file must be in JSON format and it does **not** support comments. It's recommended that only the parameters that need to be changed are included in the config file so that other parameters can retain their default values.
+
+It's possible to manage configuration using the `config` subcommand as well. `nunet config set` allows setting each parameter individually and `nunet config edit` will open the config file in the default editor from `$EDITOR` 
+
+#### Run Two DMS Instances Side by Side
 
 As a developer, you might find yourself needing to run two DMS instances, one acting as an SP (Service Provider) and the other as a CP (Compute Provider).
 
@@ -342,10 +383,7 @@ Clone the repository to two different directories. You might want to use descrip
 
 **Step 2**:
 
-You need to modify some configurations so that both DMS instances do not create a deadlock. These configurations include:
-
-1. The port DMS is listening on.
-2. The database file DMS uses.
+You need to modify some configurations so that both DMS instances do not end up trying to listen on the same port and use the same path for storage. For example, ports on `p2p.listen_address`, `rest.port`, `general.user_dir` etc... neeed to be different for two instances on the same host.
 
 The `dms_config.json` file can be used to modify these settings. Here is a sample config file that can be modified to your preference:
 
@@ -355,7 +393,7 @@ The `dms_config.json` file can be used to modify these settings. Here is a sampl
     "listen_address": ["/ip4/0.0.0.0/tcp/9100", "/ip4/0.0.0.0/udp/9100/quic-v1"]
   },
   "general": {
-    "metadata_path": "/home/user/.config/nunet/dms/",
+    "user_dir": "/home/user/.config/nunet/dms/",
     "debug": true
   },
   "rest": {
@@ -364,114 +402,25 @@ The `dms_config.json` file can be used to modify these settings. Here is a sampl
 }
 ```
 
-Please use absolute paths to avoid trouble. Also, have a look at the [config structure](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/config/config.go).
+Prefer to use absolute paths and have a look at the [config structure](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/config/config.go) for more info.
 
-3. You must also change the port number in the `nunet` shell script if you plan to use the `nunet` CLI.
-
-**Step 3**:
-
-Onboard both DMS instances.
-
-**Step 4**:
-
-Check if both can discover each other.
 
 ## Tests
 
-**Running Functional Tests with Python-Behave Framework**
+Some packages contain tests, and it is always best to run them to ensure there are no broken tests before submitting any changes. Before running the tests, the Firecracker executor requires some test data, such as a kernel file, which can be downloaded with:
 
-**Pre-requisites**
+```bash
+make testdata
+```
 
-- **Python Installation:** Ensure Python 3.8 or higher is installed on your system.
-- **Environment Variable:** Confirm that the Python path is included in the system's PATH environment variable.
+After the download is complete, all unit tests can be run with the following command. It's necessary to include the `unit` tag due to the existence of files that contain functional and integration tests.
 
-**Steps to Run Functional Tests**
+```bash
+go test --tags unit ./...
+```
 
-1. **Clone the Test-Suite Repository**
+Help in contributing tests is always appreciated :)
 
-   Open your terminal and execute the following command to clone the repository from GitLab:
-
-   ```bash
-   git clone git@gitlab.com:nunet/test-suite.git
-   ```
-
-2. **Install the Dependencies**
-
-   Navigate to the cloned test-suite directory:
-
-   ```bash
-   cd test-suite
-   ```
-
-   Install the necessary dependencies by running:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Executing the Tests**
-
-   Navigate to the functional tests directory:
-
-   ```bash
-   cd /test-suite/stages/functional_tests
-   ```
-
-   Run the tests using the `behave` command:
-
-   ```bash
-   behave features/<dir or feature file path>
-   ```
-
-   Example:
-
-   ```bash
-   behave features/device-management-service/api-tests/p2p_api.feature
-   ```
-
-   Note: This command will execute all Gherkin feature files or scenarios under the specified directory. Standard output logs will be displayed in the terminal.
-
-4. **Generate Allure Report (Optional)**
-
-   [Allure](https://allurereport.org/docs/behave/) is a HTML-based reporting framework. If you want to generate the report in a fancy way, follow these steps to generate and view the report:
-
-   **Pre-requisites for Allure**
-
-   - Install Allure from [Allure Releases](https://github.com/allure-framework/allure2/releases).
-
-   **Steps to Generate and View Allure Report**
-
-   - Run the Tests with Allure Formatter:
-
-     ```bash
-     behave features/device-management-service/<feature files to run> --junit -f allure_behave.formatter:AllureFormatter -o allure-results
-     ```
-
-     Example:
-
-     ```bash
-     behave features/device-management-service/api-tests/p2p_api.feature --junit -f allure_behave.formatter:AllureFormatter -o allure-results
-     ```
-
-   - Generate the HTML Report:
-
-     ```bash
-     allure generate allure-results -o allure-report
-     ```
-
-   - View the Report:
-
-     ```bash
-     allure open allure-report
-     ```
-
-   - Zip the Report for Sharing:
-
-     ```bash
-     zip -r allure-report.zip allure-report
-     ```
-
-By following these steps, you can effectively run functional tests using the Python-Behave framework and generate comprehensive reports using Allure.
 
 ## Specification
 
@@ -539,19 +488,6 @@ DMS is currently being refactored and new functionality will be added.
 
 Refer to the DMS global class diagram in [this](#class-diagram) section and various packages for data models.
 
-### Testing
-
-Some packages contain tests, and it is always best to run them to ensure there are no broken tests before submitting any changes. Before running the tests, the Firecracker executor requires some test data, such as a kernel file, which can be downloaded with:
-
-```bash
-make testdata
-```
-
-After the download is complete, all unit tests can be run with:
-
-```bash
-go test ./...
-```
 
 ### References
 
