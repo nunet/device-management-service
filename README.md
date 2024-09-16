@@ -83,7 +83,9 @@ You can find all binary releases [here](https://gitlab.com/nunet/device-manageme
 sudo apt update
 sudo apt install ./nunet-dms_0.5.0_amd64.deb -y
 ```
+
 3. Some dependencies such as docker and libsystemd-dev might be missing so it's recommended to fix install by running:
+
 ```
 sudo apt -f install
 ```
@@ -188,9 +190,9 @@ The Nunet CLI is the command-line interface for interacting with the Nunet Devic
 
 **Key Concepts**
 
-* **Actor:** An independent entity in the Nunet system capable of performing actions and communicating with other actors.
-* **Capability:**  Defines the permissions and restrictions granted to actors within the system.
-* **Key:** A cryptographic key pair used for authentication and authorization within the DMS.
+- **Actor:** An independent entity in the Nunet system capable of performing actions and communicating with other actors.
+- **Capability:** Defines the permissions and restrictions granted to actors within the system.
+- **Key:** A cryptographic key pair used for authentication and authorization within the DMS.
 
 You can find a detailed documentation [here](./cmd/README.md).
 
@@ -223,6 +225,7 @@ $ nunet cap new dms
 ```
 
 If you use a ledger wallet for your personal key, you can create the user context as follows:
+
 ```
 $ nunet key did ledger
 $ nunet cap new ledger:user
@@ -255,6 +258,7 @@ signed (namely capability tokens) will be presented on your Nano's
 screen in plaintext so that you can inspect it.
 
 You can get your Ledger wallet's DID with:
+
 ```
 $ nunet key did ledger
 ```
@@ -278,11 +282,13 @@ Once both identities are created, you'll need to set up capabilities. Specifical
 ###### Add a root anchor for your DMS context
 
 You can do this by invoking the `dms cap anchor` command:
+
 ```
 $ nunet cap anchor --context dms --root <user-did>
 ```
 
 Where `<user-did>` is the user did created above in [Creating identities](#creating-identities) and can be obtained by:
+
 ```
 $ nunet key did <user>
 
@@ -291,6 +297,7 @@ $ nunet key did ledger
 ```
 
 ##### Setup your DMS for the public testnet
+
 0. **The NuNet DID**
 
 ```
@@ -315,7 +322,6 @@ The first command grants nunet authorized users the capability to invoke public 
 
 The second command consumes the token and adds the require anchor for your DMS
 
-
 2. **Ask NuNet for a public network capability token**
 
 TODO
@@ -335,7 +341,7 @@ $ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nune
 # or if you are using a Ledger Wallet
 $ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-dir>
 
-$ nunet cap anchor --context dms <the-delegate-output>
+$ nunet cap anchor --context dms --require <the-delegate-output>
 ```
 
 The first command ingests the NuNet provided token and the last two commands use this token to delegate the public behavior capabilities to your DMS.
@@ -363,6 +369,7 @@ Refer to the `api` package [README](https://gitlab.com/nunet/device-management-s
 ## Configuration
 
 ### Config file
+
 The DMS searches for a configuration file `dms_config.json` in the following locations, in order of priority whenever it's started:
 
 1. The current directory (`.`)
@@ -371,7 +378,7 @@ The DMS searches for a configuration file `dms_config.json` in the following loc
 
 The configuration file must be in JSON format and it does **not** support comments. It's recommended that only the parameters that need to be changed are included in the config file so that other parameters can retain their default values.
 
-It's possible to manage configuration using the `config` subcommand as well. `nunet config set` allows setting each parameter individually and `nunet config edit` will open the config file in the default editor from `$EDITOR` 
+It's possible to manage configuration using the `config` subcommand as well. `nunet config set` allows setting each parameter individually and `nunet config edit` will open the config file in the default editor from `$EDITOR`
 
 #### Run Two DMS Instances Side by Side
 
@@ -404,7 +411,6 @@ The `dms_config.json` file can be used to modify these settings. Here is a sampl
 
 Prefer to use absolute paths and have a look at the [config structure](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/config/config.go) for more info.
 
-
 ## Tests
 
 Some packages contain tests, and it is always best to run them to ensure there are no broken tests before submitting any changes. Before running the tests, the Firecracker executor requires some test data, such as a kernel file, which can be downloaded with:
@@ -420,7 +426,6 @@ go test --tags unit ./...
 ```
 
 Help in contributing tests is always appreciated :)
-
 
 ## Specification
 
@@ -487,7 +492,6 @@ DMS is currently being refactored and new functionality will be added.
 ### Data Types
 
 Refer to the DMS global class diagram in [this](#class-diagram) section and various packages for data models.
-
 
 ### References
 
