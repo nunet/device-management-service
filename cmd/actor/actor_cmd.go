@@ -27,7 +27,13 @@ const (
 func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cmd",
-		Short: "Invoke a public behavior on an actor",
+		Short: "Invoke a predefined behavior on an actor",
+		Long: `Invoke a predefined behavior on an actor
+
+Example:
+ nunet actor cmd /broadcast/hello --dest did:key:<some-key>
+
+For more information on the list of available behaviors, refer to cmd/actor/README.md`,
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			if len(args) > 0 {
 				return nil, cobra.ShellCompDirectiveDefault
@@ -60,7 +66,6 @@ func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero) *cobra.Comman
 	return cmd
 }
 
-// NewActorCmdCmd is a constructor for `actor cmd` subcommand
 func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string, behaviorCfg behaviorConfig) *cobra.Command {
 	payload := &Payload{val: nil}
 	if behaviorCfg.Payload != nil {

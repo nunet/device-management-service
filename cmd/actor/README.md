@@ -1,4 +1,4 @@
-## Nunet Actor System CLI Documentation
+## Nunet Actor System CLI
 
 The Nunet Actor System CLI provides a set of commands for interacting with the Nunet actor system, enabling you to send messages to actors, invoke behaviors, and broadcast messages across the network.
 
@@ -28,7 +28,7 @@ nunet actor msg <behavior> <payload> [flags]
 **Flags**
 
 * `-b, --broadcast string`: Designates the topic for broadcasting the message.
-* `-c, --context string`: Specifies the capability context name, potentially used for authorization.
+* `-c, --context string`: Specifies the capability context name
 * `-d, --dest string`: Identifies the destination handle for the message.
 * `-e, --expiry time`: Sets an expiration time for the message.
 * `-h, --help`: Displays help information for the `msg` command.
@@ -89,7 +89,7 @@ nunet actor broadcast <msg> [flags]
 
 * `-h, --help`: Displays help information for the `broadcast` command.
 
-Please let me know if you have any other questions. 
+Please let me know if you have any other questions.
 
 ### `nunet actor cmd`
 
@@ -134,7 +134,7 @@ nunet actor cmd [command]
 
 * **`/broadcast/hello`**
 
-   * **Description:** Invokes the `/broadcast/hello` behavior on an actor. This likely sends a "hello" message to a broadcast topic, potentially used for discovery or initial communication.
+   * **Description:** Invokes the `/broadcast/hello` behavior on an actor. This sends a "hello" message to a broadcast topic for polite introduction.
 
    * **Usage:** `nunet actor cmd /broadcast/hello [<param> ...] [flags]`
 
@@ -150,7 +150,7 @@ nunet actor cmd [command]
    * **Usage:** `nunet actor cmd /dms/node/onboarding/offboard [<param> ...] [flags]`
 
    * **Flags:**
-     * `-f, --force`: Force the offboarding process, potentially overriding any safety checks.
+     * `-f, --force`: Force the offboarding process overriding any safety checks and invalid states.
      * `-h, --help`: Display help information for the `/dms/node/onboarding/offboard` command.
 
 * **`/dms/node/onboarding/onboard`**
@@ -171,7 +171,7 @@ nunet actor cmd [command]
 
 * **`/dms/node/onboarding/resource`**
 
-   * **Description:** Invokes the `/dms/node/onboarding/resource` behavior on an actor.  This likely retrieves or manages resource information related to the onboarding process.
+   * **Description:** Invokes the `/dms/node/onboarding/resource` behavior on an actor.  This retrieves or manages resource information related to the onboarding process.
 
    * **Usage:** `nunet actor cmd /dms/node/onboarding/resource [<param> ...] [flags]`
 
@@ -199,7 +199,7 @@ nunet actor cmd [command]
 
 * **`/dms/node/peers/dht`**
 
-   * **Description:**  Invokes the `/dms/node/peers/dht` behavior on an actor. This likely interacts with the Distributed Hash Table (DHT) used for peer discovery and content routing
+   * **Description:**  Invokes the `/dms/node/peers/dht` behavior on an actor. This interacts with the Distributed Hash Table (DHT) used for peer discovery and content routing
 
    * **Usage:** `nunet actor cmd /dms/node/peers/dht [<param> ...] [flags]`
 
@@ -227,7 +227,7 @@ nunet actor cmd [command]
 
 * **`/dms/node/peers/score`**
 
-   * **Description:**  Invokes the `/dms/node/peers/score` behavior on an actor. This likely retrieves or calculates a score for a peer, potentially used for reputation or ranking
+   * **Description:**  Invokes the `/dms/node/peers/score` behavior on an actor. This retrieves a snapshot of the peer's gossipsub broadcast score.
 
    * **Usage:** `nunet actor cmd /dms/node/peers/score [<param> ...] [flags]`
 
@@ -236,7 +236,7 @@ nunet actor cmd [command]
 
 * **`/dms/node/peers/self`**
 
-   * **Description:** Invokes the `/dms/node/peers/self` behavior on an actor. This likely retrieves information about the node itself, such as its ID or addresses
+   * **Description:** Invokes the `/dms/node/peers/self` behavior on an actor. This retrieves information about the node itself, such as its ID or addresses
 
    * **Usage:** `nunet actor cmd /dms/node/peers/self [<param> ...] [flags]`
 
@@ -281,7 +281,7 @@ nunet actor cmd [command]
 
 * **`/public/hello`**
 
-   * **Description:** Invokes the `/public/hello` behavior on an actor. This likely sends a "hello" message to a public endpoint, potentially used for general communication or testing
+   * **Description:** Invokes the `/public/hello` behavior on an actor. This broadcasts a "hello" for a polite introduction.
 
    * **Usage:** `nunet actor cmd /public/hello [<param> ...] [flags]`
 
@@ -290,7 +290,7 @@ nunet actor cmd [command]
 
 * **`/public/status`**
 
-   * **Description:**  Invokes the `/public/status` behavior on an actor. This likely retrieves the status or health information of the actor or system
+   * **Description:**  Invokes the `/public/status` behavior on an actor. This retrieves the status or health information of the actor or system
 
    * **Flags:**
      * `-h, --help`: Display help information for the `/public/status` command
@@ -299,8 +299,8 @@ nunet actor cmd [command]
 
 These flags can be used with any of the above commands:
 
-* `-c, --context string`: Specifies the capability context name. This is likely used for authorization or access control.
+* `-c, --context string`: Specifies the capability context name. This is used for authorization or access control.
 * `-d, --dest string`:  Specifies the destination for the command. This can be a DMS DID (Decentralized Identifier), a peer ID, or a handle.
 * `-e, --expiry time`:  Sets an expiration time for the message or command.
-* `-t, --timeout duration`: Sets a timeout duration for the command. If the command does not complete within the specified duration, it will time out. 
+* `-t, --timeout duration`: Sets a timeout duration for the command. If the command does not complete within the specified duration, it will time out.
 * `-h, --help`: Display help information for the commands

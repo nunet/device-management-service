@@ -17,8 +17,14 @@ func newConfigCmd(fs afero.Fs) *cobra.Command {
 	}
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Manage your configuration file",
-		Long:  "",
+		Short: "Manage configuration file",
+		Long: `Utility to manage user's configuration file via command-line
+
+Search for the configuration file is done in the following locations and order:
+
+1. "." (current directory)
+2. "$HOME/.nunet"
+3. "/etc/nunet"`,
 	}
 	cmd.AddCommand(newConfigGetCmd())
 	cmd.AddCommand(newConfigSetCmd(fs))
@@ -30,8 +36,13 @@ func newConfigGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <key>",
 		Short: "Display configuration",
-		Long:  "",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Display the value for a configuration key
+
+It reads the value from configuration file, otherwise it return default values
+
+Example:
+  nunet config get rest.port`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				info, err := json.MarshalIndent(config.GetConfig(), "", "    ")
@@ -59,9 +70,14 @@ func newConfigGetCmd() *cobra.Command {
 func newConfigSetCmd(fs afero.Fs) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set <key> <value>",
-		Short: "Set value for a configuration key",
-		Long:  "",
-		Args:  cobra.ExactArgs(2),
+		Short: "Update configuration",
+		Long: `Set value for a configuration key
+
+It creates a configuration file if does not exists, otherwise it updates the existing file
+
+Example:
+  nunet config set rest.port 4444`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			exists, err := config.FileExists(fs)
 			if err != nil {
@@ -88,9 +104,12 @@ func newConfigSetCmd(fs afero.Fs) *cobra.Command {
 func newConfigEditCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "edit",
-		Short: "Edit configuration file with default text editor",
-		Long:  "",
-		Args:  cobra.NoArgs,
+		Short: "Edit configuration",
+		Long: `Open configuration file with default text editor
+
+This command search the configuration file and open it with the default text editor
+It reads the $EDITOR environment variable and it fails if it's not set`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			editor := os.Getenv("EDITOR")
 			if editor == "" {

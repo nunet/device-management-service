@@ -1,35 +1,47 @@
-# Introduction to Nunet Command-Line Interface (CLI)
+# Introduction
 
 The Nunet Command-Line Interface (CLI) serves as a powerful tool for interacting with the Nunet ecosystem, enabling you to manage network configurations, control capabilities, and handle cryptographic keys. It provides a comprehensive set of commands to streamline various tasks and operations within the Nunet network.
 
 ## Top-Level Commands
 
-## Nunet Actor System CLI Documentation
+## Actor System
+
+```
+nunet actor
+```
 
 This command provides a suite of operations tailored for interacting with the Nunet Actor System. It enables you to communicate with actors within the network, facilitating actions like sending messages, invoking specific behaviors, and broadcasting information to multiple actors simultaneously.
 
 Detailed documentation can be found [here](./actor/README.md).
 
-## Nunet Capability Management CLI Documentation
+## Capability Management
+
+```
+nunet cap
+```
 
 This command focuses on capability management within the Nunet ecosystem. It allows you to define, delegate, and control the permissions and authorizations granted to different entities, ensuring secure and controlled interactions within the network.
 
 Detailed documentation can be found [here](./cap/README.md).
 
 
-## Nunet Configuration Management CLI Documentation
+## Configuration Management
 
-The `nunet config` command provides a streamlined way to interact with and manage your Nunet configuration file directly from the command line. This allows you to view existing settings, modify them as needed, and ensure your Nunet environment is tailored to your preferences.
+```
+nunet config
+```
+
+The config command allows to interact with and manage your configuration file directly from the command line. This allows you to view existing settings, modify them as needed, and ensure Nunet DMS is tailored to your preferences.
 
 ### Usage
 
-```bash
-nunet config [command]
+```
+nunet config COMMAND
 ```
 
 ### Available Commands
 
-* `edit`: Open the configuration file in your default text editor for manual adjustments.
+* `edit`: Opens the configuration file in your default text editor for manual adjustments.
 * `get`: Retrieve and display the current value associated with a specific configuration key.
 * `set`: Modify the configuration file by assigning a new value to a specified key.
 
@@ -38,22 +50,25 @@ nunet config [command]
 * `-h, --help`: Display help information for the `config` command and its subcommands.
 
 
-## Nunet Key Management CLI Documentation 
+## Key Management
 
+```
+nunet key
+```
 
-The Nunet Key Management CLI provides commands to manage keys within the Nunet Device Management Service (DMS). It allows you to generate new keypairs and retrieve the Decentralized Identifier (DID) associated with a specific key.
+The Nunet Key Management CLI allows generating new keypairs and retrieve the Decentralized Identifier (DID) associated with a specific key.
 
 
 ### Main Command
 
 
-* `nunet key` 
+* `nunet key`
 
 
   * **Description:** The primary command to manage keys within the Nunet DMS
 
 
-  * **Usage:** `nunet key [command]`
+  * **Usage:** `nunet key COMMAND`
 
 
   * **Available Commands:**
@@ -74,7 +89,7 @@ The Nunet Key Management CLI provides commands to manage keys within the Nunet D
 * `nunet key did`
 
 
-   * **Description:** Retrieves and displays the DID associated with a specified key. This DID uniquely identifies the key within the Nunet ecosystem.
+   * **Description:** Retrieves and displays the DID associated with a specified key. This DID uniquely identifies the key within the Nunet network.
 
 
    * **Usage:** `nunet key did <key-name> [flags]`
@@ -82,7 +97,7 @@ The Nunet Key Management CLI provides commands to manage keys within the Nunet D
 
    * **Arguments:**
 
-     * `<key-name>`: The name of the key whose DID you want to retrieve
+     * `<key-name>`: The name of the key for which the DID is to be retrieved
 
 
    * **Flags:**
@@ -117,11 +132,13 @@ The Nunet Key Management CLI provides commands to manage keys within the Nunet D
 * Choose descriptive names for your keypairs to easily identify their purpose or associated devices.
 
 
-## Nunet Run Command Documentation
+## Run Command
 
-### `nunet run`
+```
+nunet run
+```
 
-**Purpose:** Starts the Nunet Device Management Service (DMS), responsible for handling network operations and device management.
+Starts the Nunet Device Management Service (DMS) process, responsible for handling network operations and device management.
 
 **Usage:**
 
@@ -143,13 +160,13 @@ nunet run
 This starts the Nunet DMS with the default "dms" context.
 
 
-## Nunet TAP Command Documentation
+## TAP Command
 
 
 ### `nunet tap`
 
 
-**Purpose:** Creates a TAP (network tap) interface to bridge the host network with a virtual machine (VM) or container. It also configures essential network settings like IP forwarding and iptables rules to enable seamless communication.
+**Purpose:** Creates a TAP (network tap) interface to bridge the host network with a virtual machine (VM). It also configures network settings like IP forwarding and iptables rules.
 
 
 **Key Points:**
@@ -187,7 +204,7 @@ nunet tap [main_interface] [vm_interface] [CIDR] [flags]
 sudo nunet tap eth0 tap0 172.16.0.1/24
 ```
 
-This command will create a TAP interface named 'tap0' bridged to your host's 'eth0' interface. The 'tap0' interface will be assigned an IP address of '172.16.0.1' with a subnet mask of '/24'. This configuration allows a VM or container connected to 'tap0' to access the network through your host's 'eth0' interface.
+This command will create a TAP interface named 'tap0' bridged to your host's 'eth0' interface. The 'tap0' interface will be assigned an IP address of '172.16.0.1' with a subnet mask of '/24'. This configuration allows a VM connected to 'tap0' to access the network through your host's 'eth0' interface.
 
 
 **Important Notes:**
@@ -196,23 +213,3 @@ This command will create a TAP interface named 'tap0' bridged to your host's 'et
 * Ensure you have the necessary permissions to execute this command.
 
 * Be cautious when configuring network settings, as incorrect configurations can disrupt your network connectivity.
-
-
-## Nunet Log Collection CLI Documentation
-
-### `nunet log`
-
-**Purpose:** Gathers all Nunet logs into a compressed archive (tarball) for troubleshooting and analysis.
-
-**Important:** Requires root privileges (`sudo`).
-
-**Usage:**
-
-```bash
-sudo nunet log [flags]
-```
-
-**Flags:**
-
-* `-h, --help`: Displays help information.
-

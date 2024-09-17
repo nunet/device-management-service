@@ -19,11 +19,11 @@ var (
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Display the Nunet DMS version",
-		Long:  `This command prints the version of the Nunet Device Management Service.`,
+		Short: "Information about current version",
+		Long:  `Display information about the current Device Management Service (DMS) version`,
 		Run: func(_ *cobra.Command, _ []string) {
 			// TODO get the version from git; make a top level version.go file
-			fmt.Println("Nunet Device Management Service")
+			fmt.Println("NuNet Device Management Service")
 			fmt.Printf("Version: %s\nCommit: %s\n\nGo Version: %s\nBuild Date: %s\n",
 				Version, Commit, GoVersion, BuildDate)
 		},
