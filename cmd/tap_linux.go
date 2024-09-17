@@ -16,12 +16,10 @@ func newTapCommand() *cobra.Command {
 		Short: "Create and configure a TAP interface",
 		Long: `Create a TAP interface using the provided interface name and configure IP forwarding and iptables rules.
 
-This command requires three arguments:
-- main_interface (e.g., eth0)
-- vm_interface (e.g., tap0)
-- CIDR (e.g., 172.16.0.1/24)
+Example:
+  nunet tap eth0 tap0 172.16.0.1/24
 
-Note: The command requires root privileges to execute.
+Note: The command requires root privileges.
 `,
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {

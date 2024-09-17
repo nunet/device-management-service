@@ -28,7 +28,13 @@ func newRemoveCmd(afs afero.Afero) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove",
 		Short: "Remove capability anchors",
-		Long:  `Remove capability anchors in a capability context`,
+		Long: `Remove capability anchors in a capability context
+
+One capability anchor must be specified at a time.
+
+Example:
+  nunet cap remove --context user --root did:key:abcd1234
+  nunet cap remove --context user --require '<the-token>'`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var trustCtx did.TrustContext
 			if IsLedgerContext(context) {
@@ -90,9 +96,9 @@ func newRemoveCmd(afs afero.Afero) *cobra.Command {
 	}
 
 	useFlagContext(cmd, &context)
-	cmd.Flags().StringVar(&root, fnRoot, "", "DID to add as root anchor")
-	cmd.Flags().StringVar(&provide, fnProvide, "", "Tokens to add as provide anchor (in JSON format)")
-	cmd.Flags().StringVar(&require, fnRequire, "", "Tokens to add as require anchor (in JSON format)")
+	useFlagRoot(cmd, &root)
+	useFlagRequire(cmd, &require)
+	useFlagProvide(cmd, &provide)
 
 	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire)

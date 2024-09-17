@@ -17,14 +17,13 @@ const (
 func NewActorCmd(client *utils.HTTPClient, afs afero.Afero) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "actor",
-		Short: "Actor related operations",
-		Long:  "Interact with the actor system",
-		Run: func(cmd *cobra.Command, _ []string) {
-			err := cmd.Help()
-			if err != nil {
-				cmd.Println(err)
-			}
-		},
+		Short: "Interact with the actor system",
+		Long: `Interact with the actor system
+
+Actors are the entities which compose the NuActor system, a secure decentralized programming framework based on the Actor Model.
+Actors are connected through the libp2p network substrate and communication is achieved via immutable messages.
+
+For more information on the actor system, please refer to actor/README.md`,
 	}
 	cmd.AddCommand(newActorMsgCmd(client, afs))
 	cmd.AddCommand(newActorSendCmd(client))

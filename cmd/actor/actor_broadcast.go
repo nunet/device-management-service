@@ -10,12 +10,14 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-// NewActorBroadcastCmd is a constructor for `actor broadcast` subcommand
 func newActorBroadcastCmd(client *utils.HTTPClient) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "broadcast <msg>",
-		Short: "Broadcast to a topic and return the results",
-		Args:  cobra.ExactArgs(1),
+		Short: "Broadcast a message",
+		Long: `Broadcast a message to a topic
+
+If a topic is specified in the message's payload, the message will be published to all subscribers of that topic.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var msg actor.Envelope
 

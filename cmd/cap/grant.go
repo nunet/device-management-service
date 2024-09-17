@@ -24,10 +24,17 @@ func newGrantCmd(afs afero.Afero) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "grant <subjectDID>",
+		Use:   "grant <did>",
 		Short: "Grant capabilities",
-		Long:  `Grant (delegate) capabilities as anchors and side chains from a capability context`,
-		Args:  cobra.ExactArgs(1),
+		Long: `Grant a self-sign token delegating capabilities
+
+It is not necessary to set up a anchor before granting a capability because this operation is self-signed.
+
+Example:
+  nunet cap grant --context user --cap /public --duration 1h did:key:<some-key>
+
+The above command emits a self-signed token with the specified capabilities delegated from 'user' to the sbjects's DID. `,
+		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			subject := args[0]
 

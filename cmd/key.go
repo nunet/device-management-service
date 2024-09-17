@@ -19,8 +19,10 @@ import (
 func newKeyCmd(fs afero.Afero) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "key",
-		Short: "Manage keys",
-		Long:  `Manage keys for the Device Management Service`,
+		Short: "Manage cryptographic keys",
+		Long: `Manage cryptographic keys for the Device Management Service (DMS).
+
+This command provides subcommands for creating new keys and retrieving Decentralized Identifiers (DIDs) associated with existing keys.`,
 	}
 
 	cmd.AddCommand(newKeyNewCmd(fs))
@@ -32,9 +34,14 @@ func newKeyCmd(fs afero.Afero) *cobra.Command {
 func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 	return &cobra.Command{
 		Use:   "new <name>",
-		Short: "Generate a new keypair",
-		Long:  `Generate a new keypair, saving the private key into user's local keystore.`,
-		Args:  cobra.ExactArgs(1),
+		Short: "Generate a key pair",
+		Long: `Generate a key pair and save the private key into the user's local keystore.
+
+This command creates a new cryptographic key pair, stores the private key securely, and displays the associated Decentralized Identifier (DID). If a key with the specified name already exists, the user will be prompted to confirm before overwriting it.
+
+Example:
+  nunet key new user`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir)
@@ -88,10 +95,18 @@ func newKeyNewCmd(fs afero.Afero) *cobra.Command {
 
 func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
 	return &cobra.Command{
-		Use:   "did <key-name>",
-		Short: "Get DID for a key",
-		Long:  `Get the DID (Decentralized Identifier) for a specified key`,
-		Args:  cobra.ExactArgs(1),
+		Use:   "did <name>",
+		Short: "Get a key's DID",
+		Long: `Get the DID (Decentralized Identifier) for a specified key.
+
+This command retrieves the DID associated with either a key stored in the local keystore or a hardware ledger.
+
+For keys in the local keystore, the user will be prompted for the passphrase to decrypt the key. To avoid passphrase prompting, it's possible to set a DMS_PASSPHRASE environment variable. For the ledger option, it uses the first account (index 0) on the connected hardware wallet.
+
+Example:
+  nunet key did user
+  nunet key did ledger # if using ledger`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			keyName := args[0]
 

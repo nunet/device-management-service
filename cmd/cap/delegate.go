@@ -25,10 +25,16 @@ func newDelegateCmd(afs afero.Afero) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "delegate <subjectDID>",
+		Use:   "delegate <did>",
 		Short: "Delegate capabilities",
-		Long:  `Delegate capabilities for a subject`,
-		Args:  cobra.ExactArgs(1),
+		Long: `Delegate capabilities to a subject
+
+Capabilities are delegated based on provide anchors. No capabilities are delegated by default, you need to use --cap flag to explicitly specify the capabilities to delegate.
+
+Example:
+  nunet cap anchor --context user --provide '<token>'
+  nunet cap delegate --context user --cap /public --duration 1h did:key:<some-key>`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			subject := args[0]
 

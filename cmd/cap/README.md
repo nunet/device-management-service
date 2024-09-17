@@ -9,9 +9,9 @@ The Nunet Capability Management CLI provides commands to manage capabilities wit
 * `nunet cap grant`: Grant (delegate) capabilities as anchors and side chains from a capability context.
 * `nunet cap list`: List all capability anchors in a capability context
 * `nunet cap new`: Create a new persistent capability context for DMS or personal usage
-* `nunet cap remove`: Remove capability anchors in a capability context. 
+* `nunet cap remove`: Remove capability anchors in a capability context.
 
-### `nunet cap anchor` 
+### `nunet cap anchor`
 
 This command is used to add new or modify existing capability anchors within a specific capability context. Anchors serve as the foundation for defining capabilities, establishing the core permissions and restrictions
 
@@ -55,7 +55,7 @@ nunet cap delegate <subjectDID> [flags]
 * `--self-sign string`:  Specifies self-signing options: 'no' (default), 'also', or 'only'
 * `-t, --topic strings`:  Defines the topics for which capabilities are granted or delegated (can be specified multiple times)
 
-### `nunet cap grant` 
+### `nunet cap grant`
 
 This command grants (delegates) capabilities as anchors and side chains from a specified capability context
 
@@ -74,7 +74,7 @@ nunet cap grant <subjectDID> [flags]
 * `-a, --audience string`:  (Optional) Specifies the audience DID
 * `--cap strings`:  Defines the capabilities to be granted or delegated
 * `-c, --context string`: Specifies the operation context (defaults to "user")
-* `-d, --depth uint`: (Optional) Sets the delegation depth 
+* `-d, --depth uint`: (Optional) Sets the delegation depth
 * `--duration duration`: Sets the duration for which the grant is valid
 * `-e, --expiry time`: Sets an expiration time for the grant
 * `-h, --help`: Displays help information for the `grant` command
@@ -113,7 +113,7 @@ nunet cap new <name> [flags]
 
 * `-h, --help`:  Displays help information for the `new` command
 
-### `nunet cap remove` 
+### `nunet cap remove`
 
 This command removes capability anchors from a specified capability context
 
@@ -129,4 +129,4 @@ nunet cap remove [flags]
 * `-h, --help`:  Displays help information for the `remove` command
 * `--provide string`:  Removes tokens from the "provide" anchor in JSON format
 * `--require string`: Removes tokens from the "require" anchor in JSON format
-* `--root string`:  Removes a DID from the "root" anchor 
+* `--root string`:  Removes a DID from the "root" anchor

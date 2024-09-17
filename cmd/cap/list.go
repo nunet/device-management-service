@@ -16,7 +16,9 @@ func newListCmd(afs afero.Afero) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List capability anchors",
-		Long:  "List all capability anchors in a capability context",
+		Long: `List all capability anchors in a capability context
+
+It outputs DIDs and capability tokens set for root, provide and require anchors.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var trustCtx did.TrustContext
 			if IsLedgerContext(context) {

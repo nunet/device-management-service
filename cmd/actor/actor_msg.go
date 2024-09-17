@@ -12,7 +12,6 @@ import (
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
-// NewActorMsgCmd is a constructor for `actor msg` subcommand
 func newActorMsgCmd(client *dmsUtils.HTTPClient, afs afero.Afero) *cobra.Command {
 	fnDest := "dest"
 	fnBroadcast := "broadcast"
@@ -23,7 +22,15 @@ func newActorMsgCmd(client *dmsUtils.HTTPClient, afs afero.Afero) *cobra.Command
 
 	cmd := &cobra.Command{
 		Use:   "msg <behavior> <payload>",
-		Short: "Construct message for actor",
+		Short: "Construct a message",
+		Long: `Construct and sign a message that can be communicated to an actor.
+
+The constructed message is returned as a JSON object that can be used stored or piped into another command, for instance the the send, invoke, or broadcast command.
+
+Example:
+  nunet actor msg --topic /nunet/hello /broadcast/hello 'Hello, World!'`,
+
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			destStr, _ := cmd.Flags().GetString(fnDest)
 			topic, _ := cmd.Flags().GetString(fnBroadcast)
@@ -52,7 +59,6 @@ func newActorMsgCmd(client *dmsUtils.HTTPClient, afs afero.Afero) *cobra.Command
 
 			return nil
 		},
-		Args: cobra.ExactArgs(2),
 	}
 	cmd.Flags().StringP(fnDest, "d", "", "destination handle")
 	cmd.Flags().StringP(fnBroadcast, "b", "", "broadcast topic")

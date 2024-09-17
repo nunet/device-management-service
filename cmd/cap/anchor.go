@@ -28,7 +28,27 @@ func newAnchorCmd(afs afero.Afero) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "anchor",
 		Short: "Manage capability anchors",
-		Long:  `Add or modify capability anchors in a capability context`,
+		Long: `Add or modify capability anchors in a capability context.
+
+An anchor is a basis of trust in the capability system. There are three types of anchors:
+
+1. Root anchor: Represents absolute trust or effective root capability.
+   Use the --root flag with a DID value to add a root anchor.
+
+2. Require anchor: Represents input trust. We verify incoming messages based on the require anchor.
+   Use the --require flag with a token to add a require anchor.
+
+3. Provide anchor: Represents output trust. We emit invocation tokens based on our provide anchors and sign output.
+   Use the --provide flag with a token to add a provide anchor.
+
+Only one type of anchor can be added or modified per command execution.
+
+Usage examples:
+  nunet cap anchor --context user --root did:example:123456789abcdefghi
+  nunet cap anchor --context dms  --require '{"some": "json", "token": "here"}'
+  nunet cap anchor --context user --provide '{"another": "json", "token": "example"}'
+
+Note: The --context flag is required to specify the capability context.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var trustCtx did.TrustContext
 			if IsLedgerContext(context) {
@@ -96,9 +116,9 @@ func newAnchorCmd(afs afero.Afero) *cobra.Command {
 	}
 
 	useFlagContext(cmd, &context)
-	cmd.Flags().StringVar(&root, fnRoot, "", "DID to add as root anchor")
-	cmd.Flags().StringVar(&provide, fnProvide, "", "Tokens to add as provide anchor (in JSON format)")
-	cmd.Flags().StringVar(&require, fnRequire, "", "Tokens to add as require anchor (in JSON format)")
+	useFlagRoot(cmd, &root)
+	useFlagRequire(cmd, &require)
+	useFlagProvide(cmd, &provide)
 
 	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire)

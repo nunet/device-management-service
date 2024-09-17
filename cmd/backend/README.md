@@ -25,17 +25,17 @@
 
 ### Description
 
-The backend sub package contains the actual implementation of the Nunet CLI commands. 
+The backend sub package contains the actual implementation of the Nunet CLI commands.
 
 ### Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
-* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality. 
+* [README](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/README.md): Current file which is aimed towards developers who wish to use and modify the cmd functionality.
 
 * [backend](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/backend.go): This file defines various interfaces DMS backend service. These interfaces provide abstractions for functionalities like resource management, peer management, network management, logging, and file system access.
 
-* [filesystem](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/filesystem.go): This file implements FileSystem functionality using the standard `os` package. It provides functions for basic file operations like creating, opening, reading, writing, and deleting files and directories. 
+* [filesystem](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/filesystem.go): This file implements FileSystem functionality using the standard `os` package. It provides functions for basic file operations like creating, opening, reading, writing, and deleting files and directories.
 
 * [journal](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/journal.go): This file implements a wrapper to `go-systemd/sdjournal` functionality. It wraps the `sdjournal` functionality providing access to systemd journal entries like adding filters, retrieving entries, and iterating through them.
 
@@ -43,13 +43,13 @@ Here is quick overview of the contents of this directory:
 
 * [network](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/network.go): This file implements a method to get network connections data.
 
-* [resources](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/resources.go): This file implements a method to get total capacity of the machine. 
+* [resources](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/resources.go): This file implements a method to get total capacity of the machine.
 
-* [utils](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/utils.go): This file implements utitlity functions for backend functionality. 
+* [utils](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/utils.go): This file implements utitlity functions for backend functionality.
 
-* [wallet](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/wallet.go): This file contains methods to get wallet address for the user. 
+* [wallet](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/wallet.go): This file contains methods to get wallet address for the user.
 
-* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/websocket.go): This file implements a WebSocket Client for establishing and managing WebSocket connections. It provides functions to initialize the connection, send/receive messages, and handle pings for maintaining the connection. 
+* [websocket](https://gitlab.com/nunet/device-management-service/-/tree/main/cmd/backend/websocket.go): This file implements a WebSocket Client for establishing and managing WebSocket connections. It provides functions to initialize the connection, send/receive messages, and handle pings for maintaining the connection.
 
 ### Class Diagram
 
@@ -65,7 +65,7 @@ The class diagram for the `backend` package is shown below.
 !$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
 !$packageRelativePath = "/cmd/backend"
 !$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
- 
+
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
@@ -105,7 +105,7 @@ The class diagram for the `backend` package is shown below.
 
 - input: `peerID string`
 
-- output: `decoded ID` of type string 
+- output: `decoded ID` of type string
 
 - output (error): `error message`
 
@@ -351,7 +351,7 @@ The class diagram for the `backend` package is shown below.
 
 - input #1: `directory path`
 
-- input #2: `file mode and permission`  
+- input #2: `file mode and permission`
 
 - output: none
 
@@ -437,7 +437,7 @@ The class diagram for the `backend` package is shown below.
 
 - output (error): `error message`
 
-`Stat` returns information about the file. 
+`Stat` returns information about the file.
 
 ##### WriteString
 
@@ -466,7 +466,7 @@ type ConnectionStat struct {
 	Uids   []int32 `json:"uids"`
 	Pid    int32   `json:"pid"`
 }
-``` 
+```
 
 `FileInfo`: data type defined in `Go` `fs` pacakge. It consists of file information. See [here](https://pkg.go.dev/io/fs#FileInfo) for more details.
 
@@ -479,7 +479,7 @@ type FileInfo interface {
 	IsDir() bool        // abbreviation for Mode().IsDir()
 	Sys() any           // underlying data source (can return nil)
 }
-``` 
+```
 
 
 Refer to `cmd` package for all other data types applicable.
@@ -488,7 +488,7 @@ Refer to `cmd` package for all other data types applicable.
 
 The methods and interfaces in the `backend` subpacakge can be used to test the functionality of the `cmd` pacakge commands. Currently no unit test are defined since the implementaton is mostly wrappers around functions that should be tested somewhere else.
 
-### Proposed Functionality / Requirements 
+### Proposed Functionality / Requirements
 
 #### List of issues
 

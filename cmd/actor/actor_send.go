@@ -14,8 +14,15 @@ import (
 func newActorSendCmd(client *utils.HTTPClient) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "send <msg>",
-		Short: "Send message",
-		Args:  cobra.ExactArgs(1),
+		Short: "Send a message",
+		Long: `Send a message to an actor
+
+Actors only communicate via messages. For more information on constructing a message, see:
+
+  nunet actor msg --help
+
+The message is encoded into an actor envelope, which then is sent across the network through the API.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var msg actor.Envelope
 
