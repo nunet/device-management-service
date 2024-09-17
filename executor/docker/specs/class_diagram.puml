@@ -1,0 +1,72 @@
+ ' START DIAGRAM
+
+    class executor.docker.Docker {
+        -handlers
+        -client *Client
+        +ID string
+        -doWait(er <-chan *ExecutionResult, e <-chan error, eh *executionHandler)
+        -newDockerExecutionContainer(er *ExecutionRequest) string, error
+        -containerLabels(jobID string, executionID string) map[string]string
+        +Start(*ExecutionRequest) error
+        +Run(*ExecutionRequest) *ExecutionResult, error
+        +Wait(executionID) <-chan *ExecutionResult, <-chan error
+        +Cancel(executionID)
+        +Cleanup() error
+        +GetLogStream(request LogStreamRequest) ReadCloser, error
+        +FindRunningContainer(jobID string, executionID string) string, error
+    }
+
+    class executor.docker.EngineSpec-D {
+        +Image string
+        +Entrypoint []string
+        +Cmd []string
+        +Environment []string
+        +WorkingDirectory string
+        +Validate() error
+    }
+
+    class executor.docker.Client-D {
+        -client *client.Client
+        -removeContainers(filterz filters.Args) error
+        -removeContainers(filterz filters.Args) error
+        +IsInstalled() bool
+        +CreateContainer(cfg container.Config, hostConfig *container.HostConfig, netowrkConfig *network.NetworkingConfig, platform *v1.Plarform, name string) string, error
+        +StartContainer(m *firecracker.Machine) error
+        +InspectContainer(id string) types.ContainerJSON, error
+        +FollowLogs(id string) Reader, Reader, error
+        +WaitContainer(containerID string) <-chan conainerContainerWaitOKBody, <-chan error
+        +StopContainer(containerID string, timeout time.Duration) error
+        +RemoveContainer(containerID string) error
+        +RemoveObjectsWithLabel(label string, value string) error
+        +GetOutputStream(containerID string, since string, follow bool) Reader, error
+        +FindContainer(label string, value string) string, error
+        +PullImage(name string) string, error
+    }
+
+    class executor.docker.DockerEngineBuilder {
+        -eb *SpecConfig
+        +WithEntrypoint(e... string) *DockerEngineBuilder
+        +WithCmd(c... string) *DockerEngineBuilder
+        +WithEnvironment(e... string) *DockerEngineBuilder
+        +WithWorkingDirectory(w string) *DockerEngineBuilder
+        +Build() *SpecConfig
+    }
+
+    class executor.docker.executionHandler-D {
+        -client *Client
+        -jobID string
+        -executionID string
+        -containerID string
+        -resultsDir string
+        -activeCh <-chan bool
+        -waitCh <-chan bool
+        -running *atomic.bool
+        -result *models.ExecutionResult
+        +ID string
+        -active() bool
+        -run()
+        -kill() error
+        -destroy(timeout time.Duration) error
+        -outputStream(request LogStreamRequest) ReadCloser, error
+    }
+' END DIAGRAM

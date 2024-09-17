@@ -1,0 +1,60 @@
+package s3
+
+import (
+	"context"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+)
+
+// GetAWSDefaultConfig returns the default AWS config based on environment variables,
+// shared configuration and shared credentials files.
+func GetAWSDefaultConfig() (aws.Config, error) {
+	ctx, cancel := st.SpanContext(context.Background(), "s3", "get_aws_default_config_duration", "opentelemetry", "log")
+	defer cancel()
+
+	var optFns []func(*config.LoadOptions) error
+	cfg, err := config.LoadDefaultConfig(ctx, optFns...)
+	if err != nil {
+		ctx = context.WithValue(ctx, errorKey, err.Error())
+		st.Error(ctx, "get_aws_default_config_failure", nil)
+		return aws.Config{}, err
+	}
+
+	st.Info(ctx, "get_aws_default_config_success", nil)
+	return cfg, nil
+}
+
+// hasValidCredentials checks if the provided AWS config has valid credentials.
+func hasValidCredentials(config aws.Config) bool {
+	ctx, cancel := st.SpanContext(context.Background(), "s3", "has_valid_credentials_duration", "opentelemetry", "log")
+	defer cancel()
+
+	credentials, err := config.Credentials.Retrieve(ctx)
+	if err != nil {
+		ctx = context.WithValue(ctx, errorKey, err.Error())
+		st.Error(ctx, "has_valid_credentials_failure", nil)
+		return false
+	}
+
+	if !credentials.HasKeys() {
+		st.Error(ctx, "has_valid_credentials_failure_no_keys", nil)
+		return false
+	}
+
+	st.Info(ctx, "has_valid_credentials_success", nil)
+	return true
+}
+
+// sanitizeKey removes trailing spaces and wildcards
+func sanitizeKey(key string) string {
+	ctx, cancel := st.SpanContext(context.Background(), "s3", "sanitize_key_duration", "opentelemetry", "log")
+	defer cancel()
+
+	sanitizedKey := strings.TrimSuffix(strings.TrimSpace(key), "*")
+	ctx = context.WithValue(ctx, sanitizedKeyContext, sanitizedKey)
+	st.Info(ctx, "sanitize_key_success", nil)
+
+	return sanitizedKey
+}

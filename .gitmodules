@@ -1,3 +1,0 @@
-[submodule "integrations/specs/compute-api-spec"]
-	path = integrations/specs/compute-api-spec
-	url = git@gitlab.com:nunet/open-api/compute-api-spec.git

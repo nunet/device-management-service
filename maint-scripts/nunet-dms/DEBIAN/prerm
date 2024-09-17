@@ -1,4 +1,4 @@
 #!/bin/bash
 
 # Stop the service
-systemctl stop nunet-dms.service
+systemctl stop nunet.service

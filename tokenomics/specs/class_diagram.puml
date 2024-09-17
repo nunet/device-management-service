@@ -1,0 +1,89 @@
+     @startuml
+
+package "DMS"{
+    class User{
+    + Requestor : string
+    + Provider : string
+    + NodeID : string
+}
+}
+package "Jobs"{
+    class JobInfo{
+     + JobID : int
+     + Verification() : VerificationResult
+}
+}
+
+package "Orchestrator"{
+    class BidInfo{
+     + Bid : int
+
+}
+}
+
+package "Tokenomics" {
+    
+    class Contract {
+        + ContractID : int
+        - Signatures : List<Signature>
+        + Status : bool
+        + ContractProof : Proof
+        + NewContract() : Contract
+        + initiateContractClosure( orchestrator.bid : Bid)
+        + initiateContractSettlement()
+    }
+
+    class Payment {
+        + Currency : string
+        + Timestamp : time
+        + PaymentType : string          
+        + PaymentChannel : PaymentChannel 
+	    + Pricing  :      PricingMethod
+        - Status : string
+        + Deposit() 
+        + SettleContract()
+    }
+
+    class PricingMethod{
+        + Price   :    int
+        + PlatformFee : int 
+        + Period   :   string
+        + UsageLimits : UsageLimits
+        + GetFixedJobPricing() 
+        + GetPeriodicPricing() 
+    }
+
+    class PaymentChannel {
+        {static} FiatPayment : PaymentChannel
+        {static} BlockchainPayment : PaymentChannel
+    }
+
+    class Authentication {
+        - Encryption : string
+        - ZKProof : string
+        - OffChain : OffChainData
+        + Authenticate() : bool
+    }
+
+    class ProofInterface {
+        + generalAuth : Authentication
+        + ContractDatabase : string
+        + InitiateContractApproval() : void
+        + CreateContractProof() : string
+        + SaveProof() : void
+        + VerifyProof() : bool
+    }
+    
+
+    Contract --|> Payment : has
+    Payment  ..|> PricingMethod
+    Payment  ..|>  PaymentChannel
+    Contract --|> ProofInterface : has
+    ProofInterface ..|> Authentication 
+    Contract ..> DMS
+    Contract ..> Jobs
+    Contract ..> Orchestrator
+  
+}
+@enduml
+

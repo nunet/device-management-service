@@ -1,0 +1,46 @@
+
+' START DIAGRAM
+
+    class dms.orchestrator.graph.Graph {
+        <<proposed>>
+        +Slice[Vertex] vertices
+        +Slice[Edge] edges
+    }
+
+    class dms.orchestrator.graph.Edge {
+        <<proposed>>
+        +Slice[Property] properties
+        +Vertex inVertex
+        +Vertex outVertex
+    }
+
+    class dms.orchestrator.graph.Vertex {
+        <<proposed>>
+        +Slice[Property] properties
+        +Edge inEdge
+        +Edge outEdge
+        +getKnownNodes()
+        +getAvailableNodes()
+        +getKnownTopics()
+        +getAvailableTopics()
+        +subscribeToTopic()
+        +unsubscribeFromTopic()
+        +KnownNodes knownNodes
+        +AvailableNodes availableNodes
+        +Slice[String] knownTopics
+        +Slice[String] subscribedTopics
+    }
+
+    class dms.orchestrator.graph.Property {
+        <<proposed>>
+        +String key
+        +String value
+    }
+' END DIAGRAM
+
+' START IN-PACKAGE RELATIONS
+    dms.orchestrator.graph.Graph <|-- dms.orchestrator.graph.Vertex
+    dms.orchestrator.graph.Graph <|-- dms.orchestrator.graph.Edge
+    dms.orchestrator.graph.Edge <|.. dms.orchestrator.graph.Property
+    dms.orchestrator.graph.Vertex <|.. dms.orchestrator.graph.Property
+' END IN-PACKAGE RELATIONS

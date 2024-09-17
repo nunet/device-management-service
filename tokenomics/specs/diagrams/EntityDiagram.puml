@@ -1,0 +1,38 @@
+@startuml
+
+!define RECTANGLE class
+
+actor "Service provider user" as user1
+actor "Compute provider user" as user2
+
+package "Service Provider's machine" {
+    component "DMS\non Service Provider" as dms1
+    component "ML WebApp" as webapp
+}
+
+package "Compute Provider's machine" {
+    component "DMS\non Compute Provider" as dms2
+    component "ML service container\non Compute Provider" as service
+    component "Management Dashboard" as dashboard
+}
+
+package "Job Validation" {
+    component "Proof" as proof
+}
+
+package "Tokenomics Module" {
+    component "Payment Module" as payment
+}
+
+user1 --> webapp
+webapp --> dms1
+dms1 --> proof
+dms1 <--> dms2
+dms2 --> service
+user2 --> dashboard
+dashboard --> dms2
+dms2 --> proof
+dms1 --> payment
+dms2 --> payment
+
+@enduml

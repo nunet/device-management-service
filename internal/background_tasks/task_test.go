@@ -1,4 +1,4 @@
-package background_tasks
+package backgroundtasks
 
 import (
 	"testing"
@@ -11,7 +11,7 @@ func TestTaskExecution(t *testing.T) {
 	task := Task{
 		Name:        "Test Task",
 		Description: "A task for testing",
-		Function: func(args interface{}) error {
+		Function: func(_ interface{}) error {
 			// Simple test function that does nothing
 			return nil
 		},
@@ -24,4 +24,3 @@ func TestTaskExecution(t *testing.T) {
 	err := task.Function(nil)
 	assert.NoError(t, err, "Task function should execute without error")
 }
-

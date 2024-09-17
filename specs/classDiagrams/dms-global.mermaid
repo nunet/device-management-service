@@ -1,0 +1,834 @@
+classDiagram
+
+    %% api package isn't class diagram representable due to the lack of composition
+    %% the main thing it does is to wrap functions in other packages (dependencies) 
+    %% with handlers and map those handlers with rest endpoints
+    namespace api {
+        class API
+    }
+
+    namespace cmd-backend {
+        class FileHandler {
+            <<interface>>
+            +Stat() os.FileInfo, error
+            +WriteString(data string) int, error
+        }
+
+        class FIleSystem {
+            <<interface>>
+            +Create(name string) (FileHandler, error)
+            +MkdirAll(path string, perm os.FileMode) error
+            +OpenFile(name string, flag int, perm os.FileMode) (FileHandler, error)
+            +ReadFile(filename string) ([]byte, error)
+            +RemoveAll(path string) error
+            +Walk(root string, walkFn filepath.WalkFunc) error
+        }
+
+        class OS {
+            +Create(name string) (FileHandler, error)
+            +FileInfoHeader(fi os.FileInfo, link string) (*tar.Header, error)
+            +IsRegular(fi os.FileInfo) bool
+            +MkdirAll(path string, perm os.FileMode) error
+            +OpenFile(name string, flag int, perm os.FileMode) (FileHandler, error)
+            +ReadFile(filename string) ([]byte, error)
+            +RemoveAll(path string) error
+            +Walk(root string, walkFn filepath.WalkFunc) error
+        }
+
+        class Logger  {
+            <<interface>>
+            +AddMatch(match string) error
+            +Close() error
+            +GetEntry() (*sdjournal.JournalEntry, error)
+            +Next() (uint64, error)
+        }
+
+        class Journal {
+            -journal *sdjournal.Journal
+
+            +AddMatch(match string) error
+            +Close() error
+            +GetEntry() (*sdjournal.JournalEntry, error)
+            +Next() (uint64, error)
+        }
+
+        class NetworkManager  {
+            <<interface>>
+            +GetConnections(kind string) ([]net.ConnectionStat, error)
+        }
+
+        class Network {
+            +GetConnections(kind string) ([]net.ConnectionStat, error)
+        }
+
+        class PeerManager  {
+            <<interface>>
+            +ClearIncomingChatRequests() error
+            +Decode(s string) (peer.ID, error)
+        }
+
+        class P2P {
+            + ClearIncomingChatRequests() error
+            + Decode(id string) (peer.ID, error)
+        }
+
+        class ResourceManager  {
+            <<interface>>
+            +GetTotalProvisioned() *models.Provisioned
+        }
+
+        class Resources {
+            +GetTotalProvisioned() *models.Provisioned
+        }
+    
+        class Utility  {
+            <<interface>>
+            +IsOnboarded() (bool, error)
+            +ReadMetadataFile() (*models.Metadata, error)
+            +ResponseBody(c *gin.Context, method string, endpoint string, query string, body []byte) ([]byte, error)
+        }
+        class Utils {
+            +IsOnboarded() (bool, error)
+            +ReadMetadataFile() (*models.Metadata, error)
+            +ResponseBody(c *gin.Context, method string, endpoint string, query string, body []byte) ([]byte, error)
+        }
+
+        class WalletManager  {
+            <<interface>>
+            +GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error)
+            +GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error)
+        }
+        
+        class Wallet {
+            +GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error)
+            +GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error)
+        }
+        
+        class WebSocketClient  {
+            <<interface>>
+            +Initialize(url string) error
+            +Close() error
+            +ReadMessage(ctx context.Context, w io.Writer) error
+            +WriteMessage(ctx context.Context, r io.Reader) error
+            +Ping(ctx context.Context, w io.Writer) error
+        }
+        
+        class WebSocket {
+            +Conn *websocket.Conn
+
+            +Initialize(url string) error
+            +Close() error
+            +ReadMessage(ctx context.Context, w io.Writer) error
+            +WriteMessage(ctx context.Context, r io.Reader) error
+            +Ping(ctx context.Context, w io.Writer) error
+        }
+        
+    }
+    OS ..|> FIleSystem
+    Journal ..|> Logger
+    Network ..|> NetworkManager
+    P2P ..|> PeerManager
+    Resources ..|> ResourceManager
+    Utils ..|> Utility
+    Wallet ..|> WalletManager
+    WebSocket ..|> WebSocketClient
+
+    %% only class-diagram representable code shown here.
+    %% Commands don't qualify for class diagram representation because they're
+    %% individual functions that call specific rest endpoints or their own
+    %% wrappers. Composition is only applied in the cmd/backend subpkg shown above
+    namespace cmd {
+
+         class GPU  {
+            <<interface>>
+            -name() string
+            -utilizationRate() uint32
+            -memory() memoryInfo
+            -temperature() float64
+            -powerUsage() uint32
+        }
+
+        class ContainerOptions {
+            +UseGPUs bool
+            +Devices []string
+            +Groups []string
+            +Image string
+            +Command []string
+            +Entrypoint []string
+        }
+
+        class amdGPU {
+            -index int
+
+            -name() string
+            -utilizationRate() uint32
+            -memory() memoryInfo
+            -temperature() float64
+            -powerUsage() uint32
+        }
+
+        class memoryInfo {
+            -used uint64
+            -free uint64
+            -total uint64
+        }
+
+        class nvidiaGPU {
+            -index int
+
+            -getDevice() (nvml.Device, error)
+            -name() string
+            -utilizationRate() uint32
+            -memory() memoryInfo
+            -temperature() float64
+            -powerUsage() uint32
+        }
+    }
+    amdGPU ..|> GPU
+    nvidiaGPU ..|> GPU
+
+
+    namespace db {
+            class QueryConditions {
+                Field string
+                Operator string
+                Value interface
+            }
+
+            class Query {
+                +Instance T
+                +Conditions []QueryConditions
+                +SortBy string
+                +Limit int
+                +Offset int
+            }
+
+            class GenericRepository {
+                <<interface>>
+                +Create(data T) T, error
+                +Get() T, error
+                +Update(id interface, data T) T, error
+                +Delete(id interface) error
+                +Find(query Query) T, error
+                +FindAll(query Query) []T, error
+                +GetQuery() Query
+            }
+
+            class GenericEntityRepository {
+                <<interface>>
+                +Save(data T) T, error
+                +Get() T, error
+                +Clear() error
+                +History(query Query) []T, error
+                +GetQuery() Query
+            }
+
+            %% there are other interfaces in this package. Only important ones included for brevity
+    }
+
+    namespace repositories_clover {
+        class GenericEntityRepositoryClover {
+            -db *v2.DB
+            -collection string
+
+            -query() *query.Query
+
+            +GetQuery() repositories.Query
+            +Save(data T) T, error
+            +Get() T, error
+            +Clear() error
+            +History(query repositories.Query) []T, error
+        }
+
+         class GenericRepositoryClover {
+            -db *v2.DB
+            -collection string
+
+            -query(includeDeleted bool)) *query.Query
+            -query(id interface, includeDeleted bool) *query.Query
+
+            +GetQuery() repositories.Query
+            +Create(data T) T, error
+            +Get(id interface) T, error
+            +Update(id interface, data T) T, error
+            +Delete(id interface) error
+            +Find(query repositories.Query) T, error
+            +FindAll(query repositories.Query) []T, error
+        }
+
+        %% there are other interfaces in this package. Only important ones included for brevity
+    }
+
+    namespace repositories_gorm {
+        class GenericEntityRepositoryGorm {
+            -db *gorm.DB
+
+            +GetQuery() repositories.Query
+            +Save(data T) T, error
+            +Get() T, error
+            +Clear() error
+            +History(query repositories.Query) []T, error
+        }
+
+         class GenericRepositoryGorm {
+            -db *gorm.DB
+
+            +GetQuery() repositories.Query
+            +Create(data T) T, error
+            +Get(id interface) T, error
+            +Update(id interface, data T) T, error
+            +Delete(id interface) error
+            +Find(query repositories.Query) T, error
+            +FindAll(query repositories.Query) []T, error
+        }
+
+        %% there are other interfaces in this package. Only important ones included for brevity
+    }
+
+    GenericRepository <-- DatabaseCollector
+    GenericEntityRepositoryGorm ..|> GenericEntityRepository
+    GenericRepositoryGorm ..|> GenericRepository
+    GenericEntityRepositoryClover ..|> GenericEntityRepository
+    GenericRepositoryClover ..|> GenericRepository
+    
+
+    Actor ..|> Node
+    Orchestrator ..|> Node
+    ID ..|> NodeID
+    Vertex ..|> Node
+    namespace dms {
+        class Capability
+        class NodeID {
+            +models.ID.UUID id
+            +models.ID.CID cid
+            ----
+            +String peerID
+            +String DID
+            
+        }
+        class Node {
+            +NodeID id
+            +models.Mailbox mailbox
+            ----            
+            +db.LocalDatabaseCollector db
+            +dms.Capability registeredCapability
+            +dms.Capability availableCapability
+            +Map[dms.Job.JobID]dms.Capability lockedCapabilities
+            +dms.CapabilityComparator preferences
+            +Slice[jobs.AllocationID] allocations
+
+            +Actor.sendMessage(String, telemetry.Message)
+            +getAllocations() Slice[jobs.AllocationID]
+            +getAllocationStatus(jobs.AllocationID) String
+            +routeToAllocation(jobs.AllocationID)
+
+            +benchmarkCapability() dms.Capability
+            +lockCapability(jobs.Pod, dms.Capability)
+            +startAllocation(orchestrator.Invocation)
+        }
+        class PriceInformation
+        class TimeInformation
+    }
+
+    namespace executor {
+        class Executor {
+            <<interface>>
+            +Start(*ExecutionRequest) error
+            +Run(*ExecutionRequest) *ExecutionResult, error
+            +Wait(executionID) <-chan *ExecutionResult, <-chan error
+            +Cancel(executionID)
+            +GetLogStream(executionID) Reader, error
+        }
+    }
+    namespace docker {
+        class Docker {
+            -handlers
+            -client *Client
+            +ID string
+
+            -doWait(er <-chan *ExecutionResult, e <-chan error, eh *executionHandler)
+            -newDockerExecutionContainer(er *ExecutionRequest) string, error
+            -containerLabels(jobID string, executionID string) map[string]string
+
+            +Start(*ExecutionRequest) error
+            +Run(*ExecutionRequest) *ExecutionResult, error
+            +Wait(executionID) <-chan *ExecutionResult, <-chan error
+            +Cancel(executionID)
+            +Cleanup() error
+            +GetLogStream(request LogStreamRequest) ReadCloser, error
+            +FindRunningContainer(jobID string, executionID string) string, error
+        }
+
+        class EngineSpec-D {
+            +Image string
+            +Entrypoint []string
+            +Cmd []string
+            +Environment []string
+            +WorkingDirectory string
+
+            +Validate() error
+        }
+
+        class Client-D {
+            -client *client.Client
+            -removeContainers(filterz filters.Args) error
+            -removeContainers(filterz filters.Args) error
+
+            +IsInstalled() bool
+            +CreateContainer(cfg container.Config, hostConfig *container.HostConfig, netowrkConfig *network.NetworkingConfig, platform *v1.Plarform, name string) string, error
+            *StartContainer(m *firecracker.Machine) error
+            +InspectContainer(id string) types.ContainerJSON, error
+            +FollowLogs(id string) Reader, Reader, error
+            +WaitContainer(containerID string) <-chan conainerContainerWaitOKBody, <-chan error
+            +StopContainer(containerID string, timeout time.Duration) error
+            +RemoveContainer(containerID string) error
+            +RemoveObjectsWithLabel(label string, value string) error
+            +GetOutputStream(containerID string, since string, follow bool) Reader, error
+            +FindContainer(label string, value string) string, error
+            +PullImage(name string) string, error
+        }
+
+        class DockerEngineBuilder {
+            -eb *SpecConfig
+
+            +WithEntrypoint(e... string) *DockerEngineBuilder
+            +WithCmd(c... string) *DockerEngineBuilder
+            +WithEnvironment(e... string) *DockerEngineBuilder
+            +WithWorkingDirectory(w string) *DockerEngineBuilder
+            +Build() *SpecConfig
+        }
+
+        class executionHandler-D {
+            -client *Client
+            -jobID string
+            -executionID string
+            -containerID string
+            -resultsDir string
+            -activeCh <-chan bool
+            -waitCh <-chan bool
+            -running *atomic.bool
+            -result *models.ExecutionResult
+
+            +ID string
+
+            -active() bool
+            -run()
+            -kill() error
+            -destroy(timeout time.Duration) error
+            -outputStream(request LogStreamRequest) ReadCloser, error
+        }
+    }
+    namespace firecracker {
+        class Firecracker {
+            -handlers
+            -client
+            +ID
+
+            -doWait(er <-chan *ExecutionResult, e <-chan error, eh *executionHandler)
+            -newFirecrackerExecutionVM(er *ExecutionRequest) *firecracker.Machine, error
+            -generateSocketPath(jobID string, executionID string) string
+
+            +Start(*ExecutionRequest) error
+            +Run(*ExecutionRequest) *ExecutionResult, error
+            +Wait(executionID) <-chan *ExecutionResult, <-chan error
+            +Cancel(executionID)
+            +Cleanup() error
+            +FindRunningVM(jobID string, executionID string) *firecracker.Machine, error
+        }
+
+        class EngineSpec-F {
+            +KernelImage string
+            +Initrd string
+            +KernelArgs string
+            +RootFileSystem string
+            +MMDSMessage string
+
+            +Validate() error
+        }
+
+        class Client-F {
+            +IsInstalled() bool
+            +CreateVM(cfg firecracker.Config) *firecracker.Machine, error
+            *StartVM(m *firecracker.Machine) error
+            +ShutdownVM(m *firecracker.Machine) error
+            +Destroy(m *firecracker.Machine, timeout time.Duration) error
+            +FindVM(socketPath string) *firecracker.Machine, error
+        }
+
+        class FirecrackerEngineBuilder {
+            -eb *SpecConfig
+
+            +WithRootFileSystem(e string) *FirecrackerEngineBuilder
+            +WithKernelImage(e string) *FirecrackerEngineBuilder
+            +WithKernelArgs(e string) *FirecrackerEngineBuilder
+            +WithMMDSMessage(e string) *FirecrackerEngineBuilder
+            +Build() *SpecConfig
+        }
+
+        class executionHandler-F {
+            -client *Client
+            -executionID string
+            -machine *firecracker.Machine
+            -resultsDir string
+            -activeCh <-chan bool
+            -waitCh <-chan bool
+            -running *atomic.bool
+            -result *models.ExecutionResult
+
+            +ID string
+            +jobID string
+
+            -active() bool
+            -run()
+            -kill() error
+            -destroy(timeout time.Duration) error
+        }
+    }
+    Firecracker ..|> Executor
+    Docker ..|> Executor
+    %% note for Executor "implemented executors:\ndocker\nfirecracker"
+
+    namespace internal {
+        class InternalClassesTBD
+    }
+
+    Actor ..|> Allocation
+    Vertex ..|> Allocation
+    Allocation <|.. AllocationID
+    ID ..|> AllocationID
+    Job <|.. JobLink
+    JobLink <|.. Job
+    Allocation -- Job
+    Pod <|-- Job
+    Allocation -- Executor
+    namespace jobs {
+        class AllocationID {
+            +models.ID.UUID UUID
+            +String CID
+        }
+        class Allocation {
+            +AllocationID id
+            +jobs.Job.JobID jobID
+            +nodeID nodeID
+            +models.ID source
+            +models.Mailbox mailbox
+
+            +start()
+            +sendMessage(telemetry.Message)
+            +register()
+        }
+        class Job {
+            +models.ID id
+            +Slice[models.SpecConfig] inputs
+            +Slice[models.SpecConfig] outputs
+            +dms.Capability requiredCapability %% type marked for change
+            +Slice[jobs.jobLink] children
+
+            getPods() Slice[jobs.Pod]
+        }
+        class JobLink {
+            +models.SpecConfig relationProperties
+            +jobs.Job relatedJob
+
+            +validateRelations()
+        }
+        class Pod {
+            +models.ID id
+            +dms.Capabililty podCapabilitly %% type marked for change 
+            +Slice[jobs.Job] jobs 
+
+            +combineCapabilities() dms.Capability
+        }
+    }
+
+
+    namespace models {
+         class ID {
+            +String UUID
+            +String CID
+
+            +generateUUID() UUID
+            +generateCID() CID
+        }
+ 
+        class SpecConfig
+    }
+
+    namespace network {
+        class Network {
+            <<interface>>
+            +Init()
+            +Start()
+            +Stop()
+            +Ping()
+            +Advertise()
+            +Unadvertise()
+            +Publish()
+            +Subscribe()
+            +Stat()
+        }
+
+        class P2P {
+            +Host host.Host
+            +DHT *dht.IpfsDHT
+            +PS peerstore.Peerstore
+            -peers []peer.AddrInfo
+            -config Libp2pConfig
+
+            +Init()
+            +Start()
+            +Stop()
+            +Ping()
+            +Stat()
+        }
+
+        class DHT {
+            +Advertise()
+            +Unadvertise()
+        }
+
+        class Gossipsub{
+            +Publish()
+            +Subscribe()
+        }
+
+        %% class Other
+
+
+        class Messaging {
+            <<interface>>
+            +New()
+            +Send()
+            +ReceiveHandler()
+            +Close()
+        }
+
+    }
+    %% note for Other "Other is meant to represent another network/transport implementation"
+    P2P ..|> Network
+    DHT ..|> P2P
+    Gossipsub ..|> P2P
+    P2P ..|> Messaging
+    %% Other ..|> Network
+
+    Actor -- P2P
+    Actor -- Messaging
+    Vertex <.. KnownNodes
+    Vertex <.. AvailableNodes
+    Vertex -- DHT
+    Vertex -- Gossipsub
+    Bid <.. PriceBid
+    Bid <.. TimeBid
+    Bid -- BidRequest
+    Orchestrator <|-- Graph
+    namespace orchestrator {
+       class Actor { 
+            +models.ID id
+            +models.Mailbox mailbox
+
+            +processMessage() telemetry.Message
+            +sendMessage(String, telemetry.Message)
+            
+        }
+       class Mailbox {
+            +network.p2p p2p
+            +network.gossipsub gossibsub
+            +receiveMessage()
+            +handleMessage()
+            +triggerBehaviour()
+            +getKnownTopics()
+            +getSubscribedTopics()
+            +subscribeToTopic()
+            +unsubscribeFromTopic()
+
+        }        
+        class Bid {
+            +BidRequest BidRequest 
+            +jobs.JobID jobID 
+            +models.ID bidder
+            +PriceBid priceBid 
+            +TimeBid timeBid
+            +int timeout
+            +bool validOffer
+            +bool resourcesLockedUntilTimeout 
+        }
+        class PriceBid {
+            +String priceBidType 
+            +String currency
+            +String perTimeUnit
+            +bool perResult
+            +Float amount
+        }
+        class TimeBid {
+            +String timeBidType
+            +String units
+            +int duration
+            +int timeStart
+            +int timeFinish
+        }
+        class BidRequest {
+            +models.ID id
+            +jobs.Pod pod
+            +models.ID requestor
+            +models.ResourceRequirements resourceRequirements
+            +models.CapabilityComparator comparator
+        }
+        class CapabilityComparator 
+        class CapabilityComparison 
+        class Invocation {
+            +models.ID source
+            +jobs.Pod pod
+            +tokenomics.Contract contract
+        }
+        class Orchestrator {
+            <<interface>>
+            +publishBidRequest(dms.Node, orchestrator.BidRequest, dms.NodeID, ..String)
+            +compare(dms.Capability, dms.Capability) orchestrator.CapabilitlyComparison %% marked for change (types and parameters)
+            +acceptJob(dms.CapabilityComparison, dms.CapabilityComparator) bool %% marked for change (types and parameters)
+            +sendBid(dms.Node, orchestrator.BidRequest)
+            +selectBestBid(dms.Node, orchestrator.BidRequest) orchestrator.Bid
+            +sendJobRequest(dms.Node, jobs.Pod, dms.NodeID)
+            +sendInvocation(dms.Node, jobs.Invocation, dms.NodeId)
+            +orchestrateJob(dms.Node, jobs.Job)
+
+            +Slice[Graph] networkConfigurations %% not sure if this needs to be implemented as static variable
+        }
+
+    }
+    Graph <|-- Vertex
+    Graph <|-- Edge
+    Edge <|.. Property
+    Vertex <|.. Property
+    namespace orchestrator_graph {
+        %% It may be best to implement this on the basis of existing go packages dealing with property graphs
+        %% as well as their import from graphml so that to we could work with external graph packages
+        %% we may also want to implement grelin go to interact with external graph databases to do more
+        %% complex graph queries
+        class Graph {
+            +Slice[Vertex] vertices
+            +Slice[Edge] edges
+        }
+        class Edge {
+            +Slice[Property] properties
+            +Vertex inVertex
+            +Vertex outVertex
+        }
+        class Vertex {
+            +Slice[Property] properties
+            +Edge inEdge
+            +Edge outEdge
+
+            +getKnownNodes()
+            +getAvailableNodes()
+            +getKnownTopics()
+            +getAvailableTopics()
+            +subscribeToTopic()
+            +unsubscribeFromTopic()
+
+            +KnownNodes knownNodes
+            +AvailableNodes availableNodes
+            +Slice[String] knownTopics
+            +Slice[String] subscribedTopics
+        }
+        class Property {
+            +String key
+            +String value
+        }
+    }
+
+    namespace plugins {
+        class PlubinsClassesTBD
+    }
+
+    namespace storage {
+        class StorageProvider
+        class StorageVolume
+        class VolumeController
+    }
+
+    Observable .. Collector
+    Collector ..|> FileCollector
+    Collector ..|> DatabaseCollector
+    Collector ..|> OpenTelemetryCollector
+    Collector ..|> ReputationCollector
+    Collector ..|> ActorCollector
+    Event <.. EventCategory
+    Event --|> Heartbeat
+    Event --|> Message
+    Observable ..|> Event
+    Observable <.. ObservabilityLevel
+    namespace telemetry {
+        class Collector {
+            <<interface>>
+            +initialize()
+            +handleEvent()
+            +shutdown()
+            +getObserverdLevel()
+            +getEndpoint()
+        }
+        class FileCollector {
+            +String logFile
+        }
+        class DatabaseCollector {
+            +String databaseEndpoint
+        }
+        class OpenTelemetryCollector {
+            +*.traceTracerProvider TracerProvider
+            +String otEndpoint
+        }
+        class ReputationCollector
+        class ActorCollector
+        class Event {
+            +observeEvent()
+            +Time timestamp
+            +Context context
+            +EventCategory category
+            +String message
+            +Slice[Collector] collectors
+        }
+        class EventCategory {
+            +ACCOUNTING
+            +LOGGING
+            +TRACING
+            +HEARTBEAT
+        }
+        class Observable {
+            +getObservabilityLevel() ObservabilityLevel
+            +getCollectors() Slice[Collector]
+            +registerCollector(Collector)
+        }
+        class ObservabilityLevel {
+            +TRACE
+            +DEBUG
+            +INFO
+            +WARN
+            +ERROR
+            +FATAL
+        }
+        class Message {
+            +models.ID sender
+            +models.ID receiver
+            +MessageHeaders headers
+            +models.SpecConfig payload
+        }
+        class Heartbeat {
+            +models.SpecConfig config
+            +Time frequency
+            +Time duration
+
+            +register()
+            +start()
+            +trigger()
+            +stop()
+            +validateConfig()
+        }
+    }
+
+    namespace tokenomics {
+        class Contract
+        class ContractProof
+    }
+
+    namespace utils {
+        class UtilsClassesTBD
+    }

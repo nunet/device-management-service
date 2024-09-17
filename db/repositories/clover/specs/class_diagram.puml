@@ -1,0 +1,26 @@
+ ' START DIAGRAM
+   class db.repositories.repositories_clover.GenericEntityRepositoryClover {
+        -db *v2.DB
+        -collection string
+        -query() *query.Query
+        +GetQuery() repositories.Query
+        +Save(data T) T, error
+        +Get() T, error
+        +Clear() error
+        +History(query repositories.Query) []T, error
+    }
+
+    class db.repositories.repositories_clover.GenericRepositoryClover {
+        -db *v2.DB
+        -collection string
+        -query(includeDeleted bool)) *query.Query
+        -query(id interface, includeDeleted bool) *query.Query
+        +GetQuery() repositories.Query
+        +Create(data T) T, error
+        +Get(id interface) T, error
+        +Update(id interface, data T) T, error
+        +Delete(id interface) error
+        +Find(query repositories.Query) T, error
+        +FindAll(query repositories.Query) []T, error
+    }
+' END DIAGRAM

@@ -1,210 +1,406 @@
-Device Management Service, or DMS is the backend of all the clients which are available for compute or service provider. Currently they are SPD or Service Provider Dashboard and CPD aka Compute Provider Dashboard.
+# Device Management Service (DMS)
 
-Note: This README is intended for developers. For end users, please check our [Wiki section](https://gitlab.com/nunet/device-management-service/-/wikis/home).
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
-For a quick install, you can use the following script:
+## Table of Contents
+
+- [Device Management Service (DMS)](#device-management-service-dms)
+  - [Table of Contents](#table-of-contents)
+  - [About](#about)
+    - [Payment](#payment)
+  - [Installation](#installation)
+    - [Binary releases](#binary-releases)
+      - [Ubuntu/Debian](#ubuntudebian)
+    - [Building from source](#building-from-source)
+      - [Dependencies](#dependencies)
+    - [Installation on VMs](#installation-on-vms)
+    - [Installation on WSL](#installation-on-wsl)
+    - [System Requirements](#system-requirements)
+      - [CPU-only machines](#cpu-only-machines)
+        - [Minimum System Requirements](#minimum-system-requirements)
+        - [Recommended System Requirements](#recommended-system-requirements)
+      - [GPU Machines](#gpu-machines)
+        - [Minimum System Requirements](#minimum-system-requirements-1)
+        - [Recommended System Requirements](#recommended-system-requirements-1)
+  - [Usage](#usage)
+    - [Quick Start](#quick-start)
+      - [Creating identities](#creating-identities)
+      - [Using a Ledger Wallet](#using-a-ledger-wallet)
+      - [Setting up Capabilities](#setting-up-capabilities)
+        - [Create capability contexts](#create-capability-contexts)
+          - [Add a root anchor for your DMS context](#add-a-root-anchor-for-your-dms-context)
+        - [Setup your DMS for the public testnet](#setup-your-dms-for-the-public-testnet)
+      - [Running DMS](#running-dms)
+    - [Onboarding](#onboarding)
+    - [REST Endpoints](#rest-endpoints)
+  - [Configuration](#configuration)
+    - [Config file](#config-file)
+      - [Run Two DMS Instances Side by Side](#run-two-dms-instances-side-by-side)
+  - [Tests](#tests)
+  - [Specification](#specification)
+    - [Description](#description)
+    - [Design and Architecture](#design-and-architecture)
+      - [Conceptual Basis](#conceptual-basis)
+      - [Ontology](#ontology)
+      - [Architecture](#architecture)
+      - [Research](#research)
+    - [Functionality](#functionality)
+    - [Data Types](#data-types)
+    - [References](#references)
+    - [Class Diagram](#class-diagram)
+      - [Source File](#source-file)
+
+## About
+
+**Device Management Service** or **DMS** enables a machine to join the decentralized NuNet network both as a compute provider, offering its resources to the network, or to leverage the compute power of other machines in the network for processing tasks. Users with available hardware resources can get compensated whenever their machine is utilized for a computational job by other users in the network. The ultimate goal is to create a decentralized compute economy that is able sustains itself.
+
+### Payment
+
+All transactions on the Nunet network are expected to be conducted using the platform's utility token [NTX](https://docs.nunet.io/docs/v/getting-ntx). However, DMS is currently in development, and payment isn't part of `v0.5.0-boot` release. NTX payments are expected to be implemented in the [Public Alpha Mainnet](https://gitlab.com/groups/nunet/-/milestones/46#tab-issues) milestone within later release cycles.
+
+**Note**: If you are a developer, please check out the [DMS specifications](#specification) and [Building from Source](#building-from-source) sections of this document.
+
+## Installation
+
+You can install Device Management Service (DMS) via [binary releases](#binary-releases) or [building it from source](#building-from-source).
+
+### Binary releases
+
+You can find all binary releases [here](https://gitlab.com/nunet/device-management-service/-/releases) and other builds in-between releases in the [package registry](https://gitlab.com/nunet/device-management-service/-/packages)
+
+#### Ubuntu/Debian
+
+1. Download the latest .deb pacakge from the package registry:
+2. Install the debian package with `apt` or `dpkg`:
+
 ```
-sh <(curl -sL https://inst.dms.nunet.io)
+sudo apt update
+sudo apt install ./nunet-dms_0.5.0_amd64.deb -y
 ```
 
-## Getting Started with Development
-
-The cleanest way to setup development environment is to build a deb package out of this repository and let the installer do the work for you.
+3. Some dependencies such as docker and libsystemd-dev might be missing so it's recommended to fix install by running:
 
 ```
-sudo apt install build-essential curl jq iproute2 libsystemd-dev
+sudo apt -f install
 ```
 
-### Prerequisites
+### Building from source
 
-To build the deb, you'd be required to install these two packages:
+We currently support Linux and MacOS (Darwin).
 
-```
-sudo snap install go
-sudo apt install build-essential libsystemd-dev
-```
+#### Dependencies
 
-### Build, Install & Setup Dev Env
+- iproute2 (linux only)
+- libsystemd-dev (linux only)
+- go (v1.21 or later)
 
-We provide a dev-setup shell script to ease the process of getting started. It does the following:
-
-1. Setup `pre-commit` hook which runs test before every commit.
-2. Build .deb file and installs it.
-3. Stops the `nunet-dms` service so that we can run main.go directly.
-
-Run the script as follows:
+Clone the repository:
 
 ```
-bash maint-scripts/dev-setup.sh
+git clone https://gitlab.com/nunet/device-management-service.git
 ```
 
-Once the env is setup, run the DMS as follows:
+Build the CLI:
 
-```
-sudo go run main.go
-```
-
-Notice we're using `sudo` as the onboarding process writes some configuration files to `/etc/nunet`.
-
-### Component Installation
-
-To test the onboarding functionality it is required to install the DMS component. This can be done as follows:
-
-1. Download the latest version of DMS using this command
-
-`wget https://d.nunet.io/nunet-dms-latest.deb -O nunet-dms-latest.deb`
-
-2. Install DMS using this command
-
-`sudo apt update && sudo apt install ./nunet-dms-latest.deb -y`
-
-If the installation fails, try these commands instead:
-```
-sudo dpkg -i nunet-dms-latest.deb
-sudo apt -f install -y
-```
-If you see a "Permission denied" error, don't worry, it's just a notice. Proceed to the next step.
-
-3. Check if DMS is running
-Look for "/usr/bin/nunet" in the output of this command:
-```
-ps aux | grep nunet
+```bash
+cd device-management-service
+make
 ```
 
-#### Remove DMS
-To remove DMS, use this command:
-`sudo apt remove nunet-dms`
+This will result in a binary file in builds/ folder named as `dms_linux_amd64` or `dms_darwin_arm64` depending on the platform.
 
-Completely remove DMS (if needed):
-To fully uninstall and stop DMS, use either of these commands:
+You can add the compiled binary to a directory in your `$PATH`. See the [Usage](#usage) section for more information.
 
-`sudo apt purge nunet-dms`
+### Installation on VMs
 
-or
+- Skip doing an [unattended installation](https://www.virtualbox.org/manual/ch01.html#create-vm-wizard-unattended-install) for the new Ubuntu VM as it might not add the user with administrative privileges.
+- Enable [Guest Additions](https://www.virtualbox.org/manual/ch04.html) when installing the VM (VirtualBox only).
+- Always [change the default NAT network setting to Bridged](https://www.techrepublic.com/article/how-to-set-bridged-networking-in-a-virtualbox-virtual-machine) before booting the VM.
+- [Install Extension Pack](https://phoenixnap.com/kb/install-virtualbox-extension-pack) if using VirtualBox (recommended).
+- [Install VMware Tools](https://kb.vmware.com/s/article/1014294) if using VMware (recommended).
+- ML on GPU jobs on VMs are not supported.
 
-`sudo dpkg --purge nunet-dms`
+### Installation on WSL
 
-#### Update DMS
-To update the DMS to the latest version, follow these steps in the given sequence:
+- Install WSL through the Windows Store.
+- Install the [Update KB5020030](https://www.catalog.update.microsoft.com/Search.aspx?q=KB5020030) (Windows 10 only).
+- Install Ubuntu 20.04 through WSL.
+- Enable [systemd on Ubuntu WSL](https://www.xda-developers.com/how-enable-systemd-in-wsl).
+- ML Jobs deployed on Linux cannot be resumed on WSL.
 
-1. Uninstall the current DMS
-2. Download the latest DMS package
-3. Install the new DMS package
+Though it is possible to run ML jobs on Windows machines with WSL, using Ubuntu 20.04 natively is highly recommended to avoid unpredictability and performance losses.
+
+If you are using a dual-boot machine, make sure to use the `wsl --shutdown` command before shutting down Windows and running Linux for ML jobs. Also, ensure your Windows machine is not in a hibernated state when you reboot into Linux.
+
+### System Requirements
+
+#### CPU-only machines
+
+##### Minimum System Requirements
+
+We require you to specify CPU (MHz x no. of cores) and RAM, but your system must meet at least the following requirements before you decide to onboard it:
+
+- CPU: 2 GHz
+- RAM: 4 GB
+- Free Disk Space: 10 GB
+- Internet Download/Upload Speed: 4 Mbps / 0.5 MBps
+
+If the above CPU has 4 cores, your available CPU would be around 8000 MHz. So if you want to onboard half your CPU and RAM on NuNet, you can specify 4000 MHz CPU and 2000 MB RAM.
+
+##### Recommended System Requirements
+
+- CPU: 3.5 GHz
+- RAM: 8-16 GB
+- Free Disk Space: 20 GB
+- Internet Download/Upload Speed: 10 Mbps / 1.25 MBps
+
+#### GPU Machines
+
+##### Minimum System Requirements
+
+- CPU: 3 GHz
+- RAM: 8 GB
+- NVIDIA GPU: 4 GB VRAM
+- Free Disk Space: 50 GB
+- Internet Download/Upload Speed: 50 Mbps
+
+##### Recommended System Requirements
+
+- CPU: 4 GHz
+- RAM: 16-32 GB
+- NVIDIA GPU: 8-12 GB VRAM
+- Free Disk Space: 100 GB
+- Internet Download/Upload Speed: 100 Mbps
+
+## Usage
+
+### Quick Start
+
+This quick start guide will walk you through the process of setting up a Device Management Service (DMS) instance for the first time and getting it running. We'll cover creating identities, setting up capabilities, and running the DMS.
+
+**The NuNet CLI**
+
+The Nunet CLI is the command-line interface for interacting with the Nunet Device Management Service (DMS). It provides commands for managing keys, capabilities, configuration, running the DMS, and more. It's essential for setting up and administering your DMS instance.
+
+**Key Concepts**
+
+- **Actor:** An independent entity in the Nunet system capable of performing actions and communicating with other actors.
+- **Capability:** Defines the permissions and restrictions granted to actors within the system.
+- **Key:** A cryptographic key pair used for authentication and authorization within the DMS.
+
+You can find a detailed documentation [here](./cmd/README.md).
+
+#### Creating identities
+
+The first step is to generate identities/keys and capability contexts. It is recommended that two keys are setup: one for the user (default name `user`) and another for the dms (default name `dms`)
+
+A capability context is created with the `dms cap new <context>` command and it is anchored on a key with the context name.
+
+To set up a new identity/create a new key, run the command:
+
+```
+$ nunet key new <identity>
+```
+
+Then, to initialize its capability context:
+
+```
+$ nunet cap new <identity>
+```
+
+In this example, we are going to set up two identities:
+
+```
+$ nunet key new user // returns did
+$ nunet cap new user
+
+$ nunet key new dms // returns did
+$ nunet cap new dms
+```
+
+If you use a ledger wallet for your personal key, you can create the user context as follows:
+
+```
+$ nunet key did ledger
+$ nunet cap new ledger:user
+```
+
+You can create as many identities as you want, specially if you want
+to manage multiple DMS instances.
+
+The `key new` command returns a DID key for the specified identity.
+Remember to secure your keys and capability contexts, as they control access to your NuNet resources.
+They are encrypted and stored under `$HOME/.nunet` by default.
+
+Each time a new identity is generated it will prompt the user
+for a passphrase. The passphrase is associated with the created
+identity, thus a different passphrase can be set up for each identity.
+If you prefer, it's possible to set a `DMS_PASSPHRASE` environment variable
+to avoid the command prompt.
+
+#### Using a Ledger Wallet
+
+It is also possible to use a Ledger Wallet instead of creating a new
+key; this is recommended for user contexts, but you should not use it
+for the dms context as it needs the key to sign capability tokens.
+
+To set up a user context with a Ledger Wallet, you need the
+`ledger-cli` script from [NuNet's ledger wallet tool](https://gitlab.com/nunet/ledger-wallet).
+The tool uses the Eth application and specifically the first Eth
+account with signing of personal messages. Everything that needs to be
+signed (namely capability tokens) will be presented on your Nano's
+screen in plaintext so that you can inspect it.
+
+You can get your Ledger wallet's DID with:
+
+```
+$ nunet key did ledger
+```
+
+#### Setting up Capabilities
+
+NuNet's network communication is powered by the [NuActor System](actor/README.md), a zero-trust system that utilizes fine-grained capabilities, anchored on [DIDs](https://www.w3.org/TR/did-core/), following the [UCAN model](https://github.com/ucan-wg/).
+
+Once both identities are created, you'll need to set up capabilities. Specifically:
+
+1. Create capability contexts for both the user and each of your DMS instances.
+2. Add the user's DID as a _root anchor_ for the DMS capability context. This ensures that the DMS instance fully trusts the user, granting complete control over the DMS (the root capability).
+3. If you want your DMS to participate in the public NuNet testnet (and eventually the mainnet), you'll need to set up capability anchors for your DMS:
+   1. Create a capability anchor to allow your DMS to accept _public behavior invocations_ from authorized users and DMSs in the NuNet ecosystem.
+   2. Add this token to your DMS as a _require anchor_.
+   3. Request a capability token from NuNet to invoke public behaviors on the network.
+   4. Add the token as a _provide anchor_ in your personal capability context.
+   5. Delegate to your DMS the ability to make public invocations using your token.
+   6. Add the delegation token as a _provide anchor_ in your DMS.
+
+###### Add a root anchor for your DMS context
+
+You can do this by invoking the `dms cap anchor` command:
+
+```
+$ nunet cap anchor --context dms --root <user-did>
+```
+
+Where `<user-did>` is the user did created above in [Creating identities](#creating-identities) and can be obtained by:
+
+```
+$ nunet key did <user>
+
+## or if you are using a Ledger Wallet:
+$ nunet key did ledger
+```
+
+##### Setup your DMS for the public testnet
+
+0. **The NuNet DID**
+
+```
+did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
+```
+
+1. **Create a capability anchor for public behaviors**
+
+```
+# Create the grant
+$ nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-dir>
+
+# or if you are using a Ledger Wallet
+$ nunet cap grant --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-dir>
+
+# And the granted token as a require anchor
+$ nunet cap anchor --context dms --require <the-grant-output>
+
+```
+
+The first command grants nunet authorized users the capability to invoke public behaviors until December 31, 2024, and outputs a token.
+
+The second command consumes the token and adds the require anchor for your DMS
+
+2. **Ask NuNet for a public network capability token**
+
+To request tokens for participating in the testnet, please go to [did.nunet.io](https://did.nunet.io) and submit the did you generated along with your gitlab username and an email address to receive the token. It's highly recommended that you use a Ledger hardware wallet for your keys.
+
+3. **Use the NuNet granted token to authorize public behavior invocations in the public network**
+
+```
+# Add the provide anchor to your personal context
+$ nunet cap anchor --context user --provide <the-token-you-got-from-nunet>
+
+# or if you are using a Ledger Wallet
+$ nunet cap anchor --context ledger:user --provide <the-token-you-got-from-nunet>
+
+# Delegate to your DMS
+$ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-dir>
+
+# or if you are using a Ledger Wallet
+$ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-dir>
+
+$ nunet cap anchor --context dms --require <the-delegate-output>
+```
+
+The first command ingests the NuNet provided token and the last two commands use this token to delegate the public behavior capabilities to your DMS.
+
+#### Running DMS
+
+If everything was setup properly, you should be able to run:
+
+```
+$ nunet run
+```
+
+By default, DMS runs on port 9999.
 
 ### Onboarding
 
-You don't necessarily need to onboard for development, but that depends which part you're working on.
-To onboard during development, /etc/nunet need to be manually created since it's created with the package
-during installation.
+You don't necessarily need to onboard for development, but that depends on which part you're working on. To onboard during development, `/etc/nunet` needs to be manually created since it is created with the package during installation.
 
-Onboarding instructions can be found at [Onboarding Wiki](https://gitlab.com/nunet/device-management-service/-/wikis/Onboarding)
+Refer to `dms/onboarding` package [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/README.md) for details of onboarding functionality for compute provider users.
 
-## Usecase: ML on GPU/CPU
-### Communication between SPD and DMS
+### REST Endpoints
 
-This section describes the communication mechanism between the Service Provider Daemon (SPD) and the Device Management Service (DMS). It covers the REST endpoints and Websocket interactions between the two components. 
+Refer to the `api` package [README](https://gitlab.com/nunet/device-management-service/-/blob/main/api/README.md) for the list of all endpoints. Head over to project's issue section and create an issue with your question.
 
-The REST endpoints can be explored using the provided Postman collection, and any questions or clarifications can be addressed on the project's isssues. 
+## Configuration
 
-Websocket communication is utilized to maintain an open connection between SPD and DMS, allowing real-time exchange of messages. Message types, referred to as "actions," are used to ensure a predictable system for building and programming. The documentation explains the various actions supported by the Websocket endpoint, such as send-status, job-submitted, deployment-response, job-failed, and job-completed, along with their corresponding message formats.
-#### REST Endpoints
+### Config file
 
-A [Postman collection](https://gitlab.com/nunet/device-management-service/-/snippets/2507804) is there to help you get starting with REST endpoints exploration. Head over to project's issue section and create an issue with your question.
+The DMS searches for a configuration file `dms_config.json` in the following locations, in order of priority whenever it's started:
 
-#### Websocket
+1. The current directory (`.`)
+2. `$HOME/.nunet`
+3. `/etc/nunet`
 
-Both SPD and DMS endpoints are always open through Websocket. And as we know websocket is basically a wrapper around TCP, when sending a message, it's a good practice to include the message type. This message type helps us make predictable system upon which we can build/program our system on.
+The configuration file must be in JSON format and it does **not** support comments. It's recommended that only the parameters that need to be changed are included in the config file so that other parameters can retain their default values.
 
-We tried to write most of the logic in REST as more people are more aware to REST than websocket. But when it comes to websocket, here are the message types which we have implemented. By convention, we call message type **action**.
+It's possible to manage configuration using the `config` subcommand as well. `nunet config set` allows setting each parameter individually and `nunet config edit` will open the config file in the default editor from `$EDITOR`
 
-There is currently one websocket endpoint, which is available on `/run/deploy`, and it is available for any SPD client.
+#### Run Two DMS Instances Side by Side
 
-* `send-status`: This action is supposed to be invoked by SPD after they have initially invoked the `/run/request-service`. Is is called *`send-status`* because SPD is supposed to inform DMS about the blockchain transaction status of fund transfer that service provider made for running the job.
-
-An example of send status is like this:
-
-```json
-{
-    "action": "send-status",
-    "message": {
-        "transaction_type": "fund",
-        "transaction_status": "success"
-    }
-}
-```
-
-`success` or `pending` indicates actual status of blockchain transaction.
-
-send-status is the only action which a websocket client sends. Remaining others are sent by DMS.
-
-* `job-submitted`: If you have gone through the REST endpoint, you know that first endpoint that SPD hits, is /run/request-service. Then we do the send-status. If status is success, the deployment request is then passed to the compute provider. job-submitted is sent to SPD just before sending the deployment request to compute provider.
-
-Example:
-
-```json
-{
-    "action": "job-submitted"
-}
-```
-
-* `deployment-response`: Look at the message schema below.
-
-```json
-{
-    "action": "deployment-response",
-    "message": {
-        "success": true,
-        "content": https://log.url/user/logid
-    }
-}
-```
-
-If deployment is successful on the compute provider side, SPD will receive this message with log URL.
-
-* `job-failed`: If somehow job was not able to start, due to any error, SPD is going to receive following message:
-
-```json
-{
-    "action": "job-failed",
-    "message": "reason why deployment failed"
-}
-```
-
-* `job-completed`: This action is sent when container has exited with 0 exit status. Message looks simple similar to job-submitted.
-
-```json
-{
-    "action": "job-completed"
-}
-```
-
-## Run 2 DMS side by side
-
-As a developer, you might be in a situation where you have to both service provider and compute provider. For that you'll have to run 2 DMS, one acting as SP and another CP.
+As a developer, you might find yourself needing to run two DMS instances, one acting as an SP (Service Provider) and the other as a CP (Compute Provider).
 
 **Step 1**:
 
-Clone the repo to 2 different directory. You might want to use descriptive directory names to avoid confusion.
+Clone the repository to two different directories. You might want to use descriptive directory names to avoid confusion.
 
 **Step 2**:
 
-You need to modify some configuration so that both the DMS does not create a deadlock. Those configuration include:
+You need to modify some configurations so that both DMS instances do not end up trying to listen on the same port and use the same path for storage. For example, ports on `p2p.listen_address`, `rest.port`, `general.user_dir` etc... neeed to be different for two instances on the same host.
 
-1. The port DMS is listening on.
-2. The database file DMS uses.
-
-dms_config.json can be used to modify those settings. Here is a sample config file which can be modified to your taste and used:
+The `dms_config.json` file can be used to modify these settings. Here is a sample config file that can be modified to your preference:
 
 ```json
 {
   "p2p": {
-    "listen_address": [
-      "/ip4/0.0.0.0/tcp/9100",
-      "/ip4/0.0.0.0/udp/9100/quic"
-    ]
+    "listen_address": ["/ip4/0.0.0.0/tcp/9100", "/ip4/0.0.0.0/udp/9100/quic-v1"]
   },
   "general": {
-    "metadata_path": "/home/santosh/.config/nunet/dms/",
+    "user_dir": "/home/user/.config/nunet/dms/",
     "debug": true
   },
   "rest": {
@@ -213,24 +409,98 @@ dms_config.json can be used to modify those settings. Here is a sample config fi
 }
 ```
 
-Please use absolute paths to keep yourself out of trouble. Moreover, have a look at [config structure](https://gitlab.com/nunet/device-management-service/-/blob/develop/internal/config/config.go).
+Prefer to use absolute paths and have a look at the [config structure](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/config/config.go) for more info.
 
-3. You must also change the port number in the nunet shell script if you are planning to use nunet cli.
+## Tests
 
-**Step 3**:
+Some packages contain tests, and it is always best to run them to ensure there are no broken tests before submitting any changes. Before running the tests, the Firecracker executor requires some test data, such as a kernel file, which can be downloaded with:
 
-Onboard both DMSes.
+```bash
+make testdata
+```
 
-**Step 4**:
+After the download is complete, all unit tests can be run with the following command. It's necessary to include the `unit` tag due to the existence of files that contain functional and integration tests.
 
-Check if both can discover each other.
+```bash
+go test --tags unit ./...
+```
 
-**Step 5**:
+Help in contributing tests is always appreciated :)
 
-Change DMS backend URL from the SPD/CPD side and start with the testing.
+## Specification
 
-## License
+### Description
 
-Device Management Service (DMS) is licensed under the [APACHE LICENSE, VERSION 2.0](https://www.apache.org/licenses/LICENSE-2.0.txt).
+NuNet is a computing platform that provides globally distributed and optimized computing power and storage for decentralized networks, by connecting data owners and computing resources with computational processes in demand of these resources. NuNet provides a layer of intelligent interoperability between computational processes and physical computing infrastructures in an ecosystem which intelligently harnesses latent computing resources of the community into the global network of computations.
 
+Detailed information about the NuNet platform, concepts, architecture, models, stakeholders can be found in these two papers:
 
+- [White Paper](https://docs.nunet.io/nunet-whitepaper)
+- [Yellow Paper](https://docs.nunet.io/docs/v/nunet-yellow-paper/readme/main)
+
+DMS (Device Management Service) acts as the foundation of the NuNet platform, orchestrating the complex interactions between various computing resources and users. DMS implementation is structured into packages, creating a more maintainable, scalable, and robust codebase that is easier to understand, test, and collaborate on. Here are the existing packages in DMS and their purposes:
+
+- **`dms`**: Responsible for starting the whole application and core DMS functionality such as onboarding, job orchestration, job and resource management, etc.
+- **`internal`**: Code that will not be imported by any other packages and is used only on the running instance of DMS. This includes all configuration-related code, background tasks, etc.
+- **`db`**: Database used by the DMS.
+- **`storage`**: Disk storage management on each DMS for data related to DMS and jobs deployed by DMS. It also acts as an adapter to external storage services.
+- **`api`**: All API functionality (including REST API, etc.) to interact with the DMS.
+- **`cmd`**: Command line functionality and tools.
+- **`network`**: All network-related code such as p2p communication, IP over Libp2p, and other networks that might be needed in the future.
+- **`executor`**: Responsible for executing the jobs received by the DMS. Interface to various executors such as Docker, Firecracker, etc.
+- **`telemetry`**: Logs, traces, and everything related to telemetry.
+- **`plugins`**: Defined entry points and specs for third-party plugins, registration, and execution of plugin code.
+- **`types`**: Contains data models imported by various packages.
+- **`utils`**: Utility tools and functionalities.
+- **`tokenomics`**: Interaction with blockchain for the crypto-micropayments layer of the platform.
+
+### Design and Architecture
+
+#### Conceptual Basis
+
+Main concepts of the architecture of DMS, the main component of the NuNet platform, can be found in the [Yellow Paper](https://gitlab.com/nunet/publisher/platform-yellow-paper/-/tree/main).
+
+#### Ontology
+
+The Nunet Ontology, which forms the basis of the design, is explained in the articles below:
+
+- [NuNet Job Orchestration I: Ontology and Nomenclature](https://nunet.gitlab.io/research/blog/posts/ontology-and-nomenclature/)
+- [NuNet Job Orchestration II: Scheduling](https://nunet.gitlab.io/research/blog/posts/scheduling-and-orchestration/)
+- [NuNet Job Orchestration III: Mapping Ontology to Scheduling](https://nunet.gitlab.io/research/blog/posts/taxonomy-of-job-scheduling/)
+
+#### Architecture
+
+Refer to the following items to understand **DMS architecture** at a high level.
+
+- [DMS Architecture -- Understanding I](https://nunet.gitlab.io/research/blog/posts/dms-architecture/)
+- [Entity Diagram - DMS High Level](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/entityDiagrams/New_DMS_Structure_Highlevel.drawio.svg)
+
+#### Research
+
+Relevant research work that has informed the design of DMS can be found below:
+
+- [Detailed Job Orchestration Sequences I](https://nunet.gitlab.io/research/blog/posts/job-orchestration-details/)
+- [Detailed Job Orchestration Sequences II](https://nunet.gitlab.io/research/blog/posts/orchestration-discussion/)
+- [Gossipsub, DHT, and Push/Pull Mechanisms](https://nunet.gitlab.io/research/blog/posts/gossipsub/)
+- [Parent-Child Hierarchy, Allocations, and Failure Tolerance](https://nunet.gitlab.io/research/blog/posts/parent-child-relations/)
+- [Kubernetes Integration Specs](https://nunet.gitlab.io/research/blog/posts/kubernetes-integration/)
+
+### Functionality
+
+DMS is currently being refactored and new functionality will be added.
+
+### Data Types
+
+Refer to the DMS global class diagram in [this](#class-diagram) section and various packages for data models.
+
+### References
+
+In addition to the relevant links added in the sections above, you can also find useful links here: [NuNet Links](https://www.nunet.io/links).
+
+### Class Diagram
+
+The global class diagram for the DMS is shown below.
+
+#### Source File
+
+[Global Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/class_diagram.puml)

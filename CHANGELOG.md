@@ -20,6 +20,177 @@ Types of changes
 - `Security` in case of vulnerabilities.
 
 -->
+
+## [0.4.185](#541)
+
+### Changed
+- Refactored cmd and api package
+- Included dependency instantiation in dms start up
+- Get db instance returned in addition to global var set until deprecation
+- Fix onboarding
+- Simplify http client and other utilities
+
+## [0.4.184](#530)
+
+### Added
+- `Add` and `Subtract` methods to Capability model through `CapabilityAddSubtracter` interface/behavior
+
+## [0.4.183](#480)
+
+### Added
+- Node and Allocation initial implementation
+
+## [0.4.182](#425)
+
+### Changed
+- Improve status codes and replace with constants
+
+## [0.4.181](#259)
+
+### Changed
+- Removed the functions in the package and replaced them with an interface-based design.
+- Updated the types for Resource, AvailableResources, FreeResources and RequiredResources
+- Updated the usage of resources package
+
+### Added
+- Added interfaces ResourceManager, UsageMonitor and SystemSpecs
+- Added linux, amd64_darwin and arm64_darwin implementations for SystemSpecs
+- Added the SpecInfo struct
+- Added tests for the package
+
+## [0.4.180](#522)
+
+### Deprecated
+- Deprecated IsInstalled method on executor interface
+
+## [0.4.179](#524)
+
+### Changed
+- Rename the `models` package to `types`
+
+## [0.4.178](#466)
+
+### Changed
+- refactoring and improvement on gpu detection and management
+
+### Added
+- add support for intel gpu
+
+## [0.4.177](#460)
+
+### Added
+- Added Job spec parser
+
+## [0.4.176](#518)
+
+### Added
+- Allow setting rest server bind addr with config and default to localhost
+
+## [0.4.175](#377)
+
+### Deprecated
+- deprecated metadata file
+
+## [0.4.174](#481)
+
+### Deprecated
+- deprecated logbin
+
+## [0.4.173](#489)
+
+### Changed
+- changed Basic Controller and its tests accordingly to DB repositories for StorageVolumes
+- minor change on pkg to align with changes on VolController test suite
+- improved error handling in clover generic repo methods
+
+## [0.4.172](#502)
+
+### Fixed
+- unavailable log stream implementation for firecracker executor
+
+## [0.4.171](#473)
+
+### Added
+- Actor Module (#473)
+- Network Module (#445)
+
+## [0.4.170](#386)
+
+### Added
+- Support for Clover DB
+
+## [0.4.169](#428)
+
+### Added
+- Volume Controller
+
+## [0.4.168](!349)
+
+### Deprecated
+- deleted the following packages
+    - docker
+    - firecracker
+    - integrations/oracle
+    - internal/klogger
+    - internal/messaging
+    - internal/tracing
+    - libp2p
+### Changed
+- moved /internal/logger into /telemetry
+- moved /docs into /api/docs
+- moved integration/tokenomics into /utils/blockchain.go and /cardano into /utils/cardano
+
+## [0.4.167](#409)
+
+### Changed
+- Docker executor contianer run pulls image if it doesn't exist locally
+- Readme update on testing
+
+### Added
+- Executor tests and test data fetch using make
+
+## [0.4.166](#396)
+
+### Added
+- Firecracker executor
+
+## [0.4.165](#346)
+
+### Added
+- Generic executor package interface and its docker implementation
+
+## [0.4.164](#340)
+
+### Fixed
+- Tests that cause timeout or crash
+
+### Removed
+- Spans from p2p messaging due to interruption of tests
+
+### Changed
+- Moved peer filter call out of discover
+
+## [0.4.163](#364)
+
+### Fixed
+- Total vram instead of visible only for AMD GPUs
+
+## [0.4.162](#206)
+
+### Added
+- Repositories for db module. First phase of db refactoring 
+
+## [0.4.161](#353)
+
+### Changed
+- Moved onboarding and resource related code to dms package
+- Refactored CheckOnboarding
+
+## [0.4.160](#366)
+
+### Fix
+- Problem with vm start request on firecracker depreq
+
 ## [0.4.159](#376)
 
 ### Removed

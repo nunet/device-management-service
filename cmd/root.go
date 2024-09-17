@@ -1,27 +1,36 @@
 package cmd
 
 import (
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/docs"
+
+	"gitlab.com/nunet/device-management-service/cmd/actor"
+	"gitlab.com/nunet/device-management-service/cmd/cap"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-var rootCmd = &cobra.Command{
-	Use:     "nunet",
-	Short:   "NuNet Device Management Service",
-	Long:    `The Device Management Service (DMS) Command Line Interface (CLI)`,
-	Version: docs.SwaggerInfo.Version,
-	CompletionOptions: cobra.CompletionOptions{
-		DisableDefaultCmd: false,
-		HiddenDefaultCmd:  true,
-	},
-	SilenceErrors: true,
-	SilenceUsage:  true,
-	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
-	},
-}
-
-func Execute() {
-	// CheckErr prints formatted error message, if there is any, and exits
-	cobra.CheckErr(rootCmd.Execute())
+func newRootCmd(client *utils.HTTPClient, afs afero.Afero) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "nunet",
+		Short: "NuNet Device Management Service",
+		Long:  `The Device Management Service (DMS) Command Line Interface (CLI)`,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: false,
+			HiddenDefaultCmd:  true,
+		},
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Run: func(cmd *cobra.Command, _ []string) {
+			_ = cmd.Help()
+		},
+	}
+	cmd.AddCommand(newRunCmd())
+	cmd.AddCommand(newKeyCmd(afs))
+	cmd.AddCommand(cap.NewCapCmd(afs))
+	cmd.AddCommand(actor.NewActorCmd(client, afs))
+	cmd.AddCommand(newConfigCmd(afs.Fs))
+	cmd.AddCommand(newAutoCompleteCmd())
+	cmd.AddCommand(newVersionCmd())
+	cmd.AddCommand(newTapCommand())
+	return cmd
 }

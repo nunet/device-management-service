@@ -3,7 +3,7 @@ package main
 import "gitlab.com/nunet/device-management-service/cmd"
 
 //	@title			Device Management Service
-//	@version		0.4.159
+//	@version		0.4.185
 //	@description	A dashboard application for computing providers.
 //	@termsOfService	https://nunet.io/tos
 
@@ -15,6 +15,9 @@ import "gitlab.com/nunet/device-management-service/cmd"
 //	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
 
 // @host		localhost:9999
+//
+// @Schemes	http
+//
 // @BasePath	/api/v1
 func main() {
 	cmd.Execute()

@@ -1,0 +1,97 @@
+' START PREAMBLE
+
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
+
+
+' END PREAMBLE
+
+left to right direction
+'top to bottom direction
+
+' comment to show all classes that are not yet described in the diagram
+hide <<hide>>
+
+
+' START DIAGRAM
+
+' END DIAGRAM
+
+' START SUBPACKAGES
+
+'package api {
+    !include $rootUrlGitlab/api/specs/class_diagram.puml
+' }
+
+'package cmd {
+    !include $rootUrlGitlab/cmd/specs/class_diagram.puml
+'}
+
+'package db {
+    !include $rootUrlGitlab/db/specs/class_diagram.puml
+'}
+
+'package dms {
+    !include $rootUrlGitlab/dms/specs/class_diagram.puml
+'}
+
+'package executor {
+    !include $rootUrlGitlab/executor/specs/class_diagram.puml
+'}
+
+'package internal {
+    !include $rootUrlGitlab/internal/specs/class_diagram.puml
+'}
+
+'package types {
+    !include $rootUrlGitlab/types/specs/class_diagram.puml
+'}
+
+'package network {
+    !include $rootUrlGitlab/network/specs/class_diagram.puml
+'}
+
+'package plugins {
+    !include $rootUrlGitlab/plugins/specs/class_diagram.puml
+'}
+
+'package storage {
+    !include $rootUrlGitlab/storage/specs/class_diagram.puml
+'}
+
+'package telemetry {
+    !include $rootUrlGitlab/telemetry/specs/class_diagram.puml
+'}
+
+'package tokenomics {
+    !include $rootUrlGitlab/tokenomics/specs/class_diagram.puml
+'}
+
+'package utils {
+    !include $rootUrlGitlab/utils/specs/class_diagram.puml
+'}
+
+' END SUBPACKAGES
+
+' START INTER-PACKAGE RELATIONS
+types.ID ..|> dms.jobs.AllocationID
+
+dms.orchestrator.matching.ComparatorMap::ExecutorsComparator <|-- types.Executors 
+dms.orchestrator.matching.ComparatorMap::ExecutorTypeComparator <|-- types.ExecutorType
+dms.orchestrator.matching.ComparatorMap::GPUsComparator <|-- types.GPUs
+dms.orchestrator.matching.ComparatorMap::GPUVendorComparator <|-- types.GPUVendor
+dms.orchestrator.matching.ComparatorMap::GPUComparator <|-- types.GPU
+dms.orchestrator.matching.ComparatorMap::JobTypesComparator <|-- types.JobTypes
+dms.orchestrator.matching.ComparatorMap::LibraryComparator <|-- types.Library
+dms.orchestrator.matching.ComparatorMap::LocalityComparator <|-- types.Locality
+
+
+dms.orchestrator.matching.Comparator::Compare <|-- types.Comparison 
+
+types.ID ..|> dms.node.NodeID
+
+db.repositories.GenericRepository <|.. telemetry.DatabaseCollector
+
+dms.node.Actor -- network.libp2p.P2P
+
+' END INTER-PACKAGE RELATIONS

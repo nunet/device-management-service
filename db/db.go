@@ -3,40 +3,40 @@ package db
 import (
 	"fmt"
 
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/models"
+	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 var DB *gorm.DB
 
-func ConnectDatabase() {
-	database, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", config.GetConfig().General.MetadataPath)), &gorm.Config{})
-
+func ConnectDatabase(dbPath string) (*gorm.DB, error) {
+	database, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", dbPath)), &gorm.Config{})
 	if err != nil {
 		panic("Failed to connect to database!")
 	}
 
-	database.AutoMigrate(&models.ElasticToken{})
-	database.AutoMigrate(&models.VirtualMachine{})
-	database.AutoMigrate(&models.Machine{})
-	database.AutoMigrate(&models.AvailableResources{})
-	database.AutoMigrate(&models.FreeResources{})
-	database.AutoMigrate(&models.PeerInfo{})
-	database.AutoMigrate(&models.Services{})
-	database.AutoMigrate(&models.ServiceResourceRequirements{})
-	database.AutoMigrate(&models.ContainerImages{})
-	database.AutoMigrate(&models.RequestTracker{})
-	database.AutoMigrate(&models.Libp2pInfo{})
-	database.AutoMigrate(&models.DeploymentRequestFlat{})
-	database.AutoMigrate(&models.MachineUUID{})
-	database.AutoMigrate(&models.Connection{})
-	database.AutoMigrate(&models.LogBinAuth{})
+	_ = database.AutoMigrate(&types.ElasticToken{})
+	_ = database.AutoMigrate(&types.VirtualMachine{})
+	_ = database.AutoMigrate(&types.Machine{})
+	_ = database.AutoMigrate(&types.AvailableResources{})
+	_ = database.AutoMigrate(&types.FreeResources{})
+	_ = database.AutoMigrate(&types.PeerInfo{})
+	_ = database.AutoMigrate(&types.Services{})
+	_ = database.AutoMigrate(&types.ServiceResourceRequirements{})
+	_ = database.AutoMigrate(&types.ContainerImages{})
+	_ = database.AutoMigrate(&types.RequestTracker{})
+	_ = database.AutoMigrate(&types.Libp2pInfo{})
+	_ = database.AutoMigrate(&types.DeploymentRequestFlat{})
+	_ = database.AutoMigrate(&types.MachineUUID{})
+	_ = database.AutoMigrate(&types.Connection{})
+	_ = database.AutoMigrate(&types.OnboardedResources{})
+	_ = database.AutoMigrate(&types.MachineResources{})
+	_ = database.AutoMigrate(&types.OnboardingConfig{})
+	_ = database.AutoMigrate(&types.ResourceAllocation{})
 
+	// TODO remove once all DB usage is transitioned to the repos
 	DB = database
-	if err := DB.Use(otelgorm.NewPlugin()); err != nil {
-		panic(err)
-	}
+
+	return database, nil
 }

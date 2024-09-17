@@ -2,32 +2,91 @@ variables:
   # https://hub.docker.com/r/alpine/git/tags
   GIT_VERSION: v2.30.1
   BUILD_DISABLED: "yes"
-  DMS_BUILDER_VERSION: "0.4"
+  DMS_BUILDER_VERSION: "0.5-boot"
+  BUILD_IMAGE_ONLY: false
+  # CODE_QUALITY_DISABLED: true
+  # SKIP_UNIT_TESTS: true
+  # INTEGRATION_TESTS_DISABLED: true
+  # DEFECTDOJO_DISABLED: true
+  # CONTAINER_SCANNIG_DISABLED: true
+  # SAST_DISABLED: true
+  # SECRET_DETECTION_DISABLED: true
+  # SEMVER_DISABLED: true
+  # SONARQUBE_DISABLED: true
+  # FEATURE_ENVIRONMENT_DISABLED: true
 
 include:
-  project: nunet/nunet-infra
-  file: ci/templates/Auto-DevOps.gitlab-ci.yml
-  ref: develop
+  project: nunet/test-suite
+  file: cicd/Auto-DevOps.gitlab-ci.yml
+  ref: release
+  rules:
+    - if: $BUILD_IMAGE_ONLY == "true"
+      when: never
+    - when: always
 
-image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:0.3
+image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:$DMS_BUILDER_VERSION
 
 Build:
   stage: build
+  dependencies: []
+  needs: []
   script:
     - echo "Building debian archives..."
     - bash maint-scripts/build.sh
-  only:
-    refs:
-      - $CI_DEFAULT_BRANCH
-      - main
-      - staging
-      - develop
   artifacts:
     untracked: false
     when: on_success
     expire_in: "30 days"
     paths:
       - dist/
+  rules:
+    - if: $BUILD_IMAGE_ONLY == "true"
+      when: never
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
+      when: never
+    - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
+      when: never
+    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
+    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
+      when: manual
+    - when: never
+
+build:osx:
+  stage: build
+  tags:
+    - saas-macos-medium-m1
+  image: macos-14-xcode-15
+  dependencies: []
+  needs: []
+  variables:
+    HOMEBREW_NO_AUTO_UPDATE: 1
+  script:
+    - echo "Building debian archives..."
+    - brew install pandoc
+    - bash maint-scripts/build-bsd.sh
+  artifacts:
+    untracked: false
+    when: on_success
+    expire_in: "30 days"
+    paths:
+      - dist/
+  allow_failure: true
+  rules:
+    - if: $BUILD_IMAGE_ONLY == "true"
+      when: never
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
+      when: never
+    - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
+      when: never
+    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
+      when: manual
+    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
+      when: manual
+    - when: never
+
 
 Build DMS Builder:
   stage: build
@@ -36,12 +95,15 @@ Build DMS Builder:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD registry.gitlab.com
   script:
-    - docker build -f maint-scripts/Dockerfile.builder -t ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION}
+    - docker build -f maint-scripts/Dockerfile.builder -t ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION} maint-scripts/
     - docker push ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION}
   rules:
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
+      when: never
+    - if: $BUILD_IMAGE_ONLY == "true"
     - changes: 
         - maint-scripts/Dockerfile.builder
-      if: $CI_COMMIT_BRANCH == "develop"
+      if: $CI_COMMIT_BRANCH == "main"
 
 Deploy DMS:
   stage: deploy
@@ -58,47 +120,24 @@ Deploy DMS:
       - $CI_DEFAULT_BRANCH
 
 .git:push:
-  after_script:
-    - cd "${CI_COMMIT_SHA}"
-
-    - git checkout -B ${CI_COMMIT_BRANCH}
-    
-    - git add .
-    
-    - |-
-      CHANGES=$(git status --porcelain | wc -l)
-
-      if [ "$CHANGES" -gt "0" ]; then
-        git status
-
-        git commit -m "${COMMIT_MESSAGE}"
-
-        git push -f origin "${CI_COMMIT_BRANCH}"  
-      
-      fi
-
   before_script:
     - git clone "https://${GITLAB_USERNAME}:${GITLAB_TOKEN}@${CI_SERVER_HOST}/nunet/open-api/device-management-api-spec" "${CI_COMMIT_SHA}"
-
     - git config --global user.email "${GIT_USER_EMAIL:-$GITLAB_USER_EMAIL}"
     - git config --global user.name "${GIT_USER_NAME:-$GITLAB_USER_NAME}"
-
+  after_script:
+    - cd "${CI_COMMIT_SHA}"
+    - git checkout -B ${CI_COMMIT_BRANCH}
+    - git add .
+    - |-
+      CHANGES=$(git status --porcelain | wc -l)
+      if [ "$CHANGES" -gt "0" ]; then
+        git status
+        git commit -m "${COMMIT_MESSAGE}"
+        git push -f origin "${CI_COMMIT_BRANCH}"  
+      fi
   image:
     entrypoint: ['']
     name: alpine/git:${GIT_VERSION}
-
-deploy:openapi:
-  extends: .git:push
-  stage: .pre
-  script:
-    - mv docs/swagger.json "${CI_COMMIT_SHA}"
-    - mv docs/device-management-api-spec.yaml "${CI_COMMIT_SHA}"
-  only:
-    refs:
-      - $CI_DEFAULT_BRANCH
-      - main
-      - staging
-
 
 Deploy:
   stage: deploy
@@ -118,4 +157,9 @@ Deploy:
     - DMS_VERSION=$(cat main.go | grep @version | awk {'print $3'})
     - ansible-playbook -i $ANSIBLE_INVENTORY -e dms_version=$DMS_VERSION maint-scripts/deploy/playbook.yaml 
   rules:
+    - when: never
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
+      when: never
+    - if: $BUILD_IMAGE_ONLY == "true"
+      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "staging"

@@ -1,0 +1,148 @@
+package actor
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
+
+	"gitlab.com/nunet/device-management-service/cmd/utils"
+	dmsUtil "gitlab.com/nunet/device-management-service/utils"
+)
+
+const (
+	fnTimeout     = "timeout"
+	fnExpiry      = "expiry"
+	fnContextName = "context"
+	fnDest        = "dest"
+
+	bBroadcast = "broadcast"
+	bInvoke    = "invoke"
+	bSend      = "send"
+)
+
+func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cmd",
+		Short: "Invoke a predefined behavior on an actor",
+		Long: `Invoke a predefined behavior on an actor
+
+Example:
+ nunet actor cmd /broadcast/hello --dest did:key:<some-key>
+
+For more information on the list of available behaviors, refer to cmd/actor/README.md`,
+		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+			if len(args) > 0 {
+				return nil, cobra.ShellCompDirectiveDefault
+			}
+			var completions []string
+			for k := range behaviors {
+				completions = append(completions, strings.Split(k, "/")[2])
+			}
+			return completions, cobra.ShellCompDirectiveNoFileComp
+		},
+		Run: func(cmd *cobra.Command, _ []string) {
+			err := cmd.Help()
+			if err != nil {
+				cmd.Println(err)
+			}
+		},
+	}
+
+	for behavior := range behaviors {
+		if behaviorCfg, ok := behaviors[behavior]; ok {
+			cmd.AddCommand(newActorCmdCmd(client, afs, behavior, behaviorCfg))
+		}
+	}
+
+	cmd.PersistentFlags().StringP(fnContextName, "c", "", "capability context name")
+	cmd.PersistentFlags().DurationP(fnTimeout, "t", 0, "timeout duration")
+	cmd.PersistentFlags().VarP(utils.NewTimeValue(&time.Time{}), fnExpiry, "e", "expiration time")
+	cmd.PersistentFlags().StringP(fnDest, "d", "", "destination DMS DID, peer ID or handle")
+	cmd.MarkFlagsMutuallyExclusive(fnTimeout, fnExpiry)
+	return cmd
+}
+
+func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string, behaviorCfg behaviorConfig) *cobra.Command {
+	payload := &Payload{val: nil}
+	if behaviorCfg.Payload != nil {
+		payload.val = behaviorCfg.Payload()
+	}
+
+	cmd := &cobra.Command{
+		Use:               fmt.Sprintf("%s [<param> ...]", behavior),
+		Short:             fmt.Sprintf("Invoke %s behavior on an actor", behavior),
+		ValidArgsFunction: behaviorCfg.ValidArgsFn,
+		Args:              behaviorCfg.Args,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			timeout, _ := cmd.Flags().GetDuration(fnTimeout)
+			expiry, _ := utils.GetTime(cmd.Flags(), fnExpiry)
+			contextName, _ := cmd.Flags().GetString(fnContextName)
+			dest, _ := cmd.Flags().GetString(fnDest)
+
+			dmsHandle, err := getDMSHandle(client)
+			if err != nil {
+				return fmt.Errorf("could not get source DMS handle: %w", err)
+			}
+
+			topic := ""
+			if behaviorCfg.Type == bBroadcast {
+				topic = behaviorCfg.Topic
+			}
+
+			if behaviorCfg.PayloadEnc != nil {
+				payload.val, err = behaviorCfg.PayloadEnc(cmd, payload.val)
+				if err != nil {
+					return fmt.Errorf("could not marshal payload: %w", err)
+				}
+			}
+
+			invocation := behaviorCfg.Type == bInvoke
+
+			msg, err := newActorMessage(afs, dmsHandle, dest, topic, behavior, payload.val, timeout, expiry, invocation, contextName)
+			if err != nil {
+				return fmt.Errorf("could not create message: %w", err)
+			}
+
+			msgData, err := json.Marshal(msg)
+			if err != nil {
+				return fmt.Errorf("could not marshal message: %w", err)
+			}
+
+			endpoint := fmt.Sprintf("/actor/%s", behaviorCfg.Type)
+			resBody, resCode, err := client.MakeRequest("POST", endpoint, msgData)
+			if err != nil {
+				fmt.Println("err", err)
+				return fmt.Errorf("unable to make internal request: %w", err)
+			}
+			if resCode != 200 {
+				return fmt.Errorf("request failed with status code: %d", resCode)
+			}
+
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "    ")
+
+			if behaviorCfg.Type == bBroadcast {
+				var resMsgs []cmdResponse
+				if err := json.Unmarshal(resBody, &resMsgs); err != nil {
+					return fmt.Errorf("could not unmarshal response: %w", err)
+				}
+				return enc.Encode(resMsgs)
+			}
+			var resMsg cmdResponse
+			if err := json.Unmarshal(resBody, &resMsg); err != nil {
+				return nil
+			}
+			return enc.Encode(resMsg)
+		},
+	}
+
+	if behaviorCfg.SetFlags != nil {
+		behaviorCfg.SetFlags(cmd, payload.val)
+	}
+
+	return cmd
+}

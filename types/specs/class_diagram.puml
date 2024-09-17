@@ -1,0 +1,99 @@
+' START DIAGRAM
+    class models.ID {
+        +String UUID
+        +String CID
+        +generateUUID() UUID
+        +generateCID() CID
+    }
+
+    class models.SpecConfig
+
+    enum models.Comparison <<comparison.go>>{
+   Worse
+   Better
+   Equal
+   Error
+ }
+ 
+class models.Capability <<capability.go>> {
+   Executors : Executors
+   JobTypes : JobTypes
+   Resources : Resources
+   Libraries : []Library
+   Localities : []Locality
+   Storage : []Storage
+   Connectivity : Connectivity
+   Price : []PriceInformation
+   Time : []TimeInformation
+   KYCs : []KYC
+}
+
+class models.Connectivity <<capability.go>> {
+   Ports : []int
+   VPN : bool
+}
+
+class models.PriceInformation <<capability.go>> {
+   Currency : string
+   CurrencyPerHour : int
+   TotalPerJob : int
+   Preference : int
+}
+
+class models.TimeInformation  <<capability.go>> {
+    - Units: string
+    - MaxTime: int
+    - Preference: int
+}
+
+class models.Library  <<capability.go>> {
+    - Name: string
+    - Constraint: string
+    - Version: string
+}
+
+class models.Locality  <<capability.go>> {
+    - Kind: string
+    - Name: string
+}
+
+class models.Storage  <<capability.go>> {
+    - Type: string
+    - Size: int
+    - Amount: int
+}
+
+class models.KYC  <<capability.go>> {
+    - Type: string
+    - Data: string
+}
+
+enum models.JobType  <<capability.go>> {
+    BATCH
+    SINGLERUN
+    RECURRING
+    LONGRUNNING
+}
+
+class models.JobTypes <<capability.go>> {
+    - jobTypes: JobType[]
+}
+
+class models.Executors <<capability.go>> {
+    - executors: Executor[]
+}
+
+' END DIAGRAM
+
+' START IN-PACKAGE RELATIONS
+models.Capability::Executors o-- models.Executors
+models.Capability::JobTypes o-- models.JobTypes
+models.Capability::Resources o-- models.Resources
+models.Capability::Libraries o-- models.Library
+models.Capability::Localities o-- models.Locality
+models.Capability::Storage o-- models.Storage
+models.Capability::Connectivity o-- models.Connectivity
+models.Capability::Price o-- models.PriceInformation
+models.Capability::Time o-- models.TimeInformation
+models.Capability::KYCs o-- models.KYC
+' END IN-PACKAGE RELATIONS

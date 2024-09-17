@@ -1,0 +1,69 @@
+ ' START PREAMBLE
+
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
+
+' package relative path: change this for each package
+!$packageRelativePath = "/db/repositories"
+
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+
+' uncomment the following line to render all locally
+' !$rootUrl = $rootUrlLocal
+' uncomment the following line to render all from gitlab
+!$rootUrl = $packageUrlGitlab
+
+' END PREAMBLE
+
+' START DIAGRAM
+    class db.repositories.QueryConditions {
+        Field string
+        Operator string
+        Value interface
+    }
+
+    class db.repositories.Query {
+        +Instance T
+        +Conditions []QueryConditions
+        +SortBy string
+        +Limit int
+        +Offset int
+    }
+
+    interface db.repositories.GenericRepository {
+        +Create(data T) T, error
+        +Get() T, error
+        +Update(id interface, data T) T, error
+        +Delete(id interface) error
+        +Find(query Query) T, error
+        +FindAll(query Query) []T, error
+        +GetQuery() Query
+    }
+
+    interface db.repositories.GenericEntityRepository {
+        +Save(data T) T, error
+        +Get() T, error
+        +Clear() error
+        +History(query Query) []T, error
+        +GetQuery() Query
+    }
+'END DIAGRAM
+
+' START SUBPACKAGES
+
+'package db.repositories.repositories_clover {
+    !include $rootUrl/clover/specs/class_diagram.puml
+'}
+
+'package db.repositories.repositories_gorm {
+    !include $rootUrl/gorm/specs/class_diagram.puml
+'}
+
+' END SUBPACKAGES
+
+'START IN-PACKAGE RELATIONS
+db.repositories.repositories_gorm.GenericEntityRepositoryGorm <|.. db.repositories.GenericEntityRepository
+db.repositories.repositories_gorm.GenericRepositoryGorm <|.. db.repositories.GenericRepository
+db.repositories.repositories_clover.GenericEntityRepositoryClover <|.. db.repositories.GenericEntityRepository
+db.repositories.repositories_clover.GenericRepositoryClover <|.. db.repositories.GenericRepository
+' END IN-PACKAGE RELATIONS

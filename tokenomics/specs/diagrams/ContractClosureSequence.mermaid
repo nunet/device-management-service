@@ -1,0 +1,49 @@
+sequenceDiagram
+    participant Requester
+    participant ComputeProvider
+    participant Orchestrator
+    participant Contract
+    participant DMS
+    participant Models
+    participant DB
+
+
+
+    Note over Orchestrator,ComputeProvider: Notify compute provider for best selected bid
+    ComputeProvider-->>ComputeProvider: Prepares contract draft
+
+    Note over Requester, ComputeProvider: Contract Negotiation
+    Requester->>ComputeProvider: Negotiate Contract Terms(Payment type, Payment Schedule, Proof type)
+    ComputeProvider-->>Requester: Respond to Negotiation
+    Requester->>ComputeProvider: Finalize Contract Terms
+    ComputeProvider-->>Requester: Agree on Final Terms
+
+    Note over Orchestrator, Contract: Contract Initiation
+    Orchestrator->>Contract: initiateContract(bid)
+    Contract->>DMS: Create NodeIDs for Requester and ComputeProvider
+    Contract->>Contract: NewContract(bid.JobID, bid.BidRequest.RequesterID, bid.Bidder)
+    Contract->>Contract: Set Status to "initiated"
+    Contract->>Contract: Set Proof to "Initial proof details"
+
+    Note over Contract, Requester: Signing the Contract
+    Contract->>Requester: SignContract(RequesterID)
+    Requester-->>Contract: Sign with NodeID(RequesterID)
+    Contract->>Contract: Append Requester Signature
+    Contract->>Contract: Check Signatures Count
+
+    Note over Contract, ComputeProvider: Compute Provider Signing the Contract
+    Contract->>ComputeProvider: SignContract(ProviderID)
+    ComputeProvider-->>Contract: Sign with NodeID(ProviderID)
+    Contract->>Contract: Append Compute Provider Signature
+    Contract->>Contract: Check Signatures Count
+    Contract->>Contract: Set Status to "signed" (if signatures >= 2)
+
+    Note over Orchestrator, Contract: Contract Closure and Job Allocation
+    Orchestrator->>Contract: closeContract()
+    Contract->>Contract: CloseContract()
+    Contract->>Contract: Check if Status is "signed"
+    Contract->>Contract: Set Status to "closed" (if status is "signed")
+    Contract-->>Orchestrator: Contract Closed
+   Note over  Contract, DB: Contract Saved in Database
+    Orchestrator->>ComputeProvider: Allocate Job
+    ComputeProvider-->>Orchestrator: Job Started

@@ -1,0 +1,58 @@
+' START PREAMBLE
+
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/main"
+
+' package relative path: change this for each package
+!$packageRelativePath = "/dms"
+
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
+
+' uncomment the following line to render all locally
+' !$rootUrl = $rootUrlLocal
+' uncomment the following line to render all from gitlab
+!$rootUrl = $packageUrlGitlab
+
+' END PREAMBLE
+
+' START SUBPACKAGES
+
+'package dms.actor {
+    !include $rootUrl/actor/specs/class_diagram.puml
+'}
+
+'package dms.jobs {
+    !include $rootUrl/jobs/specs/class_diagram.puml
+'}
+
+'package dms.node {
+    !include $rootUrl/node/specs/class_diagram.puml
+'}
+
+'package dms.onboarding {
+    !include $rootUrl/onboarding/specs/class_diagram.puml
+'}
+
+'package dms.resources {
+    !include $rootUrl/resources/specs/class_diagram.puml
+'}
+
+'package dms.orchestrator {
+    !include $rootUrl/orchestrator/specs/class_diagram.puml
+'}
+
+
+
+' END SUBPACKAGES
+
+' START IN-PACKAGE RELATIONS
+
+dms.node.Actor -- dms.orchestrator.Messaging
+
+dms.node.Actor ..|> dms.jobs.Allocation
+dms.orchestrator.Orchestrator ..|> dms.node.Node
+dms.orchestrator.graph.Vertex ..|> dms.node.Node
+dms.orchestrator.graph.Vertex ..|> dms.jobs.Allocation
+
+' END IN-PACKAGE RELATIONS
+
