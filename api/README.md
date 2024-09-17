@@ -8,17 +8,6 @@
 - [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
-## Table of Contents
-
-1. [Description](#description)
-2. [Structure and Organisation](#structure-and-organisation)
-3. [Class Diagram](#class-diagram)
-4. [Functionality](#functionality)
-5. [Data Types](#data-types)
-6. [Testing](#testing)
-7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
-8. [References](#references)
-
 
 ## Specification
 
