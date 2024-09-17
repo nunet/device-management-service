@@ -4,16 +4,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
-
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -174,10 +177,11 @@ func TestSelfDial(t *testing.T) {
 	assert.NoError(t, err)
 	peer1p2pAddrs, err := peer1.GetMultiaddr()
 	assert.NoError(t, err)
-	err = peer1.SendMessage(context.Background(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{
-		Type: messageType,
-		Data: []byte("testing 123"),
-	})
+	err = peer1.SendMessage(context.Background(), []string{peer1p2pAddrs[0].String()},
+		types.MessageEnvelope{
+			Type: messageType,
+			Data: []byte("testing 123"),
+		})
 	assert.NoError(t, err)
 	// check if we received the data properlly
 	received := <-messageChannel
@@ -196,7 +200,8 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	customMessageProtocol := types.MessageType("/chat/1.1.1")
 
 	helloWorlPayload := "hello world"
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()},
+		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
 	assert.ErrorContains(t, err, "protocols not supported: [/chat/1.1.1]")
 
 	// 2. peer1 registers the message
@@ -214,7 +219,8 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	assert.ErrorContains(t, err, "stream with this protocol is already registered")
 
 	// 4. send message from peer2 and wait to get the response from peer1
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()},
+		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
 	assert.NoError(t, err)
 	peer1MessageContent := <-payloadReceived
 	assert.Equal(t, helloWorlPayload, peer1MessageContent)
@@ -222,14 +228,16 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	// 5. open stream functionality
 	streamPayloadMessage := "nunet world"
 	streamPayloadReceived := make(chan string)
-	err = peer1.RegisterStreamMessageHandler(types.MessageType("/custom_stream/1.2.3"), func(stream network.Stream) {
-		bytesToRead := make([]byte, len([]byte(streamPayloadMessage)))
-		_, err := stream.Read(bytesToRead)
-		assert.NoError(t, err)
-		streamPayloadReceived <- string(bytesToRead)
-	})
+	err = peer1.RegisterStreamMessageHandler(types.MessageType("/custom_stream/1.2.3"),
+		func(stream network.Stream) {
+			bytesToRead := make([]byte, len([]byte(streamPayloadMessage)))
+			_, err := stream.Read(bytesToRead)
+			assert.NoError(t, err)
+			streamPayloadReceived <- string(bytesToRead)
+		})
 	assert.NoError(t, err)
-	openedStream, err := peer2.OpenStream(context.TODO(), peer1p2pAddrs[0].String(), types.MessageType("/custom_stream/1.2.3"))
+	openedStream, err := peer2.OpenStream(context.TODO(), peer1p2pAddrs[0].String(),
+		types.MessageType("/custom_stream/1.2.3"))
 	assert.NoError(t, err)
 	_, err = openedStream.Write([]byte("nunet world"))
 	assert.NoError(t, err)
@@ -239,14 +247,162 @@ func TestSendMessageAndHandlers(t *testing.T) {
 
 	// 6. register message with bytes handler function
 	secondPayloadReceived := make(chan string)
-	err = peer1.RegisterBytesMessageHandler(types.MessageType("/custom_bytes_callback/1.1.4"), func(dt []byte) {
-		secondPayloadReceived <- string(dt)
-	})
+	err = peer1.RegisterBytesMessageHandler(
+		types.MessageType("/custom_bytes_callback/1.1.4"), func(dt []byte) {
+			secondPayloadReceived <- string(dt)
+		})
 	assert.NoError(t, err)
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()}, types.MessageEnvelope{Type: types.MessageType("/custom_bytes_callback/1.1.4"), Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(),
+		[]string{peer1p2pAddrs[0].String()},
+		types.MessageEnvelope{
+			Type: types.MessageType("/custom_bytes_callback/1.1.4"),
+			Data: []byte(helloWorlPayload),
+		})
 	assert.NoError(t, err)
 	messageFromBytesHandler := <-secondPayloadReceived
 	assert.Equal(t, helloWorlPayload, messageFromBytesHandler)
+}
+
+func TestStop(t *testing.T) {
+	peer1, _, _ := createPeers(t, 65527, 65528, 65529)
+
+	// Stop the peer and check for errors
+	err := peer1.Stop()
+	require.NoError(t, err)
+
+	// Ensure that the DHT and Host are closed
+	require.NoError(t, peer1.DHT.Close())
+	require.NoError(t, peer1.Host.Close())
+}
+
+func TestStat(t *testing.T) {
+	peer1, _, _ := createPeers(t, 65530, 65531, 65532)
+
+	// Get the network stats
+	stats := peer1.Stat()
+
+	// Check if the ID is correct
+	require.Equal(t, peer1.Host.ID().String(), stats.ID)
+
+	// Check if the ListenAddr is correct
+	expectedAddrs := make([]string, 0, len(peer1.Host.Addrs()))
+	for _, addr := range peer1.Host.Addrs() {
+		expectedAddrs = append(expectedAddrs, addr.String())
+	}
+	expectedListenAddr := strings.Join(expectedAddrs, ", ")
+	require.Equal(t, expectedListenAddr, stats.ListenAddr)
+}
+
+func TestSetupBroadcastTopic(t *testing.T) {
+	peer1, _, _ := createPeers(t, 65533, 65534, 65535)
+
+	// Test case: topic not subscribed
+	err := peer1.SetupBroadcastTopic("nonexistent_topic", func(_ *Topic) error {
+		return nil
+	})
+	require.ErrorContains(t, err, "not subscribed to nonexistent_topic")
+
+	// Test case: topic subscribed and setup function succeeds
+	topicName := "test_topic"
+	topicHandler, err := peer1.getOrJoinTopicHandler(topicName)
+	require.NoError(t, err)
+	peer1.pubsubTopics[topicName] = topicHandler
+
+	err = peer1.SetupBroadcastTopic(topicName, func(_ *Topic) error {
+		// Simulate setup logic
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Test case: topic subscribed and setup function fails
+	err = peer1.SetupBroadcastTopic(topicName, func(_ *Topic) error {
+		// Simulate setup logic failure
+		return fmt.Errorf("setup failed")
+	})
+	require.ErrorContains(t, err, "setup failed")
+}
+
+func TestKnownPeers(t *testing.T) {
+	peer1, peer2, peer3 := createPeers(t, 65200, 65201, 65202)
+
+	// Add peers to the peerstore
+	peer1ID := peer1.Host.ID()
+	peer2ID := peer2.Host.ID()
+	peer3ID := peer3.Host.ID()
+
+	peer1.Host.Peerstore().AddAddrs(peer2ID, peer2.Host.Addrs(), peerstore.PermanentAddrTTL)
+	peer1.Host.Peerstore().AddAddrs(peer3ID, peer3.Host.Addrs(), peerstore.PermanentAddrTTL)
+
+	// Test KnownPeers method
+	peers, err := peer1.KnownPeers()
+	require.NoError(t, err)
+	require.Len(t, peers, 3)
+
+	expectedPeers := []peer.ID{peer1ID, peer2ID, peer3ID}
+	for _, p := range peers {
+		require.Contains(t, expectedPeers, p.ID)
+	}
+}
+
+func TestVisiblePeers(t *testing.T) {
+	peer1, peer2, peer3 := createPeers(t, 65203, 65204, 65205)
+
+	// Add discovered peers to peer1
+	peer1.discoveredPeers = []peer.AddrInfo{
+		{ID: peer2.Host.ID(), Addrs: peer2.Host.Addrs()},
+		{ID: peer3.Host.ID(), Addrs: peer3.Host.Addrs()},
+	}
+
+	// Test VisiblePeers method
+	visiblePeers := peer1.VisiblePeers()
+	require.Len(t, visiblePeers, 2)
+
+	expectedPeers := []peer.ID{peer2.Host.ID(), peer3.Host.ID()}
+	for _, p := range visiblePeers {
+		require.Contains(t, expectedPeers, p.ID)
+	}
+}
+
+func TestGetBroadcastScore(t *testing.T) {
+	peer1, _, _ := createPeers(t, 65136, 65137, 65138)
+
+	// Initialize some dummy scores
+	dummyScores := map[peer.ID]*PeerScoreSnapshot{
+		peer1.Host.ID(): {
+			Score: 10.0,
+		},
+	}
+
+	// Set the dummy scores
+	peer1.broadcastScoreInspect(dummyScores)
+
+	// Retrieve the broadcast scores
+	scores := peer1.GetBroadcastScore()
+
+	// Check if the scores match the dummy scores
+	require.Equal(t, dummyScores, scores)
+	require.Equal(t, 10.0, scores[peer1.Host.ID()].Score)
+}
+
+func TestBroadcastScoreInspect(t *testing.T) {
+	peer1, _, _ := createPeers(t, 65139, 65140, 65141)
+
+	// Initialize some dummy scores
+	dummyScores := map[peer.ID]*PeerScoreSnapshot{
+		peer1.Host.ID(): {
+			Score: 10.0,
+		},
+	}
+
+	// Call broadcastScoreInspect with the dummy scores
+	peer1.broadcastScoreInspect(dummyScores)
+
+	// Retrieve the broadcast scores
+	scores := peer1.GetBroadcastScore()
+
+	// Check if the scores match the dummy scores
+	require.Equal(t, dummyScores, scores)
+	require.Equal(t, 10.0, scores[peer1.Host.ID()].Score)
 }
 
 func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp2p) {
