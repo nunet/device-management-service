@@ -15,6 +15,10 @@ const (
 	BroadcastHelloTopic    = "/nunet/hello"
 )
 
+type HellResponse struct {
+	DID did.DID
+}
+
 type PublicStatusResponse struct {
 	Status    string
 	Resources types.Resources
@@ -54,7 +58,8 @@ func (n *Node) handleHello(msg actor.Envelope) {
 	defer msg.Discard()
 	log.Debugf("hello from %s", msg.From)
 
-	n.sendReply(msg, nil)
+	resp := HellResponse{DID: n.actor.Security().DID()}
+	n.sendReply(msg, resp)
 }
 
 func (n *Node) publicStatusBehavior(msg actor.Envelope) {
