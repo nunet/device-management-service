@@ -436,7 +436,7 @@ NuNet is a computing platform that provides globally distributed and optimized c
 Detailed information about the NuNet platform, concepts, architecture, models, stakeholders can be found in these two papers:
 
 - [White Paper](https://docs.nunet.io/nunet-whitepaper)
-- [Yellow Paper](https://gitlab.com/nunet/publisher/platform-yellow-paper/-/tree/main)
+- [Yellow Paper](https://docs.nunet.io/docs/v/nunet-yellow-paper/readme/main)
 
 DMS (Device Management Service) acts as the foundation of the NuNet platform, orchestrating the complex interactions between various computing resources and users. DMS implementation is structured into packages, creating a more maintainable, scalable, and robust codebase that is easier to understand, test, and collaborate on. Here are the existing packages in DMS and their purposes:
 
