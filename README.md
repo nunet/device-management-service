@@ -324,7 +324,7 @@ The second command consumes the token and adds the require anchor for your DMS
 
 2. **Ask NuNet for a public network capability token**
 
-TODO
+To request tokens for participating in the testnet, please go to [did.nunet.io](https://did.nunet.io) and submit the did you generated along with your gitlab username and an email address to receive the token. It's highly recommended that you use a Ledger hardware wallet for your keys.
 
 3. **Use the NuNet granted token to authorize public behavior invocations in the public network**
 
