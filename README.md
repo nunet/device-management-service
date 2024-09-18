@@ -58,7 +58,7 @@
 
 ## About
 
-**Device Management Service** or **DMS** enables a machine to join the decentralized NuNet network both as a compute provider, offering its resources to the network, or to leverage the compute power of other machines in the network for processing tasks. Users with available hardware resources can get compensated whenever their machine is utilized for a computational job by other users in the network. The ultimate goal is to create a decentralized compute economy that is able sustains itself.
+**Device Management Service** or **DMS** enables a machine to join the decentralized NuNet network both as a compute provider, offering its resources to the network, or to leverage the compute power of other machines in the network for processing tasks. Eventually users with available hardware resources will get compensated whenever their machine is utilized for a computational job by other users in the network. The ultimate goal of the platorm is to create a decentralized compute economy that is able to sustain itself.
 
 ### Payment
 
