@@ -124,7 +124,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 func (l *Libp2p) Init(context context.Context) error {
 	host, dht, pubsub, err := NewHost(context, l.config, l.broadcastAppScore, l.broadcastScoreInspect)
 	if err != nil {
-		zlog.Sugar().Error(err)
+		log.Error(err)
 		return err
 	}
 
@@ -146,7 +146,7 @@ func (l *Libp2p) Start(context context.Context) error {
 	// bootstrap should return error if it had an error
 	err := l.Bootstrap(context, l.config.BootstrapPeers)
 	if err != nil {
-		zlog.Sugar().Errorf("failed to start network: %v", err)
+		log.Errorf("failed to start network: %v", err)
 		return err
 	}
 
@@ -155,13 +155,13 @@ func (l *Libp2p) Start(context context.Context) error {
 	if err != nil {
 		// TODO: the error might be misleading as a peer can normally work well if an error
 		// is returned here (e.g.: the error is yielded in tests even though all tests pass).
-		zlog.Sugar().Errorf("failed to start network with randevouz discovery: %v", err)
+		log.Errorf("failed to start network with randevouz discovery: %v", err)
 	}
 
 	// discover
 	err = l.DiscoverDialPeers(context)
 	if err != nil {
-		zlog.Sugar().Errorf("failed to discover peers: %v", err)
+		log.Errorf("failed to discover peers: %v", err)
 	}
 
 	// register period peer discoveryTask task
@@ -233,7 +233,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 
 	// check if the message length is greater than max allowed
 	if lengthPrefix > maxMessageLengthMB*MB {
-		zlog.Sugar().Errorf("received a big message: %d", lengthPrefix)
+		log.Errorf("received a big message: %d", lengthPrefix)
 		s.Close()
 		return
 	}
@@ -373,7 +373,7 @@ func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Du
 	select {
 	case res := <-pingChan:
 		if res.Error != nil {
-			zlog.Sugar().Errorf("failed to ping peer %s: %v", peerIDAddress, res.Error)
+			log.Errorf("failed to ping peer %s: %v", peerIDAddress, res.Error)
 			return types.PingResult{
 				Success: false,
 				RTT:     res.RTT,
@@ -685,7 +685,7 @@ func (l *Libp2p) Notify(ctx context.Context, connected, disconnected func(peer.I
 			case <-ctx.Done():
 				return
 			case ev = <-sub.Out():
-				if c, ok := ev.(*event.EvtPeerConnectednessChanged); ok {
+				if c, ok := ev.(event.EvtPeerConnectednessChanged); ok {
 					switch c.Connectedness {
 					case network.Connected:
 						connected(c.Peer)

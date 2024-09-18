@@ -18,10 +18,6 @@ import (
 
 // Bootstrap using a list.
 func (l *Libp2p) Bootstrap(ctx context.Context, bootstrapPeers []multiaddr.Multiaddr) error {
-	if err := l.DHT.Bootstrap(ctx); err != nil {
-		return fmt.Errorf("failed to prepare this node for bootstraping: %w", err)
-	}
-
 	// bootstrap all nodes at the same time.
 	if len(bootstrapPeers) > 0 {
 		var wg sync.WaitGroup
@@ -31,17 +27,21 @@ func (l *Libp2p) Bootstrap(ctx context.Context, bootstrapPeers []multiaddr.Multi
 				defer wg.Done()
 				addrInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
 				if err != nil {
-					zlog.Sugar().Errorf("failed to convert multi addr to addr info %v - %v", peerAddr, err)
+					log.Errorf("failed to convert multi addr to addr info %v - %v", peerAddr, err)
 					return
 				}
 				if err := l.Host.Connect(ctx, *addrInfo); err != nil {
-					zlog.Sugar().Errorf("failed to connect to bootstrap node %s - %v", addrInfo.ID.String(), err)
+					log.Errorf("failed to connect to bootstrap node %s - %v", addrInfo.ID.String(), err)
 				} else {
-					zlog.Sugar().Infof("connected to Bootstrap Node %s", addrInfo.ID.String())
+					log.Infof("connected to Bootstrap Node %s", addrInfo.ID.String())
 				}
 			}(addr)
 		}
 		wg.Wait()
+	}
+
+	if err := l.DHT.Bootstrap(ctx); err != nil {
+		return fmt.Errorf("failed to prepare this node for bootstraping: %w", err)
 	}
 
 	return nil

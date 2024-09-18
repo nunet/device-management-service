@@ -60,12 +60,12 @@ func (l *Libp2p) dialPeers(ctx context.Context) {
 			_, err := l.Host.Network().DialPeer(ctx, p.ID)
 			if err != nil {
 				if _, debugMode := os.LookupEnv("NUNET_DEBUG_VERBOSE"); debugMode {
-					zlog.Sugar().Debugf("couldn't establish connection with: %s - error: %v", p.ID.String(), err)
+					log.Debugf("couldn't establish connection with: %s - error: %v", p.ID.String(), err)
 				}
 				continue
 			}
 			if _, debugMode := os.LookupEnv("NUNET_DEBUG_VERBOSE"); debugMode {
-				zlog.Sugar().Debugf("connected with: %s", p.ID.String())
+				log.Debugf("connected with: %s", p.ID.String())
 			}
 		}
 	}
