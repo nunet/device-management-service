@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -22,13 +23,16 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ws "github.com/libp2p/go-libp2p/p2p/transport/websocket"
 	webtransport "github.com/libp2p/go-libp2p/p2p/transport/webtransport"
-	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	mafilt "github.com/whyrusleeping/multiaddr-filter"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 // NewHost returns a new libp2p host with dht and other related settings.
 func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p peer.ID) float64, scoreInspect pubsub.ExtendedPeerScoreInspectFn) (host.Host, *dht.IpfsDHT, *pubsub.PubSub, error) {
+	newPeer := make(chan peer.AddrInfo)
+
 	var idht *dht.IpfsDHT
 	connmgr, err := connmgr.NewConnManager(
 		100,
@@ -39,13 +43,13 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		return nil, nil, nil, err
 	}
 
-	filter := multiaddr.NewFilters()
+	filter := ma.NewFilters()
 	for _, s := range defaultServerFilters {
 		f, err := mafilt.NewMask(s)
 		if err != nil {
-			zlog.Sugar().Errorf("incorrectly formatted address filter in config: %s - %v", s, err)
+			log.Errorf("incorrectly formatted address filter in config: %s - %v", s, err)
 		}
-		filter.AddFilter(*f, multiaddr.ActionDeny)
+		filter.AddFilter(*f, ma.ActionDeny)
 	}
 
 	ps, err := pstoremem.NewPeerstore()
@@ -57,7 +61,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	baseOpts := []dht.Option{
 		dht.ProtocolPrefix(protocol.ID(config.DHTPrefix)),
 		dht.NamespacedValidator(strings.ReplaceAll(config.CustomNamespace, "/", ""), dhtValidator{PS: ps}),
-		dht.Mode(dht.ModeServer),
+		dht.Mode(dht.ModeAutoServer),
 	}
 
 	libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings(config.ListenAddress...),
@@ -81,15 +85,6 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),
 		libp2p.EnableRelayService(
-			relay.WithResources(
-				relay.Resources{
-					MaxReservations:        256,
-					MaxCircuits:            32,
-					BufferSize:             4096,
-					MaxReservationsPerPeer: 8,
-					MaxReservationsPerIP:   16,
-				},
-			),
 			relay.WithLimit(&relay.RelayLimit{
 				Duration: 5 * time.Minute,
 				Data:     1 << 21, // 2 MiB
@@ -135,6 +130,8 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		return nil, nil, nil, err
 	}
 
+	go watchForNewPeers(ctx, host, newPeer)
+
 	optsPS := []pubsub.Option{
 		pubsub.WithFloodPublish(true),
 		pubsub.WithMessageSigning(true),
@@ -167,4 +164,38 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		return nil, nil, nil, err
 	}
 	return host, idht, gossip, nil
+}
+
+func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.AddrInfo) {
+	sub, err := host.EventBus().Subscribe([]interface{}{
+		&event.EvtPeerIdentificationCompleted{},
+		&event.EvtPeerProtocolsUpdated{},
+	})
+	if err != nil {
+		log.Errorf("failed to subscribe to peer identification events: %v", err)
+		return
+	}
+	defer sub.Close()
+
+	for ctx.Err() == nil {
+		var ev any
+
+		select {
+		case <-ctx.Done():
+			return
+		case ev = <-sub.Out():
+		}
+
+		if ev, ok := ev.(event.EvtPeerIdentificationCompleted); ok {
+			var publicAddrs []ma.Multiaddr
+			for _, addr := range ev.ListenAddrs {
+				if manet.IsPublicAddr(addr) {
+					publicAddrs = append(publicAddrs, addr)
+				}
+			}
+			if len(publicAddrs) > 0 {
+				newPeer <- peer.AddrInfo{ID: ev.Peer, Addrs: publicAddrs}
+			}
+		}
+	}
 }
