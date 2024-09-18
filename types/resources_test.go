@@ -271,9 +271,9 @@ func TestResources_Comparable_Compare(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.r.Compare(tt.other); got != tt.want {
-				t.Errorf("Resources.Compare() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.r.Compare(tt.other)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

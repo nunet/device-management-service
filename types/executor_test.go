@@ -3,6 +3,8 @@ package types
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecutorType_Comparable(t *testing.T) {
@@ -21,19 +23,19 @@ func TestExecutorType_Comparable(t *testing.T) {
 			want: Equal,
 		},
 		{
-			name: "Error",
+			name: "None",
 			l:    ExecutorTypeDocker,
 			r:    ExecutorTypeFirecracker,
-			want: Error,
+			want: None,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.l.Compare(tt.r); got != tt.want {
-				t.Errorf("ExecutorType.ComplexCompare() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.l.Compare(tt.r)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -58,23 +60,23 @@ func TestExecutor_Comparable(t *testing.T) {
 			want: Equal,
 		},
 		{
-			name: "Error",
+			name: "None",
 			e: &Executor{
 				ExecutorType: ExecutorTypeDocker,
 			},
 			r: Executor{
 				ExecutorType: ExecutorTypeFirecracker,
 			},
-			want: Error,
+			want: None,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.e.Compare(tt.r); got != tt.want {
-				t.Errorf("Executor.ComplexCompare() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.e.Compare(tt.r)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -137,7 +139,7 @@ func TestExecutors_Comparable(t *testing.T) {
 			want: Better,
 		},
 		{
-			name: "Error",
+			name: "None",
 			l: Executors{
 				Executor{
 					ExecutorType: ExecutorTypeDocker,
@@ -148,16 +150,16 @@ func TestExecutors_Comparable(t *testing.T) {
 					ExecutorType: ExecutorTypeFirecracker,
 				},
 			},
-			want: Error,
+			want: None,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.l.Compare(tt.r); got != tt.want {
-				t.Errorf("ExecutorsComparator() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.l.Compare(tt.r)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

@@ -20,14 +20,28 @@ var (
 )
 
 // Compare compares two Resources objects
-func (r *Resources) Compare(other Resources) Comparison {
-	comparisonMap := ComplexComparison{
-		"CPU":  r.CPU.Compare(other.CPU),
-		"RAM":  r.RAM.Compare(other.RAM),
-		"Disk": r.Disk.Compare(other.Disk),
-		"GPUs": r.GPUs.Compare(other.GPUs),
+func (r *Resources) Compare(other Resources) (Comparison, error) {
+	cpuComp, err := r.CPU.Compare(other.CPU)
+	if err != nil {
+		return None, fmt.Errorf("error comparing CPU: %v", err)
 	}
-	return comparisonMap.Result()
+
+	ramComp, err := r.RAM.Compare(other.RAM)
+	if err != nil {
+		return None, fmt.Errorf("error comparing RAM: %v", err)
+	}
+
+	diskComp, err := r.Disk.Compare(other.Disk)
+	if err != nil {
+		return None, fmt.Errorf("error comparing Disk: %v", err)
+	}
+
+	gpuComp, err := r.GPUs.Compare(other.GPUs)
+	if err != nil {
+		return None, fmt.Errorf("error comparing GPUs: %v", err)
+	}
+
+	return cpuComp.And(ramComp).And(diskComp).And(gpuComp), nil
 }
 
 // Add returns the sum of the resources

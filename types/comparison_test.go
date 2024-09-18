@@ -13,27 +13,27 @@ func TestComparison_And(t *testing.T) {
 		expected []Comparison
 	}
 
-	comparisons := []Comparison{Better, Worse, Equal, Error}
+	comparisons := []Comparison{Better, Worse, Equal, None}
 	tests := []testCase{
 		{
 			name:     "Better checks",
 			c:        Better,
-			expected: []Comparison{Better, Worse, Better, Error},
+			expected: []Comparison{Better, Worse, Better, None},
 		},
 		{
 			name:     "Worse checks",
 			c:        Worse,
-			expected: []Comparison{Worse, Worse, Worse, Error},
+			expected: []Comparison{Worse, Worse, Worse, Worse},
 		},
 		{
 			name:     "Equal checks",
 			c:        Equal,
-			expected: []Comparison{Better, Worse, Equal, Error},
+			expected: []Comparison{Better, Worse, Equal, None},
 		},
 		{
-			name:     "Error checks",
-			c:        Error,
-			expected: []Comparison{Error, Error, Error, Error},
+			name:     "None checks",
+			c:        None,
+			expected: []Comparison{None, None, None, None},
 		},
 	}
 
@@ -75,9 +75,9 @@ func TestComplexComparison_Result(t *testing.T) {
 			expected: Better,
 		},
 		{
-			name:     "All comparisons are errors",
-			c:        ComplexComparison{"a": Error, "b": Error, "c": Error},
-			expected: Error,
+			name:     "All comparisons are none",
+			c:        ComplexComparison{"a": None, "b": None, "c": None},
+			expected: None,
 		},
 		{
 			name:     "Mixed comparisons",

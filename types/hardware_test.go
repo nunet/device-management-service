@@ -98,7 +98,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.c1.Compare(tt.c2)
+				got, err := tt.c1.Compare(tt.c2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -146,7 +147,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.r1.Compare(tt.r2)
+				got, err := tt.r1.Compare(tt.r2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -194,7 +196,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.d1.Compare(tt.d2)
+				got, err := tt.d1.Compare(tt.d2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -219,13 +222,14 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 				name: "Unequal GPUVendor",
 				v1:   GPUVendorNvidia,
 				v2:   GPUVendorIntel,
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.v1.Compare(tt.v2)
+				got, err := tt.v1.Compare(tt.v2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -297,7 +301,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.g1.Compare(tt.g2)
+				got, err := tt.g1.Compare(tt.g2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -364,7 +369,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.g1.Compare(tt.g2)
+				got, err := tt.g1.Compare(tt.g2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
