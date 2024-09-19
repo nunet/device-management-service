@@ -40,9 +40,11 @@ func (l *Libp2p) Bootstrap(ctx context.Context, bootstrapPeers []multiaddr.Multi
 		wg.Wait()
 	}
 
-	if err := l.DHT.Bootstrap(ctx); err != nil {
-		return fmt.Errorf("failed to prepare this node for bootstraping: %w", err)
-	}
+	go func() {
+		if err := l.DHT.Bootstrap(ctx); err != nil {
+			log.Errorf("failed to prepare this node for bootstraping: %s", err)
+		}
+	}()
 
 	return nil
 }

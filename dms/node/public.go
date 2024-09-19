@@ -15,7 +15,7 @@ const (
 	BroadcastHelloTopic    = "/nunet/hello"
 )
 
-type HellResponse struct {
+type HelloResponse struct {
 	DID did.DID
 }
 
@@ -56,9 +56,9 @@ func (n *Node) broadcastHelloBehavior(msg actor.Envelope) {
 
 func (n *Node) handleHello(msg actor.Envelope) {
 	defer msg.Discard()
-	log.Debugf("hello from %s", msg.From)
+	log.Debugf("hello from %s", msg.From.Address.HostID)
 
-	resp := HellResponse{DID: n.actor.Security().DID()}
+	resp := HelloResponse{DID: n.actor.Security().DID()}
 	n.sendReply(msg, resp)
 }
 

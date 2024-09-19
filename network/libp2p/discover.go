@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/libp2p/go-libp2p/core/discovery"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 )
@@ -56,7 +55,7 @@ func (l *Libp2p) dialPeers(ctx context.Context) {
 		if p.ID == l.Host.ID() {
 			continue
 		}
-		if l.Host.Network().Connectedness(p.ID) != network.Connected {
+		if !l.PeerConnected(p.ID) {
 			_, err := l.Host.Network().DialPeer(ctx, p.ID)
 			if err != nil {
 				if _, debugMode := os.LookupEnv("NUNET_DEBUG_VERBOSE"); debugMode {

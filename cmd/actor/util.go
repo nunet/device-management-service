@@ -156,9 +156,11 @@ func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, top
 	}
 
 	delegate := []ucan.Capability{}
-	if replyTo != "" && topic == "" {
+	if replyTo != "" {
 		opts = append(opts, actor.WithMessageReplyTo(replyTo))
-		delegate = append(delegate, ucan.Capability(replyTo))
+		if topic == "" {
+			delegate = append(delegate, ucan.Capability(replyTo))
+		}
 	}
 
 	opts = append(opts, actor.WithMessageSignature(sctx, []ucan.Capability{ucan.Capability(behavior)}, delegate))

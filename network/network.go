@@ -15,6 +15,7 @@ import (
 
 type (
 	PeerID            = libp2p.PeerID
+	ProtocolID        = libp2p.ProtocolID
 	Topic             = libp2p.Topic
 	Validator         = libp2p.Validator
 	ValidationResult  = libp2p.ValidationResult
@@ -30,7 +31,7 @@ const (
 // Messenger defines the interface for sending messages.
 type Messenger interface {
 	// SendMessage sends a message to the given address.
-	SendMessage(ctx context.Context, addrs []string, msg types.MessageEnvelope) error
+	SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope) error
 }
 
 type Network interface {
@@ -76,7 +77,7 @@ type Network interface {
 	GetBroadcastScore() map[PeerID]*PeerScoreSnapshot
 	// Notify allows the application to receive notifications about peer connections
 	// and disconnecions
-	Notify(ctx context.Context, connected, disconnected func(PeerID)) error
+	Notify(ctx context.Context, preconnected func(PeerID, []ProtocolID, int), connected, disconnected func(PeerID), identified, updated func(PeerID, []ProtocolID)) error
 	// PeerConnected returs true if the peer is currently connected
 	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
