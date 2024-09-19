@@ -64,8 +64,8 @@ func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType types.Mes
 
 // SendMessageToLocalHandler given the message type it sends data to the local handler found.
 func (r *HandlerRegistry) SendMessageToLocalHandler(messageType types.MessageType, data []byte) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	protoID := protocol.ID(messageType)
 	h, ok := r.bytesHandlers[protoID]

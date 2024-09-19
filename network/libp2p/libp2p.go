@@ -52,6 +52,7 @@ const (
 
 type (
 	PeerID            = peer.ID
+	ProtocolID        = protocol.ID
 	Topic             = pubsub.Topic
 	PubSub            = pubsub.PubSub
 	ValidationResult  = pubsub.ValidationResult
@@ -212,9 +213,11 @@ func (l *Libp2p) HandleMessage(messageType string, handler func(data []byte)) er
 }
 
 func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
+	l.handlerRegistry.mu.RLock()
 	callback, ok := l.handlerRegistry.bytesHandlers[s.Protocol()]
+	l.handlerRegistry.mu.RUnlock()
 	if !ok {
-		s.Close()
+		_ = s.Reset()
 		return
 	}
 
@@ -225,6 +228,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
+		_ = s.Reset()
 		return
 	}
 
@@ -233,8 +237,8 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 
 	// check if the message length is greater than max allowed
 	if lengthPrefix > maxMessageLengthMB*MB {
-		log.Errorf("received a big message: %d", lengthPrefix)
-		s.Close()
+		_ = s.Reset()
+		log.Errorf("received too a big message: %d", lengthPrefix)
 		return
 	}
 
@@ -243,9 +247,11 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
+		_ = s.Reset()
 		return
 	}
 
+	_ = s.Close()
 	callback(buf)
 }
 
@@ -255,33 +261,13 @@ func (l *Libp2p) UnregisterMessageHandler(messageType string) {
 }
 
 // SendMessage sends a message to a list of peers.
-func (l *Libp2p) SendMessage(ctx context.Context, addrs []string, msg types.MessageEnvelope) error {
-	var wg sync.WaitGroup
-	errCh := make(chan error, len(addrs))
-
-	for _, addr := range addrs {
-		wg.Add(1)
-		go func(addr string) {
-			defer wg.Done()
-			err := l.sendMessage(ctx, addr, msg)
-			if err != nil {
-				errCh <- err
-			}
-		}(addr)
-	}
-	wg.Wait()
-	close(errCh)
-
-	var result error
-	for err := range errCh {
-		if result == nil {
-			result = err
-		} else {
-			result = fmt.Errorf("%v; %v", result, err)
-		}
+func (l *Libp2p) SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope) error {
+	addrs, err := l.resolveAddress(ctx, hostID)
+	if err != nil {
+		return fmt.Errorf("error resolving addresses for peer %s: %w", hostID, err)
 	}
 
-	return result
+	return l.sendMessage(ctx, addrs, msg)
 }
 
 // OpenStream opens a stream to a remote address and returns the stream for the caller to handle.
@@ -394,48 +380,54 @@ func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Du
 
 // ResolveAddress resolves the address by given a peer id.
 func (l *Libp2p) ResolveAddress(ctx context.Context, id string) ([]string, error) {
+	ai, err := l.resolveAddress(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, 0, len(ai.Addrs))
+	for _, addr := range ai.Addrs {
+		result = append(result, fmt.Sprintf("%s/p2p/%s", addr, id))
+	}
+
+	return result, nil
+}
+
+func (l *Libp2p) resolveAddress(ctx context.Context, id string) (peer.AddrInfo, error) {
 	pid, err := peer.Decode(id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve invalid peer: %w", err)
+		return peer.AddrInfo{}, fmt.Errorf("failed to resolve invalid peer: %w", err)
 	}
 
 	// resolve ourself
 	if l.Host.ID().String() == id {
-		multiAddrs, err := l.GetMultiaddr()
+		addrs, err := l.GetMultiaddr()
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve self: %w", err)
-		}
-		resolved := make([]string, len(multiAddrs))
-		for i, v := range multiAddrs {
-			resolved[i] = v.String()
+			return peer.AddrInfo{}, fmt.Errorf("failed to resolve self: %w", err)
 		}
 
-		return resolved, nil
+		return peer.AddrInfo{ID: pid, Addrs: addrs}, nil
+	}
+
+	switch l.Host.Network().Connectedness(pid) {
+	case network.Limited:
+		fallthrough
+	case network.Connected:
+		addrs := l.Host.Peerstore().Addrs(pid)
+		return peer.AddrInfo{
+			ID:    pid,
+			Addrs: addrs,
+		}, nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	pi, err := l.DHT.FindPeer(ctx, pid)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve address %s: %w", id, err)
+		return peer.AddrInfo{}, fmt.Errorf("failed to resolve address %s: %w", id, err)
 	}
 
-	peerInfo := peer.AddrInfo{
-		ID:    pi.ID,
-		Addrs: pi.Addrs,
-	}
-
-	multiAddrs, err := peer.AddrInfoToP2pAddrs(&peerInfo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert to p2p address: %w", err)
-	}
-
-	resolved := make([]string, len(multiAddrs))
-	for i, v := range multiAddrs {
-		resolved[i] = v.String()
-	}
-
-	return resolved, nil
+	return pi, nil
 }
 
 // Query return all the advertisements in the network related to a key.
@@ -662,17 +654,23 @@ func (l *Libp2p) broadcastScoreInspect(score map[peer.ID]*PeerScoreSnapshot) {
 	l.pubsubScore = score
 }
 
-func (l *Libp2p) Notify(ctx context.Context, connected, disconnected func(peer.ID)) error {
+func (l *Libp2p) Notify(ctx context.Context, preconnected func(peer.ID, []protocol.ID, int), connected, disconnected func(peer.ID), identified, updated func(peer.ID, []protocol.ID)) error {
 	sub, err := l.Host.EventBus().Subscribe([]interface{}{
 		&event.EvtPeerConnectednessChanged{},
+		&event.EvtPeerIdentificationCompleted{},
+		&event.EvtPeerProtocolsUpdated{},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to event bus: %w", err)
 	}
 
 	for _, p := range l.Host.Network().Peers() {
-		if l.Host.Network().Connectedness(p) == network.Connected {
-			connected(p)
+		switch l.Host.Network().Connectedness(p) {
+		case network.Limited:
+			fallthrough
+		case network.Connected:
+			protos, _ := l.Host.Peerstore().GetProtocols(p)
+			preconnected(p, protos, len(l.Host.Network().ConnsToPeer(p)))
 		}
 	}
 
@@ -685,13 +683,20 @@ func (l *Libp2p) Notify(ctx context.Context, connected, disconnected func(peer.I
 			case <-ctx.Done():
 				return
 			case ev = <-sub.Out():
-				if c, ok := ev.(event.EvtPeerConnectednessChanged); ok {
-					switch c.Connectedness {
+				switch evt := ev.(type) {
+				case event.EvtPeerConnectednessChanged:
+					switch evt.Connectedness {
+					case network.Limited:
+						fallthrough
 					case network.Connected:
-						connected(c.Peer)
+						connected(evt.Peer)
 					case network.NotConnected:
-						disconnected(c.Peer)
+						disconnected(evt.Peer)
 					}
+				case event.EvtPeerIdentificationCompleted:
+					identified(evt.Peer, evt.Protocols)
+				case event.EvtPeerProtocolsUpdated:
+					updated(evt.Peer, evt.Added)
 				}
 			}
 		}
@@ -701,39 +706,38 @@ func (l *Libp2p) Notify(ctx context.Context, connected, disconnected func(peer.I
 }
 
 func (l *Libp2p) PeerConnected(p PeerID) bool {
-	return l.Host.Network().Connectedness(p) == network.Connected
+	switch l.Host.Network().Connectedness(p) {
+	case network.Limited:
+		return true
+	case network.Connected:
+		return true
+	default:
+		return false
+	}
 }
 
-func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg types.MessageEnvelope) error {
-	peerAddr, err := multiaddr.NewMultiaddr(addr)
-	if err != nil {
-		return fmt.Errorf("invalid multiaddr %s: %v", addr, err)
-	}
-
-	peerInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
-	if err != nil {
-		return fmt.Errorf("failed to get peer info %s: %v", addr, err)
-	}
-
+func (l *Libp2p) sendMessage(ctx context.Context, ai peer.AddrInfo, msg types.MessageEnvelope) error {
 	// we are delivering a message to ourself
 	// we should use the handler to send the message to the handler directly which has been previously registered.
-	if peerInfo.ID.String() == l.Host.ID().String() {
+	if ai.ID == l.Host.ID() {
 		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data)
 		return nil
 	}
 
-	if err := l.Host.Connect(ctx, *peerInfo); err != nil {
-		return fmt.Errorf("failed to connect to peer %v: %v", peerInfo.ID, err)
+	if err := l.Host.Connect(ctx, ai); err != nil {
+		return fmt.Errorf("failed to connect to peer %v: %v", ai.ID, err)
 	}
 
-	stream, err := l.Host.NewStream(ctx, peerInfo.ID, protocol.ID(msg.Type))
+	ctx = network.WithAllowLimitedConn(ctx, "send message")
+	stream, err := l.Host.NewStream(ctx, ai.ID, protocol.ID(msg.Type))
 	if err != nil {
-		return fmt.Errorf("failed to open stream to peer %v: %v", peerInfo.ID, err)
+		return fmt.Errorf("failed to open stream to peer %v: %v", ai.ID, err)
 	}
 	defer stream.Close()
 
 	requestBufferSize := 8 + len(msg.Data)
 	if requestBufferSize > maxMessageLengthMB*MB {
+		_ = stream.Reset()
 		return fmt.Errorf("message size %d is greater than limit %d bytes", requestBufferSize, maxMessageLengthMB*MB)
 	}
 
@@ -741,10 +745,12 @@ func (l *Libp2p) sendMessage(ctx context.Context, addr string, msg types.Message
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(msg.Data)))
 	copy(requestPayloadWithLength[8:], msg.Data)
 
-	_, err = stream.Write(requestPayloadWithLength)
-	if err != nil {
-		return fmt.Errorf("failed to send message to peer %v: %v", peerInfo.ID, err)
+	if _, err = stream.Write(requestPayloadWithLength); err != nil {
+		_ = stream.Reset()
+		return fmt.Errorf("failed to send message to peer %v: %w", ai.ID, err)
 	}
+
+	_ = stream.CloseWrite()
 
 	return nil
 }

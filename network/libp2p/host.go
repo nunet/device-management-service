@@ -121,8 +121,6 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	if config.Server {
 		libp2pOpts = append(libp2pOpts, libp2p.AddrsFactory(makeAddrsFactory([]string{}, []string{}, defaultServerFilters)))
 		libp2pOpts = append(libp2pOpts, libp2p.ConnectionGater((*filtersConnectionGater)(filter)))
-	} else {
-		libp2pOpts = append(libp2pOpts, libp2p.NATPortMap())
 	}
 
 	host, err := libp2p.New(libp2pOpts...)
@@ -135,7 +133,6 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	optsPS := []pubsub.Option{
 		pubsub.WithFloodPublish(true),
 		pubsub.WithMessageSigning(true),
-		pubsub.WithMaxMessageSize(config.GossipMaxMessageSize),
 		pubsub.WithPeerScore(
 			&pubsub.PeerScoreParams{
 				SkipAtomicValidation: true,
@@ -157,6 +154,9 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		),
 		pubsub.WithPeerExchange(true),
 		pubsub.WithPeerScoreInspect(scoreInspect, time.Second),
+	}
+	if config.GossipMaxMessageSize > 0 {
+		optsPS = append(optsPS, pubsub.WithMaxMessageSize(config.GossipMaxMessageSize))
 	}
 	gossip, err := pubsub.NewGossipSub(ctx, host, optsPS...)
 	// gossip, err := pubsub.NewGossipSubWithRouter(ctx, host, pubsub.DefaultGossipSubRouter(host), optsPS...)

@@ -358,12 +358,16 @@ func (n *Node) handleListVM(msg actor.Envelope) {
 }
 
 type PeerScoreResponse struct {
-	Score map[peer.ID]*network.PeerScoreSnapshot
+	Score map[string]*network.PeerScoreSnapshot
 }
 
 func (n *Node) handlePeerScore(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := PeerScoreResponse{Score: n.network.GetBroadcastScore()}
+	resp := PeerScoreResponse{Score: make(map[string]*network.PeerScoreSnapshot)}
+	snapshot := n.network.GetBroadcastScore()
+	for p, score := range snapshot {
+		resp.Score[p.String()] = score
+	}
 	n.sendReply(msg, resp)
 }
