@@ -179,7 +179,9 @@ func TestSelfDial(t *testing.T) {
 		types.MessageEnvelope{
 			Type: messageType,
 			Data: []byte("testing 123"),
-		})
+		},
+		time.Now().Add(readTimeout),
+	)
 	assert.NoError(t, err)
 	// check if we received the data properlly
 	received := <-messageChannel
@@ -199,7 +201,8 @@ func TestSendMessageAndHandlers(t *testing.T) {
 
 	helloWorlPayload := "hello world"
 	err = peer2.SendMessage(context.TODO(), peer1.Host.ID().String(),
-		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)},
+		time.Now().Add(readTimeout))
 	assert.ErrorContains(t, err, "protocols not supported: [/chat/1.1.1]")
 
 	// 2. peer1 registers the message
@@ -218,7 +221,8 @@ func TestSendMessageAndHandlers(t *testing.T) {
 
 	// 4. send message from peer2 and wait to get the response from peer1
 	err = peer2.SendMessage(context.TODO(), peer1.Host.ID().String(),
-		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)},
+		time.Now().Add(readTimeout))
 	assert.NoError(t, err)
 	peer1MessageContent := <-payloadReceived
 	assert.Equal(t, helloWorlPayload, peer1MessageContent)
@@ -255,7 +259,8 @@ func TestSendMessageAndHandlers(t *testing.T) {
 		types.MessageEnvelope{
 			Type: types.MessageType("/custom_bytes_callback/1.1.4"),
 			Data: []byte(helloWorlPayload),
-		})
+		},
+		time.Now().Add(readTimeout))
 	assert.NoError(t, err)
 	messageFromBytesHandler := <-secondPayloadReceived
 	assert.Equal(t, helloWorlPayload, messageFromBytesHandler)

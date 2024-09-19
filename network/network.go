@@ -31,7 +31,7 @@ const (
 // Messenger defines the interface for sending messages.
 type Messenger interface {
 	// SendMessage sends a message to the given address.
-	SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope) error
+	SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope, expiry time.Time) error
 }
 
 type Network interface {
