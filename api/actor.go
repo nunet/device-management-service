@@ -247,7 +247,9 @@ func SendMessage(ctx context.Context, net *libp2p.Libp2p, msg actor.Envelope) (e
 				fmt.Sprintf("actor/%s/messages/0.0.1", msg.To.Address.InboxAddress),
 			),
 			Data: data,
-		})
+		},
+		msg.Expiry(),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to send message to %s: %w", msg.To.ID, err)
 	}

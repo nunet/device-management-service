@@ -48,6 +48,8 @@ const (
 	ValidationAccept = pubsub.ValidationAccept
 	ValidationReject = pubsub.ValidationReject
 	ValidationIgnore = pubsub.ValidationIgnore
+
+	readTimeout = 30 * time.Second
 )
 
 type (
@@ -221,6 +223,12 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 		return
 	}
 
+	if err := s.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		_ = s.Reset()
+		log.Warnf("error setting read deadline: %s", err)
+		return
+	}
+
 	c := bufio.NewReader(s)
 	defer s.Close()
 
@@ -228,6 +236,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	msgLengthBuffer := make([]byte, 8)
 	_, err := c.Read(msgLengthBuffer)
 	if err != nil {
+		log.Debugf("error reading message length: %s", err)
 		_ = s.Reset()
 		return
 	}
@@ -238,7 +247,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	// check if the message length is greater than max allowed
 	if lengthPrefix > maxMessageLengthMB*MB {
 		_ = s.Reset()
-		log.Errorf("received too a big message: %d", lengthPrefix)
+		log.Warnf("message length exceeds maximum: %d", lengthPrefix)
 		return
 	}
 
@@ -247,6 +256,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	// read the full message
 	_, err = io.ReadFull(c, buf)
 	if err != nil {
+		log.Debugf("error reading message: %s", err)
 		_ = s.Reset()
 		return
 	}
@@ -261,13 +271,16 @@ func (l *Libp2p) UnregisterMessageHandler(messageType string) {
 }
 
 // SendMessage sends a message to a list of peers.
-func (l *Libp2p) SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope) error {
+func (l *Libp2p) SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope, expiry time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Until(expiry))
+	defer cancel()
+
 	addrs, err := l.resolveAddress(ctx, hostID)
 	if err != nil {
 		return fmt.Errorf("error resolving addresses for peer %s: %w", hostID, err)
 	}
 
-	return l.sendMessage(ctx, addrs, msg)
+	return l.sendMessage(ctx, addrs, msg, expiry)
 }
 
 // OpenStream opens a stream to a remote address and returns the stream for the caller to handle.
@@ -716,7 +729,7 @@ func (l *Libp2p) PeerConnected(p PeerID) bool {
 	}
 }
 
-func (l *Libp2p) sendMessage(ctx context.Context, ai peer.AddrInfo, msg types.MessageEnvelope) error {
+func (l *Libp2p) sendMessage(ctx context.Context, ai peer.AddrInfo, msg types.MessageEnvelope, expiry time.Time) error {
 	// we are delivering a message to ourself
 	// we should use the handler to send the message to the handler directly which has been previously registered.
 	if ai.ID == l.Host.ID() {
@@ -744,6 +757,11 @@ func (l *Libp2p) sendMessage(ctx context.Context, ai peer.AddrInfo, msg types.Me
 	requestPayloadWithLength := make([]byte, requestBufferSize)
 	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(msg.Data)))
 	copy(requestPayloadWithLength[8:], msg.Data)
+
+	if err := stream.SetWriteDeadline(expiry); err != nil {
+		_ = stream.Reset()
+		return fmt.Errorf("failed to set write deadline: %w", err)
+	}
 
 	if _, err = stream.Write(requestPayloadWithLength); err != nil {
 		_ = stream.Reset()
