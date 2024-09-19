@@ -97,8 +97,9 @@ We currently support Linux and MacOS (Darwin).
 #### Dependencies
 
 - iproute2 (linux only)
+- build-essential (linux only)s
 - libsystemd-dev (linux only)
-- go (v1.21 or later)
+- go (v1.21.7 or later)
 
 Clone the repository:
 
@@ -114,6 +115,12 @@ make
 ```
 
 This will result in a binary file in builds/ folder named as `dms_linux_amd64` or `dms_darwin_arm64` depending on the platform.
+
+To cross compile to arm, cross compilers need to be installed. In particular arm-linux-gnueabihf and aarch64-linux-gnu.
+For debian systems, install with:
+```
+apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+```
 
 You can add the compiled binary to a directory in your `$PATH`. See the [Usage](#usage) section for more information.
 
@@ -308,10 +315,10 @@ did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
 
 ```
 # Create the grant
-$ nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-dir>
+$ nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-did>
 
 # or if you are using a Ledger Wallet
-$ nunet cap grant --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-dir>
+$ nunet cap grant --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-did>
 
 # And the granted token as a require anchor
 $ nunet cap anchor --context dms --require <the-grant-output>
@@ -336,10 +343,10 @@ $ nunet cap anchor --context user --provide <the-token-you-got-from-nunet>
 $ nunet cap anchor --context ledger:user --provide <the-token-you-got-from-nunet>
 
 # Delegate to your DMS
-$ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-dir>
+$ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-did>
 
 # or if you are using a Ledger Wallet
-$ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-dir>
+$ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-did>
 
 $ nunet cap anchor --context dms --require <the-delegate-output>
 ```

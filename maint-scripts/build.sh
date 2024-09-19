@@ -22,6 +22,7 @@ mkdir -p $outputDir
 
 for arch in amd64 arm64 arm32
 do
+
     # echo .deb file will be written to: $outputDir
     archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$arch
     cp -r $projectRoot/maint-scripts/nunet-dms $archDir
@@ -30,6 +31,13 @@ do
 
     go version # redundant check of go version
     make linux_$arch
+
+    # check if bin is created successfully
+    if [ ! -f builds/dms_linux_$arch ]; then
+        echo "Error: builds/dms_linux_$arch not found"
+        rm -r $archDir
+        continue
+    fi
 
     # create bin only zip release
     zip -j $outputDir/nunet-dms_${fullVersion}_${arch}.zip builds/dms_linux_$arch
