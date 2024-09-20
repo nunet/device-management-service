@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
@@ -22,6 +24,15 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
+)
+
+const (
+	helloMinDelay = 10 * time.Second
+	helloMaxDelay = 20 * time.Second
+	helloTimeout  = 3 * time.Second
+	helloAttempts = 3
+
+	rootProto = "actor/root/messages/0.0.1"
 )
 
 // Node is the structure that holds the node's dependencies.
@@ -42,8 +53,10 @@ type Node struct {
 }
 
 type peerState struct {
-	conns             int
-	helloIn, helloOut bool
+	conns                           int
+	hasRoot                         bool
+	helloIn, helloOut, helloPending bool
+	helloAttempts                   int
 }
 
 // New creates a new node, attaches an actor to the node.
@@ -262,7 +275,7 @@ func (n *Node) subscribe(topics ...string) error {
 	}
 
 	n.network.SetBroadcastAppScore(n.broadcastScore)
-	if err := n.network.Notify(n.actor.Context(), n.peerConnected, n.peerDisconnected); err != nil {
+	if err := n.network.Notify(n.actor.Context(), n.peerPreConnected, n.peerConnected, n.peerDisconnected, n.peerIdentified, n.peerIdentified); err != nil {
 		return fmt.Errorf("error setting up peer notifications: %w", err)
 	}
 
@@ -288,14 +301,23 @@ func (n *Node) broadcastScore(p peer.ID) float64 {
 	defer n.mx.Unlock()
 
 	st, ok := n.peers[p]
-	if ok && st.helloIn && st.helloOut {
-		return 0.01
+	if !ok {
+		return 0
 	}
 
-	return -100
+	if st.helloIn && st.helloOut {
+		return 5
+	}
+
+	if st.hasRoot {
+		return 1
+	}
+
+	return 0
 }
 
 func (n *Node) peerConnected(p peer.ID) {
+	log.Debugf("peer connected: %s", p)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -305,13 +327,48 @@ func (n *Node) peerConnected(p peer.ID) {
 		n.peers[p] = st
 	}
 
-	if !st.helloOut {
-		go n.sayHello(p)
-	}
 	st.conns++
 }
 
+func (n *Node) peerPreConnected(p peer.ID, protos []protocol.ID, conns int) {
+	log.Debugf("peer preconnected: %s %s (%d)", p, protos, conns)
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	st := &peerState{conns: conns}
+	n.peers[p] = st
+
+	if includesRootProtocol(protos) {
+		st.hasRoot = true
+		st.helloPending = true
+		st.helloAttempts = 1
+		go n.sayHello(p)
+	}
+}
+
+func (n *Node) peerIdentified(p peer.ID, protos []protocol.ID) {
+	log.Debugf("peer identified: %s %s", p, protos)
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	st, ok := n.peers[p]
+	if !ok {
+		st = &peerState{}
+		n.peers[p] = st
+	}
+
+	if includesRootProtocol(protos) {
+		st.hasRoot = true
+		if !st.helloOut && !st.helloPending {
+			st.helloPending = true
+			st.helloAttempts++
+			go n.sayHello(p)
+		}
+	}
+}
+
 func (n *Node) peerDisconnected(p peer.ID) {
+	log.Debugf("peer disconnected: %s", p)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -354,20 +411,48 @@ func (n *Node) sayHello(p peer.ID) {
 		},
 	}
 
+	wait := helloMinDelay + time.Duration(rand.Int63n(int64(helloMaxDelay-helloMinDelay))) //nolint
+	time.Sleep(wait)
+
+	n.mx.Lock()
+	st, ok := n.peers[p]
+	if !ok {
+		n.mx.Unlock()
+		return
+	}
+
+	if !n.network.PeerConnected(p) {
+		st.helloPending = false
+		n.mx.Unlock()
+		return
+	}
+	n.mx.Unlock()
+
 	msg, err := actor.Message(
 		n.actor.Handle(),
 		handle,
 		PublicHelloBehavior,
 		nil,
-		actor.WithMessageTimeout(time.Second),
+		actor.WithMessageTimeout(helloTimeout),
 	)
 	if err != nil {
 		log.Debugf("failed to construct hello message: %s", err)
 		return
 	}
 
+	log.Debugf("saying hello to %s", handle.Address.HostID)
 	replyCh, err := n.actor.Invoke(msg)
 	if err != nil {
+		n.mx.Lock()
+		if st, ok = n.peers[p]; ok {
+			if st.helloAttempts < helloAttempts {
+				st.helloAttempts++
+				go n.sayHello(p)
+			} else {
+				st.helloPending = false
+			}
+		}
+		n.mx.Unlock()
 		log.Debugf("error invoking hello: %s", err)
 		return
 	}
@@ -376,18 +461,29 @@ func (n *Node) sayHello(p peer.ID) {
 	case reply := <-replyCh:
 		reply.Discard()
 		n.mx.Lock()
-		if st, ok := n.peers[p]; ok {
+		if st, ok = n.peers[p]; ok {
 			st.helloOut = true
+			st.helloPending = false
 		} else if n.network.PeerConnected(p) {
-			// rance with connected notification
+			// race with connected notification
 			st = &peerState{helloOut: true}
 			n.peers[p] = st
 		}
 		n.mx.Unlock()
-		log.Infof("got hello from %s", handle)
+		log.Infof("got hello response from %s", handle.Address.HostID)
 
 	case <-time.After(time.Until(msg.Expiry())):
-		log.Debugf("hello timeout for %s", handle)
+		n.mx.Lock()
+		if st, ok = n.peers[p]; ok {
+			if st.helloAttempts < helloAttempts {
+				st.helloAttempts++
+				go n.sayHello(p)
+			} else {
+				st.helloPending = false
+			}
+		}
+		n.mx.Unlock()
+		log.Debugf("hello timeout for %s", handle.Address.HostID)
 	}
 }
 
@@ -426,12 +522,12 @@ func (n *Node) sendReply(msg actor.Envelope, payload interface{}) {
 
 	reply, err := actor.ReplyTo(msg, payload, opt...)
 	if err != nil {
-		log.Debugf("error creating peers list reply: %s", err)
+		log.Debugf("error creating reply: %s", err)
 		return
 	}
 
 	if err := n.actor.Send(reply); err != nil {
-		log.Debugf("error sending peers list reply: %s", err)
+		log.Debugf("error sending  reply: %s", err)
 	}
 }
 
@@ -451,4 +547,14 @@ func createActor(sctx *actor.BasicSecurityContext, limiter actor.RateLimiter, ho
 	}
 
 	return actor, nil
+}
+
+func includesRootProtocol(protos []protocol.ID) bool {
+	for _, proto := range protos {
+		if proto == rootProto {
+			return true
+		}
+	}
+
+	return false
 }

@@ -5,6 +5,7 @@ PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
 PROTOC := protoc
 
 UNAME=$(shell uname)
+ARCH=$(shell uname -m)
 
 DMS_VERSION := "v0.5.0-boot"
 GO_VERSION := $(shell go version | awk '{print $$3}' | sed 's/go//')
@@ -30,12 +31,27 @@ linux_amd64:
 linux_arm64:
 	@echo "Building for Linux ARM64..."
 	go mod tidy
-	GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .
+	@if [ $(ARCH) = "aarch64" ]; then\
+		echo "Building ON ARM64...";\
+		GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .;\
+	elif command -v aarch64-linux-gnu-gcc > /dev/null 2>&1; then\
+		echo "Cross Compiling for aarch64...";\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .;\
+	else\
+		echo "arm64 - no compiler found";\
+	fi
 
 linux_arm32:
-	@echo "Building for Linux ARM32..."
 	go mod tidy
-	GOOS=linux GOARCH=arm go build -o builds/dms_linux_arm32 -ldflags=$(LDFLAGS) .
+	@if [ $(ARCH) = "armv7l" ] || [ $(ARCH) = "armv6l" ]; then\
+		echo "Building ON ARM32...";\
+		GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .;\
+	elif command -v arm-linux-gnueabihf-gcc > /dev/null 2>&1; then\
+		echo "Cross Compiling for arm32...";\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm go build -o builds/dms_linux_arm32 -ldflags=$(LDFLAGS) .;\
+	else\
+		echo "arm32 - no compiler found";\
+	fi
 
 darwin_arm64:
 	@echo "Building for Darwin ARM64..."

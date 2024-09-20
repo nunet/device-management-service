@@ -234,14 +234,6 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 }
 
 func SendMessage(ctx context.Context, net *libp2p.Libp2p, msg actor.Envelope) (err error) {
-	addrs, err := net.ResolveAddress(
-		ctx,
-		msg.To.Address.HostID,
-	)
-	if err != nil {
-		return fmt.Errorf("destination address can't be resolved: %w", err)
-	}
-
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
@@ -249,13 +241,15 @@ func SendMessage(ctx context.Context, net *libp2p.Libp2p, msg actor.Envelope) (e
 
 	err = net.SendMessage(
 		ctx,
-		addrs,
+		msg.To.Address.HostID,
 		types.MessageEnvelope{
 			Type: types.MessageType(
 				fmt.Sprintf("actor/%s/messages/0.0.1", msg.To.Address.InboxAddress),
 			),
 			Data: data,
-		})
+		},
+		msg.Expiry(),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to send message to %s: %w", msg.To.ID, err)
 	}

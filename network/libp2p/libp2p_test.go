@@ -175,13 +175,13 @@ func TestSelfDial(t *testing.T) {
 		messageChannel <- string(dt)
 	})
 	assert.NoError(t, err)
-	peer1p2pAddrs, err := peer1.GetMultiaddr()
-	assert.NoError(t, err)
-	err = peer1.SendMessage(context.Background(), []string{peer1p2pAddrs[0].String()},
+	err = peer1.SendMessage(context.Background(), peer1.Host.ID().String(),
 		types.MessageEnvelope{
 			Type: messageType,
 			Data: []byte("testing 123"),
-		})
+		},
+		time.Now().Add(readTimeout),
+	)
 	assert.NoError(t, err)
 	// check if we received the data properlly
 	received := <-messageChannel
@@ -200,8 +200,9 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	customMessageProtocol := types.MessageType("/chat/1.1.1")
 
 	helloWorlPayload := "hello world"
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()},
-		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(), peer1.Host.ID().String(),
+		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)},
+		time.Now().Add(readTimeout))
 	assert.ErrorContains(t, err, "protocols not supported: [/chat/1.1.1]")
 
 	// 2. peer1 registers the message
@@ -219,8 +220,9 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	assert.ErrorContains(t, err, "stream with this protocol is already registered")
 
 	// 4. send message from peer2 and wait to get the response from peer1
-	err = peer2.SendMessage(context.TODO(), []string{peer1p2pAddrs[0].String()},
-		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)})
+	err = peer2.SendMessage(context.TODO(), peer1.Host.ID().String(),
+		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)},
+		time.Now().Add(readTimeout))
 	assert.NoError(t, err)
 	peer1MessageContent := <-payloadReceived
 	assert.Equal(t, helloWorlPayload, peer1MessageContent)
@@ -253,11 +255,12 @@ func TestSendMessageAndHandlers(t *testing.T) {
 		})
 	assert.NoError(t, err)
 	err = peer2.SendMessage(context.TODO(),
-		[]string{peer1p2pAddrs[0].String()},
+		peer1.Host.ID().String(),
 		types.MessageEnvelope{
 			Type: types.MessageType("/custom_bytes_callback/1.1.4"),
 			Data: []byte(helloWorlPayload),
-		})
+		},
+		time.Now().Add(readTimeout))
 	assert.NoError(t, err)
 	messageFromBytesHandler := <-secondPayloadReceived
 	assert.Equal(t, helloWorlPayload, messageFromBytesHandler)

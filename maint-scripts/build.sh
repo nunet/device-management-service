@@ -15,13 +15,15 @@ projectRoot=$(pwd)
 outputDir="$projectRoot/dist"
 
 # TODO: Update version number from git describe after release
-fullVersion="v0.5.0-boot"
-version=$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+noCommits=$(git rev-list $(git describe --tags --abbrev=0)..HEAD --count )
+fullVersion=$(git describe --tags --abbrev=0)-$noCommits
+version="$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')-${noCommits}"
 
 mkdir -p $outputDir
 
 for arch in amd64 arm64 arm32
 do
+
     # echo .deb file will be written to: $outputDir
     archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$arch
     cp -r $projectRoot/maint-scripts/nunet-dms $archDir
@@ -30,6 +32,13 @@ do
 
     go version # redundant check of go version
     make linux_$arch
+
+    # check if bin is created successfully
+    if [ ! -f builds/dms_linux_$arch ]; then
+        echo "Error: builds/dms_linux_$arch not found"
+        rm -r $archDir
+        continue
+    fi
 
     # create bin only zip release
     zip -j $outputDir/nunet-dms_${fullVersion}_${arch}.zip builds/dms_linux_$arch

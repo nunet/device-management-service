@@ -80,9 +80,7 @@ build:osx:
     - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
       when: never
     - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
-      when: manual
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
-      when: manual
     - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
       when: manual
     - when: never
