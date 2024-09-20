@@ -15,8 +15,9 @@ projectRoot=$(pwd)
 outputDir="$projectRoot/dist"
 
 # TODO: Update version number from git describe after release
-fullVersion="v0.5.0-boot"
-version=$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+noCommits=$(git rev-list $(git describe --tags --abbrev=0)..HEAD --count )
+fullVersion=$(git describe --tags --abbrev=0)-$noCommits
+version="$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')-${noCommits}"
 
 mkdir -p $outputDir
 
