@@ -37,7 +37,6 @@ type OnboardingConfig struct {
 	Network            string             `json:"network,omitempty"`
 	PublicKey          string             `json:"public_key,omitempty"`
 	NodeID             string             `json:"node_id,omitempty"`
-	GpuInfo            []GPU              `json:"gpu_info,omitempty" gorm:"foreignKey:ResourceID"`
 	Dashboard          string             `json:"dashboard,omitempty"`
 	NTXPricePerMinute  float64            `json:"ntx_price,omitempty"`
 }
