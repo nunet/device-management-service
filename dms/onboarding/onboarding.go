@@ -103,8 +103,6 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	oConf.TotalResources.RAM = machineResources.RAM
 	oConf.TotalResources.CPU = machineResources.CPU
 
-	oConf.GpuInfo = machineResources.GPUs
-
 	oConf.OnboardedResources.RAM = types.RAM{Size: capacity.Memory}
 	oConf.OnboardedResources.CPU = types.CPU{Cores: float32(capacity.CPU)}
 	oConf.Network = capacity.Channel
