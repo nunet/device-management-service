@@ -72,19 +72,21 @@ You can install Device Management Service (DMS) via [binary releases](#binary-re
 
 ### Binary releases
 
-You can find all binary releases [here](https://gitlab.com/nunet/device-management-service/-/releases) and other builds in-between releases in the [package registry](https://gitlab.com/nunet/device-management-service/-/packages)
+You can find all binary releases [here](https://gitlab.com/nunet/device-management-service/-/releases) and other builds in-between releases in the [package registry](https://gitlab.com/nunet/device-management-service/-/packages).
+We currently support ARM and AMD64 architectures.
 
 #### Ubuntu/Debian
 
-1. Download the latest .deb pacakge from the package registry:
-2. Install the debian package with `apt` or `dpkg`:
+1. Download the latest .deb package from the [package registry](https://gitlab.com/nunet/device-management-service/-/packages)
+
+2. Install the Debian package with `apt` or `dpkg`:
 
 ```
 sudo apt update
-sudo apt install ./nunet-dms_0.5.0_amd64.deb -y
+sudo apt install ./nunet-dms_<latest>.deb -y
 ```
 
-3. Some dependencies such as docker and libsystemd-dev might be missing so it's recommended to fix install by running:
+3. Some dependencies such as `docker` and `libsystemd-dev` might be missing so it's recommended to fix install by running:
 
 ```
 sudo apt -f install
@@ -118,6 +120,7 @@ This will result in a binary file in builds/ folder named as `dms_linux_amd64` o
 
 To cross compile to arm, cross compilers need to be installed. In particular arm-linux-gnueabihf and aarch64-linux-gnu.
 For debian systems, install with:
+
 ```
 apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 ```
