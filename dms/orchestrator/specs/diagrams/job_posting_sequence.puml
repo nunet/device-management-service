@@ -1,0 +1,16 @@
+@startuml
+actor User as user
+participant "DMS 1\n(a.k.a. Service Provider)" as dms1 #53c68c
+autonumber 1.1
+user -> dms1 : JobPost (via local dms/node endpoint (cli/api))
+dms1 --> dms1 : Invoking an allocation for running the job orchestration sequence \n(see [[https://nunet.gitlab.io/research/blog/posts/parent-child-relations/#native-executor Native Executor]] idea)
+note right of user
+    With job description in text format
+    which could be using different semantics (e.g. Kubernetes)
+    and different format (e.g. json)
+end note
+
+@enduml
+
+'main under-developed aspects:
+' job description format / type with connectivity semantics;

@@ -1,0 +1,48 @@
+@startuml
+participant "dms1 \n (e.g. Service Provider)" as Requester
+participant "dms2 \n (e.g. Compute Provider)" as ComputeProvider
+participant "orchestrator \n (e.g. Orchestrator)" as Orchestrator
+participant "Contract database" as DB
+
+autonumber
+
+note over Orchestrator, ComputeProvider: Notify compute provider for best selected bid
+ComputeProvider -> ComputeProvider: Prepares contract draft
+
+note over Requester, ComputeProvider: Contract Negotiation
+Requester -> ComputeProvider: Negotiate Contract Terms(Payment type, Payment Schedule, Proof type)
+ComputeProvider --> Requester: Respond to Negotiation
+Requester -> ComputeProvider: Finalize Contract Terms
+ComputeProvider --> Requester: Agree on Final Terms
+
+note over Orchestrator, Contract: Contract Initiation
+Orchestrator -> Contract: initiateContract(bid)
+Contract -> DMS: Create NodeIDs for Requester and ComputeProvider
+Contract -> Contract: NewContract(bid.JobID, bid.BidRequest.RequesterID, bid.Bidder)
+Contract -> Contract: Set Status to "initiated"
+Contract -> Contract: Set Proof to "Initial proof details"
+
+note over Contract, Requester: Signing the Contract
+Contract -> Requester: SignContract(RequesterID)
+Requester --> Contract: Sign with NodeID(RequesterID)
+Contract -> Contract: Append Requester Signature
+Contract -> Contract: Check Signatures Count
+
+note over Contract, ComputeProvider: Compute Provider Signing the Contract
+Contract -> ComputeProvider: SignContract(ProviderID)
+ComputeProvider --> Contract: Sign with NodeID(ProviderID)
+Contract -> Contract: Append Compute Provider Signature
+Contract -> Contract: Check Signatures Count
+Contract -> Contract: Set Status to "signed" (if signatures >= 2)
+
+note over Orchestrator, Contract: Contract Closure and Job Allocation
+Orchestrator -> Contract: closeContract()
+Contract -> Contract: CloseContract()
+Contract -> Contract: Check if Status is "signed"
+Contract -> Contract: Set Status to "closed" (if status is "signed")
+Contract --> Orchestrator: Contract Closed
+note over Contract, DB: Contract Saved in Database
+Orchestrator -> ComputeProvider: Allocate Job
+ComputeProvider --> Orchestrator: Job Started
+
+@enduml
