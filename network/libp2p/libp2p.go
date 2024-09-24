@@ -14,31 +14,26 @@ import (
 	"time"
 
 	"github.com/ipfs/go-cid"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
-	"gitlab.com/nunet/device-management-service/types"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/event"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-multihash"
 	"github.com/spf13/afero"
 	"google.golang.org/protobuf/proto"
 
-	dht "github.com/libp2p/go-libp2p-kad-dht"
-
-	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
-	"github.com/libp2p/go-libp2p/core/event"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peerstore"
-	"github.com/libp2p/go-libp2p/core/protocol"
-
-	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
-
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
-
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -95,7 +90,8 @@ type Libp2p struct {
 	pingService *ping.PingService
 
 	// tasks
-	discoveryTask *bt.Task
+	discoveryTask           *bt.Task
+	advertiseRendezvousTask *bt.Task
 
 	handlerRegistry *HandlerRegistry
 
@@ -159,19 +155,22 @@ func (l *Libp2p) Start(context context.Context) error {
 		return err
 	}
 
-	// advertise randevouz discovery
-	err = l.advertiseForRendezvousDiscovery(context)
-	if err != nil {
-		// TODO: the error might be misleading as a peer can normally work well if an error
-		// is returned here (e.g.: the error is yielded in tests even though all tests pass).
-		log.Errorf("failed to start network with randevouz discovery: %v", err)
-	}
-
 	// discover
-	err = l.DiscoverDialPeers(context)
-	if err != nil {
-		log.Errorf("failed to discover peers: %v", err)
-	}
+	go func() {
+		// wait for dht bootstrap
+		time.Sleep(1 * time.Minute)
+
+		// advertise randevouz discovery
+		err = l.advertiseForRendezvousDiscovery(context)
+		if err != nil {
+			log.Warnf("failed to advertise rendezvous point: %v", err)
+		}
+
+		err = l.DiscoverDialPeers(context)
+		if err != nil {
+			log.Warnf("failed to discover peers: %v", err)
+		}
+	}()
 
 	// register period peer discoveryTask task
 	discoveryTask := &bt.Task{
@@ -184,6 +183,19 @@ func (l *Libp2p) Start(context context.Context) error {
 	}
 
 	l.discoveryTask = l.config.Scheduler.AddTask(discoveryTask)
+
+	// register rendezvous advertisement task
+	advertiseRendezvousTask := &bt.Task{
+		Name:        "Rendezvous advertisement",
+		Description: "Periodic task to advertise a rendezvous point every 6 hours",
+		Function: func(_ interface{}) error {
+			return l.advertiseForRendezvousDiscovery(context)
+		},
+		Triggers: []bt.Trigger{&bt.PeriodicTrigger{Interval: 6 * time.Hour}},
+	}
+
+	l.advertiseRendezvousTask = l.config.Scheduler.AddTask(advertiseRendezvousTask)
+
 	l.config.Scheduler.Start()
 
 	return nil
@@ -423,6 +435,7 @@ func (l *Libp2p) Stop() error {
 	var errorMessages []string
 
 	l.config.Scheduler.RemoveTask(l.discoveryTask.ID)
+	l.config.Scheduler.RemoveTask(l.advertiseRendezvousTask.ID)
 
 	if err := l.DHT.Close(); err != nil {
 		errorMessages = append(errorMessages, err.Error())

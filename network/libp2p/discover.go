@@ -3,7 +3,8 @@ package libp2p
 import (
 	"context"
 	"fmt"
-	"os"
+	"math/rand"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -51,21 +52,38 @@ func (l *Libp2p) findPeersFromRendezvousDiscovery(ctx context.Context) ([]peer.A
 }
 
 func (l *Libp2p) dialPeers(ctx context.Context) {
-	for _, p := range l.discoveredPeers {
+	maxPeers := 16
+	peersToConnect := l.discoveredPeers
+
+	if len(peersToConnect) > maxPeers {
+		//nolint:gosec
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		r.Shuffle(len(peersToConnect), func(i, j int) {
+			peersToConnect[i], peersToConnect[j] = peersToConnect[j],
+				peersToConnect[i]
+		})
+
+		// Take only the first maxPeers
+		peersToConnect = peersToConnect[:maxPeers]
+	}
+
+	for _, p := range peersToConnect {
 		if p.ID == l.Host.ID() {
 			continue
 		}
+
 		if !l.PeerConnected(p.ID) {
-			_, err := l.Host.Network().DialPeer(ctx, p.ID)
-			if err != nil {
-				if _, debugMode := os.LookupEnv("NUNET_DEBUG_VERBOSE"); debugMode {
-					log.Debugf("couldn't establish connection with: %s - error: %v", p.ID.String(), err)
+			go func(p peer.AddrInfo) {
+				dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				if err := l.Host.Connect(dialCtx, p); err != nil {
+					log.Debugf("couldn't establish connection with: %s - error: %v", p.ID, err)
+					return
 				}
-				continue
-			}
-			if _, debugMode := os.LookupEnv("NUNET_DEBUG_VERBOSE"); debugMode {
-				log.Debugf("connected with: %s", p.ID.String())
-			}
+
+				log.Debugf("connected with: %s", p.ID)
+			}(p)
 		}
 	}
 }
