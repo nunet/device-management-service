@@ -50,6 +50,8 @@ const (
 	ValidationIgnore = pubsub.ValidationIgnore
 
 	readTimeout = 30 * time.Second
+
+	sendSemaphoreLimit = 4096
 )
 
 type (
@@ -81,6 +83,9 @@ type Libp2p struct {
 	topicValidators   map[string]map[uint64]Validator
 	topicSubscription map[string]map[uint64]*pubsub.Subscription
 	nextTopicSubID    uint64
+
+	// send backpressure semaphore
+	sendSemaphore chan struct{}
 
 	// a list of peers discovered by discovery
 	discoveredPeers []peer.AddrInfo
@@ -119,6 +124,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		pubsubTopics:      make(map[string]*pubsub.Topic),
 		topicSubscription: make(map[string]map[uint64]*pubsub.Subscription),
 		topicValidators:   make(map[string]map[uint64]Validator),
+		sendSemaphore:     make(chan struct{}, sendSemaphoreLimit),
 		fs:                fs,
 	}, nil
 }
@@ -270,17 +276,113 @@ func (l *Libp2p) UnregisterMessageHandler(messageType string) {
 	l.handlerRegistry.UnregisterHandler(types.MessageType(messageType))
 }
 
-// SendMessage sends a message to a list of peers.
+// SendMessage asynchronously sends a message to a peer
 func (l *Libp2p) SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope, expiry time.Time) error {
+	pid, err := peer.Decode(hostID)
+	if err != nil {
+		return fmt.Errorf("send: invalid peer ID: %w", err)
+	}
+
+	// we are delivering a message to ourself
+	// we should use the handler to send the message to the handler directly which has been previously registered.
+	if pid == l.Host.ID() {
+		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data)
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Until(expiry))
+	select {
+	case l.sendSemaphore <- struct{}{}:
+		go func() {
+			defer cancel()
+			defer func() { <-l.sendSemaphore }()
+			l.sendMessage(ctx, pid, msg, expiry, nil)
+		}()
+		return nil
+	case <-ctx.Done():
+		cancel()
+		return ctx.Err()
+	}
+}
+
+// SendMessageSync synchronously sends a message to a peer
+func (l *Libp2p) SendMessageSync(ctx context.Context, hostID string, msg types.MessageEnvelope, expiry time.Time) error {
+	pid, err := peer.Decode(hostID)
+	if err != nil {
+		return fmt.Errorf("send: invalid peer ID: %w", err)
+	}
+
+	if pid == l.Host.ID() {
+		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data)
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, time.Until(expiry))
 	defer cancel()
 
-	addrs, err := l.resolveAddress(ctx, hostID)
-	if err != nil {
-		return fmt.Errorf("error resolving addresses for peer %s: %w", hostID, err)
+	result := make(chan error, 1)
+	l.sendMessage(ctx, pid, msg, expiry, result)
+
+	return <-result
+}
+
+func (l *Libp2p) sendMessage(ctx context.Context, pid peer.ID, msg types.MessageEnvelope, expiry time.Time, result chan error) {
+	var err error
+	defer func() {
+		if result != nil {
+			result <- err
+		}
+	}()
+
+	if !l.PeerConnected(pid) {
+		var ai peer.AddrInfo
+		ai, err = l.resolvePeerAddress(ctx, pid)
+		if err != nil {
+			log.Warnf("send: error resolving addresses for peer %s: %s", pid, err)
+			return
+		}
+
+		if err = l.Host.Connect(ctx, ai); err != nil {
+			log.Warnf("send: failed to connect to peer %s: %s", pid, err)
+			return
+		}
 	}
 
-	return l.sendMessage(ctx, addrs, msg, expiry)
+	requestBufferSize := 8 + len(msg.Data)
+	if requestBufferSize > maxMessageLengthMB*MB {
+		log.Warnf("send: message size %d is greater than limit %d bytes", requestBufferSize, maxMessageLengthMB*MB)
+		err = fmt.Errorf("message too large")
+		return
+	}
+
+	ctx = network.WithAllowLimitedConn(ctx, "send message")
+
+	stream, err := l.Host.NewStream(ctx, pid, protocol.ID(msg.Type))
+	if err != nil {
+		log.Warnf("send: failed to open stream to peer %s: %s", pid, err)
+		return
+	}
+	defer stream.Close()
+
+	if err = stream.SetWriteDeadline(expiry); err != nil {
+		_ = stream.Reset()
+		log.Warnf("send: failed to set write deadline to peer %s: %s", pid, err)
+		return
+	}
+
+	requestPayloadWithLength := make([]byte, requestBufferSize)
+	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(msg.Data)))
+	copy(requestPayloadWithLength[8:], msg.Data)
+
+	if _, err = stream.Write(requestPayloadWithLength); err != nil {
+		_ = stream.Reset()
+		log.Warnf("send: failed to send message to peer %s: %s", pid, err)
+	}
+
+	if err = stream.CloseWrite(); err != nil {
+		_ = stream.Reset()
+		log.Warnf("send: failed to flush output to peer %s: %s", pid, err)
+	}
 }
 
 // OpenStream opens a stream to a remote address and returns the stream for the caller to handle.
@@ -412,8 +514,12 @@ func (l *Libp2p) resolveAddress(ctx context.Context, id string) (peer.AddrInfo, 
 		return peer.AddrInfo{}, fmt.Errorf("failed to resolve invalid peer: %w", err)
 	}
 
+	return l.resolvePeerAddress(ctx, pid)
+}
+
+func (l *Libp2p) resolvePeerAddress(ctx context.Context, pid peer.ID) (peer.AddrInfo, error) {
 	// resolve ourself
-	if l.Host.ID().String() == id {
+	if l.Host.ID() == pid {
 		addrs, err := l.GetMultiaddr()
 		if err != nil {
 			return peer.AddrInfo{}, fmt.Errorf("failed to resolve self: %w", err)
@@ -422,10 +528,7 @@ func (l *Libp2p) resolveAddress(ctx context.Context, id string) (peer.AddrInfo, 
 		return peer.AddrInfo{ID: pid, Addrs: addrs}, nil
 	}
 
-	switch l.Host.Network().Connectedness(pid) {
-	case network.Limited:
-		fallthrough
-	case network.Connected:
+	if l.PeerConnected(pid) {
 		addrs := l.Host.Peerstore().Addrs(pid)
 		return peer.AddrInfo{
 			ID:    pid,
@@ -435,9 +538,10 @@ func (l *Libp2p) resolveAddress(ctx context.Context, id string) (peer.AddrInfo, 
 
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
+
 	pi, err := l.DHT.FindPeer(ctx, pid)
 	if err != nil {
-		return peer.AddrInfo{}, fmt.Errorf("failed to resolve address %s: %w", id, err)
+		return peer.AddrInfo{}, fmt.Errorf("failed to resolve address for peer %s: %w", pid, err)
 	}
 
 	return pi, nil
@@ -727,50 +831,6 @@ func (l *Libp2p) PeerConnected(p PeerID) bool {
 	default:
 		return false
 	}
-}
-
-func (l *Libp2p) sendMessage(ctx context.Context, ai peer.AddrInfo, msg types.MessageEnvelope, expiry time.Time) error {
-	// we are delivering a message to ourself
-	// we should use the handler to send the message to the handler directly which has been previously registered.
-	if ai.ID == l.Host.ID() {
-		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data)
-		return nil
-	}
-
-	if err := l.Host.Connect(ctx, ai); err != nil {
-		return fmt.Errorf("failed to connect to peer %v: %v", ai.ID, err)
-	}
-
-	ctx = network.WithAllowLimitedConn(ctx, "send message")
-	stream, err := l.Host.NewStream(ctx, ai.ID, protocol.ID(msg.Type))
-	if err != nil {
-		return fmt.Errorf("failed to open stream to peer %v: %v", ai.ID, err)
-	}
-	defer stream.Close()
-
-	requestBufferSize := 8 + len(msg.Data)
-	if requestBufferSize > maxMessageLengthMB*MB {
-		_ = stream.Reset()
-		return fmt.Errorf("message size %d is greater than limit %d bytes", requestBufferSize, maxMessageLengthMB*MB)
-	}
-
-	requestPayloadWithLength := make([]byte, requestBufferSize)
-	binary.LittleEndian.PutUint64(requestPayloadWithLength, uint64(len(msg.Data)))
-	copy(requestPayloadWithLength[8:], msg.Data)
-
-	if err := stream.SetWriteDeadline(expiry); err != nil {
-		_ = stream.Reset()
-		return fmt.Errorf("failed to set write deadline: %w", err)
-	}
-
-	if _, err = stream.Write(requestPayloadWithLength); err != nil {
-		_ = stream.Reset()
-		return fmt.Errorf("failed to send message to peer %v: %w", ai.ID, err)
-	}
-
-	_ = stream.CloseWrite()
-
-	return nil
 }
 
 // getOrJoinTopicHandler gets the topic handler, it will be created if it doesn't exist.
