@@ -1,0 +1,30 @@
+@startuml
+participant "DMS 1\n(a.k.a. Service Provider)" as dms1 #53c68c
+participant "DMS 2\n(a.k.a. Compute Provider 1)" as dms2 #3385ff
+loop Find right Topic(s) and construct Envelope(s)
+  dms1 --> dms1 : Actor.Publish(msg returnAvailableTopics)
+  note right of dms1
+     asks other nodes in the network to return topics 
+     that they know about in order to find out
+     the one that fits this job description
+  end note
+  note right of dms1
+    it could be that a node knows about relevant topics
+    from previous jobs or from other sources
+    in which case it selects the fitting topic from
+    local database of topics
+  end note  
+  dms1 --> dms1 : topic := selectTopic(returnAvailableTopics)
+  note right of dms1
+     in order for this to work, we have to define semantics of a topic
+     it may, or may not be enough to return only strings
+  end note
+  dms1 --> dms1 : msg1 := Envelope(bid_request_1).Options.Topic = topic
+  dms1 --> dms1 : msg2 := Envelope(bid_request_2).Options.Topic = topic
+  note right of dms1
+    topics can be calculated separately for each bid request
+    they do not need to be the same
+  end note
+end
+
+@enduml

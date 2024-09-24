@@ -6,6 +6,8 @@ participant "dms.NodeID (n2)" as Node2
 participant "Central Database" as DB
 participant "Jobs Database" as JobsDB
 
+autonumber
+
 Node1 -> DB: Retrieve Contract Details (contractID)
 DB --> Node1: Return Contract Details
 
