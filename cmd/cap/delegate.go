@@ -14,14 +14,15 @@ import (
 
 func newDelegateCmd(afs afero.Afero) *cobra.Command {
 	var (
-		context  string
-		caps     []string
-		topics   []string
-		audience string
-		expiry   time.Time
-		duration time.Duration
-		depth    uint64
-		selfSign string
+		context    string
+		caps       []string
+		topics     []string
+		audience   string
+		expiry     time.Time
+		duration   time.Duration
+		autoExpire bool
+		depth      uint64
+		selfSign   string
 	)
 
 	cmd := &cobra.Command{
@@ -44,6 +45,8 @@ Example:
 				expirationTime = uint64(expiry.UnixNano())
 			case duration != 0:
 				expirationTime = uint64(time.Now().Add(duration).UnixNano())
+			case autoExpire:
+				expirationTime = 0
 			default:
 				return fmt.Errorf("either expiration or duration must be specified")
 			}
@@ -120,11 +123,14 @@ Example:
 	useFlagTopic(cmd, &topics)
 	useFlagExpiry(cmd, &expiry)
 	useFlagDuration(cmd, &duration)
+	useFlagAutoExpire(cmd, &autoExpire)
 	useFlagDepth(cmd, &depth)
-	cmd.Flags().StringVar(&selfSign, "self-sign", "no", "Self-sign option: 'no', 'also', or 'only'")
+	cmd.Flags().StringVar(&selfSign, fnSelfSign, "no", "Self-sign option: 'no', 'also', or 'only'")
 
 	_ = cmd.MarkFlagRequired(fnContext)
-	cmd.MarkFlagsOneRequired(fnExpiry, fnDuration)
+	cmd.MarkFlagsOneRequired(fnExpiry, fnDuration, fnAutoExpire)
+	cmd.MarkFlagsMutuallyExclusive(fnExpiry, fnDuration, fnAutoExpire)
+	cmd.MarkFlagsMutuallyExclusive(fnSelfSign, fnAutoExpire)
 
 	return cmd
 }

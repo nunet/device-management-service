@@ -33,6 +33,10 @@ func useFlagDuration(cmd *cobra.Command, duration *time.Duration) {
 	cmd.Flags().DurationVar(duration, fnDuration, 0, "set duration time (specify unit)")
 }
 
+func useFlagAutoExpire(cmd *cobra.Command, autoExpire *bool) {
+	cmd.Flags().BoolVar(autoExpire, fnAutoExpire, false, "set auto expiration")
+}
+
 func useFlagDepth(cmd *cobra.Command, depth *uint64) {
 	cmd.Flags().Uint64VarP(depth, fnDepth, "d", 0, "delegation depth (optional, default=0)")
 }
