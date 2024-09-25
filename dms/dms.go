@@ -1,7 +1,6 @@
 package dms
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -49,7 +48,6 @@ func Run(ksPassphrase string, contextName string) error {
 		contextName = DefaultContextName
 	}
 
-	ctx := context.Background()
 	fs := afero.NewOsFs()
 
 	keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, KeystoreDir)
@@ -129,11 +127,11 @@ func Run(ksPassphrase string, contextName string) error {
 		return fmt.Errorf("unable to create libp2p instance: %v", err)
 	}
 
-	if err = p2p.Init(ctx); err != nil {
+	if err = p2p.Init(); err != nil {
 		return fmt.Errorf("unable to initialize libp2p: %v", err)
 	}
 
-	if err = p2p.Start(ctx); err != nil {
+	if err = p2p.Start(); err != nil {
 		return fmt.Errorf("unable to start libp2p: %v", err)
 	}
 
@@ -189,7 +187,7 @@ func Run(ksPassphrase string, contextName string) error {
 	capCtx.Start(5 * time.Minute)
 
 	hostID := p2p.Host.ID().String()
-	node, err := node.New(ctx, onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler)
+	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler)
 	if err != nil {
 		return fmt.Errorf("failed to create node: %s", err)
 	}

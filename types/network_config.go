@@ -43,4 +43,5 @@ type Libp2pConfig struct {
 	PeerCountDiscoveryLimit int
 	GracePeriodMs           int
 	GossipMaxMessageSize    int
+	BootstrapMaxSleep       int // in minutes
 }

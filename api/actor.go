@@ -124,10 +124,11 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 
 	// Register a message handler for the responseCh
 	protocol := fmt.Sprintf("actor/%s/messages/0.0.1", msg.From.Address.InboxAddress)
-	responseCh := make(chan actor.Envelope)
+	responseCh := make(chan actor.Envelope, 1)
 	err := p2p.HandleMessage(protocol, func(data []byte) {
 		var envelope actor.Envelope
 		if err := json.Unmarshal(data, &envelope); err != nil {
+			// TODO log this
 			return
 		}
 		responseCh <- envelope
