@@ -43,9 +43,9 @@ type Network interface {
 	Messenger
 
 	// Init initializes the network
-	Init(context.Context) error
+	Init() error
 	// Start starts the network
-	Start(context context.Context) error
+	Start() error
 	// Stat returns the network information
 	Stat() types.NetworkStats
 	// Ping pings the given address and returns the PingResult

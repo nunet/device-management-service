@@ -46,6 +46,9 @@ type Node struct {
 	onboarder       *onboarding.Onboarding
 	executor        executor.Executor
 
+	ctx    context.Context
+	cancel func()
+
 	mx          sync.Mutex
 	peers       map[peer.ID]*peerState
 	allocations map[string]*jobs.Allocation
@@ -60,7 +63,7 @@ type peerState struct {
 }
 
 // New creates a new node, attaches an actor to the node.
-func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager types.ResourceManager, scheduler *bt.Scheduler) (*Node, error) {
+func New(onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager types.ResourceManager, scheduler *bt.Scheduler) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
 	}
@@ -113,8 +116,10 @@ func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.Cap
 		return nil, fmt.Errorf("failed to create node actor: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	executor, err := NewExecutor(ctx)
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("new executor: %w", err)
 	}
 
@@ -129,6 +134,8 @@ func New(ctx context.Context, onboarder *onboarding.Onboarding, rootCap ucan.Cap
 		scheduler:       scheduler,
 		onboarder:       onboarder,
 		executor:        executor,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 
 	if err := nodeActor.AddBehavior(PublicHelloBehavior, n.publicHelloBehavior); err != nil {
@@ -503,6 +510,7 @@ func (n *Node) Stop() error {
 		}
 	}
 
+	n.cancel()
 	// clear the broadcast app score
 	n.network.SetBroadcastAppScore(nil)
 

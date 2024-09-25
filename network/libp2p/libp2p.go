@@ -69,6 +69,9 @@ type Libp2p struct {
 	PS     peerstore.Peerstore
 	pubsub *PubSub
 
+	ctx    context.Context
+	cancel func()
+
 	mx             sync.Mutex
 	pubsubAppScore func(peer.ID) float64
 	pubsubScore    map[peer.ID]*PeerScoreSnapshot
@@ -126,13 +129,17 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 }
 
 // Init initializes a libp2p host with its dependencies.
-func (l *Libp2p) Init(context context.Context) error {
-	host, dht, pubsub, err := NewHost(context, l.config, l.broadcastAppScore, l.broadcastScoreInspect)
+func (l *Libp2p) Init() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	host, dht, pubsub, err := NewHost(ctx, l.config, l.broadcastAppScore, l.broadcastScoreInspect)
 	if err != nil {
+		cancel()
 		log.Error(err)
 		return err
 	}
 
+	l.ctx = ctx
+	l.cancel = cancel
 	l.Host = host
 	l.DHT = dht
 	l.PS = host.Peerstore()
@@ -144,12 +151,12 @@ func (l *Libp2p) Init(context context.Context) error {
 }
 
 // Start performs network bootstrapping, peer discovery and protocols handling.
-func (l *Libp2p) Start(context context.Context) error {
+func (l *Libp2p) Start() error {
 	// set stream handlers
 	l.registerStreamHandlers()
 
 	// bootstrap should return error if it had an error
-	err := l.Bootstrap(context, l.config.BootstrapPeers)
+	err := l.Bootstrap(l.ctx, l.config.BootstrapPeers)
 	if err != nil {
 		log.Errorf("failed to start network: %v", err)
 		return err
@@ -161,12 +168,12 @@ func (l *Libp2p) Start(context context.Context) error {
 		time.Sleep(1 * time.Minute)
 
 		// advertise randevouz discovery
-		err = l.advertiseForRendezvousDiscovery(context)
+		err = l.advertiseForRendezvousDiscovery(l.ctx)
 		if err != nil {
 			log.Warnf("failed to advertise rendezvous point: %v", err)
 		}
 
-		err = l.DiscoverDialPeers(context)
+		err = l.DiscoverDialPeers(l.ctx)
 		if err != nil {
 			log.Warnf("failed to discover peers: %v", err)
 		}
@@ -177,7 +184,7 @@ func (l *Libp2p) Start(context context.Context) error {
 		Name:        "Peer Discovery",
 		Description: "Periodic task to discover new peers every 15 minutes",
 		Function: func(_ interface{}) error {
-			return l.DiscoverDialPeers(context)
+			return l.DiscoverDialPeers(l.ctx)
 		},
 		Triggers: []bt.Trigger{&bt.PeriodicTrigger{Interval: 15 * time.Minute}},
 	}
@@ -189,7 +196,7 @@ func (l *Libp2p) Start(context context.Context) error {
 		Name:        "Rendezvous advertisement",
 		Description: "Periodic task to advertise a rendezvous point every 6 hours",
 		Function: func(_ interface{}) error {
-			return l.advertiseForRendezvousDiscovery(context)
+			return l.advertiseForRendezvousDiscovery(l.ctx)
 		},
 		Triggers: []bt.Trigger{&bt.PeriodicTrigger{Interval: 6 * time.Hour}},
 	}
@@ -395,6 +402,8 @@ func (l *Libp2p) sendMessage(ctx context.Context, pid peer.ID, msg types.Message
 		_ = stream.Reset()
 		log.Warnf("send: failed to flush output to peer %s: %s", pid, err)
 	}
+
+	log.Debugf("send %d bytes to peer %s", len(requestPayloadWithLength), pid)
 }
 
 // OpenStream opens a stream to a remote address and returns the stream for the caller to handle.
@@ -434,6 +443,7 @@ func (l *Libp2p) GetMultiaddr() ([]multiaddr.Multiaddr, error) {
 func (l *Libp2p) Stop() error {
 	var errorMessages []string
 
+	l.cancel()
 	l.config.Scheduler.RemoveTask(l.discoveryTask.ID)
 	l.config.Scheduler.RemoveTask(l.advertiseRendezvousTask.ID)
 

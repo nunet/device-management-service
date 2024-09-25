@@ -410,9 +410,9 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	peer1, err := New(peer1Config, afero.NewMemMapFs())
 	assert.NoError(t, err)
 	assert.NotNil(t, peer1)
-	err = peer1.Init(context.TODO())
+	err = peer1.Init()
 	assert.NoError(t, err)
-	err = peer1.Start(context.TODO())
+	err = peer1.Start()
 	assert.NoError(t, err)
 
 	// peers of peer1 should be one (itself)
@@ -426,9 +426,9 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	assert.NoError(t, err)
 	assert.NotNil(t, peer2)
 
-	err = peer2.Init(context.TODO())
+	err = peer2.Init()
 	assert.NoError(t, err)
-	err = peer2.Start(context.TODO())
+	err = peer2.Start()
 	assert.NoError(t, err)
 
 	// sleep until the inernals of the host get updated
@@ -445,9 +445,9 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	assert.NoError(t, err)
 	assert.NotNil(t, peer3)
 
-	err = peer3.Init(context.TODO())
+	err = peer3.Init()
 	assert.NoError(t, err)
-	err = peer3.Start(context.TODO())
+	err = peer3.Start()
 	assert.NoError(t, err)
 
 	return peer1, peer2, peer3
