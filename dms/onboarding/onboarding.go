@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"time"
 
 	"github.com/spf13/afero"
@@ -26,7 +25,6 @@ type Config struct {
 	ResourceManager types.ResourceManager
 	AvResourceRepo  repositories.AvailableResources
 	UUIDRepo        repositories.MachineUUID
-	Channels        []string // supported channels such as nunet-test and nunet-team
 }
 
 // NewConfig is a constructor for Config
@@ -37,7 +35,6 @@ func NewConfig(
 	p2pRepo repositories.Libp2pInfo,
 	avResourceRepo repositories.AvailableResources,
 	uuidRepo repositories.MachineUUID,
-	channels []string,
 ) *Config {
 	return &Config{
 		Fs:             fs,
@@ -47,7 +44,6 @@ func NewConfig(
 		P2PRepo:        p2pRepo,
 		AvResourceRepo: avResourceRepo,
 		UUIDRepo:       uuidRepo,
-		Channels:       channels,
 	}
 }
 
@@ -103,9 +99,11 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 	oConf.TotalResources.RAM = machineResources.RAM
 	oConf.TotalResources.CPU = machineResources.CPU
 
-	oConf.OnboardedResources.RAM = types.RAM{Size: capacity.Memory}
+	// TODO: refactor on !531 and !563 pending merge
+	//       set the other fields in RAM and CPU
+	oConf.OnboardedResources.RAM = types.RAM{Size: capacity.Memory * 1024 * 1024 * 1024} // convert memory to bytes
 	oConf.OnboardedResources.CPU = types.CPU{Cores: float32(capacity.CPU)}
-	oConf.Network = capacity.Channel
+
 	oConf.PublicKey = capacity.PaymentAddress
 	oConf.NTXPricePerMinute = capacity.NTXPricePerMinute
 
@@ -149,8 +147,11 @@ func (o *Onboarding) ResourceConfig(ctx context.Context, capacity types.Capacity
 		return nil, fmt.Errorf("could not read onboarding params from db: %w", err)
 	}
 
+	// TODO: refactor on !531 and !563 pending merge
+	//       set the other fields in RAM and CPU
+	params.OnboardedResources.RAM = types.RAM{Size: capacity.Memory * 1024 * 1024 * 1024} // convert memory to bytes
 	params.OnboardedResources.CPU = types.CPU{Cores: float32(capacity.CPU)}
-	params.OnboardedResources.RAM = types.RAM{Size: capacity.Memory}
+
 	params.NTXPricePerMinute = capacity.NTXPricePerMinute
 
 	available, err := o.AvResourceRepo.Get(ctx)
@@ -222,13 +223,14 @@ func (o *Onboarding) validateCapacityForNunet(capacity types.CapacityForNunet) e
 		return fmt.Errorf("could not get provisioned resources: %w", err)
 	}
 
-	if capacity.CPU > int64(machineResources.CPU.Compute*9/10) || capacity.CPU < int64(machineResources.CPU.Compute/10) {
-		return fmt.Errorf("CPU should be between 10%% and 90%% of the available CPU (%d and %d)", int64(machineResources.CPU.Compute/10), int64(machineResources.CPU.Compute*9/10))
+	if capacity.CPU < 1 || capacity.CPU >= int64(machineResources.CPU.Cores) {
+		return fmt.Errorf("CPU should be between 1 and %d cores", int64(machineResources.CPU.Cores-1))
 	}
 
-	//nolint:gosec // to be fixed in TODO: 553
-	if capacity.Memory > machineResources.RAM.Size*9/10 || capacity.Memory < machineResources.RAM.Size/10 {
-		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory (%d and %d)", int64(machineResources.RAM.Size/10), int64(machineResources.RAM.Size*9/10))
+	memInGB := machineResources.RAM.Size / (1024 * 1024 * 1024)
+
+	if capacity.Memory < memInGB/10 || capacity.Memory > memInGB*9/10 {
+		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory in GigaBytes (%dGB and %dGB)", memInGB/10, memInGB*9/10)
 	}
 
 	return nil
@@ -243,16 +245,12 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForN
 		return fmt.Errorf("working directory does not exist")
 	}
 
-	if err := utils.ValidateAddress(capacity.PaymentAddress); err != nil {
+	if err := utils.ValidateAddress(capacity.PaymentAddress); capacity.PaymentAddress != "" && err != nil {
 		return fmt.Errorf("could not validate payment address: %w", err)
 	}
 
 	if err := o.validateCapacityForNunet(capacity); err != nil {
 		return fmt.Errorf("could not validate capacity data: %w", err)
-	}
-
-	if !slices.Contains(o.Channels, capacity.Channel) {
-		return fmt.Errorf("invalid channel data: '%s' channel does not exist", capacity.Channel)
 	}
 
 	return nil

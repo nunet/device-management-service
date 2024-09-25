@@ -13,7 +13,6 @@ type CapacityForNunet struct {
 	Memory            uint64  `json:"memory,omitempty"`
 	CPU               int64   `json:"cpu,omitempty"`
 	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
-	Channel           string  `json:"channel,omitempty"`
 	PaymentAddress    string  `json:"payment_addr,omitempty"`
 	ServerMode        bool    `json:"server_mode,omitempty,"`
 	IsAvailable       bool    `json:"is_available"`
@@ -34,9 +33,7 @@ type OnboardingConfig struct {
 	UpdateTimestamp    int64              `json:"update_timestamp,omitempty"`
 	TotalResources     MachineResources   `json:"total_resources,omitempty" gorm:"foreignKey:ID"`
 	OnboardedResources OnboardedResources `json:"onboarded_resources,omitempty" gorm:"foreignKey:ID"`
-	Network            string             `json:"network,omitempty"`
 	PublicKey          string             `json:"public_key,omitempty"`
-	NodeID             string             `json:"node_id,omitempty"`
 	Dashboard          string             `json:"dashboard,omitempty"`
 	NTXPricePerMinute  float64            `json:"ntx_price,omitempty"`
 }

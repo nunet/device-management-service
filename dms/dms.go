@@ -101,7 +101,6 @@ func Run(ksPassphrase string, contextName string) error {
 		AvResourceRepo:  avResR,
 		WorkDir:         config.GetConfig().WorkDir,
 		DatabasePath:    fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir),
-		Channels:        []string{"nunet", "nunet-test", "nunet-team", "nunet-edge"},
 	})
 
 	var p2pNet *libp2p.Libp2p
