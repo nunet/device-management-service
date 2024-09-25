@@ -31,9 +31,11 @@ func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero) *cobra.Comman
 		Long: `Invoke a predefined behavior on an actor
 
 Example:
- nunet actor cmd /broadcast/hello --dest did:key:<some-key>
+ nunet actor cmd --context dms /broadcast/hello
 
-For more information on the list of available behaviors, refer to cmd/actor/README.md`,
+Adding the --dest flag will cause the behavior to be invoked on the specified actor.
+
+For more information on behaviors, refer to cmd/actor/README.md`,
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			if len(args) > 0 {
 				return nil, cobra.ShellCompDirectiveDefault
@@ -74,7 +76,8 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 
 	cmd := &cobra.Command{
 		Use:               fmt.Sprintf("%s [<param> ...]", behavior),
-		Short:             fmt.Sprintf("Invoke %s behavior on an actor", behavior),
+		Short:             behaviorCfg.Short,
+		Long:              behaviorCfg.Long,
 		ValidArgsFunction: behaviorCfg.ValidArgsFn,
 		Args:              behaviorCfg.Args,
 		RunE: func(cmd *cobra.Command, _ []string) error {

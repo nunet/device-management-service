@@ -145,7 +145,7 @@ nunet actor cmd [command]
 
 * **`/dms/node/onboarding/offboard`**
 
-   * **Description:**  Invokes the `/dms/node/onboarding/offboard` behavior on an actor. This is used to offboard a node from the DMS (Decentralized Management System).
+   * **Description:**  Invokes the `/dms/node/onboarding/offboard` behavior on an actor. This is used to offboard a node from the DMS (Device Management Service).
 
    * **Usage:** `nunet actor cmd /dms/node/onboarding/offboard [<param> ...] [flags]`
 

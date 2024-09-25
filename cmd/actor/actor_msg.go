@@ -28,7 +28,7 @@ func newActorMsgCmd(client *dmsUtils.HTTPClient, afs afero.Afero) *cobra.Command
 The constructed message is returned as a JSON object that can be used stored or piped into another command, for instance the the send, invoke, or broadcast command.
 
 Example:
-  nunet actor msg --topic /nunet/hello /broadcast/hello 'Hello, World!'`,
+  nunet actor msg --broadcast /nunet/hello /broadcast/hello 'Hello, World!'`,
 
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
