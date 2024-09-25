@@ -14,6 +14,8 @@ BUILD_HASH := $(shell git rev-parse HEAD)
 
 LDFLAGS := "-X 'gitlab.com/nunet/device-management-service/cmd.GoVersion=$(GO_VERSION)' -X 'gitlab.com/nunet/device-management-service/cmd.BuildDate=$(BUILD_DATE)' -X 'gitlab.com/nunet/device-management-service/cmd.Commit=$(BUILD_HASH)'"
 
+GOFLAGS := "-buildvcs=false"
+
 .PHONY: all clean linux_amd64 darwin_arm64
 
 all:
