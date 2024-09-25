@@ -6,17 +6,19 @@ import (
 )
 
 const (
-	fnContext  = "context"
-	fnAudience = "audience"
-	fnAction   = "action"
-	fnCap      = "cap"
-	fnTopic    = "topic"
-	fnExpiry   = "expiry"
-	fnDuration = "duration"
-	fnDepth    = "depth"
-	fnProvide  = "provide"
-	fnRoot     = "root"
-	fnRequire  = "require"
+	fnContext    = "context"
+	fnAudience   = "audience"
+	fnAction     = "action"
+	fnCap        = "cap"
+	fnTopic      = "topic"
+	fnExpiry     = "expiry"
+	fnDuration   = "duration"
+	fnAutoExpire = "auto-expire"
+	fnSelfSign   = "self-sign"
+	fnDepth      = "depth"
+	fnProvide    = "provide"
+	fnRoot       = "root"
+	fnRequire    = "require"
 )
 
 // NewCapCmd returns the cap command that adds other commands
