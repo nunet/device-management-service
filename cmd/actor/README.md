@@ -161,12 +161,11 @@ nunet actor cmd [command]
 
    * **Flags:**
      * `-a, --available`: Set the node as unavailable for job deployment (default: false).
-     * `-z, --cpu int`: Set the value for CPU usage.
+     * `-z, --cpu int`: Set number of CPU cores.
      * `-h, --help`: Display help information for the `/dms/node/onboarding/onboard` command.
      * `-l, --local-enable`: Set server mode (enable for local) (default: true).
-     * `-m, --memory uint`: Set the value for memory usage.
+     * `-m, --memory uint`: Set the value for memory usage in GB.
      * `-x, --ntx-price float`: Set the price in NTX per minute for the onboarded compute resource.
-     * `-n, --nunet-channel string`: Set the channel.
      * `-w, --wallet string`: Set the wallet address.
 
 * **`/dms/node/onboarding/resource`**

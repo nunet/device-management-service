@@ -31,7 +31,7 @@ func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero) *cobra.Comman
 		Long: `Invoke a predefined behavior on an actor
 
 Example:
- nunet actor cmd --context dms /broadcast/hello
+ nunet actor cmd --context user /broadcast/hello
 
 Adding the --dest flag will cause the behavior to be invoked on the specified actor.
 

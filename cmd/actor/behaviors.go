@@ -41,8 +41,8 @@ This behavior broadcasts a "hello" for a polite introduction.
 
 Examples:
 
-  nunet actor cmd --context dms /public/hello
-  nunet actor cmd --context dms /public/hello --dest <did/peer_id/actor_handle>`,
+  nunet actor cmd --context user /public/hello
+  nunet actor cmd --context user /public/hello --dest <did/peer_id/actor_handle>`,
 	},
 	// /broadcast/hello
 	node.BroadcastHelloBehavior: {
@@ -56,8 +56,7 @@ This behavior sends a "hello" message to a broadcast topic for polite introducti
 
 Examples:
 
-  nunet actor cmd --context dms /broadcast/hello
-  nunet actor cmd --context dms /broadcast/hello --dest <did/peer_id/actor_handle>`,
+  nunet actor cmd --context user /broadcast/hello`,
 	},
 	// /public/status
 	node.PublicStatusBehavior: {
@@ -68,8 +67,8 @@ Examples:
 This behavior retrieves the status and resources information.
 
 Examples:
-  nunet actor cmd --context dms /public/status # own actor status
-  nunet actor cmd --context dms /public/status --dest <did/peer_id/actor_handle> # status of specified destination`,
+  nunet actor cmd --context user /public/status # own actor status
+  nunet actor cmd --context user /public/status --dest <did/peer_id/actor_handle> # status of specified destination`,
 	},
 	// /dms/node/peers/list
 	node.PeersListBehavior: {
@@ -80,8 +79,8 @@ Examples:
 This behavior retrieves a list of connected peers.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/peers/list # own node actor peer list
-  nunet actor cmd --context dms /dms/node/peers/list --dest <did/peer_id/actor_handle> # specified node actor peer list`,
+  nunet actor cmd --context user /dms/node/peers/list # own node actor peer list
+  nunet actor cmd --context user /dms/node/peers/list --dest <did/peer_id/actor_handle> # specified node actor peer list`,
 	},
 	// /dms/node/peers/self
 	node.PeerAddrInfoBehavior: {
@@ -92,8 +91,8 @@ Examples:
 This behavior retrieves information about the node itself, such as its ID or addresses.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/peers/self # own node actor peer ID
-  nunet actor cmd --context dms /dms/node/peers/self --dest <did/peer_id/actor_handle> # specified node actor peer ID`,
+  nunet actor cmd --context user /dms/node/peers/self # own node actor peer ID
+  nunet actor cmd --context user /dms/node/peers/self --dest <did/peer_id/actor_handle> # specified node actor peer ID`,
 	},
 	// /dms/node/peers/ping
 	node.PeerPingBehavior: {
@@ -118,7 +117,7 @@ Examples:
 This behavior establishes a ping connection with a peer.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/peers/ping --host <peer_id>`,
+  nunet actor cmd --context user /dms/node/peers/ping --host <peer_id>`,
 	},
 	// /dms/node/peers/dht
 	node.PeerDHTBehavior: {
@@ -129,7 +128,7 @@ Examples:
 This behavior returns a list of peers from the  Distributed Hash Table (DHT) used for peer discovery and content routing.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/peers/dht`,
+  nunet actor cmd --context user /dms/node/peers/dht`,
 	},
 	// /dms/node/peers/connect
 	node.PeerConnectBehavior: {
@@ -154,7 +153,7 @@ Examples:
 This behavior initiates a connection to a specified peer.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/peers/connect --address /p2p/<peer_id>`,
+  nunet actor cmd --context user /dms/node/peers/connect --address /p2p/<peer_id>`,
 	},
 	// /dms/node/peers/score
 	node.PeerScoreBehavior: {
@@ -165,7 +164,7 @@ Examples:
 This behavior retrieves a snapshot of the peer's gossipsub broadcast score.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/peers/score`,
+  nunet actor cmd --context user /dms/node/peers/score`,
 	},
 	// /dms/node/onboarding/onboard
 	node.OnboardBehaviour: {
@@ -174,15 +173,14 @@ Examples:
 		SetFlags: func(cmd *Command, payload any) {
 			// infer the type of the payload
 			p := payload.(*node.OnboardRequest)
-			cmd.Flags().Uint64VarP(&p.Config.Memory, "memory", "m", 0, "set value for memory usage (required)")
-			cmd.Flags().Int64VarP(&p.Config.CPU, "cpu", "z", 0, "set value for CPU usage (required)")
-			cmd.Flags().StringVarP(&p.Config.Channel, "nunet-channel", "n", "", "set channel (required)")
-			cmd.Flags().StringVarP(&p.Config.PaymentAddress, "wallet", "w", "", "set wallet address (required)")
+			cmd.Flags().Uint64VarP(&p.Config.Memory, "memory", "m", 0, "set amount of memory in GB  (required)")
+			cmd.Flags().Int64VarP(&p.Config.CPU, "cpu", "z", 0, "set number of CPU cores (required)")
+			cmd.Flags().StringVarP(&p.Config.PaymentAddress, "wallet", "w", "", "set wallet address (optional)")
 			cmd.Flags().Float64VarP(&p.Config.NTXPricePerMinute, "ntx-price", "x", 0, "price in NTX per minute for onboarded compute resource")
 			cmd.Flags().BoolVarP(&p.Config.IsAvailable, "available", "a", false, "unavailable for job deployment (default: false)")
 			cmd.Flags().BoolVarP(&p.Config.ServerMode, "local-enable", "l", true, "set server mode (enable for local)")
-			cmd.MarkFlagsOneRequired("memory", "cpu", "nunet-channel", "wallet")
-			cmd.MarkFlagsRequiredTogether("memory", "cpu", "nunet-channel", "wallet")
+			cmd.MarkFlagsOneRequired("memory", "cpu")
+			cmd.MarkFlagsRequiredTogether("memory", "cpu")
 		},
 		PayloadEnc: func(_ *Command, payload any) (any, error) {
 			req, ok := payload.(*node.OnboardRequest)
@@ -197,7 +195,7 @@ Examples:
 This behavior is used to onboard a node to the DMS, making its resources available for use.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/onboarding/onboard --memory 1024 --cpu 2 --nunet-channel "nunet-test" --wallet "0x1234..."`,
+  nunet actor cmd --context user /dms/node/onboarding/onboard --memory 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
 	node.OffboardBehaviour: {
@@ -221,8 +219,8 @@ Examples:
 This behavior is used to offboard a node from the DMS (Device Management Service).
 
 Examples:
-  nunet actor cmd --context dms /dms/node/onboarding/offboard
-  nunet actor cmd --context dms /dms/node/onboarding/offboard --force`,
+  nunet actor cmd --context user /dms/node/onboarding/offboard
+  nunet actor cmd --context user /dms/node/onboarding/offboard --force`,
 	},
 	// /dms/node/onboarding/status
 	node.OnboardStatusBehaviour: {
@@ -233,7 +231,7 @@ Examples:
 This behavior is used to check the onboarding status of a node.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/onboarding/status`,
+  nunet actor cmd --context user /dms/node/onboarding/status`,
 	},
 	// /dms/node/onboarding/resource
 	node.OnboardResourceBehaviour: {
@@ -244,7 +242,7 @@ Examples:
 This behavior retrieves or manages resource information related to the onboarding process.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/onboarding/resource`,
+  nunet actor cmd --context user /dms/node/onboarding/resource`,
 	},
 	// /dms/node/vm/start/custom
 	node.CustomVMStart: {
@@ -276,7 +274,7 @@ Examples:
 This behavior starts a new VM with custom configurations.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/vm/start/custom --kernel /path/to/kernel --rootfs /path/to/rootfs --cpu 2 --memory 2048`,
+  nunet actor cmd --context user /dms/node/vm/start/custom --kernel /path/to/kernel --rootfs /path/to/rootfs --cpu 2 --memory 2048`,
 	},
 	// /dms/node/vm/stop
 	node.VMStop: {
@@ -301,7 +299,7 @@ Examples:
 This behavior stops a running VM.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/vm/stop --id <execution_id>`,
+  nunet actor cmd --context user /dms/node/vm/stop --id <execution_id>`,
 	},
 	// /dms/node/vm/list
 	node.VMList: {
@@ -312,6 +310,6 @@ Examples:
 This behavior retrieves a list of virtual machines (VMs) running on the node.
 
 Examples:
-  nunet actor cmd --context dms /dms/node/vm/list`,
+  nunet actor cmd --context user /dms/node/vm/list`,
 	},
 }

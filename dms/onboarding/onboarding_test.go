@@ -56,7 +56,6 @@ func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
 		}),
 		WorkDir:      "/test",
 		DatabasePath: "/test/db.sqlite",
-		Channels:     []string{"test1", "test2", "test3"},
 	}
 	o := New(&oConfig)
 	return o
@@ -104,9 +103,8 @@ func TestOnboard(t *testing.T) {
 	require.NoError(t, err)
 
 	capacity := types.CapacityForNunet{
-		CPU:               8000,
-		Memory:            16000,
-		Channel:           "test1",
+		CPU:               3,
+		Memory:            4,
 		PaymentAddress:    "0x1234567890abcdef",
 		NTXPricePerMinute: 10,
 		ServerMode:        true,
@@ -134,27 +132,28 @@ func TestOnboard(t *testing.T) {
 
 	t.Run("unhappy case - insufficient memory", func(t *testing.T) {
 		capacity.PaymentAddress = testWalletAddress
-		capacity.Memory = 1
+		capacity.CPU = int64(total.CPU.Cores) / 2                      // 50% of total CPU cores
+		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 20 // 5% of total RAM
 
 		config, err := ts.service.Onboard(ctx, capacity)
 		assert.Nil(t, config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "memory should be between 10% and 90% of the available memory")
+		assert.Contains(t, err.Error(), "memory should be between")
 	})
 
 	t.Run("unhappy case - insufficient cpu", func(t *testing.T) {
-		capacity.Memory = total.RAM.Size / 2 // 50% of total RAM
-		capacity.CPU = 1
+		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 2 // 50% of total RAM
+		capacity.CPU = int64(total.CPU.Cores) / 20                    // 5% of total CPU cores
 
 		config, err := ts.service.Onboard(ctx, capacity)
 		assert.Nil(t, config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "CPU should be between 10% and 90% of the available CPU ")
+		assert.Contains(t, err.Error(), "CPU should be between")
 	})
 
 	t.Run("unhappy case - unmigrated schema", func(t *testing.T) {
-		capacity.Memory = total.RAM.Size / 2        // 50% of total RAM
-		capacity.CPU = int64(total.CPU.Compute) / 2 // 50% of total CPU
+		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 2 // 50% of total RAM
+		capacity.CPU = int64(total.CPU.Cores) / 2                     // 50% of total CPU cores
 		config, err := ts.service.Onboard(ctx, capacity)
 		assert.Nil(t, config)
 		assert.Error(t, err)
@@ -162,8 +161,8 @@ func TestOnboard(t *testing.T) {
 	})
 
 	t.Run("happy case", func(t *testing.T) {
-		capacity.Memory = total.RAM.Size / 2        // 50% of total RAM
-		capacity.CPU = int64(total.CPU.Compute) / 2 // 50% of total CPU
+		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 2 // 50% of total RAM
+		capacity.CPU = int64(total.CPU.Cores) / 2                     // 50% of total CPU
 
 		// migrate tables
 		err = ts.db.AutoMigrate(&types.OnboardingConfig{})
