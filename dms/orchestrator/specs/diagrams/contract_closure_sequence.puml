@@ -1,0 +1,23 @@
+@startuml
+actor User as user
+participant "DMS 1\n(a.k.a. Service Provider)" as dms1 #53c68c
+participant "DMS 2\n(a.k.a. Compute Provider 1)" as dms2 #3385ff
+participant "DMS 3\n(a.k.a. Compute Provider 2)" as dms3 #ffa31a
+
+
+  group Contract closure Job-1
+      dms1 --> dms1 : selectBestBid(Job-1, depoymentPlan)
+      dms1 -> dms2 : initiateContract(bid21)
+      note over dms1, dms2
+        Contract closure sequence is defined in tokenomics package
+      end note
+      dms1 -_> dms1 : tokenomics.ContractProof stored in local db;
+      dms2 --> dms2 : tokenomics.ContractProof stored in local db;
+      note over dms1, dms2 : tokenomics.ContractProof stored in external contractDB;
+  end
+
+
+@enduml
+
+'main under-developed aspects:
+' job description format / type with connectivity semantics;

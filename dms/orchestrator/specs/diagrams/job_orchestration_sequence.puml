@@ -1,0 +1,20 @@
+@startuml
+actor User as user
+participant "DMS 1\n(a.k.a. Service Provider)" as dms1 #53c68c
+participant "DMS 2\n(a.k.a. Compute Provider 1)" as dms2 #3385ff
+participant "DMS 3\n(a.k.a. Compute Provider 2)" as dms3 #ffa31a
+participant "DMS 4\n(a.k.a. Compute Provider 3)" as dms4 #bfbfbf
+
+
+  group Contract settlement Job-1
+    dms2 -> dms1 : notifyContractSettlement(ContractProof, jobVerificationResult, job-1-id)
+    note over dms1, dms2
+        Contract settlement sequence is defined in tokenomics package
+    end note
+  end
+
+
+@enduml
+
+'main under-developed aspects:
+' job description format / type with connectivity semantics;

@@ -26,30 +26,73 @@ type behaviorConfig struct {
 	SetFlags    func(cmd *Command, payload any)
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
+	Long        string
+	Short       string
 }
 
 var behaviors = map[string]behaviorConfig{
 	// /public/hello
 	node.PublicHelloBehavior: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "Broadcast a 'hello' message",
+		Long: `Invoke the /public/hello behavior on an actor
+
+This behavior broadcasts a "hello" for a polite introduction.
+
+Examples:
+
+  nunet actor cmd --context user /public/hello
+  nunet actor cmd --context user /public/hello --dest <did/peer_id/actor_handle>`,
 	},
 	// /broadcast/hello
 	node.BroadcastHelloBehavior: {
-		Type:  bBroadcast,
+		Type: bBroadcast,
+
 		Topic: node.BroadcastHelloTopic,
+		Short: "Broadcast a 'hello' message to a topic",
+		Long: `Invokes the /broadcast/hello behavior on an actor
+
+This behavior sends a "hello" message to a broadcast topic for polite introduction.
+
+Examples:
+
+  nunet actor cmd --context user /broadcast/hello`,
 	},
 	// /public/status
 	node.PublicStatusBehavior: {
-		Type: bInvoke,
-	},
+		Type:  bInvoke,
+		Short: "Retrieve actor status",
+		Long: `Invokes the /public/status behavior on an actor
 
+This behavior retrieves the status and resources information.
+
+Examples:
+  nunet actor cmd --context user /public/status # own actor status
+  nunet actor cmd --context user /public/status --dest <did/peer_id/actor_handle> # status of specified destination`,
+	},
 	// /dms/node/peers/list
 	node.PeersListBehavior: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "List connected peers",
+		Long: `Invokes the /dms/node/peers/list behavior on an actor
+
+This behavior retrieves a list of connected peers.
+
+Examples:
+  nunet actor cmd --context user /dms/node/peers/list # own node actor peer list
+  nunet actor cmd --context user /dms/node/peers/list --dest <did/peer_id/actor_handle> # specified node actor peer list`,
 	},
 	// /dms/node/peers/self
 	node.PeerAddrInfoBehavior: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "Get peer's ID and addresses",
+		Long: `Invokes the /dms/node/peers/self behavior on an actor
+
+This behavior retrieves information about the node itself, such as its ID or addresses.
+
+Examples:
+  nunet actor cmd --context user /dms/node/peers/self # own node actor peer ID
+  nunet actor cmd --context user /dms/node/peers/self --dest <did/peer_id/actor_handle> # specified node actor peer ID`,
 	},
 	// /dms/node/peers/ping
 	node.PeerPingBehavior: {
@@ -58,7 +101,7 @@ var behaviors = map[string]behaviorConfig{
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.PingRequest)
 
-			cmd.Flags().StringVarP(&p.Host, "host", "H", "", "Host address to ping")
+			cmd.Flags().StringVarP(&p.Host, "host", "H", "", "host address to ping (required)")
 			_ = cmd.MarkFlagRequired("host")
 		},
 		PayloadEnc: func(_ *Command, payload any) (any, error) {
@@ -68,10 +111,24 @@ var behaviors = map[string]behaviorConfig{
 			}
 			return req, nil
 		},
+		Short: "Ping a peer",
+		Long: `Invokes the /dms/node/peers/ping behavior on an actor
+
+This behavior establishes a ping connection with a peer.
+
+Examples:
+  nunet actor cmd --context user /dms/node/peers/ping --host <peer_id>`,
 	},
 	// /dms/node/peers/dht
 	node.PeerDHTBehavior: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "List peers connected to DHT",
+		Long: `Invokes the /dms/node/peers/dht behavior on an actor
+
+This behavior returns a list of peers from the  Distributed Hash Table (DHT) used for peer discovery and content routing.
+
+Examples:
+  nunet actor cmd --context user /dms/node/peers/dht`,
 	},
 	// /dms/node/peers/connect
 	node.PeerConnectBehavior: {
@@ -80,7 +137,7 @@ var behaviors = map[string]behaviorConfig{
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.PeerConnectRequest)
 
-			cmd.Flags().StringVarP(&p.Address, "address", "a", "", "Peer address to connect to")
+			cmd.Flags().StringVarP(&p.Address, "address", "a", "", "peer address to connect to (required)")
 			_ = cmd.MarkFlagRequired("address")
 		},
 		PayloadEnc: func(_ *Command, payload any) (any, error) {
@@ -90,10 +147,24 @@ var behaviors = map[string]behaviorConfig{
 			}
 			return req, nil
 		},
+		Short: "Connect to a peer",
+		Long: `Invokes the /dms/node/peers/connect behavior on an actor
+
+This behavior initiates a connection to a specified peer.
+
+Examples:
+  nunet actor cmd --context user /dms/node/peers/connect --address /p2p/<peer_id>`,
 	},
 	// /dms/node/peers/score
 	node.PeerScoreBehavior: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "Retrieves gossipsub broadcast score",
+		Long: `Invokes the /dms/node/peers/score behavior on an actor
+
+This behavior retrieves a snapshot of the peer's gossipsub broadcast score.
+
+Examples:
+  nunet actor cmd --context user /dms/node/peers/score`,
 	},
 	// /dms/node/onboarding/onboard
 	node.OnboardBehaviour: {
@@ -102,14 +173,14 @@ var behaviors = map[string]behaviorConfig{
 		SetFlags: func(cmd *Command, payload any) {
 			// infer the type of the payload
 			p := payload.(*node.OnboardRequest)
-			cmd.Flags().Uint64VarP(&p.Config.Memory, "memory", "m", 0, "set value for memory usage")
-			cmd.Flags().Int64VarP(&p.Config.CPU, "cpu", "z", 0, "set value for CPU usage")
-			cmd.Flags().StringVarP(&p.Config.Channel, "nunet-channel", "n", "", "set channel")
-			cmd.Flags().StringVarP(&p.Config.PaymentAddress, "wallet", "w", "", "set wallet address")
+			cmd.Flags().Uint64VarP(&p.Config.Memory, "memory", "m", 0, "set amount of memory in GB  (required)")
+			cmd.Flags().Int64VarP(&p.Config.CPU, "cpu", "z", 0, "set number of CPU cores (required)")
+			cmd.Flags().StringVarP(&p.Config.PaymentAddress, "wallet", "w", "", "set wallet address (optional)")
 			cmd.Flags().Float64VarP(&p.Config.NTXPricePerMinute, "ntx-price", "x", 0, "price in NTX per minute for onboarded compute resource")
 			cmd.Flags().BoolVarP(&p.Config.IsAvailable, "available", "a", false, "unavailable for job deployment (default: false)")
 			cmd.Flags().BoolVarP(&p.Config.ServerMode, "local-enable", "l", true, "set server mode (enable for local)")
-			cmd.MarkFlagsRequiredTogether("memory", "cpu", "nunet-channel", "wallet")
+			cmd.MarkFlagsOneRequired("memory", "cpu")
+			cmd.MarkFlagsRequiredTogether("memory", "cpu")
 		},
 		PayloadEnc: func(_ *Command, payload any) (any, error) {
 			req, ok := payload.(*node.OnboardRequest)
@@ -118,6 +189,13 @@ var behaviors = map[string]behaviorConfig{
 			}
 			return req, nil
 		},
+		Short: "Onboard a node to the network",
+		Long: `Invokes the /dms/node/onboarding/onboard behavior on an actor
+
+This behavior is used to onboard a node to the DMS, making its resources available for use.
+
+Examples:
+  nunet actor cmd --context user /dms/node/onboarding/onboard --memory 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
 	node.OffboardBehaviour: {
@@ -135,14 +213,36 @@ var behaviors = map[string]behaviorConfig{
 			}
 			return req, nil
 		},
+		Short: "Offboard a node from the network",
+		Long: `Invokes the /dms/node/onboarding/offboard behavior on an actor
+
+This behavior is used to offboard a node from the DMS (Device Management Service).
+
+Examples:
+  nunet actor cmd --context user /dms/node/onboarding/offboard
+  nunet actor cmd --context user /dms/node/onboarding/offboard --force`,
 	},
 	// /dms/node/onboarding/status
 	node.OnboardStatusBehaviour: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "Retrieve onboarding status of a node",
+		Long: `Invokes the /dms/node/onboarding/status behavior on an actor
+
+This behavior is used to check the onboarding status of a node.
+
+Examples:
+  nunet actor cmd --context user /dms/node/onboarding/status`,
 	},
 	// /dms/node/onboarding/resource
 	node.OnboardResourceBehaviour: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "Retrieve or manage resources of a node",
+		Long: `Invokes the /dms/node/onboarding/resource behavior on an actor
+
+This behavior retrieves or manages resource information related to the onboarding process.
+
+Examples:
+  nunet actor cmd --context user /dms/node/onboarding/resource`,
 	},
 	// /dms/node/vm/start/custom
 	node.CustomVMStart: {
@@ -150,8 +250,8 @@ var behaviors = map[string]behaviorConfig{
 		Payload: func() any { return &vmStartOpts{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*vmStartOpts)
-			cmd.Flags().StringVarP(&p.Engine.KernelImage, "kernel", "k", "", "path to kernel image file")
-			cmd.Flags().StringVarP(&p.Engine.RootFileSystem, "rootfs", "r", "", "path to root fs image file")
+			cmd.Flags().StringVarP(&p.Engine.KernelImage, "kernel", "k", "", "path to kernel image file (required)")
+			cmd.Flags().StringVarP(&p.Engine.RootFileSystem, "rootfs", "r", "", "path to root fs image file (required)")
 			cmd.Flags().StringVarP(&p.Engine.Initrd, "initrd", "i", "", "path to initial ram disk")
 			cmd.Flags().StringVarP(&p.Engine.KernelArgs, "args", "a", "", "arguments to pas to the kernel")
 			cmd.Flags().Float32VarP(&p.Resources.CPU.Cores, "cpu", "z", 1, "CPU cores to allocate")
@@ -168,6 +268,13 @@ var behaviors = map[string]behaviorConfig{
 			}
 			return newCustomVMStartRequest(opts)
 		},
+		Short: "Starts a custom VM",
+		Long: `Invokes the /dms/node/vm/start/custom behavior on an actor
+
+This behavior starts a new VM with custom configurations.
+
+Examples:
+  nunet actor cmd --context user /dms/node/vm/start/custom --kernel /path/to/kernel --rootfs /path/to/rootfs --cpu 2 --memory 2048`,
 	},
 	// /dms/node/vm/stop
 	node.VMStop: {
@@ -175,8 +282,8 @@ var behaviors = map[string]behaviorConfig{
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.VMStopRequest)
 
-			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution id of the vm")
-			_ = cmd.MarkFlagRequired("host")
+			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
+			_ = cmd.MarkFlagRequired("id")
 		},
 		PayloadEnc: func(_ *Command, payload any) (any, error) {
 			req, ok := payload.(*node.VMStopRequest)
@@ -185,10 +292,24 @@ var behaviors = map[string]behaviorConfig{
 			}
 			return req, nil
 		},
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "Stops a running VM",
+		Long: `Invokes the /dms/node/vm/stop behavior on an actor
+
+This behavior stops a running VM.
+
+Examples:
+  nunet actor cmd --context user /dms/node/vm/stop --id <execution_id>`,
 	},
 	// /dms/node/vm/list
 	node.VMList: {
-		Type: bInvoke,
+		Type:  bInvoke,
+		Short: "List running VMs",
+		Long: `Invokes the /dms/node/vm/list behavior on an actor
+
+This behavior retrieves a list of virtual machines (VMs) running on the node.
+
+Examples:
+  nunet actor cmd --context user /dms/node/vm/list`,
 	},
 }

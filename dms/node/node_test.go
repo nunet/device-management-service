@@ -1,7 +1,6 @@
 package node
 
 import (
-	"context"
 	"testing"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
@@ -96,7 +95,7 @@ func TestNew(t *testing.T) {
 				resourceManager = tt.mockResourceManager(ctrl)
 			}
 
-			act, err := New(context.TODO(), tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler)
+			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -116,7 +115,7 @@ func TestNodeAllocationMessaging(t *testing.T) {
 	t.Cleanup(ctrl.Finish)
 	resourceManager := NewMockResourceManager(ctrl)
 
-	node1, err := New(context.TODO(), &onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1))
+	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1))
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)
 	err = node1.Start()
@@ -184,10 +183,10 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 		},
 	}, afero.NewMemMapFs())
 	assert.NoError(t, err)
-	err = net.Init(context.Background())
+	err = net.Init()
 	assert.NoError(t, err)
 
-	err = net.Start(context.Background())
+	err = net.Start()
 	assert.NoError(t, err)
 
 	libp2pInstance, _ := net.(*libp2p.Libp2p)

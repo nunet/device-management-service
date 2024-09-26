@@ -30,8 +30,12 @@ const (
 
 // Messenger defines the interface for sending messages.
 type Messenger interface {
-	// SendMessage sends a message to the given address.
+	// SendMessage asynchronously sends a message to the given peer.
 	SendMessage(ctx context.Context, hostID string, msg types.MessageEnvelope, expiry time.Time) error
+
+	// SendMessageSync synchronously sends a message to the given peer.
+	// This method blocks until the message has been sent.
+	SendMessageSync(ctx context.Context, hostID string, msg types.MessageEnvelope, expiry time.Time) error
 }
 
 type Network interface {
@@ -39,9 +43,9 @@ type Network interface {
 	Messenger
 
 	// Init initializes the network
-	Init(context.Context) error
+	Init() error
 	// Start starts the network
-	Start(context context.Context) error
+	Start() error
 	// Stat returns the network information
 	Stat() types.NetworkStats
 	// Ping pings the given address and returns the PingResult

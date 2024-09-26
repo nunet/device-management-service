@@ -1,4 +1,5 @@
 /dist
+/builds
 *.db
 maint-scripts/inventory.yaml
 *.log

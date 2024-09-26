@@ -1,0 +1,297 @@
+@startuml
+actor User as user
+participant "DMS 1\n(a.k.a. Service Provider)" as dms1 #53c68c
+participant "DMS 2\n(a.k.a. Compute Provider 1)" as dms2 #3385ff
+participant "DMS 3\n(a.k.a. Compute Provider 2)" as dms3 #ffa31a
+participant "DMS 4\n(a.k.a. Compute Provider 3)" as dms4 #bfbfbf
+autonumber 1.1
+user -> dms1 : JobPost (via local dms/node endpoint (cli/api))
+dms1 --> dms1 : Invoking an allocation for running the job orchestration sequence \n(see [[https://nunet.gitlab.io/research/blog/posts/parent-child-relations/#native-executor Native Executor]] idea)
+note right of user
+    With job description in text format
+    which could be using different semantics (e.g. Kubernetes)
+    and different format (e.g. json)
+end note
+autonumber inc A 
+loop Converting JobPost into BidRequest(s)
+  activate dms1 #53c68c
+  dms1 --> dms1 : Converting JobPost job description format to NuNet JobSpec \n which needs to be defined
+  dms1 --> dms1 : Formulating BidRequests for all Jobs
+  note right of dms1
+    results in:
+    bid_request_1 := BidRequest(with Job-1)
+    bid_request_2 := BidRequest(with Job-2)
+  end note
+end
+
+autonumber inc A
+loop Find right Topic(s) and construct Envelope(s)
+  dms1 --> dms1 : Actor.Publish(msg returnAvailableTopics)
+  note right of dms1
+     asks other nodes in the network to return topics 
+     that they know about in order to find out
+     the one that fits this job description
+  end note
+  note right of dms1
+    it could be that a node knows about relevant topics
+    from previous jobs or from other sources
+    in which case it selects the fitting topic from
+    local database of topics
+  end note  
+  dms1 --> dms1 : topic := selectTopic(returnAvailableTopics)
+  note right of dms1
+     in order for this to work, we have to define semantics of a topic
+     it may, or may not be enough to return only strings
+  end note
+  dms1 --> dms1 : msg1 := Envelope(bid_request_1).Options.Topic = topic
+  dms1 --> dms1 : msg2 := Envelope(bid_request_2).Options.Topic = topic
+  note right of dms1
+    topics can be calculated separately for each bid request
+    they do not need to be the same
+  end note
+end
+
+dms1 --> dms1 : setSearchAndMatchTimeout := timeout
+note over dms1
+  timeout is how long we are willing to wait for bids
+end note
+
+autonumber inc A
+loop search and match
+  dms1 --> dms1 : Actor.Publish(msg1)
+  dms1 --> dms1 : Actor.Publish(msg2)
+  note over dms1
+    Settings:
+    Publish job request to the whole network
+    And wait for the {timeout} time
+    
+    Diagram below considers only subset of the network
+    which eventually participates in the deployment
+  end note
+  deactivate dms1
+  skinparam sequenceMessageAlign center
+  loop broadcast reaches dms2
+    group msg1
+      dms1 -> dms2 : Actor.Receive(msg1)
+      activate dms2 #3385ff
+      group Execute behavior of msg1 (provide Bid for bid_request_1?)
+        dms2 --> dms2 : Actor.availableHardwareCapability.Compare(bid_request_1.requestedHardwareCapability)\n--> Comparison: comparison21
+        alt comparison21 == Better:
+          dms2 --> dms2 : bid21_msg Envelope :=Actor.constructBid(bid_request_1)
+          dms2 -> dms1 : Actor.Send(bid21_msg)
+          deactivate dms2
+          activate dms1 #53c68c
+        end
+      end
+    end
+    dms1 --> dms1 : register bid21_msg for bid_request_1 for future processing
+    
+    group msg2
+      
+      dms1 -> dms2 : Actor.Receive(msg2)
+      deactivate dms1
+      activate dms2 #3385ff
+      group Execute behavior of msg2 (provide Bid for bid_request_2?)
+        dms2 --> dms2 : Actor.availableHardwareCapability.Compare(bid_request_2.requestedHardwareCapability)\n--> Comparison: comparison22
+        alt comparison22 == Worse:
+          dms2 --> dms2 : do nothing / garbage collect
+          deactivate dms2
+        end
+      end
+    end
+  end
+
+  autonumber inc A
+  loop broadcast reaches dms3
+    group msg1
+      dms1 -> dms3 : Actor.Receive(msg1)
+      activate dms3 #ffa31a
+      group Execute behavior of msg1 (provide Bid for bid_request_1?)
+        dms3 --> dms3 : Actor.availableHardwareCapability.Compare(bid_request_1.requestedHardwareCapability)\n--> Comparison: comparison31
+        alt comparison31 == Worse:
+          dms3 --> dms3 : do nothing / garbage collect
+        end
+      end
+    end
+    group msg2
+      dms1 -> dms3 : Actor.Receive(msg2)
+      group Execute behavior of msg2 (provide Bid for bid_request_2?)
+        dms3 --> dms3 : Actor.availableHardwareCapability.Compare(bid_request_2.requestedHardwareCapability)\n--> Comparison: comparison32
+        alt comparison32 == Better:
+          dms3 --> dms3 : bid32_msg Envelope :=Actor.constructBid(bid_request_2)
+          dms3 -> dms1 : Actor.Send(bid32_msg)
+          deactivate dms3
+          activate dms1 #53c68c
+        end
+      end
+    end
+
+    dms1 --> dms1 : register bid32_msg for bid_request_2 for future processing
+  end
+
+  autonumber inc A
+  loop broadcast reaches dms4
+    group msg1
+      dms1 -> dms4 : Actor.Receive(msg1)
+      deactivate dms1
+      activate dms4 #bfbfbf
+      group Execute behavior of msg1 (provide Bid for bid_request_1?)
+        dms4 --> dms4 : Actor.availableHardwareCapability.Compare(bid_request_1.requestedHardwareCapability)\n--> Comparison: comparison41
+        alt comparison31 == Better:
+          dms4 --> dms4 : bid41_msg Envelope :=Actor.constructBid(bid_request_1)
+          dms4 -> dms1 : Actor.Send(bid41_msg)
+          dms4 --> dms4 : (reserve capacity for the chosen timeout)
+          deactivate dms4
+          activate dms1 #53c68c
+        end
+      end
+    end
+    dms1 --> dms1 : register bid41_msg for bid_request_2 for future 
+    
+    group msg2
+      dms1 -> dms4 : Actor.Receive(msg2)
+      deactivate dms1
+      activate dms4 #bfbfbf
+      group Execute behavior of msg2 (provide Bid for bid_request_2?)
+        dms4 --> dms4 : Actor.availableHardwareCapability.Compare(bid_request_2.requestedHardwareCapability)\n--> Comparison: comparison42
+        alt comparison42 == Better:
+          dms4 --> dms4 : bid42_msg Envelope :=Actor.constructBid(bid_request_2)
+          dms4 -> dms1 : Actor.Send(bid42_msg)
+          deactivate dms4
+          activate dms1 #53c68c
+        end
+      end
+    end
+    dms1 --> dms1 : register bid42_msg for bid_request_2 for future processing
+  end
+  dms1 --> dms1 : SearchAndMatchingTimeout reached
+  note right of dms1
+    The logic of terminating the search and matching loop
+    can depend on different factors
+    e.g. we may have received bids from all nodes
+    or we may have received bids from enough number of nodes
+    or we may have received bids from all nodes with enough capacity
+    or the timeout is reached, etc.
+  end note
+  deactivate dms1
+end
+
+  note right of dms1
+    at this moment, dms1 has the following bids registered:
+    for Job-1: bid21_msg & bid41_msg
+    for Job-2: bid32_msg & bid42_msg
+  end note
+
+loop Generate deployment plan
+  note right of dms1
+    In order to ensure a valid deployment, we have to be able
+    to reason about the network of nodes that we have selected
+    (mostly their connetivity and capabilities)
+    And for that we need to generate a subnetwork graph
+    And represent it in a proper format / type
+  end note
+  dms1 -> dms2 : Actor.Send(returnConnectivityInfo(dms3))
+  activate dms1 #53c68c
+  activate dms2 #3385ff
+  dms2 -> dms1 : connectivityInfo(dms2<->dms3)
+  dms1 -> dms2 : Actor.Send(returnConnectivityInfo(dms4))
+  dms2 -> dms1 : connectivityInfo(dms2<->dms4)
+  deactivate dms2
+  activate dms4 #bfbfbf
+  dms1 -> dms4 : Actor.Send(returnConnectivityInfo(dms3))
+  dms4 -> dms1 : connectivityInfo(dms4<->dms3)
+  deactivate dms4
+  activate dms3 #ffa31a
+  dms1 -> dms3 : Actor.Send(returnConnectivityInfo(dms4))
+  dms3 -> dms1 : connectivityInfo(dms3<->dms4)
+  deactivate dms3
+  dms1 --> dms1 : subnetworkGraph := {connectivityInfo(dms2<->dms3), \nconnectivityInfo(dms2<->dms4), \nconnectivityInfo(dms4<->dms3), \nconnectivityInfo(dms3<->dms4)}
+  dms1 --> dms1 : deploymentPlan := dms1.Actor.GenerateDeploymentPlan(subnetworkGraph, [bid21, bid32, bid41, bid42])
+  note right of dms1
+    we have to implement logic of selecting best combination of bids
+    considering how they compare to each other
+    and our preferences and network configuration / requirements
+  end note
+    dms1 --> dms1 : deploymentPlan = [{Job-1: bid_21, Job-2: bid_42}, {Job-1: bid_21, Job-2: bid_32}...}
+  note right of dms1
+    In its simplest form
+    deployment plan is just an orderd list of mapping
+    of jobs to bids (i.e. machines)
+  end note
+  deactivate dms1
+end
+
+
+loop Deployment plan execution: foreach item in deploymentPlan do { 
+
+  note right of dms1
+    This loop will be repeated for each job in the deployment plan
+    in the same way as the case of Job-1 as described here
+  end note
+  autonumber inc A
+  group Contract closure Job-1
+      dms1 --> dms1 : selectBestBid(Job-1, depoymentPlan)
+      dms1 -> dms2 : initiateContract(bid21)
+      note over dms1, dms2
+        Contract closure sequence is defined in tokenomics package
+      end note
+      dms1 -_> dms1 : tokenomics.ContractProof stored in local db;
+      dms2 --> dms2 : tokenomics.ContractProof stored in local db;
+      note over dms1, dms2 : tokenomics.ContractProof stored in external contractDB;
+  end
+
+  autonumber inc A
+  group Invocation and allocation Job-1
+    dms1 -> dms2 : Invocation for a job: actor.Actor.Send(behavior=invocation(job21)))
+    dms2 --> Allocation21 ** : Create new Allocation as an actor via actor.Actor.New() and jobs.Allocation.NewAllocation() methods
+    Allocation21 -> dms2 : Add new actor to Supervision tree / strategy;
+    dms --> Allocation21 : start job execution
+
+   end
+
+  autonumber inc A
+  group Execution monitoring Job2
+    note over dms1, Allocation21 
+      monitor job execution as needed
+    end note 
+
+    Allocation21 -> dms1 : Send job status updates
+    note over Allocation21, dms1
+        Execution environment, telemetry, logging, heartbeats, 
+        data access works correctly for the job to be finished;
+    end note
+
+    alt Job success
+        Allocation21 -> dms1 : Message that the job is completed (with proof)
+        Allocation21 -> dms2 : Message that the job is completed (with proof)
+        note over dms2, Allocation21
+          This is not yet defined as job verification logic is complex
+          and may involve external varifiers, hopefully integrated from other projects
+          from the ecosystem; for now lets assume that the the initiator of the job
+          can verify its correctness, which is the base case;
+        end note
+    else Execution error
+        note over Allocation21, dms1
+          These messages will be done via supervisor model / strategy
+          Following is a crude principle to be developed further
+        end note
+        Allocation21 -> dms1 : Error message
+        Allocation21 -> dms2 : Error message
+        note over dms1, dms2 : Carnage starts
+    end
+  end 
+
+
+  group Contract settlement Job-1
+    dms2 -> dms1 : notifyContractSettlement(ContractProof, jobVerificationResult, job-1-id)
+    note over dms1, dms2
+        Contract settlement sequence is defined in tokenomics package
+    end note
+  end
+
+end
+
+@enduml
+
+'main under-developed aspects:
+' job description format / type with connectivity semantics;

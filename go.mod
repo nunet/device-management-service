@@ -1,8 +1,8 @@
 module gitlab.com/nunet/device-management-service
 
-go 1.21
+go 1.22
 
-toolchain go1.21.7
+toolchain go1.22.7
 
 require (
 	github.com/docker/docker v20.10.18+incompatible
@@ -103,7 +103,7 @@ require (
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.6.3
 	github.com/libp2p/go-libp2p-record v0.2.0 // indirect
-	github.com/libp2p/go-msgio v0.3.0 // indirect
+	github.com/libp2p/go-msgio v0.3.0
 	github.com/libp2p/go-nat v0.2.0 // indirect
 	github.com/libp2p/go-netroute v0.2.1 // indirect
 	github.com/libp2p/go-reuseport v0.4.0 // indirect

@@ -1,0 +1,64 @@
+@startuml
+actor User as user
+participant "DMS 1\n(a.k.a. Service Provider)" as dms1 #53c68c
+participant "DMS 2\n(a.k.a. Compute Provider 1)" as dms2 #3385ff
+autonumber 1.1
+
+dms1 --> dms1 : setSearchAndMatchTimeout := timeout
+note over dms1
+  timeout is how long we are willing to wait for bids
+end note
+
+autonumber inc A
+loop search and match
+  dms1 --> dms1 : Actor.Publish(msg1)
+  dms1 --> dms1 : Actor.Publish(msg2)
+  note over dms1
+    Settings:
+    Publish job request to the whole network
+    And wait for the {timeout} time
+    
+    Diagram below considers only subset of the network
+    which eventually participates in the deployment
+  end note
+  deactivate dms1
+  skinparam sequenceMessageAlign center
+  loop broadcast reaches dms2
+    dms1 --> dms1 : register bid21_msg for bid_request_1 for future processing
+    
+   end
+
+  autonumber inc A
+  loop broadcast reaches dms3
+    dms1 --> dms1 : register bid32_msg for bid_request_2 for future processing
+  end
+
+  loop broadcast reaches dms4
+    dms1 --> dms1 : register bid41_msg for bid_request_2 for future 
+    
+    dms1 --> dms1 : register bid42_msg for bid_request_2 for future processing
+  end
+ 
+  dms1 --> dms1 : SearchAndMatchingTimeout reached
+  note right of dms1
+    The logic of terminating the search and matching loop
+    can depend on different factors
+    e.g. we may have received bids from all nodes
+    or we may have received bids from enough number of nodes
+    or we may have received bids from all nodes with enough capacity
+    or the timeout is reached, etc.
+  end note
+  deactivate dms1
+end
+
+  note right of dms1
+    at this moment, dms1 has the following bids registered:
+    for Job-1: bid21_msg & bid41_msg
+    for Job-2: bid32_msg & bid42_msg
+  end note
+
+
+@enduml
+
+'main under-developed aspects:
+' job description format / type with connectivity semantics;

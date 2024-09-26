@@ -45,7 +45,7 @@ do
 
     if [[ ! -z ${GITLAB_CI+x} ]]  ; then
         # upload artifact from build.sh to GitLab Package Registry.
-        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${version}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${version}/nunet-dms_${version}_${arch}.zip
+        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${version}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_darwin_${arch}.zip
     fi
 
     if [[ ! -z ${NUNETBOT_BUILD_ENDPOINT+x} ]] ; then
