@@ -44,4 +44,6 @@ type Libp2pConfig struct {
 	GracePeriodMs           int
 	GossipMaxMessageSize    int
 	BootstrapMaxSleep       int // in minutes
+	Memory                  int // in MB
+	FileDescriptors         int
 }

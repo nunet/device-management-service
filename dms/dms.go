@@ -110,6 +110,7 @@ func Run(ksPassphrase string, contextName string) error {
 		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
 	}
 
+	gcfg := config.GetConfig()
 	cfg := &types.Libp2pConfig{
 		PrivateKey:              priv,
 		BootstrapPeers:          bootstrapPeers,
@@ -117,8 +118,10 @@ func Run(ksPassphrase string, contextName string) error {
 		Server:                  false,
 		Scheduler:               backgroundtasks.NewScheduler(10),
 		CustomNamespace:         "/nunet-dht-1/",
-		ListenAddress:           config.GetConfig().ListenAddress,
+		ListenAddress:           gcfg.P2P.ListenAddress,
 		PeerCountDiscoveryLimit: 40,
+		Memory:                  gcfg.P2P.Memory,
+		FileDescriptors:         gcfg.P2P.FileDescriptors,
 	}
 
 	p2p, err := libp2p.New(cfg, fs)
