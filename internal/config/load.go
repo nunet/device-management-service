@@ -43,6 +43,8 @@ func setDefaultConfig() *viper.Viper {
 		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
 		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
 	})
+	v.SetDefault("p2p.memory", 1024)
+	v.SetDefault("p2p.fd", 512)
 	v.SetDefault("job.log_update_interval", 2)
 	v.SetDefault("job.target_peer", "")
 	v.SetDefault("job.cleanup_interval", 3)

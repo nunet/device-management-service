@@ -28,6 +28,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-multihash"
+	msmux "github.com/multiformats/go-multistream"
 	"github.com/spf13/afero"
 	"google.golang.org/protobuf/proto"
 
@@ -345,6 +346,25 @@ func (l *Libp2p) SendMessageSync(ctx context.Context, hostID string, msg types.M
 	return <-result
 }
 
+// workaround for https://github.com/libp2p/go-libp2p/issues/2983
+func (l *Libp2p) newStream(ctx context.Context, pid peer.ID, proto protocol.ID) (network.Stream, error) {
+	s, err := l.Host.Network().NewStream(network.WithNoDial(ctx, "already dialed"), pid)
+	if err != nil {
+		return nil, err
+	}
+
+	selected, err := msmux.SelectOneOf([]protocol.ID{proto}, s)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.SetProtocol(selected); err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}
+
 func (l *Libp2p) sendMessage(ctx context.Context, pid peer.ID, msg types.MessageEnvelope, expiry time.Time, result chan error) {
 	var err error
 	defer func() {
@@ -376,7 +396,7 @@ func (l *Libp2p) sendMessage(ctx context.Context, pid peer.ID, msg types.Message
 
 	ctx = network.WithAllowLimitedConn(ctx, "send message")
 
-	stream, err := l.Host.NewStream(ctx, pid, protocol.ID(msg.Type))
+	stream, err := l.newStream(ctx, pid, protocol.ID(msg.Type))
 	if err != nil {
 		log.Warnf("send: failed to open stream to peer %s: %s", pid, err)
 		return

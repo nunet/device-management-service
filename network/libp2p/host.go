@@ -15,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
+	"github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
@@ -58,16 +59,46 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	}
 
 	var libp2pOpts []libp2p.Option
-	baseOpts := []dht.Option{
+	dhtOpts := []dht.Option{
 		dht.ProtocolPrefix(protocol.ID(config.DHTPrefix)),
 		dht.NamespacedValidator(strings.ReplaceAll(config.CustomNamespace, "/", ""), dhtValidator{PS: ps}),
 		dht.Mode(dht.ModeAutoServer),
 	}
 
+	// set up the resource manager
+	mem := int64(config.Memory)
+	if mem > 0 {
+		mem = 1024 * 1024 * mem
+	} else {
+		mem = 1024 * 1024 * 1024 // 1GB
+	}
+
+	fds := config.FileDescriptors
+	if fds == 0 {
+		fds = 512
+	}
+
+	limits := rcmgr.DefaultLimits
+	limits.SystemBaseLimit.ConnsInbound = 512
+	limits.SystemBaseLimit.ConnsOutbound = 512
+	limits.SystemBaseLimit.Conns = 1024
+	limits.SystemBaseLimit.StreamsInbound = 8192
+	limits.SystemBaseLimit.StreamsOutbound = 8192
+	limits.SystemBaseLimit.Streams = 16384
+	scaled := limits.Scale(mem, fds)
+
+	log.Infof("libp2p limits: %+v", scaled)
+
+	mgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(scaled))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings(config.ListenAddress...),
+		libp2p.ResourceManager(mgr),
 		libp2p.Identity(config.PrivateKey),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			idht, err = dht.New(ctx, h, baseOpts...)
+			idht, err = dht.New(ctx, h, dhtOpts...)
 			return idht, err
 		}),
 		libp2p.Peerstore(ps),

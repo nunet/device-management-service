@@ -240,7 +240,7 @@ func SendMessage(ctx context.Context, net *libp2p.Libp2p, msg actor.Envelope) (e
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	err = net.SendMessage(
+	err = net.SendMessageSync(
 		ctx,
 		msg.To.Address.HostID,
 		types.MessageEnvelope{

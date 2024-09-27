@@ -21,8 +21,10 @@ type Rest struct {
 }
 
 type P2P struct {
-	ListenAddress  []string `mapstructure:"listen_address" json:"listen_address"`
-	BootstrapPeers []string `mapstructure:"bootstrap_peers" json:"bootstrap_peers"`
+	ListenAddress   []string `mapstructure:"listen_address" json:"listen_address"`
+	BootstrapPeers  []string `mapstructure:"bootstrap_peers" json:"bootstrap_peers"`
+	Memory          int      `mapstructure:"memory" json:"memory"`
+	FileDescriptors int      `mapstructure:"fd" json:"fd"`
 }
 
 type Job struct {
