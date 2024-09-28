@@ -355,10 +355,12 @@ func (l *Libp2p) newStream(ctx context.Context, pid peer.ID, proto protocol.ID) 
 
 	selected, err := msmux.SelectOneOf([]protocol.ID{proto}, s)
 	if err != nil {
+		_ = s.Reset()
 		return nil, err
 	}
 
 	if err := s.SetProtocol(selected); err != nil {
+		_ = s.Reset()
 		return nil, err
 	}
 
