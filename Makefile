@@ -7,12 +7,18 @@ PROTOC := protoc
 UNAME=$(shell uname)
 ARCH=$(shell uname -m)
 
-DMS_VERSION := "v0.5.0-boot"
+NO_COMMITS=$(shell git rev-list $(git describe --tags --abbrev=0)..HEAD --count )
+
+DMS_VERSION=$(shell git describe --tags --abbrev=0 --dirty)-$(NO_COMMITS)
 GO_VERSION := $(shell go version | awk '{print $$3}' | sed 's/go//')
 BUILD_DATE := $(shell date -Iseconds)
 BUILD_HASH := $(shell git rev-parse HEAD)
 
-LDFLAGS := "-X 'gitlab.com/nunet/device-management-service/cmd.GoVersion=$(GO_VERSION)' -X 'gitlab.com/nunet/device-management-service/cmd.BuildDate=$(BUILD_DATE)' -X 'gitlab.com/nunet/device-management-service/cmd.Commit=$(BUILD_HASH)'"
+LDFLAGS := \
+	"-X 'gitlab.com/nunet/device-management-service/cmd.Version=$(DMS_VERSION)' \
+	-X 'gitlab.com/nunet/device-management-service/cmd.GoVersion=$(GO_VERSION)' \
+	-X 'gitlab.com/nunet/device-management-service/cmd.BuildDate=$(BUILD_DATE)' \
+	-X 'gitlab.com/nunet/device-management-service/cmd.Commit=$(BUILD_HASH)'"
 
 GOFLAGS := "-buildvcs=false"
 

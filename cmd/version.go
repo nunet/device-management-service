@@ -6,11 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is the version of the Nunet Device Management Service
-// TODO: use git describe after this release
-var Version = "v0.5.0-boot"
-
 var (
+	Version   string
 	GoVersion string
 	BuildDate string
 	Commit    string
