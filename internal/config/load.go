@@ -34,6 +34,9 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("general.debug", false)
 	v.SetDefault("rest.addr", "127.0.0.1")
 	v.SetDefault("rest.port", 9999)
+	v.SetDefault("profiler.enabled", true)
+	v.SetDefault("profiler.addr", "127.0.0.1")
+	v.SetDefault("profiler.port", 6060)
 	v.SetDefault("p2p.listen_address", []string{
 		"/ip4/0.0.0.0/tcp/9000",
 		"/ip4/0.0.0.0/udp/9000/quic-v1",
