@@ -13,9 +13,8 @@ set -xeuo pipefail
 projectRoot=$(pwd)
 outputDir="$projectRoot/dist"
 
-# TODO: Update version number from git describe after release
-noCommits=$(git rev-list $(git describe --tags --abbrev=0)..HEAD --count )
-fullVersion=$(git describe --tags --abbrev=0)-$noCommits
+noCommits=$(git rev-list $(git describe --tags --abbrev=0)..HEAD --count)
+fullVersion=$(git describe --tags --abbrev=0 --dirty)-$noCommits
 version="$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')-${noCommits}"
 
 mkdir -p $outputDir

@@ -307,7 +307,7 @@ After testing the frozen feature scope of the release, we aim at releasing the 0
 | **User challenge** |  |
 | **Value score** | n/a |
 | **Design** |  |
-| **Impacted functionality** | Configuration management; Local telemetry and logging management; |
+| **Impacted functionality** | Configuration management; Local telemetry and logging management (possibly); |
 | **Acceptance tests** | Unit tests of around 90%; Functional / integration tests: Arbitrary information can be stored, retrieved and searched via the implemented interface; ; <br>[tracking issue](https://gitlab.com/nunet/test-suite/-/issues/136) |
 
 #### Executor interface and implementation
@@ -411,7 +411,7 @@ After testing the frozen feature scope of the release, we aim at releasing the 0
 
 | | |
 | --- | --- |
-| **Feature name** | Observability and Telemetry design and implementation; [feature::telemetry](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=all&label_name%5B%5D=feature%3A%3Atelemetry&first_page_size=20) |
+| **Feature name** | Observability and Telemetry design and implementation; [feature::observability](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=all&label_name%5B%5D=feature%3A%3Aobservability&first_page_size=20) |
 | **Work packages** | [telemetry work package](https://nunet.gitlab.io/publisher/project-management-portal/device-management-service-version-0-5-x/work_packages/telemetry-package-implementation_technical_dependencies.html) |
 | **Code reference** | [telemetry package code](https://gitlab.com/nunet/device-management-service/-/tree/develop/telemetry?ref_type=heads) |
 | **Description / definition of done** | [telemetry interface implementation issue with full description](https://gitlab.com/nunet/device-management-service/-/issues/412) <br>[default elasticsearch collector issue with full description](https://gitlab.com/nunet/nunet-infra/-/issues/198)| 

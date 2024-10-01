@@ -19,8 +19,8 @@ func Execute() {
 
 	client := utils.NewHTTPClient(
 		fmt.Sprintf("http://%s:%d",
-			config.GetConfig().Addr,
-			config.GetConfig().Port),
+			config.GetConfig().Rest.Addr,
+			config.GetConfig().Rest.Port),
 		"/api/v1",
 	)
 

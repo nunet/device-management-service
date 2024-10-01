@@ -1,0 +1,11 @@
+@startuml
+
+[Job 1] ..> [Job 21] : link_properties
+[Job 1] ..> [Job 22] : link_properties
+[Job 1] ..> [Job 23] : link_properties
+[Job 21] ..> [Job 31] : link_properties
+[Job 22] ..> [Job 32] : link_properties
+[Job 31] ..> [Job 41] : link_properties
+[Job 32] ..> [Job 42] : link_properties
+
+@enduml

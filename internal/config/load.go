@@ -34,6 +34,9 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("general.debug", false)
 	v.SetDefault("rest.addr", "127.0.0.1")
 	v.SetDefault("rest.port", 9999)
+	v.SetDefault("profiler.enabled", true)
+	v.SetDefault("profiler.addr", "127.0.0.1")
+	v.SetDefault("profiler.port", 6060)
 	v.SetDefault("p2p.listen_address", []string{
 		"/ip4/0.0.0.0/tcp/9000",
 		"/ip4/0.0.0.0/udp/9000/quic-v1",
@@ -43,6 +46,8 @@ func setDefaultConfig() *viper.Viper {
 		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
 		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
 	})
+	v.SetDefault("p2p.memory", 1024)
+	v.SetDefault("p2p.fd", 512)
 	v.SetDefault("job.log_update_interval", 2)
 	v.SetDefault("job.target_peer", "")
 	v.SetDefault("job.cleanup_interval", 3)

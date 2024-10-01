@@ -214,30 +214,46 @@ A capability context is created with the `dms cap new <context>` command and it 
 
 To set up a new identity/create a new key, run the command:
 
-```
+```shell
 $ nunet key new <identity>
 ```
 
 Then, to initialize its capability context:
 
-```
+```shell
 $ nunet cap new <identity>
 ```
 
 In this example, we are going to set up two identities:
 
+First for the user
+```shell
+$ nunet key new user
 ```
-$ nunet key new user // returns did
-$ nunet cap new user
+then for the dms instance.
+```shell
+$ nunet key new dms
+```
 
-$ nunet key new dms // returns did
+We then setup the capability contexts for each identity:
+
+First the user
+```shell
+$ nunet cap new user
+```
+then the dms instance.
+```shell
 $ nunet cap new dms
 ```
 
 If you use a ledger wallet for your personal key, you can create the user context as follows:
 
-```
+Create a new key for the user
+```shell
 $ nunet key did ledger
+```
+Then create the capability context for the user
+```shell
 $ nunet cap new ledger:user
 ```
 
@@ -269,7 +285,7 @@ screen in plaintext so that you can inspect it.
 
 You can get your Ledger wallet's DID with:
 
-```
+```shell
 $ nunet key did ledger
 ```
 
@@ -293,16 +309,18 @@ Once both identities are created, you'll need to set up capabilities. Specifical
 
 You can do this by invoking the `dms cap anchor` command:
 
-```
+```shell
 $ nunet cap anchor --context dms --root <user-did>
 ```
 
 Where `<user-did>` is the user did created above in [Creating identities](#creating-identities) and can be obtained by:
 
-```
+```shell
 $ nunet key did <user>
+```
 
-## or if you are using a Ledger Wallet:
+or if you are using a Ledger Wallet
+```shell
 $ nunet key did ledger
 ```
 
@@ -316,16 +334,19 @@ did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
 
 1. **Create a capability anchor for public behaviors**
 
-```
-# Create the grant
+Create the grant
+```shell
 $ nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-did>
+```
 
-# or if you are using a Ledger Wallet
+or if you are using a Ledger Wallet
+```shell
 $ nunet cap grant --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-did>
+```
 
-# And the granted token as a require anchor
+And the granted token as a require anchor
+```shell
 $ nunet cap anchor --context dms --require <the-grant-output>
-
 ```
 
 The first command grants nunet authorized users the capability to invoke public behaviors until December 31, 2024, and outputs a token.
@@ -338,19 +359,30 @@ To request tokens for participating in the testnet, please go to [did.nunet.io](
 
 3. **Use the NuNet granted token to authorize public behavior invocations in the public network**
 
-```
-# Add the provide anchor to your personal context
+3.1 **Add the provide anchor to your personal context**
+```shell
 $ nunet cap anchor --context user --provide <the-token-you-got-from-nunet>
+```
 
-# or if you are using a Ledger Wallet
+or if you are using a Ledger Wallet
+```shell
 $ nunet cap anchor --context ledger:user --provide <the-token-you-got-from-nunet>
+```
 
-# Delegate to your DMS
+3.2 **Delegate to your DMS**
+```shell
 $ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-did>
+```
 
-# or if you are using a Ledger Wallet
+or if you are using a Ledger Wallet
+```shell
 $ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-did>
 
+```
+
+3.3 **Add the delegation token as a require anchor in your DMS**
+
+```shell
 $ nunet cap anchor --context dms --require <the-delegate-output>
 ```
 
@@ -360,7 +392,7 @@ The first command ingests the NuNet provided token and the last two commands use
 
 If everything was setup properly, you should be able to run:
 
-```
+```shell
 $ nunet run
 ```
 

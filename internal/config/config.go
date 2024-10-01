@@ -6,6 +6,7 @@ type Config struct {
 	P2P       `mapstructure:"p2p" json:"p2p"`
 	Job       `mapstructure:"job" json:"job"`
 	Telemetry `mapstructure:"telemetry" json:"telemetry"`
+	Profiler  `mapstructure:"profiler" json:"profiler"`
 }
 
 type General struct {
@@ -20,9 +21,17 @@ type Rest struct {
 	Port uint32 `mapstructure:"port" json:"port"`
 }
 
+type Profiler struct {
+	Enabled bool   `mapstructure:"enabled" json:"enabled"`
+	Addr    string `mapstructure:"addr" json:"addr"`
+	Port    uint32 `mapstructure:"port" json:"port"`
+}
+
 type P2P struct {
-	ListenAddress  []string `mapstructure:"listen_address" json:"listen_address"`
-	BootstrapPeers []string `mapstructure:"bootstrap_peers" json:"bootstrap_peers"`
+	ListenAddress   []string `mapstructure:"listen_address" json:"listen_address"`
+	BootstrapPeers  []string `mapstructure:"bootstrap_peers" json:"bootstrap_peers"`
+	Memory          int      `mapstructure:"memory" json:"memory"`
+	FileDescriptors int      `mapstructure:"fd" json:"fd"`
 }
 
 type Job struct {
