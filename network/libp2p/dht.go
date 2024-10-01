@@ -17,25 +17,24 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/libp2p/go-msgio"
-	"github.com/multiformats/go-multiaddr"
-	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
+	msgio "github.com/libp2p/go-msgio"
+	"github.com/libp2p/go-msgio/protoio" //nolint:staticcheck
+	multiaddr "github.com/multiformats/go-multiaddr"
 	"google.golang.org/protobuf/proto"
 
-	//nolint
-	"github.com/libp2p/go-msgio/protoio"
+	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 )
 
 const kadv1 = "/kad/1.0.0"
 
-// Bootstrap using a list.
-func (l *Libp2p) Bootstrap(ctx context.Context, bootstrapPeers []multiaddr.Multiaddr) error {
+// Connect to Bootstrap nodes
+func (l *Libp2p) ConnectToBootstrapNodes(ctx context.Context) error {
 	// bootstrap all nodes at the same time.
-	if len(bootstrapPeers) > 0 {
+	if len(l.config.BootstrapPeers) > 0 {
 		var wg sync.WaitGroup
 		connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		for _, addr := range bootstrapPeers {
+		for _, addr := range l.config.BootstrapPeers {
 			wg.Add(1)
 			go func(peerAddr multiaddr.Multiaddr) {
 				defer wg.Done()
@@ -53,20 +52,29 @@ func (l *Libp2p) Bootstrap(ctx context.Context, bootstrapPeers []multiaddr.Multi
 		}
 		wg.Wait()
 	}
+	return nil
+}
 
-	go func() {
-		if err := l.DHT.Bootstrap(ctx); err != nil {
-			log.Errorf("failed to prepare this node for bootstraping: %s", err)
-		}
-	}()
+// Start dht bootstrapper
+func (l *Libp2p) BootstrapDHT(ctx context.Context) error {
+	if err := l.DHT.Bootstrap(ctx); err != nil {
+		log.Errorf("failed to prepare this node for bootstraping: %s", err)
+		return err
+	}
 
+	return nil
+}
+
+// startRandomWalk starts a background process that crawls the dht by resolving random keys.
+func (l *Libp2p) startRandomWalk(ctx context.Context) {
 	go func() {
-		log.Debugf("starting bootstrap process")
+		log.Debug("starting bootstrap process")
 		// A simple mechanism to improve our botostrap and peer discovery:
 		// 1. initiate a background, never ending, random walk which tries to resolve
 		// random keys in the dht and by extension discovers other peers.
 
 		interval := 5 * time.Minute
+		delayOnError := 10 * time.Second
 		time.Sleep(interval) // wait for dht ready
 
 		dhtProto := protocol.ID(l.config.DHTPrefix + kadv1)
@@ -96,8 +104,14 @@ func (l *Libp2p) Bootstrap(ctx context.Context, bootstrapPeers []multiaddr.Multi
 				peers, err := l.DHT.GetClosestPeers(ctx, key)
 				if err != nil {
 					log.Debugf("bootstrap: failed to get closest peers with key=%s - error: %s", randomPeerID.String(), err)
+					time.Sleep(delayOnError)
+					delayOnError = time.Duration(float64(delayOnError) * 1.25)
+					if delayOnError > 5*time.Minute {
+						delayOnError = 5 * time.Minute
+					}
 					continue
 				}
+				delayOnError = 10 * time.Second
 
 				if len(peers) == 0 {
 					continue
@@ -177,8 +191,6 @@ func (l *Libp2p) Bootstrap(ctx context.Context, bootstrapPeers []multiaddr.Multi
 			}
 		}
 	}()
-
-	return nil
 }
 
 type dhtValidator struct {
