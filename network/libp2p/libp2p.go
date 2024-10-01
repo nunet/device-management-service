@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipfs/go-cid"
+	cid "github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -26,8 +26,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
-	"github.com/multiformats/go-multiaddr"
-	"github.com/multiformats/go-multihash"
+	multiaddr "github.com/multiformats/go-multiaddr"
+	multihash "github.com/multiformats/go-multihash"
 	msmux "github.com/multiformats/go-multistream"
 	"github.com/spf13/afero"
 	"google.golang.org/protobuf/proto"
@@ -156,12 +156,24 @@ func (l *Libp2p) Start() error {
 	// set stream handlers
 	l.registerStreamHandlers()
 
-	// bootstrap should return error if it had an error
-	err := l.Bootstrap(l.ctx, l.config.BootstrapPeers)
+	// connect to bootstrap nodes
+	err := l.ConnectToBootstrapNodes(l.ctx)
 	if err != nil {
-		log.Errorf("failed to start network: %v", err)
+		log.Errorf("failed to connect to bootstrap nodes: %v", err)
 		return err
 	}
+
+	err = l.BootstrapDHT(l.ctx)
+	if err != nil {
+		log.Errorf("failed to bootstrap dht: %v", err)
+		return err
+	}
+
+	// Start random walk
+	l.startRandomWalk(l.ctx)
+
+	// watch for local address change
+	go l.watchForAddrsChange(l.ctx)
 
 	// discover
 	go func() {
@@ -814,6 +826,26 @@ func (l *Libp2p) broadcastScoreInspect(score map[peer.ID]*PeerScoreSnapshot) {
 	defer l.mx.Unlock()
 
 	l.pubsubScore = score
+}
+
+func (l *Libp2p) watchForAddrsChange(ctx context.Context) {
+	sub, err := l.Host.EventBus().Subscribe(&event.EvtLocalAddressesUpdated{})
+	if err != nil {
+		log.Errorf("failed to subscribe to event bus: %v", err)
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-sub.Out():
+			log.Debug("network address changed. trying to be bootstrap again.")
+			if err = l.ConnectToBootstrapNodes(l.ctx); err != nil {
+				log.Errorf("failed to start network: %v", err)
+			}
+		}
+	}
 }
 
 func (l *Libp2p) Notify(ctx context.Context, preconnected func(peer.ID, []protocol.ID, int), connected, disconnected func(peer.ID), identified, updated func(peer.ID, []protocol.ID)) error {
