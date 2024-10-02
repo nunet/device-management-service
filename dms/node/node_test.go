@@ -3,7 +3,7 @@ package node
 import (
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/dms/jobs"
+	// "gitlab.com/nunet/device-management-service/dms/jobs"
 	"go.uber.org/mock/gomock"
 
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"gitlab.com/nunet/device-management-service/actor"
+	// "gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -107,48 +107,48 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestNodeAllocationMessaging(t *testing.T) {
-	rootCap := createRootCapabilityContext(t)
-	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
+// func TestNodeAllocationMessaging(t *testing.T) {
+// 	rootCap := createRootCapabilityContext(t)
+// 	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
 
-	ctrl := gomock.NewController(t)
-	t.Cleanup(ctrl.Finish)
-	resourceManager := NewMockResourceManager(ctrl)
+// 	ctrl := gomock.NewController(t)
+// 	t.Cleanup(ctrl.Finish)
+// 	resourceManager := NewMockResourceManager(ctrl)
 
-	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1))
-	assert.NoError(t, err)
-	assert.NotNil(t, node1)
-	err = node1.Start()
-	assert.NoError(t, err)
+// 	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1))
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, node1)
+// 	err = node1.Start()
+// 	assert.NoError(t, err)
 
-	alloc, err := node1.CreateAllocation(jobs.Job{ID: "123"})
-	assert.NoError(t, err)
-	assert.NotNil(t, alloc)
-	err = alloc.Start()
-	assert.NoError(t, err)
+// 	alloc, err := node1.CreateAllocation(jobs.Job{ID: "123"})
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, alloc)
+// 	err = alloc.Start()
+// 	assert.NoError(t, err)
 
-	envChan := make(chan actor.Envelope)
-	err = node1.actor.AddBehavior("/test/ping", func(msg actor.Envelope) {
-		defer msg.Discard()
-		envChan <- msg
-	})
-	type payload struct{ Name, Type string }
+// 	envChan := make(chan actor.Envelope)
+// 	err = node1.actor.AddBehavior("/test/ping", func(msg actor.Envelope) {
+// 		defer msg.Discard()
+// 		envChan <- msg
+// 	})
+// 	type payload struct{ Name, Type string }
 
-	assert.NoError(t, err)
-	msg, err := actor.Message(
-		alloc.Actor.Handle(),
-		node1.actor.Handle(),
-		"/test/ping",
-		payload{Name: "random name", Type: "x"},
-	)
-	assert.NoError(t, err)
+// 	assert.NoError(t, err)
+// 	msg, err := actor.Message(
+// 		alloc.Actor.Handle(),
+// 		node1.actor.Handle(),
+// 		"/test/ping",
+// 		payload{Name: "random name", Type: "x"},
+// 	)
+// 	assert.NoError(t, err)
 
-	err = alloc.Actor.Send(msg)
-	assert.NoError(t, err)
+// 	err = alloc.Actor.Send(msg)
+// 	assert.NoError(t, err)
 
-	received := <-envChan
-	assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
-}
+// 	received := <-envChan
+// 	assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
+// }
 
 func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {
 	privk, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
