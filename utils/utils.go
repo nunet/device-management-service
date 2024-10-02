@@ -34,7 +34,7 @@ const (
 )
 
 // DownloadFile downloads a file from a url and saves it to a filepath
-func DownloadFile(url string, filepath string) (err error) {
+func DownloadFile(url string, filepath string, maxBytes int64) (err error) {
 	zlog.Sugar().Infof("Downloading file '", filepath, "' from '", url, "'")
 	file, err := os.Create(filepath)
 	if err != nil {
@@ -47,14 +47,23 @@ func DownloadFile(url string, filepath string) (err error) {
 		return err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 
 	defer resp.Body.Close()
 
-	_, err = io.Copy(file, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download file: server returned %s", resp.Status)
+	}
+
+	reader := io.LimitReader(resp.Body, maxBytes)
+	_, err = io.Copy(file, reader)
 	if err != nil {
 		return err
 	}
@@ -219,7 +228,7 @@ func SanitizeArchivePath(d, t string) (v string, err error) {
 }
 
 // ExtractTarGzToPath extracts a tar.gz file to a specified path
-func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
+func ExtractTarGzToPath(tarGzFilePath, extractedPath string, maxBytes int64) error {
 	// Ensure the target directory exists; create it if it doesn't.
 	if err := os.MkdirAll(extractedPath, os.ModePerm); err != nil {
 		return fmt.Errorf("error creating target directory: %v", err)
@@ -239,6 +248,8 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 	tarReader := tar.NewReader(gzipReader)
 
+	var totalSize int64
+
 	for {
 		header, err := tarReader.Next()
 
@@ -248,6 +259,10 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 		if err != nil {
 			return fmt.Errorf("error reading tar header: %v", err)
+		}
+
+		if header.Size > maxBytes {
+			return fmt.Errorf("file %s exceeds the maximum allowed size of %d bytes", header.Name, maxBytes)
 		}
 
 		// Construct the full target path by joining the target directory with
@@ -278,7 +293,13 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 			// Copy the file contents from the tar archive to the new file.
 			for {
-				_, err := io.CopyN(newFile, tarReader, 1024)
+				n, err := io.CopyN(newFile, tarReader, 1024)
+				totalSize += n
+
+				if totalSize > maxBytes {
+					return fmt.Errorf("extracted data exceeds allowed limit of %d bytes", maxBytes)
+				}
+
 				if err != nil {
 					if err == io.EOF {
 						break
