@@ -27,7 +27,7 @@ func (s *ExecutorTestSuite) SetupTest() {
 	require.NoError(s.T(), err)
 	s.executor = e
 	s.T().Cleanup(func() {
-		_ = s.executor.Cleanup(context.Background())
+		_ = s.executor.Cleanup()
 	})
 }
 

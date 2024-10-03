@@ -22,7 +22,7 @@ type behaviorConfig struct {
 	Type        string
 	Topic       string
 	Payload     func() any
-	PayloadEnc  func(cmd *Command, payload any) (any, error)
+	PayloadEnc  func(payload any) (any, error)
 	SetFlags    func(cmd *Command, payload any)
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
@@ -104,7 +104,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.Host, "host", "H", "", "host address to ping (required)")
 			_ = cmd.MarkFlagRequired("host")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.PingRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -140,7 +140,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.Address, "address", "a", "", "peer address to connect to (required)")
 			_ = cmd.MarkFlagRequired("address")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.PeerConnectRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -182,7 +182,7 @@ Examples:
 			cmd.MarkFlagsOneRequired("memory", "cpu")
 			cmd.MarkFlagsRequiredTogether("memory", "cpu")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.OnboardRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -206,7 +206,7 @@ Examples:
 
 			cmd.Flags().BoolVarP(&p.Force, "force", "f", false, "force offboard")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.OffboardRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -261,7 +261,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("rootfs")
 			_ = cmd.MarkFlagFilename("rootfs")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			opts, ok := payload.(*vmStartOpts)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -285,7 +285,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.VMStopRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
