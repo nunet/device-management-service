@@ -97,12 +97,6 @@ type ResourceAllocation struct {
 	Resources
 }
 
-// SystemSpecs is an interface that defines the methods to get the system specifications of the machine
-type SystemSpecs interface {
-	// GetMachineResources returns the machine resources
-	GetMachineResources() (MachineResources, error)
-}
-
 // UsageMonitor defines the methods to monitor the system usage
 type UsageMonitor interface {
 	// GetUsage returns the resources used by the machine
@@ -123,8 +117,6 @@ type ResourceManager interface {
 	GetOnboardedResources(context.Context) (OnboardedResources, error)
 	// UpdateOnboardedResources updates the onboarded resources of the machine in the database
 	UpdateOnboardedResources(context.Context, OnboardedResources) error
-	// SystemSpecs returns the SystemSpecs instance
-	SystemSpecs() SystemSpecs
 	// UsageMonitor returns the UsageMonitor instance
 	UsageMonitor() UsageMonitor
 }

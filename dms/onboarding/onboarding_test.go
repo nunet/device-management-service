@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,7 +101,7 @@ func TestOnboard(t *testing.T) {
 
 	ctx := context.Background()
 
-	total, err := ts.service.ResourceManager.SystemSpecs().GetMachineResources()
+	total, err := hardware.GetMachineResources()
 	require.NoError(t, err)
 
 	capacity := types.CapacityForNunet{

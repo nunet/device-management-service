@@ -26,8 +26,9 @@
         - [Minimum System Requirements](#minimum-system-requirements)
         - [Recommended System Requirements](#recommended-system-requirements)
       - [GPU Machines](#gpu-machines)
-        - [Minimum System Requirements](#minimum-system-requirements-1)
-        - [Recommended System Requirements](#recommended-system-requirements-1)
+        - [Minimum System Requirements](#minimum-system-requirements)
+        - [Recommended System Requirements](#recommended-system-requirements)
+    - [GPU Driver Installation](#gpu-driver-installation)
   - [Usage](#usage)
     - [Quick Start](#quick-start)
       - [Creating identities](#creating-identities)
@@ -176,27 +177,63 @@ If the above CPU has 4 cores, your available CPU would be around 8000 MHz. So if
 
 - CPU: 3 GHz
 - RAM: 8 GB
-- NVIDIA GPU: 4 GB VRAM
+- GPU: 4 GB VRAM (NVIDIA, AMD, or Intel discrete GPU with manually installed drivers)
 - Free Disk Space: 50 GB
 - Internet Download/Upload Speed: 50 Mbps
+
+Note: For AMD64 platforms, we recommend using HiveOS as it comes with all necessary drivers pre-installed. For other setups, proper GPU drivers must be manually installed. See the [GPU Driver Installation](#gpu-driver-installation) section for instructions.
 
 ##### Recommended System Requirements
 
 - CPU: 4 GHz
 - RAM: 16-32 GB
-- NVIDIA GPU: 8-12 GB VRAM
+- GPU: 8-12 GB VRAM (NVIDIA, AMD, or Intel discrete GPU with manually installed drivers)
 - Free Disk Space: 100 GB
 - Internet Download/Upload Speed: 100 Mbps
+
+### GPU Driver Installation
+
+NuNet DMS requires properly installed GPU drivers to function correctly. We do not automatically install drivers to ensure compatibility and flexibility across different user setups. 
+
+#### For AMD64 Platforms:
+
+We recommend using the [Ubuntu](https://ubuntu.com/)-based [HiveOS](https://hiveon.com/install/) for the easiest setup.
+
+If you prefer to use a different operating system or need to install drivers manually, please follow these steps:
+
+#### NVIDIA GPUs:
+1. Visit the [NVIDIA Official Driver Downloads](https://www.nvidia.com/en-us/drivers/) page.
+2. Select your GPU model and operating system.
+3. Download and install the recommended driver.
+4. Reboot your system after installation.
+
+#### AMD GPUs:
+1. Visit the [AMD Drivers and Support for Processors and Graphics](https://www.amd.com/en/support/download/drivers.html) page.
+2. Select your GPU model and operating system.
+3. Download and install the recommended driver.
+4. Reboot your system after installation.
+
+#### Intel Discrete GPUs:
+1. Visit the [Intel® software for general purpose GPU capabilities documentation](https://dgpu-docs.intel.com/driver/overview.html) page.
+2. Select your GPU model and operating system.
+3. Download and install the recommended driver.
+4. Reboot your system after installation.
+
+For detailed instructions specific to your operating system, please refer to the documentation provided by NVIDIA, AMD, or Intel.
+
+Note: Ensure that you have the correct permissions to install drivers on your system. On Linux systems, you may need to use `sudo` or log in as root to install drivers.
 
 ## Usage
 
 ### Quick Start
 
+Before starting, ensure that you have properly installed GPU drivers if you're using a GPU-enabled machine. For AMD64 platforms, we recommend using HiveOS for the easiest setup. For other configurations, refer to the [GPU Driver Installation](#gpu-driver-installation) section for instructions.
+
 This quick start guide will walk you through the process of setting up a Device Management Service (DMS) instance for the first time and getting it running. We'll cover creating identities, setting up capabilities, and running the DMS.
 
 **The NuNet CLI**
 
-The Nunet CLI is the command-line interface for interacting with the Nunet Device Management Service (DMS). It provides commands for managing keys, capabilities, configuration, running the DMS, and more. It's essential for setting up and administering your DMS instance.
+The NuNet CLI is the command-line interface for interacting with the Nunet Device Management Service (DMS). It provides commands for managing keys, capabilities, configuration, running the DMS, and more. It's essential for setting up and administering your DMS instance.
 
 **Key Concepts**
 

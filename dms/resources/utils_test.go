@@ -68,7 +68,6 @@ func assertResources(t *testing.T, expected, actual types.Resources) {
 func newMockResourceManager(
 	repos ManagerRepos,
 	mockUsageMonitor types.UsageMonitor, //nolint:unparam // will be removed after the implementation
-	mockSystemSpecs types.SystemSpecs,
 	t *testing.T,
 ) *DefaultManager {
 	t.Helper()
@@ -76,7 +75,6 @@ func newMockResourceManager(
 	return &DefaultManager{
 		repos:        repos,
 		usageMonitor: mockUsageMonitor,
-		systemSpecs:  mockSystemSpecs,
 		store:        newStore(),
 	}
 }

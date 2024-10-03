@@ -10,10 +10,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-const DestroyTimeout = time.Second * 10
+var DestroyTimeout = time.Second * 10
 
 // executionHandler manages the lifecycle and execution of a Docker container for a specific job.
 type executionHandler struct {
@@ -138,7 +140,11 @@ func (h *executionHandler) run(ctx context.Context) {
 
 // kill sends a stop signal to the container.
 func (h *executionHandler) kill(ctx context.Context) error {
-	return h.client.StopContainer(ctx, h.containerID, DestroyTimeout)
+	timeout := int(DestroyTimeout)
+	stopOptions := container.StopOptions{
+		Timeout: &timeout,
+	}
+	return h.client.StopContainer(ctx, h.containerID, stopOptions)
 }
 
 // destroy cleans up the container and its associated resources.

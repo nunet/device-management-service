@@ -2,6 +2,7 @@ package node
 
 import (
 	"github.com/libp2p/go-libp2p/core/peer"
+	"gitlab.com/nunet/device-management-service/dms/hardware"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -66,7 +67,7 @@ func (n *Node) publicStatusBehavior(msg actor.Envelope) {
 	defer msg.Discard()
 
 	var resp PublicStatusResponse
-	machineResources, err := n.resourceManager.SystemSpecs().GetMachineResources()
+	machineResources, err := hardware.GetMachineResources()
 	if err != nil {
 		resp.Status = "ERROR"
 	} else {

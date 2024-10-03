@@ -32,5 +32,6 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero) *cobra.Command {
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
+	cmd.AddCommand(newGPUCommand())
 	return cmd
 }

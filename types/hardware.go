@@ -412,3 +412,8 @@ type NetworkInfo struct {
 	// NetworkType represents the network type, e.g., "Ethernet", "Wi-Fi", "Cellular"
 	NetworkType string
 }
+
+// GPUMetadata holds the metadata of the GPU
+type GPUMetadata struct {
+	PCIAddress string
+}

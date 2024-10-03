@@ -78,7 +78,9 @@ func (s *ClientTestSuite) createTestContainer(name, image string, cmd []string) 
 	)
 	require.NoError(s.T(), err)
 	s.T().Cleanup(func() {
-		_ = s.client.StopContainer(context.Background(), id, docker.DestroyTimeout)
+		timeout := int(docker.DestroyTimeout)
+		options := container.StopOptions{Timeout: &timeout}
+		_ = s.client.StopContainer(context.Background(), id, options)
 		_ = s.client.RemoveContainer(context.Background(), id)
 	})
 	return id
@@ -130,7 +132,9 @@ func (s *ClientTestSuite) TestStopContainer() {
 	err = s.client.StartContainer(context.Background(), id)
 	require.NoError(s.T(), err)
 
-	err = s.client.StopContainer(context.Background(), id, time.Second*5)
+	timeout := int(time.Second * 5)
+	options := container.StopOptions{Timeout: &timeout}
+	err = s.client.StopContainer(context.Background(), id, options)
 	require.NoError(s.T(), err)
 }
 
