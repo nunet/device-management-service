@@ -16,19 +16,19 @@ import (
 )
 
 const (
-	PeersListBehavior        = "/dms/node/peers/list"
-	PeerAddrInfoBehavior     = "/dms/node/peers/self"
-	PeerPingBehavior         = "/dms/node/peers/ping"
-	PeerDHTBehavior          = "/dms/node/peers/dht"
-	PeerConnectBehavior      = "/dms/node/peers/connect"
-	PeerScoreBehavior        = "/dms/node/peers/score"
-	OnboardBehaviour         = "/dms/node/onboarding/onboard"
-	OffboardBehaviour        = "/dms/node/onboarding/offboard"
-	OnboardStatusBehaviour   = "/dms/node/onboarding/status"
-	OnboardResourceBehaviour = "/dms/node/onboarding/resource"
-	CustomVMStart            = "/dms/node/vm/start/custom"
-	VMStop                   = "/dms/node/vm/stop"
-	VMList                   = "/dms/node/vm/list"
+	PeersListBehavior       = "/dms/node/peers/list"
+	PeerAddrInfoBehavior    = "/dms/node/peers/self"
+	PeerPingBehavior        = "/dms/node/peers/ping"
+	PeerDHTBehavior         = "/dms/node/peers/dht"
+	PeerConnectBehavior     = "/dms/node/peers/connect"
+	PeerScoreBehavior       = "/dms/node/peers/score"
+	OnboardBehavior         = "/dms/node/onboarding/onboard"
+	OffboardBehavior        = "/dms/node/onboarding/offboard"
+	OnboardStatusBehavior   = "/dms/node/onboarding/status"
+	OnboardResourceBehavior = "/dms/node/onboarding/resource"
+	CustomVMStartBehavior   = "/dms/node/vm/start/custom"
+	VMStopBehavior          = "/dms/node/vm/stop"
+	VMListBehavior          = "/dms/node/vm/list"
 
 	pingTimeout = 1 * time.Second
 )
@@ -47,6 +47,7 @@ func (n *Node) handlePeerPing(msg actor.Envelope) {
 
 	var request PingRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		// TODO log
 		return
 	}
 
@@ -76,6 +77,7 @@ func (n *Node) handlePeersList(msg actor.Envelope) {
 	// get the underlying libp2p instance and extract the DHT data
 	libp2pNet, ok := n.network.(*libp2p.Libp2p)
 	if !ok {
+		// TODO log
 		return
 	}
 
@@ -117,6 +119,7 @@ func (n *Node) handlePeerDHT(msg actor.Envelope) {
 	// get the underlying libp2p instance and extract the DHT data
 	libp2pNet, ok := n.network.(*libp2p.Libp2p)
 	if !ok {
+		// TODO log
 		return
 	}
 
@@ -141,11 +144,13 @@ func (n *Node) handlePeerConnect(msg actor.Envelope) {
 
 	var request PeerConnectRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		// TODO log
 		return
 	}
 
 	libp2pNet, ok := n.network.(*libp2p.Libp2p)
 	if !ok {
+		// TODO log
 		return
 	}
 
@@ -192,7 +197,6 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
-
 		return
 	}
 
@@ -221,6 +225,7 @@ func (n *Node) handleOffboard(msg actor.Envelope) {
 	var request OffboardRequest
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		// TODO log
 		return
 	}
 
@@ -270,6 +275,7 @@ func (n *Node) handleOnboardResource(msg actor.Envelope) {
 	var request OnboardResourceRequest
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		// TODO log
 		return
 	}
 
@@ -300,6 +306,7 @@ func (n *Node) handleCustomVMStart(msg actor.Envelope) {
 
 	var request CustomVMStartRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		// TODO log
 		return
 	}
 
@@ -328,6 +335,7 @@ func (n *Node) handleVMStop(msg actor.Envelope) {
 
 	var request VMStopRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		// TODO log
 		return
 	}
 

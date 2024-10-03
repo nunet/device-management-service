@@ -132,7 +132,7 @@ func (a *Allocation) Run(_ context.Context) error {
 }
 
 // Stop stops the running executor
-func (a *Allocation) Stop(_ context.Context) error {
+func (a *Allocation) Stop() error {
 	// a.mx.Lock()
 	// defer a.mx.Unlock()
 

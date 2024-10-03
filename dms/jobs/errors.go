@@ -4,4 +4,7 @@ import (
 	"errors"
 )
 
-var ErrTODO = errors.New("TODO")
+var (
+	ErrDeploymentFailed = errors.New("failed to create deployment")
+	ErrTODO             = errors.New("TODO")
+)

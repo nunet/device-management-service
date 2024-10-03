@@ -167,7 +167,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/score`,
 	},
 	// /dms/node/onboarding/onboard
-	node.OnboardBehaviour: {
+	node.OnboardBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.OnboardRequest{} },
 		SetFlags: func(cmd *Command, payload any) {
@@ -198,7 +198,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/onboard --memory 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
-	node.OffboardBehaviour: {
+	node.OffboardBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.OffboardRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -223,7 +223,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/offboard --force`,
 	},
 	// /dms/node/onboarding/status
-	node.OnboardStatusBehaviour: {
+	node.OnboardStatusBehavior: {
 		Type:  bInvoke,
 		Short: "Retrieve onboarding status of a node",
 		Long: `Invokes the /dms/node/onboarding/status behavior on an actor
@@ -234,7 +234,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/status`,
 	},
 	// /dms/node/onboarding/resource
-	node.OnboardResourceBehaviour: {
+	node.OnboardResourceBehavior: {
 		Type:  bInvoke,
 		Short: "Retrieve or manage resources of a node",
 		Long: `Invokes the /dms/node/onboarding/resource behavior on an actor
@@ -245,7 +245,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/resource`,
 	},
 	// /dms/node/vm/start/custom
-	node.CustomVMStart: {
+	node.CustomVMStartBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &vmStartOpts{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -277,7 +277,7 @@ Examples:
   nunet actor cmd --context user /dms/node/vm/start/custom --kernel /path/to/kernel --rootfs /path/to/rootfs --cpu 2 --memory 2048`,
 	},
 	// /dms/node/vm/stop
-	node.VMStop: {
+	node.VMStopBehavior: {
 		Payload: func() any { return &node.VMStopRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.VMStopRequest)
@@ -302,7 +302,7 @@ Examples:
   nunet actor cmd --context user /dms/node/vm/stop --id <execution_id>`,
 	},
 	// /dms/node/vm/list
-	node.VMList: {
+	node.VMListBehavior: {
 		Type:  bInvoke,
 		Short: "List running VMs",
 		Long: `Invokes the /dms/node/vm/list behavior on an actor
