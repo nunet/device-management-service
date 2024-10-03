@@ -212,7 +212,7 @@ func (e *Executor) GetLogStream(_ context.Context, _ types.LogStreamRequest) (io
 
 // Cleanup removes all resources associated with the executor.
 // This includes stopping and removing all running VMs and deleting their socket paths.
-func (e *Executor) Cleanup(_ context.Context) error {
+func (e *Executor) Cleanup() error {
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(e.handlers.Keys()))
 	e.handlers.Iter(func(_ string, handler *executionHandler) bool {

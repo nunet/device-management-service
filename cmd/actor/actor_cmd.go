@@ -97,7 +97,7 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 			}
 
 			if behaviorCfg.PayloadEnc != nil {
-				payload.val, err = behaviorCfg.PayloadEnc(cmd, payload.val)
+				payload.val, err = behaviorCfg.PayloadEnc(payload.val)
 				if err != nil {
 					return fmt.Errorf("could not marshal payload: %w", err)
 				}

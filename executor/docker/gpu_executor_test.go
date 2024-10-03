@@ -68,7 +68,7 @@ func TestGPUDeployment(t *testing.T) {
 
 	// Run the container
 	t.Log("Running the container")
-	if err := runContainer(t, cli, imageName, maxFreeVRAMGpu.Vendor, maxFreeVRAMGpu); err != nil {
+	if err := runContainer(t, cli, imageName, maxFreeVRAMGpu.Vendor); err != nil {
 		t.Fatalf("Error running container: %v", err)
 	}
 	t.Log("Container deployed successfully.")
@@ -101,7 +101,7 @@ func pullImage(t *testing.T, cli *client.Client, imageName string) error {
 	return nil
 }
 
-func runContainer(t *testing.T, cli *client.Client, imageName string, vendor types.GPUVendor, _ types.GPU) error {
+func runContainer(t *testing.T, cli *client.Client, imageName string, vendor types.GPUVendor) error {
 	ctx := context.Background()
 
 	containerConfig := &container.Config{
