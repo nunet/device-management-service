@@ -9,7 +9,8 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/docker/docker/api/types/image"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -30,7 +31,7 @@ type Client struct {
 
 // NewDockerClient initializes a new Docker client with environment variables and API version negotiation.
 func NewDockerClient() (*Client, error) {
-	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +83,7 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 		return nil, nil, errors.Wrap(err, "failed to get container")
 	}
 
-	logOptions := types.ContainerLogsOptions{
+	logOptions := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
@@ -117,14 +118,14 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 
 // StartContainer starts a specified Docker container.
 func (c *Client) StartContainer(ctx context.Context, containerID string) error {
-	return c.client.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
+	return c.client.ContainerStart(ctx, containerID, container.StartOptions{})
 }
 
 // WaitContainer waits for a container to stop, returning channels for the result and errors.
 func (c *Client) WaitContainer(
 	ctx context.Context,
 	containerID string,
-) (<-chan container.ContainerWaitOKBody, <-chan error) {
+) (<-chan container.WaitResponse, <-chan error) {
 	return c.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 }
 
@@ -132,9 +133,9 @@ func (c *Client) WaitContainer(
 func (c *Client) StopContainer(
 	ctx context.Context,
 	containerID string,
-	timeout time.Duration,
+	options container.StopOptions,
 ) error {
-	return c.client.ContainerStop(ctx, containerID, &timeout)
+	return c.client.ContainerStop(ctx, containerID, options)
 }
 
 // RemoveContainer removes a Docker container, optionally forcing removal and removing associated volumes.
@@ -142,7 +143,7 @@ func (c *Client) RemoveContainer(ctx context.Context, containerID string) error 
 	return c.client.ContainerRemove(
 		ctx,
 		containerID,
-		types.ContainerRemoveOptions{RemoveVolumes: true, Force: true},
+		container.RemoveOptions{RemoveVolumes: true, Force: true},
 	)
 }
 
@@ -150,7 +151,7 @@ func (c *Client) RemoveContainer(ctx context.Context, containerID string) error 
 func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) error {
 	containers, err := c.client.ContainerList(
 		ctx,
-		types.ContainerListOptions{All: true, Filters: filterz},
+		container.ListOptions{All: true, Filters: filterz},
 	)
 	if err != nil {
 		return err
@@ -179,19 +180,19 @@ func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) err
 
 // removeNetworks removes all networks matching the specified filters.
 func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error {
-	networks, err := c.client.NetworkList(ctx, types.NetworkListOptions{Filters: filterz})
+	networks, err := c.client.NetworkList(ctx, network.ListOptions{Filters: filterz})
 	if err != nil {
 		return err
 	}
 
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(networks))
-	for _, network := range networks {
+	for _, n := range networks {
 		wg.Add(1)
-		go func(network types.NetworkResource, wg *sync.WaitGroup, errCh chan error) {
+		go func(network network.Inspect, wg *sync.WaitGroup, errCh chan error) {
 			defer wg.Done()
 			errCh <- c.client.NetworkRemove(ctx, network.ID)
-		}(network, &wg, errCh)
+		}(n, &wg, errCh)
 	}
 
 	go func() {
@@ -227,16 +228,7 @@ func (c *Client) GetOutputStream(
 	since string,
 	follow bool,
 ) (io.ReadCloser, error) {
-	cont, err := c.InspectContainer(ctx, containerID)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get container")
-	}
-
-	if !cont.State.Running {
-		return nil, fmt.Errorf("cannot get logs for a container that is not running")
-	}
-
-	logOptions := types.ContainerLogsOptions{
+	logOptions := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
@@ -253,14 +245,14 @@ func (c *Client) GetOutputStream(
 
 // FindContainer searches for a container by label and value, returning its ID if found.
 func (c *Client) FindContainer(ctx context.Context, label string, value string) (string, error) {
-	containers, err := c.client.ContainerList(ctx, types.ContainerListOptions{All: true})
+	containers, err := c.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return "", err
 	}
 
-	for _, container := range containers {
-		if container.Labels[label] == value {
-			return container.ID, nil
+	for _, cont := range containers {
+		if cont.Labels[label] == value {
+			return cont.ID, nil
 		}
 	}
 
@@ -269,7 +261,7 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 
 // PullImage pulls a Docker image from a registry.
 func (c *Client) PullImage(ctx context.Context, imageName string) (string, error) {
-	out, err := c.client.ImagePull(ctx, imageName, types.ImagePullOptions{})
+	out, err := c.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		zlog.Sugar().Errorf("unable to pull image: %v", err)
 		return "", err

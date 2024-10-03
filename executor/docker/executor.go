@@ -8,10 +8,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -266,7 +267,7 @@ func (e *Executor) newDockerExecutionContainer(
 
 	// TODO: Move this code block ( L263-272) to the allocator in future
 	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
-	machineResources, err := resources.ManagerInstance.SystemSpecs().GetMachineResources()
+	machineResources, err := hardware.GetMachineResources()
 	if err != nil {
 		return "", fmt.Errorf("failed to get machine resources: %w", err)
 	}

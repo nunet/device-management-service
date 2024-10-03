@@ -9,11 +9,6 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// gpuMetadata holds the metadata of the GPU
-type gpuMetadata struct {
-	PCIAddress string
-}
-
 // ManagerRepos holds all the repositories needed for resource management
 type ManagerRepos struct {
 	FreeResources      repositories.FreeResources
@@ -25,7 +20,6 @@ type ManagerRepos struct {
 // TODO: Add telemetry for the methods https://gitlab.com/nunet/device-management-service/-/issues/535
 type DefaultManager struct {
 	usageMonitor types.UsageMonitor
-	systemSpecs  types.SystemSpecs
 	repos        ManagerRepos
 	store        *store
 
@@ -37,10 +31,8 @@ type DefaultManager struct {
 // NewResourceManager returns a new defaultResourceManager instance
 func NewResourceManager(repos ManagerRepos) *DefaultManager {
 	rmStore := newStore()
-	sysSpecs := newSystemSpecs(rmStore)
 	return &DefaultManager{
 		usageMonitor: newUsageMonitor(),
-		systemSpecs:  sysSpecs,
 		repos:        repos,
 		store:        rmStore,
 	}
@@ -243,11 +235,6 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 	}
 
 	return nil
-}
-
-// SystemSpecs returns the SystemSpecs instance
-func (d *DefaultManager) SystemSpecs() types.SystemSpecs {
-	return d.systemSpecs
 }
 
 // UsageMonitor returns the UsageMonitor instance

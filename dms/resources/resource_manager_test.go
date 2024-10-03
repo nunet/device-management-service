@@ -40,7 +40,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -84,7 +84,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		demand := types.ResourceAllocation{
 			JobID: "job1",
@@ -112,7 +112,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -203,7 +203,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -261,7 +261,7 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -311,7 +311,7 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		err = rm.DeallocateResources(context.Background(), "job1")
 		require.Error(t, err)
@@ -333,7 +333,7 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -359,7 +359,7 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -402,7 +402,7 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -456,7 +456,7 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 		}
 		setUpFreeResources(repos.FreeResources, freeResources, t)
 
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		freeResourcesFromDB, err := rm.GetFreeResources(context.Background())
 		require.NoError(t, err)
@@ -484,7 +484,7 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 		}
 		setUpFreeResources(repos.FreeResources, freeResources, t)
 
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		freeResourcesFromDB, err := rm.GetFreeResources(context.Background())
 		require.NoError(t, err)
@@ -525,7 +525,7 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 		}
 		setUpFreeResources(repos.FreeResources, freeResources, t)
 
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 		demand := types.ResourceAllocation{
 			JobID: "job1",
 			Resources: types.Resources{
@@ -570,7 +570,7 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -633,7 +633,7 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -696,45 +696,6 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 	})
 }
 
-func TestSystemSpecs(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	t.Cleanup(func() {
-		ctrl.Finish()
-	})
-
-	t.Run("Must be able to get machine resources", func(t *testing.T) {
-		t.Parallel()
-		mockSystemSpecs := NewMockSystemSpecs(ctrl)
-
-		rm := newMockResourceManager(ManagerRepos{}, nil, mockSystemSpecs, t)
-		testMachineResources := types.MachineResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					Compute:    50000,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-				GPUs: []types.GPU{
-					{
-						Model:     "NVIDIA Tesla V100",
-						TotalVRAM: 16384,
-						Vendor:    types.GPUVendorNvidia,
-					},
-				},
-			},
-		}
-		mockSystemSpecs.EXPECT().GetMachineResources().Return(testMachineResources, nil)
-
-		cpuInfo, err := rm.SystemSpecs().GetMachineResources()
-		require.NoError(t, err)
-		assertResources(t, testMachineResources.Resources, cpuInfo.Resources)
-	})
-}
-
 func TestUsageMonitor(t *testing.T) {
 	t.Parallel()
 
@@ -765,7 +726,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
 
 		repos := newMockManagerRepos(t, freeResourcesRepo, onboardedResourcesRepo, resourceAllocationRepo)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
 		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), repositories.Query[types.ResourceAllocation]{}).Return(nil, nil)
@@ -888,7 +849,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
 
 		repos := newMockManagerRepos(t, freeResourcesRepo, onboardedResourcesRepo, resourceAllocationRepo)
-		rm := newMockResourceManager(repos, nil, nil, t)
+		rm := newMockResourceManager(repos, nil, t)
 
 		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
 		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), repositories.Query[types.ResourceAllocation]{}).Return(nil, nil)

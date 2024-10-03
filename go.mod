@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.7
 
 require (
-	github.com/docker/docker v20.10.18+incompatible
+	github.com/docker/docker v27.3.1+incompatible
 	github.com/ethereum/go-ethereum v1.10.18
 	github.com/fivebinaries/go-cardano-serialization v0.0.0-20220907134105-ec9b85086588
 	github.com/gin-contrib/cors v1.4.0
@@ -44,7 +44,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0
-	github.com/docker/distribution v2.8.1+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -151,7 +150,7 @@ require (
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/sagikazarmark/locafero v0.3.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
-	github.com/sirupsen/logrus v1.8.1 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cast v1.5.1 // indirect
@@ -304,9 +303,14 @@ require github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
 require (
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
+	github.com/containerd/log v0.1.0 // indirect
 	github.com/containernetworking/cni v1.0.1 // indirect
 	github.com/containernetworking/plugins v1.0.1 // indirect
+	github.com/distribution/reference v0.6.0 // indirect
+	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/wlynxg/anet v0.0.4 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.52.0 // indirect
 )
