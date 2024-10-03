@@ -247,7 +247,7 @@ You can find a detailed documentation [here](./cmd/README.md).
 
 The first step is to generate identities/keys and capability contexts. It is recommended that two keys are setup: one for the user (default name `user`) and another for the dms (default name `dms`)
 
-A capability context is created with the `dms cap new <context>` command and it is anchored on a key with the context name.
+A capability context is created with the `nunet cap new <context>` command and it is anchored on a key with the context name.
 
 To set up a new identity/create a new key, run the command:
 
