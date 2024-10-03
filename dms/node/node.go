@@ -51,6 +51,7 @@ type Node struct {
 
 	mx          sync.Mutex
 	peers       map[peer.ID]*peerState
+	deployments map[string]*jobs.Orchestrator
 	allocations map[string]*jobs.Allocation
 	running     int32
 }
@@ -126,6 +127,7 @@ func New(onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostI
 	n := &Node{
 		hostID:          hostID,
 		network:         net,
+		deployments:     make(map[string]*jobs.Orchestrator),
 		allocations:     make(map[string]*jobs.Allocation),
 		peers:           make(map[peer.ID]*peerState),
 		resourceManager: resourceManager,
@@ -172,32 +174,40 @@ func New(onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostI
 		return nil, fmt.Errorf("adding peer score behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(OnboardBehaviour, n.handleOnboard); err != nil {
+	if err := nodeActor.AddBehavior(OnboardBehavior, n.handleOnboard); err != nil {
 		return nil, fmt.Errorf("adding onboard behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(OffboardBehaviour, n.handleOffboard); err != nil {
+	if err := nodeActor.AddBehavior(OffboardBehavior, n.handleOffboard); err != nil {
 		return nil, fmt.Errorf("adding offboard behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(OnboardStatusBehaviour, n.handleOnboardStatus); err != nil {
+	if err := nodeActor.AddBehavior(OnboardStatusBehavior, n.handleOnboardStatus); err != nil {
 		return nil, fmt.Errorf("adding onboard status behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(OnboardResourceBehaviour, n.handleOnboardResource); err != nil {
+	if err := nodeActor.AddBehavior(OnboardResourceBehavior, n.handleOnboardResource); err != nil {
 		return nil, fmt.Errorf("adding onboard resource behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(CustomVMStart, n.handleCustomVMStart); err != nil {
+	if err := nodeActor.AddBehavior(CustomVMStartBehavior, n.handleCustomVMStart); err != nil {
 		return nil, fmt.Errorf("adding custom vm start behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(VMStop, n.handleVMStop); err != nil {
+	if err := nodeActor.AddBehavior(VMStopBehavior, n.handleVMStop); err != nil {
 		return nil, fmt.Errorf("adding vm stop behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(VMList, n.handleListVM); err != nil {
+	if err := nodeActor.AddBehavior(VMListBehavior, n.handleListVM); err != nil {
 		return nil, fmt.Errorf("adding vm list behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(NewDeploymentBehavior, n.newDeployment); err != nil {
+		return nil, fmt.Errorf("adding new deployment behavior: %w", err)
+	}
+
+	if err := n.restoreDeployments(); err != nil {
+		log.Errorf("restoring deployments: %s", err)
 	}
 
 	return n, nil
@@ -505,9 +515,13 @@ func (n *Node) Stop() error {
 
 	// stop all allocations
 	for k, alloc := range n.allocations {
-		if err := alloc.Stop(context.Background()); err != nil {
-			log.Warnf("error stopping allocation %s: %w", k, err)
+		if err := alloc.Stop(); err != nil {
+			log.Warnf("error stopping allocation %s: %err", k, err)
 		}
+	}
+
+	if err := n.saveDeployments(); err != nil {
+		log.Errorf("error saving active deployments: %s", err)
 	}
 
 	n.cancel()

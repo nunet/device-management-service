@@ -9,7 +9,7 @@ type EnsembleConfig struct {
 	V1 *EnsembleConfigV1
 }
 
-// EnsembleConfig is the configuration of an ensemble
+// EnsembleConfigV1 is version 1 of the configuration for an ensemble
 type EnsembleConfigV1 struct {
 	Allocations map[string]AllocationConfig // (named) allocations in the ensemble
 	Nodes       map[string]NodeConfig       // (named) nodes in the ensemble
@@ -53,12 +53,13 @@ type NodeConfig struct {
 	Ports       []PortConfig        // the port mapping configuration for the node
 	Location    LocationConstraints // the geographical location constraints for the node
 	Peer        string              // (optional) a fixed peer for the node
+	// TODO contract information
 }
 
 // LocationConstraints provides the node location placement constraints
 type LocationConstraints struct {
-	Accept []Location // acceptable location constraints
-	Reject []Location // negative location constraints; eg !USA for GPDR purposes
+	Accept []Location // acceptable location constraints (disjunction)
+	Reject []Location // negative location constraints (conjunction); eg !USA for GPDR purposes
 }
 
 // Location is a geographical location on Planet Earth
@@ -101,3 +102,9 @@ const (
 	StrategyAllForOne  SupervisorStrategy = "AllForOne"
 	StrategyRestForOne SupervisorStrategy = "RestForOne"
 )
+
+// config validation
+func (e *EnsembleConfig) Validate() error {
+	// TODO
+	return nil
+}
