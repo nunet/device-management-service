@@ -1,20 +1,8 @@
 package jobs
 
 import (
-	"time"
-
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/types"
-)
-
-const (
-	BidRequestTopic    = "/nunet/deployment"
-	BidRequestBehavior = "/dms/deployment/request"
-	BidRequestTimeout  = 5 * time.Second
-
-	BidReplyBehavior = "/dms/deployment/bid"
-
-	MinEnsembleDeploymentTime = 15 * time.Second
 )
 
 // EnsembleBidRequest is a request for a bids pertaining to an ensemble
@@ -67,7 +55,6 @@ func (b *EnsembleBidRequest) Validate() error {
 	return nil
 }
 
-// TODO pass the envelope for verification
 func (b *Bid) Validate() error {
 	// TODO
 	return nil
@@ -83,6 +70,10 @@ func (b *Bid) NodeID() string {
 
 func (b *Bid) Peer() string {
 	return b.V1.Peer
+}
+
+func (b *Bid) Handle() actor.Handle {
+	return b.V1.Handle
 }
 
 func (b *Bid) Location() Location {

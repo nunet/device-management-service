@@ -1,6 +1,8 @@
 package jobs
 
 import (
+	"encoding/json"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -24,7 +26,6 @@ type AllocationConfig struct {
 	Executor    AllocationExecutor // the executor of the allocation
 	Resources   types.Resources    // the HW resources required by the allocation
 	Execution   types.SpecConfig   // the allocation execution configuration
-	Volumes     []VolumeConfig     // premounted external volumes
 	DNSName     string             // the internal DNS name of the allocation
 	Keys        []string           // names of the authorized ssh keys for the allocation
 	Provision   []string           // names of provisioning scripts to run (in order)
@@ -38,14 +39,6 @@ const (
 	ExecutorFirecracker AllocationExecutor = "firecracker"
 	ExecutorDocker      AllocationExecutor = "docker"
 )
-
-// VolumeConfig is an externally mounted volume
-type VolumeConfig struct {
-	Name       string           // the name of the volume
-	Type       string           // the type of the volume
-	Remote     types.SpecConfig // the remout mount config
-	Mountpoint string           // the mountpoint
-}
 
 // NodeConfig is the configuration of a distinct DMS node
 type NodeConfig struct {
@@ -81,10 +74,9 @@ type PortConfig struct {
 
 // EdgeConstraint is a constraint for a network edge between two nodes
 type EdgeConstraint struct {
-	S, T      string // (named) nodes connected by the edge
-	RTT       uint   // maximum edge RTT in milliseconds
-	BW        uint   // minimum edge bandwidth in Kbps
-	Symmetric bool   // whether the constraint is symmetric (bidirectional)
+	S, T string // (named) nodes connected by the edge
+	RTT  uint   // maximum edge RTT in milliseconds
+	BW   uint   // minimum edge bandwidth in Kbps
 }
 
 // SupervisorConfig is the supervisory structure configuration for the ensemble
@@ -107,4 +99,66 @@ const (
 func (e *EnsembleConfig) Validate() error {
 	// TODO
 	return nil
+}
+
+func (e *EnsembleConfig) Allocations() map[string]AllocationConfig {
+	return e.V1.Allocations
+}
+
+func (e *EnsembleConfig) Allocation(allocID string) (AllocationConfig, bool) {
+	a, ok := e.V1.Allocations[allocID]
+	return a, ok
+}
+
+func (e *EnsembleConfig) Nodes() map[string]NodeConfig {
+	return e.V1.Nodes
+}
+
+func (e *EnsembleConfig) Node(nodeID string) (NodeConfig, bool) {
+	n, ok := e.V1.Nodes[nodeID]
+	return n, ok
+}
+
+func (e *EnsembleConfig) EdgeConstraints() []EdgeConstraint {
+	return e.V1.Edges
+}
+
+func (l *Location) Includes(other Location) bool {
+	if l.Region != other.Region {
+		return false
+	}
+
+	if l.Country != "" && l.Country != other.Country {
+		return false
+	}
+
+	if l.City != "" && l.City != other.City {
+		return false
+	}
+
+	if l.ASN > 0 && l.ASN != other.ASN {
+		return false
+	}
+
+	if l.ISP != "" && l.ISP != other.ISP {
+		return false
+	}
+
+	return true
+}
+
+func (e *EnsembleConfig) Clone() EnsembleConfig {
+	var clone EnsembleConfig
+
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		log.Errorf("error marshaling ensemble config: %s", err)
+		return clone
+	}
+
+	if err := json.Unmarshal(bytes, &clone); err != nil {
+		log.Errorf("error unmarshaling ensemble config: %s", err)
+	}
+
+	return clone
 }

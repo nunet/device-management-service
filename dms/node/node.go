@@ -206,6 +206,10 @@ func New(onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostI
 		return nil, fmt.Errorf("adding new deployment behavior: %w", err)
 	}
 
+	if err := nodeActor.AddBehavior(jobs.VerifyEdgeConstraintBehavior, n.deploymentVerifyEdgeConstraint); err != nil {
+		return nil, fmt.Errorf("adding deployment constraint behavior: %w", err)
+	}
+
 	if err := n.restoreDeployments(); err != nil {
 		log.Errorf("restoring deployments: %s", err)
 	}
