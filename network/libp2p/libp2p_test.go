@@ -98,7 +98,7 @@ func TestAdvertiseUnadvertiseQuery(t *testing.T) {
 	err = peer3.Advertise(context.TODO(), "who_am_i", []byte(`{"peer":"peer3"}`))
 	assert.NoError(t, err)
 
-	time.Sleep(40 * time.Millisecond)
+	time.Sleep(400 * time.Millisecond)
 
 	// get the peers who have the who_am_i key
 	advertisements, err := peer1.Query(context.TODO(), "who_am_i")
