@@ -1,19 +1,16 @@
 
-Before raising an issue, please read the guidelines to determine the best way to do it:
+Before raising an issue, please review the guidelines to determine the best approach:
 
-* https://gitlab.com/nunet/documentation/-/wikis/Contribution-Guidelines
+* https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/contributing_guidelines/README.md
 
-If you are experiencing an issue when using NuNet, you can get help with our community in the NuNet Discord Server.
-
-* https://discord.gg/8S7JNRBHJa
-
-Please use one of the issue templates provided and include as much information as possible:
-- Bug - to report a problem that can be reproducible
-- Feature - to make a feature proposal to NuNet platform
-- Report - to make a report about a problem you can not reproduce or to share comments, thoughts
-- Issue - for internal use of NuNet team to create issues according to our software process
-- Default - template to only hold this explanation
+Please use one of the provided issue templates and include as much information as possible:
+- Bug - To report a problem that can be reproduced.
+- Question - To ask a question or report a bug that cannot be reproduced.
+- Feature - To propose a new feature for the NuNet platform.
+- Discussion - To start a discussion on a topic or share comments and thoughts.                   
+- Issue - For internal use by the NuNet team to create issues following our software process.
+- Default - This template holds this explanation.
 
 Thank you for helping to make NuNet a globally decentralized computing framework!
 
-<!-- template sourced from https://gitlab.com/nunet/documentation/-/blob/develop/.gitlab/issue_templates/Default.md -->
+<!-- template sourced from https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/.gitlab/issue_templates/Default.md -->
