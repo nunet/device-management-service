@@ -3,12 +3,11 @@ package db
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-)
 
-var DB *gorm.DB
+	"gitlab.com/nunet/device-management-service/types"
+)
 
 func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 	database, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", dbPath)), &gorm.Config{})
@@ -34,9 +33,6 @@ func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 	_ = database.AutoMigrate(&types.MachineResources{})
 	_ = database.AutoMigrate(&types.OnboardingConfig{})
 	_ = database.AutoMigrate(&types.ResourceAllocation{})
-
-	// TODO remove once all DB usage is transitioned to the repos
-	DB = database
 
 	return database, nil
 }

@@ -18,11 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/afero"
 	"golang.org/x/exp/slices"
 
-	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -109,36 +107,6 @@ func RandomString(n int) (string, error) {
 	return sb.String(), nil
 }
 
-// GenerateMachineUUID generates a machine uuid
-func GenerateMachineUUID() (string, error) {
-	var machine types.MachineUUID
-
-	machineUUID, err := uuid.NewDCEGroup()
-	if err != nil {
-		return "", err
-	}
-	machine.UUID = machineUUID.String()
-
-	return machine.UUID, nil
-}
-
-// GetMachineUUID returns the machine uuid from the DB
-func GetMachineUUID() string {
-	var machine types.MachineUUID
-	uuid, err := GenerateMachineUUID()
-	if err != nil {
-		zlog.Sugar().Errorf("could not generate machine uuid: %v", err)
-	}
-
-	machine.UUID = uuid
-
-	result := db.DB.FirstOrCreate(&machine)
-	if result.Error != nil {
-		zlog.Sugar().Errorf("could not find or create machine uuid record in DB: %v", result.Error)
-	}
-	return machine.UUID
-}
-
 // SliceContains checks if a string exists in a slice
 func SliceContains(s []string, str string) bool {
 	for _, v := range s {
@@ -157,13 +125,6 @@ func DeleteFile(path string, backup bool) (err error) {
 		err = os.Remove(path)
 	}
 	return
-}
-
-// ReadyForElastic checks if the device is ready to send logs to elastic
-func ReadyForElastic() bool {
-	elasticToken := types.ElasticToken{}
-	db.DB.Find(&elasticToken)
-	return elasticToken.NodeID != "" && elasticToken.ChannelName != ""
 }
 
 // CreateDirectoryIfNotExists creates a directory if it does not exist
@@ -334,24 +295,6 @@ func CheckWSL(afs afero.Afero) (bool, error) {
 	}
 
 	return false, nil
-}
-
-// SaveServiceInfo updates service info into SP's DMS for claim Reward by SP user
-func SaveServiceInfo(cpService types.Services) error {
-	var spService types.Services
-	err := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Find(&spService).Error
-	if err != nil {
-		return fmt.Errorf("unable to find service on SP side: %v", err)
-	}
-	cpService.ID = spService.ID
-	cpService.CreatedAt = spService.CreatedAt
-
-	result := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Updates(&cpService)
-	if result.Error != nil {
-		return fmt.Errorf("unable to update service info on SP side: %v", result.Error.Error())
-	}
-
-	return nil
 }
 
 func RandomBool() (bool, error) {
