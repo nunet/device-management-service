@@ -35,7 +35,7 @@ func NewTestSuite(t *testing.T) *TestSuite {
 		t.Fatalf("failed to open database: %v", err)
 	}
 
-	service := NewTestService(db, fs)
+	service := NewTestService(db, fs, t)
 
 	return &TestSuite{
 		service: service,
@@ -44,20 +44,25 @@ func NewTestSuite(t *testing.T) *TestSuite {
 	}
 }
 
-func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
+func NewTestService(db *gorm.DB, fs afero.Fs, t *testing.T) *Onboarding {
+	hardwareManager := hardware.NewHardwareManager()
+	resourceManager, err := resources.NewResourceManager(resources.ManagerRepos{
+		FreeResources:      repositories_gorm.NewFreeResources(db),
+		OnboardedResources: repositories_gorm.NewOnboardedResources(db),
+		ResourceAllocation: repositories_gorm.NewResourceAllocation(db),
+	}, hardwareManager)
+	require.NoError(t, err)
+
 	oConfig := Config{
-		Fs:             afero.Afero{Fs: fs},
-		P2PRepo:        repositories_gorm.NewLibp2pInfo(db),
-		UUIDRepo:       repositories_gorm.NewMachineUUID(db),
-		AvResourceRepo: repositories_gorm.NewAvailableResources(db),
-		ParamsRepo:     repositories_gorm.NewOnboardingParams(db),
-		ResourceManager: resources.NewResourceManager(resources.ManagerRepos{
-			FreeResources:      repositories_gorm.NewFreeResources(db),
-			OnboardedResources: repositories_gorm.NewOnboardedResources(db),
-			ResourceAllocation: repositories_gorm.NewResourceAllocation(db),
-		}),
-		WorkDir:      "/test",
-		DatabasePath: "/test/db.sqlite",
+		Fs:              afero.Afero{Fs: fs},
+		P2PRepo:         repositories_gorm.NewLibp2pInfo(db),
+		UUIDRepo:        repositories_gorm.NewMachineUUID(db),
+		AvResourceRepo:  repositories_gorm.NewAvailableResources(db),
+		ParamsRepo:      repositories_gorm.NewOnboardingParams(db),
+		ResourceManager: resourceManager,
+		Hardware:        hardwareManager,
+		WorkDir:         "/test",
+		DatabasePath:    "/test/db.sqlite",
 	}
 	o := New(&oConfig)
 	return o
@@ -101,7 +106,8 @@ func TestOnboard(t *testing.T) {
 
 	ctx := context.Background()
 
-	total, err := hardware.GetMachineResources()
+	hardwareManager := hardware.NewHardwareManager()
+	total, err := hardwareManager.GetMachineResources()
 	require.NoError(t, err)
 
 	capacity := types.CapacityForNunet{

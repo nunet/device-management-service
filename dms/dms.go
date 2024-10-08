@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
@@ -80,12 +82,16 @@ func Run(ksPassphrase string, contextName string) error {
 		return fmt.Errorf("unable to connect to database: %w", err)
 	}
 
+	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
 		FreeResources:      gdb.NewFreeResources(db),
 		OnboardedResources: gdb.NewOnboardedResources(db),
 		ResourceAllocation: gdb.NewResourceAllocation(db),
 	}
-	resourceManager := resources.NewResourceManager(repos)
+	resourceManager, err := resources.NewResourceManager(repos, hardwareManager)
+	if err != nil {
+		return fmt.Errorf("unable to create resource manager: %w", err)
+	}
 
 	onboardR := gdb.NewOnboardingParams(db)
 	p2pR := gdb.NewLibp2pInfo(db)
@@ -97,6 +103,7 @@ func Run(ksPassphrase string, contextName string) error {
 		ParamsRepo:      onboardR,
 		P2PRepo:         p2pR,
 		UUIDRepo:        uuidR,
+		Hardware:        hardwareManager,
 		ResourceManager: resourceManager,
 		AvResourceRepo:  avResR,
 		WorkDir:         config.GetConfig().WorkDir,
@@ -189,7 +196,7 @@ func Run(ksPassphrase string, contextName string) error {
 	capCtx.Start(5 * time.Minute)
 
 	hostID := p2p.Host.ID().String()
-	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler)
+	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager)
 	if err != nil {
 		return fmt.Errorf("failed to create node: %s", err)
 	}

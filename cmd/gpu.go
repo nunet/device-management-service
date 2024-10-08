@@ -44,14 +44,23 @@ func newGPUListCommand() *cobra.Command {
 				return fmt.Errorf("error getting GPUs: %w", err)
 			}
 
+			usage, err := gpu.GetGPUUsage()
+			if err != nil {
+				return fmt.Errorf("error getting GPU usage: %w", err)
+			}
+
 			if len(gpus) == 0 {
 				return fmt.Errorf("no gpus found")
 			}
 
+			if len(gpus) != len(usage) {
+				return fmt.Errorf("GPU and GPU usage counts do not match. This is a bug")
+			}
+
 			fmt.Println("GPU Details:")
-			for _, g := range gpus {
-				fmt.Printf("Model: %s, Total VRAM: %d MB, Free VRAM: %d MB, Used VRAM: %d MB, Vendor: %s, PCI Address: %s, Index: %d\n",
-					g.Model, g.TotalVRAM, g.FreeVRAM, g.UsedVRAM, g.Vendor, g.PCIAddress, g.Index)
+			for i, g := range gpus {
+				fmt.Printf("Model: %s, Total VRAM: %.2f GB, Used VRAM: %.2f GB, Vendor: %s, PCI Address: %s, Index: %d\n",
+					g.Model, types.ConvertBytesToGB(g.VRAM), types.ConvertBytesToGB(usage[i].VRAM), g.Vendor, g.PCIAddress, g.Index)
 			}
 			return nil
 		},
@@ -63,7 +72,8 @@ func newGPUTestCommand() *cobra.Command {
 		Use:   "test",
 		Short: "Test GPU deployment by running a Docker container with GPU resources",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			machineResources, err := hardware.GetMachineResources()
+			hardwareManager := hardware.NewHardwareManager()
+			machineResources, err := hardwareManager.GetMachineResources()
 			if err != nil {
 				return fmt.Errorf("getting machine resources: %v", err)
 			}
@@ -72,7 +82,7 @@ func newGPUTestCommand() *cobra.Command {
 				return fmt.Errorf("no GPUs detected on the host")
 			}
 
-			maxFreeVRAMGpu, err := machineResources.GPUs.GetGPUWithHighestFreeVRAM()
+			maxFreeVRAMGpu, err := machineResources.GPUs.MaxFreeVRAMGPU()
 			if err != nil {
 				return fmt.Errorf("getting GPU with highest free VRAM: %v", err)
 			}

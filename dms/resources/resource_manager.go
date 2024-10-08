@@ -19,9 +19,9 @@ type ManagerRepos struct {
 // DefaultManager implements the ResourceManager interface
 // TODO: Add telemetry for the methods https://gitlab.com/nunet/device-management-service/-/issues/535
 type DefaultManager struct {
-	usageMonitor types.UsageMonitor
-	repos        ManagerRepos
-	store        *store
+	repos    ManagerRepos
+	store    *store
+	hardware types.HardwareManager
 
 	// allocationLock is used to synchronize access to the allocation pool during allocation and deallocation
 	// it ensures that resource allocation and deallocation are atomic operations
@@ -29,13 +29,16 @@ type DefaultManager struct {
 }
 
 // NewResourceManager returns a new defaultResourceManager instance
-func NewResourceManager(repos ManagerRepos) *DefaultManager {
+func NewResourceManager(repos ManagerRepos, hardware types.HardwareManager) (*DefaultManager, error) {
+	if hardware == nil {
+		return nil, fmt.Errorf("hardware manager cannot be nil")
+	}
 	rmStore := newStore()
 	return &DefaultManager{
-		usageMonitor: newUsageMonitor(),
-		repos:        repos,
-		store:        rmStore,
-	}
+		repos:    repos,
+		store:    rmStore,
+		hardware: hardware,
+	}, nil
 }
 
 var _ types.ResourceManager = (*DefaultManager)(nil)
@@ -54,15 +57,24 @@ func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types
 		return fmt.Errorf("resources already allocated for job %s", allocation.JobID)
 	}
 
-	// Check if the resources are available
 	freeResources, err := d.GetFreeResources(ctx)
 	if err != nil {
 		return fmt.Errorf("getting free resources: %w", err)
 	}
 
-	// Allocate the resources
+	// Check if there are enough free resources in dms pool to allocate
 	if err := freeResources.Subtract(allocation.Resources); err != nil {
-		return fmt.Errorf("subtracting resources: %w", err)
+		return fmt.Errorf("no free resources: %w", err)
+	}
+
+	// Check if there are enough free resources on the machine to allocate
+	systemFreeResources, err := d.hardware.GetFreeResources()
+	if err != nil {
+		return fmt.Errorf("get system free resources: %w", err)
+	}
+
+	if err := systemFreeResources.Subtract(allocation.Resources); err != nil {
+		return fmt.Errorf("no free resources on the machine: %w", err)
 	}
 
 	// Potential issue: if the free resources are updated in the db, the allocations should be updated as well
@@ -235,11 +247,6 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 	}
 
 	return nil
-}
-
-// UsageMonitor returns the UsageMonitor instance
-func (d *DefaultManager) UsageMonitor() types.UsageMonitor {
-	return d.usageMonitor
 }
 
 // updateFreeResources updates the free resources in the database and the store

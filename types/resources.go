@@ -97,12 +97,6 @@ type ResourceAllocation struct {
 	Resources
 }
 
-// UsageMonitor defines the methods to monitor the system usage
-type UsageMonitor interface {
-	// GetUsage returns the resources used by the machine
-	GetUsage(context.Context) (Resources, error)
-}
-
 // ResourceManager is an interface that defines the methods to manage the resources of the machine
 type ResourceManager interface {
 	// AllocateResources allocates the resources required by a job
@@ -117,6 +111,4 @@ type ResourceManager interface {
 	GetOnboardedResources(context.Context) (OnboardedResources, error)
 	// UpdateOnboardedResources updates the onboarded resources of the machine in the database
 	UpdateOnboardedResources(context.Context, OnboardedResources) error
-	// UsageMonitor returns the UsageMonitor instance
-	UsageMonitor() UsageMonitor
 }

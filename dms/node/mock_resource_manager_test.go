@@ -126,17 +126,3 @@ func (mr *MockResourceManagerMockRecorder) UpdateOnboardedResources(arg0, arg1 a
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOnboardedResources", reflect.TypeOf((*MockResourceManager)(nil).UpdateOnboardedResources), arg0, arg1)
 }
-
-// UsageMonitor mocks base method.
-func (m *MockResourceManager) UsageMonitor() types.UsageMonitor {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UsageMonitor")
-	ret0, _ := ret[0].(types.UsageMonitor)
-	return ret0
-}
-
-// UsageMonitor indicates an expected call of UsageMonitor.
-func (mr *MockResourceManagerMockRecorder) UsageMonitor() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UsageMonitor", reflect.TypeOf((*MockResourceManager)(nil).UsageMonitor))
-}

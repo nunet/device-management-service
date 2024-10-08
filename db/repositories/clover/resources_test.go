@@ -28,7 +28,6 @@ func TestMachineResourcesRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      2,
 					ClockSpeed: 10000,
-					Compute:    20000,
 				},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 1024},
@@ -86,7 +85,6 @@ func TestFreeResourcesRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      2,
 					ClockSpeed: 10000,
-					Compute:    20000,
 				},
 				RAM: types.RAM{
 					Size: 4096,
@@ -148,7 +146,6 @@ func TestOnboardedResourcesRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      2,
 					ClockSpeed: 10000,
-					Compute:    20000,
 				},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 100000},
@@ -206,7 +203,6 @@ func TestResourceAllocationRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      2,
 					ClockSpeed: 10000,
-					Compute:    20000,
 				},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 100000},
@@ -240,7 +236,6 @@ func TestResourceAllocationRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      3,
 					ClockSpeed: 40000,
-					Compute:    50000,
 				},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 100000},

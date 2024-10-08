@@ -58,7 +58,6 @@ func assertResources(t *testing.T, expected, actual types.Resources) {
 
 	require.Equal(t, expected.CPU.Cores, actual.CPU.Cores)
 	require.Equal(t, expected.CPU.ClockSpeed, actual.CPU.ClockSpeed)
-	require.Equal(t, expected.CPU.Compute, actual.CPU.Compute)
 	require.Equal(t, expected.RAM, actual.RAM)
 	require.Equal(t, expected.Disk, actual.Disk)
 	// TODO: GPU
@@ -67,15 +66,15 @@ func assertResources(t *testing.T, expected, actual types.Resources) {
 // newMockResourceManager creates a new mockResourceManager
 func newMockResourceManager(
 	repos ManagerRepos,
-	mockUsageMonitor types.UsageMonitor, //nolint:unparam // will be removed after the implementation
+	hardware *MockHardwareManager,
 	t *testing.T,
 ) *DefaultManager {
 	t.Helper()
 
 	return &DefaultManager{
-		repos:        repos,
-		usageMonitor: mockUsageMonitor,
-		store:        newStore(),
+		repos:    repos,
+		store:    newStore(),
+		hardware: hardware,
 	}
 }
 

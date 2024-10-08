@@ -883,15 +883,14 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 					Resources: Resources{
 						CPU: CPU{
 							Cores:      2,
-							Compute:    2000,
 							ClockSpeed: 1000,
 						},
 						RAM:  RAM{Size: 1000},
 						Disk: Disk{Size: 1000},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 1000,
+								Index: 0,
+								VRAM:  1000,
 							},
 						},
 					},
@@ -900,15 +899,14 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 					Resources: Resources{
 						CPU: CPU{
 							Cores:      1,
-							Compute:    1000,
 							ClockSpeed: 1000,
 						},
 						RAM:  RAM{Size: 500},
 						Disk: Disk{Size: 500},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 500,
+								Index: 0,
+								VRAM:  500,
 							},
 						},
 					},
@@ -1309,7 +1307,6 @@ func TestHardwareCapability_Calculable_Add(t *testing.T) {
 						CPU: CPU{
 							Cores:      1,
 							ClockSpeed: 1000,
-							Compute:    1000,
 						},
 						RAM: RAM{
 							Size: 1000,
@@ -1319,8 +1316,8 @@ func TestHardwareCapability_Calculable_Add(t *testing.T) {
 						},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 1000,
+								Index: 0,
+								VRAM:  1000,
 							},
 						},
 					},
@@ -1330,7 +1327,6 @@ func TestHardwareCapability_Calculable_Add(t *testing.T) {
 						CPU: CPU{
 							Cores:      1,
 							ClockSpeed: 1000,
-							Compute:    1000,
 						},
 						RAM: RAM{
 							Size: 1000,
@@ -1340,8 +1336,8 @@ func TestHardwareCapability_Calculable_Add(t *testing.T) {
 						},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 1000,
+								Index: 0,
+								VRAM:  1000,
 							},
 						},
 					},
@@ -1351,7 +1347,6 @@ func TestHardwareCapability_Calculable_Add(t *testing.T) {
 						CPU: CPU{
 							Cores:      2,
 							ClockSpeed: 1000,
-							Compute:    2000,
 						},
 						RAM: RAM{
 							Size: 2000,
@@ -1361,8 +1356,8 @@ func TestHardwareCapability_Calculable_Add(t *testing.T) {
 						},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 2000,
+								Index: 0,
+								VRAM:  2000,
 							},
 						},
 					},
@@ -1920,7 +1915,6 @@ func TestHardwareCapability_Calculable_Subtract(t *testing.T) {
 						CPU: CPU{
 							Cores:      2,
 							ClockSpeed: 1000,
-							Compute:    2000,
 						},
 						RAM: RAM{
 							Size: 2000,
@@ -1930,8 +1924,8 @@ func TestHardwareCapability_Calculable_Subtract(t *testing.T) {
 						},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 2000,
+								Index: 0,
+								VRAM:  2000,
 							},
 						},
 					},
@@ -1941,7 +1935,6 @@ func TestHardwareCapability_Calculable_Subtract(t *testing.T) {
 						CPU: CPU{
 							Cores:      1,
 							ClockSpeed: 1000,
-							Compute:    1000,
 						},
 						RAM: RAM{
 							Size: 1000,
@@ -1951,8 +1944,8 @@ func TestHardwareCapability_Calculable_Subtract(t *testing.T) {
 						},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 1000,
+								Index: 0,
+								VRAM:  1000,
 							},
 						},
 					},
@@ -1962,7 +1955,6 @@ func TestHardwareCapability_Calculable_Subtract(t *testing.T) {
 						CPU: CPU{
 							Cores:      1,
 							ClockSpeed: 1000,
-							Compute:    1000,
 						},
 						RAM: RAM{
 							Size: 1000,
@@ -1972,8 +1964,8 @@ func TestHardwareCapability_Calculable_Subtract(t *testing.T) {
 						},
 						GPUs: GPUs{
 							{
-								Index:     0,
-								TotalVRAM: 1000,
+								Index: 0,
+								VRAM:  1000,
 							},
 						},
 					},

@@ -21,7 +21,6 @@ func GetCPU() (types.CPU, error) {
 	cpuInfo := types.CPU{
 		Cores:      float32(totalCores),
 		ClockSpeed: totalCompute / float64(m1cpu.ECoreCount()+m1cpu.PCoreCount()),
-		Compute:    totalCompute,
 	}
 	return cpuInfo, nil
 }

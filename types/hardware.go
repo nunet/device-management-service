@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// HardwareManager defines the interface for managing machine resources.
+type HardwareManager interface {
+	GetMachineResources() (MachineResources, error)
+	GetUsage() (Resources, error)
+	GetFreeResources() (Resources, error)
+}
+
 type GPUVendor string
 
 const (
@@ -13,7 +20,7 @@ const (
 	GPUVendorAMDATI  GPUVendor = "AMD/ATI"
 	GPUVendorIntel   GPUVendor = "Intel"
 	GPUVendorUnknown GPUVendor = "Unknown"
-	None             GPUVendor = "None"
+	GPUVendorNone    GPUVendor = "None"
 )
 
 // implementing Comparable interface
@@ -54,12 +61,8 @@ type GPU struct {
 	PCIAddress string
 	// Model of the GPU, e.g. A100
 	Model string `json:"model" description:"GPU model, ex A100"`
-	// TotalVRAM is the total amount of VRAM on the device
-	TotalVRAM uint64
-	// UsedVRAM is the amount of VRAM currently in use
-	UsedVRAM uint64
-	// FreeVRAM is the amount of VRAM currently free
-	FreeVRAM uint64
+	// VRAM is the total amount of VRAM on the device
+	VRAM float64
 
 	// Gorm fields
 	// Team, is this the right way to do this? What is the best practice we're following?
@@ -75,14 +78,14 @@ var (
 func (g *GPU) Compare(other GPU) Comparison {
 	comparison := make(ComplexComparison)
 
-	// compare the TotalVRAM
+	// compare the VRAM
 	switch {
-	case g.TotalVRAM > other.TotalVRAM:
-		comparison["TotalVRAM"] = Better
-	case g.TotalVRAM < other.TotalVRAM:
-		comparison["TotalVRAM"] = Worse
+	case g.VRAM > other.VRAM:
+		comparison["VRAM"] = Better
+	case g.VRAM < other.VRAM:
+		comparison["VRAM"] = Worse
 	default:
-		comparison["TotalVRAM"] = Equal
+		comparison["VRAM"] = Equal
 	}
 
 	// currently this is a very simple comparison, based on the assumption
@@ -91,28 +94,26 @@ func (g *GPU) Compare(other GPU) Comparison {
 	// it could be, that we want to compare types.of GPUs and rank them in some way;
 	// using e.g. benchmarking data from Tom's Hardware or some other source;
 
-	return comparison["TotalVRAM"]
+	return comparison["VRAM"]
 }
 
 func (g *GPU) Add(other GPU) error {
-	g.TotalVRAM += other.TotalVRAM
+	g.VRAM += other.VRAM
 	return nil
 }
 
 func (g *GPU) Subtract(other GPU) error {
-	if g.TotalVRAM < other.TotalVRAM {
-		return fmt.Errorf("total VRAM: underflow, cannot subtract %v from %v", g.TotalVRAM, other.TotalVRAM)
+	if g.VRAM < other.VRAM {
+		return fmt.Errorf("total VRAM: underflow, cannot subtract %v from %v", g.VRAM, other.VRAM)
 	}
 
-	g.TotalVRAM -= other.TotalVRAM
+	g.VRAM -= other.VRAM
 	return nil
 }
 
 func (g *GPU) Equal(other GPU) bool {
 	return g.Model == other.Model &&
-		g.TotalVRAM == other.TotalVRAM &&
-		g.UsedVRAM == other.UsedVRAM &&
-		g.FreeVRAM == other.FreeVRAM &&
+		g.VRAM == other.VRAM &&
 		g.Index == other.Index &&
 		g.Vendor == other.Vendor &&
 		g.PCIAddress == other.PCIAddress
@@ -207,25 +208,22 @@ func (gpus GPUs) Subtract(other GPUs) error {
 	return nil
 }
 
-// GetGPUWithHighestFreeVRAM Determine the GPU vendor with the highest free VRAM: NVIDIA, AMD, or Intel.
-// Useful for selecting the best GPU if multiple vendors are available,
-// especially in multi-GPU systems or mining rigs.
-func (gpus GPUs) GetGPUWithHighestFreeVRAM() (GPU, error) {
+// MaxFreeVRAMGPU returns the GPU with the maximum free VRAM from the list of GPUs
+func (gpus GPUs) MaxFreeVRAMGPU() (GPU, error) {
 	if len(gpus) == 0 {
-		// Return a GPU with Vendor set to None if no GPUs are detected - Useful for launching CPU-only containers
-		return GPU{Vendor: None}, nil
+		return GPU{}, fmt.Errorf("no GPUs found")
 	}
 
-	var maxFreeVRAMGpu GPU
-	maxFreeVRAM := uint64(0)
+	maxFreeVRAM := float64(0)
+	var maxFreeVRAMGPU GPU
 	for _, gpu := range gpus {
-		if gpu.FreeVRAM > maxFreeVRAM {
-			maxFreeVRAM = gpu.FreeVRAM
-			maxFreeVRAMGpu = gpu
+		if gpu.VRAM > maxFreeVRAM {
+			maxFreeVRAM = gpu.VRAM
+			maxFreeVRAMGPU = gpu
 		}
 	}
 
-	return maxFreeVRAMGpu, nil
+	return maxFreeVRAMGPU, nil
 }
 
 // CPU represents the CPU information
@@ -235,9 +233,6 @@ type CPU struct {
 
 	// Cores represents the number of physical CPU cores
 	Cores float32
-
-	// TotalCompute represents the total compute power of the CPU
-	Compute float64
 
 	// TODO: capture the below fields if required
 	// Model represents the CPU model, e.g., "Intel Core i7-9700K", "AMD Ryzen 9 5900X"
@@ -288,22 +283,20 @@ func (c *CPU) Compare(other CPU) Comparison {
 
 func (c *CPU) Add(other CPU) error {
 	c.Cores = round(c.Cores+other.Cores, 2)
-	c.Compute = round(c.Compute+other.Compute, 2)
 	return nil
 }
 
 func (c *CPU) Subtract(other CPU) error {
-	if c.Compute < other.Compute {
-		return fmt.Errorf("compute: underflow, cannot subtract %v from %v", c.Compute, other.Compute)
-	}
-
 	if c.Cores < other.Cores {
 		return fmt.Errorf("core: underflow, cannot subtract %v from %v", c.Cores, other.Cores)
 	}
 
 	c.Cores = round(c.Cores-other.Cores, 2)
-	c.Compute = round(c.Compute-other.Compute, 2)
 	return nil
+}
+
+func (c *CPU) Compute() float64 {
+	return float64(c.Cores) * c.ClockSpeed
 }
 
 // RAM represents the RAM information
@@ -416,4 +409,19 @@ type NetworkInfo struct {
 // GPUMetadata holds the metadata of the GPU
 type GPUMetadata struct {
 	PCIAddress string
+}
+
+// ConvertBytesToGB converts bytes to gigabytes
+func ConvertBytesToGB(bytes float64) float64 {
+	return float64(bytes) / 1e9
+}
+
+// ConvertMiBToGB converts mebibytes to gigabytes
+func ConvertMiBToGB(mib float64) float64 {
+	return (mib * 1024 * 1024) / 1_000_000_000
+}
+
+// ConvertMibToBytes converts mebibytes to bytes
+func ConvertMibToBytes(mib float64) float64 {
+	return mib * 1024 * 1024
 }

@@ -22,7 +22,6 @@ func TestResources_Calculable_Add(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -32,8 +31,8 @@ func TestResources_Calculable_Add(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -41,7 +40,6 @@ func TestResources_Calculable_Add(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -51,8 +49,8 @@ func TestResources_Calculable_Add(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -61,7 +59,6 @@ func TestResources_Calculable_Add(t *testing.T) {
 				CPU: CPU{
 					Cores:      2,
 					ClockSpeed: 1000,
-					Compute:    2000,
 				},
 				RAM: RAM{
 					Size: 2048,
@@ -71,8 +68,8 @@ func TestResources_Calculable_Add(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 16384,
+						Model: "GTX 1080",
+						VRAM:  16384,
 					},
 				},
 			},
@@ -107,7 +104,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      2,
 					ClockSpeed: 1000,
-					Compute:    2000,
 				},
 				RAM: RAM{
 					Size: 2048,
@@ -117,8 +113,8 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 16384,
+						Model: "GTX 1080",
+						VRAM:  16384,
 					},
 				},
 			},
@@ -126,7 +122,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -136,8 +131,8 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -146,7 +141,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -156,8 +150,8 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -168,7 +162,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -181,7 +174,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      2,
 					ClockSpeed: 1000,
-					Compute:    2000,
 				},
 				RAM: RAM{
 					Size: 2048,
@@ -264,14 +256,12 @@ func TestResources_Comparable_Compare(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 			},
 			other: Resources{
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 			},
 			want: Equal,
@@ -294,7 +284,6 @@ func assertResources(t *testing.T, r1, r2 Resources) {
 	// CPU
 	require.Equal(t, r1.CPU.Cores, r2.CPU.Cores)
 	require.Equal(t, r1.CPU.ClockSpeed, r2.CPU.ClockSpeed)
-	require.Equal(t, r1.CPU.Compute, r2.CPU.Compute)
 
 	// RAM
 	require.Equal(t, r1.RAM.Size, r2.RAM.Size)
@@ -306,6 +295,6 @@ func assertResources(t *testing.T, r1, r2 Resources) {
 	require.Len(t, r1.GPUs, len(r2.GPUs))
 	for i := range r1.GPUs {
 		require.Equal(t, r1.GPUs[i].Model, r2.GPUs[i].Model)
-		require.Equal(t, r1.GPUs[i].TotalVRAM, r2.GPUs[i].TotalVRAM)
+		require.Equal(t, r1.GPUs[i].VRAM, r2.GPUs[i].VRAM)
 	}
 }

@@ -24,7 +24,7 @@ func TestMachineResourcesRepository(t *testing.T) {
 		context.Background(),
 		types.MachineResources{
 			Resources: types.Resources{
-				CPU:  types.CPU{Cores: 2, ClockSpeed: 10000, Compute: 20000},
+				CPU:  types.CPU{Cores: 2, ClockSpeed: 10000},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 1024},
 			},
@@ -40,7 +40,7 @@ func TestMachineResourcesRepository(t *testing.T) {
 
 	// Test Save (update) method
 	updatedMachineResources := retrievedMachineResources
-	updatedMachineResources.CPU.Compute = 40000
+	updatedMachineResources.CPU.Cores = 4
 
 	_, err = machineResourcesRepo.Save(context.Background(), updatedMachineResources)
 	assert.NoError(t, err)
@@ -82,7 +82,6 @@ func TestFreeResourcesRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      2,
 					ClockSpeed: 10000,
-					Compute:    20000,
 				},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 100000},
@@ -141,7 +140,6 @@ func TestOnboardedResourcesRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      2,
 					ClockSpeed: 10000,
-					Compute:    20000,
 				},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 100000},
@@ -247,7 +245,6 @@ func TestResourceAllocationRepository(t *testing.T) {
 				CPU: types.CPU{
 					Cores:      2,
 					ClockSpeed: 10000,
-					Compute:    20000,
 				},
 				RAM:  types.RAM{Size: 4096},
 				Disk: types.Disk{Size: 100000},

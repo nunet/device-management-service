@@ -19,3 +19,15 @@ func GetRAM() (types.RAM, error) {
 		Size: v.Total,
 	}, nil
 }
+
+// GetRAMUsage returns the RAM usage
+func GetRAMUsage() (types.RAM, error) {
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return types.RAM{}, fmt.Errorf("failed to get total memory: %s", err)
+	}
+
+	return types.RAM{
+		Size: v.Used,
+	}, nil
+}

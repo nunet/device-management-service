@@ -267,7 +267,9 @@ func (e *Executor) newDockerExecutionContainer(
 
 	// TODO: Move this code block ( L263-272) to the allocator in future
 	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
-	machineResources, err := hardware.GetMachineResources()
+	// TODO: use the hardware manager instantiated in the dms package
+	hardwareManager := hardware.NewHardwareManager()
+	machineResources, err := hardwareManager.GetMachineResources()
 	if err != nil {
 		return "", fmt.Errorf("failed to get machine resources: %w", err)
 	}
@@ -275,16 +277,19 @@ func (e *Executor) newDockerExecutionContainer(
 	var chosenGPUVendor types.GPUVendor
 	if len(machineResources.GPUs) == 0 {
 		zlog.Info("no GPUs available on the machine")
-		chosenGPUVendor = types.GPUVendorUnknown
+		chosenGPUVendor = types.GPUVendorNone
 	} else {
-		maxFreeVRAMGpu, err := machineResources.GPUs.GetGPUWithHighestFreeVRAM()
-		if err != nil {
-			return "", fmt.Errorf("failed to get GPU with highest free VRAM: %w", err)
-		}
 		// Essential for multi-vendor GPU nodes. For example,
 		// if a machine has an 8 GB NVIDIA and a 16 GB Intel GPU, the latter should be used first.
 		// Even for machines with a single GPU, this is important as integrated GPUs would also be commonly detected.
-		chosenGPUVendor = maxFreeVRAMGpu.Vendor
+		maxFreeVRAMGpu, err := machineResources.GPUs.MaxFreeVRAMGPU()
+		if err != nil {
+			// TODO: log a warning here
+
+			chosenGPUVendor = types.GPUVendorNone
+		} else {
+			chosenGPUVendor = maxFreeVRAMGpu.Vendor
+		}
 	}
 
 	containerConfig := container.Config{

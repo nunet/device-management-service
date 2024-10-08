@@ -29,7 +29,6 @@ func GetCPU() (types.CPU, error) {
 	cpuInfo := types.CPU{
 		Cores:      float32(totalCores),
 		ClockSpeed: float64(cpus[0].Mhz) * 1000000,
-		Compute:    totalCompute,
 	}
 	return cpuInfo, nil
 }
