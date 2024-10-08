@@ -33,9 +33,6 @@ and verify the issue you're about to submit isn't a duplicate.
 ### Version number of NuNet components
 
 <!-- Inform NuNet's components version if applicable. -->
-- DMS version:
-- SPD version:
-- CPD version:
 
 ### SO version, emulator/virtual machine type and version, network type (including NAT type), environment variables, parameters, etc
 
