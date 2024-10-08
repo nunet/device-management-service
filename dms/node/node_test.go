@@ -95,7 +95,8 @@ func TestNew(t *testing.T) {
 				resourceManager = tt.mockResourceManager(ctrl)
 			}
 
-			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler)
+			hardwareManager := NewMockHardwareManager(ctrl)
+			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler, hardwareManager)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -114,8 +115,9 @@ func TestNew(t *testing.T) {
 // 	ctrl := gomock.NewController(t)
 // 	t.Cleanup(ctrl.Finish)
 // 	resourceManager := NewMockResourceManager(ctrl)
+//	hardwareManager := NewMockHardwareManager(ctrl)
 
-// 	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1))
+// 	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1), hardwareManager)
 // 	assert.NoError(t, err)
 // 	assert.NotNil(t, node1)
 // 	err = node1.Start()

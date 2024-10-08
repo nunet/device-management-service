@@ -9,3 +9,9 @@ func GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error) {
 	// TODO: Implement this function
 	return nil, nil
 }
+
+// GetGPUUsage returns the GPU usage based on the specified vendors. If no vendors are provided, it returns the information of all the GPUs
+func GetGPUUsage(vendors ...types.GPUVendor) ([]types.GPU, error) {
+	// TODO: Implement this function
+	return nil, nil
+}

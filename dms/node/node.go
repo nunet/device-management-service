@@ -42,6 +42,7 @@ type Node struct {
 	scheduler       *bt.Scheduler
 	network         network.Network
 	resourceManager types.ResourceManager
+	hardware        types.HardwareManager
 	hostID          string
 	onboarder       *onboarding.Onboarding
 	executor        executor.Executor
@@ -64,7 +65,13 @@ type peerState struct {
 }
 
 // New creates a new node, attaches an actor to the node.
-func New(onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostID string, net network.Network, resourceManager types.ResourceManager, scheduler *bt.Scheduler) (*Node, error) {
+func New(onboarder *onboarding.Onboarding,
+	rootCap ucan.CapabilityContext,
+	hostID string, net network.Network,
+	resourceManager types.ResourceManager,
+	scheduler *bt.Scheduler,
+	hardware types.HardwareManager,
+) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
 	}
@@ -131,6 +138,7 @@ func New(onboarder *onboarding.Onboarding, rootCap ucan.CapabilityContext, hostI
 		allocations:     make(map[string]*jobs.Allocation),
 		peers:           make(map[peer.ID]*peerState),
 		resourceManager: resourceManager,
+		hardware:        hardware,
 		actor:           nodeActor,
 		rootCap:         rootCap,
 		scheduler:       scheduler,

@@ -26,7 +26,6 @@ func Test_WithDemandLocks(t *testing.T) {
 			CPU: types.CPU{
 				Cores:      4,
 				ClockSpeed: 3000,
-				Compute:    12000,
 			},
 			RAM:  types.RAM{Size: 1024},
 			Disk: types.Disk{Size: 1024},
@@ -57,7 +56,6 @@ func Test_WithOnboardedLocks(t *testing.T) {
 			CPU: types.CPU{
 				Cores:      4,
 				ClockSpeed: 3000,
-				Compute:    12000,
 			},
 			RAM:  types.RAM{Size: 1024},
 			Disk: types.Disk{Size: 1024},
@@ -86,7 +84,6 @@ func Test_WithFreeLocks(t *testing.T) {
 			CPU: types.CPU{
 				Cores:      4,
 				ClockSpeed: 3000,
-				Compute:    12000,
 			},
 			RAM:  types.RAM{Size: 1024},
 			Disk: types.Disk{Size: 1024},
@@ -125,7 +122,6 @@ func Test_Concurrency(t *testing.T) {
 						CPU: types.CPU{
 							Cores:      4,
 							ClockSpeed: 3000,
-							Compute:    12000,
 						},
 						RAM:  types.RAM{Size: 1024},
 						Disk: types.Disk{Size: 1024},
@@ -174,7 +170,6 @@ func Test_Concurrency(t *testing.T) {
 						CPU: types.CPU{
 							Cores:      4,
 							ClockSpeed: 3000,
-							Compute:    12000,
 						},
 						RAM:  types.RAM{Size: 1024},
 						Disk: types.Disk{Size: 1024},
@@ -212,7 +207,6 @@ func Test_Concurrency(t *testing.T) {
 						CPU: types.CPU{
 							Cores:      4,
 							ClockSpeed: 3000,
-							Compute:    12000,
 						},
 						RAM:  types.RAM{Size: 1024},
 						Disk: types.Disk{Size: 1024},

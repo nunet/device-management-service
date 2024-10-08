@@ -1,5 +1,3 @@
-//go:build linux
-
 package cpu
 
 import (
@@ -23,7 +21,6 @@ func GetCPU() (types.CPU, error) {
 	}
 
 	return types.CPU{
-		Compute:    totalCompute,
 		Cores:      float32(len(cores)),
 		ClockSpeed: cores[0].Mhz * 1000000,
 	}, nil

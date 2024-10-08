@@ -13,3 +13,11 @@ func TestGetRAM(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, ram.Size, uint64(0))
 }
+
+func TestGetRAMUsage(t *testing.T) {
+	t.Parallel()
+
+	ram, err := GetRAMUsage()
+	require.NoError(t, err)
+	require.Greater(t, ram.Size, uint64(0))
+}

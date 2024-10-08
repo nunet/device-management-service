@@ -7,8 +7,6 @@ import (
 	"os"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
-
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
@@ -25,6 +23,7 @@ type Config struct {
 	ParamsRepo      repositories.OnboardingParams
 	P2PRepo         repositories.Libp2pInfo
 	ResourceManager types.ResourceManager
+	Hardware        types.HardwareManager
 	AvResourceRepo  repositories.AvailableResources
 	UUIDRepo        repositories.MachineUUID
 }
@@ -90,7 +89,7 @@ func (o *Onboarding) Onboard(ctx context.Context, capacity types.CapacityForNune
 		return nil, fmt.Errorf("unable to get hostname: %v", err)
 	}
 
-	machineResources, err := hardware.GetMachineResources()
+	machineResources, err := o.Hardware.GetMachineResources()
 	if err != nil {
 		return nil, fmt.Errorf("cannot get provisioned resources: %w", err)
 	}
@@ -220,7 +219,8 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 }
 
 func (o *Onboarding) validateCapacityForNunet(capacity types.CapacityForNunet) error {
-	machineResources, err := hardware.GetMachineResources()
+	// TODO: https://gitlab.com/nunet/device-management-service/-/merge_requests/563#note_2139212199
+	machineResources, err := o.Hardware.GetMachineResources()
 	if err != nil {
 		return fmt.Errorf("could not get provisioned resources: %w", err)
 	}
@@ -259,7 +259,7 @@ func (o *Onboarding) validateOnboardingPrerequisites(capacity types.CapacityForN
 }
 
 func (o *Onboarding) updateAvailableResources(ctx context.Context, capacity types.CapacityForNunet) error {
-	machineResources, err := hardware.GetMachineResources()
+	machineResources, err := o.Hardware.GetMachineResources()
 	if err != nil {
 		return fmt.Errorf("could not get provisioned resources: %w", err)
 	}

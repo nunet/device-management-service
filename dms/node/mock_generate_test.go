@@ -5,3 +5,4 @@ package node
 
 // Resource Manager
 //go:generate mockgen -destination=mock_resource_manager_test.go -source=../../types/resources.go -package=node -exclude_interfaces=UsageMonitor,ResourceOps
+//go:generate mockgen -destination=mock_hardware_manager_test.go -source=../../types/hardware.go -package=node
