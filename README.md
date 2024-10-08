@@ -74,7 +74,7 @@ You can install Device Management Service (DMS) via [binary releases](#binary-re
 ### Binary releases
 
 You can find all binary releases [here](https://gitlab.com/nunet/device-management-service/-/releases) and other builds in-between releases in the [package registry](https://gitlab.com/nunet/device-management-service/-/packages).
-We currently support ARM and AMD64 architectures.
+We currently support ARM and AMD64 architectures. You may check your architecture with appropriate command (`uname -p` for linux) and refer to the architecture name mapping e.g. [here](https://itsfoss.com/arm-aarch64-x86_64/) for figuring correct package to download.
 
 #### Ubuntu/Debian
 
