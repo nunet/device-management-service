@@ -44,31 +44,29 @@ func SliceContainsOneValue(slice []Comparison, value Comparison) bool {
 }
 
 func returnBestMatch(dimension []Comparison) (Comparison, int) {
-	// while i feel that there could be some weird matrix sorting algorithm that could be used here
-	// i can't think of any right now, so i will just iterate over the matrix and return matches
-	// in somewhat manual way
+	bestMatch := None
+	bestIndex := -1
 
 	for i, v := range dimension {
-		if v == Equal {
-			return v, i // selecting an equal match is the most efficient match
+		switch v {
+		case Equal:
+			return v, i // Equal is the best, so return immediately
+		case Better:
+			if bestMatch != Better { // Prioritize Better only if we haven't seen one yet
+				bestMatch = Better
+				bestIndex = i
+			}
+		case Worse:
+			if bestMatch == None { // Prioritize Worse only if nothing better found
+				bestMatch = Worse
+				bestIndex = i
+			}
+		default:
+			// Ignore None
 		}
 	}
-	for i, v := range dimension {
-		if v == Better {
-			return v, i // selecting a better is also not bad
-		}
-	}
-	for i, v := range dimension {
-		if v == Worse {
-			return v, i // this is just for sport
-		}
-	}
-	for i, v := range dimension {
-		if v == Error {
-			return v, i // this is just for sport
-		}
-	}
-	return Error, -1
+
+	return bestMatch, bestIndex
 }
 
 func removeIndex(slice [][]Comparison, index int) [][]Comparison {

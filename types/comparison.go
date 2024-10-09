@@ -10,23 +10,19 @@ const (
 	Better Comparison = "Better"
 	// Equal means objects on the left and right are 'equally good'
 	Equal Comparison = "Equal"
-	// Error means error in comparison or objects incomparable
-	Error Comparison = "Error"
+	// None means comparison could not be performed
+	None Comparison = "None"
 )
 
 // And returns the result of AND operation of two Comparison values
 // it respects the following table of truth:
-// |   AND  | Better |  Worse |  Equal |  Error |
+// |   AND  | Better |  Worse |  Equal |  None  |
 // | ------ | ------ |--------|--------|--------|
-// | Better | Better |  Worse | Better |  Error |
-// | Worse  | Worse  |  Worse | Worse  |  Error |
-// | Equal  | Better |  Worse | Equal  |  Error |
-// | Error  | Error  |  Error | Error  |  Error |
+// | Better | Better |  Worse | Better |  None  |
+// | Worse  | Worse  |  Worse | Worse  |  None  |
+// | Equal  | Better |  Worse | Equal  |  None  |
+// | None   | None   |  None  | None   |  None  |
 func (c Comparison) And(cmp Comparison) Comparison {
-	if c == Error || cmp == Error {
-		return Error
-	}
-
 	if c == cmp {
 		return c
 	}
@@ -41,7 +37,7 @@ func (c Comparison) And(cmp Comparison) Comparison {
 		case Equal:
 			return Equal
 		default:
-			return Error
+			return None
 		}
 
 	case Better:
@@ -51,13 +47,13 @@ func (c Comparison) And(cmp Comparison) Comparison {
 		case Equal:
 			return Better
 		default:
-			return Error
+			return None
 		}
 	case Worse:
 		return Worse
 
 	default:
-		return Error
+		return None
 	}
 }
 

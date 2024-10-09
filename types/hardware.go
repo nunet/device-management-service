@@ -26,11 +26,11 @@ const (
 // implementing Comparable interface
 var _ Comparable[GPUVendor] = (*GPUVendor)(nil)
 
-func (g GPUVendor) Compare(other GPUVendor) Comparison {
+func (g GPUVendor) Compare(other GPUVendor) (Comparison, error) {
 	if g == other {
-		return Equal
+		return Equal, nil
 	}
-	return Error
+	return None, nil
 }
 
 // ParseGPUVendor parses the GPU vendor string and returns the corresponding GPUVendor enum
@@ -75,7 +75,7 @@ var (
 	_ Calculable[GPU] = (*GPU)(nil)
 )
 
-func (g *GPU) Compare(other GPU) Comparison {
+func (g *GPU) Compare(other GPU) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
 	// compare the VRAM
@@ -94,7 +94,7 @@ func (g *GPU) Compare(other GPU) Comparison {
 	// it could be, that we want to compare types.of GPUs and rank them in some way;
 	// using e.g. benchmarking data from Tom's Hardware or some other source;
 
-	return comparison["VRAM"]
+	return comparison["VRAM"], nil
 }
 
 func (g *GPU) Add(other GPU) error {
@@ -127,12 +127,16 @@ var (
 	_ Comparable[GPUs] = (*GPUs)(nil)
 )
 
-func (gpus GPUs) Compare(other GPUs) Comparison {
+func (gpus GPUs) Compare(other GPUs) (Comparison, error) {
 	interimComparison1 := make([][]Comparison, 0)
 	for _, otherGPU := range other {
 		var interimComparison2 []Comparison
 		for _, ownGPU := range gpus {
-			interimComparison2 = append(interimComparison2, ownGPU.Compare(otherGPU))
+			c, err := ownGPU.Compare(otherGPU)
+			if err != nil {
+				return None, fmt.Errorf("error comparing GPU: %v", err)
+			}
+			interimComparison2 = append(interimComparison2, c)
 		}
 		// this matrix structure will hold the comparison results for each GPU on the right
 		// with each GPU on the left in the order they are in the slices
@@ -154,16 +158,13 @@ func (gpus GPUs) Compare(other GPUs) Comparison {
 		interimComparison1 = removeIndex(interimComparison1, index)
 	}
 
-	if slices.Contains(finalComparison, Error) {
-		return Error
-	}
 	if slices.Contains(finalComparison, Worse) {
-		return Worse
+		return Worse, nil
 	}
 	if SliceContainsOneValue(finalComparison, Equal) {
-		return Equal
+		return Equal, nil
 	}
-	return Better
+	return Better, nil
 }
 
 func (gpus GPUs) Add(other GPUs) error {
@@ -214,11 +215,9 @@ func (gpus GPUs) MaxFreeVRAMGPU() (GPU, error) {
 		return GPU{}, fmt.Errorf("no GPUs found")
 	}
 
-	maxFreeVRAM := float64(0)
 	var maxFreeVRAMGPU GPU
 	for _, gpu := range gpus {
-		if gpu.VRAM > maxFreeVRAM {
-			maxFreeVRAM = gpu.VRAM
+		if gpu.VRAM > maxFreeVRAMGPU.VRAM {
 			maxFreeVRAMGPU = gpu
 		}
 	}
@@ -257,22 +256,18 @@ var (
 	_ Comparable[CPU] = (*CPU)(nil)
 )
 
-func (c *CPU) Compare(other CPU) Comparison {
+func (c *CPU) Compare(other CPU) (Comparison, error) {
 	perfComparison := NumericComparator(
 		float64(c.Cores)*c.ClockSpeed,
 		float64(other.Cores)*other.ClockSpeed,
 	)
 
 	archComparison := LiteralComparator(c.Architecture, other.Architecture)
-
-	if archComparison == Error {
-		return Error
-	}
-	if archComparison != Equal {
-		return Worse
+	if archComparison == Equal {
+		return perfComparison, nil
 	}
 
-	return perfComparison
+	return None, nil
 
 	// currently this is a very simple comparison, based on the assumption
 	// that more cores / or equal amount of cores and frequency is acceptable, but nothing less;
@@ -318,14 +313,14 @@ var (
 	_ Comparable[RAM] = (*RAM)(nil)
 )
 
-func (r *RAM) Compare(other RAM) Comparison {
+func (r *RAM) Compare(other RAM) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
 	// compare the Size
 	comparison["Size"] = NumericComparator(r.Size, other.Size)
 	comparison["ClockSpeed"] = NumericComparator(r.ClockSpeed, other.ClockSpeed)
 
-	return comparison["Size"]
+	return comparison["Size"], nil
 }
 
 func (r *RAM) Add(other RAM) error {
@@ -373,13 +368,13 @@ var (
 	_ Comparable[Disk] = (*Disk)(nil)
 )
 
-func (d *Disk) Compare(other Disk) Comparison {
+func (d *Disk) Compare(other Disk) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
 	// compare the Size
 	comparison["Size"] = NumericComparator(d.Size, other.Size)
 
-	return comparison["Size"]
+	return comparison["Size"], nil
 }
 
 func (d *Disk) Add(other Disk) error {

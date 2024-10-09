@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestHardwareCapability_Comparable(t *testing.T) {
@@ -21,7 +23,7 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				name: "Error",
 				l:    Batch,
 				r:    SingleRun,
-				want: Error,
+				want: None,
 			},
 			{
 				name: "Equal",
@@ -36,24 +38,24 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				want: Equal,
 			},
 			{
-				name: "Error",
+				name: "None",
 				l:    Batch,
 				r:    LongRunning,
-				want: Error,
+				want: None,
 			},
 			{
-				name: "Error",
+				name: "None",
 				l:    LongRunning,
 				r:    Batch,
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.l.Compare(tt.r); got != tt.want {
-					t.Errorf("JobType.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.l.Compare(tt.r)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -67,22 +69,22 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 			want Comparison
 		}{
 			{
-				// currently the comparator is implemented in a way that it will return Error
+				// currently the comparator is implemented in a way that it will return None
 				// if compared job types contain slices that are not equal
 				// we may want to change it to return Worse which is logically more correct
 				name: "Different job type slices",
 				l:    JobTypes{Batch, SingleRun},
 				r:    JobTypes{Batch, LongRunning},
-				want: Error,
+				want: None,
 			},
 			{
-				// currently the comparator is implemented in a way that it will return Error
+				// currently the comparator is implemented in a way that it will return None
 				// if compared job types contain slices that are not equal
 				// we may want to change it to return Worse which is logically more correct
 				name: "Different job types slices",
 				l:    JobTypes{Batch, SingleRun},
 				r:    JobTypes{Recurring, SingleRun},
-				want: Error,
+				want: None,
 			},
 			{
 				name: "Different job type slices",
@@ -106,15 +108,15 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				name: "Different job type slices",
 				l:    JobTypes{Batch, LongRunning, SingleRun},
 				r:    JobTypes{Recurring, SingleRun},
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.l.Compare(tt.r); got != tt.want {
-					t.Errorf("JobTypes.ComplexCompare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.l.Compare(tt.r)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -156,9 +158,9 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.l.Compare(tt.r); got != tt.want {
-					t.Errorf("Libraries.ComplexCompare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.l.Compare(tt.r)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -197,18 +199,18 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				want: Equal,
 			},
 			{
-				name: "Error",
+				name: "None",
 				l:    locality1,
 				r:    locality3,
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.l.Compare(tt.r); got != tt.want {
-					t.Errorf("Locality.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.l.Compare(tt.r)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -276,9 +278,9 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.l.Compare(tt.r); got != tt.want {
-					t.Errorf("Localities.ComplexCompare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.l.Compare(tt.r)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -305,24 +307,24 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				want: Equal,
 			},
 			{
-				name: "Worse",
+				name: "None",
 				l:    Connectivity{Ports: []int{3000}, VPN: false},
 				r:    Connectivity{Ports: []int{3000}, VPN: true},
-				want: Worse,
+				want: None,
 			},
 			{
-				name: "Worse",
+				name: "None",
 				l:    Connectivity{Ports: []int{3000, 2000}, VPN: false},
 				r:    Connectivity{Ports: []int{3000}, VPN: true},
-				want: Worse,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.l.Compare(tt.r); got != tt.want {
-					t.Errorf("Connectivity.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.l.Compare(tt.r)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -436,9 +438,9 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.host.Compare(tt.job); got != tt.want {
-					t.Errorf("PriceInformation.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.host.Compare(tt.job)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -496,7 +498,7 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				want: Worse,
 			},
 			{
-				name: "Error",
+				name: "None",
 				host: []PriceInformation{
 					{Currency: "USD", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
 				},
@@ -504,15 +506,15 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 					{Currency: "MAD", CurrencyPerHour: 80, TotalPerJob: 800, Preference: 0},
 					{Currency: "EUR", CurrencyPerHour: 100, TotalPerJob: 1000, Preference: 0},
 				},
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.host.Compare(tt.job); got != tt.want {
-					t.Errorf("PricesInformation.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.host.Compare(tt.job)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -642,9 +644,9 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.host.Compare(tt.job); got != tt.want {
-					t.Errorf("TimeInformation.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.host.Compare(tt.job)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -671,7 +673,7 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				want: Equal,
 			},
 			{
-				name: "Error",
+				name: "None",
 				host: KYC{
 					Type: "ek",
 					Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233",
@@ -680,15 +682,15 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 					Type: "ke",
 					Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233",
 				},
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.host.Compare(tt.job); got != tt.want {
-					t.Errorf("KYC.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.host.Compare(tt.job)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -713,14 +715,14 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				want: Equal,
 			},
 			{
-				name: "Error",
+				name: "None",
 				host: []KYC{
 					{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
 				},
 				job: []KYC{
 					{Type: "ek", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
 				},
-				want: Error,
+				want: None,
 			},
 			{
 				name: "Equal",
@@ -734,7 +736,7 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 				want: Equal,
 			},
 			{
-				name: "Error",
+				name: "None",
 				host: []KYC{
 					{Type: "kde", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
 				},
@@ -742,15 +744,15 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 					{Type: "ke", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
 					{Type: "ed", Data: "as09di42ktmf90scdvms84tgmspd0idfm31;r509jvmx.ods-94m233"},
 				},
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.host.Compare(tt.job); got != tt.want {
-					t.Errorf("KYCs.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.host.Compare(tt.job)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})
@@ -917,9 +919,9 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := tt.host.Compare(tt.job); got != tt.want {
-					t.Errorf("HardwareCapability.Compare() = %v, want %v", got, tt.want)
-				}
+				got, err := tt.host.Compare(tt.job)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			})
 		}
 	})

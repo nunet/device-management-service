@@ -19,8 +19,8 @@ const (
 var _ Comparable[ExecutorType] = (*ExecutorType)(nil)
 
 // Compare compares two ExecutorType objects
-func (e ExecutorType) Compare(other ExecutorType) Comparison {
-	return LiteralComparator(string(e), string(other))
+func (e ExecutorType) Compare(other ExecutorType) (Comparison, error) {
+	return LiteralComparator(string(e), string(other)), nil
 }
 
 // String returns the string representation of the ExecutorType
@@ -37,7 +37,7 @@ type Executor struct {
 var _ Comparable[Executor] = (*Executor)(nil)
 
 // Compare compares two Executor objects
-func (e *Executor) Compare(other Executor) Comparison {
+func (e *Executor) Compare(other Executor) (Comparison, error) {
 	// comparator for  Executor types
 	// it is needed because executor type is defined as enum of ExecutorType's in types.execution.go
 	// left represent machine capabilities
@@ -103,9 +103,9 @@ func (e *Executors) Contains(executor Executor) bool {
 }
 
 // Compare compares two Executors objects
-func (e *Executors) Compare(other Executors) Comparison {
+func (e *Executors) Compare(other Executors) (Comparison, error) {
 	if reflect.DeepEqual(*e, other) {
-		return Equal
+		return Equal, nil
 	}
 
 	// comparator for Executors types:
@@ -122,7 +122,7 @@ func (e *Executors) Compare(other Executors) Comparison {
 	}
 
 	if !IsSameShallowType(lSlice, rSlice) {
-		return Error
+		return None, nil
 	}
 
 	switch {
@@ -130,20 +130,20 @@ func (e *Executors) Compare(other Executors) Comparison {
 		// if available capabilities are
 		// equal to required capabilities
 		// then the result of comparison is 'Equal'
-		return Equal
+		return Equal, nil
 
 	case IsStrictlyContained(lSlice, rSlice):
 		// if machine capabilities contain all the required capabilities
 		// then the result of comparison is 'Better'
-		return Better
+		return Better, nil
 
 	case IsStrictlyContained(rSlice, lSlice):
 		// if required capabilities contain all the machine capabilities
 		// then the result of comparison is 'Worse'
 		// ("available Capabilities are worse than required")')
 		// (note that Equal case is already handled above)
-		return Worse
+		return Worse, nil
 	default:
-		return Error
+		return None, nil
 	}
 }

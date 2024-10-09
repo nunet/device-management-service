@@ -105,7 +105,7 @@ func TestLiteralComparator(t *testing.T) {
 			name:     "left is not equal to right",
 			left:     "test",
 			right:    "test2",
-			expected: Error,
+			expected: None,
 		},
 	}
 
