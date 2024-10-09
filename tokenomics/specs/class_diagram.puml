@@ -1,89 +1,102 @@
-     @startuml
+' START PREAMBLE
 
-package "DMS"{
-    class User{
-    + Requestor : string
-    + Provider : string
-    + NodeID : string
-}
-}
-package "Jobs"{
-    class JobInfo{
-     + JobID : int
-     + Verification() : VerificationResult
-}
-}
+!$rootUrlLocal = ".."
+!$rootUrlGitlab = "https://gitlab.com/nunet/device-management-service/-/raw/develop"
 
-package "Orchestrator"{
-    class BidInfo{
-     + Bid : int
+' package relative path: change this for each package
+!$packageRelativePath = "/tokenomics"
 
-}
-}
+!$packageUrlGitlab = $rootUrlGitlab + $packageRelativePath
 
-package "Tokenomics" {
-    
-    class Contract {
-        + ContractID : int
-        - Signatures : List<Signature>
-        + Status : bool
-        + ContractProof : Proof
-        + NewContract() : Contract
-        + initiateContractClosure( orchestrator.bid : Bid)
-        + initiateContractSettlement()
-    }
+' uncomment the following line to render all locally
+ !$rootUrl = $rootUrlLocal
+' uncomment the following line to render all from gitlab
+'!$rootUrl = $packageUrlGitlab
 
-    class Payment {
-        + Currency : string
-        + Timestamp : time
-        + PaymentType : string          
-        + PaymentChannel : PaymentChannel 
-	    + Pricing  :      PricingMethod
-        - Status : string
-        + Deposit() 
-        + SettleContract()
-    }
+' END PREAMBLE
 
-    class PricingMethod{
-        + Price   :    int
-        + PlatformFee : int 
-        + Period   :   string
-        + UsageLimits : UsageLimits
-        + GetFixedJobPricing() 
-        + GetPeriodicPricing() 
-    }
+' START DIAGRAM
 
-    class PaymentChannel {
-        {static} FiatPayment : PaymentChannel
-        {static} BlockchainPayment : PaymentChannel
-    }
+    class tokenomics.Contract {
+            + ContractID : int
+            - Signatures : List<Signature>
+            + Status : bool
+            + ContractProof : Proof
+            + NewContract() : Contract
+            + initiateContractClosure( orchestrator.bid : Bid)
+            + initiateContractSettlement()
+        }
 
-    class Authentication {
-        - Encryption : string
-        - ZKProof : string
-        - OffChain : OffChainData
-        + Authenticate() : bool
-    }
+    class tokenomics.Payment {
+            + Currency : string
+            + Timestamp : time
+            + PaymentType : string          
+            + PaymentChannel : PaymentChannel 
+            + Pricing  :      PricingMethod
+            - Status : string
+            + Deposit() 
+            + SettleContract()
+        }
 
-    class ProofInterface {
-        + generalAuth : Authentication
-        + ContractDatabase : string
-        + InitiateContractApproval() : void
-        + CreateContractProof() : string
-        + SaveProof() : void
-        + VerifyProof() : bool
-    }
-    
+    class tokenomics.PricingMethod{
+            + Price   :    int
+            + PlatformFee : int 
+            + Period   :   string
+            + UsageLimits : UsageLimits
+            + GetFixedJobPricing() 
+            + GetPeriodicPricing() 
+        }
 
-    Contract --|> Payment : has
-    Payment  ..|> PricingMethod
-    Payment  ..|>  PaymentChannel
-    Contract --|> ProofInterface : has
-    ProofInterface ..|> Authentication 
-    Contract ..> DMS
-    Contract ..> Jobs
-    Contract ..> Orchestrator
-  
-}
-@enduml
+    class tokenomics.PaymentChannel {
+            {static} FiatPayment : PaymentChannel
+            {static} BlockchainPayment : PaymentChannel
+        }
 
+    class tokenomics.Authentication {
+            - Encryption : string
+            - ZKProof : string
+            - OffChain : OffChainData
+            + Authenticate() : bool
+        }
+
+    class tokenomics.ProofInterface {
+            + generalAuth : Authentication
+            + ContractDatabase : string
+            + InitiateContractApproval() : void
+            + CreateContractProof() : string
+            + SaveProof() : void
+            + VerifyProof() : bool
+        }
+        
+' END DIAGRAM
+
+' START SUBPACKAGES
+
+
+'package  dms.jobs {
+    !include $rootUrl/dms/jobs/specs/class_diagram.puml
+'}
+
+'package dms.node {
+    !include $rootUrl/node/specs/class_diagram.puml
+'}
+
+'package dms.orchestrator {
+    !include $rootUrl/orchestrator/specs/class_diagram.puml
+'}
+
+
+' END SUBPACKAGES
+
+' START INTER-PACKAGE RELATIONS
+
+    tokenomics.Contract --|> tokenomics.Payment : has
+    tokenomics.Payment  ..|> tokenomics.PricingMethod
+    tokenomics.Payment  ..|>  tokenomics.PaymentChannel
+    tokenomics.Contract --|> tokenomics.ProofInterface : has
+    tokenomics.ProofInterface ..|> tokenomics.Authentication 
+    Contract ..> dms.node.Node
+    Contract ..> dms.jobs.Allocation
+    Contract ..> dms.orchestrator.Orchestrator
+
+' END INTER-PACKAGE RELATIONS

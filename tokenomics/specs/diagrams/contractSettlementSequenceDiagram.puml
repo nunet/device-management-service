@@ -1,10 +1,21 @@
 @startuml
+skinparam participant {
+    BackgroundColor LightBlue
+    BorderColor DeepSkyBlue
+}
+
+skinparam sequence {
+    ArrowColor DarkGreen
+    ActorBorderColor DarkGreen
+    LifeLineBorderColor DarkGreen
+}
+
 title Contract Settlement Sequence Diagram
 
-participant "dms.NodeID (n1)" as Node1
-participant "dms.NodeID (n2)" as Node2
-participant "Central Database" as DB
-participant "Jobs Database" as JobsDB
+actor Node1 as "dms.NodeID (n1)"
+actor Node2 as "dms.NodeID (n2)"
+actor DB as "Central Database"
+actor JobsDB as "Jobs Database"
 
 autonumber
 
@@ -31,7 +42,16 @@ alt Job Verification Failed
     Node2 --> Node1: Acknowledge Payment
 else Job Successfully Executed with Proof
     Node1 -> Node2: Notify Job Success
-    Node1 -> Node2: Proceed to Payment Withdrawal by System
+   
+     alt FixedJobPricing
+        Contract -> Contract : calculatePaymentAmount (fixed price)
+        Contract -> Node1 : full payment for fixed job
+    end
+
+    alt PeriodicPricing
+        Contract -> Contract : calculatePaymentAmount for periodic pricing (based on usage)
+        Contract -> Node1: payment based on job completion percentage
+    end
     Node2 --> Node1: Acknowledge Payment
 else Partial Success
     Node1 -> Node2: Notify Partial Success
@@ -40,10 +60,8 @@ else Partial Success
 end
 
 note over Node1: Contract settlement process completed
-
 Node1 -> DB: Update Contract Status
 DB --> Node1: Acknowledge Status Update
 
 note over Node1, DB: Contract status updated in the database
-
 @enduml
