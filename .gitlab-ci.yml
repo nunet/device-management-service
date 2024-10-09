@@ -22,7 +22,13 @@ include:
   rules:
     - if: $BUILD_IMAGE_ONLY == "true"
       when: never
-    - when: always
+    - changes:
+        paths:
+          - '**/*.go'
+          - go.mod
+          - Makefile
+          - maint-scripts/**/*
+      when: always
 
 image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:$DMS_BUILDER_VERSION
 
