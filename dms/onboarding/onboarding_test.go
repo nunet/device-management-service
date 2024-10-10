@@ -122,7 +122,7 @@ func TestOnboard(t *testing.T) {
 			OnboardedResources: types.Resources{
 				CPU: types.CPU{Cores: 2, ClockSpeed: 1000},
 				RAM: types.RAM{
-					Size: 0.00001, // 0.00001 GB
+					Size: 10000000,
 				},
 			},
 		}
@@ -132,13 +132,13 @@ func TestOnboard(t *testing.T) {
 					Cores:      5,
 					ClockSpeed: 1000,
 				},
-				RAM: types.RAM{Size: 100000},
+				RAM: types.RAM{Size: 10000000000},
 			},
 		}
 		ts.service.Hardware.(*MockHardwareManager).EXPECT().GetMachineResources().Return(machineResources, nil)
 		err := ts.service.Onboard(ctx, config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "memory should be between")
+		assert.Contains(t, err.Error(), "could not validate capacity data: expected RAM to be between")
 	})
 
 	t.Run("unhappy case - insufficient cpu", func(t *testing.T) {
@@ -196,6 +196,7 @@ func TestOnboard(t *testing.T) {
 				Disk: types.Disk{Size: 10000},
 			},
 		}
+		ts.service.Hardware.(*MockHardwareManager).EXPECT().GetFreeResources().Return(machineResources.Resources, nil)
 		ts.service.ResourceManager.(*MockResourceManager).EXPECT().
 			UpdateOnboardedResources(ctx, config.OnboardedResources).Return(nil)
 		err := ts.service.Onboard(ctx, config)

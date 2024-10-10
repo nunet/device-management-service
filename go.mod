@@ -23,6 +23,7 @@ require (
 	github.com/libp2p/go-libp2p v0.36.4
 	github.com/libp2p/go-libp2p-kad-dht v0.26.1
 	github.com/libp2p/go-libp2p-pubsub v0.12.0
+	github.com/manifoldco/promptui v0.9.0
 	github.com/multiformats/go-multiaddr v0.13.0
 	github.com/ostafen/clover/v2 v2.0.0-alpha.3
 	github.com/robfig/cron/v3 v3.0.1
@@ -281,6 +282,7 @@ require (
 
 require (
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
+	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect

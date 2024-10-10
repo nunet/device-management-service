@@ -32,6 +32,7 @@ func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 	_ = database.AutoMigrate(&types.MachineResources{})
 	_ = database.AutoMigrate(&types.OnboardingConfig{})
 	_ = database.AutoMigrate(&types.ResourceAllocation{})
+	_ = database.AutoMigrate(&types.GPU{})
 
 	return database, nil
 }

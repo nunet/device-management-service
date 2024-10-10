@@ -3,10 +3,10 @@ package actor
 import (
 	"errors"
 	"fmt"
-
-	"gitlab.com/nunet/device-management-service/types"
+	"strconv"
 
 	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/spf13/cobra"
 
@@ -190,6 +190,10 @@ Examples:
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
+
+			// convert RAM and Disk from GB to bytes
+			req.Config.OnboardedResources.RAM.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.RAM.Size)
+			req.Config.OnboardedResources.Disk.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.Disk.Size)
 			return req, nil
 		},
 		Short: "Onboard a node to the network",
@@ -235,34 +239,6 @@ This behavior is used to check the onboarding status of a node.
 
 Examples:
   nunet actor cmd --context user /dms/node/onboarding/status`,
-	},
-	// /dms/node/onboarding/resource
-	node.OnboardResourceBehavior: {
-		Type:  bInvoke,
-		Short: "Retrieve or manage resources of a node",
-		Long: `Invokes the /dms/node/onboarding/resource behavior on an actor
-
-This behavior retrieves or manages resource information related to the onboarding process.
-
-Examples:
-  nunet actor cmd --context user /dms/node/onboarding/resource`,
-		Payload: func() any { return &node.OnboardRequest{} },
-		SetFlags: func(cmd *Command, payload any) {
-			// infer the type of the payload
-			p := payload.(*node.OnboardRequest)
-			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.RAM.Size, "ram", "R", 0, "set the RAM size in GB to reserve for NuNet")
-			cmd.Flags().Float32VarP(&p.Config.OnboardedResources.CPU.Cores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
-			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.Disk.Size, "disk", "D", 0, "set the disk size in GB to reserve for NuNet")
-			cmd.MarkFlagsRequiredTogether("ram", "disk", "cpu")
-		},
-		PreRunE: onboardBehaviorPreRun,
-		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.OnboardRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-			return req, nil
-		},
 	},
 	// /dms/node/vm/start/custom
 	node.CustomVMStartBehavior: {
@@ -341,20 +317,57 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 		return ErrInvalidArgument
 	}
 
-	// TODO: we need to have one instance of the hardware manager
-	// could we do an api call here instead?
+	// TODO: we need to have single instance of hardware manager
+	// Should we do an api call here?
 	hardwareManager := hardware.NewHardwareManager()
 	machineResources, err := hardwareManager.GetMachineResources()
 	if err != nil {
 		return fmt.Errorf("could not get machine resources: %w", err)
 	}
 
-	// TODO: create helper functions for these conversions
 	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
+	if len(machineResources.GPUs) != 0 {
+		var (
+			gpuMap         = make(map[string]types.GPU)
+			gpuPromptItems []*selectPromptItem
+		)
+		for _, gpu := range machineResources.GPUs {
+			gpuMap[gpu.Model] = gpu
+			gpuPromptItems = append(gpuPromptItems, &selectPromptItem{
+				Label: gpu.Model,
+			})
+		}
 
-	// convert RAM and Disk from GB to bytes
-	p.Config.OnboardedResources.RAM.Size = types.ConvertGBToBytes(p.Config.OnboardedResources.RAM.Size)
-	p.Config.OnboardedResources.Disk.Size = types.ConvertGBToBytes(p.Config.OnboardedResources.Disk.Size)
+		res, err := selectPrompt("Select GPU", gpuPromptItems)
+		if err != nil {
+			return fmt.Errorf("could not select GPU: %w", err)
+		}
 
+		vramValidator := func(input string) error {
+			if _, err := strconv.ParseFloat(input, 64); err != nil {
+				return fmt.Errorf("invalid input: %w", err)
+			}
+			return nil
+		}
+		for _, gpuName := range res {
+			input, err := prompt("Enter VRAM in GB", vramValidator)
+			if err != nil {
+				return fmt.Errorf("could not prompt for VRAM: %w", err)
+			}
+
+			vram, err := strconv.ParseFloat(input, 64)
+			if err != nil {
+				return fmt.Errorf("could not parse VRAM: %w", err)
+			}
+
+			gpu := gpuMap[gpuName]
+			gpu.VRAM = types.ConvertGBToBytes(vram)
+			p.Config.OnboardedResources.GPUs = append(p.Config.OnboardedResources.GPUs, gpu)
+		}
+	} else {
+		fmt.Println("No GPUs found. Skipping GPU selection.")
+	}
+
+	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
 	return nil
 }
