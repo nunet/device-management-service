@@ -8,7 +8,6 @@ set -xeuo pipefail
 # Requirements
 
 # golang is required to build the nunet binary
-# pandoc is required to convert the markdown into a man page
 
 projectRoot=$(pwd)
 outputDir="$projectRoot/dist"
@@ -33,10 +32,7 @@ do
     cp builds/dms_darwin_$arch $archDir/usr/bin/nunet
     ls -R $archDir/usr # to allow checking all files are where they're supposed to be
 
-    # create man page
-    pandoc -s -t man $archDir/usr/share/man/man1/nunet-cli-man.md -o $archDir/usr/share/man/man1/nunet.1
     gzip $archDir/usr/share/man/man1/nunet.1
-    rm $archDir/usr/share/man/man1/nunet-cli-man.md
 
     find $archDir -name .gitkeep | xargs rm
     chmod -R 755 $archDir
