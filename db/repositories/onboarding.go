@@ -4,7 +4,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// OnboardingParams represents a repository for CRUD operations on OnboardingConfig entity.
-type OnboardingParams interface {
+// OnboardingConfig represents a repository for CRUD operations on OnboardingConfig entity.
+type OnboardingConfig interface {
 	GenericEntityRepository[types.OnboardingConfig]
 }

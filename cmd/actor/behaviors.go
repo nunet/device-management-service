@@ -4,6 +4,10 @@ import (
 	"errors"
 	"fmt"
 
+	"gitlab.com/nunet/device-management-service/types"
+
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/dms/node"
@@ -24,6 +28,7 @@ type behaviorConfig struct {
 	Payload     func() any
 	PayloadEnc  func(payload any) (any, error)
 	SetFlags    func(cmd *Command, payload any)
+	PreRunE     func(cmd *Command, payload any) error
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
 	Long        string
@@ -173,15 +178,13 @@ Examples:
 		SetFlags: func(cmd *Command, payload any) {
 			// infer the type of the payload
 			p := payload.(*node.OnboardRequest)
-			cmd.Flags().Uint64VarP(&p.Config.Memory, "memory", "m", 0, "set amount of memory in GB  (required)")
-			cmd.Flags().Int64VarP(&p.Config.CPU, "cpu", "z", 0, "set number of CPU cores (required)")
-			cmd.Flags().StringVarP(&p.Config.PaymentAddress, "wallet", "w", "", "set wallet address (optional)")
-			cmd.Flags().Float64VarP(&p.Config.NTXPricePerMinute, "ntx-price", "x", 0, "price in NTX per minute for onboarded compute resource")
-			cmd.Flags().BoolVarP(&p.Config.IsAvailable, "available", "a", false, "unavailable for job deployment (default: false)")
-			cmd.Flags().BoolVarP(&p.Config.ServerMode, "local-enable", "l", true, "set server mode (enable for local)")
-			cmd.MarkFlagsOneRequired("memory", "cpu")
-			cmd.MarkFlagsRequiredTogether("memory", "cpu")
+			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.RAM.Size, "ram", "R", 0, "set the amount of memory in GB to reserve for NuNet")
+			cmd.Flags().Float32VarP(&p.Config.OnboardedResources.CPU.Cores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
+			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.Disk.Size, "disk", "D", 0, "set the amount of disk size in GB to reserve for NuNet")
+			cmd.MarkFlagsOneRequired("ram", "cpu", "disk")
+			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
+		PreRunE: onboardBehaviorPreRun,
 		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.OnboardRequest)
 			if !ok {
@@ -243,6 +246,23 @@ This behavior retrieves or manages resource information related to the onboardin
 
 Examples:
   nunet actor cmd --context user /dms/node/onboarding/resource`,
+		Payload: func() any { return &node.OnboardRequest{} },
+		SetFlags: func(cmd *Command, payload any) {
+			// infer the type of the payload
+			p := payload.(*node.OnboardRequest)
+			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.RAM.Size, "ram", "R", 0, "set the RAM size in GB to reserve for NuNet")
+			cmd.Flags().Float32VarP(&p.Config.OnboardedResources.CPU.Cores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
+			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.Disk.Size, "disk", "D", 0, "set the disk size in GB to reserve for NuNet")
+			cmd.MarkFlagsRequiredTogether("ram", "disk", "cpu")
+		},
+		PreRunE: onboardBehaviorPreRun,
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.OnboardRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
 	},
 	// /dms/node/vm/start/custom
 	node.CustomVMStartBehavior: {
@@ -254,8 +274,9 @@ Examples:
 			cmd.Flags().StringVarP(&p.Engine.RootFileSystem, "rootfs", "r", "", "path to root fs image file (required)")
 			cmd.Flags().StringVarP(&p.Engine.Initrd, "initrd", "i", "", "path to initial ram disk")
 			cmd.Flags().StringVarP(&p.Engine.KernelArgs, "args", "a", "", "arguments to pas to the kernel")
-			cmd.Flags().Float32VarP(&p.Resources.CPU.Cores, "cpu", "z", 1, "CPU cores to allocate")
-			cmd.Flags().Uint64VarP(&p.Resources.RAM.Size, "memory", "m", 1024, "Memory to allocate")
+			cmd.Flags().Float32Var(&p.Resources.CPU.Cores, "cpu", 1, "CPU cores to allocate")
+			cmd.Flags().Float64VarP(&p.Resources.RAM.Size, "ram", "m", 1, "Memory to allocate in GB")
+			cmd.Flags().Float64Var(&p.Resources.Disk.Size, "disk", 0.5, "path to disk image file")
 			_ = cmd.MarkFlagRequired("kernel")
 			_ = cmd.MarkFlagFilename("kernel")
 			_ = cmd.MarkFlagRequired("rootfs")
@@ -312,4 +333,28 @@ This behavior retrieves a list of virtual machines (VMs) running on the node.
 Examples:
   nunet actor cmd --context user /dms/node/vm/list`,
 	},
+}
+
+func onboardBehaviorPreRun(_ *Command, payload any) error {
+	p, ok := payload.(*node.OnboardRequest)
+	if !ok {
+		return ErrInvalidArgument
+	}
+
+	// TODO: we need to have one instance of the hardware manager
+	// could we do an api call here instead?
+	hardwareManager := hardware.NewHardwareManager()
+	machineResources, err := hardwareManager.GetMachineResources()
+	if err != nil {
+		return fmt.Errorf("could not get machine resources: %w", err)
+	}
+
+	// TODO: create helper functions for these conversions
+	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
+
+	// convert RAM and Disk from GB to bytes
+	p.Config.OnboardedResources.RAM.Size = types.ConvertGBToBytes(p.Config.OnboardedResources.RAM.Size)
+	p.Config.OnboardedResources.Disk.Size = types.ConvertGBToBytes(p.Config.OnboardedResources.Disk.Size)
+
+	return nil
 }

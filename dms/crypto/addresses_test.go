@@ -1,15 +1,14 @@
-package onboarding_test
+package crypto
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/nunet/device-management-service/dms/onboarding"
 )
 
 func TestGetEthereumAddressAndPrivateKey(t *testing.T) {
-	addrAndPrivKey, _ := onboarding.GetEthereumAddressAndPrivateKey()
+	addrAndPrivKey, _ := GetEthereumAddressAndPrivateKey()
 	addr := addrAndPrivKey.Address
 	privKey := addrAndPrivKey.PrivateKey
 
@@ -25,7 +24,7 @@ func TestGetEthereumAddressAndPrivateKey(t *testing.T) {
 }
 
 func TestGetCardanoAddressAndMnemonic(t *testing.T) {
-	addrAndMnemonic, _ := onboarding.GetCardanoAddressAndMnemonic()
+	addrAndMnemonic, _ := GetCardanoAddressAndMnemonic()
 	addr := addrAndMnemonic.Address
 	mnemonic := addrAndMnemonic.Mnemonic
 

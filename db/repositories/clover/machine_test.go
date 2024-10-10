@@ -141,56 +141,6 @@ func TestMachine(t *testing.T) {
 	_ = machineRepo.Delete(context.Background(), machine2.ID)
 }
 
-// TestAvailableResources is a test suite for the AvailableResources.
-// It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
-// This test suite ensures that the repository functions for the AvailableResources model behave as expected.
-func TestAvailableResources(t *testing.T) {
-	// Setup your database connection for testing
-	db, path := setup()
-	defer teardown(db, path)
-
-	// Initialize the repository
-	availableResourcesRepo := NewAvailableResources(db)
-
-	// Test Save method
-	createdAvailableResources, err := availableResourcesRepo.Save(
-		context.Background(),
-		types.AvailableResources{
-			Vcpu: 2,
-		},
-	)
-	assert.NoError(t, err)
-
-	// Test Get method
-	retrievedAvailableResources, err := availableResourcesRepo.Get(context.Background())
-	assert.NoError(t, err)
-	assert.Equal(t, createdAvailableResources.Vcpu, retrievedAvailableResources.Vcpu)
-
-	// Test Save (update) method
-	updatedAvailableResources := retrievedAvailableResources
-	updatedAvailableResources.Vcpu = 4
-
-	_, err = availableResourcesRepo.Save(context.Background(), updatedAvailableResources)
-	assert.NoError(t, err)
-	retrievedAvailableResources, err = availableResourcesRepo.Get(context.Background())
-	assert.NoError(t, err)
-	assert.Equal(t, updatedAvailableResources.Vcpu, retrievedAvailableResources.Vcpu)
-
-	// Test History method
-	query := availableResourcesRepo.GetQuery()
-	query.Limit = 3
-	history, err := availableResourcesRepo.History(context.Background(), query)
-	assert.NoError(t, err)
-	assert.Len(t, history, 2)
-
-	// Test Clear method
-	err = availableResourcesRepo.Clear(context.Background())
-	assert.NoError(t, err)
-	history, err = availableResourcesRepo.History(context.Background(), query)
-	assert.NoError(t, err)
-	assert.Len(t, history, 0)
-}
-
 // TestServices is a test suite for the Services.
 // It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
 // This test suite ensures that the repository functions for the Services model behave as expected.

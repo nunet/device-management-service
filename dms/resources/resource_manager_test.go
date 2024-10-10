@@ -57,7 +57,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 			},
 		}
 
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		demand := types.ResourceAllocation{
@@ -137,7 +137,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 			},
 		}
 
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		// Table tests for insufficient resources
@@ -229,7 +229,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 			},
 		}
 
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		demand := types.ResourceAllocation{
@@ -285,7 +285,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 			},
 		}
 
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		// Since this demand is higher than the actual resources on the machine
@@ -334,7 +334,7 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 				Disk: types.Disk{Size: 1024},
 			},
 		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		demand := types.ResourceAllocation{
@@ -410,7 +410,7 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 				RAM: types.RAM{Size: 2048},
 			},
 		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		onboardedResourcesFromManager, err := rm.GetOnboardedResources(context.Background())
@@ -435,7 +435,7 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 				RAM: types.RAM{Size: 2048},
 			},
 		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		newOnboardedResources := types.OnboardedResources{
@@ -447,7 +447,7 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 				RAM: types.RAM{Size: 3072},
 			},
 		}
-		err = rm.UpdateOnboardedResources(context.Background(), newOnboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), newOnboardedResources.Resources)
 		require.NoError(t, err)
 
 		// Check if the onboarded resources are updated in the database
@@ -477,7 +477,7 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 				RAM: types.RAM{Size: 2048},
 			},
 		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		// Set the onboarded resources in the store to nil
@@ -658,7 +658,7 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 			},
 		}
 
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		demands := []types.ResourceAllocation{
@@ -724,7 +724,7 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 			},
 		}
 
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		demands := []types.ResourceAllocation{
@@ -807,7 +807,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
 			return freeResources, nil
 		})
-		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
@@ -934,7 +934,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
 			return freeResources, nil
 		})
-		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources)
+		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup

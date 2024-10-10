@@ -180,7 +180,7 @@ func (n *Node) handlePeerConnect(msg actor.Envelope) {
 }
 
 type OnboardRequest struct {
-	Config types.CapacityForNunet
+	Config types.OnboardingConfig
 }
 
 type OnboardResponse struct {
@@ -200,14 +200,14 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 		return
 	}
 
-	onboardResult, err := n.onboarder.Onboard(context.Background(), request.Config)
+	err := n.onboarder.Onboard(context.Background(), request.Config)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
 	}
 
-	resp.Config = *onboardResult
+	resp.Config = request.Config
 	n.sendReply(msg, resp)
 }
 
@@ -261,7 +261,7 @@ func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 }
 
 type OnboardResourceRequest struct {
-	Config types.CapacityForNunet
+	Config types.OnboardingConfig
 }
 
 type OnboardResourceResponse struct {
@@ -281,15 +281,14 @@ func (n *Node) handleOnboardResource(msg actor.Envelope) {
 
 	resp := OnboardResourceResponse{}
 
-	result, err := n.onboarder.ResourceConfig(context.Background(), request.Config)
+	err := n.onboarder.Update(context.Background(), request.Config)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
 	}
 
-	resp.Result = *result
-
+	resp.Result = request.Config
 	n.sendReply(msg, resp)
 }
 

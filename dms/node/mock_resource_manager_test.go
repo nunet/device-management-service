@@ -114,7 +114,7 @@ func (mr *MockResourceManagerMockRecorder) GetTotalAllocation() *gomock.Call {
 }
 
 // UpdateOnboardedResources mocks base method.
-func (m *MockResourceManager) UpdateOnboardedResources(arg0 context.Context, arg1 types.OnboardedResources) error {
+func (m *MockResourceManager) UpdateOnboardedResources(arg0 context.Context, arg1 types.Resources) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateOnboardedResources", arg0, arg1)
 	ret0, _ := ret[0].(error)

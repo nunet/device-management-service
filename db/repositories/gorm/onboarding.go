@@ -7,12 +7,12 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type OnboardingParamsGORM struct {
+type OnboardingConfigGORM struct {
 	repositories.GenericEntityRepository[types.OnboardingConfig]
 }
 
-func NewOnboardingParams(db *gorm.DB) repositories.OnboardingParams {
-	return &OnboardingParamsGORM{
+func NewOnboardingConfig(db *gorm.DB) repositories.OnboardingConfig {
+	return &OnboardingConfigGORM{
 		NewGenericEntityRepository[types.OnboardingConfig](db),
 	}
 }

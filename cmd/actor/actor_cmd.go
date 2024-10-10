@@ -80,6 +80,12 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 		Long:              behaviorCfg.Long,
 		ValidArgsFunction: behaviorCfg.ValidArgsFn,
 		Args:              behaviorCfg.Args,
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			if behaviorCfg.PreRunE != nil {
+				return behaviorCfg.PreRunE(cmd, payload.val)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			timeout, _ := cmd.Flags().GetDuration(fnTimeout)
 			expiry, _ := utils.GetTime(cmd.Flags(), fnExpiry)

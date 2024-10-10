@@ -28,22 +28,6 @@ type Machine struct {
 	TokenomicsBlockchain string
 }
 
-// AvailableResources are the amount of resources onboarded which
-// can be used by NuNet
-type AvailableResources struct {
-	BaseDBModel
-	TotCPUHz          int64
-	CPUNo             int
-	CPUHz             float64
-	PriceCPU          float64
-	RAM               uint64
-	PriceRAM          float64
-	Vcpu              int
-	Disk              float64
-	PriceDisk         float64
-	NTXPricePerMinute float64
-}
-
 type Services struct {
 	BaseDBModel
 	TxHash               string
