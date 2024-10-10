@@ -68,8 +68,7 @@ build:osx:
   variables:
     HOMEBREW_NO_AUTO_UPDATE: 1
   script:
-    - echo "Building debian archives..."
-    - brew install pandoc
+    - echo "Building darwin binaries..."
     - bash maint-scripts/build-bsd.sh
   artifacts:
     untracked: false

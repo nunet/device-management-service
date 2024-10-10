@@ -9,7 +9,6 @@ set -xeuo pipefail
 
 # golang is required to build the nunet binary
 # dpkg-deb is required to create the .deb package
-# pandoc is required to convert the markdown into a man page
 
 projectRoot=$(pwd)
 outputDir="$projectRoot/dist"
@@ -46,9 +45,7 @@ do
     ls -R $archDir/usr # to allow checking all files are where they're supposed to be
 
     # create man page
-    pandoc -s -t man $archDir/usr/share/man/man1/nunet-cli-man.md -o $archDir/usr/share/man/man1/nunet.1
     gzip $archDir/usr/share/man/man1/nunet.1
-    rm $archDir/usr/share/man/man1/nunet-cli-man.md
 
     DMS_INST_SIZE=$(du -sB1 $archDir | awk '{ print $1 }')
     sed -i "s/Installed-Size:.*/Installed-Size: $DMS_INST_SIZE/g" $archDir/DEBIAN/control
