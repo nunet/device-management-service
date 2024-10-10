@@ -23,8 +23,3 @@ type OnboardedResources interface {
 type ResourceAllocation interface {
 	GenericRepository[types.ResourceAllocation]
 }
-
-// AvailableResources represents a repository for CRUD operations on AvailableResources entity.
-type AvailableResources interface {
-	GenericEntityRepository[types.AvailableResources]
-}

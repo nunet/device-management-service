@@ -213,7 +213,7 @@ func (d *DefaultManager) GetOnboardedResources(ctx context.Context) (types.Onboa
 }
 
 // UpdateOnboardedResources updates the onboarded resources of the machine in the database
-func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources types.OnboardedResources) error {
+func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources types.Resources) error {
 	if err := d.store.withOnboardedLock(func() error {
 		// calculate the new free resources based on the allocations
 		totalAllocation, err := d.GetTotalAllocation()
@@ -221,7 +221,10 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 			return fmt.Errorf("getting total allocations: %w", err)
 		}
 
-		if err := resources.Resources.Subtract(totalAllocation); err != nil {
+		onboardedResources := types.OnboardedResources{Resources: resources}
+
+		// Check if the demand is too high
+		if err := resources.Subtract(totalAllocation); err != nil {
 			return fmt.Errorf("couldn't subtract allocation: %w. Demand too high", err)
 		}
 
@@ -229,14 +232,14 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 		// If the free resources update fails, the onboarded resources should not be updated
 		// Since we have no concept of transactions in the current implementation of db, we cannot handle this scenario
 		// without writing a custom transaction manager
-		_, err = d.repos.OnboardedResources.Save(ctx, resources)
+		_, err = d.repos.OnboardedResources.Save(ctx, onboardedResources)
 		if err != nil {
 			return fmt.Errorf("failed to update onboarded resources: %w", err)
 		}
 
-		d.store.onboardedResources = &resources
+		d.store.onboardedResources = &onboardedResources
 		if err := d.updateFreeResources(ctx, types.FreeResources{
-			Resources: resources.Resources,
+			Resources: resources,
 		}); err != nil {
 			return fmt.Errorf("updating free resources in db: %w", err)
 		}

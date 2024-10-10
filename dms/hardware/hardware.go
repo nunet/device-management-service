@@ -82,7 +82,7 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 		return types.Resources{}, fmt.Errorf("failed to get Disk usage: %w", err)
 	}
 
-	gpus, err := gpu.GetGPUs()
+	gpus, err := gpu.GetGPUUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("failed to get GPU usage: %w", err)
 	}

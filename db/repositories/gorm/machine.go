@@ -29,19 +29,6 @@ func NewMachine(db *gorm.DB) repositories.Machine {
 	return &MachineGORM{NewGenericRepository[types.Machine](db)}
 }
 
-// AvailableResourcesGORM is a GORM implementation of the AvailableResources interface.
-type AvailableResourcesGORM struct {
-	repositories.GenericEntityRepository[types.AvailableResources]
-}
-
-// NewAvailableResources creates a new instance of AvailableResourcesGORM.
-// It initializes and returns a GORM-based repository for AvailableResources entity.
-func NewAvailableResources(db *gorm.DB) repositories.AvailableResources {
-	return &AvailableResourcesGORM{
-		NewGenericEntityRepository[types.AvailableResources](db),
-	}
-}
-
 // ServicesGORM is a GORM implementation of the Services interface.
 type ServicesGORM struct {
 	repositories.GenericRepository[types.Services]

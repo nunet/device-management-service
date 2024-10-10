@@ -1,4 +1,4 @@
-package onboarding
+package crypto
 
 import (
 	"crypto/ecdsa"
@@ -13,7 +13,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error) {
+func GetEthereumAddressAndPrivateKey() (*types.Account, error) {
 	privateKey, err := crypto.GenerateKey()
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error) 
 		return nil, errors.New("publicKey is not of type *ecdsa.PublicKey")
 	}
 	address := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
-	var pair types.BlockchainAddressPrivKey
+	var pair types.Account
 
 	pair.Address = address
 	pair.PrivateKey = privateKeyString
@@ -37,8 +37,8 @@ func harden(num uint32) uint32 {
 	return 0x80000000 + num
 }
 
-func GetCardanoAddressAndMnemonic() (*types.BlockchainAddressPrivKey, error) {
-	var pair types.BlockchainAddressPrivKey
+func GetCardanoAddressAndMnemonic() (*types.Account, error) {
+	var pair types.Account
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
 	pair.Mnemonic = mnemonic

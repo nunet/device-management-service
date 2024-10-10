@@ -44,6 +44,23 @@ func (r *Resources) Compare(other Resources) (Comparison, error) {
 	return cpuComp.And(ramComp).And(diskComp).And(gpuComp), nil
 }
 
+// Equal returns true if the resources are equal
+func (r *Resources) Equal(other Resources) bool {
+	if r.RAM.Size != other.RAM.Size {
+		return false
+	}
+
+	if r.CPU.Cores != other.CPU.Cores {
+		return false
+	}
+
+	if r.Disk.Size != other.Disk.Size {
+		return false
+	}
+
+	return true
+}
+
 // Add returns the sum of the resources
 func (r *Resources) Add(other Resources) error {
 	if err := r.CPU.Add(other.CPU); err != nil {
@@ -124,5 +141,5 @@ type ResourceManager interface {
 	// GetOnboardedResources returns the onboarded resources of the machine
 	GetOnboardedResources(context.Context) (OnboardedResources, error)
 	// UpdateOnboardedResources updates the onboarded resources of the machine in the database
-	UpdateOnboardedResources(context.Context, OnboardedResources) error
+	UpdateOnboardedResources(context.Context, Resources) error
 }

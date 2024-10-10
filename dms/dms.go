@@ -93,19 +93,17 @@ func Run(ksPassphrase string, contextName string) error {
 		return fmt.Errorf("unable to create resource manager: %w", err)
 	}
 
-	onboardR := gdb.NewOnboardingParams(db)
+	onboardR := gdb.NewOnboardingConfig(db)
 	p2pR := gdb.NewLibp2pInfo(db)
 	uuidR := gdb.NewMachineUUID(db)
-	avResR := gdb.NewAvailableResources(db)
 
 	onboard := onboarding.New(&onboarding.Config{
 		Fs:              afero.Afero{Fs: fs},
-		ParamsRepo:      onboardR,
+		ConfigRepo:      onboardR,
 		P2PRepo:         p2pR,
 		UUIDRepo:        uuidR,
 		Hardware:        hardwareManager,
 		ResourceManager: resourceManager,
-		AvResourceRepo:  avResR,
 		WorkDir:         config.GetConfig().WorkDir,
 		DatabasePath:    fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir),
 	})

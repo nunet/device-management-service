@@ -27,7 +27,6 @@ func setup() {
 		&types.Machine{},
 		&types.MachineResources{},
 		&types.FreeResources{},
-		&types.AvailableResources{},
 		&types.Services{},
 		&types.ServiceResourceRequirements{},
 		&types.Libp2pInfo{},

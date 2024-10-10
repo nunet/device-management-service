@@ -18,7 +18,6 @@ func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 	_ = database.AutoMigrate(&types.ElasticToken{})
 	_ = database.AutoMigrate(&types.VirtualMachine{})
 	_ = database.AutoMigrate(&types.Machine{})
-	_ = database.AutoMigrate(&types.AvailableResources{})
 	_ = database.AutoMigrate(&types.FreeResources{})
 	_ = database.AutoMigrate(&types.PeerInfo{})
 	_ = database.AutoMigrate(&types.Services{})

@@ -62,74 +62,17 @@ The class diagram for the `onboarding` package is shown below.
 
 ### Functionality
 
-#### Onboard Compute Provider
+#### Onboard
 
-- signature: `Onboard(ctx context.Context, capacity types.CapacityForNunet) (*types.Metadata, error)`
-
-- input #1: `Context object`
-
-- input #2: `types.CapacityForNunet`
-
-- output: `types.Metadata`
-
-- output (error): Error message
-
-`Onboard` function executes the onboarding process for a compute provider. 
-
-
-#### Get Metadata 
-
-- signature: `GetMetadata(ctx context.Context, capacity types.CapacityForNunet) (*types.Metadata, error)`
+- signature: `Onboard(ctx context.Context, config types.OnboardingConfig) error`
 
 - input #1: `Context object`
 
-- input #2: `types.CapacityForNunet`
-
-- output: `types.Metadata`
+- input #2: `types.OnboardingConfig`
 
 - output (error): Error message
 
-`GetMetadata` function retrieves and returns the machine metadata stored by the DMS.
- 
- #### CreatePaymentAddress
-
-- signature: `CreatePaymentAddress(wallet string) (*types.BlockchainAddressPrivKey, error)`
-
-- input: `Blockchain name`
-
-- output: `types.BlockchainAddressPrivKey`
-
-- output (error): Error message
-
-`CreatePaymentAddress` function creates a wallet for the user on the specified blockchain. 
-
-#### Onboarding status
-
-- signature: `Status() (*types.OnboardingStatus, error)`
-
-- input: None
-
-- output: `types.OnboardingStatus`
-
-- output (error): Error message
-
-`Status` function returns the onboarding status of the machine along with some metadata. 
-
-
-### Change Resource Configuration
-
-- signature: `ResourceConfig(ctx context.Context, capacity types.CapacityForNunet) (*types.Metadata, error)`
-
-- input #1: `Context object`
-
-- input #2: `types.CapacityForNunet`
-
-- output: `types.Metadata`
-
-- output (error): Error message
-
-`ResourceConfig` changes the configuration of the resources onboarded to Nunet. 
-
+`Onboard` function executes the onboarding process for a compute provider based on the configuration provided.
 
 ### Offboard
 
@@ -145,24 +88,31 @@ The class diagram for the `onboarding` package is shown below.
 
 `Offboard` removes the resources onboarded to Nunet. If the `force` parameter is `True`, then offboarding process will continue even in the presence of errors. 
 
+### IsOnboarded
+
+- signature: `IsOnboarded(ctx context.Context) (bool, error)`
+- input #1: `Context object`
+- output #1: `bool`
+- output #2: `error`
+
+`IsOnboarded` checks if the compute provider is onboarded.
+
+### Info
+
+- signature: `Info(ctx context.Context) (types.OnboardingConfig, error)`
+- input #1: `Context object`
+- output #1: `types.OnboardingConfig`
+- output #2: `error`
+
+`Info` returns the configuration of the onboarding process.
 
 ### Data Types
 
-- `types.BlockchainAddressPrivKey`: This contains public key, private key and mnenmoic associated with it. This is generated when user opts to create a payment address / wallet using the api functionality.
-
-- `types.CapacityForNunet`: This is the input provided by the compute provider user to start the onboarding process.
-
-- `types.Metadata`: This contains information about the machine stored by the DMS. It is generated as a result of the onboarding process.
-
-- `types.Provisioned`: This has total capacity of the machine onboarded by the user.
-
-- `types.OnboardingStatus`: This is returned while retrieving the onboarding status.
-
-- `types.AvailableResources`: This has the available capacity that has been onboarded to Nunet.
+- `types.OnboardingConfig`: Holds the configuration for onboarding a compute provider.
 
 ### Testing
 
-`TBD`
+- All the tests for the onboarding package can be found in the [onboarding_test.go](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/onboarding_test.go) file.
 
 ### Proposed Functionality / Requirements 
 

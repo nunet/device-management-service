@@ -9,11 +9,11 @@ import (
 func TestGetDisk(t *testing.T) {
 	disk, err := GetDisk()
 	require.NoError(t, err)
-	require.Greater(t, disk.Size, uint64(0))
+	require.Greater(t, disk.Size, float64(0))
 }
 
 func TestGetDiskUsage(t *testing.T) {
 	disk, err := GetDiskUsage()
 	require.NoError(t, err)
-	require.Greater(t, disk.Size, uint64(0))
+	require.Greater(t, disk.Size, float64(0))
 }

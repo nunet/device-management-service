@@ -16,7 +16,7 @@ func GetRAM() (types.RAM, error) {
 	}
 
 	return types.RAM{
-		Size: v.Total,
+		Size: float64(v.Total),
 	}, nil
 }
 
@@ -28,6 +28,6 @@ func GetRAMUsage() (types.RAM, error) {
 	}
 
 	return types.RAM{
-		Size: v.Used,
+		Size: float64(v.Used),
 	}, nil
 }

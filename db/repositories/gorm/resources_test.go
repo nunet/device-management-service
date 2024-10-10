@@ -179,55 +179,6 @@ func TestOnboardedResourcesRepository(t *testing.T) {
 	assert.Len(t, history, 0)
 }
 
-// TestAvailableResources is a test suite for the AvailableResources.
-// It includes test cases that cover the basic CRUD operations and custom repository functions if there are any.
-// This test suite ensures that the repository functions for the AvailableResources model behave as expected.
-func TestAvailableResourcesRepository(t *testing.T) {
-	// Setup your database connection for testing
-	setup()
-	defer teardown()
-
-	// Initialize the repository
-	availableResourcesRepo := NewAvailableResources(db)
-
-	// Test Save method
-	createdAvailableResources, err := availableResourcesRepo.Save(
-		context.Background(),
-		types.AvailableResources{},
-	)
-	assert.NoError(t, err)
-	assert.NotZero(t, createdAvailableResources.ID)
-
-	// Test Get method
-	retrievedAvailableResources, err := availableResourcesRepo.Get(context.Background())
-	assert.NoError(t, err)
-	assert.Equal(t, createdAvailableResources.ID, retrievedAvailableResources.ID)
-
-	// Test Save (update) method
-	updatedAvailableResources := retrievedAvailableResources
-	updatedAvailableResources.Vcpu = 4
-
-	_, err = availableResourcesRepo.Save(context.Background(), updatedAvailableResources)
-	assert.NoError(t, err)
-	retrievedAvailableResources, err = availableResourcesRepo.Get(context.Background())
-	assert.NoError(t, err)
-	assert.Equal(t, updatedAvailableResources.Vcpu, retrievedAvailableResources.Vcpu)
-
-	// Test History method
-	query := availableResourcesRepo.GetQuery()
-	query.Limit = 3
-	history, err := availableResourcesRepo.History(context.Background(), query)
-	assert.NoError(t, err)
-	assert.Len(t, history, 2)
-
-	// Test Clear method
-	err = availableResourcesRepo.Clear(context.Background())
-	assert.NoError(t, err)
-	history, err = availableResourcesRepo.History(context.Background(), query)
-	assert.NoError(t, err)
-	assert.Len(t, history, 0)
-}
-
 func TestResourceAllocationRepository(t *testing.T) {
 	// Setup your database connection for testing
 	setup()

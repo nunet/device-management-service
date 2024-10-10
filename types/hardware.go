@@ -295,7 +295,7 @@ func (c *CPU) Compute() float64 {
 // RAM represents the RAM information
 type RAM struct {
 	// Size in bytes
-	Size uint64
+	Size float64
 
 	// TODO: capture the below fields if required
 	// Clock speed in Hz
@@ -338,7 +338,7 @@ func (r *RAM) Subtract(other RAM) error {
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
-	Size uint64
+	Size float64
 
 	// TODO: capture the below fields if required
 	// Model represents the disk model, e.g., "Samsung 970 EVO Plus", "Western Digital Blue SN550"
@@ -407,6 +407,11 @@ type GPUMetadata struct {
 // ConvertBytesToGB converts bytes to gigabytes
 func ConvertBytesToGB(bytes float64) float64 {
 	return float64(bytes) / 1e9
+}
+
+// ConvertGBToBytes converts gigabytes to bytes
+func ConvertGBToBytes(gb float64) float64 {
+	return gb * 1e9
 }
 
 // ConvertMiBToGB converts mebibytes to gigabytes
