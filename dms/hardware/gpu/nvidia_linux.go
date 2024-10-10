@@ -96,7 +96,6 @@ func getNVIDIAGPUs(metadata []types.GPUMetadata) ([]types.GPU, error) {
 
 		gpu := types.GPU{
 			PCIAddress: metadata[i].PCIAddress,
-			Name:       name,
 			Model:      name,
 			VRAM:       float64(memory.Total),
 			Vendor:     types.GPUVendorNvidia,
@@ -137,7 +136,6 @@ func getNVIDIAGPUUsage(_ []types.GPUMetadata) ([]types.GPU, error) {
 		}
 
 		gpu := types.GPU{
-			Name:   name,
 			Model:  name,
 			VRAM:   float64(memory.Used),
 			Vendor: types.GPUVendorNvidia,
