@@ -194,10 +194,6 @@ func New(onboarder *onboarding.Onboarding,
 		return nil, fmt.Errorf("adding onboard status behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(OnboardResourceBehavior, n.handleOnboardResource); err != nil {
-		return nil, fmt.Errorf("adding onboard resource behavior: %w", err)
-	}
-
 	if err := nodeActor.AddBehavior(CustomVMStartBehavior, n.handleCustomVMStart); err != nil {
 		return nil, fmt.Errorf("adding custom vm start behavior: %w", err)
 	}

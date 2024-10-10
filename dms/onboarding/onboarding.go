@@ -11,7 +11,10 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-var ErrMachineNotOnboarded = errors.New("machine is not onboarded")
+var (
+	ErrMachineNotOnboarded = errors.New("machine is not onboarded")
+	ErrOutOfRange          = errors.New("out of range")
+)
 
 type Config struct {
 	Fs              afero.Afero
@@ -103,29 +106,6 @@ func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig)
 	if _, err := o.ConfigRepo.Save(ctx, config); err != nil {
 		return fmt.Errorf("could not save onboarding config: %w", err)
 	}
-	log.Debugf("machine onboarded successfully")
-
-	return nil
-}
-
-// Update updates the onboarding configuration
-// Currently, it only updates the onboarded resources
-func (o *Onboarding) Update(ctx context.Context, config types.OnboardingConfig) error {
-	log.Debugf("updating the onboarding config with the new config: %+v", config)
-	// update onboarded resources if there is a change with the existing config
-	onboardedResources, err := o.ResourceManager.GetOnboardedResources(ctx)
-	if err != nil {
-		return fmt.Errorf("could not get onboarded resources: %w", err)
-	}
-
-	if onboardedResources.Equal(config.OnboardedResources) {
-		return nil
-	}
-
-	if err := o.ResourceManager.UpdateOnboardedResources(ctx, config.OnboardedResources); err != nil {
-		return fmt.Errorf("could not update onboarded resources: %w", err)
-	}
-	log.Debugf("onboarding config updated successfully")
 
 	return nil
 }
@@ -170,25 +150,92 @@ func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
 	return nil
 }
 
-// validateCapacity validates the resource capacity data
-// It checks if the CPU and memory are within 10% and 90% of the available resources
+func validateRange(actual, min, max float64) error {
+	if actual < min || actual > max {
+		return ErrOutOfRange
+	}
+	return nil
+}
+
 func (o *Onboarding) validateCapacity(resources types.Resources) error {
 	// TODO: https://gitlab.com/nunet/device-management-service/-/merge_requests/563#note_2139212199
 	machineResources, err := o.Hardware.GetMachineResources()
 	if err != nil {
-		return fmt.Errorf("could not get provisioned resources: %w", err)
+		return fmt.Errorf("retrieve provisioned machine resources: %w", err)
 	}
 
 	if resources.CPU.Cores < 1 || resources.CPU.Cores > machineResources.CPU.Cores {
 		return fmt.Errorf("cores must be between %d and %.0f", 1, machineResources.CPU.Cores)
 	}
 
-	if resources.RAM.Size > machineResources.RAM.Size*9/10 || resources.RAM.Size < machineResources.RAM.Size/10 {
-		return fmt.Errorf("memory should be between 10%% and 90%% of the available memory (%.2f and %.2f): %.2f",
-			types.ConvertBytesToGB(machineResources.RAM.Size/10),
-			types.ConvertBytesToGB(machineResources.RAM.Size*9/10),
-			types.ConvertBytesToGB(resources.RAM.Size),
-		)
+	if err := validateRange(
+		resources.RAM.Size,
+		machineResources.RAM.Size/10,
+		machineResources.RAM.Size*9/10,
+	); err != nil {
+		if errors.Is(err, ErrOutOfRange) {
+			return fmt.Errorf("expected RAM to be between %.2f and %.2f, got %.2f ",
+				types.ConvertBytesToGB(machineResources.RAM.Size/10),
+				types.ConvertBytesToGB(machineResources.RAM.Size*9/10),
+				types.ConvertBytesToGB(resources.RAM.Size),
+			)
+		}
+
+		return fmt.Errorf("validating resource range for RAM: %w", err)
+	}
+
+	for _, gpu := range resources.GPUs {
+		selectedGPU, err := machineResources.GPUs.GetWithIndex(gpu.Index)
+		if err != nil {
+			return fmt.Errorf("could not get find gpu: %w", err)
+		}
+
+		if err := validateRange(
+			gpu.VRAM,
+			selectedGPU.VRAM/10,
+			selectedGPU.VRAM*9/10,
+		); err != nil {
+			if errors.Is(err, ErrOutOfRange) {
+				return fmt.Errorf("expected GPU %d VRAM to be between %.2f and %.2f, got %.2f",
+					gpu.Index,
+					types.ConvertBytesToGB(selectedGPU.VRAM/10),
+					types.ConvertBytesToGB(selectedGPU.VRAM*9/10),
+					types.ConvertBytesToGB(gpu.VRAM),
+				)
+			}
+
+			return fmt.Errorf("validating resource range for GPU %d: %w", gpu.Index, err)
+		}
+	}
+
+	return nil
+}
+
+// validateUsage validates the resource usage data
+// It checks if the there is enough resources available to onboard
+func (o *Onboarding) validateUsage(resources types.Resources) error {
+	freeResources, err := o.Hardware.GetFreeResources()
+	if err != nil {
+		return fmt.Errorf("could not get usage data: %w", err)
+	}
+
+	if resources.CPU.Compute() > freeResources.CPU.Compute() {
+		return fmt.Errorf("CPU usage is too high: %.2f", freeResources.CPU.Compute())
+	}
+
+	if resources.RAM.Size > freeResources.RAM.Size {
+		return fmt.Errorf("memory usage is too high: %.2f", freeResources.RAM.Size)
+	}
+
+	for _, gpu := range resources.GPUs {
+		selectedGPU, err := freeResources.GPUs.GetWithIndex(gpu.Index)
+		if err != nil {
+			return fmt.Errorf("could not find gpu: %w", err)
+		}
+
+		if gpu.VRAM > selectedGPU.VRAM {
+			return fmt.Errorf("GPU %d usage is too high: %.2f", gpu.Index, gpu.VRAM)
+		}
 	}
 
 	return nil
@@ -206,6 +253,10 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 
 	if err := o.validateCapacity(config.OnboardedResources); err != nil {
 		return fmt.Errorf("could not validate capacity data: %w", err)
+	}
+
+	if err := o.validateUsage(config.OnboardedResources); err != nil {
+		return fmt.Errorf("could not validate usage data: %w", err)
 	}
 
 	return nil

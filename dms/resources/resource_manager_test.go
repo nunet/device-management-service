@@ -828,11 +828,11 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 					},
 				}
 
+				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
 				freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
 					return freeResources, nil
 				})
 				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil)
-				hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
 				err := rm.AllocateResources(context.Background(), demand)
 				require.NoError(t, err)
 			}()

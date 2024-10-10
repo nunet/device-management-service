@@ -64,7 +64,7 @@ type GPU struct {
 
 	// Gorm fields
 	// Team, is this the right way to do this? What is the best practice we're following?
-	ResourceID uint `gorm:"foreignKey:ID"`
+	ResourceID string `gorm:"foreignKey:ID"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -221,6 +221,16 @@ func (gpus GPUs) MaxFreeVRAMGPU() (GPU, error) {
 	}
 
 	return maxFreeVRAMGPU, nil
+}
+
+// GetWithIndex returns the GPU with the specified index
+func (gpus GPUs) GetWithIndex(index int) (GPU, error) {
+	for _, gpu := range gpus {
+		if gpu.Index == index {
+			return gpu, nil
+		}
+	}
+	return GPU{}, fmt.Errorf("GPU with index %d not found", index)
 }
 
 // CPU represents the CPU information

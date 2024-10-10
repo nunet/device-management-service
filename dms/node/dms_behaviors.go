@@ -16,19 +16,18 @@ import (
 )
 
 const (
-	PeersListBehavior       = "/dms/node/peers/list"
-	PeerAddrInfoBehavior    = "/dms/node/peers/self"
-	PeerPingBehavior        = "/dms/node/peers/ping"
-	PeerDHTBehavior         = "/dms/node/peers/dht"
-	PeerConnectBehavior     = "/dms/node/peers/connect"
-	PeerScoreBehavior       = "/dms/node/peers/score"
-	OnboardBehavior         = "/dms/node/onboarding/onboard"
-	OffboardBehavior        = "/dms/node/onboarding/offboard"
-	OnboardStatusBehavior   = "/dms/node/onboarding/status"
-	OnboardResourceBehavior = "/dms/node/onboarding/resource"
-	CustomVMStartBehavior   = "/dms/node/vm/start/custom"
-	VMStopBehavior          = "/dms/node/vm/stop"
-	VMListBehavior          = "/dms/node/vm/list"
+	PeersListBehavior     = "/dms/node/peers/list"
+	PeerAddrInfoBehavior  = "/dms/node/peers/self"
+	PeerPingBehavior      = "/dms/node/peers/ping"
+	PeerDHTBehavior       = "/dms/node/peers/dht"
+	PeerConnectBehavior   = "/dms/node/peers/connect"
+	PeerScoreBehavior     = "/dms/node/peers/score"
+	OnboardBehavior       = "/dms/node/onboarding/onboard"
+	OffboardBehavior      = "/dms/node/onboarding/offboard"
+	OnboardStatusBehavior = "/dms/node/onboarding/status"
+	CustomVMStartBehavior = "/dms/node/vm/start/custom"
+	VMStopBehavior        = "/dms/node/vm/stop"
+	VMListBehavior        = "/dms/node/vm/list"
 
 	pingTimeout = 1 * time.Second
 )
@@ -267,29 +266,6 @@ type OnboardResourceRequest struct {
 type OnboardResourceResponse struct {
 	Error  string
 	Result types.OnboardingConfig
-}
-
-func (n *Node) handleOnboardResource(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request OnboardResourceRequest
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		// TODO log
-		return
-	}
-
-	resp := OnboardResourceResponse{}
-
-	err := n.onboarder.Update(context.Background(), request.Config)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	resp.Result = request.Config
-	n.sendReply(msg, resp)
 }
 
 type CustomVMStartRequest struct {
