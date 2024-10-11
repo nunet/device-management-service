@@ -9,6 +9,17 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 )
 
+// Note: our GORM implementation does not support:
+//
+// - Structs with maps
+//
+// - Structs with nested NAMED structs, e.g.:
+//     type ComputerSpecs struct {
+//      types.BaseDBModel
+//      CPU     int
+//      Another AnotherStruct
+//     }
+
 const (
 	createdAtField = "CreatedAt"
 )
