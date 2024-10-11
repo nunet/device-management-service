@@ -234,7 +234,7 @@ func (o *Onboarding) validateUsage(resources types.Resources) error {
 		}
 
 		if gpu.VRAM > selectedGPU.VRAM {
-			return fmt.Errorf("GPU %d usage is too high: %.2f", gpu.Index, gpu.VRAM)
+			return fmt.Errorf("GPU %s usage is too high: %.2f", gpu.Model, gpu.VRAM)
 		}
 	}
 
