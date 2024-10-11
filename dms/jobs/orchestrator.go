@@ -31,6 +31,7 @@ const (
 type Orchestrator struct {
 	actor   actor.Actor
 	network network.Network //nolint
+	geo     *GeoLocator
 
 	mx       sync.Mutex
 	id       string
@@ -464,20 +465,39 @@ func (o *Orchestrator) makeCandidateDeploymentBig(bids map[string][]Bid) (func()
 	}, true
 }
 
-func (o *Orchestrator) checkPermutationEdgeConstraints(_ map[string]Bid) bool {
-	// TODO improve the intelligence of the generation of candidate deployments to
-	//      precheck edge RTT constraints of a permutation based on lower bound estimation
-	//      using the speed of light.
-	//      Specifically, we need to map the exact location to a (lat,long) pair,
-	//      and compute the time light takes to travel along the geodesic (x2 for
-	//      round trip)
-	//      For now we just do random, but this is likely to produce false positives if
-	//      there are edge RTT constraints.
+func (o *Orchestrator) checkPermutationEdgeConstraints(candidate map[string]Bid) bool {
+	for _, cst := range o.cfg.EdgeConstraints() {
+		if cst.RTT == 0 {
+			continue
+		}
 
-	// TODO in the future, we will also have bandwidth for the node at large in
-	//      the bid, and we can estimate maximum TCP throughput of an edge, given
-	//      the BW and the speed of light RTT. We can use this to also pre-validate
-	//      edge BW constraints and further cut down the permutation space.
+		bidS := candidate[cst.S]
+		bidT := candidate[cst.T]
+
+		locS, err := o.geo.Coordinate(bidS.Location())
+		if err != nil {
+			log.Errorf("Failed to get location for bid %s: %v", bidS.NodeID(), err)
+			continue
+		}
+
+		locT, err := o.geo.Coordinate(bidT.Location())
+		if err != nil {
+			log.Errorf("Failed to get location for bid %s: %v", bidT.NodeID(), err)
+			continue
+		}
+
+		distance := computeGeodesic(locS, locT)
+
+		// in milliseconds
+		minRTT := (distance / lightSpeed) * 2 * 1000
+
+		if minRTT > float64(cst.RTT) {
+			log.Debugf("Edge constraint not satisfied: min RTT %.2f ms > constraint %d ms for %s -> %s", minRTT, cst.RTT, cst.S, cst.T)
+			return false
+		}
+
+		// TODO: add bandwidth check when that information becomes available
+	}
 
 	return true
 }
