@@ -1,8 +1,6 @@
 package hardware
 
 import (
-	"os"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,10 +20,6 @@ func TestDefaultHardwareManager_GetMachineResources(t *testing.T) {
 
 func TestDefaultHardwareManager_GetFreeResources(t *testing.T) {
 	t.Parallel()
-	isPipeline, _ := strconv.ParseBool(os.Getenv("GITLAB_CI"))
-	if isPipeline {
-		t.Skip("Skipping test as the usage would be 0 in the pipeline")
-	}
 
 	hm := NewHardwareManager()
 	freeResources, err := hm.GetFreeResources()
@@ -38,11 +32,6 @@ func TestDefaultHardwareManager_GetFreeResources(t *testing.T) {
 
 func TestDefaultHardwareManager_GetUsage(t *testing.T) {
 	t.Parallel()
-
-	isPipeline, _ := strconv.ParseBool(os.Getenv("GITLAB_CI"))
-	if isPipeline {
-		t.Skip("Skipping test as the usage would be 0 in the pipeline")
-	}
 
 	hm := NewHardwareManager()
 	usage, err := hm.GetUsage()

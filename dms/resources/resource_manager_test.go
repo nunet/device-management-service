@@ -810,7 +810,10 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		var wg sync.WaitGroup
+		var (
+			wg    sync.WaitGroup
+			mutex sync.Mutex
+		)
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			index := i
@@ -828,11 +831,15 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 					},
 				}
 
-				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
+				mutex.Lock()
+				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
+					return onboardedResources.Resources, nil
+				})
 				freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
 					return freeResources, nil
 				})
 				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil)
+				mutex.Unlock()
 				err := rm.AllocateResources(context.Background(), demand)
 				require.NoError(t, err)
 			}()
@@ -951,6 +958,8 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
 			return freeResources, nil
 		}).Times(numGoroutines)
+
+		var mutex sync.Mutex
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			index := i
@@ -968,11 +977,15 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 					},
 				}
 
+				mutex.Lock()
 				freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
 					return freeResources, nil
 				})
 				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil)
-				hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
+				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
+					return onboardedResources.Resources, nil
+				})
+				mutex.Unlock()
 				err := rm.AllocateResources(context.Background(), demand)
 				require.NoError(t, err)
 

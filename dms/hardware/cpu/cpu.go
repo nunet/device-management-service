@@ -2,6 +2,7 @@ package cpu
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 
@@ -10,7 +11,7 @@ import (
 
 // GetUsage returns the CPU usage for the system
 func GetUsage() (types.CPU, error) {
-	cpuUsage, err := cpu.Percent(0, false)
+	cpuUsage, err := cpu.Percent(time.Second, false)
 	if err != nil {
 		return types.CPU{}, fmt.Errorf("failed to get CPU usage: %s", err)
 	}
