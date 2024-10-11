@@ -10,6 +10,17 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 )
 
+// Note: our GORM implementation does not support:
+//
+// - Structs with maps
+//
+// - Structs with nested NAMED structs, e.g.:
+//     type ComputerSpecs struct {
+//      types.BaseDBModel
+//      CPU     int
+//      Another AnotherStruct
+//     }
+
 // GenericRepositoryGORM is a generic repository implementation using GORM as an ORM.
 // It is intended to be embedded in model repositories to provide basic database operations.
 type GenericRepositoryGORM[T repositories.ModelType] struct {

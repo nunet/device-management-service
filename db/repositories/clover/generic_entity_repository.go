@@ -65,10 +65,13 @@ func (repo *GenericEntityRepositoryClover[T]) Get(_ context.Context) (T, error) 
 		Field:     "CreatedAt",
 		Direction: -1,
 	})
-	doc, err := repo.db.FindFirst(q)
 
-	if err != nil || doc == nil {
+	doc, err := repo.db.FindFirst(q)
+	if err != nil {
 		return model, handleDBError(err)
+	}
+	if doc == nil {
+		return model, handleDBError(clover.ErrDocumentNotExist)
 	}
 
 	model, err = toModel[T](doc, true)

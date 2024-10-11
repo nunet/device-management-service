@@ -26,13 +26,7 @@ func setup() (*clover.DB, string) {
 	}
 
 	// Create collections
-	collections := []string{
-		"peer_info", "machine", "free_resources", "available_resources",
-		"services", "service_resource_requirements", "libp_2_p_info",
-		"machine_uuid", "connection", "elastic_token", "deployment_request_flat",
-		"request_tracker", "virtual_machine", "storage_volume", "onboarded_resources",
-		"machine_resources", "resource_allocation",
-	}
+	collections := []string{"car", "computer_specs"}
 
 	for _, collection := range collections {
 		if err := db.CreateCollection(collection); err != nil {

@@ -78,9 +78,12 @@ func (repo *GenericRepositoryClover[T]) Create(_ context.Context, data T) (T, er
 // Get retrieves a record by its identifier.
 func (repo *GenericRepositoryClover[T]) Get(_ context.Context, id interface{}) (T, error) {
 	var model T
-	doc, err := repo.db.FindFirst(repo.queryWithID(id, false))
-	if err != nil || doc == nil {
+	doc, err := repo.db.FindById(repo.collection, id.(string))
+	if err != nil {
 		return model, handleDBError(err)
+	}
+	if doc == nil {
+		return model, handleDBError(clover.ErrDocumentNotExist)
 	}
 
 	model, err = toModel[T](doc, false)
@@ -111,9 +114,8 @@ func (repo *GenericRepositoryClover[T]) Update(
 
 // Delete removes a record by its identifier.
 func (repo *GenericRepositoryClover[T]) Delete(_ context.Context, id interface{}) error {
-	err := repo.db.Update(
+	err := repo.db.Delete(
 		repo.queryWithID(id, false),
-		map[string]interface{}{"DeletedAt": time.Now()},
 	)
 	return err
 }
