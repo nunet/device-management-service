@@ -5,27 +5,28 @@ package node
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
-	"gitlab.com/nunet/device-management-service/executor"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
-	"gitlab.com/nunet/device-management-service/executor/null"
 )
 
-func NewExecutor(ctx context.Context) (executor.Executor, error) {
+func (n *Node) initSupportedExecutors(ctx context.Context) error {
 	executor, err := firecracker.NewExecutor(ctx, "root")
-	if err != nil {
-		if errors.Is(err, firecracker.ErrNotInstalled) {
-			executor, err := null.NewExecutor(ctx, "root")
-			if err != nil {
-				return nil, fmt.Errorf("failed to setup null executor: %w", err)
-			}
-			return executor, nil
+	if err == nil {
+		n.executors[string(jobs.ExecutorFirecracker)] = executorMetadata{
+			executor:      executor,
+			executionType: jobs.ExecutorFirecracker,
 		}
-
-		return nil, fmt.Errorf("failed to create executor: %w", err)
 	}
 
-	return executor, nil
+	dockerExec, err := docker.NewExecutor(ctx, "root")
+	if err == nil {
+		n.executors[string(jobs.ExecutorDocker)] = executorMetadata{
+			executor:      dockerExec,
+			executionType: jobs.ExecutorDocker,
+		}
+	}
+
+	return nil
 }

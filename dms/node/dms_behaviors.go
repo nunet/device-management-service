@@ -10,6 +10,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
@@ -28,6 +29,10 @@ const (
 	CustomVMStartBehavior = "/dms/node/vm/start/custom"
 	VMStopBehavior        = "/dms/node/vm/stop"
 	VMListBehavior        = "/dms/node/vm/list"
+
+	ContainerStart = "/dms/node/container/start"
+	ContainerStop  = "/dms/node/container/stop"
+	ContainerList  = "/dms/node/container/list"
 
 	pingTimeout = 1 * time.Second
 )
@@ -276,7 +281,7 @@ type CustomVMStartResponse struct {
 	Error string
 }
 
-func (n *Node) handleCustomVMStart(msg actor.Envelope) {
+func (n *Node) handleVMContainerStart(msg actor.Envelope) {
 	defer msg.Discard()
 
 	var request CustomVMStartRequest
@@ -285,9 +290,23 @@ func (n *Node) handleCustomVMStart(msg actor.Envelope) {
 		return
 	}
 
+	var executionType jobs.AllocationExecutor
+	if request.Execution.EngineSpec.IsType(types.ExecutorTypeFirecracker.String()) {
+		executionType = jobs.ExecutorFirecracker
+	} else if request.Execution.EngineSpec.IsType(types.ExecutorTypeDocker.String()) {
+		executionType = jobs.ExecutorDocker
+	}
+
 	resp := CustomVMStartResponse{}
 
-	err := n.executor.Start(context.Background(), &request.Execution)
+	e, err := n.getExecutor(executionType)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err = e.executor.Start(context.Background(), &request.Execution)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -298,14 +317,15 @@ func (n *Node) handleCustomVMStart(msg actor.Envelope) {
 }
 
 type VMStopRequest struct {
-	ExecutionID string
+	ExecutionID   string
+	ExecutionType jobs.AllocationExecutor
 }
 
 type VMStopResponse struct {
 	Error string
 }
 
-func (n *Node) handleVMStop(msg actor.Envelope) {
+func (n *Node) handleVMContainerStop(msg actor.Envelope) {
 	defer msg.Discard()
 
 	var request VMStopRequest
@@ -316,7 +336,14 @@ func (n *Node) handleVMStop(msg actor.Envelope) {
 
 	resp := VMStopResponse{}
 
-	err := n.executor.Cancel(context.Background(), request.ExecutionID)
+	e, err := n.getExecutor(request.ExecutionType)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err = e.executor.Cancel(context.Background(), request.ExecutionID)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -327,16 +354,24 @@ func (n *Node) handleVMStop(msg actor.Envelope) {
 }
 
 type ListVMResponse struct {
-	Error string
-	VMS   []types.ExecutionListItem
+	Error         string
+	VMS           []types.ExecutionListItem
+	ExecutionType jobs.AllocationExecutor
 }
 
-func (n *Node) handleListVM(msg actor.Envelope) {
+func (n *Node) handleVMContainerList(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := ListVMResponse{
-		VMS: n.executor.List(),
+	resp := ListVMResponse{}
+
+	e, err := n.getExecutor(resp.ExecutionType)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
 	}
+
+	resp.VMS = e.executor.List()
 
 	n.sendReply(msg, resp)
 }

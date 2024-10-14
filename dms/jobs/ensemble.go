@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"encoding/json"
+	"errors"
 
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -97,7 +98,10 @@ const (
 
 // config validation
 func (e *EnsembleConfig) Validate() error {
-	// TODO
+	if e == nil || e.V1 == nil {
+		return errors.New("invalid ensemble config")
+	}
+
 	return nil
 }
 

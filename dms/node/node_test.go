@@ -1,6 +1,7 @@
 package node
 
 import (
+	"net"
 	"testing"
 
 	// "gitlab.com/nunet/device-management-service/dms/jobs"
@@ -9,6 +10,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 
 	"github.com/multiformats/go-multiaddr"
+	"github.com/oschwald/geoip2-golang"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,6 +36,9 @@ func TestNew(t *testing.T) {
 		mockResourceManager func(ctrl *gomock.Controller) types.ResourceManager
 		scheduler           *bt.Scheduler
 		onboarder           *onboarding.Onboarding
+		geoip               types.GeoIPLocator
+		hostLocation        HostGeolocation
+		portConfig          PortConfig
 
 		expErr string
 	}{
@@ -73,12 +78,21 @@ func TestNew(t *testing.T) {
 			net:       createNetwork(t, nil, "14950"),
 			expErr:    "scheduler is nil",
 		},
+		"no geoip": {
+			onboarder: &onboarding.Onboarding{},
+			rootCap:   rootCap,
+			hostID:    "123",
+			net:       createNetwork(t, nil, "14950"),
+			scheduler: bt.NewScheduler(1),
+			expErr:    "geoip is nil",
+		},
 		"success": {
 			onboarder: &onboarding.Onboarding{},
 			rootCap:   rootCap,
 			hostID:    "123",
 			net:       createNetwork(t, nil, "14950"),
 			scheduler: bt.NewScheduler(1),
+			geoip:     &geoipMock{},
 		},
 	}
 
@@ -96,7 +110,7 @@ func TestNew(t *testing.T) {
 			}
 
 			hardwareManager := NewMockHardwareManager(ctrl)
-			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler, hardwareManager)
+			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler, hardwareManager, tt.geoip, tt.hostLocation, tt.portConfig)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -108,49 +122,49 @@ func TestNew(t *testing.T) {
 	}
 }
 
-// func TestNodeAllocationMessaging(t *testing.T) {
-// 	rootCap := createRootCapabilityContext(t)
-// 	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
+func TestNodeAllocationMessaging(t *testing.T) {
+	rootCap := createRootCapabilityContext(t)
+	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
 
-// 	ctrl := gomock.NewController(t)
-// 	t.Cleanup(ctrl.Finish)
-// 	resourceManager := NewMockResourceManager(ctrl)
-//	hardwareManager := NewMockHardwareManager(ctrl)
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+	resourceManager := NewMockResourceManager(ctrl)
+	hardwareManager := NewMockHardwareManager(ctrl)
 
-// 	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1), hardwareManager)
-// 	assert.NoError(t, err)
-// 	assert.NotNil(t, node1)
-// 	err = node1.Start()
-// 	assert.NoError(t, err)
+	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1), hardwareManager, &geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535})
+	assert.NoError(t, err)
+	assert.NotNil(t, node1)
+	err = node1.Start()
+	assert.NoError(t, err)
+	require.Greater(t, len(node1.executors), 0)
+	// 	alloc, err := node1.CreateAllocation(jobs.Job{ID: "123"})
+	// 	assert.NoError(t, err)
+	// 	assert.NotNil(t, alloc)
+	// 	err = alloc.Start()
+	// 	assert.NoError(t, err)
 
-// 	alloc, err := node1.CreateAllocation(jobs.Job{ID: "123"})
-// 	assert.NoError(t, err)
-// 	assert.NotNil(t, alloc)
-// 	err = alloc.Start()
-// 	assert.NoError(t, err)
+	// 	envChan := make(chan actor.Envelope)
+	// 	err = node1.actor.AddBehavior("/test/ping", func(msg actor.Envelope) {
+	// 		defer msg.Discard()
+	// 		envChan <- msg
+	// 	})
+	// 	type payload struct{ Name, Type string }
 
-// 	envChan := make(chan actor.Envelope)
-// 	err = node1.actor.AddBehavior("/test/ping", func(msg actor.Envelope) {
-// 		defer msg.Discard()
-// 		envChan <- msg
-// 	})
-// 	type payload struct{ Name, Type string }
+	// 	assert.NoError(t, err)
+	// 	msg, err := actor.Message(
+	// 		alloc.Actor.Handle(),
+	// 		node1.actor.Handle(),
+	// 		"/test/ping",
+	// 		payload{Name: "random name", Type: "x"},
+	// 	)
+	// 	assert.NoError(t, err)
 
-// 	assert.NoError(t, err)
-// 	msg, err := actor.Message(
-// 		alloc.Actor.Handle(),
-// 		node1.actor.Handle(),
-// 		"/test/ping",
-// 		payload{Name: "random name", Type: "x"},
-// 	)
-// 	assert.NoError(t, err)
+	// 	err = alloc.Actor.Send(msg)
+	// 	assert.NoError(t, err)
 
-// 	err = alloc.Actor.Send(msg)
-// 	assert.NoError(t, err)
-
-// 	received := <-envChan
-// 	assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
-// }
+	// received := <-envChan
+	// assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
+}
 
 func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {
 	privk, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
@@ -193,4 +207,18 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 
 	libp2pInstance, _ := net.(*libp2p.Libp2p)
 	return libp2pInstance
+}
+
+type geoipMock struct {
+	country *geoip2.Country
+	city    *geoip2.City
+	err     error
+}
+
+func (g *geoipMock) Country(_ net.IP) (*geoip2.Country, error) {
+	return g.country, g.err
+}
+
+func (g *geoipMock) City(_ net.IP) (*geoip2.City, error) {
+	return g.city, g.err
 }

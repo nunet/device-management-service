@@ -86,6 +86,9 @@ func TestPingResolveAddress(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Greater(t, len(addresses), 0)
 	assert.Contains(t, addresses[0], peer2.Host.ID().String())
+
+	ip := peer1.GetPeerIP(peer2.Host.ID())
+	assert.NotEmpty(t, ip)
 }
 
 func TestAdvertiseUnadvertiseQuery(t *testing.T) {

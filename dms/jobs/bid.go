@@ -1,6 +1,10 @@
 package jobs
 
 import (
+	"errors"
+	"fmt"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -47,16 +51,49 @@ type BidV1 struct {
 	Peer       string       // the peer ID of the node
 	Location   Location     // the location of the node
 	Handle     actor.Handle // the handle of the actor submitting the bid
-	// TODO signature from Peer
+	Signature  []byte
 }
 
 func (b *EnsembleBidRequest) Validate() error {
-	// TODO
+	if b == nil {
+		return errors.New("ensemble bid request is nil")
+	}
+
+	if b.ID == "" {
+		return errors.New("ensemble id is empty")
+	}
+
+	if len(b.Request) == 0 {
+		return errors.New("ensemble with empty requests")
+	}
+
 	return nil
 }
 
 func (b *Bid) Validate() error {
-	// TODO
+	if b.V1 == nil {
+		return fmt.Errorf("bid V1 is nil")
+	}
+
+	p, err := peer.Decode(b.V1.Peer)
+	if err != nil {
+		return fmt.Errorf("failed to decode bid's peer id: %w", err)
+	}
+
+	pubKey, err := p.ExtractPublicKey()
+	if err != nil {
+		return fmt.Errorf("failed to extract public key: %w", err)
+	}
+
+	ok, err := pubKey.Verify([]byte{}, b.V1.Signature)
+	if err != nil {
+		return fmt.Errorf("failed to verify signature: %w", err)
+	}
+
+	if !ok {
+		return errors.New("signature verification failed")
+	}
+
 	return nil
 }
 

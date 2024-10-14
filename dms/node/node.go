@@ -45,16 +45,23 @@ type Node struct {
 	hardware        types.HardwareManager
 	hostID          string
 	onboarder       *onboarding.Onboarding
-	executor        executor.Executor
+	executors       map[string]executorMetadata
+	rumutex         sync.RWMutex
 
 	ctx    context.Context
 	cancel func()
 
 	mx          sync.Mutex
 	peers       map[peer.ID]*peerState
+	bids        map[string]*bidState
 	deployments map[string]*jobs.Orchestrator
 	allocations map[string]*jobs.Allocation
 	running     int32
+
+	geoip         types.GeoIPLocator
+	hostLocation  HostGeolocation
+	portConfig    PortConfig
+	portAllocator *PortAllocator
 }
 
 type peerState struct {
@@ -64,6 +71,28 @@ type peerState struct {
 	helloAttempts                   int
 }
 
+type bidState struct {
+	expire  time.Time
+	request jobs.BidRequest
+	ports   []int
+}
+
+type executorMetadata struct {
+	executor      executor.Executor
+	executionType jobs.AllocationExecutor
+}
+
+type HostGeolocation struct {
+	HostContinent string
+	HostCountry   string
+	HostCity      string
+}
+
+type PortConfig struct {
+	AvailableRangeFrom int
+	AvailableRangeTo   int
+}
+
 // New creates a new node, attaches an actor to the node.
 func New(onboarder *onboarding.Onboarding,
 	rootCap ucan.CapabilityContext,
@@ -71,6 +100,7 @@ func New(onboarder *onboarding.Onboarding,
 	resourceManager types.ResourceManager,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
+	geoip types.GeoIPLocator, hostLocation HostGeolocation, portConfig PortConfig,
 ) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
@@ -93,6 +123,10 @@ func New(onboarder *onboarding.Onboarding,
 
 	if scheduler == nil {
 		return nil, errors.New("scheduler is nil")
+	}
+
+	if geoip == nil {
+		return nil, errors.New("geoip is nil")
 	}
 
 	rootDID := rootCap.DID()
@@ -125,15 +159,11 @@ func New(onboarder *onboarding.Onboarding,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	executor, err := NewExecutor(ctx)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("new executor: %w", err)
-	}
 
 	n := &Node{
 		hostID:          hostID,
 		network:         net,
+		bids:            make(map[string]*bidState),
 		deployments:     make(map[string]*jobs.Orchestrator),
 		allocations:     make(map[string]*jobs.Allocation),
 		peers:           make(map[peer.ID]*peerState),
@@ -143,9 +173,18 @@ func New(onboarder *onboarding.Onboarding,
 		rootCap:         rootCap,
 		scheduler:       scheduler,
 		onboarder:       onboarder,
-		executor:        executor,
+		executors:       make(map[string]executorMetadata),
 		ctx:             ctx,
 		cancel:          cancel,
+		geoip:           geoip,
+		hostLocation:    hostLocation,
+		portConfig:      portConfig,
+		portAllocator:   NewPortAllocator(portConfig),
+	}
+
+	if err := n.initSupportedExecutors(ctx); err != nil {
+		cancel()
+		return nil, fmt.Errorf("new executor: %w", err)
 	}
 
 	if err := nodeActor.AddBehavior(PublicHelloBehavior, n.publicHelloBehavior); err != nil {
@@ -154,6 +193,11 @@ func New(onboarder *onboarding.Onboarding,
 	if err := nodeActor.AddBehavior(PublicStatusBehavior, n.publicStatusBehavior); err != nil {
 		return nil, fmt.Errorf("adding public status behavior: %w", err)
 	}
+
+	if err := nodeActor.AddBehavior(jobs.BidRequestBehavior, n.handleBidRequest, actor.WithBehaviorTopic(jobs.BidRequestTopic)); err != nil {
+		return nil, fmt.Errorf("adding bid requests behavior: %w", err)
+	}
+
 	if err := nodeActor.AddBehavior(BroadcastHelloBehavior, n.broadcastHelloBehavior, actor.WithBehaviorTopic(BroadcastHelloTopic)); err != nil {
 		return nil, fmt.Errorf("adding broadcast status behavior: %w", err)
 	}
@@ -194,20 +238,32 @@ func New(onboarder *onboarding.Onboarding,
 		return nil, fmt.Errorf("adding onboard status behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(CustomVMStartBehavior, n.handleCustomVMStart); err != nil {
+	if err := nodeActor.AddBehavior(CustomVMStartBehavior, n.handleVMContainerStart); err != nil {
 		return nil, fmt.Errorf("adding custom vm start behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(VMStopBehavior, n.handleVMStop); err != nil {
+	if err := nodeActor.AddBehavior(VMStopBehavior, n.handleVMContainerStop); err != nil {
 		return nil, fmt.Errorf("adding vm stop behavior: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(VMListBehavior, n.handleListVM); err != nil {
+	if err := nodeActor.AddBehavior(VMListBehavior, n.handleVMContainerList); err != nil {
 		return nil, fmt.Errorf("adding vm list behavior: %w", err)
 	}
 
 	if err := nodeActor.AddBehavior(NewDeploymentBehavior, n.newDeployment); err != nil {
 		return nil, fmt.Errorf("adding new deployment behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(ContainerStart, n.handleVMContainerStart); err != nil {
+		return nil, fmt.Errorf("adding custom container start behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(ContainerStop, n.handleVMContainerStop); err != nil {
+		return nil, fmt.Errorf("adding container stop behavior: %w", err)
+	}
+
+	if err := nodeActor.AddBehavior(ContainerList, n.handleVMContainerList); err != nil {
+		return nil, fmt.Errorf("adding container list behavior: %w", err)
 	}
 
 	if err := nodeActor.AddBehavior(jobs.VerifyEdgeConstraintBehavior, n.deploymentVerifyEdgeConstraint); err != nil {
@@ -284,12 +340,23 @@ func (n *Node) Start() error {
 		return fmt.Errorf("failed to start node actor: %w", err)
 	}
 
-	if err := n.subscribe(BroadcastHelloTopic); err != nil {
+	if err := n.subscribe(BroadcastHelloTopic, jobs.BidRequestTopic); err != nil {
 		_ = n.actor.Stop()
 		return err
 	}
 
+	go n.gcBidState()
+
 	return nil
+}
+
+// ExecutorAvailable returns the availability of a specific executor.
+func (n *Node) ExecutorAvailable(execType jobs.AllocationExecutor) bool {
+	n.rumutex.RLock()
+	defer n.rumutex.RUnlock()
+
+	_, ok := n.executors[string(execType)]
+	return ok
 }
 
 func (n *Node) subscribe(topics ...string) error {
@@ -559,6 +626,18 @@ func (n *Node) sendReply(msg actor.Envelope, payload interface{}) {
 	if err := n.actor.Send(reply); err != nil {
 		log.Debugf("error sending  reply: %s", err)
 	}
+}
+
+func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, error) {
+	n.rumutex.RLock()
+	defer n.rumutex.RUnlock()
+
+	e, ok := n.executors[string(execType)]
+	if !ok {
+		return executorMetadata{}, errors.New("executor not available")
+	}
+
+	return e, nil
 }
 
 // createActor creates an actor.

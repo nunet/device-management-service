@@ -11,8 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const MaxPermutations = 1_000_000
@@ -30,7 +32,7 @@ const (
 
 type Orchestrator struct {
 	actor   actor.Actor
-	network network.Network //nolint
+	network network.Network
 	geo     *GeoLocator
 
 	mx       sync.Mutex
@@ -41,6 +43,32 @@ type Orchestrator struct {
 
 	ctx    context.Context
 	cancel func()
+}
+
+func NewOrchestrator(actor actor.Actor, network network.Network, cfg EnsembleConfig) (*Orchestrator, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
+	}
+
+	uuid, err := uuid.NewUUID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create orchestrator id: %w", err)
+	}
+
+	geo, err := NewGeoLocator()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create geolocator: %w", err)
+	}
+
+	o := &Orchestrator{
+		actor:   actor,
+		network: network,
+		geo:     geo,
+		id:      uuid.String(),
+		cfg:     cfg,
+	}
+
+	return o, nil
 }
 
 func (o *Orchestrator) setStatus(status DeploymentStatus) {
@@ -102,6 +130,12 @@ deploy:
 			peerID := bid.Peer()
 			if _, exclude := peerExclusion[peerID]; exclude {
 				log.Debugf("ignoring duplicate bid from peer %s", peerID)
+				return false
+			}
+
+			err := bid.Validate()
+			if err != nil {
+				log.Debugf("failed to validate bid from peer %s: %s", peerID, err)
 				return false
 			}
 
@@ -873,13 +907,100 @@ func (o *Orchestrator) acceptPeerLocation(nodeID, peerID string, loc Location) b
 }
 
 func (o *Orchestrator) makeInitialBidRequest() (EnsembleBidRequest, error) {
-	// TODO
-	return EnsembleBidRequest{}, ErrTODO
+	return o.ensembleConfigToBidRequest(&o.cfg)
 }
 
-func (o *Orchestrator) makeResidualBidRequest(_ map[string][]Bid, _ map[string]struct{}) (EnsembleBidRequest, error) {
-	// TODO
-	return EnsembleBidRequest{}, ErrTODO
+func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclusion map[string]struct{}) (EnsembleBidRequest, error) {
+	residualConfig := EnsembleConfig{
+		V1: &EnsembleConfigV1{
+			Allocations: make(map[string]AllocationConfig),
+			Nodes:       make(map[string]NodeConfig),
+		},
+	}
+
+	for n, ncfg := range o.cfg.V1.Nodes {
+		if _, exclude := candidate[n]; exclude {
+			continue
+		}
+
+		residualConfig.V1.Nodes[n] = ncfg
+	}
+
+	for _, ncfg := range residualConfig.V1.Nodes {
+		for _, a := range ncfg.Allocations {
+			residualConfig.V1.Allocations[a] = o.cfg.V1.Allocations[a]
+		}
+	}
+
+	result, err := o.ensembleConfigToBidRequest(&residualConfig)
+	if err != nil {
+		return result, err
+	}
+
+	for p := range exclusion {
+		result.PeerExclusion = append(result.PeerExclusion, p)
+	}
+
+	return result, nil
+}
+
+func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (EnsembleBidRequest, error) {
+	v1Config := config.V1
+
+	ensembleBidRequest := EnsembleBidRequest{
+		ID: o.id,
+	}
+
+	for nodeID, nodeConfig := range v1Config.Nodes {
+		bidRequest := BidRequest{
+			V1: &BidRequestV1{
+				NodeID:   nodeID,
+				Location: nodeConfig.Location,
+			},
+		}
+
+		var aggregateResources types.Resources
+		var executors []AllocationExecutor
+
+		var staticPorts []int
+		dynamicPortsCount := 0
+
+		for _, allocationName := range nodeConfig.Allocations {
+			allocationConfig, ok := v1Config.Allocations[allocationName]
+			if !ok {
+				continue
+			}
+
+			if !containsExecutor(executors, allocationConfig.Executor) {
+				executors = append(executors, allocationConfig.Executor)
+			}
+
+			err := aggregateResources.Add(allocationConfig.Resources)
+			if err != nil {
+				return EnsembleBidRequest{}, err
+			}
+
+			for _, portConfig := range nodeConfig.Ports {
+				if portConfig.Allocation == allocationName {
+					if portConfig.Public == 0 {
+						dynamicPortsCount++
+					} else {
+						staticPorts = append(staticPorts, portConfig.Public)
+					}
+				}
+			}
+		}
+
+		bidRequest.V1.Executors = executors
+		bidRequest.V1.Resources = aggregateResources
+
+		bidRequest.V1.PublicPorts.Static = staticPorts
+		bidRequest.V1.PublicPorts.Dynamic = dynamicPortsCount
+
+		ensembleBidRequest.Request = append(ensembleBidRequest.Request, bidRequest)
+	}
+
+	return ensembleBidRequest, nil
 }
 
 func (o *Orchestrator) supervise() {
@@ -888,4 +1009,13 @@ func (o *Orchestrator) supervise() {
 
 func (o *Orchestrator) Stop() {
 	// TODO
+}
+
+func containsExecutor(executors []AllocationExecutor, executor AllocationExecutor) bool {
+	for _, e := range executors {
+		if e == executor {
+			return true
+		}
+	}
+	return false
 }

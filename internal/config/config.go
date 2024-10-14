@@ -10,10 +10,16 @@ type Config struct {
 }
 
 type General struct {
-	UserDir string `mapstructure:"user_dir" json:"user_dir"`
-	WorkDir string `mapstructure:"work_dir" json:"work_dir"`
-	DataDir string `mapstructure:"data_dir" json:"data_dir"`
-	Debug   bool   `mapstructure:"debug" json:"debug"`
+	UserDir                string `mapstructure:"user_dir" json:"user_dir"`
+	WorkDir                string `mapstructure:"work_dir" json:"work_dir"`
+	DataDir                string `mapstructure:"data_dir" json:"data_dir"`
+	Debug                  bool   `mapstructure:"debug" json:"debug"`
+	GeoIPFile              string `mapstructure:"geo_ip_file" json:"geo_ip_file"`
+	HostCountry            string `mapstructure:"host_country" json:"host_country"`
+	HostCity               string `mapstructure:"host_city" json:"host_city"`
+	HostContinent          string `mapstructure:"host_continent" json:"host_continent"`
+	PortAvailableRangeFrom int    `mapstructure:"port_available_range_from" json:"port_available_range_from"`
+	PortAvailableRangeTo   int    `mapstructure:"port_available_range_to" json:"port_available_range_to"`
 }
 
 type Rest struct {

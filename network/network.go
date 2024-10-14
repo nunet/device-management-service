@@ -86,6 +86,8 @@ type Network interface {
 	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
 	Stop() error
+	// GetPeerIP returns the ipv4 or v6 of a peer
+	GetPeerIP(p PeerID) string
 }
 
 // NewNetwork returns a new network given the configuration.

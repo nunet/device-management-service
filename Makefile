@@ -7,9 +7,9 @@ PROTOC := protoc
 UNAME=$(shell uname)
 ARCH=$(shell uname -m)
 
-NO_COMMITS=$(shell git rev-list $(shell git describe --tags --abbrev=0)..HEAD --count )
+NO_COMMITS=$(shell git rev-list $(shell git describe --tags --always --abbrev=0)..HEAD --count )
 
-DMS_VERSION=$(shell git describe --tags --abbrev=0 --dirty)-$(NO_COMMITS)
+DMS_VERSION=$(shell git describe --tags --always --abbrev=0 --dirty)-$(NO_COMMITS)-$(shell git rev-parse --short HEAD)
 GO_VERSION := $(shell go version | awk '{print $$3}' | sed 's/go//')
 BUILD_DATE := $(shell date -Iseconds)
 BUILD_HASH := $(shell git rev-parse HEAD)
