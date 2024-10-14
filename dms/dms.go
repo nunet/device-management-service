@@ -11,6 +11,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/oschwald/geoip2-golang"
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/api"
@@ -48,6 +49,11 @@ func NewP2P() libp2p.Libp2p {
 func Run(ksPassphrase string, contextName string) error {
 	if contextName == "" {
 		contextName = DefaultContextName
+	}
+
+	geoip2db, err := geoip2.Open(config.GetConfig().General.GeoIPFile)
+	if err != nil {
+		return fmt.Errorf("failed to load geoip2db: %w", err)
 	}
 
 	fs := afero.NewOsFs()
@@ -193,8 +199,19 @@ func Run(ksPassphrase string, contextName string) error {
 	trustCtx.Start(time.Hour)
 	capCtx.Start(5 * time.Minute)
 
+	hostLocation := node.HostGeolocation{
+		HostCountry:   config.GetConfig().General.HostCountry,
+		HostCity:      config.GetConfig().General.HostCity,
+		HostContinent: config.GetConfig().General.HostContinent,
+	}
+
+	portConfig := node.PortConfig{
+		AvailableRangeFrom: config.GetConfig().General.PortAvailableRangeFrom,
+		AvailableRangeTo:   config.GetConfig().General.PortAvailableRangeTo,
+	}
+
 	hostID := p2p.Host.ID().String()
-	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager)
+	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager, geoip2db, hostLocation, portConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create node: %s", err)
 	}

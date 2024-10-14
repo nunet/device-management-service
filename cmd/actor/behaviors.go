@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/node"
 )
 
@@ -278,7 +279,7 @@ Examples:
 		Payload: func() any { return &node.VMStopRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.VMStopRequest)
-
+			p.ExecutionType = jobs.ExecutorFirecracker
 			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
@@ -300,6 +301,11 @@ Examples:
 	},
 	// /dms/node/vm/list
 	node.VMListBehavior: {
+		Payload: func() any {
+			return &node.ListVMResponse{
+				ExecutionType: jobs.ExecutorFirecracker,
+			}
+		},
 		Type:  bInvoke,
 		Short: "List running VMs",
 		Long: `Invokes the /dms/node/vm/list behavior on an actor

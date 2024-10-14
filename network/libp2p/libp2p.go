@@ -507,6 +507,23 @@ func (l *Libp2p) Stat() types.NetworkStats {
 	}
 }
 
+// GetPeerIP gets the ip of the peer from the peer store
+func (l *Libp2p) GetPeerIP(p PeerID) string {
+	addrs := l.Host.Peerstore().Addrs(p)
+
+	for _, addr := range addrs {
+		addrParts := strings.Split(addr.String(), "/")
+
+		for i, part := range addrParts {
+			if part == "ip4" || part == "ip6" {
+				return addrParts[i+1]
+			}
+		}
+	}
+
+	return ""
+}
+
 // Ping the remote address. The remote address is the encoded peer id which will be decoded and used here.
 //
 // TODO (Return error once): something that was confusing me when using this method is that the error is

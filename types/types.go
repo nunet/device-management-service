@@ -1,9 +1,11 @@
 package types
 
 import (
+	"net"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/oschwald/geoip2-golang"
 	"gorm.io/gorm"
 )
 
@@ -36,4 +38,10 @@ func (m *BaseDBModel) BeforeCreate(_ *gorm.DB) error {
 func (m *BaseDBModel) BeforeUpdate(_ *gorm.DB) error {
 	m.UpdatedAt = time.Now()
 	return nil
+}
+
+// GeoIPLocator returns the info about an IP.
+type GeoIPLocator interface {
+	Country(ipAddress net.IP) (*geoip2.Country, error)
+	City(ipAddress net.IP) (*geoip2.City, error)
 }

@@ -12,10 +12,13 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/pkg/errors"
 
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
+
+var ErrNotInstalled = errors.New("docker is not installed")
 
 const (
 	labelExecutorName = "nunet-executor"
@@ -42,7 +45,7 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	}
 
 	if !dockerClient.IsInstalled(ctx) {
-		return nil, fmt.Errorf("docker is not installed")
+		return nil, ErrNotInstalled
 	}
 
 	return &Executor{

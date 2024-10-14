@@ -277,6 +277,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.43
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.31
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.65.2
+	github.com/oschwald/geoip2-golang v1.11.0
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible
 )
 
@@ -297,6 +298,7 @@ require (
 	github.com/holiman/uint256 v1.3.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
 	github.com/wlynxg/anet v0.0.4 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.52.0 // indirect
 	go.opentelemetry.io/otel/log v0.6.0 // indirect
