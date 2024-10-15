@@ -39,6 +39,7 @@ type AllocationExecutor string
 const (
 	ExecutorFirecracker AllocationExecutor = "firecracker"
 	ExecutorDocker      AllocationExecutor = "docker"
+	ExecutorNull        AllocationExecutor = "null"
 )
 
 // NodeConfig is the configuration of a distinct DMS node
