@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	_ "embed"
+
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -39,6 +41,9 @@ const (
 	CapstoreDir        = "cap/"
 )
 
+//go:embed data/GeoLite2-Country.mmdb
+var geoLite2Country []byte
+
 // NewP2P is stub, real implementation is needed in order to pass it to
 // routers which access them in some handlers.
 func NewP2P() libp2p.Libp2p {
@@ -51,14 +56,17 @@ func Run(ksPassphrase string, contextName string) error {
 		contextName = DefaultContextName
 	}
 
-	geoip2db, err := geoip2.Open(config.GetConfig().General.GeoIPFile)
+	gcfg := config.GetConfig()
+
+	// load geoip2 database
+	geoip2db, err := geoip2.FromBytes(geoLite2Country)
 	if err != nil {
-		return fmt.Errorf("failed to load geoip2db: %w", err)
+		return fmt.Errorf("unable to load geoip2 database: %w", err)
 	}
 
 	fs := afero.NewOsFs()
 
-	keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, KeystoreDir)
+	keyStoreDir := filepath.Join(gcfg.UserDir, KeystoreDir)
 	keyStore, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
 		return fmt.Errorf("unable to create keystore: %w", err)
@@ -83,7 +91,7 @@ func Run(ksPassphrase string, contextName string) error {
 	}
 	pubKey := priv.GetPublic()
 
-	db, err := db.ConnectDatabase(config.GetConfig().General.WorkDir)
+	db, err := db.ConnectDatabase(gcfg.WorkDir)
 	if err != nil {
 		return fmt.Errorf("unable to connect to database: %w", err)
 	}
@@ -110,18 +118,17 @@ func Run(ksPassphrase string, contextName string) error {
 		UUIDRepo:        uuidR,
 		Hardware:        hardwareManager,
 		ResourceManager: resourceManager,
-		WorkDir:         config.GetConfig().WorkDir,
-		DatabasePath:    fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir),
+		WorkDir:         gcfg.WorkDir,
+		DatabasePath:    fmt.Sprintf("%s/nunet.db", gcfg.WorkDir),
 	})
 
 	var p2pNet *libp2p.Libp2p
 
-	bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
-	for i, addr := range config.GetConfig().P2P.BootstrapPeers {
+	bootstrapPeers := make([]multiaddr.Multiaddr, len(gcfg.P2P.BootstrapPeers))
+	for i, addr := range gcfg.P2P.BootstrapPeers {
 		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
 	}
 
-	gcfg := config.GetConfig()
 	cfg := &types.Libp2pConfig{
 		PrivateKey:              priv,
 		BootstrapPeers:          bootstrapPeers,
@@ -155,7 +162,7 @@ func Run(ksPassphrase string, contextName string) error {
 		return fmt.Errorf("unable to create trust context: %w", err)
 	}
 
-	capStoreDir := filepath.Join(config.GetConfig().General.UserDir, CapstoreDir)
+	capStoreDir := filepath.Join(gcfg.UserDir, CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", contextName))
 	var capCtx ucan.CapabilityContext
 
@@ -200,14 +207,14 @@ func Run(ksPassphrase string, contextName string) error {
 	capCtx.Start(5 * time.Minute)
 
 	hostLocation := node.HostGeolocation{
-		HostCountry:   config.GetConfig().General.HostCountry,
-		HostCity:      config.GetConfig().General.HostCity,
-		HostContinent: config.GetConfig().General.HostContinent,
+		HostCountry:   gcfg.HostCountry,
+		HostCity:      gcfg.HostCity,
+		HostContinent: gcfg.HostContinent,
 	}
 
 	portConfig := node.PortConfig{
-		AvailableRangeFrom: config.GetConfig().General.PortAvailableRangeFrom,
-		AvailableRangeTo:   config.GetConfig().General.PortAvailableRangeTo,
+		AvailableRangeFrom: gcfg.PortAvailableRangeFrom,
+		AvailableRangeTo:   gcfg.PortAvailableRangeTo,
 	}
 
 	hostID := p2p.Host.ID().String()
@@ -228,8 +235,8 @@ func Run(ksPassphrase string, contextName string) error {
 		Logger:     logger.New("rest-server"),
 		Resource:   resourceManager,
 		MidW:       nil,
-		Port:       config.GetConfig().Rest.Port,
-		Addr:       config.GetConfig().Rest.Addr,
+		Port:       gcfg.Rest.Port,
+		Addr:       gcfg.Rest.Addr,
 	}
 	rServer := api.NewRESTServer(&restConfig)
 	rServer.InitializeRoutes()
