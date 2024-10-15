@@ -56,7 +56,6 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("telemetry.global_endpoint", "otel-collector.telemetry.nunet.io:4318")
 	v.SetDefault("telemetry.observability_level", "INFO")
 	v.SetDefault("telemetry.telemetry_mode", "production")
-
 	return v
 }
 

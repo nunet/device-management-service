@@ -14,7 +14,6 @@ type General struct {
 	WorkDir                string `mapstructure:"work_dir" json:"work_dir"`
 	DataDir                string `mapstructure:"data_dir" json:"data_dir"`
 	Debug                  bool   `mapstructure:"debug" json:"debug"`
-	GeoIPFile              string `mapstructure:"geo_ip_file" json:"geo_ip_file"`
 	HostCountry            string `mapstructure:"host_country" json:"host_country"`
 	HostCity               string `mapstructure:"host_city" json:"host_city"`
 	HostContinent          string `mapstructure:"host_continent" json:"host_continent"`
