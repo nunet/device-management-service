@@ -419,7 +419,7 @@ func (o *Orchestrator) makeCandidateDeploymentSmall(bids map[string][]Bid) (func
 		for count < nperm {
 			count++
 
-			nextPerm := rand.Int63n(nperm) //nolint
+			nextPerm := rand.Int63n(nperm)
 			perm := getPermutation(nextPerm)
 
 			if !o.checkPermutationEdgeConstraints(perm) {

@@ -86,8 +86,27 @@ type Network interface {
 	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
 	Stop() error
+
 	// GetPeerIP returns the ipv4 or v6 of a peer
 	GetPeerIP(p PeerID) string
+
+	// CreateSubnet creates a subnet with the given subnetID and CIDR
+	CreateSubnet(ctx context.Context, subnetID string, routingTable map[string]string) error
+
+	// AddSubnetPeer adds a peer to the subnet
+	AddSubnetPeer(subnetID, peerID, ip string) error
+
+	// AcceptSubnetPeer accepts a peer to the subnet
+	AcceptSubnetPeer(subnetID, peerID, ip string) error
+
+	// MapPort maps a sourceIp:sourcePort to destIP:destPort
+	MapPort(protocol, sourceIP, sourcePort, destIP, destPort string) error
+
+	// UnmapPort removes a previous port map
+	UnmapPort(protocol, sourceIP, sourcePort, destIP, destPort string) error
+
+	// AddDNSRecord adds a dns record to our local resolver
+	AddSubnetDNSRecord(subnetID, name, ip string) error
 }
 
 // NewNetwork returns a new network given the configuration.

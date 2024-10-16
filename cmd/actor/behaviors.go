@@ -242,7 +242,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/status`,
 	},
 	// /dms/node/vm/start/custom
-	node.CustomVMStartBehavior: {
+	node.VMStartBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &vmStartOpts{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -264,6 +264,7 @@ Examples:
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
+
 			return newCustomVMStartRequest(opts)
 		},
 		Short: "Starts a custom VM",
@@ -314,6 +315,157 @@ This behavior retrieves a list of virtual machines (VMs) running on the node.
 
 Examples:
   nunet actor cmd --context user /dms/node/vm/list`,
+	},
+
+	node.SubnetCreateBehavior: {
+		Payload: func() any { return &node.SubnetCreateRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.SubnetCreateRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.SubnetCreateRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Create a subnet",
+		Long: `Invokes the /dms/node/subnet/create behavior on an actor
+
+This behavior creates a new subnet with the specified subnet ID, IP address, and routing table.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
+	},
+
+	node.SubnetAddPeerBehavior: {
+		Payload: func() any { return &node.SubnetAddPeerRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.SubnetAddPeerRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
+			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "peer IP address (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("peer-id")
+			_ = cmd.MarkFlagRequired("ip")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.SubnetAddPeerRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Add a peer to a subnet",
+		Long: `Invokes the /dms/node/subnet/add-peer behavior on an actor
+
+This behavior adds a peer to the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/add-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
+	},
+
+	node.SubnetAcceptPeerBehavior: {
+		Payload: func() any { return &node.SubnetAcceptPeerRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.SubnetAcceptPeerRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
+			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "peer IP address (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("peer-id")
+			_ = cmd.MarkFlagRequired("ip")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.SubnetAcceptPeerRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Accept a peer to a subnet",
+		Long: `Invokes the /dms/node/subnet/accept-peer behavior on an actor
+
+This behavior accepts a peer to the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/accept-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
+	},
+
+	node.SubnetMapPortBehavior: {
+		Payload: func() any { return &node.SubnetMapPortRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.SubnetMapPortRequest)
+
+			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
+			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
+			cmd.Flags().StringVarP(&p.SourcePort, "source-port", "o", "", "source port (required)")
+			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "i", "", "destination IP address (required)")
+			cmd.Flags().StringVarP(&p.DestPort, "dest-port", "n", "", "destination port (required)")
+			_ = cmd.MarkFlagRequired("protocol")
+			_ = cmd.MarkFlagRequired("source-ip")
+			_ = cmd.MarkFlagRequired("source-port")
+			_ = cmd.MarkFlagRequired("dest-ip")
+			_ = cmd.MarkFlagRequired("dest-port")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.SubnetMapPortRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Map a port",
+		Long: `Invokes the /dms/node/subnet/map-port behavior on an actor
+
+This behavior maps a port from the source to the destination.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
+	},
+
+	node.SubnetDNSAddRecordBehavior: {
+		Payload: func() any { return &node.SubnetDNSAddRecordRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.SubnetDNSAddRecordRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
+			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "IP address (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("name")
+			_ = cmd.MarkFlagRequired("ip")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.SubnetDNSAddRecordRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Add a DNS record",
+		Long: `Invokes the /dms/node/subnet/dns/add-record behavior on an actor
+
+This behavior adds a DNS record to the local resolver.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/dns/add-record --subnet-id <subnet_id> --name <record_name> --ip <ip>`,
 	},
 }
 

@@ -17,22 +17,26 @@ import (
 )
 
 const (
-	PeersListBehavior     = "/dms/node/peers/list"
-	PeerAddrInfoBehavior  = "/dms/node/peers/self"
-	PeerPingBehavior      = "/dms/node/peers/ping"
-	PeerDHTBehavior       = "/dms/node/peers/dht"
-	PeerConnectBehavior   = "/dms/node/peers/connect"
-	PeerScoreBehavior     = "/dms/node/peers/score"
-	OnboardBehavior       = "/dms/node/onboarding/onboard"
-	OffboardBehavior      = "/dms/node/onboarding/offboard"
-	OnboardStatusBehavior = "/dms/node/onboarding/status"
-	CustomVMStartBehavior = "/dms/node/vm/start/custom"
-	VMStopBehavior        = "/dms/node/vm/stop"
-	VMListBehavior        = "/dms/node/vm/list"
-
-	ContainerStart = "/dms/node/container/start"
-	ContainerStop  = "/dms/node/container/stop"
-	ContainerList  = "/dms/node/container/list"
+	PeersListBehavior          = "/dms/node/peers/list"
+	PeerAddrInfoBehavior       = "/dms/node/peers/self"
+	PeerPingBehavior           = "/dms/node/peers/ping"
+	PeerDHTBehavior            = "/dms/node/peers/dht"
+	PeerConnectBehavior        = "/dms/node/peers/connect"
+	PeerScoreBehavior          = "/dms/node/peers/score"
+	OnboardBehavior            = "/dms/node/onboarding/onboard"
+	OffboardBehavior           = "/dms/node/onboarding/offboard"
+	OnboardStatusBehavior      = "/dms/node/onboarding/status"
+	VMStartBehavior            = "/dms/node/vm/start"
+	VMStopBehavior             = "/dms/node/vm/stop"
+	VMListBehavior             = "/dms/node/vm/list"
+	ContainerStartBehavior     = "/dms/node/container/start"
+	ContainerStopBehavior      = "/dms/node/container/stop"
+	ContainerListBehavior      = "/dms/node/container/list"
+	SubnetCreateBehavior       = "/dms/node/subnet/create"
+	SubnetAddPeerBehavior      = "/dms/node/subnet/peer/add"
+	SubnetAcceptPeerBehavior   = "/dms/node/subnet/peer/accept"
+	SubnetMapPortBehavior      = "/dms/node/subnet/port/map"
+	SubnetDNSAddRecordBehavior = "/dms/node/subnet/dns/add"
 
 	pingTimeout = 1 * time.Second
 )
@@ -388,5 +392,152 @@ func (n *Node) handlePeerScore(msg actor.Envelope) {
 	for p, score := range snapshot {
 		resp.Score[p.String()] = score
 	}
+	n.sendReply(msg, resp)
+}
+
+type SubnetCreateRequest struct {
+	SubnetID     string
+	IP           string
+	RoutingTable map[string]string
+}
+
+type SubnetCreateResponse struct {
+	Error string
+}
+
+func (n *Node) handleSubnetCreate(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetCreateRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := SubnetCreateResponse{}
+	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+type SubnetAddPeerRequest struct {
+	SubnetID string
+	PeerID   string
+	IP       string
+}
+
+type SubnetAddPeerResponse struct {
+	Error string
+}
+
+func (n *Node) handleSubnetAddPeer(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetAddPeerRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := SubnetAddPeerResponse{}
+	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+type SubnetAcceptPeerRequest struct {
+	SubnetID string
+	PeerID   string
+	IP       string
+}
+
+type SubnetAcceptPeerResponse struct {
+	Error string
+}
+
+func (n *Node) handleSubnetAcceptPeer(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetAcceptPeerRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := SubnetAcceptPeerResponse{}
+	err := n.network.AcceptSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+type SubnetMapPortRequest struct {
+	Protocol   string
+	SourceIP   string
+	SourcePort string
+	DestIP     string
+	DestPort   string
+}
+
+type SubnetMapPortResponse struct {
+	Error string
+}
+
+func (n *Node) handleSubnetMapPort(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetMapPortRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := SubnetMapPortResponse{}
+	err := n.network.MapPort(request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+type SubnetDNSAddRecordRequest struct {
+	SubnetID   string
+	DomainName string
+	IP         string
+}
+
+type SubnetDNSAddRecordResponse struct {
+	Error string
+}
+
+func (n *Node) handleSubnetDNSAddRecord(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetDNSAddRecordRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := SubnetDNSAddRecordResponse{}
+	err := n.network.AddSubnetDNSRecord(request.SubnetID, request.DomainName, request.IP)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
 	n.sendReply(msg, resp)
 }

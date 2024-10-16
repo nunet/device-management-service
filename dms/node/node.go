@@ -187,87 +187,99 @@ func New(onboarder *onboarding.Onboarding,
 		return nil, fmt.Errorf("new executor: %w", err)
 	}
 
-	if err := nodeActor.AddBehavior(PublicHelloBehavior, n.publicHelloBehavior); err != nil {
-		return nil, fmt.Errorf("adding public hello behavior: %w", err)
+	dmsBehaviors := map[string]struct {
+		fn   func(actor.Envelope)
+		opts []actor.BehaviorOption
+	}{
+		PublicHelloBehavior: {
+			fn: n.publicHelloBehavior,
+		},
+		PublicStatusBehavior: {
+			fn: n.publicStatusBehavior,
+		},
+		BroadcastHelloBehavior: {
+			fn: n.broadcastHelloBehavior,
+			opts: []actor.BehaviorOption{
+				actor.WithBehaviorTopic(BroadcastHelloTopic),
+			},
+		},
+		PeersListBehavior: {
+			fn: n.handlePeersList,
+		},
+		PeerAddrInfoBehavior: {
+			fn: n.handlePeerAddrInfo,
+		},
+		PeerPingBehavior: {
+			fn: n.handlePeerPing,
+		},
+		PeerDHTBehavior: {
+			fn: n.handlePeerDHT,
+		},
+		PeerConnectBehavior: {
+			fn: n.handlePeerConnect,
+		},
+		PeerScoreBehavior: {
+			fn: n.handlePeerScore,
+		},
+		OnboardBehavior: {
+			fn: n.handleOnboard,
+		},
+		OffboardBehavior: {
+			fn: n.handleOffboard,
+		},
+		OnboardStatusBehavior: {
+			fn: n.handleOnboardStatus,
+		},
+		VMStartBehavior: {
+			fn: n.handleVMContainerStart,
+		},
+		VMStopBehavior: {
+			fn: n.handleVMContainerStop,
+		},
+		VMListBehavior: {
+			fn: n.handleVMContainerList,
+		},
+		ContainerStartBehavior: {
+			fn: n.handleVMContainerStart,
+		},
+		ContainerStopBehavior: {
+			fn: n.handleVMContainerStop,
+		},
+		ContainerListBehavior: {
+			fn: n.handleVMContainerList,
+		},
+		NewDeploymentBehavior: {
+			fn: n.newDeployment,
+		},
+		jobs.VerifyEdgeConstraintBehavior: {
+			fn: n.deploymentVerifyEdgeConstraint,
+		},
+		jobs.BidRequestBehavior: {
+			fn: n.handleBidRequest,
+			opts: []actor.BehaviorOption{
+				actor.WithBehaviorTopic(jobs.BidRequestTopic),
+			},
+		},
+		SubnetCreateBehavior: {
+			fn: n.handleSubnetCreate,
+		},
+		SubnetAddPeerBehavior: {
+			fn: n.handleSubnetAddPeer,
+		},
+		SubnetAcceptPeerBehavior: {
+			fn: n.handleSubnetAcceptPeer,
+		},
+		SubnetMapPortBehavior: {
+			fn: n.handleSubnetMapPort,
+		},
+		SubnetDNSAddRecordBehavior: {
+			fn: n.handleSubnetDNSAddRecord,
+		},
 	}
-	if err := nodeActor.AddBehavior(PublicStatusBehavior, n.publicStatusBehavior); err != nil {
-		return nil, fmt.Errorf("adding public status behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(jobs.BidRequestBehavior, n.handleBidRequest, actor.WithBehaviorTopic(jobs.BidRequestTopic)); err != nil {
-		return nil, fmt.Errorf("adding bid requests behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(BroadcastHelloBehavior, n.broadcastHelloBehavior, actor.WithBehaviorTopic(BroadcastHelloTopic)); err != nil {
-		return nil, fmt.Errorf("adding broadcast status behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(PeersListBehavior, n.handlePeersList); err != nil {
-		return nil, fmt.Errorf("adding peers list behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(PeerAddrInfoBehavior, n.handlePeerAddrInfo); err != nil {
-		return nil, fmt.Errorf("adding peers addr info behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(PeerPingBehavior, n.handlePeerPing); err != nil {
-		return nil, fmt.Errorf("adding peer ping behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(PeerDHTBehavior, n.handlePeerDHT); err != nil {
-		return nil, fmt.Errorf("adding peer dht behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(PeerConnectBehavior, n.handlePeerConnect); err != nil {
-		return nil, fmt.Errorf("adding peer connect behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(PeerScoreBehavior, n.handlePeerScore); err != nil {
-		return nil, fmt.Errorf("adding peer score behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(OnboardBehavior, n.handleOnboard); err != nil {
-		return nil, fmt.Errorf("adding onboard behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(OffboardBehavior, n.handleOffboard); err != nil {
-		return nil, fmt.Errorf("adding offboard behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(OnboardStatusBehavior, n.handleOnboardStatus); err != nil {
-		return nil, fmt.Errorf("adding onboard status behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(CustomVMStartBehavior, n.handleVMContainerStart); err != nil {
-		return nil, fmt.Errorf("adding custom vm start behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(VMStopBehavior, n.handleVMContainerStop); err != nil {
-		return nil, fmt.Errorf("adding vm stop behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(VMListBehavior, n.handleVMContainerList); err != nil {
-		return nil, fmt.Errorf("adding vm list behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(NewDeploymentBehavior, n.newDeployment); err != nil {
-		return nil, fmt.Errorf("adding new deployment behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(ContainerStart, n.handleVMContainerStart); err != nil {
-		return nil, fmt.Errorf("adding custom container start behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(ContainerStop, n.handleVMContainerStop); err != nil {
-		return nil, fmt.Errorf("adding container stop behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(ContainerList, n.handleVMContainerList); err != nil {
-		return nil, fmt.Errorf("adding container list behavior: %w", err)
-	}
-
-	if err := nodeActor.AddBehavior(jobs.VerifyEdgeConstraintBehavior, n.deploymentVerifyEdgeConstraint); err != nil {
-		return nil, fmt.Errorf("adding deployment constraint behavior: %w", err)
+	for behavior, handler := range dmsBehaviors {
+		if err := nodeActor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
+			return nil, fmt.Errorf("adding %s behavior: %w", behavior, err)
+		}
 	}
 
 	if err := n.restoreDeployments(); err != nil {
@@ -503,7 +515,7 @@ func (n *Node) sayHello(p peer.ID) {
 		},
 	}
 
-	wait := helloMinDelay + time.Duration(rand.Int63n(int64(helloMaxDelay-helloMinDelay))) //nolint
+	wait := helloMinDelay + time.Duration(rand.Int63n(int64(helloMaxDelay-helloMinDelay)))
 	time.Sleep(wait)
 
 	n.mx.Lock()

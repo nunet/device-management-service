@@ -103,6 +103,9 @@ type Libp2p struct {
 
 	// dependencies (db, filesystem...)
 	fs afero.Fs
+
+	subnets                         map[string]*subnet
+	isSubnetWriteProtocolRegistered int32
 }
 
 // New creates a libp2p instance.
@@ -126,6 +129,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		topicValidators:   make(map[string]map[uint64]Validator),
 		sendSemaphore:     make(chan struct{}, sendSemaphoreLimit),
 		fs:                fs,
+		subnets:           make(map[string]*subnet),
 	}, nil
 }
 
