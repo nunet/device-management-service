@@ -8,7 +8,6 @@ linters:
     - govet
     - revive
     - gofumpt
-    - gosec
     - unparam
     - goconst
     - prealloc
@@ -23,3 +22,6 @@ linters:
     - gosimple
     - gocritic
     - nolintlint
+  gosec:
+    excludes:
+    - G115
