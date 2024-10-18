@@ -127,19 +127,6 @@ The class diagram for the `backend` package is shown below.
 
 `GetCardanoAddressAndMnemonic` generates wallet on Cardano blockchain.
 
-##### GetEthereumAddressAndPrivateKey
-
-- signature: `GetEthereumAddressAndPrivateKey() (*types.BlockchainAddressPrivKey, error)`
-
-- input: None
-
-- output: `types.onboarding.BlockchainAddressPrivKey`
-
-- output (error): `error message`
-
-`GetEthereumAddressAndPrivateKey` generates wallet on Ethereum blockchain.
-
-
 #### NetworkManager interface
 
 `NetworkManager` interface abstracts connection on ports. It consists of following methods:

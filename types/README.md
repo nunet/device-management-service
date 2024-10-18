@@ -862,7 +862,7 @@ type ElasticToken struct {
 - `types.BlockchainAddressPrivKey`
 
 ```
-// BlockchainAddressPrivKey holds Ethereum wallet address and private key from which the
+// BlockchainAddressPrivKey holds Ethereum/Cardano wallet address and private key from which the
 // address is derived.
 type BlockchainAddressPrivKey struct {
 	Address    string `json:"address,omitempty"`
