@@ -2,6 +2,7 @@ package libp2p
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/multiformats/go-multiaddr"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestSubnetCreate(t *testing.T) {
-	peer1 := createPeer(t, 4001)
+	peer1 := createPeer(t, 0)
 	require.NotNil(t, peer1)
 
 	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
@@ -24,12 +25,16 @@ func TestSubnetCreate(t *testing.T) {
 }
 
 func TestSubnetAddPeer(t *testing.T) {
-	peer1 := createPeer(t, 4001)
+	peer1 := createPeer(t, 0)
 	require.NotNil(t, peer1)
 
 	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
 	require.NoError(t, err)
 
+	// requires root privileges - skipping if not root
+	if os.Getuid() != 0 {
+		t.Skip("requires root privileges")
+	}
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.1")
 	require.NoError(t, err)
 
