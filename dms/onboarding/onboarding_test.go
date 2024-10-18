@@ -4,11 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"go.uber.org/mock/gomock"
-
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
@@ -47,8 +46,6 @@ func NewTestService(db *gorm.DB, fs afero.Fs, t *testing.T) *Onboarding {
 	ctrl := gomock.NewController(t)
 	oConfig := Config{
 		Fs:              afero.Afero{Fs: fs},
-		P2PRepo:         repositories_gorm.NewLibp2pInfo(db),
-		UUIDRepo:        repositories_gorm.NewMachineUUID(db),
 		ConfigRepo:      repositories_gorm.NewOnboardingConfig(db),
 		ResourceManager: NewMockResourceManager(ctrl),
 		Hardware:        NewMockHardwareManager(ctrl),
@@ -67,16 +64,6 @@ func NewTestService(db *gorm.DB, fs afero.Fs, t *testing.T) *Onboarding {
 
 func (ts *TestSuite) setupDB() {
 	_ = ts.db.AutoMigrate(&types.OnboardingConfig{})
-	_ = ts.db.AutoMigrate(&types.Libp2pInfo{})
-	_ = ts.db.AutoMigrate(&types.MachineUUID{})
-}
-
-func (ts *TestSuite) savePrivateKey(ctx context.Context) error {
-	p2p := types.Libp2pInfo{
-		PrivateKey: []byte("1234"),
-	}
-	_, err := ts.service.P2PRepo.Save(ctx, p2p)
-	return err
 }
 
 func TestIsOnboarded(t *testing.T) {
@@ -85,9 +72,6 @@ func TestIsOnboarded(t *testing.T) {
 	ts.setupDB()
 
 	ctx := context.Background()
-	if err := ts.savePrivateKey(ctx); err != nil {
-		t.Errorf("unable to save private key: %v", err)
-	}
 
 	t.Run("happy case", func(t *testing.T) {
 		onboarded, err := ts.service.IsOnboarded(ctx)

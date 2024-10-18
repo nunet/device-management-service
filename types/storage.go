@@ -2,6 +2,9 @@ package types
 
 const (
 	StorageVolumeTypeBind = "bind"
+
+	StorageProviderS3   = "s3"
+	StorageProviderIPFS = "ipfs"
 )
 
 // StorageVolumeExecutor represents a prepared storage volume that can be mounted to an execution
