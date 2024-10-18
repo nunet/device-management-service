@@ -123,7 +123,7 @@ require (
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
 	github.com/mikioh/tcpopt v0.0.0-20190314235656-172688c1accc // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
-	github.com/mitchellh/mapstructure v1.5.0
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/term v0.0.0-20220808134915-39b0c02b01ae // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -275,7 +275,10 @@ require (
 
 require github.com/oschwald/geoip2-golang v1.11.0
 
-require github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+require (
+	github.com/go-viper/mapstructure/v2 v2.2.1
+	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+)
 
 require (
 	github.com/bytedance/sonic/loader v0.1.1 // indirect

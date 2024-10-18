@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	yaml "gopkg.in/yaml.v3"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/transform"
