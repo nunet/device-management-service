@@ -15,12 +15,3 @@ type OnboardingConfig struct {
 	OnboardedResources Resources `json:"resources,omitempty" gorm:"-"`
 	MachineResources   Resources `json:"machine_resources,omitempty" gorm:"-"`
 }
-
-type OnboardingStatus struct {
-	Onboarded        bool             `json:"onboarded"`
-	Error            error            `json:"error"`
-	MachineUUID      string           `json:"machine_uuid"`
-	WorkDir          string           `json:"work_dir"`
-	DatabasePath     string           `json:"database_path"`
-	OnboardingConfig OnboardingConfig `json:"onboarding_config"`
-}

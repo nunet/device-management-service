@@ -39,17 +39,3 @@ type MMDSMetadata struct {
 	NodeID string `json:"node_id"`
 	PKey   string `json:"pkey"`
 }
-
-type Actions struct {
-	ActionType string `json:"action_type"`
-}
-type VirtualMachine struct {
-	BaseDBModel
-	SocketFile string `json:"socket_file"`
-	BootSource string `json:"boot_source"`
-	Filesystem string `json:"filesystem"`
-	VCPUCount  uint   `json:"vcpu_count"`
-	MemSizeMib uint   `json:"mem_size_mib"`
-	TapDevice  string `json:"tap_device"`
-	State      string `json:"state"`
-}

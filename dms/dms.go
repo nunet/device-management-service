@@ -1,15 +1,12 @@
 package dms
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
-
-	_ "embed"
-
-	"gitlab.com/nunet/device-management-service/dms/hardware"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
@@ -19,6 +16,7 @@ import (
 	"gitlab.com/nunet/device-management-service/api"
 	"gitlab.com/nunet/device-management-service/db"
 	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
@@ -108,14 +106,10 @@ func Run(ksPassphrase string, contextName string) error {
 	}
 
 	onboardR := gdb.NewOnboardingConfig(db)
-	p2pR := gdb.NewLibp2pInfo(db)
-	uuidR := gdb.NewMachineUUID(db)
 
 	onboard := onboarding.New(&onboarding.Config{
 		Fs:              afero.Afero{Fs: fs},
 		ConfigRepo:      onboardR,
-		P2PRepo:         p2pR,
-		UUIDRepo:        uuidR,
 		Hardware:        hardwareManager,
 		ResourceManager: resourceManager,
 		WorkDir:         gcfg.WorkDir,

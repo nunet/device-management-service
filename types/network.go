@@ -1,5 +1,9 @@
 package types
 
+import (
+	"time"
+)
+
 const (
 	NetP2P = "p2p"
 )
@@ -27,4 +31,10 @@ type NetworkStats struct {
 // MessageInfo is a stub. Please expand it or completely change it based on requirements.
 type MessageInfo struct {
 	Info string `json:"info"` // Message information
+}
+
+type PingResult struct {
+	RTT     time.Duration
+	Success bool
+	Error   error
 }

@@ -21,10 +21,8 @@ type Config struct {
 	WorkDir         string
 	DatabasePath    string
 	ConfigRepo      repositories.OnboardingConfig
-	P2PRepo         repositories.Libp2pInfo
 	ResourceManager types.ResourceManager
 	Hardware        types.HardwareManager
-	UUIDRepo        repositories.MachineUUID
 }
 
 // NewConfig is a constructor for Config
@@ -32,16 +30,12 @@ func NewConfig(
 	fs afero.Afero,
 	workDir, dbPath string,
 	configRepo repositories.OnboardingConfig,
-	p2pRepo repositories.Libp2pInfo,
-	uuidRepo repositories.MachineUUID,
 ) *Config {
 	return &Config{
 		Fs:           fs,
 		WorkDir:      workDir,
 		DatabasePath: dbPath,
 		ConfigRepo:   configRepo,
-		P2PRepo:      p2pRepo,
-		UUIDRepo:     uuidRepo,
 	}
 }
 
