@@ -6,94 +6,65 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jaypipes/ghw"
-
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 var (
-	metadata map[types.GPUVendor][]types.GPUMetadata
-	mu       sync.Mutex
+	gpuInfoCache map[types.GPUVendor][]types.GPU
+	mu           sync.Mutex
 )
 
-// fetchGPUMetadata returns the GPU metadata for all GPUs
-// TODO: Use one single library to fetch GPU information or improve the match criteria
-// https://gitlab.com/nunet/device-management-service/-/issues/548
-// TODO: write tests by mocking the gpu snapshot
-// https://gitlab.com/nunet/device-management-service/-/issues/534
-func fetchGPUMetadata() (map[types.GPUVendor][]types.GPUMetadata, error) {
-	if metadata != nil {
-		return metadata, nil
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	metadata = make(map[types.GPUVendor][]types.GPUMetadata)
-	gpuInfo, err := ghw.GPU()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, card := range gpuInfo.GraphicsCards {
-		if card.DeviceInfo == nil {
-			continue
-		}
-		pciAddress := card.Address
-		vendor := types.ParseGPUVendor(card.DeviceInfo.Vendor.Name)
-		metadata[vendor] = append(metadata[vendor], types.GPUMetadata{PCIAddress: pciAddress})
-	}
-
-	return metadata, nil
-}
-
-// GetGPUs returns the GPUs based on the specified vendors. If no vendors are provided, it returns the information of all the GPUs
+// GetGPUs returns the GPU information based on the specified vendors.
+// If no vendors are provided, it returns the information of all the GPUs.
 func GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error) {
-	return getGPUsHelper(fetchGPUMetadata, assignIndexToGPUs, map[types.GPUVendor]func(metadata []types.GPUMetadata) ([]types.GPU, error){
+	return getGPUsHelper(assignIndexToGPUs, map[types.GPUVendor]func() ([]types.GPU, error){
 		types.GPUVendorIntel:  getIntelGPUs,
 		types.GPUVendorNvidia: getNVIDIAGPUs,
 		types.GPUVendorAMDATI: getAMDGPUs,
 	}, vendors...)
 }
 
-// GetGPUUsage returns the GPU usage based on the specified vendors. If no vendors are provided, it returns the information of all the GPUs
+// GetGPUUsage returns the GPU usage based on the specified vendors.
+// If no vendors are provided, it returns the information of all the GPUs.
 func GetGPUUsage(vendors ...types.GPUVendor) ([]types.GPU, error) {
-	return getGPUsHelper(fetchGPUMetadata, assignIndexToGPUs, map[types.GPUVendor]func(metadata []types.GPUMetadata) ([]types.GPU, error){
+	return getGPUsHelper(assignIndexToGPUs, map[types.GPUVendor]func() ([]types.GPU, error){
 		types.GPUVendorIntel:  getIntelGPUUsage,
 		types.GPUVendorNvidia: getNVIDIAGPUUsage,
 		types.GPUVendorAMDATI: getAMDGPUUsage,
 	}, vendors...)
 }
 
-// getGPUsHelper is a helper function to avoid code duplication in GetGPUs and GetGPUUsage
-func getGPUsHelper(fetchMetadata func() (map[types.GPUVendor][]types.GPUMetadata, error), assignFunc func([]types.GPU) []types.GPU, fetchFuncs map[types.GPUVendor]func(metadata []types.GPUMetadata) ([]types.GPU, error), vendors ...types.GPUVendor) ([]types.GPU, error) {
+// getGPUsHelper is a helper function to avoid code duplication in GetGPUs and GetGPUUsage.
+// It fetches GPU information from different vendors and aggregates the results.
+func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU, fetchFuncs map[types.GPUVendor]func() ([]types.GPU, error), vendors ...types.GPUVendor) ([]types.GPU, error) {
 	var gpus []types.GPU
 
-	gpuMetadata, err := fetchMetadata()
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch GPU metadata: %v", err)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if gpuInfoCache == nil {
+		gpuInfoCache = make(map[types.GPUVendor][]types.GPU)
 	}
 
-	// Helper function to fetch and append GPU info
-	fetchAndAppendGPUs := func(fetchFunc func(metadata []types.GPUMetadata) ([]types.GPU, error), vendor types.GPUVendor) {
-		vendorMetadata, ok := gpuMetadata[vendor]
-		if !ok {
-			// TODO: log a warning here
-			return
-		}
-
-		gpuList, err := fetchFunc(vendorMetadata)
+	// Helper function to fetch and append GPU info for a vendor
+	fetchAndAppendGPUs := func(fetchFunc func() ([]types.GPU, error), vendor types.GPUVendor) {
+		gpuList, err := fetchFunc()
 		if err != nil {
 			// TODO: log a warning here
 			return
 		}
+		gpuInfoCache[vendor] = gpuList
 		gpus = append(gpus, gpuList...)
 	}
 
 	if len(vendors) == 0 {
 		// No specific vendor requested, fetch all types of GPUs
 		for vendor, fetchFunc := range fetchFuncs {
-			fetchAndAppendGPUs(fetchFunc, vendor)
+			if cachedGpus, ok := gpuInfoCache[vendor]; ok {
+				gpus = append(gpus, cachedGpus...)
+			} else {
+				fetchAndAppendGPUs(fetchFunc, vendor)
+			}
 		}
 	} else {
 		// Fetch GPUs for the specified vendor only
@@ -102,7 +73,11 @@ func getGPUsHelper(fetchMetadata func() (map[types.GPUVendor][]types.GPUMetadata
 			if !ok {
 				return nil, fmt.Errorf("unsupported GPU vendor: %v", vendor)
 			}
-			fetchAndAppendGPUs(fetchFunc, vendor)
+			if cachedGpus, ok := gpuInfoCache[vendor]; ok {
+				gpus = append(gpus, cachedGpus...)
+			} else {
+				fetchAndAppendGPUs(fetchFunc, vendor)
+			}
 		}
 	}
 
