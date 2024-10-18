@@ -19,7 +19,7 @@ type EnsembleConfigV1 struct {
 	Edges       []EdgeConstraint            // network edge constraints
 	Supervisor  SupervisorConfig            // supervision structure
 	Keys        map[string]string           // (named) ssh public keys relevant to the allocation
-	Scripts     map[string]string           // (named) provisioning scripts
+	Scripts     map[string][]byte           // (named) provisioning scripts
 }
 
 // AllocationConfig is the configuration of an allocation
