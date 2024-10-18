@@ -34,7 +34,7 @@ Here is quick overview of the contents of this directory:
 
 * [handler](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/handler.go): This is main file where the code for onboarding functionality exists.
 
-* [addresses](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/addresses.go): This file houses functions to generate Ethereum and Cardano wallet addresses along with its private key. 
+* [addresses](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/addresses.go): This file houses functions to generate Cardano wallet addresses along with its private key. 
 
 * [addresses_test](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/addresses_test.go): This file houses functions to test the address generation functions defined in [addresses](addresses.go).
 

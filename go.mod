@@ -8,7 +8,6 @@ require (
 	github.com/NVIDIA/go-nvml v0.12.4-0
 	github.com/aws/aws-sdk-go-v2 v1.32.2
 	github.com/docker/docker v27.3.1+incompatible
-	github.com/ethereum/go-ethereum v1.14.11
 	github.com/fatih/structs v1.1.0
 	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
 	github.com/fivebinaries/go-cardano-serialization v0.0.0-20220907134105-ec9b85086588
@@ -216,8 +215,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.32.2 // indirect
 	github.com/aws/smithy-go v1.22.0 // indirect
-	github.com/btcsuite/btcd v0.20.1-beta // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
@@ -296,7 +293,6 @@ require (
 	github.com/ebitengine/purego v0.8.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/holiman/uint256 v1.3.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oschwald/maxminddb-golang v1.13.0 // indirect

@@ -1,37 +1,12 @@
 package crypto
 
 import (
-	"crypto/ecdsa"
-	"errors"
-
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fivebinaries/go-cardano-serialization/address"
 	"github.com/fivebinaries/go-cardano-serialization/bip32"
 	"github.com/fivebinaries/go-cardano-serialization/network"
 	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/nunet/device-management-service/types"
 )
-
-func GetEthereumAddressAndPrivateKey() (*types.Account, error) {
-	privateKey, err := crypto.GenerateKey()
-	if err != nil {
-		return nil, err
-	}
-	privateKeyBytes := crypto.FromECDSA(privateKey)
-	privateKeyString := hexutil.Encode(privateKeyBytes)
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, errors.New("publicKey is not of type *ecdsa.PublicKey")
-	}
-	address := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
-	var pair types.Account
-
-	pair.Address = address
-	pair.PrivateKey = privateKeyString
-	return &pair, nil
-}
 
 func harden(num uint32) uint32 {
 	return 0x80000000 + num

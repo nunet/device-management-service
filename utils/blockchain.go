@@ -3,16 +3,11 @@ package utils
 import (
 	"errors"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/fivebinaries/go-cardano-serialization/address"
 )
 
-// ValidateAddress checks if the wallet address is a valid ethereum/cardano address
+// ValidateAddress checks if the wallet address is a valid cardano address
 func ValidateAddress(addr string) error {
-	if common.IsHexAddress(addr) {
-		return errors.New("ethereum wallet address not allowed")
-	}
-
 	validCardano := false
 	isValidCardano(addr, &validCardano)
 	if validCardano {

@@ -7,22 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetEthereumAddressAndPrivateKey(t *testing.T) {
-	addrAndPrivKey, _ := GetEthereumAddressAndPrivateKey()
-	addr := addrAndPrivKey.Address
-	privKey := addrAndPrivKey.PrivateKey
-
-	t.Run("ethereum address is 42 characters long", func(t *testing.T) {
-		want := 42
-		assert.Equal(t, want, len(addr))
-	})
-
-	t.Run("ethereum private key is 66 characters long", func(t *testing.T) {
-		want := 66
-		assert.Equal(t, want, len(privKey))
-	})
-}
-
 func TestGetCardanoAddressAndMnemonic(t *testing.T) {
 	addrAndMnemonic, _ := GetCardanoAddressAndMnemonic()
 	addr := addrAndMnemonic.Address
