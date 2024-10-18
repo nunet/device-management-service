@@ -3,6 +3,7 @@ package actor
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 
 	"gitlab.com/nunet/device-management-service/dms/hardware"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	"gitlab.com/nunet/device-management-service/dms/node"
 )
 
@@ -34,6 +36,10 @@ type behaviorConfig struct {
 	Args        cobra.PositionalArgs
 	Long        string
 	Short       string
+}
+
+type NewDeploymentRequestCmd struct {
+	Config string
 }
 
 var behaviors = map[string]behaviorConfig{
@@ -315,6 +321,58 @@ This behavior retrieves a list of virtual machines (VMs) running on the node.
 
 Examples:
   nunet actor cmd --context user /dms/node/vm/list`,
+	},
+	node.NewDeploymentBehavior: {
+		Type:  bInvoke,
+		Short: "Create a new deployment",
+		Long: `Invokes the /dms/node/deployment/new behavior on an actor
+
+This behavior creates a new deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/new --spec-file <path to ensemble specification file>`,
+		Payload: func() any { return &NewDeploymentRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*NewDeploymentRequestCmd)
+			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file (required)")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*NewDeploymentRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			data, err := os.ReadFile(req.Config)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read config file: %w", err)
+			}
+
+			cfg := &node.NewDeploymentRequest{}
+			err = parser.Parse(parser.SpecTypeEnsembleV1, data, &cfg.Ensemble)
+			if err != nil {
+				return nil, err
+			}
+
+			for name, script := range cfg.Ensemble.V1.Scripts {
+				fmt.Println(name, string(script))
+				scriptData, err := os.ReadFile(string(script))
+				if err != nil {
+					return nil, fmt.Errorf("failed to read script file: %w", err)
+				}
+				cfg.Ensemble.V1.Scripts[name] = scriptData
+
+			}
+
+			for name, key := range cfg.Ensemble.V1.Keys {
+				key, err := os.ReadFile(key)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read script file: %w", err)
+				}
+				cfg.Ensemble.V1.Keys[name] = string(key)
+
+			}
+
+			return cfg, nil
+		},
 	},
 
 	node.SubnetCreateBehavior: {
