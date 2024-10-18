@@ -409,11 +409,6 @@ type NetworkInfo struct {
 	NetworkType string
 }
 
-// GPUMetadata holds the metadata of the GPU
-type GPUMetadata struct {
-	PCIAddress string
-}
-
 // ConvertBytesToGB converts bytes to gigabytes
 func ConvertBytesToGB(bytes float64) float64 {
 	return float64(bytes) / 1e9

@@ -13,7 +13,7 @@ import (
 
 // runROCmSmiCommand executes the rocm-smi command and returns the output as a string.
 func runROCmSmiCommand() (string, error) {
-	cmd := exec.Command("rocm-smi", "--showid", "--showproductname", "--showmeminfo", "vram")
+	cmd := exec.Command("rocm-smi", "--showid", "--showproductname", "--showmeminfo", "vram", "--showbus")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("AMD ROCm not installed, initialized, or configured (reboot recommended for newly installed AMD GPU Drivers): %s", err)
@@ -25,6 +25,20 @@ func runROCmSmiCommand() (string, error) {
 func parseRegex(pattern, output string) [][]string {
 	regex := regexp.MustCompile(pattern)
 	return regex.FindAllStringSubmatch(output, -1)
+}
+
+// getAMDGPUPCIAddress extracts the PCI bus ID from the command output.
+func getAMDGPUPCIAddress(output string) ([]string, error) {
+	pciMatches := parseRegex(`GPU\[\d+\]\s+: PCI Bus:\s+([^\n]+)`, output)
+	if len(pciMatches) == 0 {
+		return nil, fmt.Errorf("find PCI bus IDs in the output")
+	}
+
+	pciAddresses := make([]string, len(pciMatches))
+	for i, match := range pciMatches {
+		pciAddresses[i] = match[1]
+	}
+	return pciAddresses, nil
 }
 
 // getAMDGPUTotalVRAM extracts the total VRAM from the command output and converts it to MiB.
@@ -78,29 +92,38 @@ func getAMDGPUName(output string) ([]string, error) {
 }
 
 // getAMDGPUs returns the GPU information for AMD GPUs.
-func getAMDGPUs(metadata []types.GPUMetadata) ([]types.GPU, error) {
+func getAMDGPUs() ([]types.GPU, error) {
 	output, err := runROCmSmiCommand()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get AMD GPU information: %s", err)
 	}
 
 	gpuNameMatches, err := getAMDGPUName(output)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get AMD GPU names: %s", err)
 	}
 
 	totalVRAMs, err := getAMDGPUTotalVRAM(output)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get AMD GPU total VRAM: %s", err)
+	}
+
+	pciAddresses, err := getAMDGPUPCIAddress(output)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get AMD GPU PCI addresses: %s", err)
+	}
+
+	if len(gpuNameMatches) != len(totalVRAMs) || len(gpuNameMatches) != len(pciAddresses) {
+		return nil, fmt.Errorf("failed to get AMD GPU information: mismatched GPU details")
 	}
 
 	gpuInfos := make([]types.GPU, 0, len(gpuNameMatches))
 	for i := range gpuNameMatches {
 		gpuInfo := types.GPU{
-			PCIAddress: metadata[i].PCIAddress,
 			Model:      gpuNameMatches[i],
 			VRAM:       totalVRAMs[i],
 			Vendor:     types.GPUVendorAMDATI,
+			PCIAddress: pciAddresses[i],
 		}
 
 		gpuInfos = append(gpuInfos, gpuInfo)
@@ -110,27 +133,38 @@ func getAMDGPUs(metadata []types.GPUMetadata) ([]types.GPU, error) {
 }
 
 // getAMDGPUUsage returns the GPU usage for AMD GPUs.
-func getAMDGPUUsage(_ []types.GPUMetadata) ([]types.GPU, error) {
+func getAMDGPUUsage() ([]types.GPU, error) {
 	output, err := runROCmSmiCommand()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get AMD GPU information: %s", err)
 	}
 
 	gpuNameMatches, err := getAMDGPUName(output)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get AMD GPU names: %s", err)
+	}
+
+	pciAddresses, err := getAMDGPUPCIAddress(output)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get AMD GPU PCI addresses: %s", err)
 	}
 
 	usedVRAMs, err := getAMDGPUUsedVRAM(output)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get AMD GPU used VRAM: %s", err)
+	}
+
+	if len(gpuNameMatches) != len(usedVRAMs) || len(gpuNameMatches) != len(pciAddresses) {
+		return nil, fmt.Errorf("failed to get AMD GPU information: mismatched GPU details")
 	}
 
 	gpus := make([]types.GPU, 0, len(usedVRAMs))
 	for i, usedVRAM := range usedVRAMs {
 		gpuInfo := types.GPU{
-			Model: gpuNameMatches[i],
-			VRAM:  usedVRAM,
+			Model:      gpuNameMatches[i],
+			VRAM:       usedVRAM,
+			Vendor:     types.GPUVendorAMDATI,
+			PCIAddress: pciAddresses[i],
 		}
 		gpus = append(gpus, gpuInfo)
 	}

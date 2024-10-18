@@ -5,6 +5,7 @@ package gpu
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"gitlab.com/nunet/device-management-service/types"
@@ -60,8 +61,35 @@ func getNVIDIADeviceMemory(device nvml.Device) (nvml.Memory, error) {
 	return memory, nil
 }
 
+// convertBusID converts the BusId array to a correctly formatted PCI address string.
+func convertBusID(busID [32]int8) string {
+	busIDBytes := make([]byte, len(busID))
+	for i, b := range busID {
+		busIDBytes[i] = byte(b)
+	}
+
+	busIDStr := strings.TrimRight(string(busIDBytes), "\x00")
+
+	// Check if the string starts with extra zero groups and correct the format
+	if strings.HasPrefix(busIDStr, "00000000:") {
+		// Trim it to the correct format: "0000:XX:YY.Z"
+		return "0000" + busIDStr[8:]
+	}
+
+	return busIDStr
+}
+
+// getNVIDIAPCIAddress returns the PCI address for the NVIDIA device.
+func getNVIDIAPCIAddress(device nvml.Device) (string, error) {
+	pciInfo, ret := device.GetPciInfo()
+	if !errors.Is(ret, nvml.SUCCESS) {
+		return "", fmt.Errorf("failed to get PCI info for device: %s", nvml.ErrorString(ret))
+	}
+	return convertBusID(pciInfo.BusId), nil
+}
+
 // getNVIDIAGPUs returns the GPU information for NVIDIA GPUs.
-func getNVIDIAGPUs(metadata []types.GPUMetadata) ([]types.GPU, error) {
+func getNVIDIAGPUs() ([]types.GPU, error) {
 	if err := initNVML(); err != nil {
 		return nil, err
 	}
@@ -70,10 +98,6 @@ func getNVIDIAGPUs(metadata []types.GPUMetadata) ([]types.GPU, error) {
 	deviceCount, err := getNVIDIADeviceCount()
 	if err != nil {
 		return nil, err
-	}
-
-	if deviceCount != len(metadata) {
-		return nil, fmt.Errorf("failed to find NVIDIA GPU information for all GPUs")
 	}
 
 	var gpus []types.GPU
@@ -94,8 +118,13 @@ func getNVIDIAGPUs(metadata []types.GPUMetadata) ([]types.GPU, error) {
 			return nil, err
 		}
 
+		pciAddress, err := getNVIDIAPCIAddress(device)
+		if err != nil {
+			return nil, err
+		}
+
 		gpu := types.GPU{
-			PCIAddress: metadata[i].PCIAddress,
+			PCIAddress: pciAddress,
 			Model:      name,
 			VRAM:       float64(memory.Total),
 			Vendor:     types.GPUVendorNvidia,
@@ -107,7 +136,7 @@ func getNVIDIAGPUs(metadata []types.GPUMetadata) ([]types.GPU, error) {
 }
 
 // getNVIDIAGPUUsage returns the GPU usage for NVIDIA GPUs.
-func getNVIDIAGPUUsage(_ []types.GPUMetadata) ([]types.GPU, error) {
+func getNVIDIAGPUUsage() ([]types.GPU, error) {
 	if err := initNVML(); err != nil {
 		return nil, err
 	}
@@ -135,10 +164,16 @@ func getNVIDIAGPUUsage(_ []types.GPUMetadata) ([]types.GPU, error) {
 			return nil, err
 		}
 
+		pciAddress, err := getNVIDIAPCIAddress(device)
+		if err != nil {
+			return nil, err
+		}
+
 		gpu := types.GPU{
-			Model:  name,
-			VRAM:   float64(memory.Used),
-			Vendor: types.GPUVendorNvidia,
+			PCIAddress: pciAddress,
+			Model:      name,
+			VRAM:       float64(memory.Used),
+			Vendor:     types.GPUVendorNvidia,
 		}
 		gpus = append(gpus, gpu)
 	}
