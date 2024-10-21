@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/fatih/structs"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	"gitlab.com/nunet/device-management-service/types"
 )
