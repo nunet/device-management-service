@@ -21,10 +21,18 @@ const (
 	AllocationDeploymentBehavior = "/dms/deployment/allocate"
 	AllocationDeploymentTimeout  = 3 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
+	AllocationStartBehavior      = "/dms/allocation/start"
+	AllocationStartTimeout       = 3 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 
 	MaxBidMultiplier = 8
+
+	SubnetCreateBehavior       = "/dms/node/subnet/create"
+	SubnetAddPeerBehavior      = "/dms/node/subnet/add-peer"
+	SubnetAcceptPeerBehavior   = "/dms/node/subnet/accept-peer"
+	SubnetMapPortBehavior      = "/dms/node/subnet/map-port"
+	SubnetDNSAddRecordBehavior = "/dms/node/subnet/dns/add-record"
 )
 
 type VerifyEdgeConstraintRequest struct {
@@ -58,6 +66,7 @@ type AllocationDeploymentRequest struct {
 type AllocationDeploymentConfig struct {
 	Executor  AllocationExecutor
 	Resources types.Resources
+	Execution types.SpecConfig
 }
 
 type AllocationDeploymentResponse struct {
@@ -69,4 +78,81 @@ type AllocationDeploymentResponse struct {
 type RevertDeploymentMessage struct {
 	EnsembleID string
 	NodeID     string
+}
+
+type AllocationStartRequest struct {
+	Resources types.Resources
+	Executor  AllocationExecutor
+	Execution types.SpecConfig
+}
+
+type AllocationStartResponse struct {
+	OK    bool
+	Error string
+}
+
+type RestartAllocationRequest struct {
+	AllocationID string
+}
+
+type RestartAllocationResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetCreateRequest struct {
+	SubnetID     string
+	IP           string
+	RoutingTable map[string]string
+}
+
+type SubnetCreateResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetAddPeerRequest struct {
+	SubnetID string
+	PeerID   string
+	IP       string
+}
+
+type SubnetAddPeerResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetAcceptPeerRequest struct {
+	SubnetID string
+	PeerID   string
+	IP       string
+}
+
+type SubnetAcceptPeerResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetMapPortRequest struct {
+	Protocol   string
+	SourceIP   string
+	SourcePort string
+	DestIP     string
+	DestPort   string
+}
+
+type SubnetMapPortResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetDNSAddRecordRequest struct {
+	SubnetID   string
+	DomainName string
+	IP         string
+}
+
+type SubnetDNSAddRecordResponse struct {
+	OK    bool
+	Error string
 }

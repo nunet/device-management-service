@@ -375,17 +375,17 @@ Examples:
 		},
 	},
 
-	node.SubnetCreateBehavior: {
-		Payload: func() any { return &node.SubnetCreateRequest{} },
+	jobs.SubnetCreateBehavior: {
+		Payload: func() any { return &jobs.SubnetCreateRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.SubnetCreateRequest)
+			p := payload.(*jobs.SubnetCreateRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.SubnetCreateRequest)
+			req, ok := payload.(*jobs.SubnetCreateRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
@@ -402,10 +402,10 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
 	},
 
-	node.SubnetAddPeerBehavior: {
-		Payload: func() any { return &node.SubnetAddPeerRequest{} },
+	jobs.SubnetAddPeerBehavior: {
+		Payload: func() any { return &jobs.SubnetAddPeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.SubnetAddPeerRequest)
+			p := payload.(*jobs.SubnetAddPeerRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
@@ -415,7 +415,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("ip")
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.SubnetAddPeerRequest)
+			req, ok := payload.(*jobs.SubnetAddPeerRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
@@ -432,10 +432,10 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/add-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
 	},
 
-	node.SubnetAcceptPeerBehavior: {
-		Payload: func() any { return &node.SubnetAcceptPeerRequest{} },
+	jobs.SubnetAcceptPeerBehavior: {
+		Payload: func() any { return &jobs.SubnetAcceptPeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.SubnetAcceptPeerRequest)
+			p := payload.(*jobs.SubnetAcceptPeerRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
@@ -445,7 +445,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("ip")
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.SubnetAcceptPeerRequest)
+			req, ok := payload.(*jobs.SubnetAcceptPeerRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
@@ -462,10 +462,10 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/accept-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
 	},
 
-	node.SubnetMapPortBehavior: {
-		Payload: func() any { return &node.SubnetMapPortRequest{} },
+	jobs.SubnetMapPortBehavior: {
+		Payload: func() any { return &jobs.SubnetMapPortRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.SubnetMapPortRequest)
+			p := payload.(*jobs.SubnetMapPortRequest)
 
 			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
 			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
@@ -479,7 +479,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("dest-port")
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.SubnetMapPortRequest)
+			req, ok := payload.(*jobs.SubnetMapPortRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
@@ -496,10 +496,10 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
 	},
 
-	node.SubnetDNSAddRecordBehavior: {
-		Payload: func() any { return &node.SubnetDNSAddRecordRequest{} },
+	jobs.SubnetDNSAddRecordBehavior: {
+		Payload: func() any { return &jobs.SubnetDNSAddRecordRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.SubnetDNSAddRecordRequest)
+			p := payload.(*jobs.SubnetDNSAddRecordRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
@@ -509,7 +509,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("ip")
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.SubnetDNSAddRecordRequest)
+			req, ok := payload.(*jobs.SubnetDNSAddRecordRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
@@ -519,7 +519,6 @@ Examples:
 		Type:  bInvoke,
 		Short: "Add a DNS record",
 		Long: `Invokes the /dms/node/subnet/dns/add-record behavior on an actor
-
 This behavior adds a DNS record to the local resolver.
 
 Examples:
