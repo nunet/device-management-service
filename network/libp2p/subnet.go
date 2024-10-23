@@ -557,7 +557,7 @@ func (s *subnet) writePackets(stream network.Stream) {
 				_, err := stream.Read(packetSize)
 				if err != nil {
 					log.Error("failed to read packet size from stream", err, "subnet", s.info.id)
-					stream.Reset()
+					_ = stream.Reset()
 					return
 				}
 
