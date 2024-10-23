@@ -118,6 +118,29 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
+	_ = actr1.AddBehavior(AllocationStartBehavior, func(msg actor.Envelope) {
+		defer msg.Discard()
+
+		var request AllocationStartRequest
+		if err := json.Unmarshal(msg.Message, &request); err != nil {
+			return
+		}
+
+		response := AllocationStartResponse{
+			OK: true,
+		}
+
+		reply, err := actor.ReplyTo(msg, response)
+		if err != nil {
+			log.Debugf("error creating reply: %s", err)
+			return
+		}
+
+		if err := actr1.Send(reply); err != nil {
+			log.Debugf("error sending  reply: %s", err)
+		}
+	})
+
 	_ = actr1.AddBehavior(SubnetAddPeerBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
@@ -284,7 +307,7 @@ func TestProvision(t *testing.T) {
 		actor.MakeExpiry(time.Hour),
 		0,
 		[]ucan.Capability{
-			// ucan.Capability("/dms"),
+			ucan.Capability(AllocationStartBehavior),
 			ucan.Capability(SubnetCreateBehavior),
 			ucan.Capability(SubnetAddPeerBehavior),
 			ucan.Capability(SubnetAcceptPeerBehavior),
