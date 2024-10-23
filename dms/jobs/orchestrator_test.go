@@ -14,7 +14,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
-	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type subnetObj struct {
@@ -29,10 +29,55 @@ func TestProvision(t *testing.T) {
 	addrs, privKey, peer := actor.NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
 	rootDID, root := actor.MakeRootTrustContext(t)
 	actorDID, trust := actor.MakeTrustContext(t, privKey)
-	cap := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
-	actr := actor.CreateActor(t, peer, cap)
+	capa := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+	actr := actor.CreateActor(t, peer, capa)
 	require.NoError(t, actr.Start())
-	orchestrator := NewOrchestrator(uuid.New().String(), EnsembleConfig{}, actr)
+	orchestrator, err := NewOrchestrator(actr, peer, EnsembleConfig{
+		V1: &EnsembleConfigV1{
+			Allocations: map[string]AllocationConfig{
+				"allocation1": {
+					Executor: "docker",
+					Resources: types.Resources{
+						CPU: types.CPU{
+							ClockSpeed: 2.4,
+							Cores:      2,
+							Model:      "Intel Core i7",
+							Vendor:     "Intel",
+						},
+						GPUs: []types.GPU{
+							{
+								Model:      "NVIDIA GeForce GTX 1080",
+								Vendor:     "NVIDIA",
+								VRAM:       8,
+								Index:      0,
+								PCIAddress: "0000:01:00.0",
+							},
+						},
+						RAM: types.RAM{
+							Size:       16,
+							ClockSpeed: 2400,
+						},
+						Disk: types.Disk{
+							Size:       256,
+							Model:      "Samsung 970 EVO",
+							Vendor:     "Samsung",
+							Type:       "SSD",
+							Interface:  "NVMe",
+							ReadSpeed:  3500,
+							WriteSpeed: 2500,
+						},
+					},
+					Execution: types.SpecConfig{},
+				},
+			},
+			Nodes: map[string]NodeConfig{
+				"node1": {
+					Allocations: []string{"allocation1"},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
 
 	_, privKey1, peer1 := actor.NewLibp2pNetwork(t, addrs)
 	rootDID1, root1 := actor.MakeRootTrustContext(t)
@@ -43,11 +88,11 @@ func TestProvision(t *testing.T) {
 	require.NoError(t, actr1.Start())
 
 	subnets := make(map[string]subnetObj)
-	actr1.AddBehavior(libp2p.SubnetCreateBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(SubnetCreateBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		fmt.Println("got msg for create")
-		var request libp2p.SubnetCreateRequest
+		var request SubnetCreateRequest
 		if err := json.Unmarshal(msg.Message, &request); err != nil {
 			return
 		}
@@ -60,7 +105,7 @@ func TestProvision(t *testing.T) {
 			ports:        map[int]int{},
 		}
 
-		reply, err := actor.ReplyTo(msg, libp2p.SubnetCreateResponse{
+		reply, err := actor.ReplyTo(msg, SubnetCreateResponse{
 			OK: true,
 		})
 		if err != nil {
@@ -73,28 +118,27 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	actr1.AddBehavior(libp2p.SubnetAddPeerBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(SubnetAddPeerBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
-		var request libp2p.SubnetAddPeerRequest
+		var request SubnetAddPeerRequest
 		if err := json.Unmarshal(msg.Message, &request); err != nil {
 			return
 		}
 
-		response := libp2p.SubnetAddPeerResponse{
+		response := SubnetAddPeerResponse{
 			OK: true,
 		}
 
 		subnet, ok := subnets[actr1.Handle().DID.String()]
 		if !ok {
 			response.OK = false
-			response.Error = "subnet not found"
+			response.Error = "subnet not found" //nolint
 		} else {
 			subnet.peer[request.IP] = request.PeerID
 		}
 
 		reply, err := actor.ReplyTo(msg, response)
-
 		if err != nil {
 			log.Debugf("error creating reply: %s", err)
 			return
@@ -105,15 +149,15 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	actr1.AddBehavior(libp2p.SubnetAcceptPeerBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(SubnetAcceptPeerBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
-		var request libp2p.SubnetAcceptPeerRequest
+		var request SubnetAcceptPeerRequest
 		if err := json.Unmarshal(msg.Message, &request); err != nil {
 			return
 		}
 
-		response := libp2p.SubnetAcceptPeerResponse{
+		response := SubnetAcceptPeerResponse{
 			OK: true,
 		}
 
@@ -136,15 +180,15 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	actr1.AddBehavior(libp2p.SubnetDNSAddRecordBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(SubnetDNSAddRecordBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
-		var request libp2p.SubnetDNSAddRecordRequest
+		var request SubnetDNSAddRecordRequest
 		if err := json.Unmarshal(msg.Message, &request); err != nil {
 			return
 		}
 
-		response := libp2p.SubnetDNSAddRecordResponse{
+		response := SubnetDNSAddRecordResponse{
 			OK: true,
 		}
 
@@ -167,15 +211,15 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	actr1.AddBehavior(libp2p.SubnetMapPortBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(SubnetMapPortBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
-		var request libp2p.SubnetMapPortRequest
+		var request SubnetMapPortRequest
 		if err := json.Unmarshal(msg.Message, &request); err != nil {
 			return
 		}
 
-		response := libp2p.SubnetMapPortResponse{
+		response := SubnetMapPortResponse{
 			OK: true,
 		}
 
@@ -200,14 +244,14 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	nodeId := uuid.New().String()
+	nodeID := uuid.New().String()
 	manifest := EnsembleManifest{
 		ID:           uuid.New().String(),
 		Orchestrator: actr.Handle(),
 		Allocations: map[string]AllocationManifest{
 			"allocation1": {
 				ID:       uuid.New().String(),
-				NodeID:   nodeId,
+				NodeID:   nodeID,
 				Handle:   actr1.Handle(),
 				DNSName:  "actor.com.",
 				PrivAddr: "",
@@ -217,7 +261,7 @@ func TestProvision(t *testing.T) {
 			},
 		},
 		Nodes: map[string]NodeManifest{
-			nodeId: {
+			nodeID: {
 				ID:        uuid.New().String(),
 				Peer:      peer1.Host.ID().String(),
 				Handle:    actr1.Handle(),
@@ -241,11 +285,11 @@ func TestProvision(t *testing.T) {
 		0,
 		[]ucan.Capability{
 			// ucan.Capability("/dms"),
-			ucan.Capability(libp2p.SubnetCreateBehavior),
-			ucan.Capability(libp2p.SubnetAddPeerBehavior),
-			ucan.Capability(libp2p.SubnetAcceptPeerBehavior),
-			ucan.Capability(libp2p.SubnetDNSAddRecordBehavior),
-			ucan.Capability(libp2p.SubnetMapPortBehavior),
+			ucan.Capability(SubnetCreateBehavior),
+			ucan.Capability(SubnetAddPeerBehavior),
+			ucan.Capability(SubnetAcceptPeerBehavior),
+			ucan.Capability(SubnetDNSAddRecordBehavior),
+			ucan.Capability(SubnetMapPortBehavior),
 		},
 	)
 	require.NoError(t, err)
@@ -259,9 +303,9 @@ func TestProvision(t *testing.T) {
 	require.True(t, ok)
 
 	assert.Equal(t, subnet.id, manifest.ID)
-	for ip, peerId := range subnet.routingTable {
-		if peerId == peer1.Host.ID().String() {
-			assert.Equal(t, subnet.routingTable[ip], peerId)
+	for ip, peerID := range subnet.routingTable {
+		if peerID == peer1.Host.ID().String() {
+			assert.Equal(t, subnet.routingTable[ip], peerID)
 			ownIP = ip
 		}
 	}

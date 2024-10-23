@@ -616,7 +616,7 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	return e, nil
 }
 
-func (n *Node) createAllocations(ensembleID string, nodeID string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
+func (n *Node) createAllocations(ensembleID string, _ string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 

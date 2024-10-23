@@ -91,7 +91,7 @@ func nextIP(ip net.IP, netmask int) net.IP {
 // refactor this to use bitwise operations on the IP.
 func GetRandomCIDR(mask int, blacklist []string) (string, error) {
 	var cidr string
-	var breakCounter int = 0
+	var breakCounter int
 	for {
 		if mask > 0 && breakCounter > 2^mask || mask == 0 && breakCounter > 255 {
 			return fmt.Sprintf("%s/%d", "0.0.0.0", mask), fmt.Errorf("could not find a CIDR after %d attempts", breakCounter)
@@ -135,8 +135,8 @@ func isOnBlacklist(cidr string, blacklist []string) bool {
 
 func GetRandomCIDRInRange(mask int, start, end net.IP, blacklist []string) (string, error) {
 	var cidr string
-	var breakCounter int = 0
-	var networkBitsIndex int = mask / 8
+	var breakCounter int
+	networkBitsIndex := mask / 8
 	for {
 		if mask > 0 && breakCounter > 2^mask || mask == 0 && breakCounter > 255 {
 			return fmt.Sprintf("%s/%d", "0.0.0.0", mask), fmt.Errorf("could not find a CIDR after %d attempts", breakCounter)
