@@ -10,6 +10,7 @@ import (
 	"time"
 
 	// "github.com/google/uuid"
+	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -260,20 +261,23 @@ func New(onboarder *onboarding.Onboarding,
 				actor.WithBehaviorTopic(jobs.BidRequestTopic),
 			},
 		},
-		SubnetCreateBehavior: {
+		jobs.SubnetCreateBehavior: {
 			fn: n.handleSubnetCreate,
 		},
-		SubnetAddPeerBehavior: {
+		jobs.SubnetAddPeerBehavior: {
 			fn: n.handleSubnetAddPeer,
 		},
-		SubnetAcceptPeerBehavior: {
+		jobs.SubnetAcceptPeerBehavior: {
 			fn: n.handleSubnetAcceptPeer,
 		},
-		SubnetMapPortBehavior: {
+		jobs.SubnetMapPortBehavior: {
 			fn: n.handleSubnetMapPort,
 		},
-		SubnetDNSAddRecordBehavior: {
+		jobs.SubnetDNSAddRecordBehavior: {
 			fn: n.handleSubnetDNSAddRecord,
+		},
+		jobs.AllocationDeploymentBehavior: {
+			fn: n.handleAllocationDeployment,
 		},
 	}
 	for behavior, handler := range dmsBehaviors {
@@ -288,46 +292,6 @@ func New(onboarder *onboarding.Onboarding,
 
 	return n, nil
 }
-
-// CreateAllocation creates an allocation
-// func (n *Node) CreateAllocation(job jobs.Job) (*jobs.Allocation, error) {
-// 	// generate random keypair
-// 	priv, pub, err := crypto.GenerateKeyPair(crypto.Ed25519)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to generate random keypair for allocation job %s: %w", job.ID, err)
-// 	}
-
-// 	security, err := actor.NewBasicSecurityContext(pub, priv, n.rootCap)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to create security context: %w", err)
-// 	}
-
-// 	allocationInbox, err := uuid.NewUUID()
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
-// 	}
-
-// 	actor, err := createActor(security, n.actor.Limiter(), n.hostID, allocationInbox.String(), n.network, n.scheduler)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
-// 	}
-
-// 	allocation, err := jobs.NewAllocation(actor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
-// 	}
-
-// 	err = allocation.Start()
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to start the allocation: %w", err)
-// 	}
-
-// 	n.mx.Lock()
-// 	n.allocations[allocation.ID] = allocation
-// 	n.mx.Unlock()
-
-// 	return allocation, nil
-// }
 
 // GetAllocation gets an allocation by id.
 func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
@@ -602,7 +566,7 @@ func (n *Node) Stop() error {
 
 	// stop all allocations
 	for k, alloc := range n.allocations {
-		if err := alloc.Stop(); err != nil {
+		if err := alloc.Stop(n.ctx); err != nil {
 			log.Warnf("error stopping allocation %s: %err", k, err)
 		}
 	}
@@ -650,6 +614,75 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	}
 
 	return e, nil
+}
+
+func (n *Node) createAllocations(ensembleID string, nodeID string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	allocHandles := make(map[string]actor.Handle, len(allocations))
+	for allocationID, config := range allocations {
+		if _, ok := n.allocations[allocationID]; ok {
+			continue
+		}
+
+		allocation, err := n.createAllocation(jobs.Job{
+			ID:        ensembleID,
+			Resources: config.Resources,
+			Execution: config.Execution,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create allocation %s: %w", allocationID, err)
+		}
+
+		if err := allocation.Run(n.ctx); err != nil {
+			return nil, fmt.Errorf("failed to run allocation %s: %w", allocationID, err)
+		}
+
+		allocHandles[allocationID] = allocation.Actor.Handle()
+	}
+
+	return allocHandles, nil
+}
+
+// createAllocation creates an allocation
+func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
+	// generate random keypair
+	priv, pub, err := crypto.GenerateKeyPair(crypto.Ed25519)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate random keypair for allocation job %s: %w", job.ID, err)
+	}
+
+	security, err := actor.NewBasicSecurityContext(pub, priv, n.rootCap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create security context: %w", err)
+	}
+
+	allocationInbox, err := uuid.NewUUID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
+	}
+
+	actor, err := createActor(security, n.actor.Limiter(), n.hostID, allocationInbox.String(), n.network, n.scheduler)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
+	}
+
+	allocation, err := jobs.NewAllocation(actor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
+	}
+
+	err = allocation.Start()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start the allocation: %w", err)
+	}
+
+	n.mx.Lock()
+	n.allocations[allocation.ID] = allocation
+	n.mx.Unlock()
+
+	return allocation, nil
 }
 
 // createActor creates an actor.
