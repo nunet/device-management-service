@@ -18,11 +18,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/api/types/image"
-
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
@@ -60,11 +59,15 @@ func (c *Client) CreateContainer(
 	networkingConfig *network.NetworkingConfig,
 	platform *v1.Platform,
 	name string,
+	pullImage bool,
 ) (string, error) {
-	_, err := c.PullImage(ctx, config.Image)
-	if err != nil {
-		return "", err
+	if pullImage {
+		_, err := c.PullImage(ctx, config.Image)
+		if err != nil {
+			return "", err
+		}
 	}
+
 	resp, err := c.client.ContainerCreate(
 		ctx,
 		config,
@@ -135,6 +138,16 @@ func (c *Client) WaitContainer(
 	containerID string,
 ) (<-chan container.WaitResponse, <-chan error) {
 	return c.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+}
+
+// PauseContainer pauses the main process of the given container without terminating it.
+func (c *Client) PauseContainer(ctx context.Context, containerID string) error {
+	return c.client.ContainerPause(ctx, containerID)
+}
+
+// ResumeContainer resumes the process execution within the container
+func (c *Client) ResumeContainer(ctx context.Context, containerID string) error {
+	return c.client.ContainerUnpause(ctx, containerID)
 }
 
 // StopContainer stops a running Docker container with a specified timeout.
@@ -265,6 +278,29 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 	}
 
 	return "", fmt.Errorf("unable to find container for %s=%s", label, value)
+}
+
+// GetImage returns detailed information about a Docker image.
+func (c *Client) GetImage(ctx context.Context, imageName string) (image.Summary, error) {
+	images, err := c.client.ImageList(ctx, image.ListOptions{All: true})
+	if err != nil {
+		return image.Summary{}, err
+	}
+
+	// If imageName does not contain a tag, we need to append ":latest" to the image name.
+	if !strings.Contains(imageName, ":") {
+		imageName = fmt.Sprintf("%s:latest", imageName)
+	}
+
+	for _, image := range images {
+		for _, tag := range image.RepoTags {
+			if tag == imageName {
+				return image, nil
+			}
+		}
+	}
+
+	return image.Summary{}, fmt.Errorf("unable to find image %s", imageName)
 }
 
 // PullImage pulls a Docker image from a registry.

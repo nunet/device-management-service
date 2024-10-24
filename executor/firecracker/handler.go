@@ -17,9 +17,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/firecracker-microvm/firecracker-go-sdk"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
+	fcmodels "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 
 	"gitlab.com/nunet/device-management-service/types"
+)
+
+const (
+	vmDestroyTimeout = time.Second * 10
 )
 
 // executionHandler is a struct that holds the necessary information to manage the execution of a firecracker VM.
@@ -55,8 +60,7 @@ func (h *executionHandler) run(ctx context.Context) {
 	h.running.Store(true)
 
 	defer func() {
-		destroyTimeout := time.Second * 10
-		if err := h.destroy(destroyTimeout); err != nil {
+		if err := h.destroy(vmDestroyTimeout); err != nil {
 			zlog.Sugar().Warnf("failed to destroy container: %v\n", err)
 		}
 		h.running.Store(false)
@@ -98,4 +102,42 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 	defer cancel()
 
 	return h.client.DestroyVM(ctx, h.machine, timeout)
+}
+
+// pause pauses the firecracker VM.
+func (h *executionHandler) pause(ctx context.Context) error {
+	return h.client.PauseVM(ctx, h.machine)
+}
+
+// resume resumes the firecracker VM.
+func (h *executionHandler) resume(ctx context.Context) error {
+	return h.client.ResumeVM(ctx, h.machine)
+}
+
+// status returns the result of the execution.
+func (h *executionHandler) status(ctx context.Context) (types.ExecutionStatus, error) {
+	if !h.active() {
+		if h.result != nil {
+			if h.result.ExitCode == types.ExecutionStatusCodeSuccess {
+				return types.ExecutionStatusSuccess, nil
+			}
+			return types.ExecutionStatusFailed, fmt.Errorf("VM exited: %v", h.result.ErrorMsg)
+		}
+		return types.ExecutionStatusPending, nil
+	}
+
+	info, err := h.machine.DescribeInstanceInfo(ctx)
+	if err != nil {
+		return types.ExecutionStatusFailed, fmt.Errorf("failed to get VM status: %v", err)
+	}
+	switch *info.State {
+	case fcmodels.InstanceInfoStateNotStarted:
+		return types.ExecutionStatusPending, nil
+	case fcmodels.InstanceInfoStateRunning:
+		return types.ExecutionStatusRunning, nil
+	case fcmodels.InstanceInfoStatePaused:
+		return types.ExecutionStatusPaused, nil
+	default:
+		return types.ExecutionStatusFailed, fmt.Errorf("unknown VM state: %s", *info.State)
+	}
 }

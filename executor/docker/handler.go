@@ -97,7 +97,7 @@ func (h *executionHandler) run(ctx context.Context) {
 			}
 			return
 		}
-		if containerJSON.ContainerJSONBase.State.OOMKilled {
+		if containerJSON.State.OOMKilled {
 			containerError = errors.New("container was killed due to OOM")
 			h.result = &types.ExecutionResult{
 				ExitCode: int(containerExitStatusCode),
@@ -146,6 +146,16 @@ func (h *executionHandler) run(ctx context.Context) {
 	}
 }
 
+// pause pauses the main process of the container without terminating it.
+func (h *executionHandler) pause(ctx context.Context) error {
+	return h.client.PauseContainer(ctx, h.containerID)
+}
+
+// resume resumes the process execution within the container
+func (h *executionHandler) resume(ctx context.Context) error {
+	return h.client.ResumeContainer(ctx, h.containerID)
+}
+
 // kill sends a stop signal to the container.
 func (h *executionHandler) kill(ctx context.Context) error {
 	timeout := int(DestroyTimeout)
@@ -192,4 +202,35 @@ func (h *executionHandler) outputStream(
 	}
 	// Gets the underlying reader, and provides data since the value of the `since` timestamp.
 	return h.client.GetOutputStream(ctx, h.containerID, since, request.Follow)
+}
+
+// status returns the result of the execution.
+func (h *executionHandler) status(ctx context.Context) (types.ExecutionStatus, error) {
+	if h.result != nil {
+		if h.result.ExitCode == types.ExecutionStatusCodeSuccess {
+			return types.ExecutionStatusSuccess, nil
+		}
+		return types.ExecutionStatusFailed, nil
+	}
+	info, err := h.client.InspectContainer(ctx, h.containerID)
+	if err != nil {
+		return types.ExecutionStatusFailed, fmt.Errorf("failed to get container status: %v", err)
+	}
+	switch info.State.Status {
+	case "created":
+		return types.ExecutionStatusPending, nil
+	case "running":
+		return types.ExecutionStatusRunning, nil
+	case "paused":
+		return types.ExecutionStatusPaused, nil
+	case "exited":
+		if info.State.ExitCode == 0 {
+			return types.ExecutionStatusSuccess, nil
+		}
+		return types.ExecutionStatusFailed, nil
+	case "dead":
+		return types.ExecutionStatusFailed, nil
+	default:
+		return types.ExecutionStatusFailed, fmt.Errorf("unknown container status: %s", info.State.Status)
+	}
 }

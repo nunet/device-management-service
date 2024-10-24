@@ -10,26 +10,24 @@ package docker_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
+	"github.com/google/uuid"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
 var (
-	defaultImage = "alpine"
-	defaultCmd   = []string{"echo", "hello world"}
-	defaultName  = "nunet-test-container"
+	defaultImage  = "alpine"
+	transientCmd  = []string{"echo", "hello world"}
+	persistentCmd = []string{"sh", "-c", "while true; do date; sleep 1; done"}
 )
 
 // ClientTestSuite is the test suite for the Docker client.
@@ -41,7 +39,7 @@ type ClientTestSuite struct {
 // SetupTest sets up the test suite by initializing a new Docker client.
 func (s *ClientTestSuite) SetupTest() {
 	c, err := docker.NewDockerClient()
-	require.NoError(s.T(), err)
+	s.NoError(err)
 	s.client = c
 }
 
@@ -67,7 +65,7 @@ func TestClientTestSuite(t *testing.T) {
 }
 
 // createTestContainer is a helper method to create a container for testing.
-func (s *ClientTestSuite) createTestContainer(name, image string, cmd []string) string {
+func (s *ClientTestSuite) createTestContainer(image string, cmd []string) string {
 	config := &container.Config{
 		Image: image,
 		Cmd:   cmd,
@@ -75,6 +73,12 @@ func (s *ClientTestSuite) createTestContainer(name, image string, cmd []string) 
 	hostConfig := &container.HostConfig{}
 	networkingConfig := &network.NetworkingConfig{}
 	platform := &v1.Platform{}
+	pullImage := true
+
+	_, err := s.client.GetImage(context.Background(), image)
+	if err == nil {
+		pullImage = false
+	}
 
 	id, err := s.client.CreateContainer(
 		context.Background(),
@@ -82,9 +86,12 @@ func (s *ClientTestSuite) createTestContainer(name, image string, cmd []string) 
 		hostConfig,
 		networkingConfig,
 		platform,
-		name,
+		fmt.Sprintf("nunet_test_container-%s", uuid.New()),
+		pullImage,
 	)
-	require.NoError(s.T(), err)
+
+	s.NoError(err)
+
 	s.T().Cleanup(func() {
 		timeout := int(docker.DestroyTimeout)
 		options := container.StopOptions{Timeout: &timeout}
@@ -96,63 +103,43 @@ func (s *ClientTestSuite) createTestContainer(name, image string, cmd []string) 
 
 // TestIsInstalled tests the IsInstalled method of the Docker client.
 func (s *ClientTestSuite) TestIsInstalled() {
-	assert.True(s.T(), s.client.IsInstalled(context.Background()))
+	s.True(s.client.IsInstalled(context.Background()))
 }
 
 // TestCreateContainer tests the CreateContainer method of the Docker client.
 func (s *ClientTestSuite) TestCreateContainer() {
-	randomSuffix, err := utils.RandomString(10)
-	require.NoError(s.T(), err)
-	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
-	assert.NotEmpty(s.T(), id)
+	id := s.createTestContainer(defaultImage, transientCmd)
+	s.NotEmpty(id)
 }
 
 // TestInspectContainer tests the InspectContainer method of the Docker client.
 func (s *ClientTestSuite) TestInspectContainer() {
-	randomSuffix, err := utils.RandomString(10)
-	require.NoError(s.T(), err)
-	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
-	assert.NotEmpty(s.T(), id)
+	id := s.createTestContainer(defaultImage, transientCmd)
+	s.Require().NotEmpty(id)
 
 	container, err := s.client.InspectContainer(context.Background(), id)
-	require.NoError(s.T(), err)
-	assert.Equal(s.T(), id, container.ID)
+	s.NoError(err)
+	s.Equal(id, container.ID)
 }
 
-// TestStartContainer tests the StartContainer method of the Docker client.
-func (s *ClientTestSuite) TestStartContainer() {
-	randomSuffix, err := utils.RandomString(10)
-	require.NoError(s.T(), err)
-	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
-	assert.NotEmpty(s.T(), id)
+// TestContainerLifecycle tests the lifecycle methods of the Docker client.
+func (s *ClientTestSuite) TestContainerLifecycle() {
+	id := s.createTestContainer(defaultImage, persistentCmd)
+	s.Require().NotEmpty(id)
 
-	err = s.client.StartContainer(context.Background(), id)
-	require.NoError(s.T(), err)
-}
+	err := s.client.StartContainer(context.Background(), id)
+	s.Require().NoError(err)
 
-// TestStopContainer tests the StopContainer method of the Docker client.
-func (s *ClientTestSuite) TestStopContainer() {
-	randomSuffix, err := utils.RandomString(10)
-	require.NoError(s.T(), err)
-	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
-	assert.NotEmpty(s.T(), id)
+	err = s.client.PauseContainer(context.Background(), id)
+	s.Require().NoError(err)
 
-	err = s.client.StartContainer(context.Background(), id)
-	require.NoError(s.T(), err)
+	err = s.client.ResumeContainer(context.Background(), id)
+	s.Require().NoError(err)
 
-	timeout := int(time.Second * 5)
-	options := container.StopOptions{Timeout: &timeout}
-	err = s.client.StopContainer(context.Background(), id, options)
-	require.NoError(s.T(), err)
-}
-
-// TestRemoveContainer tests the RemoveContainer method of the Docker client.
-func (s *ClientTestSuite) TestRemoveContainer() {
-	randomSuffix, err := utils.RandomString(10)
-	require.NoError(s.T(), err)
-	id := s.createTestContainer(defaultName+randomSuffix, defaultImage, defaultCmd)
-	assert.NotEmpty(s.T(), id)
+	stopTime := 0
+	err = s.client.StopContainer(context.Background(), id, container.StopOptions{Timeout: &stopTime})
+	s.Require().NoError(err)
 
 	err = s.client.RemoveContainer(context.Background(), id)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 }

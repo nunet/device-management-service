@@ -96,34 +96,17 @@ func (s *ClientTestSuite) createTestVM(socketPath string) *firecrackerSdk.Machin
 	}
 	m, err := s.client.CreateVM(context.Background(), cfg)
 	require.NoError(s.T(), err)
+
 	s.T().Cleanup(func() {
 		_ = s.client.DestroyVM(context.Background(), m, 10*time.Second)
 	})
-	go func(m *firecrackerSdk.Machine) {
-		time.Sleep(3 * time.Second)
-		_ = m.StopVMM()
-	}(m)
+
 	return m
 }
 
 // TestIsInstalled tests the IsInstalled method of the Firecracker client.
 func (s *ClientTestSuite) TestIsInstalled() {
 	assert.True(s.T(), s.client.IsInstalled(context.Background()))
-}
-
-// TestCreateVM tests the CreateVM method of the Firecracker client.
-func (s *ClientTestSuite) TestCreateVM() {
-	m := s.createTestVM(defaultSocketPath)
-	require.NotNil(s.T(), m)
-}
-
-// TestStartVM tests the StartVM method of the Firecracker client.
-func (s *ClientTestSuite) TestStartVM() {
-	m := s.createTestVM(defaultSocketPath)
-	require.NotNil(s.T(), m)
-
-	err := s.client.StartVM(context.Background(), m)
-	require.NoError(s.T(), err)
 }
 
 // TestFindVM tests the FindVM method of the Firecracker client.
@@ -137,4 +120,22 @@ func (s *ClientTestSuite) TestFindVM() {
 	vm, err := s.client.FindVM(context.Background(), m.Cfg.SocketPath)
 	require.NoError(s.T(), err)
 	require.NotNil(s.T(), vm)
+}
+
+// TestVMLifecycle tests the lifecycle of a Firecracker VM.
+func (s *ClientTestSuite) TestVMLifecycle() {
+	m := s.createTestVM(defaultSocketPath)
+	require.NotNil(s.T(), m)
+
+	err := s.client.StartVM(context.Background(), m)
+	require.NoError(s.T(), err)
+
+	err = s.client.PauseVM(context.Background(), m)
+	require.NoError(s.T(), err)
+
+	err = s.client.ResumeVM(context.Background(), m)
+	require.NoError(s.T(), err)
+
+	err = s.client.ShutdownVM(context.Background(), m)
+	require.NoError(s.T(), err)
 }

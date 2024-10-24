@@ -16,12 +16,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
-
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/pkg/errors"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -29,12 +28,17 @@ import (
 var ErrNotInstalled = errors.New("docker is not installed")
 
 const (
+	nanoCPUsPerCore = 1e9
+
 	labelExecutorName = "nunet-executor"
 	labelJobID        = "nunet-jobID"
 	labelExecutionID  = "nunet-executionID"
 
 	outputStreamCheckTickTime = 100 * time.Millisecond
 	outputStreamCheckTimeout  = 5 * time.Second
+
+	statusWaitTickTime = 100 * time.Millisecond
+	statusWaitTimeout  = 10 * time.Second
 )
 
 // Executor manages the lifecycle of Docker containers for execution requests.
@@ -105,6 +109,30 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	// run the container.
 	go handler.run(ctx)
 	return nil
+}
+
+// Pause pauses the container
+func (e *Executor) Pause(
+	ctx context.Context,
+	executionID string,
+) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.pause(ctx)
+}
+
+// Resume resumes the container
+func (e *Executor) Resume(
+	ctx context.Context,
+	executionID string,
+) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.resume(ctx)
 }
 
 // Wait initiates a wait for the completion of a specific execution using its
@@ -228,6 +256,53 @@ func (e *Executor) List() []types.ExecutionListItem {
 	return nil
 }
 
+// GetStatus returns the status of the execution identified by its executionID.
+// It returns the status of the execution and an error if the execution is not found or status is unknown.
+func (e *Executor) GetStatus(ctx context.Context, executionID string) (types.ExecutionStatus, error) {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return "", fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.status(ctx)
+}
+
+// WaitForStatus waits for the execution to reach a specific status.
+// It returns an error if the execution is not found or the status is unknown.
+func (e *Executor) WaitForStatus(
+	ctx context.Context,
+	executionID string,
+	status types.ExecutionStatus,
+	timeout *time.Duration,
+) error {
+	waitTimeout := statusWaitTimeout
+	if timeout != nil {
+		waitTimeout = *timeout
+	}
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	ticker := time.NewTicker(statusWaitTickTime)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			s, err := handler.status(ctx)
+			if err != nil {
+				return err
+			}
+			if s == status {
+				return nil
+			}
+		case <-time.After(waitTimeout):
+			return fmt.Errorf("execution (%s) did not reach status %s", executionID, status)
+		}
+	}
+}
+
 // Run initiates and waits for the completion of an execution in one call.
 // This method serves as a higher-level convenience function that
 // internally calls Start and Wait methods.
@@ -305,12 +380,15 @@ func (e *Executor) newDockerExecutionContainer(
 
 	containerConfig := container.Config{
 		Image:      dockerArgs.Image,
-		Tty:        true, // Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
 		Env:        dockerArgs.Environment,
 		Entrypoint: dockerArgs.Entrypoint,
 		Cmd:        dockerArgs.Cmd,
 		Labels:     e.containerLabels(params.JobID, params.ExecutionID),
 		WorkingDir: dockerArgs.WorkingDirectory,
+		// TODO (Tty): tty currently breaks the logs and consequently the `Run()` methods and `GetLogStream()`.
+		// to enable Tty, besides setting to true, we must handle the logs correctly.
+		// Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
+		// Tty:        true,
 	}
 
 	mounts, err := makeContainerMounts(params.Inputs, params.Outputs, params.ResultsDir)
@@ -321,10 +399,6 @@ func (e *Executor) newDockerExecutionContainer(
 	zlog.Sugar().Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
 	hostConfig := configureHostConfig(chosenGPUVendor, params, mounts)
 
-	if _, err = e.client.PullImage(ctx, dockerArgs.Image); err != nil {
-		return "", fmt.Errorf("failed to pull docker image: %w", err)
-	}
-
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
 		&containerConfig,
@@ -332,6 +406,7 @@ func (e *Executor) newDockerExecutionContainer(
 		nil,
 		nil,
 		labelExecutionValue(e.ID, params.JobID, params.ExecutionID),
+		true,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
@@ -343,6 +418,7 @@ func (e *Executor) newDockerExecutionContainer(
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
 func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, mounts []mount.Mount) container.HostConfig {
 	var hostConfig container.HostConfig
+
 	switch vendor {
 	case types.GPUVendorNvidia:
 		deviceIDs := make([]string, len(params.Resources.GPUs))
@@ -352,7 +428,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				DeviceRequests: []container.DeviceRequest{
 					{
@@ -370,7 +446,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -400,7 +476,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -415,7 +491,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 			},
 		}
