@@ -22,7 +22,7 @@ LDFLAGS := \
 
 GOFLAGS := "-buildvcs=false"
 
-.PHONY: all clean linux_amd64 darwin_arm64
+.PHONY: all clean linux_amd64 darwin_arm64 license
 
 all:
 	@if [ $(UNAME) = Linux ]; then\
@@ -80,6 +80,23 @@ clean:
 
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
+
+license:
+	@echo "  →→  \033[1;36mAdding license headers...\033[0m"
+	addlicense -v \
+		-l="apache" \
+		-f copyright.txt \
+		-c "NuNet" \
+		-ignore "**/*.md" \
+		-ignore "**/*.html" \
+		-ignore "**/*.css" \
+		-ignore "**/*.scss" \
+		-ignore "**/*.yml" \
+		-ignore "**/*.yaml" \
+		-ignore "**/*.js" \
+		-ignore "**/*.sh" \
+		-ignore "*Dockerfile" \
+		.
 
 arch=$(shell uname -m)
 FC_TEST_DATA_PATH = ./executor/firecracker/testdata
