@@ -8,6 +8,17 @@
 
 package types
 
+// ExecutionStatus is the status of an execution
+type ExecutionStatus string
+
+const (
+	ExecutionStatusPending ExecutionStatus = "pending"
+	ExecutionStatusRunning ExecutionStatus = "running"
+	ExecutionStatusPaused  ExecutionStatus = "paused"
+	ExecutionStatusFailed  ExecutionStatus = "failed"
+	ExecutionStatusSuccess ExecutionStatus = "success"
+)
+
 // ExecutionRequest is the request object for executing a job
 type ExecutionRequest struct {
 	JobID       string                   // ID of the job to execute

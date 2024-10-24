@@ -17,12 +17,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/firecracker-microvm/firecracker-go-sdk"
-	fcModels "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
+	fcmodels "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"go.uber.org/multierr"
 
 	"gitlab.com/nunet/device-management-service/types"
@@ -31,6 +32,14 @@ import (
 
 const (
 	socketDir = "/tmp"
+
+	DefaultCPUCount int64 = 1
+	DefaultMemSize  int64 = 50 * 1024
+
+	statusWaitTickTime = 100 * time.Millisecond
+	statusWaitTimeout  = 10 * time.Second
+
+	defaultKernelArgs = "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.unified_cgroup_hierarchy=0 systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init"
 )
 
 var ErrNotInstalled = errors.New("firecracker is not installed")
@@ -120,6 +129,30 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	// run the VM.
 	go handler.run(ctx)
 	return nil
+}
+
+// Pause pauses the container
+func (e *Executor) Pause(
+	ctx context.Context,
+	executionID string,
+) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.pause(ctx)
+}
+
+// Resume resumes the container
+func (e *Executor) Resume(
+	ctx context.Context,
+	executionID string,
+) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.resume(ctx)
 }
 
 // Wait initiates a wait for the completion of a specific execution using its
@@ -218,6 +251,53 @@ func (e *Executor) GetLogStream(_ context.Context, _ types.LogStreamRequest) (io
 	return nil, fmt.Errorf("GetLogStream is not implemented for Firecracker")
 }
 
+// GetStatus returns the status of the execution identified by the executionID.
+// It returns the status of the execution and an error if the execution is not found or status is unknown.
+func (e *Executor) GetStatus(ctx context.Context, executionID string) (types.ExecutionStatus, error) {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return "", fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.status(ctx)
+}
+
+// WaitForStatus waits for the execution to reach a specific status.
+// It returns an error if the execution is not found or the status is unknown.
+func (e *Executor) WaitForStatus(
+	ctx context.Context,
+	executionID string,
+	status types.ExecutionStatus,
+	timeout *time.Duration,
+) error {
+	waitTimeout := statusWaitTimeout
+	if timeout != nil {
+		waitTimeout = *timeout
+	}
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	ticker := time.NewTicker(statusWaitTickTime)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			s, err := handler.status(ctx)
+			if err != nil {
+				return err
+			}
+			if s >= status {
+				return nil
+			}
+		case <-time.After(waitTimeout):
+			return fmt.Errorf("execution (%s) did not reach status %s", executionID, status)
+		}
+	}
+}
+
 // Cleanup removes all resources associated with the executor.
 // This includes stopping and removing all running VMs and deleting their socket paths.
 func (e *Executor) Cleanup() error {
@@ -227,7 +307,7 @@ func (e *Executor) Cleanup() error {
 		wg.Add(1)
 		go func(handler *executionHandler, wg *sync.WaitGroup, errCh chan error) {
 			defer wg.Done()
-			errCh <- handler.destroy(time.Second * 10)
+			errCh <- handler.destroy(vmDestroyTimeout)
 		}(handler, &wg, errCh)
 		return true
 	})
@@ -258,13 +338,16 @@ func (e *Executor) newFirecrackerExecutionVM(
 		return nil, fmt.Errorf("failed to decode firecracker engine spec: %w", err)
 	}
 
+	fcArgs.KernelArgs = strings.Join([]string{defaultKernelArgs, fcArgs.KernelArgs}, " ")
+
 	fcConfig := firecracker.Config{
 		VMID:            params.ExecutionID,
 		SocketPath:      e.generateSocketPath(params.JobID, params.ExecutionID),
 		KernelImagePath: fcArgs.KernelImage,
 		InitrdPath:      fcArgs.Initrd,
 		KernelArgs:      fcArgs.KernelArgs,
-		MachineCfg: fcModels.MachineConfiguration{
+		LogLevel:        "Error",
+		MachineCfg: fcmodels.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(params.Resources.CPU.Cores)),
 			MemSizeMib: firecracker.Int64(int64(params.Resources.RAM.Size)),
 		},
@@ -299,8 +382,8 @@ func makeVMMounts(
 	inputs []*types.StorageVolumeExecutor,
 	outputs []*types.StorageVolumeExecutor,
 	resultsDir string,
-) ([]fcModels.Drive, error) {
-	var drives []fcModels.Drive
+) ([]fcmodels.Drive, error) {
+	var drives []fcmodels.Drive
 	drivesBuilder := firecracker.NewDrivesBuilder(rootFileSystem)
 	for _, input := range inputs {
 		drivesBuilder.AddDrive(input.Source, input.ReadOnly)

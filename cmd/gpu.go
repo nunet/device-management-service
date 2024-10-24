@@ -14,15 +14,12 @@ import (
 	"os"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/dms/hardware"
-	"gitlab.com/nunet/device-management-service/executor/docker"
-
 	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
-
+	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/types"
-
-	"github.com/spf13/cobra"
 )
 
 func newGPUCommand() *cobra.Command {
@@ -196,6 +193,7 @@ func newGPUTestCommand() *cobra.Command {
 				nil,
 				nil,
 				"nunet-gpu-test",
+				true,
 			)
 			if err != nil {
 				return fmt.Errorf("pulling Docker image: %v", err)

@@ -11,6 +11,7 @@ package null
 import (
 	"context"
 	"io"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/types"
@@ -62,5 +63,25 @@ func (e *Executor) List() []types.ExecutionListItem {
 
 // Cleanup does nothing and returns nil.
 func (e *Executor) Cleanup(_ context.Context) error {
+	return nil
+}
+
+// GetStatus returns an empty ExecutionStatus.
+func (e *Executor) GetStatus(_ context.Context, _ string) (types.ExecutionStatus, error) {
+	return "", nil
+}
+
+// Pause does nothing and returns nil.
+func (e *Executor) Pause(_ context.Context, _ string) error {
+	return nil
+}
+
+// Resume does nothing and returns nil.
+func (e *Executor) Resume(_ context.Context, _ string) error {
+	return nil
+}
+
+// WaitForStatus does nothing and returns nil.
+func (e *Executor) WaitForStatus(_ context.Context, _ string, _ types.ExecutionStatus, _ *time.Duration) error {
 	return nil
 }

@@ -18,7 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/firecracker-microvm/firecracker-go-sdk"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
+	fcmodels "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
 const pidCheckTickTime = 100 * time.Millisecond
@@ -54,7 +55,6 @@ func (c *Client) CreateVM(
 	cmd := firecracker.VMCommandBuilder{}.
 		WithSocketPath(cfg.SocketPath).
 		Build(ctx)
-
 	machineOpts := []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),
 	}
@@ -68,6 +68,11 @@ func (c *Client) StartVM(ctx context.Context, m *firecracker.Machine) error {
 	return m.Start(ctx)
 }
 
+// StopVM stops the Firecracker VM.
+func (c *Client) StopVM(_ context.Context, m *firecracker.Machine) error {
+	return m.StopVMM()
+}
+
 // ShutdownVM shuts down the Firecracker VM.
 func (c *Client) ShutdownVM(ctx context.Context, m *firecracker.Machine) error {
 	return m.Shutdown(ctx)
@@ -79,17 +84,23 @@ func (c *Client) DestroyVM(
 	m *firecracker.Machine,
 	timeout time.Duration,
 ) error {
-	// Get the PID of the Firecracker process and shut down the VM.
-	// If the process is still running after the timeout, kill it.
-	err := c.ShutdownVM(ctx, m)
-	if err != nil {
-		return fmt.Errorf("failed to shutdown vm: %w", err)
-	}
-
-	pid, _ := m.PID()
 	defer os.Remove(m.Cfg.SocketPath)
 
+	// Get the PID of the Firecracker process and shut down the VM.
+	// If the process is still running after the timeout, kill it.
+
 	// If the process is not running, return early.
+	pid, _ := m.PID()
+	if pid <= 0 {
+		return nil
+	}
+
+	err := c.ShutdownVM(ctx, m)
+	if err != nil {
+		return err
+	}
+
+	pid, _ = m.PID()
 	if pid <= 0 {
 		return nil
 	}
@@ -108,7 +119,7 @@ func (c *Client) DestroyVM(
 				done <- false
 				return
 			case <-ticker.C:
-				if pid, _ := m.PID(); pid <= 0 {
+				if pid, _ = m.PID(); pid <= 0 {
 					done <- true
 					return
 				}
@@ -127,6 +138,16 @@ func (c *Client) DestroyVM(
 	}
 
 	return nil
+}
+
+// PauseVM pauses the Firecracker VM.
+func (c *Client) PauseVM(ctx context.Context, m *firecracker.Machine) error {
+	return m.PauseVM(ctx)
+}
+
+// ResumeVM resumes the Firecracker VM.
+func (c *Client) ResumeVM(ctx context.Context, m *firecracker.Machine) error {
+	return m.ResumeVM(ctx)
 }
 
 // FindVM finds a Firecracker VM by its socket path.
@@ -154,7 +175,7 @@ func (c *Client) FindVM(ctx context.Context, socketPath string) (*firecracker.Ma
 		return nil, fmt.Errorf("failed to get instance info for socket %s: %v", socketPath, err)
 	}
 
-	if *info.State != "Running" {
+	if *info.State != fcmodels.InstanceInfoStateRunning {
 		return nil, fmt.Errorf(
 			"VM with socket %s is not running, current state: %s",
 			socketPath,
