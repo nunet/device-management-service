@@ -36,11 +36,15 @@ const (
 
 	MaxBidMultiplier = 8
 
-	SubnetCreateBehavior       = "/dms/node/subnet/create"
-	SubnetAddPeerBehavior      = "/dms/node/subnet/add-peer"
-	SubnetAcceptPeerBehavior   = "/dms/node/subnet/accept-peer"
-	SubnetMapPortBehavior      = "/dms/node/subnet/map-port"
-	SubnetDNSAddRecordBehavior = "/dms/node/subnet/dns/add-record"
+	SubnetCreateBehavior          = "/dms/node/subnet/create"
+	SubnetDestroyBehavior         = "/dms/node/subnet/destroy"
+	SubnetAddPeerBehavior         = "/dms/node/subnet/add-peer"
+	SubnetRemovePeerBehavior      = "/dms/node/subnet/remove-peer"
+	SubnetAcceptPeerBehavior      = "/dms/node/subnet/accept-peer"
+	SubnetMapPortBehavior         = "/dms/node/subnet/map-port"
+	SubnetDNSAddRecordBehavior    = "/dms/node/subnet/dns/add-record"
+	SubnetUnmapPortBehavior       = "/dms/node/subnet/unmap-port"
+	SubnetDNSRemoveRecordBehavior = "/dms/node/subnet/dns/remove-record"
 )
 
 type VerifyEdgeConstraintRequest struct {
@@ -119,6 +123,15 @@ type SubnetCreateResponse struct {
 	Error string
 }
 
+type SubnetDestroyRequest struct {
+	SubnetID string
+}
+
+type SubnetDestroyResponse struct {
+	OK    bool
+	Error string
+}
+
 type SubnetAddPeerRequest struct {
 	SubnetID string
 	PeerID   string
@@ -126,6 +139,16 @@ type SubnetAddPeerRequest struct {
 }
 
 type SubnetAddPeerResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetRemovePeerRequest struct {
+	SubnetID string
+	PeerID   string
+}
+
+type SubnetRemovePeerResponse struct {
 	OK    bool
 	Error string
 }
@@ -142,6 +165,7 @@ type SubnetAcceptPeerResponse struct {
 }
 
 type SubnetMapPortRequest struct {
+	SubnetID   string
 	Protocol   string
 	SourceIP   string
 	SourcePort string
@@ -161,6 +185,30 @@ type SubnetDNSAddRecordRequest struct {
 }
 
 type SubnetDNSAddRecordResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetUnmapPortRequest struct {
+	SubnetID   string
+	Protocol   string
+	SourceIP   string
+	SourcePort string
+	DestIP     string
+	DestPort   string
+}
+
+type SubnetUnmapPortResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetDNSRemoveRecordRequest struct {
+	SubnetID   string
+	DomainName string
+}
+
+type SubnetDNSRemoveRecordResponse struct {
 	OK    bool
 	Error string
 }

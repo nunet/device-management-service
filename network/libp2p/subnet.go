@@ -46,7 +46,11 @@ type subnet struct {
 	}
 
 	mx     sync.Mutex
-	ifaces map[string]*tun.TUN
+	ifaces map[string]struct {
+		tun    *tun.TUN
+		ctx    context.Context
+		cancel context.CancelFunc
+	}
 
 	io struct {
 		mx      sync.RWMutex
@@ -58,6 +62,12 @@ type subnet struct {
 
 	dnsmx      sync.RWMutex
 	dnsRecords map[string]string
+
+	portMapping map[string]*struct {
+		destPort string
+		destIP   string
+		srcIP    string
+	}
 }
 
 func (l *Libp2p) CreateSubnet(ctx context.Context, subnetID string, routingTable map[string]string) error {
@@ -88,6 +98,54 @@ func (l *Libp2p) CreateSubnet(ctx context.Context, subnetID string, routingTable
 		}
 	}
 	l.subnets[subnetID] = s
+	return nil
+}
+
+func (l *Libp2p) DestroySubnet(subnetID string) error {
+	s, ok := l.subnets[subnetID]
+	if !ok {
+		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
+	}
+
+	for ip := range s.ifaces {
+		s.ifaces[ip].cancel()
+		_ = s.ifaces[ip].tun.Down()
+		name := s.ifaces[ip].tun.Iface.Name()
+		_ = tun.Delete(name)
+	}
+
+	s.mx.Lock()
+	s.ifaces = make(map[string]struct {
+		tun    *tun.TUN
+		ctx    context.Context
+		cancel context.CancelFunc
+	})
+	s.mx.Unlock()
+
+	s.io.mx.Lock()
+	for _, ms := range s.io.streams {
+		ms.mx.Lock()
+		_ = ms.stream.Reset()
+		ms.mx.Unlock()
+	}
+	s.io.streams = make(map[string]*struct {
+		mx     sync.Mutex
+		stream network.Stream
+	})
+	s.io.mx.Unlock()
+
+	s.dnsmx.Lock()
+	s.dnsRecords = make(map[string]string)
+	s.dnsmx.Unlock()
+
+	s.info.rtable.Clear()
+
+	for sourcePort, mapping := range s.portMapping {
+		_ = l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
+	}
+
+	l.UnregisterMessageHandler(PacketExchangeProtocolID)
+	delete(l.subnets, subnetID)
 	return nil
 }
 
@@ -137,12 +195,52 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 		return fmt.Errorf("failed to bring up tun interface: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(s.ctx)
 	s.mx.Lock()
-	s.ifaces[ipAddr.String()] = iface
+	s.ifaces[ipAddr.String()] = struct {
+		tun    *tun.TUN
+		ctx    context.Context
+		cancel context.CancelFunc
+	}{
+		tun:    iface,
+		ctx:    ctx,
+		cancel: cancel,
+	}
 	s.mx.Unlock()
 
-	go s.readPackets(s.ctx, iface)
+	go s.readPackets(ctx, iface)
 
+	return nil
+}
+
+func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
+	s, ok := l.subnets[subnetID]
+	if !ok {
+		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
+	}
+
+	peerIDObj, err := peer.Decode(peerID)
+	if err != nil {
+		return fmt.Errorf("failed to decode peer ID %s: %w", peerID, err)
+	}
+
+	ip, ok := s.info.rtable.Get(peerIDObj)
+	if !ok {
+		return fmt.Errorf("peer with ID %s is not in the subnet", peerID)
+	}
+
+	s.mx.Lock()
+	iface, ok := s.ifaces[ip]
+	if ok {
+		iface.cancel()
+		name := iface.tun.Iface.Name()
+		_ = iface.tun.Down()
+		_ = tun.Delete(name)
+		delete(s.ifaces, ip)
+	}
+	s.mx.Unlock()
+
+	s.info.rtable.Remove(peerIDObj)
 	return nil
 }
 
@@ -167,7 +265,16 @@ func (l *Libp2p) AcceptSubnetPeer(subnetID, peerID, ip string) error {
 	return nil
 }
 
-func (l *Libp2p) MapPort(protocol, sourceIP, sourcePort, destIP, destPort string) error {
+func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error {
+	s, ok := l.subnets[subnetID]
+	if !ok {
+		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
+	}
+
+	if _, ok := s.portMapping[sourcePort]; ok {
+		return fmt.Errorf("port %s is already mapped", sourcePort)
+	}
+
 	// TODO track the port so that we can unmap it when we tear down the subnet
 	cmd := exec.Command(
 		"iptables",
@@ -208,12 +315,76 @@ func (l *Libp2p) MapPort(protocol, sourceIP, sourcePort, destIP, destPort string
 		return fmt.Errorf("error executing ip tables command: %w", err)
 	}
 
+	s.portMapping[sourcePort] = &struct {
+		destPort string
+		destIP   string
+		srcIP    string
+	}{
+		destPort: destPort,
+		destIP:   destIP,
+		srcIP:    sourceIP,
+	}
+
 	return nil
 }
 
-func (l *Libp2p) UnmapPort(protocol, sourceIP, sourcePort, destIP, destPort string) error { //nolint
-	// TODO
-	return fmt.Errorf("TODO UnmapPort")
+func (l *Libp2p) UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error {
+	s, ok := l.subnets[subnetID]
+	if !ok {
+		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
+	}
+
+	mapping, ok := s.portMapping[sourcePort]
+	if !ok {
+		return fmt.Errorf("port %s is not mapped", sourcePort)
+	}
+
+	if mapping.destIP != destIP || mapping.destPort != destPort || mapping.srcIP != sourceIP {
+		return fmt.Errorf("port %s is not mapped to %s:%s", sourcePort, destIP, destPort)
+	}
+
+	cmd := exec.Command(
+		"iptables",
+		"-t", "nat",
+		"-D", "PREROUTING",
+		"-d", sourceIP,
+		"-p", protocol,
+		"--dport", sourcePort,
+		"-j", "DNAT",
+		"--to-destination", destIP+":"+destPort)
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("error executing iptables PREROUTING command: %w", err)
+	}
+
+	cmd = exec.Command(
+		"iptables",
+		"-D", "FORWARD",
+		"-p", "tcp",
+		"-d", destIP,
+		"--dport", destPort,
+		"-j", "ACCEPT")
+
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("error executing iptables FORWARD command: %w", err)
+	}
+
+	cmd = exec.Command(
+		"iptables",
+		"-t", "nat",
+		"-D", "POSTROUTING",
+		"-j", "MASQUERADE")
+
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("error executing iptables POSTROUTING command: %w", err)
+	}
+
+	delete(s.portMapping, sourcePort)
+
+	return nil
 }
 
 // AddDNSRecord adds a dns record to our local resolver
@@ -225,6 +396,19 @@ func (l *Libp2p) AddSubnetDNSRecord(subnetID, name, ip string) error {
 
 	s.dnsmx.Lock()
 	s.dnsRecords[name] = ip
+	s.dnsmx.Unlock()
+
+	return nil
+}
+
+func (l *Libp2p) RemoveSubnetDNSRecord(subnetID, name string) error {
+	s, ok := l.subnets[subnetID]
+	if !ok {
+		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
+	}
+
+	s.dnsmx.Lock()
+	delete(s.dnsRecords, name)
 	s.dnsmx.Unlock()
 
 	return nil
@@ -278,7 +462,11 @@ func newSubnet(ctx context.Context, l *Libp2p) *subnet {
 		}{
 			rtable: NewRoutingTable(),
 		},
-		ifaces: make(map[string]*tun.TUN),
+		ifaces: make(map[string]struct {
+			tun    *tun.TUN
+			ctx    context.Context
+			cancel context.CancelFunc
+		}),
 		io: struct {
 			mx      sync.RWMutex
 			streams map[string]*struct {
@@ -292,6 +480,11 @@ func newSubnet(ctx context.Context, l *Libp2p) *subnet {
 			}),
 		},
 		dnsRecords: map[string]string{},
+		portMapping: map[string]*struct {
+			destPort string
+			destIP   string
+			srcIP    string
+		}{},
 	}
 }
 
@@ -311,7 +504,7 @@ func (s *subnet) readPackets(ctx context.Context, iface *tun.TUN) {
 					log.Debug("tun device closed, abandoning read loop...", err, "subnet", s.info.id)
 					return
 				} else if err != nil {
-					log.Error("failed to read packet from tun device", err, "subnet", s.info.id)
+					log.Error("failed to read packet from tun device ", err, "subnet", s.info.id)
 					continue
 				}
 
@@ -417,7 +610,7 @@ func (s *subnet) Route(destIP string, packet []byte, plen int) {
 	if _, ok := s.ifaces[destIP]; ok {
 		log.Debug("found destination ip in tuns table", "subnet", s.info.id, "dstIP", destIP)
 		// if so, write to the tun
-		_, _ = s.ifaces[destIP].Iface.Write(packet[:plen])
+		_, _ = s.ifaces[destIP].tun.Iface.Write(packet[:plen])
 		return
 	}
 
@@ -596,8 +789,8 @@ func (s *subnet) writePackets(stream network.Stream) {
 				// if no tun is found, drop the packet
 				s.mx.Lock()
 				if iface, ok := s.ifaces[destIP]; ok {
-					log.Debug("writing packet to tun device", "tun", iface.Iface.Name(), "subnet", s.info.id, "dstIP", destIP)
-					_, _ = iface.Iface.Write(packet[:plen])
+					log.Debug("writing packet to tun device", "tun", iface.tun.Iface.Name(), "subnet", s.info.id, "dstIP", destIP)
+					_, _ = iface.tun.Iface.Write(packet[:plen])
 				} else {
 					// drop the packet
 					log.Debug("unrecognized destination ip, no tun device found for ip", "subnet", s.info.id, "dstIP", destIP)

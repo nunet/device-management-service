@@ -410,6 +410,32 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
 	},
 
+	jobs.SubnetDestroyBehavior: {
+		Payload: func() any { return &jobs.SubnetDestroyRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetDestroyRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetDestroyRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Destroy a subnet",
+		Long: `Invokes the /dms/node/subnet/destroy behavior on an actor
+
+This behavior destroys the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/destroy --subnet-id <subnet_id>`,
+	},
+
 	jobs.SubnetAddPeerBehavior: {
 		Payload: func() any { return &jobs.SubnetAddPeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -438,6 +464,34 @@ This behavior adds a peer to the specified subnet.
 
 Examples:
   nunet actor cmd --context user /dms/node/subnet/add-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
+	},
+
+	jobs.SubnetRemovePeerBehavior: {
+		Payload: func() any { return &jobs.SubnetRemovePeerRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetRemovePeerRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("peer-id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetRemovePeerRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Remove a peer from a subnet",
+		Long: `Invokes the /dms/node/subnet/remove-peer behavior on an actor
+
+This behavior removes a peer from the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/remove-peer --subnet-id <subnet_id> --peer-id <peer_id>`,
 	},
 
 	jobs.SubnetAcceptPeerBehavior: {
@@ -475,10 +529,11 @@ Examples:
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetMapPortRequest)
 
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "i", "", "subnet-id (required)")
 			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
 			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
 			cmd.Flags().StringVarP(&p.SourcePort, "source-port", "o", "", "source port (required)")
-			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "i", "", "destination IP address (required)")
+			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "d", "", "destination IP address (required)")
 			cmd.Flags().StringVarP(&p.DestPort, "dest-port", "n", "", "destination port (required)")
 			_ = cmd.MarkFlagRequired("protocol")
 			_ = cmd.MarkFlagRequired("source-ip")
@@ -531,6 +586,71 @@ This behavior adds a DNS record to the local resolver.
 
 Examples:
   nunet actor cmd --context user /dms/node/subnet/dns/add-record --subnet-id <subnet_id> --name <record_name> --ip <ip>`,
+	},
+
+	jobs.SubnetUnmapPortBehavior: {
+		Payload: func() any { return &jobs.SubnetUnmapPortRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetUnmapPortRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "i", "", "subnet-id (required)")
+			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
+			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
+			cmd.Flags().StringVarP(&p.SourcePort, "source-port", "o", "", "source port (required)")
+			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "d", "", "destination IP address (required)")
+			cmd.Flags().StringVarP(&p.DestPort, "dest-port", "n", "", "destination port (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("protocol")
+			_ = cmd.MarkFlagRequired("source-ip")
+			_ = cmd.MarkFlagRequired("source-port")
+			_ = cmd.MarkFlagRequired("dest-ip")
+			_ = cmd.MarkFlagRequired("dest-port")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetUnmapPortRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Unmap a port",
+		Long: `Invokes the /dms/node/subnet/unmap-port behavior on an actor
+
+This behavior removes a port mapping.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/unmap-port --subnet-id <subnet_id> --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
+	},
+
+	jobs.SubnetDNSRemoveRecordBehavior: {
+		Payload: func() any { return &jobs.SubnetDNSRemoveRecordRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetDNSRemoveRecordRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("name")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetDNSRemoveRecordRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Remove a DNS record",
+		Long: `Invokes the /dms/node/subnet/dns/remove-record behavior on an actor
+
+This behavior removes a DNS record from the local resolver.
+
+Examples:
+
+  nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
 }
 

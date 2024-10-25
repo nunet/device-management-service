@@ -11,7 +11,10 @@ package libp2p
 import (
 	"context"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
@@ -32,7 +35,7 @@ func TestSubnetCreate(t *testing.T) {
 	assert.Equal(t, 0, len(peer1.subnets["subnet1"].info.rtable.All()))
 }
 
-func TestSubnetAddPeer(t *testing.T) {
+func TestSubnetAddRemovePeer(t *testing.T) {
 	peer1 := createPeer(t, 0)
 	require.NotNil(t, peer1)
 
@@ -43,25 +46,185 @@ func TestSubnetAddPeer(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("requires root privileges")
 	}
-	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.1")
+	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(peer1.subnets))
 	assert.Equal(t, 1, len(peer1.subnets["subnet1"].ifaces))
 	assert.Equal(t, 1, len(peer1.subnets["subnet1"].info.rtable.All()))
 
-	peerID, ok := peer1.subnets["subnet1"].info.rtable.Get(peer1.Host.ID())
+	ip, ok := peer1.subnets["subnet1"].info.rtable.Get(peer1.Host.ID())
 	require.True(t, ok)
 
-	assert.Equal(t, "10.0.0.1", peerID)
+	assert.Equal(t, "10.0.0.2", ip)
 
-	ip, ok := peer1.subnets["subnet1"].info.rtable.GetByIP("10.0.0.1")
+	peerID, ok := peer1.subnets["subnet1"].info.rtable.GetByIP("10.0.0.2")
 	require.True(t, ok)
 
-	assert.Equal(t, peer1.Host.ID(), ip)
+	assert.Equal(t, peer1.Host.ID(), peerID)
+
+	err = peer1.RemoveSubnetPeer("subnet1", peer1.Host.ID().String())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, len(peer1.subnets))
+	assert.Equal(t, 0, len(peer1.subnets["subnet1"].ifaces))
+
+	assert.Equal(t, 0, len(peer1.subnets["subnet1"].info.rtable.All()))
 }
 
-func createPeer(t *testing.T, port int) *Libp2p {
+func TestSubnetMapUnmapPorts(t *testing.T) {
+	peer1 := createPeer(t, 0)
+	require.NotNil(t, peer1)
+
+	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
+	require.NoError(t, err)
+
+	// requires root privileges - skipping if not root
+	if os.Getuid() != 0 {
+		t.Skip("requires root privileges")
+	}
+
+	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
+	require.NoError(t, err)
+
+	cmd := exec.Command("sh", "-c", "sudo iptables -t nat -L PREROUTING -v -n")
+	op, err := cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.True(t, strings.Contains(string(op), "tcp dpt:8080 to:10.0.0.1:8888"))
+
+	cmd = exec.Command("sh", "-c", "sudo iptables -L FORWARD -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.True(t, strings.Contains(string(op), "tcp dpt:8888"))
+
+	// Command to list POSTROUTING rules in the nat table and grep for the port
+	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L POSTROUTING -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.True(t, strings.Contains(string(op), "0.0.0.0/0"))
+
+	assert.Equal(t, 1, len(peer1.subnets["subnet1"].portMapping))
+	assert.Equal(t, "8888", peer1.subnets["subnet1"].portMapping["8080"].destPort)
+	assert.Equal(t, "10.0.0.1", peer1.subnets["subnet1"].portMapping["8080"].destIP)
+	assert.Equal(t, "0.0.0.0", peer1.subnets["subnet1"].portMapping["8080"].srcIP)
+
+	err = peer1.UnmapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "9999")
+	require.Error(t, err, "is not mapped to")
+
+	err = peer1.UnmapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
+	require.NoError(t, err)
+
+	// port := "8080"
+	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L PREROUTING -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(op), "tcp dpt:8080 to:"))
+
+	cmd = exec.Command("sh", "-c", "sudo iptables -L FORWARD -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(op), "tcp dpt:8888"))
+
+	// Command to list POSTROUTING rules in the nat table and grep for the port
+	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L POSTROUTING -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(op), "0.0.0.0/0"))
+
+	assert.Equal(t, 0, len(peer1.subnets["subnet1"].portMapping))
+}
+
+func TestSubnetAddRemoveDNSRecord(t *testing.T) {
+	peer1 := createPeer(t, 0)
+	require.NotNil(t, peer1)
+
+	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
+	require.NoError(t, err)
+
+	// requires root privileges - skipping if not root
+	if os.Getuid() != 0 {
+		t.Skip("requires root privileges")
+	}
+
+	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
+	require.NoError(t, err)
+
+	err = peer1.AddSubnetDNSRecord("subnet1", "example.com.", "10.20.30.40")
+	require.NoError(t, err)
+
+	<-time.After(3 * time.Second)
+
+	cmd := exec.Command("sh", "-c", "dig +short @10.0.0.1 example.com")
+	op, err := cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "10.20.30.40", strings.TrimSpace(string(op)))
+
+	err = peer1.RemoveSubnetDNSRecord("subnet1", "example.com.")
+	require.NoError(t, err)
+
+	cmd = exec.Command("sh", "-c", "dig +short @10.0.0.1")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "", strings.TrimSpace(string(op)))
+}
+
+func TestSubnetDestroy(t *testing.T) {
+	peer1 := createPeer(t, 0)
+	require.NotNil(t, peer1)
+
+	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
+	require.NoError(t, err)
+
+	// requires root privileges - skipping if not root
+	if os.Getuid() != 0 {
+		t.Skip("requires root privileges")
+	}
+	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
+	require.NoError(t, err)
+
+	err = peer1.AddSubnetDNSRecord("subnet1", "example.com.", "10.20.30.40")
+	require.NoError(t, err)
+
+	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
+	require.NoError(t, err)
+
+	err = peer1.DestroySubnet("subnet1")
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, len(peer1.subnets))
+
+	cmd := exec.Command("sh", "-c", "dig +short @10.0.0.1")
+	op, err := cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "", strings.TrimSpace(string(op)))
+
+	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L PREROUTING -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(op), "tcp dpt:8080 to:"))
+
+	cmd = exec.Command("sh", "-c", "sudo iptables -L FORWARD -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(op), "tcp dpt:8888"))
+
+	// Command to list POSTROUTING rules in the nat table and grep for the port
+	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L POSTROUTING -v -n")
+	op, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(op), "0.0.0.0/0"))
+
+	<-time.After(15 * time.Second)
+
+	// // Command to list POSTROUTING rules in the nat table and grep for the port
+	// cmd = exec.Command("sh", "-c", "ifconfig | grep dms")
+	// op, err = cmd.CombinedOutput()
+	// require.NoError(t, err)
+	// fmt.Println("PPPPP", string(op))
+	// assert.True(t, 0 == len(strings.TrimSpace(string(op))))
+}
+
+func createPeer(t *testing.T, port int) *Libp2p { //nolint
 	peerConfig := setupPeerConfig(t, port, []multiaddr.Multiaddr{})
 	peer1, err := New(peerConfig, afero.NewMemMapFs())
 

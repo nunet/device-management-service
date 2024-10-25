@@ -21,6 +21,7 @@ type SubnetRoutingTable interface {
 	RemoveByIP(addr string)
 	GetByIP(addr string) (peer.ID, bool)
 	All() map[peer.ID]string
+	Clear()
 }
 
 type rtable struct {
@@ -95,4 +96,12 @@ func (rt *rtable) All() map[peer.ID]string {
 		idx[k] = v
 	}
 	return idx
+}
+
+func (rt *rtable) Clear() {
+	rt.mx.Lock()
+	defer rt.mx.Unlock()
+
+	rt.idx = make(map[peer.ID]string)
+	rt.revIdx = make(map[string]peer.ID)
 }
