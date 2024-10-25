@@ -272,8 +272,14 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.SubnetCreateBehavior: {
 			fn: n.handleSubnetCreate,
 		},
+		jobs.SubnetDestroyBehavior: {
+			fn: n.handleSubnetDestroy,
+		},
 		jobs.SubnetAddPeerBehavior: {
 			fn: n.handleSubnetAddPeer,
+		},
+		jobs.SubnetRemovePeerBehavior: {
+			fn: n.handleSubnetRemovePeer,
 		},
 		jobs.SubnetAcceptPeerBehavior: {
 			fn: n.handleSubnetAcceptPeer,
@@ -283,6 +289,12 @@ func New(onboarder *onboarding.Onboarding,
 		},
 		jobs.SubnetDNSAddRecordBehavior: {
 			fn: n.handleSubnetDNSAddRecord,
+		},
+		jobs.SubnetUnmapPortBehavior: {
+			fn: n.handleSubnetUnmapPort,
+		},
+		jobs.SubnetDNSRemoveRecordBehavior: {
+			fn: n.handleSubnetDNSRemoveRecord,
 		},
 		jobs.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,

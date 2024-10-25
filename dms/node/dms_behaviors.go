@@ -465,7 +465,7 @@ func (n *Node) handleSubnetMapPort(msg actor.Envelope) {
 	}
 
 	resp := jobs.SubnetMapPortResponse{}
-	err := n.network.MapPort(request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
+	err := n.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -511,6 +511,84 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	}
 
 	resp.Allocations = allocations
+
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetUnmapPort(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetUnmapPortRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetUnmapPortResponse{}
+	err := n.network.UnmapPort(
+		request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort,
+	)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetDNSRemoveRecordRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetDNSRemoveRecordResponse{}
+	err := n.network.RemoveSubnetDNSRecord(request.SubnetID, request.DomainName)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetDestroyRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetDestroyResponse{}
+	err := n.network.DestroySubnet(request.SubnetID)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetRemovePeer(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetRemovePeerRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetRemovePeerResponse{}
+	err := n.network.RemoveSubnetPeer(request.SubnetID, request.PeerID)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
 
 	n.sendReply(msg, resp)
 }

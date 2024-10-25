@@ -101,20 +101,29 @@ type Network interface {
 	// CreateSubnet creates a subnet with the given subnetID and CIDR
 	CreateSubnet(ctx context.Context, subnetID string, routingTable map[string]string) error
 
+	// RemoveSubnet removes a subnet
+	DestroySubnet(subnetID string) error
+
 	// AddSubnetPeer adds a peer to the subnet
 	AddSubnetPeer(subnetID, peerID, ip string) error
+
+	// RemoveSubnetPeer removes a peer from the subnet
+	RemoveSubnetPeer(subnetID, peerID string) error
 
 	// AcceptSubnetPeer accepts a peer to the subnet
 	AcceptSubnetPeer(subnetID, peerID, ip string) error
 
 	// MapPort maps a sourceIp:sourcePort to destIP:destPort
-	MapPort(protocol, sourceIP, sourcePort, destIP, destPort string) error
+	MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
 
 	// UnmapPort removes a previous port map
-	UnmapPort(protocol, sourceIP, sourcePort, destIP, destPort string) error
+	UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
 
 	// AddDNSRecord adds a dns record to our local resolver
 	AddSubnetDNSRecord(subnetID, name, ip string) error
+
+	// RemoveDNSRecord removes a dns record from our local resolver
+	RemoveSubnetDNSRecord(subnetID, name string) error
 }
 
 // NewNetwork returns a new network given the configuration.
