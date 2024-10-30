@@ -73,32 +73,37 @@ func TestSubnetAddRemovePeer(t *testing.T) {
 }
 
 func TestSubnetMapUnmapPorts(t *testing.T) {
-	peer1 := createPeer(t, 0)
-	require.NotNil(t, peer1)
-
-	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
-	require.NoError(t, err)
+	_, err := exec.LookPath("iptables")
+	if err != nil {
+		t.Skip("iptables not found in path")
+	}
 
 	// requires root privileges - skipping if not root
 	if os.Getuid() != 0 {
 		t.Skip("requires root privileges")
 	}
 
+	peer1 := createPeer(t, 0)
+	require.NotNil(t, peer1)
+
+	err = peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
+	require.NoError(t, err)
+
 	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
 	require.NoError(t, err)
 
-	cmd := exec.Command("sh", "-c", "sudo iptables -t nat -L PREROUTING -v -n")
+	cmd := exec.Command("sh", "-c", "iptables -t nat -L PREROUTING -v -n")
 	op, err := cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(string(op), "tcp dpt:8080 to:10.0.0.1:8888"))
 
-	cmd = exec.Command("sh", "-c", "sudo iptables -L FORWARD -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -L FORWARD -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(string(op), "tcp dpt:8888"))
 
 	// Command to list POSTROUTING rules in the nat table and grep for the port
-	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L POSTROUTING -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -t nat -L POSTROUTING -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(string(op), "0.0.0.0/0"))
@@ -115,18 +120,18 @@ func TestSubnetMapUnmapPorts(t *testing.T) {
 	require.NoError(t, err)
 
 	// port := "8080"
-	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L PREROUTING -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -t nat -L PREROUTING -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "tcp dpt:8080 to:"))
 
-	cmd = exec.Command("sh", "-c", "sudo iptables -L FORWARD -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -L FORWARD -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "tcp dpt:8888"))
 
 	// Command to list POSTROUTING rules in the nat table and grep for the port
-	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L POSTROUTING -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -t nat -L POSTROUTING -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "0.0.0.0/0"))
@@ -135,16 +140,22 @@ func TestSubnetMapUnmapPorts(t *testing.T) {
 }
 
 func TestSubnetAddRemoveDNSRecord(t *testing.T) {
-	peer1 := createPeer(t, 0)
-	require.NotNil(t, peer1)
-
-	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
-	require.NoError(t, err)
+	// requires iptables and dig
+	_, err := exec.LookPath("iptables")
+	if err != nil {
+		t.Skip("iptables not found in path")
+	}
 
 	// requires root privileges - skipping if not root
 	if os.Getuid() != 0 {
 		t.Skip("requires root privileges")
 	}
+
+	peer1 := createPeer(t, 0)
+	require.NotNil(t, peer1)
+
+	err = peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
+	require.NoError(t, err)
 
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
@@ -153,6 +164,12 @@ func TestSubnetAddRemoveDNSRecord(t *testing.T) {
 	require.NoError(t, err)
 
 	<-time.After(3 * time.Second)
+
+	// requires dig
+	_, err = exec.LookPath("dig")
+	if err != nil {
+		t.Skip("dig not found in path")
+	}
 
 	cmd := exec.Command("sh", "-c", "dig +short @10.0.0.1 example.com")
 	op, err := cmd.CombinedOutput()
@@ -169,16 +186,23 @@ func TestSubnetAddRemoveDNSRecord(t *testing.T) {
 }
 
 func TestSubnetDestroy(t *testing.T) {
-	peer1 := createPeer(t, 0)
-	require.NotNil(t, peer1)
-
-	err := peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
-	require.NoError(t, err)
+	// requires iptables and dig
+	_, err := exec.LookPath("iptables")
+	if err != nil {
+		t.Skip("iptables not found in path")
+	}
 
 	// requires root privileges - skipping if not root
 	if os.Getuid() != 0 {
 		t.Skip("requires root privileges")
 	}
+
+	peer1 := createPeer(t, 0)
+	require.NotNil(t, peer1)
+
+	err = peer1.CreateSubnet(context.Background(), "subnet1", map[string]string{})
+	require.NoError(t, err)
+
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
@@ -193,23 +217,29 @@ func TestSubnetDestroy(t *testing.T) {
 
 	assert.Equal(t, 0, len(peer1.subnets))
 
+	// requires dig
+	_, err = exec.LookPath("dig")
+	if err != nil {
+		t.Skip("dig not found in path")
+	}
+
 	cmd := exec.Command("sh", "-c", "dig +short @10.0.0.1")
 	op, err := cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.Equal(t, "", strings.TrimSpace(string(op)))
 
-	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L PREROUTING -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -t nat -L PREROUTING -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "tcp dpt:8080 to:"))
 
-	cmd = exec.Command("sh", "-c", "sudo iptables -L FORWARD -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -L FORWARD -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "tcp dpt:8888"))
 
 	// Command to list POSTROUTING rules in the nat table and grep for the port
-	cmd = exec.Command("sh", "-c", "sudo iptables -t nat -L POSTROUTING -v -n")
+	cmd = exec.Command("sh", "-c", "iptables -t nat -L POSTROUTING -v -n")
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "0.0.0.0/0"))

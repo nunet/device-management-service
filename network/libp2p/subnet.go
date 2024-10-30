@@ -16,18 +16,17 @@ import (
 	"io/fs"
 	"math/rand"
 	"net"
-	"os/exec"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	network "github.com/libp2p/go-libp2p/core/network"
-	peer "github.com/libp2p/go-libp2p/core/peer"
-	"gitlab.com/nunet/device-management-service/network/libp2p/tun"
-	"gitlab.com/nunet/device-management-service/types"
-
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	network "github.com/libp2p/go-libp2p/core/network"
+	peer "github.com/libp2p/go-libp2p/core/peer"
+
+	"gitlab.com/nunet/device-management-service/lib/sys"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -47,7 +46,7 @@ type subnet struct {
 
 	mx     sync.Mutex
 	ifaces map[string]struct {
-		tun    *tun.TUN
+		tun    *sys.NetInterface
 		ctx    context.Context
 		cancel context.CancelFunc
 	}
@@ -110,13 +109,12 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 	for ip := range s.ifaces {
 		s.ifaces[ip].cancel()
 		_ = s.ifaces[ip].tun.Down()
-		name := s.ifaces[ip].tun.Iface.Name()
-		_ = tun.Delete(name)
+		_ = s.ifaces[ip].tun.Delete()
 	}
 
 	s.mx.Lock()
 	s.ifaces = make(map[string]struct {
-		tun    *tun.TUN
+		tun    *sys.NetInterface
 		ctx    context.Context
 		cancel context.CancelFunc
 	})
@@ -167,7 +165,7 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 
 	s.info.rtable.Add(peerIDObj, ip)
 
-	ifaces, err := tun.LocalInterfaces()
+	ifaces, err := sys.GetNetInterfaces()
 	if err != nil {
 		return err
 	}
@@ -186,9 +184,19 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	log.Debug("Creating TUN interface", "name", name)
 	address := fmt.Sprintf("%s/24", ipAddr.String())
 
-	iface, err := tun.New(name, tun.Address(address), tun.MTU(IfaceMTU))
+	iface, err := sys.NewTunTapInterface(name, sys.NetTunMode, false)
 	if err != nil {
 		return fmt.Errorf("failed to create tun interface: %w", err)
+	}
+
+	err = iface.SetAddress(address)
+	if err != nil {
+		return fmt.Errorf("failed to set address on tun interface: %w", err)
+	}
+
+	err = iface.SetMTU(IfaceMTU)
+	if err != nil {
+		return fmt.Errorf("failed to set MTU on tun interface: %w", err)
 	}
 
 	if err := iface.Up(); err != nil {
@@ -198,7 +206,7 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.mx.Lock()
 	s.ifaces[ipAddr.String()] = struct {
-		tun    *tun.TUN
+		tun    *sys.NetInterface
 		ctx    context.Context
 		cancel context.CancelFunc
 	}{
@@ -233,9 +241,8 @@ func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
 	iface, ok := s.ifaces[ip]
 	if ok {
 		iface.cancel()
-		name := iface.tun.Iface.Name()
 		_ = iface.tun.Down()
-		_ = tun.Delete(name)
+		_ = iface.tun.Delete()
 		delete(s.ifaces, ip)
 	}
 	s.mx.Unlock()
@@ -261,128 +268,6 @@ func (l *Libp2p) AcceptSubnetPeer(subnetID, peerID, ip string) error {
 	}
 
 	s.info.rtable.Add(peerIDObj, ip)
-
-	return nil
-}
-
-func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error {
-	s, ok := l.subnets[subnetID]
-	if !ok {
-		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
-	}
-
-	if _, ok := s.portMapping[sourcePort]; ok {
-		return fmt.Errorf("port %s is already mapped", sourcePort)
-	}
-
-	// TODO track the port so that we can unmap it when we tear down the subnet
-	cmd := exec.Command(
-		"iptables",
-		"-t", "nat",
-		"-A", "PREROUTING",
-		"-d", sourceIP,
-		"-p", protocol,
-		"--dport", sourcePort,
-		"-j", "DNAT",
-		"--to-destination", destIP+":"+destPort) //notlint:gosec
-
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error executing iptables command: %w", err)
-	}
-
-	cmd = exec.Command(
-		"iptables",
-		"-A", "FORWARD",
-		"-p", "tcp",
-		"-d", destIP,
-		"--dport", destPort,
-		"-j", "ACCEPT")
-
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error executing iptables command: %w", err)
-	}
-
-	cmd = exec.Command(
-		"iptables",
-		"-t", "nat",
-		"-A", "POSTROUTING",
-		"-j", "MASQUERADE")
-
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error executing ip tables command: %w", err)
-	}
-
-	s.portMapping[sourcePort] = &struct {
-		destPort string
-		destIP   string
-		srcIP    string
-	}{
-		destPort: destPort,
-		destIP:   destIP,
-		srcIP:    sourceIP,
-	}
-
-	return nil
-}
-
-func (l *Libp2p) UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error {
-	s, ok := l.subnets[subnetID]
-	if !ok {
-		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
-	}
-
-	mapping, ok := s.portMapping[sourcePort]
-	if !ok {
-		return fmt.Errorf("port %s is not mapped", sourcePort)
-	}
-
-	if mapping.destIP != destIP || mapping.destPort != destPort || mapping.srcIP != sourceIP {
-		return fmt.Errorf("port %s is not mapped to %s:%s", sourcePort, destIP, destPort)
-	}
-
-	cmd := exec.Command(
-		"iptables",
-		"-t", "nat",
-		"-D", "PREROUTING",
-		"-d", sourceIP,
-		"-p", protocol,
-		"--dport", sourcePort,
-		"-j", "DNAT",
-		"--to-destination", destIP+":"+destPort)
-
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error executing iptables PREROUTING command: %w", err)
-	}
-
-	cmd = exec.Command(
-		"iptables",
-		"-D", "FORWARD",
-		"-p", "tcp",
-		"-d", destIP,
-		"--dport", destPort,
-		"-j", "ACCEPT")
-
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error executing iptables FORWARD command: %w", err)
-	}
-
-	cmd = exec.Command(
-		"iptables",
-		"-t", "nat",
-		"-D", "POSTROUTING",
-		"-j", "MASQUERADE")
-
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error executing iptables POSTROUTING command: %w", err)
-	}
-
-	delete(s.portMapping, sourcePort)
 
 	return nil
 }
@@ -463,7 +348,7 @@ func newSubnet(ctx context.Context, l *Libp2p) *subnet {
 			rtable: NewRoutingTable(),
 		},
 		ifaces: make(map[string]struct {
-			tun    *tun.TUN
+			tun    *sys.NetInterface
 			ctx    context.Context
 			cancel context.CancelFunc
 		}),
@@ -488,7 +373,7 @@ func newSubnet(ctx context.Context, l *Libp2p) *subnet {
 	}
 }
 
-func (s *subnet) readPackets(ctx context.Context, iface *tun.TUN) {
+func (s *subnet) readPackets(ctx context.Context, iface *sys.NetInterface) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -550,7 +435,7 @@ func (s *subnet) readPackets(ctx context.Context, iface *tun.TUN) {
 	}
 }
 
-func (s *subnet) handleDNSQueries(iface *tun.TUN, packet []byte, packetlen int) error {
+func (s *subnet) handleDNSQueries(iface *sys.NetInterface, packet []byte, packetlen int) error {
 	s.dnsmx.RLock()
 	payload, err := handleDNSQuery(packet[28:packetlen], s.dnsRecords)
 	s.dnsmx.RUnlock()
