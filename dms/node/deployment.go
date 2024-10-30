@@ -9,7 +9,6 @@
 package node
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -156,6 +155,8 @@ func (n *Node) restoreDeployments() error {
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
+	log.Debugf("got a bid request from: %s", &msg.From.Address)
+
 	var request jobs.EnsembleBidRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		return
@@ -163,6 +164,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 
 	machineResources, err := n.hardware.GetMachineResources()
 	if err != nil {
+		log.Debugf("failed to get machine resources")
 		return
 	}
 
@@ -178,6 +180,7 @@ loop:
 	for _, v := range request.Request {
 		// check if it is a V1 request
 		if v.V1 == nil {
+			log.Debug("bid request not v1")
 			continue
 		}
 
@@ -185,12 +188,14 @@ loop:
 		hostID := n.actor.Handle().Address.HostID
 		for _, p := range request.PeerExclusion {
 			if p == hostID {
+				log.Debug("bid request has execlusion")
 				continue loop
 			}
 		}
 
 		// TODO allow static ports
 		if len(v.V1.PublicPorts.Static) > 0 {
+			log.Debug("bid request has static public ports")
 			continue loop
 		}
 
@@ -198,16 +203,19 @@ loop:
 		for _, e := range v.V1.Executors {
 			_, err := n.getExecutor(e)
 			if err != nil {
+				log.Debugf("failed to get executor: %v", e)
 				continue loop
 			}
 		}
 
 		comparisonResult, err := machineResources.Compare(v.V1.Resources)
 		if err != nil {
+			log.Debugf("failed to compare machine resources")
 			continue loop
 		}
 
 		if comparisonResult != types.Better {
+			log.Debugf("resource comparison - not better - result: %v")
 			continue
 		}
 
@@ -217,6 +225,7 @@ loop:
 	}
 
 	if !found {
+		log.Debugf("bid requirements were not satisfied")
 		return
 	}
 
@@ -224,31 +233,20 @@ loop:
 	allocKey := request.ID
 	ports, err := n.portAllocator.Allocate(allocKey, toAnswer.V1.PublicPorts.Dynamic)
 	if err != nil {
+		log.Debugf("failed to allocate ports")
 		return
 	}
 	cleanup := func() {
 		n.portAllocator.Release(allocKey)
 	}
 
+	log.Debugf("signing bid with did: %+v", n.actor.Security().DID())
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
 		cleanup()
 		return
 	}
-
-	allFields := bytes.Join([][]byte{
-		[]byte(request.ID),
-		[]byte(n.hostID),
-		[]byte(n.hostLocation.HostContinent),
-		[]byte(n.hostLocation.HostCountry),
-		[]byte(n.hostLocation.HostCity),
-	}, []byte{})
-
-	sig, err := provider.Sign(allFields)
-	if err != nil {
-		cleanup()
-		return
-	}
+	log.Debugf("signing bid with proider: %+v", provider)
 
 	bid := jobs.Bid{
 		V1: &jobs.BidV1{
@@ -260,9 +258,14 @@ loop:
 				Country: n.hostLocation.HostCountry,
 				City:    n.hostLocation.HostCity,
 			},
-			Handle:    n.actor.Handle(),
-			Signature: sig,
+			Handle: n.actor.Handle(),
 		},
+	}
+
+	err = bid.Sign(provider)
+	if err != nil {
+		cleanup()
+		return
 	}
 
 	n.sendReply(msg, bid)
