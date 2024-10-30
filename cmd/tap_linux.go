@@ -10,11 +10,10 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/lib/sys"
 )
 
 // newTapCommand creates the Cobra command to set up a TAP interface
@@ -27,68 +26,68 @@ func newTapCommand() *cobra.Command {
 Example:
   nunet tap eth0 tap0 172.16.0.1/24
 
-Note: The command requires root privileges.
+Note: The command requires root privileges or CAP_NET_ADMIN=ep capability.
 `,
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// check if the user is root
-			if os.Getuid() != 0 {
-				return fmt.Errorf("this command requires root privileges to execute")
+			// check if running with privilege
+			if err := sys.RequiredCaps(); err != nil && os.Getuid() != 0 {
+				return fmt.Errorf("this command requires the CAP_NET_ADMIN=ep capability or run as root")
 			}
 
 			mainInterface := args[0]
 			vmInterface := args[1]
 			cidr := args[2]
 
-			// Step 1: Create the TAP interface
-			err := runCommand(cmd.OutOrStdout(), fmt.Sprintf("ip tuntap add %s mode tap", vmInterface))
+			// Check if the interfaces
+			_, err := sys.GetNetInterfaceByName(mainInterface)
+			if err != nil {
+				return fmt.Errorf("couldn't read main interface %q", mainInterface)
+			}
+			_, err = sys.GetNetInterfaceByName(vmInterface)
+			if err == nil {
+				return fmt.Errorf("interface %q already exists", vmInterface)
+			}
+
+			// Create the TAP interface
+			iface, err := sys.NewTunTapInterface(vmInterface, sys.NetTapMode, true)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "TAP interface %s created\n", iface.Iface.Name())
+
+			// Assign IP address to the TAP interface
+			err = iface.SetAddress(cidr)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "IP address %s assigned to TAP interface %s\n", cidr, iface.Iface.Name())
+
+			// Bring the TAP interface up
+			err = iface.Up()
 			if err != nil {
 				return err
 			}
 
-			// Step 2: Assign IP address to the TAP interface
-			err = runCommand(cmd.OutOrStdout(), fmt.Sprintf("ip addr add %s dev %s", cidr, vmInterface))
+			// Add iptables rules for connection tracking
+			err = sys.AddRelEstRule("FORWARD")
 			if err != nil {
 				return err
 			}
 
-			// Step 3: Bring the TAP interface up
-			err = runCommand(cmd.OutOrStdout(), fmt.Sprintf("ip link set %s up", vmInterface))
+			// Add iptables rules to allow forwarding between interfaces
+			err = sys.AddForwardIntRule(vmInterface, mainInterface)
 			if err != nil {
 				return err
 			}
 
-			// Step 4: Enable IP forwarding
-			err = runCommand(cmd.OutOrStdout(), "echo 1 > /proc/sys/net/ipv4/ip_forward")
-			if err != nil {
-				return err
-			}
-
-			// Step 5: Add iptables rules for connection tracking
-			err = runCommand(cmd.OutOrStdout(), "iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT || iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT")
-			if err != nil {
-				return err
-			}
-
-			// Step 6: Add iptables rules to allow forwarding between interfaces
-			err = runCommand(cmd.OutOrStdout(), fmt.Sprintf("iptables -C FORWARD -i %s -o %s -j ACCEPT || iptables -A FORWARD -i %s -o %s -j ACCEPT", vmInterface, mainInterface, vmInterface, mainInterface))
-			if err != nil {
-				return err
+			// Check IP Forwarding kernel parameter
+			if enabled, err := sys.ForwardingEnabled(); !enabled || err != nil {
+				return fmt.Errorf("IP forwarding looks to be disabled. Please enable it using 'sysctl -w sys.ipv4.ip_forward=1'")
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "TAP interface %s created and configured successfully\n", vmInterface)
 			return nil
 		},
 	}
-}
-
-// Helper function to execute shell commands
-func runCommand(stdout io.Writer, command string) error {
-	cmd := exec.Command("sh", "-c", command)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to execute command: %s, Error: %w, Output: %s", command, err, output)
-	}
-	fmt.Fprintf(stdout, "Executed: %s\n", command)
-	return nil
 }
