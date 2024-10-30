@@ -9,11 +9,13 @@
 package jobs
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -62,6 +64,8 @@ type BidV1 struct {
 	Signature  []byte
 }
 
+const bidPrefix = "dms-bid-"
+
 func (b *EnsembleBidRequest) Validate() error {
 	if b == nil {
 		return errors.New("ensemble bid request is nil")
@@ -75,6 +79,34 @@ func (b *EnsembleBidRequest) Validate() error {
 		return errors.New("ensemble with empty requests")
 	}
 
+	return nil
+}
+
+func (b *Bid) SignatureData() ([]byte, error) {
+	bidV1Copy := *b.V1
+	bidV1Copy.Signature = nil
+	data, err := json.Marshal(&bidV1Copy)
+	if err != nil {
+		return nil, fmt.Errorf("signature data: %w", err)
+	}
+
+	result := make([]byte, len(bidPrefix)+len(data))
+	copy(result, []byte(bidPrefix))
+	copy(result[len(bidPrefix):], data)
+
+	return result, nil
+}
+
+func (b *Bid) Sign(key did.Provider) error {
+	data, err := b.SignatureData()
+	if err != nil {
+		return fmt.Errorf("unable to create bid signature data")
+	}
+	sig, err := key.Sign(data)
+	if err != nil {
+		return fmt.Errorf("unable to sign the bid")
+	}
+	b.V1.Signature = sig
 	return nil
 }
 
@@ -93,7 +125,12 @@ func (b *Bid) Validate() error {
 		return fmt.Errorf("failed to extract public key: %w", err)
 	}
 
-	ok, err := pubKey.Verify([]byte{}, b.V1.Signature)
+	signData, err := b.SignatureData()
+	if err != nil {
+		return fmt.Errorf("unable to get bid signature data")
+	}
+
+	ok, err := pubKey.Verify(signData, b.V1.Signature)
 	if err != nil {
 		return fmt.Errorf("failed to verify signature: %w", err)
 	}

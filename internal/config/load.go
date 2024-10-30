@@ -40,6 +40,9 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("general.work_dir", fmt.Sprintf("%s/nunet", homeDir))
 	v.SetDefault("general.data_dir", "/var/nunet")
 	v.SetDefault("general.debug", false)
+	v.SetDefault("general.port_available_range_from", 16384)
+	v.SetDefault("general.port_available_range_to", 32768)
+
 	v.SetDefault("rest.addr", "127.0.0.1")
 	v.SetDefault("rest.port", 9999)
 	v.SetDefault("profiler.enabled", true)
