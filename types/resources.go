@@ -123,6 +123,13 @@ type FreeResources struct {
 	Resources
 }
 
+// CommittedResources represents the committed resources of the machine
+type CommittedResources struct {
+	BaseDBModel
+	Resources
+	JobID string `json:"job_id"`
+}
+
 // OnboardedResources represents the onboarded resources of the machine
 type OnboardedResources struct {
 	BaseDBModel
@@ -132,12 +139,16 @@ type OnboardedResources struct {
 // ResourceAllocation represents the allocation of resources for a job
 type ResourceAllocation struct {
 	BaseDBModel
-	JobID string
+	JobID string `json:"job_id"`
 	Resources
 }
 
 // ResourceManager is an interface that defines the methods to manage the resources of the machine
 type ResourceManager interface {
+	// CommitResources preallocates the resources required by the jobs
+	CommitResources(context.Context, ResourceAllocation) error
+	// ReleaseCommittedResources releases the resources that were preallocated
+	ReleaseCommittedResources(context.Context, string) error
 	// AllocateResources allocates the resources required by a job
 	AllocateResources(context.Context, ResourceAllocation) error
 	// DeallocateResources deallocates the resources required by a job

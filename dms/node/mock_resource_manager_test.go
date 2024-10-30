@@ -40,6 +40,22 @@ func (m *MockResourceManager) EXPECT() *MockResourceManagerMockRecorder {
 	return m.recorder
 }
 
+// CommitResources mocks base method.
+func (m *MockResourceManager) CommitResources(arg0 context.Context, arg1 types.ResourceAllocation) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PreallocateResourceS", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReleaseCommittedResources mocks base method.
+func (m *MockResourceManager) ReleaseCommittedResources(arg0 context.Context, arg1 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseResources", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
 // AllocateResources mocks base method.
 func (m *MockResourceManager) AllocateResources(arg0 context.Context, arg1 types.ResourceAllocation) error {
 	m.ctrl.T.Helper()

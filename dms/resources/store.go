@@ -22,6 +22,7 @@ type locks struct {
 	allocations sync.RWMutex
 	onboarded   sync.RWMutex
 	free        sync.RWMutex
+	committed   sync.RWMutex
 }
 
 // newLocks returns a new locks instance
@@ -36,6 +37,7 @@ func newLocks() *locks {
 type store struct {
 	onboardedResources *types.OnboardedResources
 	freeResources      *types.FreeResources
+	committedResources map[string]*types.CommittedResources
 	allocations        map[string]types.ResourceAllocation
 
 	locks *locks
@@ -44,8 +46,9 @@ type store struct {
 // newStore returns a new store instance
 func newStore() *store {
 	return &store{
-		allocations: make(map[string]types.ResourceAllocation),
-		locks:       newLocks(),
+		allocations:        make(map[string]types.ResourceAllocation),
+		committedResources: make(map[string]*types.CommittedResources),
+		locks:              newLocks(),
 	}
 }
 
@@ -67,6 +70,19 @@ func (s *store) withOnboardedLock(fn func() error) error {
 func (s *store) withFreeLock(fn func()) {
 	s.locks.free.Lock()
 	defer s.locks.free.Unlock()
+	fn()
+}
+
+// withCommittedLock locks the committed lock and executes the function
+func (s *store) withCommittedLock(fn func()) {
+	s.locks.committed.Lock()
+	defer s.locks.committed.Unlock()
+	fn()
+}
+
+func (s *store) withCommittedRLock(fn func()) {
+	s.locks.committed.RLock()
+	defer s.locks.committed.RUnlock()
 	fn()
 }
 

@@ -592,3 +592,22 @@ func (n *Node) handleSubnetRemovePeer(msg actor.Envelope) {
 
 	n.sendReply(msg, resp)
 }
+
+func (n *Node) handleCommitDeployment(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.CommitDeploymentRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.CommitDeploymentResponse{}
+	err := n.commitDeployment(request.EnsembleID)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}

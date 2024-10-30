@@ -24,7 +24,7 @@ func TestNewStore(t *testing.T) {
 	require.NotNil(t, s)
 }
 
-func Test_WithDemandLocks(t *testing.T) {
+func TestStore_WithDemandLocks(t *testing.T) {
 	t.Parallel()
 
 	s := newStore()
@@ -55,7 +55,7 @@ func Test_WithDemandLocks(t *testing.T) {
 	require.Equalf(t, mockDemand, demand, "expected allocations to be %v, got %v", mockDemand, demand)
 }
 
-func Test_WithOnboardedLocks(t *testing.T) {
+func TestStore_WithOnboardedLocks(t *testing.T) {
 	t.Parallel()
 
 	s := newStore()
@@ -83,7 +83,7 @@ func Test_WithOnboardedLocks(t *testing.T) {
 	require.Equal(t, mockOnboarded, onboarded)
 }
 
-func Test_WithFreeLocks(t *testing.T) {
+func TestStore_WithFreeLocks(t *testing.T) {
 	t.Parallel()
 
 	s := newStore()
@@ -109,7 +109,34 @@ func Test_WithFreeLocks(t *testing.T) {
 	require.Equal(t, mockFree, free)
 }
 
-func Test_Concurrency(t *testing.T) {
+func TestStore_WithCommittedLocks(t *testing.T) {
+	t.Parallel()
+
+	s := newStore()
+	mockCommitted := types.CommittedResources{
+		Resources: types.Resources{
+			CPU: types.CPU{
+				Cores:      4,
+				ClockSpeed: 3000,
+			},
+			RAM:  types.RAM{Size: 1024},
+			Disk: types.Disk{Size: 1024},
+		},
+	}
+
+	s.withCommittedLock(func() {
+		s.committedResources["job1"] = &mockCommitted
+	})
+
+	var committed types.CommittedResources
+	s.withCommittedLock(func() {
+		committed = *s.committedResources["job1"]
+	})
+
+	require.Equal(t, mockCommitted, committed)
+}
+
+func TestStore_Concurrency(t *testing.T) {
 	t.Parallel()
 	const numGoroutines = 50
 
@@ -230,6 +257,41 @@ func Test_Concurrency(t *testing.T) {
 					f = *s.freeResources
 				})
 				require.Equal(t, free, f)
+			}()
+		}
+
+		wg.Wait()
+	})
+
+	t.Run("WithCommittedLocks", func(t *testing.T) {
+		t.Parallel()
+		s := newStore()
+		var wg sync.WaitGroup
+		for i := 0; i < numGoroutines; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				committed := types.CommittedResources{
+					Resources: types.Resources{
+						CPU: types.CPU{
+							Cores:      4,
+							ClockSpeed: 3000,
+						},
+						RAM:  types.RAM{Size: 1024},
+						Disk: types.Disk{Size: 1024},
+					},
+				}
+
+				s.withCommittedLock(func() {
+					s.committedResources["job1"] = &committed
+				})
+
+				var c types.CommittedResources
+				s.withCommittedLock(func() {
+					c = *s.committedResources["job1"]
+				})
+				require.Equal(t, committed, c)
 			}()
 		}
 

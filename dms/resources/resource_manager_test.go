@@ -38,6 +38,363 @@ func TestNewResourceManager(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDefaultManager_CommitResources(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Must be able to preallocate the resources when there is an availability", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_PreallocateResources1?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm := newMockResourceManager(repos, hm, t)
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		demand := types.ResourceAllocation{
+			JobID: "job1",
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      3,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 1024},
+				Disk: types.Disk{Size: 512},
+			},
+		}
+
+		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
+		err = rm.CommitResources(context.Background(), demand)
+		require.NoError(t, err)
+
+		// Check if the committed resources are stored in the map
+		demandFromMap, ok := rm.store.committedResources[demand.JobID]
+		require.True(t, ok)
+		assertResources(t, demand.Resources, demandFromMap.Resources)
+	})
+
+	t.Run("Must return an error when resources are already committed for the job", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources2?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm := newMockResourceManager(repos, hm, t)
+
+		demand := types.ResourceAllocation{
+			JobID: "job1",
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      3,
+					ClockSpeed: 10000,
+				},
+				RAM: types.RAM{Size: 1024},
+			},
+		}
+		rm.store.withCommittedLock(func() {
+			rm.store.committedResources[demand.JobID] = &types.CommittedResources{
+				Resources: demand.Resources,
+				JobID:     demand.JobID,
+			}
+		})
+
+		err = rm.CommitResources(context.Background(), demand)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "resources already committed for job")
+	})
+
+	t.Run("Must return an error when there are insufficient resources to commit", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources3?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm := newMockResourceManager(repos, hm, t)
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		// Table tests for insufficient resources
+		tests := []struct {
+			name   string
+			demand types.ResourceAllocation
+			error  bool
+		}{
+			{
+				name: "CPU allocations exceeds",
+				demand: types.ResourceAllocation{
+					JobID: "job1",
+					Resources: types.Resources{
+						CPU: types.CPU{
+							Cores:      6,
+							ClockSpeed: 10000,
+						},
+						RAM:  types.RAM{Size: 1024},
+						Disk: types.Disk{Size: 512},
+					},
+				},
+				error: true,
+			},
+			{
+				name: "RAM allocations exceeds",
+				demand: types.ResourceAllocation{
+					JobID: "job1",
+					Resources: types.Resources{
+						CPU: types.CPU{
+							Cores:      3,
+							ClockSpeed: 10000,
+						},
+						RAM:  types.RAM{Size: 4096},
+						Disk: types.Disk{Size: 512},
+					},
+				},
+				error: true,
+			},
+			{
+				name: "Disk allocations exceeds",
+				demand: types.ResourceAllocation{
+					JobID: "job1",
+					Resources: types.Resources{
+						CPU: types.CPU{
+							Cores:      3,
+							ClockSpeed: 10000,
+						},
+						RAM:  types.RAM{Size: 1024},
+						Disk: types.Disk{Size: 2048},
+					},
+				},
+				error: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := rm.CommitResources(context.Background(), tt.demand)
+				if tt.error {
+					require.Error(t, err)
+					require.Contains(t, err.Error(), "no free resources: error subtracting")
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("Must be able to update the free resources after committing resources", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources4?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm := newMockResourceManager(repos, hm, t)
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		demand := types.ResourceAllocation{
+			JobID: "job1",
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      3,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 1024},
+				Disk: types.Disk{Size: 512},
+			},
+		}
+
+		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
+		err = rm.CommitResources(context.Background(), demand)
+		require.NoError(t, err)
+
+		// Check if the free resources are updated in the store
+		freeResourcesFromDB := getFreeResourcesFromDB(repos.FreeResources, t)
+		err = onboardedResources.Resources.Subtract(demand.Resources)
+		require.NoError(t, err)
+		expectedFreeResources := types.FreeResources{
+			Resources: onboardedResources.Resources,
+		}
+		require.NoError(t, err)
+		assertResources(t, expectedFreeResources.Resources, freeResourcesFromDB.Resources)
+	})
+
+	t.Run("Must fail when there are not enough resources in the machine", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources5?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm := newMockResourceManager(repos, hm, t)
+
+		// setting a very high unrealistic resources to onboard
+		// this is so that the test can skip this check
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 5000,
+				},
+				RAM:  types.RAM{Size: 50000},
+				Disk: types.Disk{Size: 50000},
+			},
+		}
+
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		// Since this demand is higher than the actual resources on the machine
+		// it shouldn't have free resources to allocate
+		demand := types.ResourceAllocation{
+			JobID: "job1",
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      4,
+					ClockSpeed: 4000,
+				},
+				RAM:  types.RAM{Size: 40000},
+				Disk: types.Disk{Size: 40000},
+			},
+		}
+
+		hm.EXPECT().GetFreeResources().Return(types.Resources{}, fmt.Errorf("no free resources on the machine"))
+		err = rm.CommitResources(context.Background(), demand)
+		require.ErrorContains(t, err, "no free resources on the machine")
+	})
+}
+
+func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Must be able to release the resources and update free resources", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_ReleaseResources1?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm := newMockResourceManager(repos, hm, t)
+
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		demand := types.ResourceAllocation{
+			JobID: "job1",
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      3,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 1024},
+				Disk: types.Disk{Size: 512},
+			},
+		}
+		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
+		err = rm.CommitResources(context.Background(), demand)
+		require.NoError(t, err)
+
+		err = rm.ReleaseCommittedResources(context.Background(), demand.JobID)
+		require.NoError(t, err)
+
+		// Check if the committed resources were removed from the map
+		_, ok := rm.store.committedResources[demand.JobID]
+		require.False(t, ok)
+
+		// check if the resources are added back to the free resources
+		freeResourcesFromDB, err := rm.GetFreeResources(context.Background())
+		require.NoError(t, err)
+		assertResources(t, onboardedResources.Resources, freeResourcesFromDB.Resources)
+	})
+
+	t.Run("Must return an error when resources are not pre-allocated for the job", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_ReleaseCommittedResources2?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm := newMockResourceManager(repos, hm, t)
+
+		err = rm.ReleaseCommittedResources(context.Background(), "job1")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "resources not committed for job")
+	})
+}
+
 func TestDefaultManager_AllocateResources(t *testing.T) {
 	t.Parallel()
 
@@ -273,7 +630,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources5?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources6?mode=memory&cache=shared"), &gorm.Config{})
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
