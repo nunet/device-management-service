@@ -33,7 +33,11 @@ type DefaultManager struct {
 
 	// allocationLock is used to synchronize access to the allocation pool during allocation and deallocation
 	// it ensures that resource allocation and deallocation are atomic operations
-	allocationLock sync.RWMutex
+	allocationLock sync.Mutex
+
+	// committedLock is used to synchronize access to the committed resources pool during committing and releasing
+	// it ensures that resource committing and releasing are atomic operations
+	committedLock sync.Mutex
 }
 
 // NewResourceManager returns a new defaultResourceManager instance
@@ -50,6 +54,103 @@ func NewResourceManager(repos ManagerRepos, hardware types.HardwareManager) (*De
 }
 
 var _ types.ResourceManager = (*DefaultManager)(nil)
+
+// CommitResources preallocates the resources required by the jobs
+func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.ResourceAllocation) error {
+	d.committedLock.Lock()
+	defer d.committedLock.Unlock()
+
+	// Check if resources are already allocated for the job
+	var ok bool
+	d.store.withCommittedRLock(func() {
+		_, ok = d.store.committedResources[allocation.JobID]
+	})
+	if ok {
+		return fmt.Errorf("resources already committed for job %s", allocation.JobID)
+	}
+
+	ok = false
+	d.store.withAllocationsLock(func() {
+		_, ok = d.store.allocations[allocation.JobID]
+	})
+	if ok {
+		return fmt.Errorf("resources already allocated for job %s", allocation.JobID)
+	}
+
+	freeResources, err := d.GetFreeResources(ctx)
+	if err != nil {
+		return fmt.Errorf("getting free resources: %w", err)
+	}
+
+	// Check if there are enough free resources in dms pool to allocate
+	if err := freeResources.Subtract(allocation.Resources); err != nil {
+		return fmt.Errorf("no free resources: %w", err)
+	}
+
+	// Check if there are enough free resources on the machine to preallocate
+	systemFreeResources, err := d.hardware.GetFreeResources()
+	if err != nil {
+		return fmt.Errorf("get system free resources: %w", err)
+	}
+
+	if err := systemFreeResources.Subtract(allocation.Resources); err != nil {
+		return fmt.Errorf("no free resources on the machine: %w", err)
+	}
+
+	// update the committed resources in the store
+	d.store.withCommittedLock(func() {
+		d.store.committedResources[allocation.JobID] = &types.CommittedResources{
+			Resources: allocation.Resources,
+			JobID:     allocation.JobID,
+		}
+	})
+	if err := d.updateFreeResources(ctx, freeResources); err != nil {
+		return fmt.Errorf("updating free resources in db: %w", err)
+	}
+
+	return nil
+}
+
+// ReleaseCommittedResources releases the resources that were preallocated
+func (d *DefaultManager) ReleaseCommittedResources(ctx context.Context, jobID string) error {
+	d.committedLock.Lock()
+	defer d.committedLock.Unlock()
+	// Check if resources are already deallocated for the job
+	var (
+		committedResources *types.CommittedResources
+		ok                 bool
+	)
+	d.store.withCommittedLock(func() {
+		committedResources, ok = d.store.committedResources[jobID]
+	})
+	if !ok {
+		return fmt.Errorf("resources not committed for job %s", jobID)
+	}
+
+	// Get the free resources in order to update them
+	freeResources, err := d.GetFreeResources(ctx)
+	if err != nil {
+		return fmt.Errorf("getting free resources: %w", err)
+	}
+
+	// Release the committed resources
+	d.store.withCommittedLock(func() {
+		delete(d.store.committedResources, jobID)
+	})
+
+	// Potential issue: if the free resources are updated in the db, the allocations should be updated as well
+	// If the allocations update fails, the free resources should not be updated
+	// Since we have no concept of transactions in the current implementation of db, we cannot handle this scenario
+	// without writing a custom transaction manager
+	if err := freeResources.Add(committedResources.Resources); err != nil {
+		return fmt.Errorf("adding resources: %w", err)
+	}
+	if err := d.updateFreeResources(ctx, freeResources); err != nil {
+		return fmt.Errorf("updating free resources in db: %w", err)
+	}
+
+	return nil
+}
 
 // AllocateResources allocates resources for a job
 func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types.ResourceAllocation) error {

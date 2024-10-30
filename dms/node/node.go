@@ -299,6 +299,9 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,
 		},
+		jobs.CommitDeploymentBehavior: {
+			fn: n.handleCommitDeployment,
+		},
 	}
 	for behavior, handler := range dmsBehaviors {
 		if err := nodeActor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
@@ -703,6 +706,41 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	n.mx.Unlock()
 
 	return allocation, nil
+}
+
+func (n *Node) commitDeployment(ensembleID string) error {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	bidState, ok := n.bids[ensembleID]
+	if !ok {
+		return fmt.Errorf("no bid requests for ensemble id: %s", ensembleID)
+	}
+
+	if bidState.expire.Before(time.Now()) {
+		return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
+	}
+
+	if err := n.resourceManager.CommitResources(context.TODO(), types.ResourceAllocation{
+		JobID:     ensembleID,
+		Resources: bidState.request.V1.Resources,
+	}); err != nil {
+		return fmt.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
+	}
+
+	go func() {
+		<-time.After(time.Until(bidState.expire))
+		n.mx.Lock()
+		defer n.mx.Unlock()
+
+		if err := n.resourceManager.ReleaseCommittedResources(context.TODO(), ensembleID); err != nil {
+			log.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
+		}
+
+		delete(n.bids, ensembleID)
+	}()
+
+	return nil
 }
 
 // createActor creates an actor.
