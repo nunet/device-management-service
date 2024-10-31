@@ -38,7 +38,6 @@ func (t *PeriodicTrigger) IsReady() bool {
 	if t.CronExpr != "" {
 		cronExpr, err := cron.ParseStandard(t.CronExpr)
 		if err != nil {
-			zlog.Sugar().Errorf("Error parsing CronExpr: %v", err)
 			return false
 		}
 
@@ -72,7 +71,6 @@ func (t *PeriodicTriggerWithJitter) IsReady() bool {
 	if t.CronExpr != "" {
 		cronExpr, err := cron.ParseStandard(t.CronExpr)
 		if err != nil {
-			zlog.Sugar().Errorf("Error parsing CronExpr: %v", err)
 			return false
 		}
 

@@ -18,7 +18,6 @@ import (
 	"gorm.io/gorm/logger"
 
 	rGorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
-	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -36,7 +35,6 @@ func SetupVolumeControllerTestKit(basePath string, volumes map[string]*types.Sto
 	// s3 tests depend on basicController (which in turn depends on telemetry instantiation).
 	// S3 are calling this SetupVolControllerTestSuite, so it's one way to initialize telemetry
 	// for basic controller
-	st = telemetry.NewTelemetry(nil, nil, true)
 
 	db, err := gorm.Open(
 		sqlite.Open("file:?mode=memory&cache=shared"),

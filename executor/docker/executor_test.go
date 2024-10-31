@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -28,6 +29,8 @@ type ExecutorTestSuite struct {
 
 // SetupTest sets up the test suite by initializing a new Docker executor.
 func (s *ExecutorTestSuite) SetupTest() {
+	// Set observability to no-op mode for this test
+	observability.SetNoOpMode(true)
 	e, err := docker.NewExecutor(context.Background(), "test_docker_executor")
 	s.NoError(err)
 	s.executor = e

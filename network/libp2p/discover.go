@@ -17,17 +17,25 @@ import (
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
-// DiscoverDialPeers discovers peers using randevouz point
+// DiscoverDialPeers discovers peers using rendezvous point
 func (l *Libp2p) DiscoverDialPeers(ctx context.Context) error {
+	endTrace := observability.StartTrace("libp2p_peer_discover_duration")
+	defer endTrace()
+
 	foundPeers, err := l.findPeersFromRendezvousDiscovery(ctx)
 	if err != nil {
+		log.Errorw("libp2p_peer_discover_failure", "error", err)
 		return err
 	}
 
 	if len(foundPeers) > 0 {
 		l.discoveredPeers = foundPeers
+		log.Infow("libp2p_peer_discover_success", "foundPeers", len(foundPeers))
+	} else {
+		log.Debug("No peers found during discovery")
 	}
 
 	// filter out peers with no listening addresses and self host
@@ -47,6 +55,9 @@ func (l *Libp2p) advertiseForRendezvousDiscovery(context context.Context) error 
 
 // findPeersFromRendezvousDiscovery uses the randevouz point to discover other peers.
 func (l *Libp2p) findPeersFromRendezvousDiscovery(ctx context.Context) ([]peer.AddrInfo, error) {
+	endTrace := observability.StartTrace("libp2p_find_peers_duration")
+	defer endTrace()
+
 	peers, err := dutil.FindPeers(
 		ctx,
 		l.discovery,
@@ -54,8 +65,11 @@ func (l *Libp2p) findPeersFromRendezvousDiscovery(ctx context.Context) ([]peer.A
 		discovery.Limit(l.config.PeerCountDiscoveryLimit),
 	)
 	if err != nil {
+		log.Errorw("libp2p_find_peers_failure", "error", err)
 		return nil, fmt.Errorf("failed to discover peers: %w", err)
 	}
+
+	log.Infow("libp2p_find_peers_success", "peersCount", len(peers))
 	return peers, nil
 }
 

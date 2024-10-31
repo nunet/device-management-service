@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -23,6 +24,10 @@ type StorageVolumeGORM struct {
 // NewStorageVolume creates a new instance of StorageVolumeGORM.
 // It initializes and returns a GORM-based repository for StorageVolume entities.
 func NewStorageVolume(db *gorm.DB) repositories.StorageVolume {
+	endTrace := observability.StartTrace("gorm_db_storage_volume_init_duration")
+	defer endTrace()
+
+	logger.Infow("gorm_db_storage_volume_init_success", "repository", "StorageVolume")
 	return &StorageVolumeGORM{
 		NewGenericRepository[types.StorageVolume](db),
 	}

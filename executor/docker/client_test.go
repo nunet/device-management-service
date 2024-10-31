@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 var (
@@ -38,6 +39,9 @@ type ClientTestSuite struct {
 
 // SetupTest sets up the test suite by initializing a new Docker client.
 func (s *ClientTestSuite) SetupTest() {
+	// Set observability to no-op mode for this test
+	observability.SetNoOpMode(true)
+
 	c, err := docker.NewDockerClient()
 	s.NoError(err)
 	s.client = c

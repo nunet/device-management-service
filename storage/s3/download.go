@@ -1,11 +1,3 @@
-// Copyright 2024, Nunet
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
-
 package s3
 
 import (
@@ -19,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/afero"
 
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	basicController "gitlab.com/nunet/device-management-service/storage/basic_controller"
 	"gitlab.com/nunet/device-management-service/types"
@@ -32,37 +25,33 @@ import (
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
 func (s *Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig) (types.StorageVolume, error) {
-	ctx, cancel := st.SpanContext(ctx, "s3", "s3_download_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace("s3_download_duration")
+	defer endTrace()
 
 	var storageVol types.StorageVolume
 
 	source, err := DecodeInputSpec(sourceSpecs)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_download_failure", nil)
+		log.Errorw("s3_download_failure", "error", err)
 		return types.StorageVolume{}, err
 	}
 
 	storageVol, err = s.volController.CreateVolume(storage.VolumeSourceS3)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_volume_create_failure", nil)
+		log.Errorw("s3_volume_create_failure", "error", fmt.Errorf("failed to create storage volume: %w", err))
 		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume: %v", err)
 	}
 
 	resolvedObjects, err := resolveStorageKey(ctx, s.Client, &source)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_resolve_key_failure", nil)
+		log.Errorw("s3_resolve_key_failure", "error", fmt.Errorf("failed to resolve storage key: %v", err))
 		return types.StorageVolume{}, fmt.Errorf("failed to resolve storage key: %v", err)
 	}
 
 	for _, resolvedObject := range resolvedObjects {
 		err = s.downloadObject(ctx, &source, resolvedObject, storageVol.Path)
 		if err != nil {
-			ctx = context.WithValue(ctx, errorKey, err.Error())
-			st.Error(ctx, "s3_download_object_failure", nil)
+			log.Errorw("s3_download_object_failure", "error", fmt.Errorf("failed to download s3 object: %v", err))
 			return types.StorageVolume{}, fmt.Errorf("failed to download s3 object: %v", err)
 		}
 	}
@@ -70,16 +59,18 @@ func (s *Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig) (
 	// after data is filled within the volume, we have to lock it
 	err = s.volController.LockVolume(storageVol.Path)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_volume_lock_failure", nil)
+		log.Errorw("s3_volume_lock_failure", "error", fmt.Errorf("failed to lock storage volume: %v", err))
 		return types.StorageVolume{}, fmt.Errorf("failed to lock storage volume: %v", err)
 	}
 
-	st.Info(ctx, "s3_download_success", nil)
+	log.Infow("s3_download_success", "volumeID", storageVol.ID, "path", storageVol.Path)
 	return storageVol, nil
 }
 
 func (s *Storage) downloadObject(ctx context.Context, source *InputSource, object s3Object, volPath string) error {
+	endTrace := observability.StartTrace("s3_download_object_duration")
+	defer endTrace()
+
 	outputPath := filepath.Join(volPath, *object.key)
 
 	// use the same file system instance used by the Volume Controller
@@ -90,8 +81,7 @@ func (s *Storage) downloadObject(ctx context.Context, source *InputSource, objec
 
 	err := fs.MkdirAll(outputPath, 0o755)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_create_directory_failure", nil)
+		log.Errorw("s3_create_directory_failure", "path", outputPath, "error", fmt.Errorf("failed to create directory: %v", err))
 		return fmt.Errorf("failed to create directory: %v", err)
 	}
 
@@ -102,25 +92,23 @@ func (s *Storage) downloadObject(ctx context.Context, source *InputSource, objec
 
 	outputFile, err := fs.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0o755)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_open_file_failure", nil)
+		log.Errorw("s3_open_file_failure", "path", outputPath, "error", err)
 		return err
 	}
 	defer outputFile.Close()
 
-	zlog.Sugar().Debugf("Downloading s3 object %s to %s", *object.key, outputPath)
+	log.Debugw("Downloading s3 object", "objectKey", *object.key, "outputPath", outputPath)
 	_, err = s.downloader.Download(ctx, outputFile, &s3.GetObjectInput{
 		Bucket:  aws.String(source.Bucket),
 		Key:     object.key,
 		IfMatch: object.eTag,
 	})
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_download_failure", nil)
+		log.Errorw("s3_download_failure", "objectKey", *object.key, "error", fmt.Errorf("failed to download file: %w", err))
 		return fmt.Errorf("failed to download file: %w", err)
 	}
 
-	st.Info(ctx, "s3_download_object_success", nil)
+	log.Infow("s3_download_object_success", "objectKey", *object.key)
 	return nil
 }
 
@@ -129,8 +117,7 @@ func resolveStorageKey(ctx context.Context, client *s3.Client, source *InputSour
 	key := source.Key
 	if key == "" {
 		err := fmt.Errorf("key is required")
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_resolve_key_failure", nil)
+		log.Errorw("s3_resolve_key_failure", "error", err)
 		return nil, err
 	}
 
@@ -153,15 +140,13 @@ func resolveSingleObject(ctx context.Context, client *s3.Client, source *InputSo
 
 	headObjectOut, err := client.HeadObject(ctx, headObjectInput)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_head_object_failure", nil)
+		log.Errorw("s3_head_object_failure", "key", key, "error", err)
 		return []s3Object{}, fmt.Errorf("failed to retrieve object metadata: %v", err)
 	}
 
 	if strings.HasPrefix(*headObjectOut.ContentType, "application/x-directory") {
 		err := fmt.Errorf("x-directory is not yet handled")
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "s3_directory_handling_failure", nil)
+		log.Errorw("s3_directory_handling_failure", "key", key, "error", err)
 		return []s3Object{}, err
 	}
 
@@ -187,8 +172,7 @@ func resolveObjectsWithPrefix(ctx context.Context, client *s3.Client, source *In
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			ctx = context.WithValue(ctx, errorKey, err.Error())
-			st.Error(ctx, "s3_list_objects_failure", nil)
+			log.Errorw("s3_list_objects_failure", "error", fmt.Errorf("failed to list objects: %v", err))
 			return nil, fmt.Errorf("failed to list objects: %v", err)
 		}
 
@@ -201,6 +185,6 @@ func resolveObjectsWithPrefix(ctx context.Context, client *s3.Client, source *In
 		}
 	}
 
-	st.Info(ctx, "s3_resolve_objects_with_prefix_success", nil)
+	log.Infow("s3_resolve_objects_with_prefix_success", "objectCount", len(objects))
 	return objects, nil
 }

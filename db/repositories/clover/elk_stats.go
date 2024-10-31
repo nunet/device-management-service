@@ -9,9 +9,10 @@
 package clover
 
 import (
-	"github.com/ostafen/clover/v2"
+	clover "github.com/ostafen/clover/v2"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -23,7 +24,13 @@ type RequestTrackerClover struct {
 // NewRequestTracker creates a new instance of RequestTrackerClover.
 // It initializes and returns a Clover-based repository for RequestTracker entities.
 func NewRequestTracker(db *clover.DB) repositories.RequestTracker {
-	return &RequestTrackerClover{
+	endTrace := observability.StartTrace("clover_db_repo_init_duration")
+	defer endTrace()
+
+	repo := &RequestTrackerClover{
 		NewGenericRepository[types.RequestTracker](db),
 	}
+
+	logger.Infow("clover_db_repo_init_success", "repository", "RequestTracker")
+	return repo
 }

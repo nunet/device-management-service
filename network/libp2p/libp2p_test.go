@@ -25,10 +25,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestNew(t *testing.T) {
+	// Set observability to no-op mode for testing
+	observability.SetNoOpMode(true)
+
 	t.Parallel()
 
 	cases := map[string]struct {

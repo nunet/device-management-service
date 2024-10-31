@@ -12,6 +12,7 @@ import (
 	clover "github.com/ostafen/clover/v2"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -23,6 +24,10 @@ type StorageVolumeClover struct {
 // NewStorageVolume creates a new instance of StorageVolumeClover.
 // It initializes and returns a Clover-based repository for StorageVolume entities.
 func NewStorageVolume(db *clover.DB) repositories.StorageVolume {
+	endTrace := observability.StartTrace("clover_storage_volume_init_duration")
+	defer endTrace()
+
+	logger.Infow("clover_storage_volume_init_success", "collection", "storage_volume")
 	return &StorageVolumeClover{
 		NewGenericRepository[types.StorageVolume](db),
 	}

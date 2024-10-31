@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -31,6 +32,9 @@ type ExecutorTestSuite struct {
 
 // SetupTest sets up the test suite by initializing a new Firecracker executor.
 func (s *ExecutorTestSuite) SetupTest() {
+	// Set observability to no-op mode for this test
+	observability.SetNoOpMode(true)
+
 	e, err := firecracker.NewExecutor(context.Background(), "test_firecracker_executor")
 	s.NoError(err)
 

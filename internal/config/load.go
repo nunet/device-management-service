@@ -63,10 +63,24 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("job.target_peer", "")
 	v.SetDefault("job.cleanup_interval", 3)
 
-	v.SetDefault("telemetry.service_name", "NunetDMS")
-	v.SetDefault("telemetry.global_endpoint", "otel-collector.telemetry.nunet.io:4318")
-	v.SetDefault("telemetry.observability_level", "INFO")
-	v.SetDefault("telemetry.telemetry_mode", "production")
+	// default observability settings
+	v.SetDefault("observability.log_level", "INFO")
+	v.SetDefault("observability.log_file", "/var/log/nunet-dms.log")
+	v.SetDefault("observability.max_size", 100) // megabytes
+	v.SetDefault("observability.max_backups", 3)
+	v.SetDefault("observability.max_age", 28) // days
+	v.SetDefault("observability.elasticsearch_url", "http://localhost:9200")
+	v.SetDefault("observability.elasticsearch_index", "nunet-dms")
+	v.SetDefault("observability.flush_interval", 5) // Default flush interval is 5 seconds
+
+	// default APM settings
+	v.SetDefault("apm.server_url", "http://apm.telemetry.nunet.io")
+	v.SetDefault("apm.service_name", "nunet-dms")
+	v.SetDefault("apm.environment", "production")
+	v.SetDefault("apm.certificate", "/usr/share/elasticsearch/config/client.crt")
+	v.SetDefault("apm.key", "/usr/share/elasticsearch/config/client.key")
+	v.SetDefault("apm.ca", "/usr/share/elasticsearch/config/ca.crt")
+
 	return v
 }
 

@@ -9,12 +9,13 @@
 package config
 
 type Config struct {
-	General   `mapstructure:"general" json:"general"`
-	Rest      `mapstructure:"rest" json:"rest"`
-	P2P       `mapstructure:"p2p" json:"p2p"`
-	Job       `mapstructure:"job" json:"job"`
-	Telemetry `mapstructure:"telemetry" json:"telemetry"`
-	Profiler  `mapstructure:"profiler" json:"profiler"`
+	Profiler      `mapstructure:"profiler" json:"profiler"`
+	General       `mapstructure:"general" json:"general"`
+	Rest          `mapstructure:"rest" json:"rest"`
+	P2P           `mapstructure:"p2p" json:"p2p"`
+	Job           `mapstructure:"job" json:"job"`
+	Observability `mapstructure:"observability" json:"observability"`
+	APM           `mapstructure:"apm" json:"apm"`
 }
 
 type General struct {
@@ -53,9 +54,22 @@ type Job struct {
 	CleanupInterval   int    `mapstructure:"cleanup_interval" json:"cleanup_interval"`       // docker container and images clean up interval in days
 }
 
-type Telemetry struct {
-	ServiceName        string `mapstructure:"service_name" json:"service_name"`
-	GlobalEndpoint     string `mapstructure:"global_endpoint" json:"global_endpoint"`
-	ObservabilityLevel string `mapstructure:"observability_level" json:"observability_level"`
-	TelemetryMode      string `mapstructure:"telemetry_mode" json:"telemetry_mode"`
+type Observability struct {
+	LogLevel           string `mapstructure:"log_level" json:"log_level"`
+	LogFile            string `mapstructure:"log_file" json:"log_file"`
+	MaxSize            int    `mapstructure:"max_size" json:"max_size"` // in megabytes
+	MaxBackups         int    `mapstructure:"max_backups" json:"max_backups"`
+	MaxAge             int    `mapstructure:"max_age" json:"max_age"` // in days
+	ElasticsearchURL   string `mapstructure:"elasticsearch_url" json:"elasticsearch_url"`
+	ElasticsearchIndex string `mapstructure:"elasticsearch_index" json:"elasticsearch_index"`
+	FlushInterval      int    `mapstructure:"flush_interval" json:"flush_interval"` // in seconds
+}
+
+type APM struct {
+	ServerURL   string `mapstructure:"server_url" json:"server_url"`
+	ServiceName string `mapstructure:"service_name" json:"service_name"`
+	Environment string `mapstructure:"environment" json:"environment"`
+	Certificate string `mapstructure:"certificate" json:"certificate"`
+	Key         string `mapstructure:"key" json:"key"`
+	CA          string `mapstructure:"ca" json:"ca"`
 }

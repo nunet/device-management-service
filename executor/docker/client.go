@@ -38,17 +38,30 @@ type Client struct {
 
 // NewDockerClient initializes a new Docker client with environment variables and API version negotiation.
 func NewDockerClient() (*Client, error) {
+	log.Infow("docker_client_init_started")
+
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
+		log.Errorw("docker_client_init_failure", "error", err)
 		return nil, err
 	}
+
+	log.Infow("docker_client_init_success")
 	return &Client{client: c}, nil
 }
 
 // IsInstalled checks if Docker is installed and reachable by pinging the Docker daemon.
 func (c *Client) IsInstalled(ctx context.Context) bool {
+	log.Infow("docker_client_is_installed_check_started")
+
 	_, err := c.client.Ping(ctx)
-	return err == nil
+	if err != nil {
+		log.Errorw("docker_client_is_installed_failure", "error", err)
+		return false
+	}
+
+	log.Infow("docker_client_is_installed_success")
+	return true
 }
 
 // CreateContainer creates a new Docker container with the specified configuration.
@@ -62,8 +75,11 @@ func (c *Client) CreateContainer(
 	pullImage bool,
 ) (string, error) {
 	if pullImage {
+		log.Infow("docker_create_container_started", "image", config.Image)
+
 		_, err := c.PullImage(ctx, config.Image)
 		if err != nil {
+			log.Errorw("docker_create_container_failure", "error", err)
 			return "", err
 		}
 	}
@@ -77,20 +93,27 @@ func (c *Client) CreateContainer(
 		name,
 	)
 	if err != nil {
+		log.Errorw("docker_create_container_failure", "error", err)
 		return "", err
 	}
+
+	log.Infow("docker_create_container_success", "containerID", resp.ID)
 	return resp.ID, nil
 }
 
 // InspectContainer returns detailed information about a Docker container.
 func (c *Client) InspectContainer(ctx context.Context, id string) (types.ContainerJSON, error) {
+	log.Infow("docker_inspect_container_started", "containerID", id)
 	return c.client.ContainerInspect(ctx, id)
 }
 
 // FollowLogs tails the logs of a specified container, returning separate readers for stdout and stderr.
 func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.Reader, err error) {
+	log.Infow("docker_follow_logs_started", "containerID", id)
+
 	cont, err := c.InspectContainer(ctx, id)
 	if err != nil {
+		log.Errorw("docker_follow_logs_failure", "error", err)
 		return nil, nil, errors.Wrap(err, "failed to get container")
 	}
 
@@ -102,6 +125,7 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 
 	logsReader, err := c.client.ContainerLogs(ctx, cont.ID, logOptions)
 	if err != nil {
+		log.Errorw("docker_follow_logs_failure", "error", err)
 		return nil, nil, errors.Wrap(err, "failed to get container logs")
 	}
 
@@ -120,7 +144,7 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 
 		_, err = stdcopy.StdCopy(stdoutBuffer, stderrBuffer, logsReader)
 		if err != nil && !errors.Is(err, context.Canceled) {
-			zlog.Sugar().Warnf("context closed while getting logs: %v\n", err)
+			log.Warnf("context closed while getting logs: %v\n", err)
 		}
 	}()
 
@@ -129,6 +153,7 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 
 // StartContainer starts a specified Docker container.
 func (c *Client) StartContainer(ctx context.Context, containerID string) error {
+	log.Infow("docker_start_container_started", "containerID", containerID)
 	return c.client.ContainerStart(ctx, containerID, container.StartOptions{})
 }
 
@@ -137,6 +162,7 @@ func (c *Client) WaitContainer(
 	ctx context.Context,
 	containerID string,
 ) (<-chan container.WaitResponse, <-chan error) {
+	log.Infow("docker_wait_container_started", "containerID", containerID)
 	return c.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 }
 
@@ -156,11 +182,13 @@ func (c *Client) StopContainer(
 	containerID string,
 	options container.StopOptions,
 ) error {
+	log.Infow("docker_stop_container_started", "containerID", containerID)
 	return c.client.ContainerStop(ctx, containerID, options)
 }
 
 // RemoveContainer removes a Docker container, optionally forcing removal and removing associated volumes.
 func (c *Client) RemoveContainer(ctx context.Context, containerID string) error {
+	log.Infow("docker_remove_container_started", "containerID", containerID)
 	return c.client.ContainerRemove(
 		ctx,
 		containerID,
@@ -170,11 +198,14 @@ func (c *Client) RemoveContainer(ctx context.Context, containerID string) error 
 
 // removeContainers removes all containers matching the specified filters.
 func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) error {
+	log.Infow("docker_remove_containers_started")
+
 	containers, err := c.client.ContainerList(
 		ctx,
 		container.ListOptions{All: true, Filters: filterz},
 	)
 	if err != nil {
+		log.Errorw("docker_remove_containers_failure", "error", err)
 		return err
 	}
 
@@ -196,13 +227,22 @@ func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) err
 	for err := range errCh {
 		errs = multierr.Append(errs, err)
 	}
+
+	if errs != nil {
+		log.Errorw("docker_remove_containers_failure", "error", errs)
+	} else {
+		log.Infow("docker_remove_containers_success")
+	}
 	return errs
 }
 
 // removeNetworks removes all networks matching the specified filters.
 func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error {
+	log.Infow("docker_remove_networks_started")
+
 	networks, err := c.client.NetworkList(ctx, network.ListOptions{Filters: filterz})
 	if err != nil {
+		log.Errorw("docker_remove_networks_failure", "error", err)
 		return err
 	}
 
@@ -225,17 +265,31 @@ func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error
 	for err := range errCh {
 		errs = multierr.Append(errs, err)
 	}
+
+	if errs != nil {
+		log.Errorw("docker_remove_networks_failure", "error", errs)
+	} else {
+		log.Infow("docker_remove_networks_success")
+	}
 	return errs
 }
 
 // RemoveObjectsWithLabel removes all Docker containers and networks with a specific label.
 func (c *Client) RemoveObjectsWithLabel(ctx context.Context, label string, value string) error {
+	log.Infow("docker_remove_objects_with_label_started", "label", label, "value", value)
+
 	filterz := filters.NewArgs(
 		filters.Arg("label", fmt.Sprintf("%s=%s", label, value)),
 	)
 
 	containerErr := c.removeContainers(ctx, filterz)
 	networkErr := c.removeNetworks(ctx, filterz)
+
+	if containerErr != nil || networkErr != nil {
+		log.Errorw("docker_remove_objects_with_label_failure", "containerErr", containerErr, "networkErr", networkErr)
+	}
+
+	log.Infow("docker_remove_objects_with_label_success")
 	return multierr.Combine(containerErr, networkErr)
 }
 
@@ -249,6 +303,8 @@ func (c *Client) GetOutputStream(
 	since string,
 	follow bool,
 ) (io.ReadCloser, error) {
+	log.Infow("docker_get_output_stream_started", "containerID", containerID)
+
 	logOptions := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
@@ -258,26 +314,34 @@ func (c *Client) GetOutputStream(
 
 	logReader, err := c.client.ContainerLogs(ctx, containerID, logOptions)
 	if err != nil {
+		log.Errorw("docker_get_output_stream_failure", "error", err)
 		return nil, errors.Wrap(err, "failed to get container logs")
 	}
 
+	log.Infow("docker_get_output_stream_success", "containerID", containerID)
 	return logReader, nil
 }
 
 // FindContainer searches for a container by label and value, returning its ID if found.
 func (c *Client) FindContainer(ctx context.Context, label string, value string) (string, error) {
+	log.Infow("docker_find_container_started", "label", label, "value", value)
+
 	containers, err := c.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
+		log.Errorw("docker_find_container_failure", "error", err)
 		return "", err
 	}
 
 	for _, cont := range containers {
 		if cont.Labels[label] == value {
+			log.Infow("docker_find_container_success", "containerID", cont.ID)
 			return cont.ID, nil
 		}
 	}
 
-	return "", fmt.Errorf("unable to find container for %s=%s", label, value)
+	err = fmt.Errorf("unable to find container for %s=%s", label, value)
+	log.Errorw("docker_find_container_failure", "error", err)
+	return "", err
 }
 
 // GetImage returns detailed information about a Docker image.
@@ -305,9 +369,11 @@ func (c *Client) GetImage(ctx context.Context, imageName string) (image.Summary,
 
 // PullImage pulls a Docker image from a registry.
 func (c *Client) PullImage(ctx context.Context, imageName string) (string, error) {
+	log.Infow("docker_pull_image_started", "image", imageName)
+
 	out, err := c.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
-		zlog.Sugar().Errorf("unable to pull image: %v", err)
+		log.Errorw("docker_pull_image_failure", "error", err)
 		return "", err
 	}
 
@@ -321,14 +387,14 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 			if err == io.EOF {
 				break
 			}
-			zlog.Sugar().Errorf("unable pull image: %v", err)
+			log.Errorw("docker_pull_image_failure", "error", err)
 			return "", err
 		}
 		if message.Aux != nil {
 			continue
 		}
 		if message.Error != nil {
-			zlog.Sugar().Errorf("unable pull image: %v", message.Error.Message)
+			log.Errorw("docker_pull_image_failure", "error", message.Error.Message)
 			return "", errors.New(message.Error.Message)
 		}
 		if strings.HasPrefix(message.Status, "Digest") {
@@ -336,5 +402,6 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 		}
 	}
 
+	log.Infow("docker_pull_image_success", "digest", digest)
 	return digest, nil
 }

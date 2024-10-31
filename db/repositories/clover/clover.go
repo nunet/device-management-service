@@ -12,21 +12,28 @@ import (
 	"fmt"
 
 	clover "github.com/ostafen/clover/v2"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 // NewDB initializes and sets up the clover database using bbolt under the hood.
 // Additionally, it automatically creates collections for the necessary types.
 func NewDB(path string, collections []string) (*clover.DB, error) {
+	endTrace := observability.StartTrace("clover_db_init_duration")
+	defer endTrace()
+
 	db, err := clover.Open(path)
 	if err != nil {
+		logger.Errorw("clover_db_init_failure", "error", fmt.Errorf("failed to connect to database: %w", err))
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	for _, collection := range collections {
 		if err := db.CreateCollection(collection); err != nil {
+			logger.Errorw("clover_db_init_failure", "collection", collection, "error", fmt.Errorf("failed to create collection %s: %w", collection, err))
 			return nil, fmt.Errorf("failed to create collection %s: %w", collection, err)
 		}
 	}
 
+	logger.Infow("clover_db_init_success", "path", path, "collections", collections)
 	return db, nil
 }
