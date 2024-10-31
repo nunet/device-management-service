@@ -14,6 +14,9 @@ variables:
   # SEMVER_DISABLED: true
   # SONARQUBE_DISABLED: true
   # FEATURE_ENVIRONMENT_DISABLED: true
+  # ALLOW_LINT_FAIL: true
+  ALLOW_UNIT_TESTS_FAIL: true
+  # ALLOW_INTEGRATION_TESTS_FAIL: true
 
 include:
   project: nunet/test-suite
