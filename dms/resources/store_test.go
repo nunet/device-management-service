@@ -83,32 +83,6 @@ func TestStore_WithOnboardedLocks(t *testing.T) {
 	require.Equal(t, mockOnboarded, onboarded)
 }
 
-func TestStore_WithFreeLocks(t *testing.T) {
-	t.Parallel()
-
-	s := newStore()
-	mockFree := types.FreeResources{
-		Resources: types.Resources{
-			CPU: types.CPU{
-				Cores:      4,
-				ClockSpeed: 3000,
-			},
-			RAM:  types.RAM{Size: 1024},
-			Disk: types.Disk{Size: 1024},
-		},
-	}
-
-	s.withFreeLock(func() {
-		s.freeResources = &mockFree
-	})
-
-	var free types.FreeResources
-	s.withFreeRLock(func() {
-		free = *s.freeResources
-	})
-	require.Equal(t, mockFree, free)
-}
-
 func TestStore_WithCommittedLocks(t *testing.T) {
 	t.Parallel()
 
@@ -228,41 +202,6 @@ func TestStore_Concurrency(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("WithFreeLocks", func(t *testing.T) {
-		t.Parallel()
-		s := newStore()
-		var wg sync.WaitGroup
-		for i := 0; i < numGoroutines; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
-				free := types.FreeResources{
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      4,
-							ClockSpeed: 3000,
-						},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 1024},
-					},
-				}
-
-				s.withFreeLock(func() {
-					s.freeResources = &free
-				})
-
-				var f types.FreeResources
-				s.withFreeRLock(func() {
-					f = *s.freeResources
-				})
-				require.Equal(t, free, f)
-			}()
-		}
-
-		wg.Wait()
-	})
-
 	t.Run("WithCommittedLocks", func(t *testing.T) {
 		t.Parallel()
 		s := newStore()
@@ -288,7 +227,7 @@ func TestStore_Concurrency(t *testing.T) {
 				})
 
 				var c types.CommittedResources
-				s.withCommittedLock(func() {
+				s.withCommittedRLock(func() {
 					c = *s.committedResources["job1"]
 				})
 				require.Equal(t, committed, c)

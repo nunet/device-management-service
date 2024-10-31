@@ -21,7 +21,6 @@ import (
 type locks struct {
 	allocations sync.RWMutex
 	onboarded   sync.RWMutex
-	free        sync.RWMutex
 	committed   sync.RWMutex
 }
 
@@ -36,7 +35,6 @@ func newLocks() *locks {
 // allocations: resources that are requested by the jobs
 type store struct {
 	onboardedResources *types.OnboardedResources
-	freeResources      *types.FreeResources
 	committedResources map[string]*types.CommittedResources
 	allocations        map[string]types.ResourceAllocation
 
@@ -66,13 +64,6 @@ func (s *store) withOnboardedLock(fn func() error) error {
 	return fn()
 }
 
-// withFreeLock locks the free lock and executes the function
-func (s *store) withFreeLock(fn func()) {
-	s.locks.free.Lock()
-	defer s.locks.free.Unlock()
-	fn()
-}
-
 // withCommittedLock locks the committed lock and executes the function
 func (s *store) withCommittedLock(fn func()) {
 	s.locks.committed.Lock()
@@ -97,12 +88,5 @@ func (s *store) withAllocationsRLock(fn func()) {
 func (s *store) withOnboardedRLock(fn func()) {
 	s.locks.onboarded.RLock()
 	defer s.locks.onboarded.RUnlock()
-	fn()
-}
-
-// withFreeRLock performs a read lock and returns the result and error
-func (s *store) withFreeRLock(fn func()) {
-	s.locks.free.RLock()
-	defer s.locks.free.RUnlock()
 	fn()
 }

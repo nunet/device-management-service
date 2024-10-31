@@ -104,7 +104,6 @@ func Run(ksPassphrase string, contextName string) error {
 
 	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
-		FreeResources:      gdb.NewFreeResources(db),
 		OnboardedResources: gdb.NewOnboardedResources(db),
 		ResourceAllocation: gdb.NewResourceAllocation(db),
 	}

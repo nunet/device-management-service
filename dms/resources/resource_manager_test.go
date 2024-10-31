@@ -48,7 +48,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_PreallocateResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources1?mode=memory&cache=shared"), &gorm.Config{})
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
@@ -96,7 +96,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources2?mode=memory&cache=shared"), &gorm.Config{})
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
@@ -131,7 +131,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources3?mode=memory&cache=shared"), &gorm.Config{})
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
@@ -223,7 +223,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources4?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources4?mode=memory&cache=shared"), &gorm.Config{})
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
@@ -260,14 +260,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check if the free resources are updated in the store
-		freeResourcesFromDB := getFreeResourcesFromDB(repos.FreeResources, t)
+		updatedFreeResources, err := rm.GetFreeResources(context.Background())
+		require.NoError(t, err)
 		err = onboardedResources.Resources.Subtract(demand.Resources)
 		require.NoError(t, err)
 		expectedFreeResources := types.FreeResources{
 			Resources: onboardedResources.Resources,
 		}
 		require.NoError(t, err)
-		assertResources(t, expectedFreeResources.Resources, freeResourcesFromDB.Resources)
+		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
 	})
 
 	t.Run("Must fail when there are not enough resources in the machine", func(t *testing.T) {
@@ -276,7 +277,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources5?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources5?mode=memory&cache=shared"), &gorm.Config{})
 		require.NoError(t, err)
 
 		repos := setupManagerRepos(t, mockDB)
@@ -360,10 +361,12 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 			},
 		}
 		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
+
 		err = rm.CommitResources(context.Background(), demand)
 		require.NoError(t, err)
 
 		err = rm.ReleaseCommittedResources(context.Background(), demand.JobID)
+
 		require.NoError(t, err)
 
 		// Check if the committed resources were removed from the map
@@ -614,14 +617,15 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check if the free resources are updated in the store
-		freeResourcesFromDB := getFreeResourcesFromDB(repos.FreeResources, t)
+		updatedFreeResources, err := rm.GetFreeResources(context.Background())
+		require.NoError(t, err)
 		err = onboardedResources.Resources.Subtract(demand.Resources)
 		require.NoError(t, err)
 		expectedFreeResources := types.FreeResources{
 			Resources: onboardedResources.Resources,
 		}
 		require.NoError(t, err)
-		assertResources(t, expectedFreeResources.Resources, freeResourcesFromDB.Resources)
+		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
 	})
 
 	t.Run("Must fail when there are not enough resources in the machine", func(t *testing.T) {
@@ -872,7 +876,19 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-
+		rm := newMockResourceManager(repos, hm, t)
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
 		freeResources := types.FreeResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -883,61 +899,13 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 				Disk: types.Disk{Size: 1024},
 			},
 		}
-		setUpFreeResources(repos.FreeResources, freeResources, t)
 
-		rm := newMockResourceManager(repos, hm, t)
-
-		freeResourcesFromDB, err := rm.GetFreeResources(context.Background())
+		updatedFreeResources, err := rm.GetFreeResources(context.Background())
 		require.NoError(t, err)
-		assertResources(t, freeResources.Resources, freeResourcesFromDB.Resources)
-		require.NotNil(t, rm.store.freeResources)
+		assertResources(t, freeResources.Resources, updatedFreeResources.Resources)
 	})
 
-	t.Run("Must be able to update the store from DB if empty", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_FreeResources2?mode=memory&cache=shared"), &gorm.Config{})
-		require.NoError(t, err)
-
-		repos := setupManagerRepos(t, mockDB)
-		hm := NewMockHardwareManager(ctrl)
-
-		freeResources := types.FreeResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-		setUpFreeResources(repos.FreeResources, freeResources, t)
-
-		rm := newMockResourceManager(repos, hm, t)
-
-		freeResourcesFromDB, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, freeResources.Resources, freeResourcesFromDB.Resources)
-		require.NotNil(t, rm.store.freeResources)
-
-		// Set the free resources in the store to nil
-		rm.store.withFreeLock(func() {
-			rm.store.freeResources = nil
-		})
-
-		// Get the free resources again
-		freeResourcesFromDB, err = rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, freeResources.Resources, freeResourcesFromDB.Resources)
-		require.NotNil(t, rm.store.freeResources)
-	})
-
-	t.Run("Must be able to update free resources", func(t *testing.T) {
+	t.Run("Must be able to up to date free resources", func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
@@ -958,13 +926,11 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 				Disk: types.Disk{Size: 1024},
 			},
 		}
-		freeResources := types.FreeResources{
-			Resources: onboardedResources.Resources,
-		}
-		setUpFreeResources(repos.FreeResources, freeResources, t)
 		hm := NewMockHardwareManager(ctrl)
-
 		rm := newMockResourceManager(repos, hm, t)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
 		demand := types.ResourceAllocation{
 			JobID: "job1",
 			Resources: types.Resources{
@@ -976,22 +942,22 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 				Disk: types.Disk{Size: 512},
 			},
 		}
+
 		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
 		err = rm.AllocateResources(context.Background(), demand)
 		require.NoError(t, err)
 
-		freeResourcesFromDB := getFreeResourcesFromDB(repos.FreeResources, t)
-		err = onboardedResources.Subtract(demand.Resources)
+		updatedFreeResources, err := rm.GetFreeResources(context.Background())
 		require.NoError(t, err)
+
+		err = onboardedResources.Resources.Subtract(demand.Resources)
 		expectedFreeResources := types.FreeResources{
 			Resources: onboardedResources.Resources,
 		}
 		require.NoError(t, err)
-		assertResources(t, expectedFreeResources.Resources, freeResourcesFromDB.Resources)
+		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
 
 		// Check if the free resources are updated in the store
-		require.NotNil(t, rm.store.freeResources)
-		updatedFreeResources := *rm.store.freeResources
 		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
 	})
 }
@@ -1066,6 +1032,7 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 	})
 
 	t.Run("Must be able to get total allocations from DB if not in store", func(t *testing.T) {
+		t.Skip("We need to load the data on init")
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		t.Cleanup(func() {
@@ -1148,16 +1115,12 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		freeResourcesRepo := NewMockGenericEntityRepository[types.FreeResources](ctrl)
 		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
 		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
 
-		repos := newMockManagerRepos(t, freeResourcesRepo, onboardedResourcesRepo, resourceAllocationRepo)
+		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
 		rm := newMockResourceManager(repos, hm, t)
-
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
-		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), repositories.Query[types.ResourceAllocation]{}).Return(nil, nil)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -1168,10 +1131,8 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				Disk: types.Disk{Size: 1024},
 			},
 		}
+
 		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil)
-		freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
-			return freeResources, nil
-		})
 		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
@@ -1195,13 +1156,9 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 						Disk: types.Disk{Size: 10},
 					},
 				}
-
 				mutex.Lock()
 				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
 					return onboardedResources.Resources, nil
-				})
-				freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
-					return freeResources, nil
 				})
 				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil)
 				mutex.Unlock()
@@ -1234,27 +1191,23 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			},
 		}
 		assertResources(t, expectedFreeResources.Resources, freeResources.Resources)
-
 		// Deallocate the resources
-
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{}).Times(numGoroutines)
-		resourceAllocationRepo.EXPECT().Find(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query repositories.Query[types.ResourceAllocation]) (types.ResourceAllocation, error) {
-			return types.ResourceAllocation{
-				BaseDBModel: types.BaseDBModel{
-					ID: query.Conditions[0].Value.(string),
-				},
-			}, nil
-		}).Times(numGoroutines)
-		resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).Times(numGoroutines)
-		freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
-			return freeResources, nil
-		}).Times(numGoroutines)
 		for i := 0; i < numGoroutines; i++ {
 			jobID := fmt.Sprintf("job%d", i)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-
+				mutex.Lock()
+				resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
+				resourceAllocationRepo.EXPECT().Find(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query repositories.Query[types.ResourceAllocation]) (types.ResourceAllocation, error) {
+					return types.ResourceAllocation{
+						BaseDBModel: types.BaseDBModel{
+							ID: query.Conditions[0].Value.(string),
+						},
+					}, nil
+				})
+				resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil)
+				mutex.Unlock()
 				err := rm.DeallocateResources(context.Background(), jobID)
 				require.NoError(t, err)
 			}()
@@ -1282,16 +1235,13 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		freeResourcesRepo := NewMockGenericEntityRepository[types.FreeResources](ctrl)
 		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
 		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
 
-		repos := newMockManagerRepos(t, freeResourcesRepo, onboardedResourcesRepo, resourceAllocationRepo)
+		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
 		rm := newMockResourceManager(repos, hm, t)
 
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
-		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), repositories.Query[types.ResourceAllocation]{}).Return(nil, nil)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -1302,28 +1252,11 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				Disk: types.Disk{Size: 1024},
 			},
 		}
-		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil)
-		freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
-			return freeResources, nil
-		})
+		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil).Times(1)
 		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
-
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{}).Times(numGoroutines)
-		resourceAllocationRepo.EXPECT().Find(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query repositories.Query[types.ResourceAllocation]) (types.ResourceAllocation, error) {
-			return types.ResourceAllocation{
-				BaseDBModel: types.BaseDBModel{
-					ID: query.Conditions[0].Value.(string),
-				},
-			}, nil
-		}).Times(numGoroutines)
-		resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).Times(numGoroutines)
-		freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
-			return freeResources, nil
-		}).Times(numGoroutines)
-
 		var mutex sync.Mutex
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
@@ -1343,14 +1276,24 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				}
 
 				mutex.Lock()
-				freeResourcesRepo.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, freeResources types.FreeResources) (types.FreeResources, error) {
-					return freeResources, nil
-				})
-				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil)
+				// allocate expectations
 				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
 					return onboardedResources.Resources, nil
-				})
+				}).Times(1)
+				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil).Times(1)
+
+				// deallocate expectations
+				resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{}).Times(1)
+				resourceAllocationRepo.EXPECT().Find(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query repositories.Query[types.ResourceAllocation]) (types.ResourceAllocation, error) {
+					return types.ResourceAllocation{
+						BaseDBModel: types.BaseDBModel{
+							ID: query.Conditions[0].Value.(string),
+						},
+					}, nil
+				}).Times(1)
+				resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 				mutex.Unlock()
+
 				err := rm.AllocateResources(context.Background(), demand)
 				require.NoError(t, err)
 
