@@ -211,11 +211,6 @@ deploy:
 				break
 			}
 
-			targetPeersBidded := o.hasAllTargetPeersBidded(bidMap, nodeForTargetPeer)
-			if !targetPeersBidded {
-				break
-			}
-
 			// we don't have bids for some of our nodes so we don't have a candidate
 			// we need to make a residual bid request for the remaining nodes
 			// Note: in order to facilitate random selection, the residual bid requests
@@ -612,26 +607,6 @@ func (o *Orchestrator) makeCandidateDeploymentBig(bids map[string][]Bid) (func()
 
 		return nil, false
 	}, true
-}
-
-func (o *Orchestrator) hasAllTargetPeersBidded(bidMap map[string][]Bid, nodeForTargetPeer map[string]string) bool {
-	if len(nodeForTargetPeer) > 0 {
-		// Check which specified peers didn't submit bids
-		missingPeers := []string{}
-		for nodeID, nodeConfig := range o.cfg.Nodes() {
-			if nodeConfig.Peer == "" {
-				continue
-			}
-			if _, hasBids := bidMap[nodeID]; !hasBids {
-				missingPeers = append(missingPeers, nodeConfig.Peer)
-			}
-		}
-		if len(missingPeers) > 0 {
-			log.Errorf("specified peer(s) did not submit bids: %v", missingPeers)
-			return false
-		}
-	}
-	return true
 }
 
 func (o *Orchestrator) checkPermutationEdgeConstraints(candidate map[string]Bid) bool {
