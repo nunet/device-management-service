@@ -781,6 +781,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	wg1.Add(len(candidate))
 	for n, bid := range candidate {
 		go func(n string, bid Bid) {
+			defer wg1.Done()
 			err := o.commitDeployment(n, bid.Handle())
 			mx.Lock()
 			if err != nil {
@@ -809,6 +810,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	wg2.Add(len(candidate))
 	for n, bid := range candidate {
 		go func(n string, bid Bid) {
+			defer wg2.Done()
 			allocated, err := o.allocate(n, bid.Handle())
 			mx.Lock()
 			if err != nil {
@@ -996,7 +998,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	wg := sync.WaitGroup{}
 	for id, manifest := range em.Allocations {
 		wg.Add(1)
-		go func() {
+		go func(id string, manifest AllocationManifest) {
 			defer wg.Done()
 
 			config, ok := allocCfgs[id]
@@ -1050,7 +1052,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
 				return
 			}
-		}()
+		}(id, manifest)
 	}
 
 	wg.Wait()

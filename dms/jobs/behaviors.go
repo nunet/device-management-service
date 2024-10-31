@@ -27,10 +27,10 @@ const (
 	CommitDeploymentBehavior     = "/dms/deployment/commit"
 	CommitDeploymentTimeout      = 3 * time.Second
 	AllocationDeploymentBehavior = "/dms/deployment/allocate"
-	AllocationDeploymentTimeout  = 3 * time.Second
+	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
 	AllocationStartBehavior      = "/dms/allocation/start"
-	AllocationStartTimeout       = 3 * time.Second
+	AllocationStartTimeout       = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 
