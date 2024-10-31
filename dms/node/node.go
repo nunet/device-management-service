@@ -693,7 +693,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 
 	allocation, err := jobs.NewAllocation(actor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
+		return nil, fmt.Errorf("failed to create allocation: %w", err)
 	}
 
 	err = allocation.Start()

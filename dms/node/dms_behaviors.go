@@ -510,8 +510,8 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 		return
 	}
 
+	resp.OK = true
 	resp.Allocations = allocations
-
 	n.sendReply(msg, resp)
 }
 
@@ -609,5 +609,6 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 		return
 	}
 
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
