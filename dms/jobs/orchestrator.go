@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/utils"
@@ -127,6 +128,15 @@ deploy:
 	for time.Now().Before(expiry) {
 		o.setStatus(DeploymentStatusPreparing)
 
+		// 0. check if one of the ensemble nodes have peer specified
+		// If bid request to peer specified fails, the entire deployment must fail
+		nodeForTargetPeer := make(map[string]string)
+		for nodeID, node := range o.cfg.Nodes() {
+			if node.Peer != "" {
+				nodeForTargetPeer[node.Peer] = nodeID
+			}
+		}
+
 		// 1. Create bid requests for nodes
 		bidrq, err := o.makeInitialBidRequest()
 		if err != nil {
@@ -137,6 +147,13 @@ deploy:
 		bidMap := make(map[string][]Bid)
 		peerExclusion := make(map[string]struct{})
 		addBid := func(bid Bid) bool {
+			// if peer is already specified on another node, ignore the bid
+			if _, ok := nodeForTargetPeer[bid.Peer()]; ok {
+				if nodeForTargetPeer[bid.Peer()] != bid.NodeID() {
+					return false
+				}
+			}
+
 			// check that the peer has not already submitted a bid
 			peerID := bid.Peer()
 			if _, exclude := peerExclusion[peerID]; exclude {
@@ -170,6 +187,7 @@ deploy:
 				return false
 			}
 
+			log.Debugf("added bid to bitMap from peer %s for %s", peerID, nodeID)
 			bidMap[nodeID] = append(bidMap[nodeID], bid)
 			peerExclusion[peerID] = struct{}{}
 			return true
@@ -190,6 +208,11 @@ deploy:
 		for time.Now().Before(expiry) {
 			nextCandidate, ok = o.makeCandidateDeployments(bidMap)
 			if ok {
+				break
+			}
+
+			targetPeersBidded := o.hasAllTargetPeersBidded(bidMap, nodeForTargetPeer)
+			if !targetPeersBidded {
 				break
 			}
 
@@ -284,19 +307,45 @@ func (o *Orchestrator) requestBids(bidrq EnsembleBidRequest, expiry time.Time) (
 	}
 
 	bidExpiry := uint64(bidExpiryTime.UnixNano())
-	msg, err := actor.Message(
-		o.actor.Handle(),
-		actor.Handle{},
-		BidRequestBehavior,
-		bidrq,
-		actor.WithMessageTopic(BidRequestTopic),
-		actor.WithMessageReplyTo(BidReplyBehavior),
-		actor.WithMessageExpiry(bidExpiry),
-	)
-	if err != nil {
-		return nil, nil, time.Time{}, fmt.Errorf("creating bid request message: %w", err)
+
+	// Split requests into direct peer requests and broadcast requests
+	var directRequests []BidRequest
+	var broadcastRequests []BidRequest
+
+	for _, req := range bidrq.Request {
+		if req.V1 == nil {
+			continue
+		}
+
+		nodeConfig, ok := o.cfg.Node(req.V1.NodeID)
+		if !ok {
+			continue
+		}
+
+		if nodeConfig.Peer != "" {
+			// This node has a specific peer target
+			directRequests = append(directRequests, req)
+		} else {
+			// This node needs broadcast
+			broadcastRequests = append(broadcastRequests, req)
+		}
 	}
 
+	// Send direct peer requests
+	for _, req := range directRequests {
+		nodeConfig, _ := o.cfg.Node(req.V1.NodeID)
+		targetedReq := EnsembleBidRequest{
+			ID:            bidrq.ID,
+			Request:       []BidRequest{req},
+			PeerExclusion: bidrq.PeerExclusion,
+		}
+		err := o.requestBidPeer(targetedReq, nodeConfig, bidExpiry)
+		if err != nil {
+			return nil, nil, time.Time{}, fmt.Errorf("requesting bid to targeted peer: %w", err)
+		}
+	}
+
+	// create reply behavior for this specific ensemble bid request
 	bidCh := make(chan Bid)
 	bidDoneCh := make(chan struct{})
 	if err := o.actor.AddBehavior(
@@ -324,11 +373,66 @@ func (o *Orchestrator) requestBids(bidrq EnsembleBidRequest, expiry time.Time) (
 		return nil, nil, time.Time{}, fmt.Errorf("adding bid behavior: %w", err)
 	}
 
-	if err := o.actor.Publish(msg); err != nil {
-		return nil, nil, time.Time{}, fmt.Errorf("publishing bid request: %w", err)
+	// Send broadcast
+	if len(broadcastRequests) > 0 {
+		broadcastReq := EnsembleBidRequest{
+			ID:            bidrq.ID,
+			Request:       broadcastRequests,
+			PeerExclusion: bidrq.PeerExclusion,
+		}
+		err := o.broadcastBid(broadcastReq, bidExpiry)
+		if err != nil {
+			return nil, nil, time.Time{}, fmt.Errorf("broadcasting bid request: %w", err)
+		}
 	}
 
 	return bidCh, bidDoneCh, bidExpiryTime, nil
+}
+
+func (o *Orchestrator) broadcastBid(bidrq EnsembleBidRequest, bidExpiry uint64) error {
+	msg, err := actor.Message(
+		o.actor.Handle(),
+		actor.Handle{},
+		BidRequestBehavior,
+		bidrq,
+		actor.WithMessageTopic(BidRequestTopic),
+		actor.WithMessageReplyTo(BidReplyBehavior),
+		actor.WithMessageExpiry(bidExpiry),
+	)
+	if err != nil {
+		return fmt.Errorf("creating broadcast bid message: %w", err)
+	}
+
+	if err := o.actor.Publish(msg); err != nil {
+		return fmt.Errorf("publishing bid request: %w", err)
+	}
+	return nil
+}
+
+func (o *Orchestrator) requestBidPeer(targetedReq EnsembleBidRequest, nodeConfig NodeConfig, bidExpiry uint64) error {
+	destHandle, err := actor.HandleFromPeerID(nodeConfig.Peer)
+	if err != nil {
+		return fmt.Errorf("getting handle of selected peer %s: %w", nodeConfig.Peer, err)
+	}
+
+	log.Infof("sending direct peer request to %s: %+v", nodeConfig.Peer, targetedReq)
+	msg, err := actor.Message(
+		o.actor.Handle(),
+		destHandle,
+		BidRequestBehavior,
+		targetedReq,
+		actor.WithMessageReplyTo(BidReplyBehavior),
+		actor.WithMessageExpiry(bidExpiry),
+	)
+	if err != nil {
+		return fmt.Errorf("creating targeted bid message: %w", err)
+	}
+
+	if err := o.actor.Send(msg); err != nil {
+		return fmt.Errorf("sending targeted bid request: %w", err)
+	}
+
+	return nil
 }
 
 func (o *Orchestrator) collectBids(bidCh chan Bid, bidDoneCh chan struct{}, bidExpiryTime time.Time, addBid func(Bid) bool, maxBids int) {
@@ -508,6 +612,26 @@ func (o *Orchestrator) makeCandidateDeploymentBig(bids map[string][]Bid) (func()
 
 		return nil, false
 	}, true
+}
+
+func (o *Orchestrator) hasAllTargetPeersBidded(bidMap map[string][]Bid, nodeForTargetPeer map[string]string) bool {
+	if len(nodeForTargetPeer) > 0 {
+		// Check which specified peers didn't submit bids
+		missingPeers := []string{}
+		for nodeID, nodeConfig := range o.cfg.Nodes() {
+			if nodeConfig.Peer == "" {
+				continue
+			}
+			if _, hasBids := bidMap[nodeID]; !hasBids {
+				missingPeers = append(missingPeers, nodeConfig.Peer)
+			}
+		}
+		if len(missingPeers) > 0 {
+			log.Errorf("specified peer(s) did not submit bids: %v", missingPeers)
+			return false
+		}
+	}
+	return true
 }
 
 func (o *Orchestrator) checkPermutationEdgeConstraints(candidate map[string]Bid) bool {
@@ -1327,7 +1451,8 @@ func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclus
 		residualConfig.V1.Nodes[n] = ncfg
 	}
 
-	for _, ncfg := range residualConfig.V1.Nodes {
+	for id, ncfg := range residualConfig.V1.Nodes {
+		log.Debugf("still looking for node %s", id)
 		for _, a := range ncfg.Allocations {
 			residualConfig.V1.Allocations[a] = o.cfg.V1.Allocations[a]
 		}
