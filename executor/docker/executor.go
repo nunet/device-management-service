@@ -16,11 +16,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/observability"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/pkg/errors"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -68,8 +70,11 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 
 // Start begins the execution of a request by starting a Docker container.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
-	zlog.Sugar().
-		Infof("Starting execution for job %s, execution %s", request.JobID, request.ExecutionID)
+	endTrace := observability.StartTrace("docker_executor_start_duration")
+	defer endTrace()
+
+	// Log starting execution
+	log.Infow("docker_executor_start_begin", "jobID", request.JobID, "executionID", request.ExecutionID)
 
 	// It's possible that this is being called due to a restart. We should check if the
 	// container is already running.
@@ -79,14 +84,17 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		// failing that will create a new container.
 		if handler, ok := e.handlers.Get(request.ExecutionID); ok {
 			if handler.active() {
+				log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution already started")
 				return fmt.Errorf("execution is already started")
 			}
+			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution completed")
 			return fmt.Errorf("execution is already completed")
 		}
 
 		// Create a new handler for the execution.
 		containerID, err = e.newDockerExecutionContainer(ctx, request)
 		if err != nil {
+			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", err)
 			return fmt.Errorf("failed to create new container: %w", err)
 		}
 	}
@@ -147,15 +155,22 @@ func (e *Executor) Wait(
 	ctx context.Context,
 	executionID string,
 ) (<-chan *types.ExecutionResult, <-chan error) {
+	endTrace := observability.StartTrace("docker_executor_wait_duration")
+	defer endTrace()
+
+	log.Infow("docker_executor_wait_begin", "executionID", executionID)
+
 	handler, found := e.handlers.Get(executionID)
 	resultCh := make(chan *types.ExecutionResult, 1)
 	errCh := make(chan error, 1)
 
 	if !found {
+		log.Errorw("docker_executor_wait_failure", "executionID", executionID, "error", "execution not found")
 		errCh <- fmt.Errorf("execution (%s) not found", executionID)
 		return resultCh, errCh
 	}
 
+	log.Infow("docker_executor_wait_success", "executionID", executionID)
 	go e.doWait(ctx, resultCh, errCh, handler)
 	return resultCh, errCh
 }
@@ -172,7 +187,6 @@ func (e *Executor) doWait(
 	errCh chan error,
 	handler *executionHandler,
 ) {
-	zlog.Sugar().Infof("executionID %s waiting for execution", handler.executionID)
 	defer close(out)
 	defer close(errCh)
 
@@ -182,8 +196,6 @@ func (e *Executor) doWait(
 		return
 	case <-handler.waitCh:
 		if handler.result != nil {
-			zlog.Sugar().
-				Infof("executionID %s received results from execution", handler.executionID)
 			out <- handler.result
 		} else {
 			errCh <- fmt.Errorf("execution (%s) result is nil", handler.executionID)
@@ -329,11 +341,18 @@ func (e *Executor) Run(
 // Cleanup removes all Docker resources associated with the executor.
 // This includes removing containers including networks and volumes with the executor's label.
 func (e *Executor) Cleanup(ctx context.Context) error {
+	endTrace := observability.StartTrace("docker_executor_cleanup_duration")
+	defer endTrace()
+
+	log.Infow("docker_executor_cleanup_begin", "executorID", e.ID)
+
 	err := e.client.RemoveObjectsWithLabel(ctx, labelExecutorName, e.ID)
 	if err != nil {
+		log.Errorw("docker_executor_cleanup_failure", "executorID", e.ID, "error", err)
 		return fmt.Errorf("failed to remove containers: %w", err)
 	}
-	zlog.Info("Cleaned up all Docker resources")
+
+	log.Infow("docker_executor_cleanup_success", "executorID", e.ID)
 	return nil
 }
 
@@ -362,7 +381,7 @@ func (e *Executor) newDockerExecutionContainer(
 
 	var chosenGPUVendor types.GPUVendor
 	if len(machineResources.GPUs) == 0 {
-		zlog.Info("no GPUs available on the machine")
+		log.Infow("no GPUs available on the machine")
 		chosenGPUVendor = types.GPUVendorNone
 	} else {
 		// Essential for multi-vendor GPU nodes. For example,
@@ -396,7 +415,6 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to create container mounts: %w", err)
 	}
 
-	zlog.Sugar().Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
 	hostConfig := configureHostConfig(chosenGPUVendor, params, mounts)
 
 	executionContainer, err := e.client.CreateContainer(

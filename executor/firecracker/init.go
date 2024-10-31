@@ -12,11 +12,8 @@
 package firecracker
 
 import (
-	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	logging "github.com/ipfs/go-log/v2"
 )
 
-var zlog *logger.Logger
-
-func init() {
-	zlog = logger.New("executor.firecracker")
-}
+// log is the logger for the firecracker package
+var log = logging.Logger("firecracker")

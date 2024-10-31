@@ -41,10 +41,9 @@ type executionHandler struct {
 	resultsDir  string
 
 	// synchronization
-	// synchronization
-	activeCh chan bool    // Blocks until the container starts running.
-	waitCh   chan bool    // BLocks until execution completes or fails.
-	running  *atomic.Bool // Indicates if the container is currently running.
+	activeCh chan bool    // Blocks until the VM starts running.
+	waitCh   chan bool    // Blocks until execution completes or fails.
+	running  *atomic.Bool // Indicates if the VM is currently running.
 
 	// result of the execution
 	result *types.ExecutionResult
@@ -61,16 +60,17 @@ func (h *executionHandler) run(ctx context.Context) {
 
 	defer func() {
 		if err := h.destroy(vmDestroyTimeout); err != nil {
-			zlog.Sugar().Warnf("failed to destroy container: %v\n", err)
+			log.Warnf("failed to destroy VM: %v", err)
 		}
 		h.running.Store(false)
 		close(h.waitCh)
 	}()
 
-	// start the VM
-	zlog.Sugar().Info("starting firecracker execution")
+	// Start the VM
+	log.Infow("firecracker_execution_starting", "executionID", h.executionID)
 	if err := h.client.StartVM(ctx, h.machine); err != nil {
 		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start VM: %v", err))
+		log.Errorw("firecracker_vm_start_failure", "error", err, "executionID", h.executionID)
 		return
 	}
 
@@ -79,25 +79,28 @@ func (h *executionHandler) run(ctx context.Context) {
 	err := h.machine.Wait(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			h.result = types.NewFailedExecutionResult(
-				fmt.Errorf("context closed while waiting on VM: %v", err),
-			)
+			h.result = types.NewFailedExecutionResult(fmt.Errorf("context closed while waiting on VM: %v", err))
+			log.Errorw("firecracker_execution_context_closed", "error", err, "executionID", h.executionID)
 			return
 		}
 		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to wait on VM: %v", err))
+		log.Errorw("firecracker_vm_wait_failure", "error", err, "executionID", h.executionID)
 		return
 	}
 
 	h.result = types.NewExecutionResult(types.ExecutionStatusCodeSuccess)
+	log.Infow("firecracker_execution_success", "executionID", h.executionID)
 }
 
 // kill stops the firecracker VM.
 func (h *executionHandler) kill(ctx context.Context) error {
+	log.Infow("firecracker_kill_vm", "executionID", h.executionID)
 	return h.client.ShutdownVM(ctx, h.machine)
 }
 
 // destroy stops the firecracker VM and removes its resources.
 func (h *executionHandler) destroy(timeout time.Duration) error {
+	log.Infow("firecracker_destroy_vm", "executionID", h.executionID)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 

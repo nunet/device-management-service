@@ -41,6 +41,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/observability"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -160,6 +161,11 @@ func (l *Libp2p) Init() error {
 	l.pubsub = pubsub
 	l.handlerRegistry = NewHandlerRegistry(host)
 
+	// Initialize the observability package with the host
+	if err := observability.Initialize(l.Host); err != nil {
+		return fmt.Errorf("failed to initialize observability: %w", err)
+	}
+
 	return nil
 }
 
@@ -171,15 +177,17 @@ func (l *Libp2p) Start() error {
 	// connect to bootstrap nodes
 	err := l.ConnectToBootstrapNodes(l.ctx)
 	if err != nil {
-		log.Errorf("failed to connect to bootstrap nodes: %v", err)
+		log.Errorf("libp2p_bootstrap_failure", "error", err)
 		return err
 	}
+	log.Infow("libp2p_bootstrap_success")
 
 	err = l.BootstrapDHT(l.ctx)
 	if err != nil {
-		log.Errorf("failed to bootstrap dht: %v", err)
+		log.Errorf("libp2p_bootstrap_failure", "error", err)
 		return err
 	}
+	log.Infow("libp2p_bootstrap_success")
 
 	// Start random walk
 	l.startRandomWalk(l.ctx)
@@ -195,12 +203,16 @@ func (l *Libp2p) Start() error {
 		// advertise randevouz discovery
 		err = l.advertiseForRendezvousDiscovery(l.ctx)
 		if err != nil {
-			log.Warnf("failed to advertise rendezvous point: %v", err)
+			log.Warnf("libp2p_advertise_rendezvous_failure", "error", err)
+		} else {
+			log.Infow("libp2p_advertise_rendezvous_success")
 		}
 
 		err = l.DiscoverDialPeers(l.ctx)
 		if err != nil {
-			log.Warnf("failed to discover peers: %v", err)
+			log.Warnf("libp2p_peer_discover_failure", "error", err)
+		} else {
+			log.Infow("libp2p_peer_discover_success", "foundPeers", len(l.discoveredPeers))
 		}
 	}()
 

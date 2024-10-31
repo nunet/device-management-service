@@ -11,7 +11,7 @@
 package internal
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -46,7 +46,7 @@ var clients = make(map[WebSocketConnection]string)
 func ListenForWs(conn *WebSocketConnection) {
 	defer func() {
 		if r := recover(); r != nil {
-			zlog.Sugar().Errorf("Error:", fmt.Sprintf("%v", r))
+			log.Printf("Recovered from panic: %v", r) // Log the panic if needed
 		}
 	}()
 
@@ -54,10 +54,13 @@ func ListenForWs(conn *WebSocketConnection) {
 
 	for {
 		_, msg, err := conn.ReadMessage()
-		if err == nil { // if NO error
+		if err == nil {
 			// logic to send command and fetch the output
 			cmd.Command = string(msg)
 			commandChan <- cmd
+		} else {
+			log.Printf("Error reading message: %v", err) // Handle the error if needed
+			return
 		}
 	}
 }
@@ -67,7 +70,6 @@ func ListenForWs(conn *WebSocketConnection) {
 func SendCommandForExecution() {
 	for {
 		command := <-commandChan
-		zlog.Sugar().Infof("%v", command)
 		// TO BE IMPLEMENTED
 		// send command
 
@@ -76,7 +78,7 @@ func SendCommandForExecution() {
 		// send back result
 		err := command.Conn.WriteMessage(websocket.TextMessage, []byte(command.Command))
 		if err != nil {
-			zlog.Sugar().Warnf("failed to write message: %w", err)
+			log.Printf("Error writing message: %v", err) // Log the error when message fails to send
 		}
 	}
 }

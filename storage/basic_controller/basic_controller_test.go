@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
-	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -41,9 +41,8 @@ func TestVolumeControllerTestSuite(t *testing.T) {
 // SetupTest prepares a VolumeController with two volumes (with db
 // and fs configured) in which data is written to the second volume.
 func (s *VolumeControllerTestSuite) SetupTest() {
-	// Initialize telemetry in test mode, replacing the global st
-	st = telemetry.NewTelemetry(nil, nil, true)
-
+	// Set observability to no-op mode for testing
+	observability.SetNoOpMode(true)
 	basePath := "/home/.nunet/volumes/"
 	volumes := map[string]*types.StorageVolume{
 		"volume1": {

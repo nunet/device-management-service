@@ -26,8 +26,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 
+	"gitlab.com/nunet/device-management-service/observability"
 	basicController "gitlab.com/nunet/device-management-service/storage/basic_controller"
-	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -71,9 +71,9 @@ type S3ProviderTestSuite struct {
 
 // SetupTest is mainly setting up a volume controller based on its test suite and a S3 client.
 func (s *S3ProviderTestSuite) SetupTest() {
+	// Set observability to no-op mode for testing
+	observability.SetNoOpMode(true)
 	s.ctx = context.Background()
-	// Initialize telemetry in test mode, replacing the global st
-	st = telemetry.NewTelemetry(nil, nil, true)
 
 	volumes := map[string]*types.StorageVolume{
 		"volume1": {

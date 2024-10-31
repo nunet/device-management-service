@@ -9,11 +9,8 @@
 package docker
 
 import (
-	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	logging "github.com/ipfs/go-log/v2"
 )
 
-var zlog *logger.Logger
-
-func init() {
-	zlog = logger.New("docker.executor")
-}
+// log is the logger for the docker package
+var log = logging.Logger("docker")

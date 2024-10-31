@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 const (
@@ -41,6 +42,9 @@ type ClientTestSuite struct {
 
 // SetupTest sets up the test suite by initializing a new Firecracker client.
 func (s *ClientTestSuite) SetupTest() {
+	// Set observability to no-op mode for this test
+	observability.SetNoOpMode(true)
+
 	c, err := firecracker.NewFirecrackerClient()
 	require.NoError(s.T(), err)
 	s.client = c

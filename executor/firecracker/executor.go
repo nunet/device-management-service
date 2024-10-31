@@ -54,19 +54,25 @@ type Executor struct {
 
 // NewExecutor initializes a new executor for Firecracker VMs.
 func NewExecutor(ctx context.Context, id string) (*Executor, error) {
+	log.Infow("firecracker_executor_init_started", "executorID", id)
+
 	firecrackerClient, err := NewFirecrackerClient()
 	if err != nil {
+		log.Errorw("firecracker_executor_init_failure", "error", err)
 		return nil, err
 	}
 
 	if !firecrackerClient.IsInstalled(ctx) {
+		log.Errorw("firecracker_executor_not_installed", "executorID", id)
 		return nil, ErrNotInstalled
 	}
+
 	fe := &Executor{
 		ID:     id,
 		client: firecrackerClient,
 	}
 
+	log.Infow("firecracker_executor_init_success", "executorID", id)
 	return fe, nil
 }
 
@@ -86,13 +92,13 @@ func (e *Executor) List() []types.ExecutionListItem {
 		return true
 	})
 
+	log.Infow("firecracker_executor_list", "executionCount", len(executions))
 	return executions
 }
 
 // start begins the execution of a request by starting a new Firecracker VM.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
-	zlog.Sugar().
-		Infof("Starting execution for job %s, execution %s", request.JobID, request.ExecutionID)
+	log.Infow("firecracker_start_execution", "jobID", request.JobID, "executionID", request.ExecutionID)
 
 	// It's possible that this is being called due to a restart. We should check if the
 	// VM is already running.
@@ -110,6 +116,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		// Create a new handler for the execution.
 		machine, err = e.newFirecrackerExecutionVM(ctx, request)
 		if err != nil {
+			log.Errorw("firecracker_create_vm_failure", "error", err)
 			return fmt.Errorf("failed to create new firecracker VM: %w", err)
 		}
 	}
@@ -128,6 +135,8 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	e.handlers.Put(request.ExecutionID, handler)
 	// run the VM.
 	go handler.run(ctx)
+
+	log.Infow("firecracker_start_execution_success", "jobID", request.JobID, "executionID", request.ExecutionID)
 	return nil
 }
 
@@ -173,6 +182,7 @@ func (e *Executor) Wait(
 
 	if !found {
 		errCh <- fmt.Errorf("execution (%s) not found", executionID)
+		log.Errorw("firecracker_wait_execution_not_found", "executionID", executionID)
 		return resultCh, errCh
 	}
 
@@ -192,7 +202,8 @@ func (e *Executor) doWait(
 	errCh chan error,
 	handler *executionHandler,
 ) {
-	zlog.Sugar().Infof("executionID %s waiting for execution", handler.executionID)
+	log.Infow("firecracker_wait_execution", "executionID", handler.executionID)
+
 	defer close(out)
 	defer close(errCh)
 
@@ -202,10 +213,10 @@ func (e *Executor) doWait(
 		return
 	case <-handler.waitCh:
 		if handler.result != nil {
-			zlog.Sugar().
-				Infof("executionID %s received results from execution", handler.executionID)
+			log.Infow("firecracker_wait_execution_result_received", "executionID", handler.executionID)
 			out <- handler.result
 		} else {
+			log.Errorw("firecracker_wait_execution_result_nil", "executionID", handler.executionID)
 			errCh <- fmt.Errorf("execution (%s) result is nil", handler.executionID)
 		}
 	}
@@ -216,6 +227,7 @@ func (e *Executor) doWait(
 func (e *Executor) Cancel(ctx context.Context, executionID string) error {
 	handler, found := e.handlers.Get(executionID)
 	if !found {
+		log.Errorw("firecracker_cancel_execution_not_found", "executionID", executionID)
 		return fmt.Errorf("failed to cancel execution (%s). execution not found", executionID)
 	}
 	return handler.kill(ctx)
@@ -248,6 +260,7 @@ func (e *Executor) Run(
 // It is defined to satisfy the Executor interface.
 // This method will return an error if called.
 func (e *Executor) GetLogStream(_ context.Context, _ types.LogStreamRequest) (io.ReadCloser, error) {
+	log.Error("firecracker_get_log_stream_not_implemented")
 	return nil, fmt.Errorf("GetLogStream is not implemented for Firecracker")
 }
 
@@ -301,6 +314,8 @@ func (e *Executor) WaitForStatus(
 // Cleanup removes all resources associated with the executor.
 // This includes stopping and removing all running VMs and deleting their socket paths.
 func (e *Executor) Cleanup() error {
+	log.Infow("firecracker_cleanup_started", "executorID", e.ID)
+
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(e.handlers.Keys()))
 	e.handlers.Iter(func(_ string, handler *executionHandler) bool {
@@ -320,7 +335,8 @@ func (e *Executor) Cleanup() error {
 	for err := range errCh {
 		errs = multierr.Append(errs, err)
 	}
-	zlog.Info("Cleaned up all firecracker resources")
+
+	log.Infow("firecracker_cleanup_complete", "executorID", e.ID)
 	return errs
 }
 
@@ -333,8 +349,11 @@ func (e *Executor) newFirecrackerExecutionVM(
 	ctx context.Context,
 	params *types.ExecutionRequest,
 ) (*firecracker.Machine, error) {
+	log.Infow("firecracker_create_vm_started", "executionID", params.ExecutionID)
+
 	fcArgs, err := DecodeSpec(params.EngineSpec)
 	if err != nil {
+		log.Errorw("firecracker_create_vm_decode_spec_failure", "error", err)
 		return nil, fmt.Errorf("failed to decode firecracker engine spec: %w", err)
 	}
 
@@ -360,16 +379,18 @@ func (e *Executor) newFirecrackerExecutionVM(
 		params.ResultsDir,
 	)
 	if err != nil {
+		log.Errorw("firecracker_create_vm_mounts_failure", "error", err)
 		return nil, fmt.Errorf("failed to create VM mounts: %w", err)
 	}
 	fcConfig.Drives = mounts
 
 	machine, err := e.client.CreateVM(ctx, fcConfig)
 	if err != nil {
+		log.Errorw("firecracker_create_vm_failure", "error", err)
 		return nil, fmt.Errorf("failed to create VM: %w", err)
 	}
 
-	// e.client.VMPassMMDs(ctx, machine, fcArgs.MMDSMessage)
+	log.Infow("firecracker_create_vm_success", "executionID", params.ExecutionID)
 	return machine, nil
 }
 

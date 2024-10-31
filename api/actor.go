@@ -17,13 +17,18 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	logging "github.com/ipfs/go-log/v2"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+// log is the logger for the actor API package
+var log = logging.Logger("actor-api")
 
 // ActorHandle godoc
 //
@@ -36,8 +41,12 @@ import (
 //	@Failure		500	{object}	object	"handle id is invalid"
 //	@Router			/actor/handle [get]
 func (rs RESTServer) ActorHandle(c *gin.Context) {
+	endTrace := observability.StartTrace("actor_handle_retrieve_duration")
+	defer endTrace()
+
 	p2p := rs.config.P2P
 	if p2p == nil {
+		log.Errorw("actor_handle_retrieve_failure", "error", "host node hasn't yet been initialized")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
@@ -47,6 +56,7 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 	pubk := p2p.Host.Peerstore().PubKey(p2p.Host.ID())
 	id, err := crypto.IDFromPublicKey(pubk)
 	if err != nil {
+		log.Errorw("actor_handle_retrieve_failure", "error", "handle id is invalid")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "handle id is invalid"})
 		return
 	}
@@ -62,6 +72,7 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 		},
 	}
 
+	log.Infow("actor_handle_retrieve_success", "id", id, "DID", did)
 	c.JSON(http.StatusOK, handle)
 }
 
@@ -81,24 +92,31 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/send [post]
 func (rs RESTServer) ActorSendMessage(c *gin.Context) {
+	endTrace := observability.StartTrace("actor_send_message_duration")
+	defer endTrace()
+
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {
+		log.Errorw("actor_send_message_failure", "error", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	p2p := rs.config.P2P
 	if p2p == nil {
+		log.Errorw("actor_send_message_failure", "error", "host node hasn't yet been initialized")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
 
 	err := SendMessage(c.Request.Context(), p2p, msg)
 	if err != nil {
+		log.Errorw("actor_send_message_failure", "error", err.Error(), "destination", msg.To.Address.HostID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	log.Infow("actor_send_message_success", "destination", msg.To.Address.HostID)
 	c.JSON(http.StatusOK, gin.H{"message": "message sent"})
 }
 
@@ -118,14 +136,19 @@ func (rs RESTServer) ActorSendMessage(c *gin.Context) {
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/invoke [post]
 func (rs RESTServer) ActorInvoke(c *gin.Context) {
+	endTrace := observability.StartTrace("actor_invoke_duration")
+	defer endTrace()
+
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {
+		log.Errorw("actor_invoke_failure", "error", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	p2p := rs.config.P2P
 	if p2p == nil {
+		log.Errorw("actor_invoke_failure", "error", "host node hasn't yet been initialized")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
@@ -136,12 +159,13 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 	err := p2p.HandleMessage(protocol, func(data []byte) {
 		var envelope actor.Envelope
 		if err := json.Unmarshal(data, &envelope); err != nil {
-			// TODO log this
+			log.Errorw("actor_invoke_response_failure", "error", err.Error())
 			return
 		}
 		responseCh <- envelope
 	})
 	if err != nil {
+		log.Errorw("actor_invoke_failure", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -151,18 +175,22 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 
 	err = SendMessage(c.Request.Context(), p2p, msg)
 	if err != nil {
+		log.Errorw("actor_invoke_failure", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	select {
 	case responseMsg := <-responseCh:
+		log.Infow("actor_invoke_success", "destination", msg.To.Address.HostID)
 		c.JSON(http.StatusOK, responseMsg)
 		return
 	case <-time.After(time.Until(msg.Expiry())):
+		log.Errorw("actor_invoke_failure", "error", "request timeout")
 		c.JSON(http.StatusRequestTimeout, gin.H{"error": "request timeout"})
 		return
 	case <-c.Request.Context().Done():
+		log.Errorw("actor_invoke_failure", "error", "request timeout")
 		c.JSON(http.StatusRequestTimeout, gin.H{"error": "request timeout"})
 		return
 	}
@@ -183,24 +211,32 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 //				@Failure		500	{object}	object	"failed to publish message"
 //				@Router			/actor/broadcast [post]
 func (rs RESTServer) ActorBroadcast(c *gin.Context) {
+	endTrace := observability.StartTrace("actor_broadcast_duration")
+	defer endTrace()
+
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {
+		log.Errorw("actor_broadcast_failure", "error", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	p2p := rs.config.P2P
 	if p2p == nil {
+		log.Errorw("actor_broadcast_failure", "error", "host node hasn't yet been initialized")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
+		return
 	}
 
 	if !msg.IsBroadcast() {
+		log.Errorw("actor_broadcast_failure", "error", "message is not a broadcast message")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message is not a broadcast message"})
 		return
 	}
 
 	data, err := json.Marshal(msg)
 	if err != nil {
+		log.Errorw("actor_broadcast_failure", "error", "failed to marshal message")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal message"})
 		return
 	}
@@ -212,6 +248,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 	err = p2p.HandleMessage(protocol, func(data []byte) {
 		var envelope actor.Envelope
 		if err = json.Unmarshal(data, &envelope); err != nil {
+			log.Errorw("actor_broadcast_failure", "error", "failed to unmarshal response message")
 			return
 		}
 		mu.Lock()
@@ -219,6 +256,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 		mu.Unlock()
 	})
 	if err != nil {
+		log.Errorw("actor_broadcast_failure", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -228,6 +266,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 
 	// Publish the message
 	if err := p2p.Publish(c.Request.Context(), msg.Options.Topic, data); err != nil {
+		log.Errorw("actor_broadcast_failure", "error", "failed to publish message")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish message"})
 		return
 	}
@@ -239,6 +278,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 	case <-c.Request.Context().Done():
 		// request context done
 	}
+	log.Infow("actor_broadcast_success", "fromAddress", msg.From.Address.HostID, "responsesCount", len(messages))
 	c.JSON(http.StatusOK, messages)
 }
 

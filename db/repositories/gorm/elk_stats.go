@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -23,6 +24,10 @@ type RequestTrackerGORM struct {
 // NewRequestTracker creates a new instance of RequestTrackerGORM.
 // It initializes and returns a GORM-based repository for RequestTracker entities.
 func NewRequestTracker(db *gorm.DB) repositories.RequestTracker {
+	endTrace := observability.StartTrace("gorm_db_request_tracker_init_duration")
+	defer endTrace()
+
+	logger.Infow("gorm_db_request_tracker_init_success", "repository", "RequestTracker")
 	return &RequestTrackerGORM{
 		NewGenericRepository[types.RequestTracker](db),
 	}

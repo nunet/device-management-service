@@ -35,7 +35,6 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
-	"gitlab.com/nunet/device-management-service/telemetry/logger"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -233,7 +232,6 @@ func Run(ksPassphrase string, contextName string) error {
 	restConfig := api.RESTServerConfig{
 		P2P:        p2pNet,
 		Onboarding: onboard,
-		Logger:     logger.New("rest-server"),
 		Resource:   resourceManager,
 		MidW:       nil,
 		Port:       gcfg.Rest.Port,

@@ -15,12 +15,16 @@ import (
 
 	clover "github.com/ostafen/clover/v2"
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 // setup initializes and sets up the clover database using bbolt under the hood in a temporary dir.
 // Additionally, it automatically creates collections for the necessary types.
 // TODO: add error handling?
 func setup() (*clover.DB, string) {
+	// Set observability to no-op mode for testing
+	observability.SetNoOpMode(true)
+
 	path, err := tempDir()
 	if err != nil {
 		fmt.Println(err)

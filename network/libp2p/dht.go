@@ -30,6 +30,7 @@ import (
 	multiaddr "github.com/multiformats/go-multiaddr"
 	"google.golang.org/protobuf/proto"
 
+	"gitlab.com/nunet/device-management-service/observability"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 )
 
@@ -65,11 +66,15 @@ func (l *Libp2p) ConnectToBootstrapNodes(ctx context.Context) error {
 
 // Start dht bootstrapper
 func (l *Libp2p) BootstrapDHT(ctx context.Context) error {
+	endTrace := observability.StartTrace("libp2p_bootstrap_duration")
+	defer endTrace()
+
 	if err := l.DHT.Bootstrap(ctx); err != nil {
-		log.Errorf("failed to prepare this node for bootstraping: %s", err)
+		log.Errorw("libp2p_bootstrap_failure", "error", err)
 		return err
 	}
 
+	log.Infow("libp2p_bootstrap_success")
 	return nil
 }
 
@@ -208,12 +213,17 @@ type dhtValidator struct {
 
 // Validate validates an item placed into the dht.
 func (d dhtValidator) Validate(key string, value []byte) error {
+	endTrace := observability.StartTrace("libp2p_dht_validate_duration")
+	defer endTrace()
+
 	// empty value is considered deleting an item from the dht
 	if len(value) == 0 {
+		log.Infow("libp2p_dht_validate_success", "key", key)
 		return nil
 	}
 
 	if !strings.HasPrefix(key, d.customNamespace) {
+		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", "invalid key namespace")
 		return errors.New("invalid key namespace")
 	}
 
@@ -221,11 +231,13 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 	var envelope commonproto.Advertisement
 	err := proto.Unmarshal(value, &envelope)
 	if err != nil {
+		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", fmt.Sprintf("failed to unmarshal envelope: %v", err))
 		return fmt.Errorf("failed to unmarshal envelope: %w", err)
 	}
 
 	pubKey, err := crypto.UnmarshalSecp256k1PublicKey(envelope.PublicKey)
 	if err != nil {
+		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", fmt.Sprintf("failed to unmarshal public key: %v", err))
 		return fmt.Errorf("failed to unmarshal public key: %w", err)
 	}
 
@@ -237,13 +249,16 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 	}, nil)
 	ok, err := pubKey.Verify(concatenatedBytes, envelope.Signature)
 	if err != nil {
+		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", fmt.Sprintf("failed to verify envelope: %v", err))
 		return fmt.Errorf("failed to verify envelope: %w", err)
 	}
 
 	if !ok {
+		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", "public key didn't sign the payload")
 		return errors.New("failed to verify envelope, public key didn't sign payload")
 	}
 
+	log.Infow("libp2p_dht_validate_success", "key", key)
 	return nil
 }
 

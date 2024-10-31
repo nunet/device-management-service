@@ -41,7 +41,6 @@ const (
 
 // DownloadFile downloads a file from a url and saves it to a filepath
 func DownloadFile(url string, filepath string, maxBytes int64) (err error) {
-	zlog.Sugar().Infof("Downloading file '", filepath, "' from '", url, "'")
 	file, err := os.Create(filepath)
 	if err != nil {
 		return err
