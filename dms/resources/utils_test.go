@@ -25,33 +25,31 @@ import (
 // used by tests.
 func setupManagerRepos(t *testing.T, db *gorm.DB) ManagerRepos {
 	err := db.AutoMigrate(
-		&types.FreeResources{},
 		&types.OnboardedResources{},
 		&types.ResourceAllocation{},
 	)
 	require.NoError(t, err)
 
 	return ManagerRepos{
-		FreeResources:      gormRepo.NewFreeResources(db),
 		OnboardedResources: gormRepo.NewOnboardedResources(db),
 		ResourceAllocation: gormRepo.NewResourceAllocation(db),
 	}
 }
 
 // setUpFreeResources sets up the mock free resources using the repository
-func setUpFreeResources(repo repositories.FreeResources, freeResources types.FreeResources, t *testing.T) {
-	t.Helper()
-	_, err := repo.Save(context.Background(), freeResources)
-	require.NoError(t, err)
-}
+// func setUpFreeResources(repo repositories.FreeResources, freeResources types.FreeResources, t *testing.T) {
+// 	t.Helper()
+// 	_, err := repo.Save(context.Background(), freeResources)
+// 	require.NoError(t, err)
+// }
 
-// getFreeResourcesFromDB gets the free resources using the repository
-func getFreeResourcesFromDB(repo repositories.FreeResources, t *testing.T) types.FreeResources {
-	t.Helper()
-	freeResources, err := repo.Get(context.Background())
-	require.NoError(t, err)
-	return freeResources
-}
+// // getFreeResourcesFromDB gets the free resources using the repository
+// func getFreeResourcesFromDB(repo repositories.FreeResources, t *testing.T) types.FreeResources {
+// 	t.Helper()
+// 	freeResources, err := repo.Get(context.Background())
+// 	require.NoError(t, err)
+// 	return freeResources
+// }
 
 // getOnboardedResourcesFromDB gets the onboarded resources using the repository
 func getOnboardedResourcesFromDB(repo repositories.OnboardedResources, t *testing.T) types.OnboardedResources {
@@ -88,14 +86,12 @@ func newMockResourceManager(
 
 // newMockManagerRepos creates a new mock ManagerRepos
 func newMockManagerRepos(t *testing.T,
-	freeResources repositories.FreeResources,
 	onboardedResources repositories.OnboardedResources,
 	resourceAllocation repositories.ResourceAllocation,
 ) ManagerRepos {
 	t.Helper()
 
 	return ManagerRepos{
-		FreeResources:      freeResources,
 		OnboardedResources: onboardedResources,
 		ResourceAllocation: resourceAllocation,
 	}
