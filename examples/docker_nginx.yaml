@@ -1,0 +1,47 @@
+version: "V1"
+
+allocations:
+    alloc1:
+        executor: docker
+        resources:
+            cpu:
+                clockspeed: 2400000000
+                cores: 2
+                model: ""
+                vendor: "Intel"
+                threads: 2
+                architecture: "x86_64"
+                cachesize: 0
+            gpus: []
+            ram:
+                size: 1024
+                clockspeed: 3
+                type: ""
+            disk:
+                size: 20000
+                model: ""
+                vendor: ""
+                type: ""
+                interface: ""
+                readspeed: 0
+                writespeed: 0
+        execution:
+            type: docker
+            params:
+                image: nginxdemos/hello
+                working_directory: /
+        dnsname: mydocker
+        keys: []
+        provision: []
+        healthcheck: ""
+nodes:
+    node1:
+        allocations:
+            - alloc1
+        ports:
+            - public: 1
+              private: 1
+              allocation: alloc1
+        location:
+            accept: []
+            reject: []

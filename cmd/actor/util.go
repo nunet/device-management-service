@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -137,11 +136,11 @@ func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, top
 	case destStr != "":
 		switch {
 		case strings.HasPrefix(destStr, "did:"):
-			dest, err = handleFromDID(destStr)
+			dest, err = actor.HandleFromDID(destStr)
 		case strings.HasPrefix(destStr, "{"):
 			err = json.Unmarshal([]byte(destStr), &dest)
 		default:
-			dest, err = handleFromPeerID(destStr)
+			dest, err = actor.HandleFromPeerID(destStr)
 		}
 
 		if err != nil {
@@ -179,70 +178,4 @@ func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, top
 	}
 
 	return msg, nil
-}
-
-func handleFromPeerID(dest string) (actor.Handle, error) {
-	peerID, err := peer.Decode(dest)
-	if err != nil {
-		return actor.Handle{}, err
-	}
-
-	pubk, err := peerID.ExtractPublicKey()
-	if err != nil {
-		return actor.Handle{}, err
-	}
-
-	if !crypto.AllowedKey(int(pubk.Type())) {
-		return actor.Handle{}, fmt.Errorf("unexpected key type: %d", pubk.Type())
-	}
-
-	actorID, err := crypto.IDFromPublicKey(pubk)
-	if err != nil {
-		return actor.Handle{}, err
-	}
-
-	actorDID := did.FromPublicKey(pubk)
-	handle := actor.Handle{
-		ID:  actorID,
-		DID: actorDID,
-		Address: actor.Address{
-			HostID:       peerID.String(),
-			InboxAddress: "root",
-		},
-	}
-
-	return handle, nil
-}
-
-func handleFromDID(dest string) (actor.Handle, error) {
-	actorDID, err := did.FromString(dest)
-	if err != nil {
-		return actor.Handle{}, err
-	}
-
-	pubk, err := did.PublicKeyFromDID(actorDID)
-	if err != nil {
-		return actor.Handle{}, err
-	}
-
-	actorID, err := crypto.IDFromPublicKey(pubk)
-	if err != nil {
-		return actor.Handle{}, err
-	}
-
-	peerID, err := peer.IDFromPublicKey(pubk)
-	if err != nil {
-		return actor.Handle{}, err
-	}
-
-	handle := actor.Handle{
-		ID:  actorID,
-		DID: actorDID,
-		Address: actor.Address{
-			HostID:       peerID.String(),
-			InboxAddress: "root",
-		},
-	}
-
-	return handle, nil
 }

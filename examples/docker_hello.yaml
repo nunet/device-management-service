@@ -28,7 +28,7 @@ allocations:
         execution:
             type: docker
             params:
-                image: nginxdemos/hello
+                image: hello-world
                 working_directory: /
         dnsname: mydocker
         keys: []
@@ -38,10 +38,7 @@ nodes:
     node1:
         allocations:
             - alloc1
-        ports:
-            - public: 1
-              private: 1
-              allocation: alloc1
         location:
             accept: []
             reject: []
+        peer: 12D3KooWKgAbHgeBPHTP3y6CNJLNqCyFcMBHVJXgTWpgyexxcS42
