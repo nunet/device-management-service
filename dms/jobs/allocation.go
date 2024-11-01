@@ -15,11 +15,10 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/docker"
-
-	// "gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -46,9 +45,10 @@ type AllocationDetails struct {
 }
 
 type Job struct {
-	ID        string
-	Resources types.Resources
-	Execution types.SpecConfig
+	ID               string
+	Resources        types.Resources
+	Execution        types.SpecConfig
+	ProvisionScripts map[string][]byte
 }
 
 // Allocation represents an allocation
@@ -130,10 +130,11 @@ func (a *Allocation) Run(ctx context.Context) error {
 	}
 
 	err = a.executor.Start(ctx, &types.ExecutionRequest{
-		JobID:       a.Job.ID,
-		ExecutionID: a.executionID,
-		EngineSpec:  &a.Job.Execution,
-		Resources:   &a.Job.Resources,
+		JobID:            a.Job.ID,
+		ExecutionID:      a.executionID,
+		EngineSpec:       &a.Job.Execution,
+		Resources:        &a.Job.Resources,
+		ProvisionScripts: a.Job.ProvisionScripts,
 		// TODO add the following
 		Inputs:     []*types.StorageVolumeExecutor{}, // Question: what are those?
 		Outputs:    []*types.StorageVolumeExecutor{},

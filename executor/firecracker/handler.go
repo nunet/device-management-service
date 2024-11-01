@@ -14,6 +14,7 @@ package firecracker
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -103,6 +104,17 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 	log.Infow("firecracker_destroy_vm", "executionID", h.executionID)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	// TODO: move this to executionHandler field
+	customInitPath := fmt.Sprintf("%s-%s", customInitPrefixPath, h.executionID)
+	initScriptsPath := fmt.Sprintf("%s-%s", initScriptsPrefixPath, h.executionID)
+
+	if err := os.RemoveAll(customInitPath); err != nil {
+		log.Errorf("failed to remove custom init: %v", err)
+	}
+	if err := os.RemoveAll(initScriptsPath); err != nil {
+		log.Errorf("failed to remove init scripts: %v", err)
+	}
 
 	return h.client.DestroyVM(ctx, h.machine, timeout)
 }

@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +43,8 @@ const (
 
 	statusWaitTickTime = 100 * time.Millisecond
 	statusWaitTimeout  = 10 * time.Second
+
+	initScriptsBaseDir = "/tmp/nunet-init-scripts-"
 )
 
 // Executor manages the lifecycle of Docker containers for execution requests.
@@ -109,6 +113,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		activeCh:    make(chan bool),
 		running:     &atomic.Bool{},
 		TTYEnabled:  true,
+		initScripts: request.ProvisionScripts,
 	}
 
 	// register the handler for this executionID
@@ -187,6 +192,7 @@ func (e *Executor) doWait(
 	errCh chan error,
 	handler *executionHandler,
 ) {
+	log.Infof("executionID %s waiting for execution", handler.executionID)
 	defer close(out)
 	defer close(errCh)
 
@@ -196,6 +202,7 @@ func (e *Executor) doWait(
 		return
 	case <-handler.waitCh:
 		if handler.result != nil {
+			log.Debugf("executionID %s received results from execution ", handler.executionID)
 			out <- handler.result
 		} else {
 			errCh <- fmt.Errorf("execution (%s) result is nil", handler.executionID)
@@ -321,8 +328,7 @@ func (e *Executor) WaitForStatus(
 // It returns the result of the execution or an error if either starting
 // or waiting fails, or if the context is canceled.
 func (e *Executor) Run(
-	ctx context.Context,
-	request *types.ExecutionRequest,
+	ctx context.Context, request *types.ExecutionRequest,
 ) (*types.ExecutionResult, error) {
 	if err := e.Start(ctx, request); err != nil {
 		return nil, err
@@ -340,6 +346,7 @@ func (e *Executor) Run(
 
 // Cleanup removes all Docker resources associated with the executor.
 // This includes removing containers including networks and volumes with the executor's label.
+// It also removes all temporary directories created for init scripts.
 func (e *Executor) Cleanup(ctx context.Context) error {
 	endTrace := observability.StartTrace("docker_executor_cleanup_duration")
 	defer endTrace()
@@ -353,6 +360,22 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 	}
 
 	log.Infow("docker_executor_cleanup_success", "executorID", e.ID)
+
+	// Remove all provision scripts used for mounting
+	pattern := initScriptsBaseDir + "*"
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return fmt.Errorf("failed to find init script directories: %w", err)
+	}
+
+	for _, dir := range matches {
+		if err := os.RemoveAll(dir); err != nil {
+			log.Warnf("Failed to remove init script directory %s: %v", dir, err)
+		} else {
+			log.Infof("Removed init script directory: %s", dir)
+		}
+	}
+
 	return nil
 }
 
@@ -415,6 +438,33 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to create container mounts: %w", err)
 	}
 
+	initScriptsDir, err := prepareInitScripts(params.ProvisionScripts, params.ExecutionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to prepare init scripts: %w", err)
+	}
+
+	if initScriptsDir != "" {
+		oldEntryPoint := containerConfig.Entrypoint
+		oldCmd := containerConfig.Cmd
+
+		// Execute init scripts first
+		containerConfig.Entrypoint = []string{"/bin/sh", "-c"}
+		containerConfig.Cmd = []string{
+			fmt.Sprintf("%s/run_provision_scripts.sh && %s %s",
+				initScriptsDir,
+				strings.Join(oldEntryPoint, " "),
+				strings.Join(oldCmd, " ")),
+		}
+
+		// Add a mount for the init scripts
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: initScriptsDir,
+			Target: initScriptsDir,
+		})
+	}
+
+	log.Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
 	hostConfig := configureHostConfig(chosenGPUVendor, params, mounts)
 
 	executionContainer, err := e.client.CreateContainer(
@@ -430,6 +480,42 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
 	return executionContainer, nil
+}
+
+// prepareInitScripts creates a shell script that will run all init scripts
+func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
+	if len(scripts) == 0 {
+		return "", nil
+	}
+
+	tempDir := initScriptsBaseDir + id
+	err := os.MkdirAll(tempDir, 0o700)
+	if err != nil {
+		return "", fmt.Errorf("failed to create init scripts base directory: %w", err)
+	}
+
+	scriptNames := make([]string, 0, len(scripts))
+	for name, content := range scripts {
+		filename := filepath.Join(tempDir, name)
+		if err := os.WriteFile(filename, content, 0o700); err != nil {
+			return "", fmt.Errorf("failed to write init script %s: %w", name, err)
+		}
+		scriptNames = append(scriptNames, filename)
+	}
+
+	// Create a wrapper script to execute all init scripts
+	wrapperContent := "#!/bin/sh\n\n"
+	for _, script := range scriptNames {
+		wrapperContent += fmt.Sprintf("echo 'Executing %s'\n", filepath.Base(script))
+		wrapperContent += fmt.Sprintf("%s\n", script)
+	}
+
+	wrapperPath := filepath.Join(tempDir, "run_provision_scripts.sh")
+	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0o700); err != nil {
+		return "", fmt.Errorf("failed to write wrapper script: %w", err)
+	}
+
+	return tempDir, nil
 }
 
 // configureHostConfig sets up the host configuration for the container based on the

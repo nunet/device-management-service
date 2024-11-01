@@ -936,10 +936,17 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 	ncfg, _ := o.cfg.Node(n)
 	for _, a := range ncfg.Allocations {
 		acfg, _ := o.cfg.Allocation(a)
+
+		provisionScripts := make(map[string][]byte)
+		for _, p := range acfg.Provision {
+			provisionScripts[p] = o.cfg.V1.Scripts[p]
+		}
+
 		allocs[a] = AllocationDeploymentConfig{
-			Executor:  acfg.Executor,
-			Resources: acfg.Resources,
-			Execution: acfg.Execution,
+			Executor:         acfg.Executor,
+			Resources:        acfg.Resources,
+			Execution:        acfg.Execution,
+			ProvisionScripts: provisionScripts,
 		}
 	}
 
