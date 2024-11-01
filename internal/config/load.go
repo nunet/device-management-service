@@ -169,3 +169,17 @@ func GetPath() string {
 	}
 	return v.ConfigFileUsed()
 }
+
+func CreateConfigFileIfNotExists(fs afero.Fs) error {
+	exists, err := FileExists(fs)
+	if err != nil {
+		return fmt.Errorf("failed to check if config file exists: %w", err)
+	}
+	if !exists {
+		v := setDefaultConfig()
+		if err := v.SafeWriteConfig(); err != nil {
+			return fmt.Errorf("failed to create config file: %w", err)
+		}
+	}
+	return nil
+}
