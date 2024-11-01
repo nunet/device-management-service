@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+
 	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
@@ -174,7 +175,7 @@ func TestConfigEditCmd(t *testing.T) {
 				os.Unsetenv("EDITOR")
 			}
 
-			cmd := newConfigEditCmd()
+			cmd := newConfigEditCmd(afero.NewMemMapFs())
 			_, err := ExecuteCommand(cmd)
 
 			if tt.wantErr {

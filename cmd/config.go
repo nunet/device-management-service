@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+
 	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
@@ -36,7 +37,7 @@ Search for the configuration file is done in the following locations and order:
 	}
 	cmd.AddCommand(newConfigGetCmd())
 	cmd.AddCommand(newConfigSetCmd(fs))
-	cmd.AddCommand(newConfigEditCmd())
+	cmd.AddCommand(newConfigEditCmd(fs))
 	return cmd
 }
 
@@ -109,7 +110,7 @@ Example:
 	return cmd
 }
 
-func newConfigEditCmd() *cobra.Command {
+func newConfigEditCmd(fs afero.Fs) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "edit",
 		Short: "Edit configuration",
@@ -122,6 +123,11 @@ It reads the $EDITOR environment variable and it fails if it's not set`,
 			editor := os.Getenv("EDITOR")
 			if editor == "" {
 				return fmt.Errorf("$EDITOR not set")
+			}
+
+			err := config.CreateConfigFileIfNotExists(fs)
+			if err != nil {
+				return fmt.Errorf("failed to create config file: %w", err)
 			}
 			cmd.Printf("Text editor: %s\n", editor)
 			cmd.Printf("Config path: %s\n", config.GetPath())
