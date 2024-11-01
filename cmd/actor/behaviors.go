@@ -14,14 +14,13 @@ import (
 	"os"
 	"strconv"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
-	"gitlab.com/nunet/device-management-service/types"
-
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var ErrInvalidArgument = errors.New("invalid argument")
@@ -255,6 +254,94 @@ This behavior is used to check the onboarding status of a node.
 Examples:
   nunet actor cmd --context user /dms/node/onboarding/status`,
 	},
+
+	// /dms/node/deployment/list
+	node.DeploymentListBehavior: {
+		Type:  bInvoke,
+		Short: "List deployments",
+		Long: `Invokes the /dms/node/deployment/list behavior on an actor
+
+This behavior retrieves a list of all deployments on the node.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/list`,
+	},
+
+	// /dms/node/deployment/status
+	node.DeploymentStatusBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentStatusRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentStatusRequest)
+			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentStatusRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Get deployment status",
+		Long: `Invokes the /dms/node/deployment/status behavior on an actor
+
+This behavior retrieves the status of a specific deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>`,
+	},
+
+	// /dms/node/deployment/manifest
+	node.DeploymentManifestBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentManifestRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentManifestRequest)
+			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentManifestRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Get deployment manifest",
+		Long: `Invokes the /dms/node/deployment/manifest behavior on an actor
+
+This behavior retrieves the manifest of a specific deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/manifest --id <deployment_id>`,
+	},
+
+	// /dms/node/deployment/shutdown
+	node.DeploymentShutdownBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentShutdownRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentShutdownRequest)
+			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentShutdownRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Shutdown a deployment",
+		Long: `Invokes the /dms/node/deployment/shutdown behavior on an actor
+
+This behavior shuts down a specific deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/shutdown --id <deployment_id>`,
+	},
+
 	// /dms/node/vm/start/custom
 	node.VMStartBehavior: {
 		Type:    bInvoke,

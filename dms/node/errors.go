@@ -12,4 +12,8 @@ import (
 	"errors"
 )
 
-var ErrTODO = errors.New("TODO")
+var (
+	ErrTODO                 = errors.New("TODO")
+	ErrDeploymentNotFound   = errors.New("deployment not found")
+	ErrDeploymentNotRunning = errors.New("deployment not running")
+)
