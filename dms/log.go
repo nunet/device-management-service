@@ -41,6 +41,9 @@ func silenceLibp2pLogging() error {
 	err = logging.SetLogLevel("routedhost", "panic")
 	errs = multierr.Append(errs, err)
 
+	err = logging.SetLogLevel("relay", "panic")
+	errs = multierr.Append(errs, err)
+
 	err = logging.SetLogLevel("autorelay", "panic")
 	errs = multierr.Append(errs, err)
 

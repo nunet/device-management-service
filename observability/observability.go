@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -89,6 +90,11 @@ var (
 
 // initLogger configures the global logger with console, file, Elasticsearch logging, and event emission
 func initLogger(observabilityConfig config.Observability) error {
+	// make sure log dir exists
+	if err := os.MkdirAll(filepath.Dir(observabilityConfig.LogFile), 0o755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
+	}
+
 	// Parse the global log level
 	logLevel, err := parseLogLevel(observabilityConfig.LogLevel)
 	if err != nil {
@@ -357,7 +363,7 @@ func (e *eventEmitterCore) Write(entry zapcore.Entry, fields []zapcore.Field) er
 	}
 
 	// Create a CustomEvent
-	customEvent := &CustomEvent{
+	customEvent := CustomEvent{
 		Name:      "log_event",
 		Timestamp: entry.Time,
 		Data:      eventData,
