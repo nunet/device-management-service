@@ -31,7 +31,9 @@ import (
 )
 
 const (
-	socketDir = "/tmp"
+	socketDir             = "/tmp"
+	customInitPrefixPath  = "/tmp/custom-init"
+	initScriptsPrefixPath = "/tmp/init_scripts"
 
 	DefaultCPUCount int64 = 1
 	DefaultMemSize  int64 = 50 * 1024
@@ -39,7 +41,7 @@ const (
 	statusWaitTickTime = 100 * time.Millisecond
 	statusWaitTimeout  = 10 * time.Second
 
-	defaultKernelArgs = "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.unified_cgroup_hierarchy=0 systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init"
+	defaultKernelArgs = "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.unified_cgroup_hierarchy=0 systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target"
 )
 
 var ErrNotInstalled = errors.New("firecracker is not installed")
@@ -357,7 +359,16 @@ func (e *Executor) newFirecrackerExecutionVM(
 		return nil, fmt.Errorf("failed to decode firecracker engine spec: %w", err)
 	}
 
+	customInitPath := fmt.Sprintf("%s-%s", customInitPrefixPath, params.ExecutionID)
+	initScriptsPath := fmt.Sprintf("%s-%s", initScriptsPrefixPath, params.ExecutionID)
+
+	err = prepareCustomInit(params.ProvisionScripts, customInitPath, initScriptsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare custom init: %w", err)
+	}
+
 	fcArgs.KernelArgs = strings.Join([]string{defaultKernelArgs, fcArgs.KernelArgs}, " ")
+	fcArgs.KernelArgs = strings.Join([]string{fcArgs.KernelArgs, fmt.Sprintf("init=%s", customInitPrefixPath)}, " ")
 
 	fcConfig := firecracker.Config{
 		VMID:            params.ExecutionID,
@@ -377,6 +388,8 @@ func (e *Executor) newFirecrackerExecutionVM(
 		params.Inputs,
 		params.Outputs,
 		params.ResultsDir,
+		customInitPath,
+		initScriptsPath,
 	)
 	if err != nil {
 		log.Errorw("firecracker_create_vm_mounts_failure", "error", err)
@@ -402,13 +415,16 @@ func makeVMMounts(
 	rootFileSystem string,
 	inputs []*types.StorageVolumeExecutor,
 	outputs []*types.StorageVolumeExecutor,
-	resultsDir string,
+	resultsDir, customInitPath, initScriptsPath string,
 ) ([]fcmodels.Drive, error) {
 	var drives []fcmodels.Drive
 	drivesBuilder := firecracker.NewDrivesBuilder(rootFileSystem)
 	for _, input := range inputs {
 		drivesBuilder.AddDrive(input.Source, input.ReadOnly)
 	}
+
+	drivesBuilder.AddDrive(customInitPath, true)
+	drivesBuilder.AddDrive(initScriptsPath, true)
 
 	for _, output := range outputs {
 		if output.Source == "" {

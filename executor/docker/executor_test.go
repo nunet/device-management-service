@@ -76,6 +76,22 @@ func (s *ExecutorTestSuite) TestRunJob() {
 	s.NotEmpty(result.STDOUT)
 }
 
+// Test RunJobWithInitScripts tests the Run method of the Docker executor with ProvisionScripts.
+func (s *ExecutorTestSuite) TestRunJobWithInitScripts() {
+	request := s.newExecutionRequest(transientCmd)
+	request.ProvisionScripts = map[string][]byte{
+		"script1": []byte("#!/usr/bin/env python\nprint(\"hello_init\")"),
+		"script2": []byte("#!/bin/sh\necho bye_init"),
+	}
+
+	result, err := s.executor.Run(context.Background(), request)
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal(types.ExecutionStatusCodeSuccess, result.ExitCode)
+	s.Contains(result.STDOUT, "hello_init")
+	s.Contains(result.STDOUT, "bye_init")
+}
+
 // Test WaitJob tests the Wait method of the Docker executor.
 func (s *ExecutorTestSuite) TestWaitJob() {
 	request := s.newExecutionRequest(transientCmd)

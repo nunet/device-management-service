@@ -21,13 +21,14 @@ const (
 
 // ExecutionRequest is the request object for executing a job
 type ExecutionRequest struct {
-	JobID       string                   // ID of the job to execute
-	ExecutionID string                   // ID of the execution
-	EngineSpec  *SpecConfig              // Engine spec for the execution
-	Resources   *Resources               // Resources for the execution
-	Inputs      []*StorageVolumeExecutor // Input volumes for the execution
-	Outputs     []*StorageVolumeExecutor // Output volumes for the results
-	ResultsDir  string                   // Directory to store the results
+	JobID            string                   // ID of the job to execute
+	ExecutionID      string                   // ID of the execution
+	EngineSpec       *SpecConfig              // Engine spec for the execution
+	Resources        *Resources               // Resources for the execution
+	Inputs           []*StorageVolumeExecutor // Input volumes for the execution
+	Outputs          []*StorageVolumeExecutor // Output volumes for the results
+	ResultsDir       string                   // Directory to store the results
+	ProvisionScripts map[string][]byte        // (named) Scripts to run when initiating the execution
 }
 
 // ExecutionListItem is the result of the current executions.

@@ -85,6 +85,11 @@ func (s *ExecutorTestSuite) TestStartJob() {
 // // Test RunJob tests the Run method of the Firecracker executor.
 func (s *ExecutorTestSuite) TestRunJob() {
 	request := s.newExecutionRequest(false)
+
+	request.ProvisionScripts = map[string][]byte{
+		"script1.sh": []byte("touch /tmp/hello_init.txt"),
+		"script2.sh": []byte("touch /tmp/bye_init.txt"),
+	}
 	result, err := s.executor.Run(context.Background(), request)
 	s.NoError(err)
 	s.NotNil(result)

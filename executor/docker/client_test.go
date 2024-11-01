@@ -11,9 +11,12 @@ package docker_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -26,7 +29,7 @@ import (
 )
 
 var (
-	defaultImage  = "alpine"
+	defaultImage  = "python:alpine"
 	transientCmd  = []string{"echo", "hello world"}
 	persistentCmd = []string{"sh", "-c", "while true; do date; sleep 1; done"}
 )
@@ -146,4 +149,47 @@ func (s *ClientTestSuite) TestContainerLifecycle() {
 
 	err = s.client.RemoveContainer(context.Background(), id)
 	s.Require().NoError(err)
+}
+
+// TestFollowLogs tests the FollowLogs method of the Docker client.
+func (s *ClientTestSuite) TestFollowLogs() {
+	// Create a container that outputs some logs
+	id := s.createTestContainer(defaultImage, []string{"sh", "-c", "echo stdout message && echo stderr message >&2"})
+	s.NotEmpty(id)
+
+	err := s.client.StartContainer(context.Background(), id)
+	s.NoError(err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stdout, stderr, err := s.client.FollowLogs(ctx, id)
+	s.NoError(err)
+
+	// Use a WaitGroup to ensure we've read all the output
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var stdoutContent, stderrContent []byte
+	var stdoutErr, stderrErr error
+
+	go func() {
+		defer wg.Done()
+		stdoutContent, stdoutErr = io.ReadAll(stdout)
+	}()
+
+	go func() {
+		defer wg.Done()
+		stderrContent, stderrErr = io.ReadAll(stderr)
+	}()
+
+	// Wait for both goroutines to finish
+	wg.Wait()
+
+	s.NoError(stdoutErr)
+	s.NoError(stderrErr)
+
+	// Check the content of stdout and stderr
+	s.Contains(string(stdoutContent), "stdout message")
+	s.Contains(string(stderrContent), "stderr message")
 }

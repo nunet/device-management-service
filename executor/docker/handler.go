@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -47,6 +48,9 @@ type executionHandler struct {
 
 	// TTY setting
 	TTYEnabled bool // Indicates if TTY is enabled for the container.
+
+	// others
+	initScripts map[string][]byte
 }
 
 // active checks if the execution handler's container is running.
@@ -200,6 +204,11 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 
 	if err := h.client.RemoveContainer(ctx, h.containerID); err != nil {
 		log.Errorw("docker_execution_handler_destroy_failure", "error", err, "executionID", h.executionID)
+		return err
+	}
+
+	err := os.RemoveAll(initScriptsBaseDir + h.executionID)
+	if err != nil {
 		return err
 	}
 

@@ -76,9 +76,10 @@ type AllocationDeploymentRequest struct {
 }
 
 type AllocationDeploymentConfig struct {
-	Executor  AllocationExecutor
-	Resources types.Resources
-	Execution types.SpecConfig
+	Executor         AllocationExecutor
+	Resources        types.Resources
+	Execution        types.SpecConfig
+	ProvisionScripts map[string][]byte
 }
 
 type AllocationDeploymentResponse struct {

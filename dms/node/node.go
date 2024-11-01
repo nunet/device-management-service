@@ -659,9 +659,10 @@ func (n *Node) createAllocations(ensembleID string, _ string, allocations map[st
 		}
 
 		allocation, err := n.createAllocation(jobs.Job{
-			ID:        ensembleID,
-			Resources: config.Resources,
-			Execution: config.Execution,
+			ID:               ensembleID,
+			Resources:        config.Resources,
+			Execution:        config.Execution,
+			ProvisionScripts: config.ProvisionScripts,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create allocation %s: %w", allocationID, err)
