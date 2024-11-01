@@ -35,10 +35,11 @@ import (
 )
 
 const (
-	helloMinDelay = 10 * time.Second
-	helloMaxDelay = 20 * time.Second
-	helloTimeout  = 3 * time.Second
-	helloAttempts = 3
+	helloMinDelay                   = 10 * time.Second
+	helloMaxDelay                   = 20 * time.Second
+	helloTimeout                    = 3 * time.Second
+	helloAttempts                   = 3
+	clearCommitedResourcesFrequency = 60 * time.Second
 
 	rootProto = "actor/root/messages/0.0.1"
 )
@@ -67,10 +68,11 @@ type Node struct {
 	allocations map[string]*jobs.Allocation
 	running     int32
 
-	geoip         types.GeoIPLocator
-	hostLocation  HostGeolocation
-	portConfig    PortConfig
-	portAllocator *PortAllocator
+	geoip             types.GeoIPLocator
+	hostLocation      HostGeolocation
+	portConfig        PortConfig
+	portAllocator     *PortAllocator
+	commitedResources map[string]*bidState
 }
 
 type peerState struct {
@@ -170,25 +172,26 @@ func New(onboarder *onboarding.Onboarding,
 	ctx, cancel := context.WithCancel(context.Background())
 
 	n := &Node{
-		hostID:          hostID,
-		network:         net,
-		bids:            make(map[string]*bidState),
-		deployments:     make(map[string]*jobs.Orchestrator),
-		allocations:     make(map[string]*jobs.Allocation),
-		peers:           make(map[peer.ID]*peerState),
-		resourceManager: resourceManager,
-		hardware:        hardware,
-		actor:           nodeActor,
-		rootCap:         rootCap,
-		scheduler:       scheduler,
-		onboarder:       onboarder,
-		executors:       make(map[string]executorMetadata),
-		ctx:             ctx,
-		cancel:          cancel,
-		geoip:           geoip,
-		hostLocation:    hostLocation,
-		portConfig:      portConfig,
-		portAllocator:   NewPortAllocator(portConfig),
+		hostID:            hostID,
+		network:           net,
+		bids:              make(map[string]*bidState),
+		deployments:       make(map[string]*jobs.Orchestrator),
+		allocations:       make(map[string]*jobs.Allocation),
+		peers:             make(map[peer.ID]*peerState),
+		resourceManager:   resourceManager,
+		hardware:          hardware,
+		actor:             nodeActor,
+		rootCap:           rootCap,
+		scheduler:         scheduler,
+		onboarder:         onboarder,
+		executors:         make(map[string]executorMetadata),
+		ctx:               ctx,
+		cancel:            cancel,
+		geoip:             geoip,
+		hostLocation:      hostLocation,
+		portConfig:        portConfig,
+		portAllocator:     NewPortAllocator(portConfig),
+		commitedResources: make(map[string]*bidState),
 	}
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
@@ -324,6 +327,13 @@ func New(onboarder *onboarding.Onboarding,
 	if err := n.restoreDeployments(); err != nil {
 		log.Errorf("restoring deployments: %s", err)
 	}
+
+	ticker := time.NewTicker(clearCommitedResourcesFrequency)
+	go func() {
+		for range ticker.C {
+			n.clearCommitedResources()
+		}
+	}()
 
 	return n, nil
 }
@@ -735,6 +745,11 @@ func (n *Node) commitDeployment(ensembleID string) error {
 		return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
 	}
 
+	_, alreadyCommited := n.commitedResources[ensembleID]
+	if alreadyCommited {
+		return nil
+	}
+
 	if err := n.resourceManager.CommitResources(context.TODO(), types.ResourceAllocation{
 		JobID:     ensembleID,
 		Resources: bidState.request.V1.Resources,
@@ -742,19 +757,26 @@ func (n *Node) commitDeployment(ensembleID string) error {
 		return fmt.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
 	}
 
-	go func() {
-		<-time.After(time.Until(bidState.expire))
-		n.mx.Lock()
-		defer n.mx.Unlock()
-
-		if err := n.resourceManager.ReleaseCommittedResources(context.TODO(), ensembleID); err != nil {
-			log.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
-		}
-
-		delete(n.bids, ensembleID)
-	}()
+	n.commitedResources[ensembleID] = bidState
 
 	return nil
+}
+
+func (n *Node) clearCommitedResources() {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	for ensembleID, v := range n.commitedResources {
+		// if allocation not found for this commitment and bid is expired release resources
+		_, allocFound := n.allocations[ensembleID]
+		if !allocFound && time.Now().After(v.expire) {
+			if err := n.resourceManager.ReleaseCommittedResources(context.Background(), ensembleID); err != nil {
+				log.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
+			}
+			delete(n.bids, ensembleID)
+			delete(n.commitedResources, ensembleID)
+		}
+	}
 }
 
 // createActor creates an actor.
