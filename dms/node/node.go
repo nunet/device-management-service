@@ -61,6 +61,7 @@ type Node struct {
 	cancel func()
 
 	mx          sync.Mutex
+	allocmx     sync.Mutex
 	peers       map[peer.ID]*peerState
 	bids        map[string]*bidState
 	deployments map[string]*jobs.Orchestrator
@@ -318,8 +319,8 @@ func New(onboarder *onboarding.Onboarding,
 
 // GetAllocation gets an allocation by id.
 func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
-	n.mx.Lock()
-	defer n.mx.Unlock()
+	n.allocmx.Lock()
+	defer n.allocmx.Unlock()
 
 	alloc, ok := n.allocations[id]
 	if !ok {
@@ -640,9 +641,6 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 }
 
 func (n *Node) createAllocations(ensembleID string, _ string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
 	allocHandles := make(map[string]actor.Handle, len(allocations))
 	for allocationID, config := range allocations {
 		if _, ok := n.allocations[allocationID]; ok {
@@ -701,11 +699,15 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to start the allocation: %w", err)
 	}
 
-	n.mx.Lock()
-	n.allocations[allocation.ID] = allocation
-	n.mx.Unlock()
+	n.updateAllocations(allocation)
 
 	return allocation, nil
+}
+
+func (n *Node) updateAllocations(alloc *jobs.Allocation) {
+	n.allocmx.Lock()
+	n.allocations[alloc.ID] = alloc
+	n.allocmx.Unlock()
 }
 
 func (n *Node) commitDeployment(ensembleID string) error {
