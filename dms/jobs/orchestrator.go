@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/utils"
@@ -40,6 +41,25 @@ const (
 	DeploymentStatusRunning
 	DeploymentStatusFailed
 )
+
+func DeploymentStatusString(d DeploymentStatus) string {
+	switch d {
+	case DeploymentStatusPreparing:
+		return "Preparing"
+	case DeploymentStatusGenerating:
+		return "Generating"
+	case DeploymentStatusCommitting:
+		return "Committing"
+	case DeploymentStatusProvisioning:
+		return "Provisioning"
+	case DeploymentStatusRunning:
+		return "Running"
+	case DeploymentStatusFailed:
+		return "Failed"
+	default:
+		return "Unknown"
+	}
+}
 
 type Orchestrator struct {
 	actor   actor.Actor
@@ -246,6 +266,10 @@ deploy:
 			continue deploy
 		}
 
+		o.mx.Lock()
+		o.manifest = manifest
+		o.mx.Unlock()
+
 		// 6. provision the network and start the allocations
 		o.setStatus(DeploymentStatusProvisioning)
 
@@ -271,8 +295,9 @@ deploy:
 	return ErrDeploymentFailed
 }
 
-func (o *Orchestrator) Shutdown() {
+func (o *Orchestrator) Shutdown() error {
 	// TODO shutdown the deployment
+	return nil
 }
 
 func (o *Orchestrator) requestBids(bidrq EnsembleBidRequest, expiry time.Time) (chan Bid, chan struct{}, time.Time, error) {

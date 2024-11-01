@@ -25,22 +25,30 @@ import (
 )
 
 const (
-	PeersListBehavior       = "/dms/node/peers/list"
-	PeerAddrInfoBehavior    = "/dms/node/peers/self"
-	PeerPingBehavior        = "/dms/node/peers/ping"
-	PeerDHTBehavior         = "/dms/node/peers/dht"
-	PeerConnectBehavior     = "/dms/node/peers/connect"
-	PeerScoreBehavior       = "/dms/node/peers/score"
+	PeersListBehavior    = "/dms/node/peers/list"
+	PeerAddrInfoBehavior = "/dms/node/peers/self"
+	PeerPingBehavior     = "/dms/node/peers/ping"
+	PeerDHTBehavior      = "/dms/node/peers/dht"
+	PeerConnectBehavior  = "/dms/node/peers/connect"
+	PeerScoreBehavior    = "/dms/node/peers/score"
+
 	OnboardBehavior         = "/dms/node/onboarding/onboard"
 	OffboardBehavior        = "/dms/node/onboarding/offboard"
 	OnboardStatusBehavior   = "/dms/node/onboarding/status"
 	OnboardResourceBehavior = "/dms/node/onboarding/resource"
-	ContainerStartBehavior  = "/dms/node/container/start"
-	ContainerStopBehavior   = "/dms/node/container/stop"
-	ContainerListBehavior   = "/dms/node/container/list"
-	VMStartBehavior         = "/dms/node/vm/start/custom"
-	VMStopBehavior          = "/dms/node/vm/stop"
-	VMListBehavior          = "/dms/node/vm/list"
+
+	ContainerStartBehavior = "/dms/node/container/start"
+	ContainerStopBehavior  = "/dms/node/container/stop"
+	ContainerListBehavior  = "/dms/node/container/list"
+
+	VMStartBehavior = "/dms/node/vm/start/custom"
+	VMStopBehavior  = "/dms/node/vm/stop"
+	VMListBehavior  = "/dms/node/vm/list"
+
+	DeploymentListBehavior     = "/dms/node/deployment/list"
+	DeploymentStatusBehavior   = "/dms/node/deployment/status"
+	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
+	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 
 	pingTimeout = 1 * time.Second
 )
@@ -279,6 +287,132 @@ type OnboardResourceRequest struct {
 type OnboardResourceResponse struct {
 	Error  string
 	Result types.OnboardingConfig
+}
+
+type DeploymentListResponse struct {
+	// Deployment ID -> Deployment Status
+	Deployments map[string]string
+}
+
+func (n *Node) handleDeploymentList(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var resp DeploymentListResponse
+
+	for ID, dep := range n.deployments {
+		resp.Deployments[ID] = jobs.DeploymentStatusString(dep.Status())
+	}
+
+	n.sendReply(msg, resp)
+}
+
+type DeploymentStatusRequest struct {
+	ID string
+}
+
+type DeploymentStatusResponse struct {
+	Status jobs.DeploymentStatus
+	Error  string
+}
+
+func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request DeploymentStatusRequest
+	var resp DeploymentStatusResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	d, ok := n.deployments[request.ID]
+	if !ok {
+		// TODO: check database for persisted deployments data
+		resp.Error = ErrDeploymentNotFound.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Status = d.Status()
+	n.sendReply(msg, resp)
+}
+
+type DeploymentManifestRequest struct {
+	ID string
+}
+
+type DeploymentManifestResponse struct {
+	Manifest jobs.EnsembleManifest
+	Error    string
+}
+
+func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request DeploymentManifestRequest
+	var resp DeploymentManifestResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	d, ok := n.deployments[request.ID]
+	if !ok {
+		// TODO: check database for persisted deployments data
+		resp.Error = ErrDeploymentNotFound.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Manifest = d.Manifest()
+	n.sendReply(msg, resp)
+}
+
+type DeploymentShutdownRequest struct {
+	ID string
+}
+
+type DeploymentShutdownResponse struct {
+	Error string
+}
+
+func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request DeploymentShutdownRequest
+	var resp DeploymentShutdownResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	d, ok := n.deployments[request.ID]
+	if !ok {
+		resp.Error = ErrDeploymentNotFound.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	if d.Status() != jobs.DeploymentStatusRunning {
+		// maybe-TODO: if it's still provisioning/committing,
+		// we should stop the deployment process anyway
+		resp.Error = ErrDeploymentNotRunning.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err := d.Shutdown()
+	if err != nil {
+		resp.Error = err.Error()
+	}
+
+	n.sendReply(msg, resp)
 }
 
 type CustomVMStartRequest struct {

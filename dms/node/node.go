@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	// "github.com/google/uuid"
 	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -259,6 +258,18 @@ func New(onboarder *onboarding.Onboarding,
 		},
 		NewDeploymentBehavior: {
 			fn: n.newDeployment,
+		},
+		DeploymentListBehavior: {
+			fn: n.handleDeploymentList,
+		},
+		DeploymentStatusBehavior: {
+			fn: n.handleDeploymentStatus,
+		},
+		DeploymentManifestBehavior: {
+			fn: n.handleDeploymentManifest,
+		},
+		DeploymentShutdownBehavior: {
+			fn: n.handleDeploymentShutdown,
 		},
 		jobs.VerifyEdgeConstraintBehavior: {
 			fn: n.deploymentVerifyEdgeConstraint,
