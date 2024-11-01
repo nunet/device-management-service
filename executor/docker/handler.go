@@ -213,7 +213,7 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 	}
 
 	// Remove related objects like networks or volumes created for this execution.
-	err := h.client.RemoveObjectsWithLabel(
+	err = h.client.RemoveObjectsWithLabel(
 		ctx,
 		labelExecutionID,
 		labelExecutionValue(h.ID, h.jobID, h.executionID),
