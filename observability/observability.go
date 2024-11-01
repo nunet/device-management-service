@@ -50,12 +50,11 @@ func Initialize(host host.Host) error {
 
 	// Initialize the logger with configurations
 	if err := initLogger(cfg.Observability); err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize logger: %v\n", err)
 	}
-
 	// Initialize Elastic APM tracing
 	if err := initTracing(cfg.APM); err != nil {
-		return fmt.Errorf("failed to initialize APM tracing: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize tracing: %v\n", err)
 	}
 
 	return nil
@@ -101,12 +100,19 @@ func initLogger(observabilityConfig config.Observability) error {
 	fileCore := createFileCore(observabilityConfig, logLevel)
 	esCore, err := createElasticsearchCore(observabilityConfig, logLevel)
 	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "Warning: Unable to create Elasticsearch logger: %v\n", err)
+		esCore = nil // Proceed without Elasticsearch core
 	}
 	eventCore := newEventEmitterCore(logLevel)
 
-	// Combine cores
-	combinedCore = zapcore.NewTee(consoleCore, fileCore, esCore, eventCore)
+	// Combine cores, excluding nil cores
+	var cores []zapcore.Core
+	cores = append(cores, consoleCore, fileCore)
+	if esCore != nil {
+		cores = append(cores, esCore)
+	}
+	cores = append(cores, eventCore)
+	combinedCore = zapcore.NewTee(cores...)
 
 	// Replace the global logger
 	logging.SetPrimaryCore(combinedCore)
@@ -182,7 +188,8 @@ func newElasticsearchWriteSyncer(url string, index string, flushInterval time.Du
 	// Create Elasticsearch client
 	client, err := elastic.NewClient(
 		elastic.SetURL(url),
-		elastic.SetSniff(false), // Disable sniffing if not using a cluster
+		elastic.SetSniff(false),       // Disable sniffing if not using a cluster
+		elastic.SetHealthcheck(false), // Disable initial health check
 	)
 	if err != nil {
 		return nil, err

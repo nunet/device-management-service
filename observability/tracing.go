@@ -3,6 +3,7 @@ package observability
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
@@ -45,7 +46,9 @@ func initTracing(apmConfig config.APM) error {
 		Transport:          tr,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create APM tracer: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize APM tracing: %v\n", err)
+		SetNoOpMode(true)
+		return nil // Proceed without tracing
 	}
 
 	return nil
