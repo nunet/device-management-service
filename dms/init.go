@@ -42,4 +42,12 @@ func init() {
 			log.Warnf("unable to create user directory: %v", err)
 		}
 	}
+
+	libp2pLogging := os.Getenv("LIBP2P_LOGGING")
+	if libp2pLogging == "false" || libp2pLogging == "" {
+		err := silenceLibp2pLogging()
+		if err != nil {
+			log.Warnf("unable to set libp2p logging: %v", err)
+		}
+	}
 }

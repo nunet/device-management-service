@@ -10,6 +10,57 @@ package dms
 
 import (
 	logging "github.com/ipfs/go-log/v2"
+	"go.uber.org/multierr"
 )
 
 var log = logging.Logger("dms")
+
+// silenceLibp2pLogging is used to silence logs coming from libp2p
+// imported libraries as they're enabled by default.
+//
+// TODO: move this to observability?
+func silenceLibp2pLogging() error {
+	log.Debug("silecing libp2p logging")
+	var errs error
+
+	err := logging.SetLogLevel("libp2p", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("swarm2", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("basichost", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("pubsub", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("p2p-config", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("routedhost", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("autorelay", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("autonat", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("node", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("p2p-holepunch", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("rcmgr", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevelRegex("dht/*", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevelRegex("net/*", "panic")
+	errs = multierr.Append(errs, err)
+
+	return errs
+}
