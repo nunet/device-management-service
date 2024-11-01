@@ -38,7 +38,7 @@ func setDefaultConfig() *viper.Viper {
 	v := getViper()
 	v.SetDefault("general.user_dir", fmt.Sprintf("%s/.nunet", homeDir))
 	v.SetDefault("general.work_dir", fmt.Sprintf("%s/nunet", homeDir))
-	v.SetDefault("general.data_dir", "/var/nunet")
+	v.SetDefault("general.data_dir", fmt.Sprintf("%s/nunet/data", homeDir))
 	v.SetDefault("general.debug", false)
 	v.SetDefault("general.port_available_range_from", 16384)
 	v.SetDefault("general.port_available_range_to", 32768)
@@ -65,7 +65,7 @@ func setDefaultConfig() *viper.Viper {
 
 	// default observability settings
 	v.SetDefault("observability.log_level", "INFO")
-	v.SetDefault("observability.log_file", "/var/log/nunet-dms.log")
+	v.SetDefault("observability.log_file", fmt.Sprintf("%s/nunet/logs/nunet-dms.log", homeDir))
 	v.SetDefault("observability.max_size", 100) // megabytes
 	v.SetDefault("observability.max_backups", 3)
 	v.SetDefault("observability.max_age", 28) // days
