@@ -770,7 +770,7 @@ func (n *Node) clearCommitedResources() {
 		// if allocation not found for this commitment and bid is expired release resources
 		_, allocFound := n.allocations[ensembleID]
 		if !allocFound && time.Now().After(v.expire) {
-			if err := n.resourceManager.UnCommittedResources(context.Background(), ensembleID); err != nil {
+			if err := n.resourceManager.UncommitResources(context.Background(), ensembleID); err != nil {
 				log.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
 			}
 			delete(n.bids, ensembleID)

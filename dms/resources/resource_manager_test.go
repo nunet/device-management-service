@@ -371,7 +371,7 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		err = rm.CommitResources(context.Background(), demand)
 		require.NoError(t, err)
 
-		err = rm.UnCommittedResources(context.Background(), demand.JobID)
+		err = rm.UncommitResources(context.Background(), demand.JobID)
 
 		require.NoError(t, err)
 
@@ -399,7 +399,7 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
 
-		err = rm.UnCommittedResources(context.Background(), "job1")
+		err = rm.UncommitResources(context.Background(), "job1")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "resources not committed for job")
 	})
@@ -1436,7 +1436,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				err := rm.UnCommittedResources(context.Background(), jobID)
+				err := rm.UncommitResources(context.Background(), jobID)
 				require.NoError(t, err)
 			}()
 		}
@@ -1507,7 +1507,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				require.NoError(t, err)
 
 				// Deallocate the resources
-				err = rm.UnCommittedResources(context.Background(), demand.JobID)
+				err = rm.UncommitResources(context.Background(), demand.JobID)
 				require.NoError(t, err)
 			}()
 		}

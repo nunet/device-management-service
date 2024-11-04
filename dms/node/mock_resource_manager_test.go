@@ -40,18 +40,19 @@ func (m *MockResourceManager) EXPECT() *MockResourceManagerMockRecorder {
 	return m.recorder
 }
 
-// AllocateResources mocks base method.
-func (m *MockResourceManager) AllocateResources(arg0 context.Context, arg1 types.ResourceAllocation) error {
+
+// UncommitResources mocks base method.
+func (m *MockResourceManager) UncommitResources(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllocateResources", arg0, arg1)
+	ret := m.ctrl.Call(m, "UncommitResources", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AllocateResources indicates an expected call of AllocateResources.
-func (mr *MockResourceManagerMockRecorder) AllocateResources(arg0, arg1 any) *gomock.Call {
+// UncommitResources indicates an expected call of UncommitResources.
+func (mr *MockResourceManagerMockRecorder) UncommitResources(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateResources", reflect.TypeOf((*MockResourceManager)(nil).AllocateResources), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UncommitResources", reflect.TypeOf((*MockResourceManager)(nil).UncommitResources), arg0, arg1)
 }
 
 // CommitResources mocks base method.
@@ -66,6 +67,20 @@ func (m *MockResourceManager) CommitResources(arg0 context.Context, arg1 types.C
 func (mr *MockResourceManagerMockRecorder) CommitResources(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitResources", reflect.TypeOf((*MockResourceManager)(nil).CommitResources), arg0, arg1)
+}
+
+// AllocateResources mocks base method.
+func (m *MockResourceManager) AllocateResources(arg0 context.Context, arg1 types.ResourceAllocation) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AllocateResources", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AllocateResources indicates an expected call of AllocateResources.
+func (mr *MockResourceManagerMockRecorder) AllocateResources(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateResources", reflect.TypeOf((*MockResourceManager)(nil).AllocateResources), arg0, arg1)
 }
 
 // DeallocateResources mocks base method.
@@ -125,20 +140,6 @@ func (m *MockResourceManager) GetTotalAllocation() (types.Resources, error) {
 func (mr *MockResourceManagerMockRecorder) GetTotalAllocation() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTotalAllocation", reflect.TypeOf((*MockResourceManager)(nil).GetTotalAllocation))
-}
-
-// UnCommittedResources mocks base method.
-func (m *MockResourceManager) UnCommittedResources(arg0 context.Context, arg1 string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnCommittedResources", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UnCommittedResources indicates an expected call of UnCommittedResources.
-func (mr *MockResourceManagerMockRecorder) UnCommittedResources(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnCommittedResources", reflect.TypeOf((*MockResourceManager)(nil).UnCommittedResources), arg0, arg1)
 }
 
 // UpdateOnboardedResources mocks base method.
