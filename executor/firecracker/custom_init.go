@@ -17,6 +17,8 @@
 // Inserting custom scripts to be executed from within Firecracker when booting the VM
 // with `/sbin/overlay-init`
 
+//go:build linux
+
 package firecracker
 
 import (

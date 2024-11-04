@@ -46,18 +46,22 @@ func NewResourceManager(repos ManagerRepos, hardware types.HardwareManager) (*De
 	}
 	rmStore := newStore()
 
-	// TODO: load the allocations from db on startup
-	return &DefaultManager{
+	defaultManager := &DefaultManager{
 		repos:    repos,
 		store:    rmStore,
 		hardware: hardware,
-	}, nil
+	}
+	if err := defaultManager.loadAllocationsFromDB(context.Background()); err != nil {
+		return nil, fmt.Errorf("loading allocations from db: %w", err)
+	}
+
+	return defaultManager, nil
 }
 
 var _ types.ResourceManager = (*DefaultManager)(nil)
 
-// CommitResources preallocates the resources required by the jobs
-func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.ResourceAllocation) error {
+// CommitResources commits the resources for a jobID
+func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.CommittedResources) error {
 	d.committedLock.Lock()
 	defer d.committedLock.Unlock()
 
@@ -108,8 +112,8 @@ func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.R
 	return nil
 }
 
-// ReleaseCommittedResources releases the resources that were committed
-func (d *DefaultManager) ReleaseCommittedResources(_ context.Context, jobID string) error {
+// UnCommittedResources releases the committed resources for a jobID
+func (d *DefaultManager) UnCommittedResources(_ context.Context, jobID string) error {
 	d.committedLock.Lock()
 	defer d.committedLock.Unlock()
 	// Check if resources are already deallocated for the job
@@ -285,18 +289,12 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 			return fmt.Errorf("getting total allocations: %w", err)
 		}
 
-		// QUESTION(@kanishka): should this line be here or after the Subtract? I think after.
-		onboardedResources := types.OnboardedResources{Resources: resources}
-
 		// Check if the demand is too high
 		if err := resources.Subtract(totalAllocation); err != nil {
 			return fmt.Errorf("couldn't subtract allocation: %w. Demand too high", err)
 		}
 
-		// Potential issue: if the onboarded resources are updated in the db, the free resources should be updated as well
-		// If the free resources update fails, the onboarded resources should not be updated
-		// Since we have no concept of transactions in the current implementation of db, we cannot handle this scenario
-		// without writing a custom transaction manager
+		onboardedResources := types.OnboardedResources{Resources: resources}
 		_, err = d.repos.OnboardedResources.Save(ctx, onboardedResources)
 		if err != nil {
 			return fmt.Errorf("failed to update onboarded resources: %w", err)
@@ -312,7 +310,7 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 }
 
 // loadAllocationsFromDB fetches the allocations from the database
-func (d *DefaultManager) loadAllocationsFromDB(ctx context.Context) error { //nolint:unused
+func (d *DefaultManager) loadAllocationsFromDB(ctx context.Context) error {
 	allocations, err := d.repos.ResourceAllocation.FindAll(ctx, d.repos.ResourceAllocation.GetQuery())
 	if err != nil {
 		return fmt.Errorf("loading allocations from db: %w", err)
