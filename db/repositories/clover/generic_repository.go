@@ -98,8 +98,8 @@ func (repo *GenericRepositoryClover[T]) Get(_ context.Context, id interface{}) (
 	defer endTrace()
 
 	var model T
-	doc, err := repo.db.FindFirst(repo.queryWithID(id, false))
-	if err != nil || doc == nil {
+	doc, err := repo.db.FindById(repo.collection, id.(string))
+	if err != nil {
 		logger.Errorw("clover_db_get_failure", "id", id, "error", err)
 		return model, handleDBError(err)
 	}
@@ -168,11 +168,14 @@ func (repo *GenericRepositoryClover[T]) Find(
 	var model T
 	q := repo.query(false)
 	q = applyConditions(q, query)
-	doc, err := repo.db.FindFirst(q)
 
-	if err != nil || doc == nil {
+	doc, err := repo.db.FindFirst(q)
+	if err != nil {
 		logger.Errorw("clover_db_find_failure", "error", err)
 		return model, handleDBError(err)
+	}
+	if doc == nil {
+		return model, handleDBError(clover.ErrDocumentNotExist)
 	}
 
 	model, err = toModel[T](doc, false)
