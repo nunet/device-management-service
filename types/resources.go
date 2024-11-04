@@ -147,8 +147,8 @@ type ResourceAllocation struct {
 type ResourceManager interface {
 	// CommitResources preallocates the resources required by the jobs
 	CommitResources(context.Context, CommittedResources) error
-	// UnCommittedResources releases the resources that were preallocated for the jobs
-	UnCommittedResources(context.Context, string) error
+	// UncommitResources releases the resources that were preallocated for the jobs
+	UncommitResources(context.Context, string) error
 	// AllocateResources allocates the resources required by a job
 	AllocateResources(context.Context, ResourceAllocation) error
 	// DeallocateResources deallocates the resources required by a job

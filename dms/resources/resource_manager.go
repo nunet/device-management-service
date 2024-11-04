@@ -112,8 +112,8 @@ func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.C
 	return nil
 }
 
-// UnCommittedResources releases the committed resources for a jobID
-func (d *DefaultManager) UnCommittedResources(_ context.Context, jobID string) error {
+// UncommitResources releases the committed resources for a jobID
+func (d *DefaultManager) UncommitResources(_ context.Context, jobID string) error {
 	d.committedLock.Lock()
 	defer d.committedLock.Unlock()
 	// Check if resources are already deallocated for the job
