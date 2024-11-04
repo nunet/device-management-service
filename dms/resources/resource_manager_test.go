@@ -41,7 +41,7 @@ func TestNewResourceManager(t *testing.T) {
 func TestDefaultManager_CommitResources(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Must be able to preallocate the resources when there is an availability", func(t *testing.T) {
+	t.Run("Must be able to commit the resources when there is an availability", func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
@@ -53,7 +53,8 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -68,7 +69,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		demand := types.ResourceAllocation{
+		demand := types.CommittedResources{
 			JobID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -101,9 +102,10 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
-		demand := types.ResourceAllocation{
+		demand := types.CommittedResources{
 			JobID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -136,7 +138,8 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -154,12 +157,12 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		// Table tests for insufficient resources
 		tests := []struct {
 			name   string
-			demand types.ResourceAllocation
+			demand types.CommittedResources
 			error  bool
 		}{
 			{
 				name: "CPU allocations exceeds",
-				demand: types.ResourceAllocation{
+				demand: types.CommittedResources{
 					JobID: "job1",
 					Resources: types.Resources{
 						CPU: types.CPU{
@@ -174,7 +177,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			},
 			{
 				name: "RAM allocations exceeds",
-				demand: types.ResourceAllocation{
+				demand: types.CommittedResources{
 					JobID: "job1",
 					Resources: types.Resources{
 						CPU: types.CPU{
@@ -189,7 +192,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			},
 			{
 				name: "Disk allocations exceeds",
-				demand: types.ResourceAllocation{
+				demand: types.CommittedResources{
 					JobID: "job1",
 					Resources: types.Resources{
 						CPU: types.CPU{
@@ -228,7 +231,8 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -243,7 +247,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		demand := types.ResourceAllocation{
+		demand := types.CommittedResources{
 			JobID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -282,7 +286,8 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		// setting a very high unrealistic resources to onboard
 		// this is so that the test can skip this check
@@ -302,7 +307,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 
 		// Since this demand is higher than the actual resources on the machine
 		// it shouldn't have free resources to allocate
-		demand := types.ResourceAllocation{
+		demand := types.CommittedResources{
 			JobID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -334,7 +339,8 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -349,7 +355,7 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		demand := types.ResourceAllocation{
+		demand := types.CommittedResources{
 			JobID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -365,7 +371,7 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		err = rm.CommitResources(context.Background(), demand)
 		require.NoError(t, err)
 
-		err = rm.ReleaseCommittedResources(context.Background(), demand.JobID)
+		err = rm.UnCommittedResources(context.Background(), demand.JobID)
 
 		require.NoError(t, err)
 
@@ -390,9 +396,10 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
-		err = rm.ReleaseCommittedResources(context.Background(), "job1")
+		err = rm.UnCommittedResources(context.Background(), "job1")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "resources not committed for job")
 	})
@@ -413,7 +420,8 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -461,7 +469,8 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		demand := types.ResourceAllocation{
 			JobID: "job1",
@@ -493,7 +502,8 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -585,7 +595,8 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -639,7 +650,8 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		// setting a very high unrealistic resources to onboard
 		// this is so that the test can skip this check
@@ -691,7 +703,8 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -745,7 +758,8 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		err = rm.DeallocateResources(context.Background(), "job1")
 		require.Error(t, err)
@@ -768,7 +782,8 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -794,7 +809,8 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -836,7 +852,8 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -876,7 +893,8 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -927,7 +945,8 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 			},
 		}
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
@@ -976,7 +995,8 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -1031,8 +1051,7 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		assertResources(t, totalDemand, actualDemand)
 	})
 
-	t.Run("Must be able to get total allocations from DB if not in store", func(t *testing.T) {
-		t.Skip("We need to load the data on init")
+	t.Run("Must be able to get total allocations from DB", func(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		t.Cleanup(func() {
@@ -1043,7 +1062,8 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 
 		repos := setupManagerRepos(t, mockDB)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -1093,11 +1113,10 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Set the allocations in the store to nil
-		rm.store.withAllocationsLock(func() {
-			rm.store.allocations = make(map[string]types.ResourceAllocation)
-		})
-
+		// Create a new instance of the manager to test if the allocations are loaded from the DB
+		repos = setupManagerRepos(t, mockDB)
+		rm, err = NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		actualDemand, err := rm.GetTotalAllocation()
 		require.NoError(t, err)
 		assertResources(t, totalDemand, actualDemand)
@@ -1120,7 +1139,11 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+
+		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
+		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -1133,7 +1156,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		}
 
 		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil)
-		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		var (
@@ -1240,7 +1263,10 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
-		rm := newMockResourceManager(repos, hm, t)
+		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
+		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
 
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
@@ -1253,7 +1279,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			},
 		}
 		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil).Times(1)
-		err := rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
@@ -1309,6 +1335,189 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		for i := 0; i < numGoroutines; i++ {
 			jobID := fmt.Sprintf("job%d", i)
 			_, ok := rm.store.allocations[jobID]
+			require.False(t, ok)
+		}
+
+		// Check if the free resources are updated correctly
+		freeResources, err := rm.GetFreeResources(context.Background())
+		require.NoError(t, err)
+		assertResources(t, onboardedResources.Resources, freeResources.Resources)
+	})
+
+	t.Run("Commit resources then uncommit them", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
+		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
+
+		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
+		hm := NewMockHardwareManager(ctrl)
+
+		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
+		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      50,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+
+		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		var (
+			wg    sync.WaitGroup
+			mutex sync.Mutex
+		)
+		for i := 0; i < numGoroutines; i++ {
+			wg.Add(1)
+			index := i
+			go func() {
+				defer wg.Done()
+				demand := types.CommittedResources{
+					JobID: fmt.Sprintf("job%d", index),
+					Resources: types.Resources{
+						CPU: types.CPU{
+							Cores:      0.1,
+							ClockSpeed: 10000,
+						},
+						RAM:  types.RAM{Size: 10},
+						Disk: types.Disk{Size: 10},
+					},
+				}
+				mutex.Lock()
+				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
+					return onboardedResources.Resources, nil
+				})
+				mutex.Unlock()
+				err := rm.CommitResources(context.Background(), demand)
+				require.NoError(t, err)
+			}()
+		}
+
+		wg.Wait()
+
+		// Check if the resources are committed for all the jobs
+		for i := 0; i < numGoroutines; i++ {
+			jobID := fmt.Sprintf("job%d", i)
+			demand, ok := rm.store.committedResources[jobID]
+			require.True(t, ok)
+			require.Equal(t, jobID, demand.JobID)
+		}
+
+		// Check if the free resources are updated correctly
+		freeResources, err := rm.GetFreeResources(context.Background())
+		require.NoError(t, err)
+		expectedFreeResources := types.FreeResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      50 - 0.1*numGoroutines,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048 - 10*numGoroutines},
+				Disk: types.Disk{Size: 1024 - 10*numGoroutines},
+			},
+		}
+		assertResources(t, expectedFreeResources.Resources, freeResources.Resources)
+		// Uncommit the resources
+		for i := 0; i < numGoroutines; i++ {
+			jobID := fmt.Sprintf("job%d", i)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				err := rm.UnCommittedResources(context.Background(), jobID)
+				require.NoError(t, err)
+			}()
+		}
+
+		wg.Wait()
+
+		// Check if the resources are uncommitted for all the jobs
+		for i := 0; i < numGoroutines; i++ {
+			jobID := fmt.Sprintf("job%d", i)
+			_, ok := rm.store.allocations[jobID]
+			require.False(t, ok)
+		}
+	})
+
+	t.Run("Concurrent commit and uncommit", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
+		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
+
+		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
+		hm := NewMockHardwareManager(ctrl)
+		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
+		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
+
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      50,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil).Times(1)
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		var wg sync.WaitGroup
+		for i := 0; i < numGoroutines; i++ {
+			wg.Add(1)
+			index := i
+			go func() {
+				defer wg.Done()
+				demand := types.CommittedResources{
+					JobID: fmt.Sprintf("job%d", index),
+					Resources: types.Resources{
+						CPU: types.CPU{
+							Cores:      0.1,
+							ClockSpeed: 10000,
+						},
+						RAM:  types.RAM{Size: 10},
+						Disk: types.Disk{Size: 10},
+					},
+				}
+
+				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
+					return onboardedResources.Resources, nil
+				})
+				err := rm.CommitResources(context.Background(), demand)
+				require.NoError(t, err)
+
+				// Deallocate the resources
+				err = rm.UnCommittedResources(context.Background(), demand.JobID)
+				require.NoError(t, err)
+			}()
+		}
+
+		wg.Wait()
+
+		// Check if the resources are uncommitted for all the jobs
+		for i := 0; i < numGoroutines; i++ {
+			jobID := fmt.Sprintf("job%d", i)
+			_, ok := rm.store.committedResources[jobID]
 			require.False(t, ok)
 		}
 

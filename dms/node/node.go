@@ -750,7 +750,7 @@ func (n *Node) commitDeployment(ensembleID string) error {
 		return nil
 	}
 
-	if err := n.resourceManager.CommitResources(context.TODO(), types.ResourceAllocation{
+	if err := n.resourceManager.CommitResources(context.TODO(), types.CommittedResources{
 		JobID:     ensembleID,
 		Resources: bidState.request.V1.Resources,
 	}); err != nil {
@@ -770,7 +770,7 @@ func (n *Node) clearCommitedResources() {
 		// if allocation not found for this commitment and bid is expired release resources
 		_, allocFound := n.allocations[ensembleID]
 		if !allocFound && time.Now().After(v.expire) {
-			if err := n.resourceManager.ReleaseCommittedResources(context.Background(), ensembleID); err != nil {
+			if err := n.resourceManager.UnCommittedResources(context.Background(), ensembleID); err != nil {
 				log.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
 			}
 			delete(n.bids, ensembleID)

@@ -36,21 +36,6 @@ func setupManagerRepos(t *testing.T, db *gorm.DB) ManagerRepos {
 	}
 }
 
-// setUpFreeResources sets up the mock free resources using the repository
-// func setUpFreeResources(repo repositories.FreeResources, freeResources types.FreeResources, t *testing.T) {
-// 	t.Helper()
-// 	_, err := repo.Save(context.Background(), freeResources)
-// 	require.NoError(t, err)
-// }
-
-// // getFreeResourcesFromDB gets the free resources using the repository
-// func getFreeResourcesFromDB(repo repositories.FreeResources, t *testing.T) types.FreeResources {
-// 	t.Helper()
-// 	freeResources, err := repo.Get(context.Background())
-// 	require.NoError(t, err)
-// 	return freeResources
-// }
-
 // getOnboardedResourcesFromDB gets the onboarded resources using the repository
 func getOnboardedResourcesFromDB(repo repositories.OnboardedResources, t *testing.T) types.OnboardedResources {
 	t.Helper()
@@ -67,21 +52,6 @@ func assertResources(t *testing.T, expected, actual types.Resources) {
 	require.Equal(t, expected.RAM, actual.RAM)
 	require.Equal(t, expected.Disk, actual.Disk)
 	// TODO: GPU
-}
-
-// newMockResourceManager creates a new mockResourceManager
-func newMockResourceManager(
-	repos ManagerRepos,
-	hardware *MockHardwareManager,
-	t *testing.T,
-) *DefaultManager {
-	t.Helper()
-
-	return &DefaultManager{
-		repos:    repos,
-		store:    newStore(),
-		hardware: hardware,
-	}
 }
 
 // newMockManagerRepos creates a new mock ManagerRepos

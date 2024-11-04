@@ -146,9 +146,9 @@ type ResourceAllocation struct {
 // ResourceManager is an interface that defines the methods to manage the resources of the machine
 type ResourceManager interface {
 	// CommitResources preallocates the resources required by the jobs
-	CommitResources(context.Context, ResourceAllocation) error
-	// ReleaseCommittedResources releases the resources that were preallocated
-	ReleaseCommittedResources(context.Context, string) error
+	CommitResources(context.Context, CommittedResources) error
+	// UnCommittedResources releases the resources that were preallocated for the jobs
+	UnCommittedResources(context.Context, string) error
 	// AllocateResources allocates the resources required by a job
 	AllocateResources(context.Context, ResourceAllocation) error
 	// DeallocateResources deallocates the resources required by a job
