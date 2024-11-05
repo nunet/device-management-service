@@ -81,9 +81,7 @@ clean:
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
 
-license:
-	@echo "  →→  \033[1;36mAdding license headers...\033[0m"
-	addlicense -v \
+LICENSE_FLAGS := -v \
 		-l="apache" \
 		-f copyright.txt \
 		-c "NuNet" \
@@ -95,8 +93,11 @@ license:
 		-ignore "**/*.yaml" \
 		-ignore "**/*.js" \
 		-ignore "**/*.sh" \
-		-ignore "*Dockerfile" \
-		.
+		-ignore "*Dockerfile"
+
+license:
+	@echo "  →→  \033[1;36m$(if $(CHECK),Checking,Adding) license headers...\033[0m"
+	addlicense $(LICENSE_FLAGS) $(if $(CHECK),-check) .
 
 arch=$(shell uname -m)
 FC_TEST_DATA_PATH = ./executor/firecracker/testdata
