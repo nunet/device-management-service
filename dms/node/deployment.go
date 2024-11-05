@@ -9,6 +9,7 @@
 package node
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -230,6 +231,7 @@ loop:
 	}
 
 	// handle dynamic port allocs
+	// TODO: dynamic port allocs should be on committing phase
 	allocKey := request.ID
 	ports, err := n.portAllocator.Allocate(allocKey, toAnswer.V1.PublicPorts.Dynamic)
 	if err != nil {
@@ -270,6 +272,80 @@ loop:
 
 	n.sendReply(msg, bid)
 	n.rememberBid(request.ID, toAnswer, ports)
+}
+
+func (n *Node) handleRevertDeployment(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.RevertDeploymentMessage
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+	ensembleID := request.EnsembleID
+
+	// try revert bid if exists
+	// TODO: remove this part if port allocation be moved to committing phase
+	n.mx.Lock()
+	_, ok := n.bids[ensembleID]
+	n.mx.Unlock()
+	if ok {
+		n.portAllocator.Release(ensembleID)
+	}
+
+	// try revert commit phase
+	n.mx.Lock()
+	_, ok = n.commitedResources[ensembleID]
+	n.mx.Unlock()
+	if ok {
+		err := n.releaseCommit(ensembleID)
+		if err != nil {
+			log.Errorf("failed to revert commit for ensemble id: %s: %s", ensembleID, err)
+			// we have to try to revert allocation too, so do not return
+		}
+	}
+
+	// try revert allocations if exist
+	for _, allocID := range request.AllocationsIDs {
+		err := n.releaseAllocation(allocID)
+		if err != nil {
+			log.Errorf("failed to revert allocation %s: %s", allocID, err)
+		}
+	}
+	log.Infof("deployment reverted: %s", ensembleID)
+}
+
+func (n *Node) releaseCommit(eid string) error {
+	err := n.resourceManager.ReleaseCommittedResources(context.TODO(), eid)
+	if err != nil {
+		return fmt.Errorf("failed to release resources for ensemble id: %s: %w", eid, err)
+	}
+
+	n.mx.Lock()
+	delete(n.commitedResources, eid)
+	n.mx.Unlock()
+
+	return nil
+}
+
+func (n *Node) releaseAllocation(allocID string) error {
+	n.mx.Lock()
+	alloc, ok := n.allocations[allocID]
+	n.mx.Unlock()
+	if !ok {
+		log.Debugf("allocation %s not found (it may be already released)", allocID)
+		return nil
+	}
+
+	err := alloc.Stop(context.TODO())
+	if err != nil {
+		return fmt.Errorf("failed to stop allocation %s: %w", allocID, err)
+	}
+
+	n.mx.Lock()
+	delete(n.allocations, allocID)
+	n.mx.Unlock()
+
+	return nil
 }
 
 func (n *Node) rememberBid(eid string, req jobs.BidRequest, ports []int) {
