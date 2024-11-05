@@ -40,7 +40,6 @@ func (m *MockResourceManager) EXPECT() *MockResourceManagerMockRecorder {
 	return m.recorder
 }
 
-
 // UncommitResources mocks base method.
 func (m *MockResourceManager) UncommitResources(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()

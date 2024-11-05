@@ -82,24 +82,8 @@ func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.C
 		return fmt.Errorf("resources already allocated for job %s", allocation.JobID)
 	}
 
-	freeResources, err := d.GetFreeResources(ctx)
-	if err != nil {
-		return fmt.Errorf("getting free resources: %w", err)
-	}
-
-	// Check if there are enough free resources in dms pool to allocate
-	if err := freeResources.Subtract(allocation.Resources); err != nil {
-		return fmt.Errorf("no free resources: %w", err)
-	}
-
-	// Check if there are enough free resources on the machine to commit
-	systemFreeResources, err := d.hardware.GetFreeResources()
-	if err != nil {
-		return fmt.Errorf("get system free resources: %w", err)
-	}
-
-	if err := systemFreeResources.Subtract(allocation.Resources); err != nil {
-		return fmt.Errorf("no free resources on the machine: %w", err)
+	if err := d.checkCapacity(ctx, allocation.Resources); err != nil {
+		return fmt.Errorf("checking capacity: %w", err)
 	}
 
 	// update the committed resources in the store
@@ -149,24 +133,8 @@ func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types
 		return fmt.Errorf("resources already allocated for job %s", allocation.JobID)
 	}
 
-	freeResources, err := d.GetFreeResources(ctx)
-	if err != nil {
-		return fmt.Errorf("getting free resources: %w", err)
-	}
-
-	// Check if there are enough free resources in dms pool to allocate
-	if err := freeResources.Subtract(allocation.Resources); err != nil {
-		return fmt.Errorf("no free resources: %w", err)
-	}
-
-	// Check if there are enough free resources on the machine to allocate
-	systemFreeResources, err := d.hardware.GetFreeResources()
-	if err != nil {
-		return fmt.Errorf("get system free resources: %w", err)
-	}
-
-	if err := systemFreeResources.Subtract(allocation.Resources); err != nil {
-		return fmt.Errorf("no free resources on the machine: %w", err)
+	if err := d.checkCapacity(ctx, allocation.Resources); err != nil {
+		return fmt.Errorf("checking capacity: %w", err)
 	}
 
 	if err := d.storeAllocation(ctx, allocation); err != nil {
@@ -304,6 +272,31 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// checkCapacity checks if the resources are available in the pool
+func (d *DefaultManager) checkCapacity(ctx context.Context, resources types.Resources) error {
+	freeResources, err := d.GetFreeResources(ctx)
+	if err != nil {
+		return fmt.Errorf("getting free resources: %w", err)
+	}
+
+	// Check if there are enough free resources in dms pool to allocate
+	if err := freeResources.Subtract(resources); err != nil {
+		return fmt.Errorf("no free resources: %w", err)
+	}
+
+	// Check if there are enough free resources on the machine to allocate
+	systemFreeResources, err := d.hardware.GetFreeResources()
+	if err != nil {
+		return fmt.Errorf("get system free resources: %w", err)
+	}
+
+	if err := systemFreeResources.Subtract(resources); err != nil {
+		return fmt.Errorf("no free resources on the machine: %w", err)
 	}
 
 	return nil
