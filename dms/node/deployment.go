@@ -315,7 +315,7 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 }
 
 func (n *Node) releaseCommit(eid string) error {
-	err := n.resourceManager.ReleaseCommittedResources(context.TODO(), eid)
+	err := n.resourceManager.UncommitResources(context.TODO(), eid)
 	if err != nil {
 		return fmt.Errorf("failed to release resources for ensemble id: %s: %w", eid, err)
 	}
