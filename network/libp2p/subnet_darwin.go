@@ -1,6 +1,6 @@
 //go:build darwin
-// +build darwin
 
+//nolint:all // This is a stub file for darwin
 package libp2p
 
 import (
