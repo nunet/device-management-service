@@ -1,5 +1,6 @@
 //go:build darwin
 
+//nolint:all // This is a stub file for darwin
 package sys
 
 import (
