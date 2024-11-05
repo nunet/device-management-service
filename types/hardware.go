@@ -72,7 +72,7 @@ type GPU struct {
 
 	// Gorm fields
 	// Team, is this the right way to do this? What is the best practice we're following?
-	ResourceID string `json:"resource_id" gorm:"foreignKey:ID"`
+	ResourceID string `json:"-" gorm:"foreignKey:ID"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -251,19 +251,19 @@ type CPU struct {
 
 	// TODO: capture the below fields if required
 	// Model represents the CPU model, e.g., "Intel Core i7-9700K", "AMD Ryzen 9 5900X"
-	Model string `json:"model" description:"CPU model, e.g., Intel Core i7-9700K, AMD Ryzen 9 5900X"`
+	Model string `json:"model,omitempty" description:"CPU model, e.g., Intel Core i7-9700K, AMD Ryzen 9 5900X"`
 
 	// Vendor represents the CPU manufacturer, e.g., "Intel", "AMD"
-	Vendor string `json:"vendor" description:"CPU manufacturer, e.g., Intel, AMD"`
+	Vendor string `json:"vendor,omitempty" description:"CPU manufacturer, e.g., Intel, AMD"`
 
 	// Threads represents the number of logical CPU threads (including hyperthreading)
-	Threads int `json:"threads" description:"Number of logical CPU threads (including hyperthreading)"`
+	Threads int `json:"threads,omitempty" description:"Number of logical CPU threads (including hyperthreading)"`
 
 	// Architecture represents the CPU architecture, e.g., "x86", "x86_64", "arm64"
-	Architecture string `json:"architecture" description:"CPU architecture, e.g., x86, x86_64, arm64"`
+	Architecture string `json:"architecture,omitempty" description:"CPU architecture, e.g., x86, x86_64, arm64"`
 
 	// Cache size in bytes
-	CacheSize uint64 `json:"cache_size" description:"CPU cache size in bytes"`
+	CacheSize uint64 `json:"cache_size,omitempty" description:"CPU cache size in bytes"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -317,10 +317,10 @@ type RAM struct {
 
 	// TODO: capture the below fields if required
 	// Clock speed in Hz
-	ClockSpeed uint64 `json:"clock_speed" description:"Clock speed of the RAM in Hz"`
+	ClockSpeed uint64 `json:"clock_speed,omitempty" description:"Clock speed of the RAM in Hz"`
 
 	// Type represents the RAM type, e.g., "DDR4", "DDR5", "LPDDR4"
-	Type string `json:"type" description:"RAM type, e.g., DDR4, DDR5, LPDDR4"`
+	Type string `json:"type,omitempty" description:"RAM type, e.g., DDR4, DDR5, LPDDR4"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -360,22 +360,22 @@ type Disk struct {
 
 	// TODO: capture the below fields if required
 	// Model represents the disk model, e.g., "Samsung 970 EVO Plus", "Western Digital Blue SN550"
-	Model string `json:"model" description:"Disk model, e.g., Samsung 970 EVO Plus, Western Digital Blue SN550"`
+	Model string `json:"model,omitempty" description:"Disk model, e.g., Samsung 970 EVO Plus, Western Digital Blue SN550"`
 
 	// Vendor represents the disk manufacturer, e.g., "Samsung", "Western Digital"
-	Vendor string `json:"vendor" description:"Disk manufacturer, e.g., Samsung, Western Digital"`
+	Vendor string `json:"vendor,omitempty" description:"Disk manufacturer, e.g., Samsung, Western Digital"`
 
 	// Type represents the disk type, e.g., "SSD", "HDD", "NVMe"
-	Type string `json:"type" description:"Disk type, e.g., SSD, HDD, NVMe"`
+	Type string `json:"type,omitempty" description:"Disk type, e.g., SSD, HDD, NVMe"`
 
 	// Interface represents the disk interface, e.g., "SATA", "PCIe", "M.2"
-	Interface string `json:"interface" description:"Disk interface, e.g., SATA, PCIe, M.2"`
+	Interface string `json:"interface,omitempty" description:"Disk interface, e.g., SATA, PCIe, M.2"`
 
 	// Read speed in bytes per second
-	ReadSpeed uint64 `json:"read_speed" description:"Read speed in bytes per second"`
+	ReadSpeed uint64 `json:"read_speed,omitempty" description:"Read speed in bytes per second"`
 
 	// Write speed in bytes per second
-	WriteSpeed uint64 `json:"write_speed" description:"Write speed in bytes per second"`
+	WriteSpeed uint64 `json:"write_speed,omitempty" description:"Write speed in bytes per second"`
 }
 
 // implementing Comparable and Calculable interfaces

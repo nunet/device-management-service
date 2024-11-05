@@ -16,7 +16,7 @@ import (
 // Resources represents the resources of the machine
 type Resources struct {
 	CPU  CPU  `json:"cpu" gorm:"embedded;embeddedPrefix:cpu_"`
-	GPUs GPUs `json:"gpus" gorm:"foreignKey:ResourceID"`
+	GPUs GPUs `json:"gpus,omitempty" gorm:"foreignKey:ResourceID"`
 	RAM  RAM  `json:"ram" gorm:"embedded;embeddedPrefix:ram_"`
 	Disk Disk `json:"disk" gorm:"embedded;embeddedPrefix:disk_"`
 }

@@ -220,8 +220,15 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 		return
 	}
 
-	err := n.onboarder.Onboard(context.Background(), request.Config)
+	machineResources, err := n.hardware.GetMachineResources()
 	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+	request.Config.MachineResources = machineResources.Resources
+
+	if err := n.onboarder.Onboard(context.Background(), request.Config); err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
