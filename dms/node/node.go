@@ -284,6 +284,9 @@ func New(onboarder *onboarding.Onboarding,
 				actor.WithBehaviorTopic(jobs.BidRequestTopic),
 			},
 		},
+		jobs.RevertDeploymentBehavior: {
+			fn: n.handleRevertDeployment,
+		},
 		jobs.SubnetCreateBehavior: {
 			fn: n.handleSubnetCreate,
 		},

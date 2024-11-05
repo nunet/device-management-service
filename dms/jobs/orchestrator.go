@@ -912,13 +912,15 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 }
 
 func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
+	ncfg, _ := o.cfg.Node(n)
+
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
 		RevertDeploymentBehavior,
 		RevertDeploymentMessage{
-			EnsembleID: o.id,
-			NodeID:     n,
+			EnsembleID:     o.id,
+			AllocationsIDs: ncfg.Allocations,
 		},
 	)
 	if err != nil {
