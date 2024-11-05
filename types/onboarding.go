@@ -20,6 +20,6 @@ type OnboardingConfig struct {
 
 	// These are not stored in the database, but are part of the onboarding config
 	// during the get onboarding config call these are populated from the resource manager and hardware
-	OnboardedResources Resources `json:"resources,omitempty" gorm:"-"`
-	MachineResources   Resources `json:"machine_resources,omitempty" gorm:"-"`
+	OnboardedResources Resources `json:"onboarded_resources,omitempty" gorm:"-" clover:"-"`
+	MachineResources   Resources `json:"machine_resources,omitempty" gorm:"-" clover:"-"`
 }
