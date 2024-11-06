@@ -77,6 +77,9 @@ func (s *ExecutorTestSuite) TestRunJob() {
 }
 
 // Test RunJobWithInitScripts tests the Run method of the Docker executor with ProvisionScripts.
+//
+// CI/CD: if the runner is within a container/VM, `/tmp/nunet/` need to be mounted to it since
+// Docker socket expects the path to available on the host
 func (s *ExecutorTestSuite) TestRunJobWithInitScripts() {
 	request := s.newExecutionRequest(transientCmd)
 	request.ProvisionScripts = map[string][]byte{

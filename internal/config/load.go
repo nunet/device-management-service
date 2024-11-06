@@ -177,6 +177,7 @@ func CreateConfigFileIfNotExists(fs afero.Fs) error {
 	}
 	if !exists {
 		v := setDefaultConfig()
+		v.SetFs(fs)
 		if err := v.SafeWriteConfig(); err != nil {
 			return fmt.Errorf("failed to create config file: %w", err)
 		}
