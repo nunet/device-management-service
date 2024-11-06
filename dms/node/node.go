@@ -714,6 +714,19 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
 
+	n.mx.Lock()
+	_, alreadyCommited := n.commitedResources[job.ID]
+	n.mx.Unlock()
+	if !alreadyCommited {
+		return nil, fmt.Errorf("no committed resources for ensemble id: %s", job.ID)
+	}
+
+	if err := n.resourceManager.UncommitResources(context.Background(), job.ID); err != nil {
+		log.Errorf("failed to uncommit resources for ensemble id: %s: %w", job.ID, err)
+	}
+
+	delete(n.commitedResources, job.ID)
+
 	allocation, err := jobs.NewAllocation(actor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation: %w", err)
