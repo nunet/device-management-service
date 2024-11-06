@@ -44,7 +44,7 @@ const (
 	statusWaitTickTime = 100 * time.Millisecond
 	statusWaitTimeout  = 10 * time.Second
 
-	initScriptsBaseDir = "/tmp/nunet-init-scripts-"
+	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
 )
 
 // Executor manages the lifecycle of Docker containers for execution requests.
