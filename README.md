@@ -489,10 +489,10 @@ $ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topi
 
 ```
 
-3.3 **Add the delegation token as a require anchor in your DMS**
+3.3 **Add the delegation token as a provide anchor in your DMS**
 
 ```shell
-$ nunet cap anchor --context dms --require <the-delegate-output>
+$ nunet cap anchor --context dms --provide <the-delegate-output>
 ```
 
 The first command ingests the NuNet provided token and the last two commands use this token to delegate the public behavior capabilities to your DMS.
