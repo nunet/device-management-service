@@ -14,12 +14,15 @@ import (
 	"fmt"
 	"sync"
 
+	logging "github.com/ipfs/go-log/v2"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 var (
-	gpuInfoCache map[types.GPUVendor][]types.GPU
-	mu           sync.Mutex
+	// TODO: refactor cache usage while implementing #712 (comment from !682)
+	gpuCache map[types.GPUVendor][]types.GPU
+	mu       sync.Mutex
+	log      = logging.Logger("hardware/gpu")
 )
 
 // GetGPUs returns the GPU information based on the specified vendors.
@@ -29,7 +32,7 @@ func GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error) {
 		types.GPUVendorIntel:  getIntelGPUs,
 		types.GPUVendorNvidia: getNVIDIAGPUs,
 		types.GPUVendorAMDATI: getAMDGPUs,
-	}, vendors...)
+	}, true, vendors...)
 }
 
 // GetGPUUsage returns the GPU usage based on the specified vendors.
@@ -39,39 +42,43 @@ func GetGPUUsage(vendors ...types.GPUVendor) ([]types.GPU, error) {
 		types.GPUVendorIntel:  getIntelGPUUsage,
 		types.GPUVendorNvidia: getNVIDIAGPUUsage,
 		types.GPUVendorAMDATI: getAMDGPUUsage,
-	}, vendors...)
+	}, false, vendors...)
 }
 
 // getGPUsHelper is a helper function to avoid code duplication in GetGPUs and GetGPUUsage.
 // It fetches GPU information from different vendors and aggregates the results.
-func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU, fetchFuncs map[types.GPUVendor]func() ([]types.GPU, error), vendors ...types.GPUVendor) ([]types.GPU, error) {
+func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU,
+	fetchFuncs map[types.GPUVendor]func() ([]types.GPU, error),
+	useCache bool,
+	vendors ...types.GPUVendor,
+) ([]types.GPU, error) {
 	var gpus []types.GPU
 
 	mu.Lock()
 	defer mu.Unlock()
 
-	if gpuInfoCache == nil {
-		gpuInfoCache = make(map[types.GPUVendor][]types.GPU)
+	if gpuCache == nil {
+		gpuCache = make(map[types.GPUVendor][]types.GPU)
 	}
 
 	// Helper function to fetch and append GPU info for a vendor
 	fetchAndAppendGPUs := func(fetchFunc func() ([]types.GPU, error), vendor types.GPUVendor) {
 		gpuList, err := fetchFunc()
 		if err != nil {
-			// TODO: log a warning here
+			log.Warnf("error fetching %v GPUs: %v", vendor, err)
 			return
 		}
-		gpuInfoCache[vendor] = gpuList
+		gpuCache[vendor] = gpuList
 		gpus = append(gpus, gpuList...)
 	}
 
 	if len(vendors) == 0 {
 		// No specific vendor requested, fetch all types of GPUs
 		for vendor, fetchFunc := range fetchFuncs {
-			if cachedGpus, ok := gpuInfoCache[vendor]; ok {
-				gpus = append(gpus, cachedGpus...)
-			} else {
+			if !useCache || len(gpuCache[vendor]) == 0 {
 				fetchAndAppendGPUs(fetchFunc, vendor)
+			} else {
+				gpus = append(gpus, gpuCache[vendor]...)
 			}
 		}
 	} else {
@@ -81,10 +88,10 @@ func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU, fetchFuncs map[type
 			if !ok {
 				return nil, fmt.Errorf("unsupported GPU vendor: %v", vendor)
 			}
-			if cachedGpus, ok := gpuInfoCache[vendor]; ok {
-				gpus = append(gpus, cachedGpus...)
-			} else {
+			if !useCache || len(gpuCache[vendor]) == 0 {
 				fetchAndAppendGPUs(fetchFunc, vendor)
+			} else {
+				gpus = append(gpus, gpuCache[vendor]...)
 			}
 		}
 	}
