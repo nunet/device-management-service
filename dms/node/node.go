@@ -725,7 +725,9 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		log.Errorf("failed to uncommit resources for ensemble id: %s: %w", job.ID, err)
 	}
 
+	n.mx.Lock()
 	delete(n.commitedResources, job.ID)
+	n.mx.Unlock()
 
 	allocation, err := jobs.NewAllocation(actor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
 	if err != nil {
