@@ -158,6 +158,16 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 
 	log.Debugf("got a bid request from: %s", &msg.From.Address)
 
+	onboarded, err := n.onboarder.IsOnboarded(n.ctx)
+	if err != nil {
+		log.Debugf("got some error while checking onboarding: %w", err)
+		return
+	}
+	if !onboarded {
+		log.Debugf("node not onboarded. ignoring bid request...")
+		return
+	}
+
 	var request jobs.EnsembleBidRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		return
@@ -248,7 +258,7 @@ loop:
 		cleanup()
 		return
 	}
-	log.Debugf("signing bid with proider: %+v", provider)
+	log.Debugf("signing bid with provider: %+v", provider)
 
 	bid := jobs.Bid{
 		V1: &jobs.BidV1{
