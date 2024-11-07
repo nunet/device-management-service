@@ -94,9 +94,7 @@ type RevertDeploymentMessage struct {
 }
 
 type AllocationStartRequest struct {
-	Resources types.Resources
-	Executor  AllocationExecutor
-	Execution types.SpecConfig
+	AllocationID string
 }
 
 type AllocationStartResponse struct {

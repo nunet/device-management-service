@@ -1016,7 +1016,6 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 func (o *Orchestrator) provision(em EnsembleManifest) error {
 	log.Infof("provisioning ensemble manifest: %+v", em)
 	// 0. start the allocations
-	allocCfgs := o.cfg.Allocations()
 	errCh := make(chan error, len(em.Allocations))
 	wg := sync.WaitGroup{}
 	for id, manifest := range em.Allocations {
@@ -1024,30 +1023,21 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 		go func(id string, manifest AllocationManifest) {
 			defer wg.Done()
 
-			config, ok := allocCfgs[id]
-			if !ok {
-				errCh <- fmt.Errorf("error retreiving allocation from config: %w", ErrProvisioningFailed)
-				return
-			}
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
 				AllocationStartBehavior,
-				AllocationStartRequest{
-					Resources: config.Resources,
-					Execution: config.Execution,
-					Executor:  config.Executor,
-				},
+				AllocationStartRequest{AllocationID: id},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
 			if err != nil {
-				errCh <- fmt.Errorf("error creating subnet message: %w", err)
+				errCh <- fmt.Errorf("error creating allocation start message: %w", err)
 				return
 			}
 
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
-				errCh <- fmt.Errorf("error invoking subnet message: %w", err)
+				errCh <- fmt.Errorf("error invoking allocation start: %w", err)
 				return
 			}
 
@@ -1055,24 +1045,20 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			select {
 			case reply = <-replyCh:
 			case <-time.After(2 * time.Minute):
-				errCh <- fmt.Errorf("timeout creating subnet: %w", ErrDeploymentFailed)
+				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
 				return
 			}
 
 			defer reply.Discard()
 
-			var response struct {
-				OK    bool
-				Error string
-			}
-
+			var response AllocationStartResponse
 			if err := json.Unmarshal(reply.Message, &response); err != nil {
-				errCh <- fmt.Errorf("error unmarshalling subnet response: %w", err)
+				errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
 				return
 			}
 
 			if !response.OK {
-				errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
+				errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
 				return
 			}
 		}(id, manifest)
