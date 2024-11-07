@@ -317,6 +317,9 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,
 		},
+		jobs.AllocationStartBehavior: {
+			fn: n.handleAllocationStart,
+		},
 		jobs.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
 		},
@@ -679,10 +682,6 @@ func (n *Node) createAllocations(ensembleID string, _ string, allocations map[st
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create allocation %s: %w", allocationID, err)
-		}
-
-		if err := allocation.Run(n.ctx); err != nil {
-			return nil, fmt.Errorf("failed to run allocation %s: %w", allocationID, err)
 		}
 
 		allocHandles[allocationID] = allocation.Actor.Handle()

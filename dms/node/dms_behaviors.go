@@ -11,6 +11,7 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -653,6 +654,49 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 
 	resp.OK = true
 	resp.Allocations = allocations
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleAllocationStart(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.AllocationStartRequest
+	var resp jobs.AllocationStartResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		err = fmt.Errorf("failed to unmarshal request: %w", err)
+		log.Error(err)
+
+		resp.Error = err.Error()
+		resp.OK = false
+		n.sendReply(msg, resp)
+		return
+	}
+
+	allocation, err := n.GetAllocation(request.AllocationID)
+	if err != nil {
+		err = fmt.Errorf("failed to get allocation: %w", err)
+		log.Error(err)
+
+		resp.Error = err.Error()
+		resp.OK = false
+		n.sendReply(msg, resp)
+		return
+	}
+
+	if err := allocation.Run(n.ctx); err != nil {
+		err = fmt.Errorf("failed to run allocation: %w", err)
+		log.Error(err)
+
+		resp.Error = err.Error()
+		resp.OK = false
+		n.sendReply(msg, resp)
+		return
+	}
+
+	log.Info("Running allocation's job: ", request.AllocationID)
+
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
 

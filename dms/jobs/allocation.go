@@ -105,6 +105,7 @@ func (a *Allocation) Run(ctx context.Context) error {
 	defer a.mx.Unlock()
 
 	if a.status == running {
+		log.Warnf("allocation %s is already running", a.ID)
 		return nil
 	}
 
