@@ -109,11 +109,7 @@ func (a *Allocation) Run(ctx context.Context) error {
 		return nil
 	}
 
-	resourceAllocation := types.ResourceAllocation{JobID: a.Job.ID, Resources: a.Job.Resources}
-	err := a.resourceManager.AllocateResources(ctx, resourceAllocation)
-	if err != nil {
-		return fmt.Errorf("failed to allocate resources: %w", err)
-	}
+	var err error
 
 	defer func() {
 		if a.status != running {

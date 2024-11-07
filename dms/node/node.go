@@ -715,7 +715,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 
 	n.mx.Lock()
 	_, alreadyCommited := n.commitedResources[job.ID]
-	n.mx.Unlock()
+
 	if !alreadyCommited {
 		return nil, fmt.Errorf("no committed resources for ensemble id: %s", job.ID)
 	}
@@ -724,7 +724,12 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		log.Errorf("failed to uncommit resources for ensemble id: %s: %w", job.ID, err)
 	}
 
-	n.mx.Lock()
+	resourceAllocation := types.ResourceAllocation{JobID: job.ID, Resources: job.Resources}
+	err = n.resourceManager.AllocateResources(n.ctx, resourceAllocation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate resources: %w", err)
+	}
+
 	delete(n.commitedResources, job.ID)
 	n.mx.Unlock()
 
