@@ -190,6 +190,8 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 		}
 	})
 
+	log.Debugf("Onboarded Resources: %+v \nTotal Allocation: %+v\nCommitted Resources: %+v",
+		onboardedResources.Resources, totalAllocation, committedResources)
 	// calculate the free resources
 	freeResources.Resources = onboardedResources.Resources
 	if err := freeResources.Resources.Subtract(totalAllocation); err != nil {
@@ -199,6 +201,8 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 	if err := freeResources.Resources.Subtract(committedResources); err != nil {
 		return types.FreeResources{}, fmt.Errorf("subtracting committed resources: %w", err)
 	}
+
+	log.Debugf("Free Resources: %+v", freeResources)
 
 	return freeResources, nil
 }
@@ -295,9 +299,11 @@ func (d *DefaultManager) checkCapacity(ctx context.Context, resources types.Reso
 		return fmt.Errorf("get system free resources: %w", err)
 	}
 
+	log.Debugf("System Free Resources: %+v", systemFreeResources)
 	if err := systemFreeResources.Subtract(resources); err != nil {
 		return fmt.Errorf("no free resources on the machine: %w", err)
 	}
+	log.Debugf("System Free Resources after subtraction: %+v", systemFreeResources)
 
 	return nil
 }

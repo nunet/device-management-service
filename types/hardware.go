@@ -110,7 +110,7 @@ func (g *GPU) Add(other GPU) error {
 
 func (g *GPU) Subtract(other GPU) error {
 	if g.VRAM < other.VRAM {
-		return fmt.Errorf("total VRAM: underflow, cannot subtract %v from %v", g.VRAM, other.VRAM)
+		return fmt.Errorf("total VRAM: underflow, cannot subtract %v from %v", other.VRAM, g.VRAM)
 	}
 
 	g.VRAM -= other.VRAM
@@ -299,7 +299,7 @@ func (c *CPU) Add(other CPU) error {
 
 func (c *CPU) Subtract(other CPU) error {
 	if c.Cores < other.Cores {
-		return fmt.Errorf("core: underflow, cannot subtract %v from %v", c.Cores, other.Cores)
+		return fmt.Errorf("core: underflow, cannot subtract %v from %v", other.Cores, c.Cores)
 	}
 
 	c.Cores = round(c.Cores-other.Cores, 2)
@@ -346,7 +346,7 @@ func (r *RAM) Add(other RAM) error {
 
 func (r *RAM) Subtract(other RAM) error {
 	if r.Size < other.Size {
-		return fmt.Errorf("size: underflow, cannot subtract %v from %v", r.Size, other.Size)
+		return fmt.Errorf("size: underflow, cannot subtract %v from %v", other.Size, r.Size)
 	}
 
 	r.Size -= other.Size
@@ -400,7 +400,7 @@ func (d *Disk) Add(other Disk) error {
 
 func (d *Disk) Subtract(other Disk) error {
 	if d.Size < other.Size {
-		return fmt.Errorf("size: underflow, cannot subtract %v from %v", d.Size, other.Size)
+		return fmt.Errorf("size: underflow, cannot subtract %v from %v", other.Size, d.Size)
 	}
 
 	d.Size -= other.Size

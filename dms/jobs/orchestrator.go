@@ -106,6 +106,7 @@ func (o *Orchestrator) setStatus(status DeploymentStatus) {
 	o.mx.Lock()
 	defer o.mx.Unlock()
 
+	log.Infof("setting status to: %s", DeploymentStatusString(status))
 	o.status = status
 }
 
@@ -157,6 +158,7 @@ deploy:
 		}
 
 		// 1. Create bid requests for nodes
+		log.Debugf("creating bid requests for nodes: %+v", o.cfg.Nodes())
 		bidrq, err := o.makeInitialBidRequest()
 		if err != nil {
 			return fmt.Errorf("creating bid request: %w", err)
@@ -212,6 +214,7 @@ deploy:
 			return true
 		}
 
+		log.Debugf("collecting bids")
 		bidCh, bidDoneCh, bidExpiryTime, err := o.requestBids(bidrq, expiry)
 		if err != nil {
 			return fmt.Errorf("collecting bids: %w", err)
@@ -221,6 +224,7 @@ deploy:
 		o.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
 
 		// 3. Create a candidate deployment
+		log.Debugf("creating candidate deployments")
 		var nextCandidate func() (map[string]Bid, bool)
 		var ok bool
 
@@ -234,6 +238,7 @@ deploy:
 			// we need to make a residual bid request for the remaining nodes
 			// Note: in order to facilitate random selection, the residual bid requests
 			//       can drop some of the original bids
+			log.Debugf("creating residual bid request")
 			bidrq, err := o.makeResidualBidRequest(bidMap, peerExclusion)
 			if err != nil {
 				return fmt.Errorf("creating residual bid request: %w", err)
@@ -249,7 +254,7 @@ deploy:
 		}
 
 		if !ok {
-			log.Debugf("failed to create candidate deployments")
+			log.Debugf("failed to create candidate deployments - trying again")
 			continue deploy
 		}
 
@@ -257,6 +262,7 @@ deploy:
 		//    edge constraints
 		o.setStatus(DeploymentStatusGenerating)
 
+		log.Debugf("generating candidate deployment")
 		var candidate map[string]Bid
 		for time.Now().Before(expiry) {
 			candidate, ok = nextCandidate()
@@ -277,6 +283,7 @@ deploy:
 		// 5. Commit the deployment
 		o.setStatus(DeploymentStatusCommitting)
 
+		log.Info("committing candidate bids")
 		manifest, err := o.commit(candidate)
 		if err != nil {
 			log.Warnf("failed to commit deployment: %s", err)
@@ -290,8 +297,9 @@ deploy:
 		// 6. provision the network and start the allocations
 		o.setStatus(DeploymentStatusProvisioning)
 
+		log.Info("provisioning network")
 		if err := o.provision(manifest); err != nil {
-			log.Errorf("failed to privision network: %s", err)
+			log.Errorf("failed to provision network: %s", err)
 			o.revert(manifest)
 			continue deploy
 		}
@@ -302,6 +310,7 @@ deploy:
 		o.ctx, o.cancel = context.WithCancel(context.Background())
 		o.mx.Unlock()
 
+		log.Infof("deployment successful, starting supervisor")
 		o.setStatus(DeploymentStatusRunning)
 		go o.supervise()
 
@@ -309,6 +318,7 @@ deploy:
 	}
 
 	// we failed to create the deployment in time
+	log.Errorf("failed to create the deployment in time")
 	return ErrDeploymentFailed
 }
 
@@ -351,6 +361,7 @@ func (o *Orchestrator) requestBids(bidrq EnsembleBidRequest, expiry time.Time) (
 	}
 
 	// Send direct peer requests
+	log.Debugf("sending direct peer requests: %+v", directRequests)
 	for _, req := range directRequests {
 		nodeConfig, _ := o.cfg.Node(req.V1.NodeID)
 		targetedReq := EnsembleBidRequest{
@@ -393,6 +404,7 @@ func (o *Orchestrator) requestBids(bidrq EnsembleBidRequest, expiry time.Time) (
 	}
 
 	// Send broadcast
+	log.Debugf("sending broadcast requests: %+v", broadcastRequests)
 	if len(broadcastRequests) > 0 {
 		broadcastReq := EnsembleBidRequest{
 			ID:            bidrq.ID,
@@ -457,6 +469,7 @@ func (o *Orchestrator) requestBidPeer(targetedReq EnsembleBidRequest, nodeConfig
 func (o *Orchestrator) collectBids(bidCh chan Bid, bidDoneCh chan struct{}, bidExpiryTime time.Time, addBid func(Bid) bool, maxBids int) {
 	defer close(bidDoneCh)
 
+	log.Debugf("collecting bids until: %v", bidExpiryTime)
 	timer := time.NewTimer(time.Until(bidExpiryTime))
 	defer timer.Stop()
 
@@ -464,6 +477,7 @@ func (o *Orchestrator) collectBids(bidCh chan Bid, bidDoneCh chan struct{}, bidE
 	for {
 		select {
 		case bid := <-bidCh:
+			log.Debugf("received bid: %+v", bid)
 			if err := bid.Validate(); err != nil {
 				log.Debugf("got invalid bid: %s", err)
 				continue
@@ -1000,6 +1014,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 }
 
 func (o *Orchestrator) provision(em EnsembleManifest) error {
+	log.Infof("provisioning ensemble manifest: %+v", em)
 	// 0. start the allocations
 	allocCfgs := o.cfg.Allocations()
 	errCh := make(chan error, len(em.Allocations))
@@ -1394,6 +1409,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 }
 
 func (o *Orchestrator) revert(mf EnsembleManifest) {
+	log.Infof("reverting ensemble manifest: %+v", mf)
 	for n, nmf := range mf.Nodes {
 		o.revertDeployment(n, nmf.Handle)
 	}
@@ -1487,6 +1503,7 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (Ensem
 		ID: o.id,
 	}
 
+	log.Infof("creating bid request for nodes: %+v", v1Config.Nodes)
 	for nodeID, nodeConfig := range v1Config.Nodes {
 		bidRequest := BidRequest{
 			V1: &BidRequestV1{
