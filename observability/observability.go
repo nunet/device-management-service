@@ -22,9 +22,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/natefinch/lumberjack"
 	"github.com/olivere/elastic/v7"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
 const timestampKey = "timestamp"
@@ -144,7 +145,7 @@ func createConsoleCore(levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 
 	consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
 	consoleWS := zapcore.AddSync(os.Stdout)
