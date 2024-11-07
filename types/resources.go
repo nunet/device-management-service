@@ -71,6 +71,7 @@ func (r *Resources) Equal(other Resources) bool {
 
 // Add returns the sum of the resources
 func (r *Resources) Add(other Resources) error {
+	log.Debugf("adding resources: %+v + %+v", r, other)
 	if err := r.CPU.Add(other.CPU); err != nil {
 		return fmt.Errorf("error adding CPU: %v", err)
 	}
@@ -92,6 +93,7 @@ func (r *Resources) Add(other Resources) error {
 
 // Subtract returns the difference of the resources
 func (r *Resources) Subtract(other Resources) error {
+	log.Debugf("subtracting resources: %+v - %+v", r, other)
 	if err := r.CPU.Subtract(other.CPU); err != nil {
 		return fmt.Errorf("error subtracting CPU: %v", err)
 	}

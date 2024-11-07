@@ -68,6 +68,7 @@ func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU,
 			log.Warnf("error fetching %v GPUs: %v", vendor, err)
 			return
 		}
+		log.Infof("fetched %v GPUs: %v", vendor, gpuList)
 		gpuCache[vendor] = gpuList
 		gpus = append(gpus, gpuList...)
 	}

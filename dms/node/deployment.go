@@ -43,6 +43,7 @@ type NewDeploymentResponse struct {
 func (n *Node) newDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
+	log.Infof("new deployment: %+v", msg)
 	if time.Until(msg.Expiry()) < MinDeploymentTime {
 		log.Debugf("deployment time too short")
 		n.sendReply(msg, NewDeploymentResponse{
@@ -156,7 +157,7 @@ func (n *Node) restoreDeployments() error {
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
-	log.Debugf("got a bid request from: %s", &msg.From.Address)
+	log.Debugf("got a bid request from: %+v", &msg.From.Address)
 
 	onboarded, err := n.onboarder.IsOnboarded(n.ctx)
 	if err != nil {
@@ -199,7 +200,7 @@ loop:
 		hostID := n.actor.Handle().Address.HostID
 		for _, p := range request.PeerExclusion {
 			if p == hostID {
-				log.Debug("bid request has execlusion")
+				log.Debug("bid request has exclusion")
 				continue loop
 			}
 		}
@@ -214,7 +215,7 @@ loop:
 		for _, e := range v.V1.Executors {
 			_, err := n.getExecutor(e)
 			if err != nil {
-				log.Debugf("failed to get executor: %v", e)
+				log.Debugf("failed to get executor: %+v", e)
 				continue loop
 			}
 		}
@@ -226,7 +227,7 @@ loop:
 		}
 
 		if comparisonResult != types.Better {
-			log.Debugf("resource comparison - not better - result: %v")
+			log.Debugf("resource comparison - not better - result: %+v", comparisonResult)
 			continue
 		}
 
@@ -321,7 +322,7 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 			log.Errorf("failed to revert allocation %s: %s", allocID, err)
 		}
 	}
-	log.Infof("deployment reverted: %s", ensembleID)
+	log.Infof("deployment reverted: %+v", ensembleID)
 }
 
 func (n *Node) releaseCommit(eid string) error {
