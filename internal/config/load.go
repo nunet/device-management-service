@@ -72,7 +72,7 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("observability.elasticsearch_url", "http://localhost:9200")
 	v.SetDefault("observability.elasticsearch_index", "nunet-dms")
 	v.SetDefault("observability.flush_interval", 5) // Default flush interval is 5 seconds
-	v.SetDefault("observability.elasticsearch_enabled", true)
+	v.SetDefault("observability.elasticsearch_enabled", false)
 	v.SetDefault("observability.elasticsearch_api_key", "")
 
 	// default APM settings
