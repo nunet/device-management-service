@@ -10,20 +10,21 @@ package observability
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/natefinch/lumberjack"
 	"github.com/olivere/elastic/v7"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const timestampKey = "timestamp"
@@ -34,6 +35,18 @@ var (
 
 	// customEventEmitter is the emitter for CustomEvent
 	customEventEmitter event.Emitter
+
+	// Global variables for observability control
+	noOpMode bool
+	mutex    sync.RWMutex
+
+	// Global variables to hold references for dynamic updates
+	combinedCore     zapcore.Core
+	esSyncerInstance *bufferedElasticsearchSyncer
+	atomicLevel      zap.AtomicLevel = zap.NewAtomicLevel()
+
+	// Logger for the observability package
+	log = logging.Logger("observability")
 )
 
 // CustomEvent represents a custom event structure
@@ -45,7 +58,7 @@ type CustomEvent struct {
 
 // Initialize sets up the logger, tracing, and event bus
 func Initialize(host host.Host) error {
-	if isNoOp() {
+	if IsNoOpMode() {
 		return nil
 	}
 
@@ -59,65 +72,47 @@ func Initialize(host host.Host) error {
 
 	// Initialize the logger with configurations
 	if err := initLogger(cfg.Observability); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize logger: %v\n", err)
+		log.Warnf("Failed to initialize logger: %v", err)
 	}
-	// Initialize Elastic APM tracing
-	if err := initTracing(cfg.APM); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize tracing: %v\n", err)
-	}
+
+	// Initialize Elastic APM tracing with the API key
+	initTracing(cfg.APM)
 
 	return nil
 }
 
-// OverrideLoggerForTesting reconfigures the logger to log only to console
+// OverrideLoggerForTesting reconfigures the logger for unit tests
 func OverrideLoggerForTesting() error {
-	// Use the existing configuration
-	cfg := config.GetConfig()
-
-	// Parse the global log level
-	logLevel, err := parseLogLevel(cfg.Observability.LogLevel)
-	if err != nil {
-		return fmt.Errorf("invalid log level: %w", err)
-	}
-
-	// Reconfigure the logger to log only to console
-	consoleCore := createConsoleCore(logLevel)
-	combinedCore = zapcore.NewTee(consoleCore)
-
-	// Replace the global logger
-	logging.SetPrimaryCore(combinedCore)
-
+	// Set observability to no-op mode for unit tests
+	SetNoOpMode(true)
 	return nil
 }
-
-// Global variables to hold references to cores for dynamic updates
-var (
-	combinedCore     zapcore.Core
-	esSyncerInstance *bufferedElasticsearchSyncer
-)
 
 // initLogger configures the global logger with console, file, Elasticsearch logging, and event emission
 func initLogger(observabilityConfig config.Observability) error {
-	// make sure log dir exists
-	if err := os.MkdirAll(filepath.Dir(observabilityConfig.LogFile), 0o755); err != nil {
-		return fmt.Errorf("failed to create log directory: %w", err)
-	}
-
 	// Parse the global log level
 	logLevel, err := parseLogLevel(observabilityConfig.LogLevel)
 	if err != nil {
 		return fmt.Errorf("invalid log level: %w", err)
 	}
 
-	// Create cores
-	consoleCore := createConsoleCore(logLevel)
-	fileCore := createFileCore(observabilityConfig, logLevel)
-	esCore, err := createElasticsearchCore(observabilityConfig, logLevel)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Unable to create Elasticsearch logger: %v\n", err)
-		esCore = nil // Proceed without Elasticsearch core
+	// Set the atomic level
+	atomicLevel.SetLevel(logLevel)
+
+	// Create cores, passing atomicLevel as LevelEnabler
+	consoleCore := createConsoleCore(atomicLevel)
+	fileCore := createFileCore(observabilityConfig, atomicLevel)
+
+	var esCore zapcore.Core
+	if observabilityConfig.ElasticsearchEnabled {
+		esCore, err = createElasticsearchCore(observabilityConfig, atomicLevel)
+		if err != nil {
+			log.Warnf("Unable to create Elasticsearch logger: %v", err)
+			esCore = nil // Proceed without Elasticsearch core
+		}
 	}
-	eventCore := newEventEmitterCore(logLevel)
+
+	eventCore := newEventEmitterCore(atomicLevel)
 
 	// Combine cores, excluding nil cores
 	var cores []zapcore.Core
@@ -145,7 +140,7 @@ func parseLogLevel(levelStr string) (zapcore.Level, error) {
 }
 
 // createConsoleCore creates a console logging core
-func createConsoleCore(logLevel zapcore.Level) zapcore.Core {
+func createConsoleCore(levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -154,11 +149,11 @@ func createConsoleCore(logLevel zapcore.Level) zapcore.Core {
 	consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
 	consoleWS := zapcore.AddSync(os.Stdout)
 
-	return zapcore.NewCore(consoleEncoder, consoleWS, logLevel)
+	return zapcore.NewCore(consoleEncoder, consoleWS, levelEnabler)
 }
 
 // createFileCore creates a file logging core
-func createFileCore(observabilityConfig config.Observability, logLevel zapcore.Level) zapcore.Core {
+func createFileCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -173,15 +168,16 @@ func createFileCore(observabilityConfig config.Observability, logLevel zapcore.L
 		Compress:   true,
 	})
 
-	return zapcore.NewCore(fileEncoder, fileWS, logLevel)
+	return zapcore.NewCore(fileEncoder, fileWS, levelEnabler)
 }
 
 // createElasticsearchCore creates an Elasticsearch logging core
-func createElasticsearchCore(observabilityConfig config.Observability, logLevel zapcore.Level) (zapcore.Core, error) {
+func createElasticsearchCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) (zapcore.Core, error) {
 	esWS, err := newElasticsearchWriteSyncer(
 		observabilityConfig.ElasticsearchURL,
 		observabilityConfig.ElasticsearchIndex,
 		time.Duration(observabilityConfig.FlushInterval)*time.Second,
+		observabilityConfig.ElasticsearchAPIKey,
 	)
 	if err != nil {
 		return nil, err
@@ -194,16 +190,30 @@ func createElasticsearchCore(observabilityConfig config.Observability, logLevel 
 
 	esEncoder := zapcore.NewJSONEncoder(encoderConfig)
 
-	return zapcore.NewCore(esEncoder, esWS, logLevel), nil
+	return zapcore.NewCore(esEncoder, esWS, levelEnabler), nil
 }
 
 // newElasticsearchWriteSyncer creates a WriteSyncer for Elasticsearch with buffering
-func newElasticsearchWriteSyncer(url string, index string, flushInterval time.Duration) (zapcore.WriteSyncer, error) {
-	// Create Elasticsearch client
+func newElasticsearchWriteSyncer(url string, index string, flushInterval time.Duration, apiKey string) (zapcore.WriteSyncer, error) {
+	// Create TLS configuration
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true, // WARNING: Only for testing purposes
+	}
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}
+
+	// Create Elasticsearch client with API key authentication
 	client, err := elastic.NewClient(
 		elastic.SetURL(url),
-		elastic.SetSniff(false),       // Disable sniffing if not using a cluster
-		elastic.SetHealthcheck(false), // Disable initial health check
+		elastic.SetHttpClient(httpClient),
+		elastic.SetSniff(false),
+		elastic.SetHealthcheck(false),
+		elastic.SetHeaders(http.Header{
+			"Authorization": []string{"ApiKey " + apiKey},
+		}),
 	)
 	if err != nil {
 		return nil, err
@@ -222,26 +232,27 @@ type bufferedElasticsearchSyncer struct {
 	client        *elastic.Client
 	index         string
 	ctx           context.Context
+	cancelFunc    context.CancelFunc
 	buffer        []string
 	bufferMutex   sync.Mutex
 	flushInterval time.Duration
-	ticker        *time.Ticker
-	done          chan struct{}
+	lastErrorTime time.Time
+	errorCount    int
 }
 
 // newBufferedElasticsearchSyncer creates a new bufferedElasticsearchSyncer
 func newBufferedElasticsearchSyncer(client *elastic.Client, index string, flushInterval time.Duration) *bufferedElasticsearchSyncer {
+	ctx, cancel := context.WithCancel(context.Background())
 	syncer := &bufferedElasticsearchSyncer{
 		client:        client,
 		index:         index,
-		ctx:           context.Background(),
+		ctx:           ctx,
+		cancelFunc:    cancel,
 		buffer:        make([]string, 0),
 		flushInterval: flushInterval,
-		done:          make(chan struct{}),
 	}
 
-	// Start the flush ticker
-	syncer.ticker = time.NewTicker(syncer.flushInterval)
+	// Start the flush goroutine
 	go syncer.start()
 
 	return syncer
@@ -249,11 +260,14 @@ func newBufferedElasticsearchSyncer(client *elastic.Client, index string, flushI
 
 // start begins the periodic flushing of the buffer
 func (b *bufferedElasticsearchSyncer) start() {
+	ticker := time.NewTicker(b.flushInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-b.ticker.C:
+		case <-ticker.C:
 			b.Flush()
-		case <-b.done:
+		case <-b.ctx.Done():
 			return
 		}
 	}
@@ -276,13 +290,14 @@ func (b *bufferedElasticsearchSyncer) Sync() error {
 // Flush sends the buffered log entries to Elasticsearch
 func (b *bufferedElasticsearchSyncer) Flush() {
 	b.bufferMutex.Lock()
-	bufferCopy := b.buffer
-	b.buffer = make([]string, 0)
-	b.bufferMutex.Unlock()
+	defer b.bufferMutex.Unlock()
 
-	if len(bufferCopy) == 0 {
+	if len(b.buffer) == 0 {
 		return
 	}
+
+	bufferCopy := b.buffer
+	b.buffer = make([]string, 0)
 
 	bulkRequest := b.client.Bulk()
 	for _, logEntry := range bufferCopy {
@@ -292,23 +307,88 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 	_, err := bulkRequest.Do(b.ctx)
 	if err != nil {
-		// Handle the error (e.g., log it)
-		fmt.Fprintf(os.Stderr, "Error flushing logs to Elasticsearch: %v\n", err)
+		// Implement error suppression
+		now := time.Now()
+		if b.errorCount == 0 || now.Sub(b.lastErrorTime) > 5*time.Minute {
+			log.Warnf("Error flushing logs to Elasticsearch: %v", err)
+			b.lastErrorTime = now
+			b.errorCount = 1
+		} else {
+			b.errorCount++
+		}
+	} else {
+		// Reset error count on successful flush
+		b.errorCount = 0
 	}
 }
 
-// Close stops the ticker and flushes remaining logs
+// Close stops the flush goroutine and flushes remaining logs
 func (b *bufferedElasticsearchSyncer) Close() {
-	b.ticker.Stop()
-	close(b.done)
+	b.cancelFunc()
 	b.Flush()
 }
 
 // setFlushInterval allows changing the flush interval dynamically
 func (b *bufferedElasticsearchSyncer) setFlushInterval(interval time.Duration) {
-	b.ticker.Stop()
+	// Cancel the existing context to stop the goroutine
+	b.cancelFunc()
+
+	// Create a new context and start a new goroutine
+	b.ctx, b.cancelFunc = context.WithCancel(context.Background())
 	b.flushInterval = interval
-	b.ticker = time.NewTicker(b.flushInterval)
+
+	// Start the flush goroutine with the new interval
+	go b.start()
+}
+
+// SetElasticsearchEndpoint updates the Elasticsearch client endpoint
+func SetElasticsearchEndpoint(url string) error {
+	if esSyncerInstance == nil {
+		return fmt.Errorf("elasticsearch syncer not initialized")
+	}
+
+	// Get the configuration
+	cfg := config.GetConfig()
+	apiKey := cfg.Observability.ElasticsearchAPIKey
+
+	// Create TLS configuration
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true, // WARNING: Only for testing purposes
+	}
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}
+
+	// Create new client with updated endpoint and configurations
+	client, err := elastic.NewClient(
+		elastic.SetURL(url),
+		elastic.SetHttpClient(httpClient),
+		elastic.SetSniff(false),
+		elastic.SetHealthcheck(false),
+		elastic.SetHeaders(http.Header{
+			"Authorization": []string{"ApiKey " + apiKey},
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create new elasticsearch client: %v", err)
+	}
+
+	// Update configuration
+	cfg.Observability.ElasticsearchURL = url
+
+	// Flush existing logs before switching client
+	esSyncerInstance.Flush()
+
+	// Acquire the mutex to prevent concurrent access
+	esSyncerInstance.bufferMutex.Lock()
+	defer esSyncerInstance.bufferMutex.Unlock()
+
+	// Update the client
+	esSyncerInstance.client = client
+
+	return nil
 }
 
 // initEventBus initializes the global event bus
@@ -326,9 +406,9 @@ func initEventBus(host host.Host) error {
 }
 
 // newEventEmitterCore creates a zapcore.Core that emits log entries to the event bus
-func newEventEmitterCore(level zapcore.LevelEnabler) zapcore.Core {
+func newEventEmitterCore(levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	return &eventEmitterCore{
-		LevelEnabler: level,
+		LevelEnabler: levelEnabler,
 	}
 }
 
@@ -356,6 +436,10 @@ func (e *eventEmitterCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) 
 
 // Write implements zapcore.Core
 func (e *eventEmitterCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	if IsNoOpMode() {
+		return nil
+	}
+
 	// Convert the log entry and fields into a map[string]interface{}
 	eventData := map[string]interface{}{
 		"level":     entry.Level.String(),
@@ -379,8 +463,8 @@ func (e *eventEmitterCore) Write(entry zapcore.Entry, fields []zapcore.Field) er
 
 	// Emit the event using the customEventEmitter
 	if err := customEventEmitter.Emit(customEvent); err != nil {
-		// Handle error if necessary
-		fmt.Fprintf(os.Stderr, "Error emitting event: %v\n", err)
+		// Log the error at Debug level to avoid cluttering
+		log.Debugf("Error emitting event: %v", err)
 	}
 
 	return nil
@@ -393,23 +477,19 @@ func (e *eventEmitterCore) Sync() error {
 
 // SetLogLevel sets the global log level for all collectors
 func SetLogLevel(level string) error {
-	_, err := parseLogLevel(level)
+	logLevel, err := parseLogLevel(level)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid log level: %w", err)
 	}
 
 	// Update the configuration
 	cfg := config.GetConfig()
 	cfg.Observability.LogLevel = level
 
-	// Rebuild the logger with the new log level
-	return rebuildLogger(cfg.Observability)
-}
+	// Set the new log level in atomicLevel
+	atomicLevel.SetLevel(logLevel)
 
-// rebuildLogger rebuilds the combined core and updates the global logger
-func rebuildLogger(observabilityConfig config.Observability) error {
-	// Re-initialize the logger with the updated configuration
-	return initLogger(observabilityConfig)
+	return nil
 }
 
 // SetFlushInterval sets the flush interval for Elasticsearch logging dynamically
@@ -441,7 +521,7 @@ func EmitCustomEvent(eventName string, keyValues ...interface{}) error {
 	}
 
 	// Create the custom event
-	customEvent := &CustomEvent{
+	customEvent := CustomEvent{
 		Name:      eventName,
 		Timestamp: time.Now(),
 		Data:      eventData,
@@ -449,7 +529,7 @@ func EmitCustomEvent(eventName string, keyValues ...interface{}) error {
 
 	// Emit the event using the customEventEmitter
 	if err := customEventEmitter.Emit(customEvent); err != nil {
-		return fmt.Errorf("failed to emit custom event: %w", err)
+		log.Debugf("Failed to emit custom event: %v", err)
 	}
 	return nil
 }
@@ -462,4 +542,31 @@ func Shutdown() {
 	if esSyncerInstance != nil {
 		esSyncerInstance.Close()
 	}
+}
+
+// SetNoOpMode enables or disables the no-op mode for observability.
+func SetNoOpMode(enabled bool) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	noOpMode = enabled
+
+	if noOpMode {
+		// Disable logging by setting the level to a higher level than Panic
+		atomicLevel.SetLevel(zapcore.Level(100)) // An arbitrarily high level
+	} else {
+		// Restore the log level from configuration
+		cfg := config.GetConfig()
+		logLevel, err := parseLogLevel(cfg.Observability.LogLevel)
+		if err != nil {
+			logLevel = zapcore.InfoLevel
+		}
+		atomicLevel.SetLevel(logLevel)
+	}
+}
+
+// IsNoOpMode returns whether observability is in no-op mode.
+func IsNoOpMode() bool {
+	mutex.RLock()
+	defer mutex.RUnlock()
+	return noOpMode
 }

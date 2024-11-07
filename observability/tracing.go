@@ -12,60 +12,68 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"sync"
 	"time"
 
-	logging "github.com/ipfs/go-log/v2"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/transport"
 )
 
-var (
-	// noOpMode indicates whether tracing is in no-op mode
-	noOpMode bool
-	// mutex to protect access to noOpMode
-	mutex sync.RWMutex
-	// log is the logger for the observability package
-	log = logging.Logger("observability")
-)
+// tracingNoOpMode indicates whether tracing is in no-op mode
+var tracingNoOpMode bool
 
-func initTracing(apmConfig config.APM) error {
+// initTracing initializes the Elastic APM tracer
+func initTracing(apmConfig config.APM) {
+	if IsNoOpMode() {
+		tracingNoOpMode = true
+		return
+	}
+
 	// Create a new APM transport
 	tr, err := transport.NewHTTPTransport()
 	if err != nil {
-		return fmt.Errorf("failed to create APM transport: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create APM transport: %v\n", err)
+		tracingNoOpMode = true
+		return // Proceed without tracing
 	}
 
-	// Parse the APM Server URL
+	// Parse and set the APM Server URL
 	serverURL, err := url.Parse(apmConfig.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to parse APM server URL: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to parse APM server URL: %v\n", err)
+		tracingNoOpMode = true
+		return
 	}
-
-	// Set the APM Server URL
 	tr.SetServerURL(serverURL)
 
-	// Create a new tracer with the transport and set the environment
-	apm.DefaultTracer, err = apm.NewTracerOptions(apm.TracerOptions{
-		ServiceName:        apmConfig.ServiceName,
-		ServiceVersion:     "1.0.0",
-		ServiceEnvironment: apmConfig.Environment,
-		Transport:          tr,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize APM tracing: %v\n", err)
-		SetNoOpMode(true)
-		return nil // Proceed without tracing
+	// Set API key if provided
+	if apmConfig.APIKey != "" {
+		tr.SetSecretToken(apmConfig.APIKey)
 	}
 
-	return nil
+	// Set the environment variable for the tracer's environment
+	if err := os.Setenv("ELASTIC_APM_ENVIRONMENT", apmConfig.Environment); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to set environment: %v\n", err)
+		tracingNoOpMode = true
+		return
+	}
+
+	// Initialize the APM tracer
+	apm.DefaultTracer, err = apm.NewTracer(apmConfig.ServiceName, "1.0.0")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize APM tracer: %v\n", err)
+		tracingNoOpMode = true
+		return
+	}
+
+	// Set the transport for the tracer
+	apm.DefaultTracer.Transport = tr
 }
 
 // StartTrace starts a trace for the given operationName and key-value pairs.
 // It returns a function that should be deferred to end the trace.
 func StartTrace(operationName string, keyValues ...interface{}) func() {
-	if isNoOp() {
+	if IsNoOpMode() || tracingNoOpMode {
 		return func() {}
 	}
 
@@ -101,18 +109,4 @@ func StartTrace(operationName string, keyValues ...interface{}) func() {
 		// End the transaction
 		tx.End()
 	}
-}
-
-// SetNoOpMode enables or disables the no-op mode for tracing.
-func SetNoOpMode(enabled bool) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	noOpMode = enabled
-}
-
-// isNoOp checks if the tracer is in no-op mode.
-func isNoOp() bool {
-	mutex.RLock()
-	defer mutex.RUnlock()
-	return noOpMode
 }

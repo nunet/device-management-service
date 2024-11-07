@@ -283,9 +283,9 @@ require (
 )
 
 require (
+	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/olivere/elastic/v7 v7.0.32
 	go.uber.org/mock v0.4.0
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
