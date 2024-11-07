@@ -55,21 +55,21 @@ type Job struct {
 }
 
 type Observability struct {
-	LogLevel           string `mapstructure:"log_level" json:"log_level"`
-	LogFile            string `mapstructure:"log_file" json:"log_file"`
-	MaxSize            int    `mapstructure:"max_size" json:"max_size"` // in megabytes
-	MaxBackups         int    `mapstructure:"max_backups" json:"max_backups"`
-	MaxAge             int    `mapstructure:"max_age" json:"max_age"` // in days
-	ElasticsearchURL   string `mapstructure:"elasticsearch_url" json:"elasticsearch_url"`
-	ElasticsearchIndex string `mapstructure:"elasticsearch_index" json:"elasticsearch_index"`
-	FlushInterval      int    `mapstructure:"flush_interval" json:"flush_interval"` // in seconds
+	LogLevel             string `mapstructure:"log_level" json:"log_level"`
+	LogFile              string `mapstructure:"log_file" json:"log_file"`
+	MaxSize              int    `mapstructure:"max_size" json:"max_size"` // in megabytes
+	MaxBackups           int    `mapstructure:"max_backups" json:"max_backups"`
+	MaxAge               int    `mapstructure:"max_age" json:"max_age"` // in days
+	ElasticsearchURL     string `mapstructure:"elasticsearch_url" json:"elasticsearch_url"`
+	ElasticsearchIndex   string `mapstructure:"elasticsearch_index" json:"elasticsearch_index"`
+	FlushInterval        int    `mapstructure:"flush_interval" json:"flush_interval"`               // in seconds
+	ElasticsearchEnabled bool   `mapstructure:"elasticsearch_enabled" json:"elasticsearch_enabled"` // disable elastic logging
+	ElasticsearchAPIKey  string `mapstructure:"elasticsearch_api_key" json:"elasticsearch_api_key"`
 }
 
 type APM struct {
 	ServerURL   string `mapstructure:"server_url" json:"server_url"`
 	ServiceName string `mapstructure:"service_name" json:"service_name"`
 	Environment string `mapstructure:"environment" json:"environment"`
-	Certificate string `mapstructure:"certificate" json:"certificate"`
-	Key         string `mapstructure:"key" json:"key"`
-	CA          string `mapstructure:"ca" json:"ca"`
+	APIKey      string `mapstructure:"api_key" json:"api_key"`
 }
