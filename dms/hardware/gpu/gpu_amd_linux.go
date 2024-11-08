@@ -32,7 +32,7 @@ func GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error) {
 		types.GPUVendorIntel:  getIntelGPUs,
 		types.GPUVendorNvidia: getNVIDIAGPUs,
 		types.GPUVendorAMDATI: getAMDGPUs,
-	}, true, vendors...)
+	}, false, vendors...)
 }
 
 // GetGPUUsage returns the GPU usage based on the specified vendors.
@@ -79,6 +79,7 @@ func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU,
 			if !useCache || len(gpuCache[vendor]) == 0 {
 				fetchAndAppendGPUs(fetchFunc, vendor)
 			} else {
+				log.Infof("using cached %v GPUs", vendor)
 				gpus = append(gpus, gpuCache[vendor]...)
 			}
 		}
@@ -92,6 +93,7 @@ func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU,
 			if !useCache || len(gpuCache[vendor]) == 0 {
 				fetchAndAppendGPUs(fetchFunc, vendor)
 			} else {
+				log.Infof("using cached %v GPUs", vendor)
 				gpus = append(gpus, gpuCache[vendor]...)
 			}
 		}
