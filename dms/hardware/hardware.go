@@ -10,7 +10,6 @@ package hardware
 
 import (
 	"fmt"
-	"sync"
 
 	"gitlab.com/nunet/device-management-service/dms/hardware/cpu"
 	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
@@ -18,10 +17,7 @@ import (
 )
 
 // defaultHardwareManager manages the machine's hardware resources.
-type defaultHardwareManager struct {
-	machineResources *types.MachineResources
-	mu               sync.Mutex
-}
+type defaultHardwareManager struct{}
 
 // NewHardwareManager creates a new instance of defaultHardwareManager.
 func NewHardwareManager() types.HardwareManager {
@@ -32,13 +28,6 @@ var _ types.HardwareManager = (*defaultHardwareManager)(nil)
 
 // GetMachineResources returns the resources of the machine in a thread-safe manner.
 func (m *defaultHardwareManager) GetMachineResources() (types.MachineResources, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.machineResources != nil {
-		return *m.machineResources, nil
-	}
-
 	var err error
 	var cpuDetails types.CPU
 	var ram types.RAM
@@ -61,16 +50,14 @@ func (m *defaultHardwareManager) GetMachineResources() (types.MachineResources, 
 		return types.MachineResources{}, fmt.Errorf("failed to get Disk: %w", err)
 	}
 
-	m.machineResources = &types.MachineResources{
+	return types.MachineResources{
 		Resources: types.Resources{
 			CPU:  cpuDetails,
 			RAM:  ram,
 			Disk: diskDetails,
 			GPUs: gpus,
 		},
-	}
-
-	return *m.machineResources, nil
+	}, nil
 }
 
 // GetUsage returns the usage of the machine.
