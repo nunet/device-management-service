@@ -317,9 +317,6 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,
 		},
-		jobs.AllocationStartBehavior: {
-			fn: n.handleAllocationStart,
-		},
 		jobs.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
 		},
@@ -638,6 +635,7 @@ func (n *Node) Stop() error {
 	return nil
 }
 
+// TODO: make send reply a helper func from actor pkg
 func (n *Node) sendReply(msg actor.Envelope, payload interface{}) {
 	var opt []actor.MessageOption
 	if msg.IsBroadcast() {
@@ -698,6 +696,8 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to generate random keypair for allocation job %s: %w", job.ID, err)
 	}
 
+	// TODO: all allocations are using the root cap, is that correct?
+	// we may be granting capabilities to all allocations running in the actor instead for specific ones
 	security, err := actor.NewBasicSecurityContext(pub, priv, n.rootCap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create security context: %w", err)
@@ -708,7 +708,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
 	}
 
-	actor, err := createActor(security, n.actor.Limiter(), n.hostID, allocationInbox.String(), n.network, n.scheduler)
+	allocActor, err := createActor(security, n.actor.Limiter(), n.hostID, allocationInbox.String(), n.network, n.scheduler)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
@@ -733,7 +733,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	delete(n.commitedResources, job.ID)
 	n.mx.Unlock()
 
-	allocation, err := jobs.NewAllocation(actor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
+	allocation, err := jobs.NewAllocation(allocActor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation: %w", err)
 	}

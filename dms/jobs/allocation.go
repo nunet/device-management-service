@@ -189,11 +189,18 @@ func (a *Allocation) Start() error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
+	// add allocation behaviors
+	err := a.Actor.AddBehavior(AllocationStartBehavior, a.handleAllocationStart)
+	if err != nil {
+		return fmt.Errorf("failed to add allocation start behavior to allocation actor: %w", err)
+	}
+
+	// start actor
 	if a.actorRunning {
 		return nil
 	}
 
-	err := a.Actor.Start()
+	err = a.Actor.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start allocation actor: %w", err)
 	}
@@ -217,4 +224,44 @@ func (a *Allocation) createExecutor(ctx context.Context, execution types.SpecCon
 	}
 
 	return nil
+}
+
+func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
+	log.Infof("behavior allocation start from: %+v", msg.From)
+	defer msg.Discard()
+
+	var resp AllocationStartResponse
+
+	if err := a.Run(context.TODO()); err != nil {
+		err = fmt.Errorf("failed to run allocation: %w", err)
+		log.Error(err)
+
+		resp.Error = err.Error()
+		resp.OK = false
+		a.sendReply(msg, resp)
+		return
+	}
+
+	log.Info("Running allocation's job: ", a.ID)
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+// TODO: make send reply a helper func from actor pkg
+func (a *Allocation) sendReply(msg actor.Envelope, payload interface{}) {
+	var opt []actor.MessageOption
+	if msg.IsBroadcast() {
+		opt = append(opt, actor.WithMessageSource(a.Actor.Handle()))
+	}
+
+	reply, err := actor.ReplyTo(msg, payload, opt...)
+	if err != nil {
+		log.Debugf("error creating reply: %s", err)
+		return
+	}
+
+	if err := a.Actor.Send(reply); err != nil {
+		log.Debugf("error sending  reply: %s", err)
+	}
 }

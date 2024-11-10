@@ -5,31 +5,15 @@ allocations:
         executor: docker
         resources:
             cpu:
-                clockspeed: 2400000000
-                cores: 2
-                model: ""
-                vendor: "Intel"
-                threads: 2
-                architecture: "x86_64"
-                cachesize: 0
+                cores: 1
             gpus: []
             ram:
                 size: 1024
-                clockspeed: 3
-                type: ""
             disk:
-                size: 20000
-                model: ""
-                vendor: ""
-                type: ""
-                interface: ""
-                readspeed: 0
-                writespeed: 0
+                size: 20
         execution:
             type: docker
-            params:
-                image: hello-world
-                working_directory: /
+            image: hello-world
         dnsname: mydocker
         keys: []
         provision: []
@@ -41,4 +25,3 @@ nodes:
         location:
             accept: []
             reject: []
-        peer: 12D3KooWKgAbHgeBPHTP3y6CNJLNqCyFcMBHVJXgTWpgyexxcS42
