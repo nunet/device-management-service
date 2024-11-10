@@ -20,6 +20,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
@@ -652,51 +653,19 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 		return
 	}
 
+	// TODO: what should be the expire time?
+	// TODO: should we keep depth 0?
+	// grant allocation capabilities to orchestrator
+	tokens, err := n.rootCap.Grant(ucan.Invoke, msg.From.DID, n.rootCap.DID(), []string{}, actor.MakeExpiry(24*time.Hour), 0, []ucan.Capability{jobs.AllocationStartBehavior})
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to create granting token for allocation caps: %s", err.Error())
+		n.sendReply(msg, resp)
+		return
+	}
+
 	resp.OK = true
 	resp.Allocations = allocations
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleAllocationStart(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.AllocationStartRequest
-	var resp jobs.AllocationStartResponse
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		err = fmt.Errorf("failed to unmarshal request: %w", err)
-		log.Error(err)
-
-		resp.Error = err.Error()
-		resp.OK = false
-		n.sendReply(msg, resp)
-		return
-	}
-
-	allocation, err := n.GetAllocation(request.AllocationID)
-	if err != nil {
-		err = fmt.Errorf("failed to get allocation: %w", err)
-		log.Error(err)
-
-		resp.Error = err.Error()
-		resp.OK = false
-		n.sendReply(msg, resp)
-		return
-	}
-
-	if err := allocation.Run(n.ctx); err != nil {
-		err = fmt.Errorf("failed to run allocation: %w", err)
-		log.Error(err)
-
-		resp.Error = err.Error()
-		resp.OK = false
-		n.sendReply(msg, resp)
-		return
-	}
-
-	log.Info("Running allocation's job: ", request.AllocationID)
-
-	resp.OK = true
+	resp.Tokens = tokens
 	n.sendReply(msg, resp)
 }
 

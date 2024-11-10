@@ -5,31 +5,16 @@ allocations:
         executor: docker
         resources:
             cpu:
-                clockspeed: 2400000000
-                cores: 2
-                model: ""
-                vendor: "Intel"
-                threads: 2
-                architecture: "x86_64"
-                cachesize: 0
+                cores: 1
             gpus: []
             ram:
-                size: 1024
-                clockspeed: 3
-                type: ""
+                size: 102
             disk:
-                size: 20000
-                model: ""
-                vendor: ""
-                type: ""
-                interface: ""
-                readspeed: 0
-                writespeed: 0
+                size: 20
         execution:
             type: docker
-            params:
-                image: nginxdemos/hello
-                working_directory: /
+            image: nginxdemos/hello
+            working_directory: /
         dnsname: mydocker
         keys: []
         provision: []
@@ -39,8 +24,7 @@ nodes:
         allocations:
             - alloc1
         ports:
-            - public: 1
-              private: 1
+            - private: 1
               allocation: alloc1
         location:
             accept: []

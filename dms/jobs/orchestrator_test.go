@@ -19,6 +19,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -128,11 +129,6 @@ func TestProvision(t *testing.T) {
 
 	_ = actr1.AddBehavior(AllocationStartBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
-
-		var request AllocationStartRequest
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
 
 		response := AllocationStartResponse{
 			OK: true,

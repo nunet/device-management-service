@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -29,7 +30,7 @@ const (
 	AllocationDeploymentBehavior = "/dms/deployment/allocate"
 	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
-	AllocationStartBehavior      = "/dms/allocation/start"
+	AllocationStartBehavior      = "/dms/deployment/start"
 	AllocationStartTimeout       = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
@@ -86,6 +87,7 @@ type AllocationDeploymentResponse struct {
 	OK          bool
 	Error       string
 	Allocations map[string]actor.Handle
+	Tokens      ucan.TokenList // tokens granted for allocation capabilities
 }
 
 type RevertDeploymentMessage struct {
@@ -93,9 +95,7 @@ type RevertDeploymentMessage struct {
 	AllocationsIDs []string
 }
 
-type AllocationStartRequest struct {
-	AllocationID string
-}
+type AllocationStartRequest struct{}
 
 type AllocationStartResponse struct {
 	OK    bool
