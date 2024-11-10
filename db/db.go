@@ -1,14 +1,21 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package db
 
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/types"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-)
 
-var DB *gorm.DB
+	"gitlab.com/nunet/device-management-service/types"
+)
 
 func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 	database, err := gorm.Open(sqlite.Open(fmt.Sprintf("%s/nunet.db", dbPath)), &gorm.Config{})
@@ -16,27 +23,13 @@ func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 		panic("Failed to connect to database!")
 	}
 
-	_ = database.AutoMigrate(&types.ElasticToken{})
-	_ = database.AutoMigrate(&types.VirtualMachine{})
-	_ = database.AutoMigrate(&types.Machine{})
-	_ = database.AutoMigrate(&types.AvailableResources{})
 	_ = database.AutoMigrate(&types.FreeResources{})
-	_ = database.AutoMigrate(&types.PeerInfo{})
-	_ = database.AutoMigrate(&types.Services{})
-	_ = database.AutoMigrate(&types.ServiceResourceRequirements{})
-	_ = database.AutoMigrate(&types.ContainerImages{})
 	_ = database.AutoMigrate(&types.RequestTracker{})
-	_ = database.AutoMigrate(&types.Libp2pInfo{})
-	_ = database.AutoMigrate(&types.DeploymentRequestFlat{})
-	_ = database.AutoMigrate(&types.MachineUUID{})
-	_ = database.AutoMigrate(&types.Connection{})
 	_ = database.AutoMigrate(&types.OnboardedResources{})
 	_ = database.AutoMigrate(&types.MachineResources{})
 	_ = database.AutoMigrate(&types.OnboardingConfig{})
 	_ = database.AutoMigrate(&types.ResourceAllocation{})
-
-	// TODO remove once all DB usage is transitioned to the repos
-	DB = database
+	_ = database.AutoMigrate(&types.GPU{})
 
 	return database, nil
 }

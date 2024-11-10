@@ -1,13 +1,20 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package basiccontroller
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/spf13/afero"
-
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -31,8 +38,8 @@ type BasicVolumeController struct {
 // TODO-BugFix [path]: volBasePath might not end with `/`, causing errors when calling methods.
 // We need to validate it using the `path` library or just verifying the string.
 func NewDefaultVolumeController(repo repositories.StorageVolume, volBasePath string, fs afero.Fs) (*BasicVolumeController, error) {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_controller_init_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeControllerInitDuration)
+	defer endTrace()
 
 	vc := &BasicVolumeController{
 		repo:     repo,
@@ -40,7 +47,7 @@ func NewDefaultVolumeController(repo repositories.StorageVolume, volBasePath str
 		FS:       fs,
 	}
 
-	st.Info(ctx, "volume_controller_init_success", nil)
+	log.Infow(LogVolumeControllerInitSuccess, LogKeyBasePath, volBasePath)
 	return vc, nil
 }
 
@@ -53,8 +60,8 @@ func NewDefaultVolumeController(repo repositories.StorageVolume, volBasePath str
 //
 // TODO-maybe [withName]: allow callers to specify custom name for path
 func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, opts ...storage.CreateVolOpt) (types.StorageVolume, error) {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_create_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeCreateDuration)
+	defer endTrace()
 
 	vol := types.StorageVolume{
 		Private:        false,
@@ -68,27 +75,24 @@ func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, op
 
 	randomStr, err := utils.RandomString(16)
 	if err != nil {
-		return types.StorageVolume{}, fmt.Errorf("failed to create random string: %w", err)
+		log.Errorw(LogVolumeCreateFailure, LogKeyError, err)
+		return types.StorageVolume{}, err
 	}
 
 	vol.Path = vc.basePath + string(volSource) + "-" + randomStr
-	ctx = context.WithValue(ctx, pathKey, vol.Path)
 
 	if err := vc.FS.Mkdir(vol.Path, os.ModePerm); err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_create_failure", nil)
-		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume: %w", err)
+		log.Errorw(LogVolumeCreateFailure, LogKeyPath, vol.Path, LogKeyError, err)
+		return types.StorageVolume{}, err
 	}
 
-	createdVol, err := vc.repo.Create(ctx, vol)
+	createdVol, err := vc.repo.Create(context.TODO(), vol)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_create_failure", nil)
-		return types.StorageVolume{}, fmt.Errorf("failed to create storage volume in repository: %w", err)
+		log.Errorw(LogVolumeCreateFailure, LogKeyPath, vol.Path, LogKeyError, err)
+		return types.StorageVolume{}, err
 	}
 
-	ctx = context.WithValue(ctx, volumeIDKey, createdVol.ID)
-	st.Info(ctx, "volume_create_success", nil)
+	log.Infow(LogVolumeCreateSuccess, LogKeyVolumeID, createdVol.ID, LogKeyPath, vol.Path)
 	return createdVol, nil
 }
 
@@ -98,17 +102,15 @@ func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, op
 //
 // TODO-maybe [CID]: maybe calculate CID of every volume in case WithCID opt is not provided
 func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.LockVolOpt) error {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_lock_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeLockDuration)
+	defer endTrace()
 
-	ctx = context.WithValue(ctx, pathKey, pathToVol)
 	query := vc.repo.GetQuery()
 	query.Conditions = append(query.Conditions, repositories.EQ("Path", pathToVol))
-	vol, err := vc.repo.Find(ctx, query)
+	vol, err := vc.repo.Find(context.TODO(), query)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_lock_failure", nil)
-		return fmt.Errorf("failed to find storage volume with path %s - Error: %w", pathToVol, err)
+		log.Errorw(LogVolumeLockFailure, LogKeyPath, pathToVol, LogKeyError, err)
+		return err
 	}
 
 	for _, opt := range opts {
@@ -116,21 +118,19 @@ func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.Lo
 	}
 
 	vol.ReadOnly = true
-	updatedVol, err := vc.repo.Update(ctx, vol.ID, vol)
+	updatedVol, err := vc.repo.Update(context.TODO(), vol.ID, vol)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_lock_failure", nil)
-		return fmt.Errorf("failed to update storage volume with path %s - Error: %w", pathToVol, err)
+		log.Errorw(LogVolumeLockFailure, LogKeyVolumeID, vol.ID, LogKeyError, err)
+		return err
 	}
 
-	// change file permissions
+	// Change file permissions to read-only
 	if err := vc.FS.Chmod(updatedVol.Path, 0o400); err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_lock_failure", nil)
-		return fmt.Errorf("failed to make storage volume read-only (path: %s): %w", updatedVol.Path, err)
+		log.Errorw(LogVolumeLockFailure, LogKeyPath, updatedVol.Path, LogKeyError, err)
+		return err
 	}
 
-	st.Info(ctx, "volume_lock_success", nil)
+	log.Infow(LogVolumeLockSuccess, LogKeyVolumeID, updatedVol.ID, LogKeyPath, updatedVol.Path)
 	return nil
 }
 
@@ -157,11 +157,9 @@ func WithCID(cid string) storage.LockVolOpt {
 // Note [CID]: if we start to type CID as cid.CID, we may have to use generics here
 // as in `[T string | cid.CID]`
 func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.IDType) error {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_delete_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeDeleteDuration)
+	defer endTrace()
 
-	ctx = context.WithValue(ctx, identifierKey, identifier)
-	ctx = context.WithValue(ctx, idTypeKey, idType)
 	query := vc.repo.GetQuery()
 
 	switch idType {
@@ -170,36 +168,32 @@ func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.
 	case storage.IDTypeCID:
 		query.Conditions = append(query.Conditions, repositories.EQ("CID", identifier))
 	default:
-		ctx = context.WithValue(ctx, errorKey, "identifier type not supported")
-		st.Error(ctx, "volume_delete_failure", nil)
-		return fmt.Errorf("identifier type not supported")
+		log.Errorw(LogVolumeDeleteFailure, LogKeyIdentifier, identifier, LogKeyError, ErrMsgInvalidIdentifier)
+		return ErrInvalidIdentifier
 	}
 
-	vol, err := vc.repo.Find(ctx, query)
+	vol, err := vc.repo.Find(context.TODO(), query)
 	if err != nil {
 		if err == repositories.ErrNotFound {
-			ctx = context.WithValue(ctx, errorKey, err.Error())
-			st.Error(ctx, "volume_delete_failure", nil)
-			return fmt.Errorf("volume not found: %w", err)
+			log.Errorw(LogVolumeDeleteFailure, LogKeyIdentifier, identifier, LogKeyError, ErrMsgVolumeNotFound)
+			return repositories.ErrNotFound
 		}
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_delete_failure", nil)
-		return fmt.Errorf("failed to find volume: %w", err)
+		log.Errorw(LogVolumeDeleteFailure, LogKeyIdentifier, identifier, LogKeyError, err)
+		return err
 	}
 
 	// Remove the directory
 	if err := vc.FS.RemoveAll(vol.Path); err != nil {
-		return fmt.Errorf("failed to remove volume directory: %w", err)
+		log.Errorw(LogVolumeDeleteFailure, LogKeyPath, vol.Path, LogKeyError, err)
+		return err
 	}
 
-	// Delete the record from the database
-	if err := vc.repo.Delete(context.Background(), vol.ID); err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_delete_failure", nil)
-		return fmt.Errorf("failed to delete volume: %w", err)
+	if err := vc.repo.Delete(context.TODO(), vol.ID); err != nil {
+		log.Errorw(LogVolumeDeleteFailure, LogKeyVolumeID, vol.ID, LogKeyError, err)
+		return err
 	}
 
-	st.Info(ctx, "volume_delete_success", nil)
+	log.Infow(LogVolumeDeleteSuccess, LogKeyVolumeID, vol.ID, LogKeyPath, vol.Path)
 	return nil
 }
 
@@ -207,29 +201,25 @@ func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.
 //
 // TODO [filter]: maybe add opts to filter results by certain values
 func (vc *BasicVolumeController) ListVolumes() ([]types.StorageVolume, error) {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_list_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeListDuration)
+	defer endTrace()
 
-	volumes, err := vc.repo.FindAll(ctx, vc.repo.GetQuery())
+	volumes, err := vc.repo.FindAll(context.TODO(), vc.repo.GetQuery())
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, err.Error())
-		st.Error(ctx, "volume_list_failure", nil)
-		return nil, fmt.Errorf("failed to list volumes: %w", err)
+		log.Errorw(LogVolumeListFailure, LogKeyError, err)
+		return nil, err
 	}
 
-	ctx = context.WithValue(ctx, volumeCountKey, len(volumes))
-	st.Info(ctx, "volume_list_success", nil)
+	log.Infow(LogVolumeListSuccess, LogKeyVolumeCount, len(volumes))
 	return volumes, nil
 }
 
 // GetSize returns the size of a volume
 // TODO-minor: identify which measurement type will be used
 func (vc *BasicVolumeController) GetSize(identifier string, idType storage.IDType) (int64, error) {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_get_size_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeGetSizeDuration)
+	defer endTrace()
 
-	ctx = context.WithValue(ctx, identifierKey, identifier)
-	ctx = context.WithValue(ctx, idTypeKey, idType)
 	query := vc.repo.GetQuery()
 
 	switch idType {
@@ -238,50 +228,42 @@ func (vc *BasicVolumeController) GetSize(identifier string, idType storage.IDTyp
 	case storage.IDTypeCID:
 		query.Conditions = append(query.Conditions, repositories.EQ("CID", identifier))
 	default:
-		ctx = context.WithValue(ctx, errorKey, fmt.Sprintf("unsupported ID type: %d", idType))
-		st.Error(ctx, "volume_get_size_failure", nil)
-		return 0, fmt.Errorf("unsupported ID type: %d", idType)
+		log.Errorw(LogVolumeGetSizeFailure, LogKeyIdentifier, identifier, LogKeyError, ErrMsgInvalidIdentifier)
+		return 0, ErrInvalidIdentifier
 	}
 
-	vol, err := vc.repo.Find(ctx, query)
+	vol, err := vc.repo.Find(context.TODO(), query)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, fmt.Sprintf("failed to find volume: %v", err))
-		st.Error(ctx, "volume_get_size_failure", nil)
-		return 0, fmt.Errorf("failed to find volume: %w", err)
+		log.Errorw(LogVolumeGetSizeFailure, LogKeyIdentifier, identifier, LogKeyError, err)
+		return 0, err
 	}
 
 	size, err := utils.GetDirectorySize(vc.FS, vol.Path)
 	if err != nil {
-		ctx = context.WithValue(ctx, errorKey, fmt.Sprintf("failed to get directory size: %v", err))
-		st.Error(ctx, "volume_get_size_failure", nil)
-		return 0, fmt.Errorf("failed to get directory size: %w", err)
+		log.Errorw(LogVolumeGetSizeFailure, LogKeyPath, vol.Path, LogKeyError, err)
+		return 0, err
 	}
 
-	ctx = context.WithValue(ctx, sizeKey, size)
-	st.Info(ctx, "volume_get_size_success", nil)
-	ctx = context.WithValue(ctx, sizeKey, size)
-	st.Info(ctx, "volume_get_size_success", nil)
+	log.Infow(LogVolumeGetSizeSuccess, LogKeyVolumeID, vol.ID, LogKeySize, size)
 	return size, nil
 }
 
 // EncryptVolume encrypts a given volume
 func (vc *BasicVolumeController) EncryptVolume(path string, _ types.Encryptor, _ types.EncryptionType) error {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_encrypt_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeEncryptDuration)
+	defer endTrace()
 
-	ctx = context.WithValue(ctx, pathKey, path)
-	st.Error(ctx, "volume_encrypt_not_implemented", nil)
-	return fmt.Errorf("not implemented")
+	log.Errorw(LogVolumeEncryptNotImplemented, LogKeyPath, path)
+	return ErrNotImplemented
 }
 
 // DecryptVolume decrypts a given volume
 func (vc *BasicVolumeController) DecryptVolume(path string, _ types.Decryptor, _ types.EncryptionType) error {
-	ctx, cancel := st.SpanContext(context.Background(), "controller", "volume_decrypt_duration", "opentelemetry", "log")
-	defer cancel()
+	endTrace := observability.StartTrace(TraceVolumeDecryptDuration)
+	defer endTrace()
 
-	ctx = context.WithValue(ctx, pathKey, path)
-	st.Error(ctx, "volume_decrypt_not_implemented", nil)
-	return fmt.Errorf("not implemented")
+	log.Errorw(LogVolumeDecryptNotImplemented, LogKeyPath, path)
+	return ErrNotImplemented
 }
 
 var _ storage.VolumeController = (*BasicVolumeController)(nil)

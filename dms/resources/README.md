@@ -36,12 +36,6 @@ Here is quick overview of the contents of this pacakge:
 
 * [resource_manager](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/resource_manager.go): Contains the resource manager which is responsible for managing the resources of dms.
 
-* [system_specs_linux](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/system_specs_linux.go): Contains the implementation of the `SystemSpecs` interface for linux.
-
-* [system_specs_amd64_darwin](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/system_specs_amd64_darwin.go): Contains the implementation of the `SystemSpecs` interface for amd64 darwin.
-
-* [system_specs_arm64_darwin](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/system_specs_arm64_darwin.go): Contains the implementation of the `SystemSpecs` interface for arm64 darwin.
-
 * [usage_monitor](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/usage_monitor.go): Contains the implementation of the `UsageMonitor` interface.
 
 * [store](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/resources/store.go): Contains the implementation of the `store` for the resource manager.
@@ -124,15 +118,6 @@ The interface methods are explained below.
 
 `UpdateOnboardedResources` updates the resources onboarded to dms.
 
-##### `SystemSpecs`
-
-- signature: `SystemSpecs() types.SystemSpecs`
-- input: None
-- output: `types.SystemSpecs` instance
-- output (error): None
-
-`SystemSpecs` returns the `types.SystemSpecs` instance.
-
 ##### `UsageMonitor`
 
 - signature: `UsageMonitor() types.UsageMonitor`
@@ -141,19 +126,6 @@ The interface methods are explained below.
 - output (error): None
 
 `UsageMonitor` returns the `types.UsageMonitor` instance.
-
-#### SystemSpecs Interface
-
-This interface defines the methods to get the system specifications of the machine. These methods are explained below.
-
-##### `GetMachineResources`
-
-- signature: `GetMachineResources(context.Context) (MachineResources, error)`
-- input: `Context`
-- output: `MachineResources`
-- output (error): Error message
-
-`GetMachineResources` returns the resources available on the machine.
 
 ### UsageMonitor Interface
 

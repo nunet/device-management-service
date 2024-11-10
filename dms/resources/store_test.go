@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package resources
 
 import (
@@ -16,7 +24,7 @@ func TestNewStore(t *testing.T) {
 	require.NotNil(t, s)
 }
 
-func Test_WithDemandLocks(t *testing.T) {
+func TestStore_WithDemandLocks(t *testing.T) {
 	t.Parallel()
 
 	s := newStore()
@@ -26,7 +34,6 @@ func Test_WithDemandLocks(t *testing.T) {
 			CPU: types.CPU{
 				Cores:      4,
 				ClockSpeed: 3000,
-				Compute:    12000,
 			},
 			RAM:  types.RAM{Size: 1024},
 			Disk: types.Disk{Size: 1024},
@@ -48,7 +55,7 @@ func Test_WithDemandLocks(t *testing.T) {
 	require.Equalf(t, mockDemand, demand, "expected allocations to be %v, got %v", mockDemand, demand)
 }
 
-func Test_WithOnboardedLocks(t *testing.T) {
+func TestStore_WithOnboardedLocks(t *testing.T) {
 	t.Parallel()
 
 	s := newStore()
@@ -57,7 +64,6 @@ func Test_WithOnboardedLocks(t *testing.T) {
 			CPU: types.CPU{
 				Cores:      4,
 				ClockSpeed: 3000,
-				Compute:    12000,
 			},
 			RAM:  types.RAM{Size: 1024},
 			Disk: types.Disk{Size: 1024},
@@ -77,34 +83,34 @@ func Test_WithOnboardedLocks(t *testing.T) {
 	require.Equal(t, mockOnboarded, onboarded)
 }
 
-func Test_WithFreeLocks(t *testing.T) {
+func TestStore_WithCommittedLocks(t *testing.T) {
 	t.Parallel()
 
 	s := newStore()
-	mockFree := types.FreeResources{
+	mockCommitted := types.CommittedResources{
 		Resources: types.Resources{
 			CPU: types.CPU{
 				Cores:      4,
 				ClockSpeed: 3000,
-				Compute:    12000,
 			},
 			RAM:  types.RAM{Size: 1024},
 			Disk: types.Disk{Size: 1024},
 		},
 	}
 
-	s.withFreeLock(func() {
-		s.freeResources = &mockFree
+	s.withCommittedLock(func() {
+		s.committedResources["job1"] = &mockCommitted
 	})
 
-	var free types.FreeResources
-	s.withFreeRLock(func() {
-		free = *s.freeResources
+	var committed types.CommittedResources
+	s.withCommittedLock(func() {
+		committed = *s.committedResources["job1"]
 	})
-	require.Equal(t, mockFree, free)
+
+	require.Equal(t, mockCommitted, committed)
 }
 
-func Test_Concurrency(t *testing.T) {
+func TestStore_Concurrency(t *testing.T) {
 	t.Parallel()
 	const numGoroutines = 50
 
@@ -125,7 +131,6 @@ func Test_Concurrency(t *testing.T) {
 						CPU: types.CPU{
 							Cores:      4,
 							ClockSpeed: 3000,
-							Compute:    12000,
 						},
 						RAM:  types.RAM{Size: 1024},
 						Disk: types.Disk{Size: 1024},
@@ -174,7 +179,6 @@ func Test_Concurrency(t *testing.T) {
 						CPU: types.CPU{
 							Cores:      4,
 							ClockSpeed: 3000,
-							Compute:    12000,
 						},
 						RAM:  types.RAM{Size: 1024},
 						Disk: types.Disk{Size: 1024},
@@ -198,7 +202,7 @@ func Test_Concurrency(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("WithFreeLocks", func(t *testing.T) {
+	t.Run("WithCommittedLocks", func(t *testing.T) {
 		t.Parallel()
 		s := newStore()
 		var wg sync.WaitGroup
@@ -207,27 +211,26 @@ func Test_Concurrency(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				free := types.FreeResources{
+				committed := types.CommittedResources{
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      4,
 							ClockSpeed: 3000,
-							Compute:    12000,
 						},
 						RAM:  types.RAM{Size: 1024},
 						Disk: types.Disk{Size: 1024},
 					},
 				}
 
-				s.withFreeLock(func() {
-					s.freeResources = &free
+				s.withCommittedLock(func() {
+					s.committedResources["job1"] = &committed
 				})
 
-				var f types.FreeResources
-				s.withFreeRLock(func() {
-					f = *s.freeResources
+				var c types.CommittedResources
+				s.withCommittedRLock(func() {
+					c = *s.committedResources["job1"]
 				})
-				require.Equal(t, free, f)
+				require.Equal(t, committed, c)
 			}()
 		}
 

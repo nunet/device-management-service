@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
 
 import (
@@ -20,16 +28,16 @@ var (
 	_ Calculable[Connectivity] = (*Connectivity)(nil)
 )
 
-func (c *Connectivity) Compare(other Connectivity) Comparison {
+func (c *Connectivity) Compare(other Connectivity) (Comparison, error) {
 	if reflect.DeepEqual(*c, other) {
-		return Equal
+		return Equal, nil
 	}
 
 	if IsStrictlyContainedInt(c.Ports, other.Ports) && (c.VPN && other.VPN || c.VPN && !other.VPN) {
-		return Better
+		return Better, nil
 	}
 
-	return Worse
+	return None, nil
 }
 
 func (c *Connectivity) Add(other Connectivity) error {
@@ -122,21 +130,21 @@ func (t *TimeInformation) TotalTime() int {
 	}
 }
 
-func (t *TimeInformation) Compare(other TimeInformation) Comparison {
+func (t *TimeInformation) Compare(other TimeInformation) (Comparison, error) {
 	if reflect.DeepEqual(t, other) {
-		return Equal
+		return Equal, nil
 	}
 	ownTotalTime := t.TotalTime()
 	otherTotalTime := other.TotalTime()
 
 	if ownTotalTime == otherTotalTime {
-		return Equal
+		return Equal, nil
 	}
 
 	if ownTotalTime < otherTotalTime {
-		return Worse
+		return Worse, nil
 	}
-	return Better
+	return Better, nil
 }
 
 // PriceInformation represents the pricing information
@@ -150,34 +158,34 @@ type PriceInformation struct {
 // implementing Comparable interface
 var _ Comparable[PriceInformation] = (*PriceInformation)(nil)
 
-func (p *PriceInformation) Compare(other PriceInformation) Comparison {
+func (p *PriceInformation) Compare(other PriceInformation) (Comparison, error) {
 	if reflect.DeepEqual(p, other) {
-		return Equal
+		return Equal, nil
 	}
 
 	if p.Currency == other.Currency {
 		if p.TotalPerJob == other.TotalPerJob {
 			if p.CurrencyPerHour == other.CurrencyPerHour {
-				return Equal
+				return Equal, nil
 			} else if p.CurrencyPerHour < other.CurrencyPerHour {
-				return Better
+				return Better, nil
 			}
 
-			return Worse
+			return Worse, nil
 		}
 
 		if p.TotalPerJob < other.TotalPerJob {
 			if p.CurrencyPerHour <= other.CurrencyPerHour {
-				return Better
+				return Better, nil
 			}
 
-			return Worse
+			return Worse, nil
 		}
 
-		return Worse
+		return Worse, nil
 	}
 
-	return Error
+	return None, nil
 }
 
 func (p *PriceInformation) Equal(price PriceInformation) bool {
@@ -197,35 +205,34 @@ type Library struct {
 // implementing Comparable interface
 var _ Comparable[Library] = (*Library)(nil)
 
-func (lib *Library) Compare(other Library) Comparison {
+func (lib *Library) Compare(other Library) (Comparison, error) {
 	ownVersion, err := version.NewVersion(lib.Version)
 	if err != nil {
-		return Error
+		return None, fmt.Errorf("error parsing version: %v", err)
 	}
 
-	// return 'Error' if the version of the left library is not valid
 	constraints, err := version.NewConstraint(other.Constraint + " " + other.Version)
 	if err != nil {
-		return Error
+		return None, fmt.Errorf("error parsing constraint: %v", err)
 	}
 
-	// return 'Error' if the names of the libraries are different
+	// return 'None' if the names of the libraries are different
 	if lib.Name != other.Name {
-		return Error
+		return None, nil
 	}
 
 	// else return 'Equal if versions of libraries are equal and the constraint is '='
 	if other.Constraint == "=" && constraints.Check(ownVersion) {
-		return Equal
+		return Equal, nil
 	}
 
 	// else return 'Better' if versions of libraries match the constraint
 	if constraints.Check(ownVersion) {
-		return Better
+		return Better, nil
 	}
 
 	// else return 'Worse'
-	return Worse
+	return Worse, nil
 }
 
 func (lib *Library) Equal(library Library) bool {
@@ -244,15 +251,16 @@ type Locality struct {
 // implementing Comparable interface
 var _ Comparable[Locality] = (*Locality)(nil)
 
-func (loc *Locality) Compare(other Locality) Comparison {
-	if loc.Kind == other.Kind {
-		if loc.Name == other.Name {
-			return Equal
-		}
-		return Worse
+func (loc *Locality) Compare(other Locality) (Comparison, error) {
+	if loc.Kind != other.Kind {
+		return None, nil
 	}
 
-	return Error
+	if loc.Name == other.Name {
+		return Equal, nil
+	}
+
+	return Worse, nil
 }
 
 func (loc *Locality) Equal(locality Locality) bool {
@@ -272,12 +280,12 @@ type KYC struct {
 // implementing Comparable interface
 var _ Comparable[KYC] = (*KYC)(nil)
 
-func (k *KYC) Compare(other KYC) Comparison {
+func (k *KYC) Compare(other KYC) (Comparison, error) {
 	if reflect.DeepEqual(*k, other) {
-		return Equal
+		return Equal, nil
 	}
 
-	return Error
+	return None, nil
 }
 
 func (k *KYC) Equal(kyc KYC) bool {
@@ -300,11 +308,11 @@ const (
 // implementing Comparable and Calculable interface
 var _ Comparable[JobType] = (*JobType)(nil)
 
-func (j JobType) Compare(other JobType) Comparison {
+func (j JobType) Compare(other JobType) (Comparison, error) {
 	if reflect.DeepEqual(j, other) {
-		return Equal
+		return Equal, nil
 	}
-	return Error
+	return None, nil
 }
 
 // JobTypes a slice of JobType
@@ -356,13 +364,14 @@ func (j *JobTypes) Subtract(other JobTypes) error {
 	return nil
 }
 
-func (j *JobTypes) Compare(other JobTypes) Comparison {
+func (j *JobTypes) Compare(other JobTypes) (Comparison, error) {
 	// we know that interfaces here are slices, so need to assert first
 	l := ConvertTypedSliceToUntypedSlice(*j)
 	r := ConvertTypedSliceToUntypedSlice(other)
 
 	if !IsSameShallowType(l, r) {
-		return Error
+		// cannot compare different types
+		return None, nil
 	}
 
 	switch {
@@ -370,25 +379,25 @@ func (j *JobTypes) Compare(other JobTypes) Comparison {
 		// if available capabilities are
 		// equal to required capabilities
 		// then the result of comparison is 'Equal'
-		return Equal
+		return Equal, nil
 
 	case IsStrictlyContained(l, r):
 		// if machine capabilities contain all the required capabilities
 		// then the result of comparison is 'Better'
-		return Better
+		return Better, nil
 
 	case IsStrictlyContained(r, l):
 		// if required capabilities contain all the machine capabilities
 		// then the result of comparison is 'Worse'
 		// ("available Capabilities are worse than required")')
 		// (note that Equal case is already handled above)
-		return Worse
+		return Worse, nil
 
 		// TODO: this comparator does not take into account options when several job types are available and several job types are required
 		// in the same data structure; this is why the test fails;
 	}
 
-	return Error
+	return None, nil
 }
 
 func (j *JobTypes) Contains(jobType JobType) bool {
@@ -445,12 +454,16 @@ func (l *Libraries) Subtract(other Libraries) error {
 	return nil
 }
 
-func (l *Libraries) Compare(other Libraries) Comparison {
+func (l *Libraries) Compare(other Libraries) (Comparison, error) {
 	interimComparison1 := make([][]Comparison, 0)
 	for _, otherLibrary := range other {
 		var interimComparison2 []Comparison
 		for _, ownLibrary := range *l {
-			interimComparison2 = append(interimComparison2, ownLibrary.Compare(otherLibrary))
+			c, err := ownLibrary.Compare(otherLibrary)
+			if err != nil {
+				return None, fmt.Errorf("error comparing library: %v", err)
+			}
+			interimComparison2 = append(interimComparison2, c)
 		}
 		// this matrix structure will hold the comparison results for each GPU on the right
 		// with each GPU on the left in the order they are in the slices
@@ -472,16 +485,13 @@ func (l *Libraries) Compare(other Libraries) Comparison {
 		interimComparison1 = removeIndex(interimComparison1, index)
 	}
 
-	if slices.Contains(finalComparison, Error) {
-		return Error
-	}
 	if slices.Contains(finalComparison, Worse) {
-		return Worse
+		return Worse, nil
 	}
 	if SliceContainsOneValue(finalComparison, Equal) {
-		return Equal
+		return Equal, nil
 	}
-	return Better
+	return Better, nil
 }
 
 func (l *Libraries) Contains(library Library) bool {
@@ -501,14 +511,18 @@ var (
 	_ Calculable[Localities] = (*Localities)(nil)
 )
 
-func (l *Localities) Compare(other Localities) Comparison {
+func (l *Localities) Compare(other Localities) (Comparison, error) {
 	interimComparison := make([]map[string]Comparison, 0)
 	for _, otherLocality := range other {
 		field := make(map[string]Comparison)
-		field[otherLocality.Kind] = Error
+		field[otherLocality.Kind] = None
 		for _, ownLocality := range *l {
 			if ownLocality.Kind == otherLocality.Kind {
-				field[otherLocality.Kind] = ownLocality.Compare(otherLocality)
+				c, err := ownLocality.Compare(otherLocality)
+				if err != nil {
+					return None, fmt.Errorf("error comparing locality: %v", err)
+				}
+				field[otherLocality.Kind] = c
 				// this is to make sure that we have a comparison even if slice dimentiones do not match
 			}
 		}
@@ -522,16 +536,13 @@ func (l *Localities) Compare(other Localities) Comparison {
 		}
 	}
 
-	if slices.Contains(finalComparison, Error) {
-		return Error
-	}
 	if slices.Contains(finalComparison, Worse) {
-		return Worse
+		return Worse, nil
 	}
 	if SliceContainsOneValue(finalComparison, Equal) {
-		return Equal
+		return Equal, nil
 	}
-	return Better
+	return Better, nil
 }
 
 func (l *Localities) Add(other Localities) error {
@@ -588,22 +599,27 @@ var (
 	_ Calculable[KYCs] = (*KYCs)(nil)
 )
 
-func (k *KYCs) Compare(other KYCs) Comparison {
+func (k *KYCs) Compare(other KYCs) (Comparison, error) {
 	if reflect.DeepEqual(*k, other) {
-		return Equal
+		return Equal, nil
 	} else if len(other) == 0 && len(*k) != 0 {
-		return Better
+		return Better, nil
 	}
 
 	for _, ownKYC := range *k {
 		for _, otherKYC := range other {
-			if comp := ownKYC.Compare(otherKYC); comp == Equal {
-				return Equal
+			comp, err := ownKYC.Compare(otherKYC)
+			if err != nil {
+				return None, fmt.Errorf("error comparing KYC: %v", err)
+			}
+
+			if comp != None {
+				return comp, nil
 			}
 		}
 	}
 
-	return Error
+	return None, nil
 }
 
 func (k *KYCs) Add(other KYCs) error {
@@ -698,21 +714,25 @@ func (ps *PricesInformation) Subtract(other PricesInformation) error {
 	return nil
 }
 
-func (ps *PricesInformation) Compare(other PricesInformation) Comparison {
+func (ps *PricesInformation) Compare(other PricesInformation) (Comparison, error) {
 	if reflect.DeepEqual(*ps, other) {
-		return Equal
+		return Equal, nil
 	}
 
-	comparison := Error
 	for _, ownPrice := range *ps {
 		for _, otherPrice := range other {
-			if comparison = ownPrice.Compare(otherPrice); comparison != Error {
-				return comparison
+			c, err := ownPrice.Compare(otherPrice)
+			if err != nil {
+				return None, fmt.Errorf("error comparing price: %v", err)
+			}
+
+			if c != None {
+				return c, nil
 			}
 		}
 	}
 
-	return comparison
+	return None, nil
 }
 
 func (ps *PricesInformation) Contains(price PriceInformation) bool {
@@ -744,20 +764,33 @@ var (
 )
 
 // Compare compares two HardwareCapability objects
-func (c *HardwareCapability) Compare(other HardwareCapability) Comparison {
-	comparisonMap := ComplexComparison{
-		"Executors":    c.Executors.Compare(other.Executors),
-		"JobTypes":     c.JobTypes.Compare(other.JobTypes),
-		"Resources":    c.Resources.Compare(other.Resources),
-		"Libraries":    c.Libraries.Compare(other.Libraries),
-		"Localities":   c.Localities.Compare(other.Localities),
-		"Price":        c.Price.Compare(other.Price),
-		"KYCs":         c.KYCs.Compare(other.KYCs),
-		"Time":         c.Time.Compare(other.Time),
-		"Connectivity": c.Connectivity.Compare(other.Connectivity),
+func (c *HardwareCapability) Compare(other HardwareCapability) (Comparison, error) {
+	complexComparison := make(ComplexComparison)
+
+	compareFields := []struct {
+		name    string
+		compare func() (Comparison, error)
+	}{
+		{"Executors", func() (Comparison, error) { return c.Executors.Compare(other.Executors) }},
+		{"JobTypes", func() (Comparison, error) { return c.JobTypes.Compare(other.JobTypes) }},
+		{"Resources", func() (Comparison, error) { return c.Resources.Compare(other.Resources) }},
+		{"Libraries", func() (Comparison, error) { return c.Libraries.Compare(other.Libraries) }},
+		{"Localities", func() (Comparison, error) { return c.Localities.Compare(other.Localities) }},
+		{"Connectivity", func() (Comparison, error) { return c.Connectivity.Compare(other.Connectivity) }},
+		{"Price", func() (Comparison, error) { return c.Price.Compare(other.Price) }},
+		{"Time", func() (Comparison, error) { return c.Time.Compare(other.Time) }},
+		{"KYCs", func() (Comparison, error) { return c.KYCs.Compare(other.KYCs) }},
 	}
 
-	return comparisonMap.Result()
+	for _, field := range compareFields {
+		result, err := field.compare()
+		if err != nil {
+			return None, fmt.Errorf("error comparing %s: %v", field.name, err)
+		}
+		complexComparison[field.name] = result
+	}
+
+	return complexComparison.Result(), nil
 }
 
 // Add adds the resources of the given HardwareCapability to the current HardwareCapability

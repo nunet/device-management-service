@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package docker
 
 import (
@@ -5,24 +13,38 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/observability"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/pkg/errors"
 
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
+var ErrNotInstalled = errors.New("docker is not installed")
+
 const (
+	nanoCPUsPerCore = 1e9
+
 	labelExecutorName = "nunet-executor"
 	labelJobID        = "nunet-jobID"
 	labelExecutionID  = "nunet-executionID"
 
 	outputStreamCheckTickTime = 100 * time.Millisecond
 	outputStreamCheckTimeout  = 5 * time.Second
+
+	statusWaitTickTime = 100 * time.Millisecond
+	statusWaitTimeout  = 10 * time.Second
+
+	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
 )
 
 // Executor manages the lifecycle of Docker containers for execution requests.
@@ -41,7 +63,7 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	}
 
 	if !dockerClient.IsInstalled(ctx) {
-		return nil, fmt.Errorf("docker is not installed")
+		return nil, ErrNotInstalled
 	}
 
 	return &Executor{
@@ -52,8 +74,11 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 
 // Start begins the execution of a request by starting a Docker container.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
-	zlog.Sugar().
-		Infof("Starting execution for job %s, execution %s", request.JobID, request.ExecutionID)
+	endTrace := observability.StartTrace("docker_executor_start_duration")
+	defer endTrace()
+
+	// Log starting execution
+	log.Infow("docker_executor_start_begin", "jobID", request.JobID, "executionID", request.ExecutionID)
 
 	// It's possible that this is being called due to a restart. We should check if the
 	// container is already running.
@@ -63,14 +88,17 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		// failing that will create a new container.
 		if handler, ok := e.handlers.Get(request.ExecutionID); ok {
 			if handler.active() {
+				log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution already started")
 				return fmt.Errorf("execution is already started")
 			}
+			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution completed")
 			return fmt.Errorf("execution is already completed")
 		}
 
 		// Create a new handler for the execution.
 		containerID, err = e.newDockerExecutionContainer(ctx, request)
 		if err != nil {
+			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", err)
 			return fmt.Errorf("failed to create new container: %w", err)
 		}
 	}
@@ -85,6 +113,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		activeCh:    make(chan bool),
 		running:     &atomic.Bool{},
 		TTYEnabled:  true,
+		initScripts: request.ProvisionScripts,
 	}
 
 	// register the handler for this executionID
@@ -93,6 +122,30 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	// run the container.
 	go handler.run(ctx)
 	return nil
+}
+
+// Pause pauses the container
+func (e *Executor) Pause(
+	ctx context.Context,
+	executionID string,
+) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.pause(ctx)
+}
+
+// Resume resumes the container
+func (e *Executor) Resume(
+	ctx context.Context,
+	executionID string,
+) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.resume(ctx)
 }
 
 // Wait initiates a wait for the completion of a specific execution using its
@@ -107,15 +160,22 @@ func (e *Executor) Wait(
 	ctx context.Context,
 	executionID string,
 ) (<-chan *types.ExecutionResult, <-chan error) {
+	endTrace := observability.StartTrace("docker_executor_wait_duration")
+	defer endTrace()
+
+	log.Infow("docker_executor_wait_begin", "executionID", executionID)
+
 	handler, found := e.handlers.Get(executionID)
 	resultCh := make(chan *types.ExecutionResult, 1)
 	errCh := make(chan error, 1)
 
 	if !found {
+		log.Errorw("docker_executor_wait_failure", "executionID", executionID, "error", "execution not found")
 		errCh <- fmt.Errorf("execution (%s) not found", executionID)
 		return resultCh, errCh
 	}
 
+	log.Infow("docker_executor_wait_success", "executionID", executionID)
 	go e.doWait(ctx, resultCh, errCh, handler)
 	return resultCh, errCh
 }
@@ -132,7 +192,7 @@ func (e *Executor) doWait(
 	errCh chan error,
 	handler *executionHandler,
 ) {
-	zlog.Sugar().Infof("executionID %s waiting for execution", handler.executionID)
+	log.Infof("executionID %s waiting for execution", handler.executionID)
 	defer close(out)
 	defer close(errCh)
 
@@ -142,8 +202,7 @@ func (e *Executor) doWait(
 		return
 	case <-handler.waitCh:
 		if handler.result != nil {
-			zlog.Sugar().
-				Infof("executionID %s received results from execution", handler.executionID)
+			log.Debugf("executionID %s received results from execution ", handler.executionID)
 			out <- handler.result
 		} else {
 			errCh <- fmt.Errorf("execution (%s) result is nil", handler.executionID)
@@ -216,14 +275,60 @@ func (e *Executor) List() []types.ExecutionListItem {
 	return nil
 }
 
+// GetStatus returns the status of the execution identified by its executionID.
+// It returns the status of the execution and an error if the execution is not found or status is unknown.
+func (e *Executor) GetStatus(ctx context.Context, executionID string) (types.ExecutionStatus, error) {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return "", fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.status(ctx)
+}
+
+// WaitForStatus waits for the execution to reach a specific status.
+// It returns an error if the execution is not found or the status is unknown.
+func (e *Executor) WaitForStatus(
+	ctx context.Context,
+	executionID string,
+	status types.ExecutionStatus,
+	timeout *time.Duration,
+) error {
+	waitTimeout := statusWaitTimeout
+	if timeout != nil {
+		waitTimeout = *timeout
+	}
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	ticker := time.NewTicker(statusWaitTickTime)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			s, err := handler.status(ctx)
+			if err != nil {
+				return err
+			}
+			if s == status {
+				return nil
+			}
+		case <-time.After(waitTimeout):
+			return fmt.Errorf("execution (%s) did not reach status %s", executionID, status)
+		}
+	}
+}
+
 // Run initiates and waits for the completion of an execution in one call.
 // This method serves as a higher-level convenience function that
 // internally calls Start and Wait methods.
 // It returns the result of the execution or an error if either starting
 // or waiting fails, or if the context is canceled.
 func (e *Executor) Run(
-	ctx context.Context,
-	request *types.ExecutionRequest,
+	ctx context.Context, request *types.ExecutionRequest,
 ) (*types.ExecutionResult, error) {
 	if err := e.Start(ctx, request); err != nil {
 		return nil, err
@@ -241,12 +346,36 @@ func (e *Executor) Run(
 
 // Cleanup removes all Docker resources associated with the executor.
 // This includes removing containers including networks and volumes with the executor's label.
+// It also removes all temporary directories created for init scripts.
 func (e *Executor) Cleanup(ctx context.Context) error {
+	endTrace := observability.StartTrace("docker_executor_cleanup_duration")
+	defer endTrace()
+
+	log.Infow("docker_executor_cleanup_begin", "executorID", e.ID)
+
 	err := e.client.RemoveObjectsWithLabel(ctx, labelExecutorName, e.ID)
 	if err != nil {
+		log.Errorw("docker_executor_cleanup_failure", "executorID", e.ID, "error", err)
 		return fmt.Errorf("failed to remove containers: %w", err)
 	}
-	zlog.Info("Cleaned up all Docker resources")
+
+	log.Infow("docker_executor_cleanup_success", "executorID", e.ID)
+
+	// Remove all provision scripts used for mounting
+	pattern := initScriptsBaseDir + "*"
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return fmt.Errorf("failed to find init script directories: %w", err)
+	}
+
+	for _, dir := range matches {
+		if err := os.RemoveAll(dir); err != nil {
+			log.Warnf("Failed to remove init script directory %s: %v", dir, err)
+		} else {
+			log.Infof("Removed init script directory: %s", dir)
+		}
+	}
+
 	return nil
 }
 
@@ -266,34 +395,42 @@ func (e *Executor) newDockerExecutionContainer(
 
 	// TODO: Move this code block ( L263-272) to the allocator in future
 	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
-	machineResources, err := resources.ManagerInstance.SystemSpecs().GetMachineResources()
+	// TODO: use the hardware manager instantiated in the dms package
+	hardwareManager := hardware.NewHardwareManager()
+	machineResources, err := hardwareManager.GetMachineResources()
 	if err != nil {
 		return "", fmt.Errorf("failed to get machine resources: %w", err)
 	}
 
 	var chosenGPUVendor types.GPUVendor
 	if len(machineResources.GPUs) == 0 {
-		zlog.Info("no GPUs available on the machine")
-		chosenGPUVendor = types.GPUVendorUnknown
+		log.Infow("no GPUs available on the machine")
+		chosenGPUVendor = types.GPUVendorNone
 	} else {
-		maxFreeVRAMGpu, err := machineResources.GPUs.GetGPUWithHighestFreeVRAM()
-		if err != nil {
-			return "", fmt.Errorf("failed to get GPU with highest free VRAM: %w", err)
-		}
 		// Essential for multi-vendor GPU nodes. For example,
 		// if a machine has an 8 GB NVIDIA and a 16 GB Intel GPU, the latter should be used first.
 		// Even for machines with a single GPU, this is important as integrated GPUs would also be commonly detected.
-		chosenGPUVendor = maxFreeVRAMGpu.Vendor
+		maxFreeVRAMGpu, err := machineResources.GPUs.MaxFreeVRAMGPU()
+		if err != nil {
+			// TODO: log a warning here
+
+			chosenGPUVendor = types.GPUVendorNone
+		} else {
+			chosenGPUVendor = maxFreeVRAMGpu.Vendor
+		}
 	}
 
 	containerConfig := container.Config{
 		Image:      dockerArgs.Image,
-		Tty:        true, // Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
 		Env:        dockerArgs.Environment,
 		Entrypoint: dockerArgs.Entrypoint,
 		Cmd:        dockerArgs.Cmd,
 		Labels:     e.containerLabels(params.JobID, params.ExecutionID),
 		WorkingDir: dockerArgs.WorkingDirectory,
+		// TODO (Tty): tty currently breaks the logs and consequently the `Run()` methods and `GetLogStream()`.
+		// to enable Tty, besides setting to true, we must handle the logs correctly.
+		// Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
+		// Tty:        true,
 	}
 
 	mounts, err := makeContainerMounts(params.Inputs, params.Outputs, params.ResultsDir)
@@ -301,12 +438,34 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to create container mounts: %w", err)
 	}
 
-	zlog.Sugar().Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
-	hostConfig := configureHostConfig(chosenGPUVendor, params, mounts)
-
-	if _, err = e.client.PullImage(ctx, dockerArgs.Image); err != nil {
-		return "", fmt.Errorf("failed to pull docker image: %w", err)
+	initScriptsDir, err := prepareInitScripts(params.ProvisionScripts, params.ExecutionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to prepare init scripts: %w", err)
 	}
+
+	if initScriptsDir != "" {
+		oldEntryPoint := containerConfig.Entrypoint
+		oldCmd := containerConfig.Cmd
+
+		// Execute init scripts first
+		containerConfig.Entrypoint = []string{"/bin/sh", "-c"}
+		containerConfig.Cmd = []string{
+			fmt.Sprintf("%s/run_provision_scripts.sh && %s %s",
+				initScriptsDir,
+				strings.Join(oldEntryPoint, " "),
+				strings.Join(oldCmd, " ")),
+		}
+
+		// Add a mount for the init scripts
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: initScriptsDir,
+			Target: initScriptsDir,
+		})
+	}
+
+	log.Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
+	hostConfig := configureHostConfig(chosenGPUVendor, params, mounts)
 
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
@@ -315,6 +474,7 @@ func (e *Executor) newDockerExecutionContainer(
 		nil,
 		nil,
 		labelExecutionValue(e.ID, params.JobID, params.ExecutionID),
+		true,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
@@ -322,10 +482,47 @@ func (e *Executor) newDockerExecutionContainer(
 	return executionContainer, nil
 }
 
+// prepareInitScripts creates a shell script that will run all init scripts
+func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
+	if len(scripts) == 0 {
+		return "", nil
+	}
+
+	tempDir := initScriptsBaseDir + id
+	err := os.MkdirAll(tempDir, 0o700)
+	if err != nil {
+		return "", fmt.Errorf("failed to create init scripts base directory: %w", err)
+	}
+
+	scriptNames := make([]string, 0, len(scripts))
+	for name, content := range scripts {
+		filename := filepath.Join(tempDir, name)
+		if err := os.WriteFile(filename, content, 0o700); err != nil {
+			return "", fmt.Errorf("failed to write init script %s: %w", name, err)
+		}
+		scriptNames = append(scriptNames, filename)
+	}
+
+	// Create a wrapper script to execute all init scripts
+	wrapperContent := "#!/bin/sh\n\n"
+	for _, script := range scriptNames {
+		wrapperContent += fmt.Sprintf("echo 'Executing %s'\n", filepath.Base(script))
+		wrapperContent += fmt.Sprintf("%s\n", script)
+	}
+
+	wrapperPath := filepath.Join(tempDir, "run_provision_scripts.sh")
+	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0o700); err != nil {
+		return "", fmt.Errorf("failed to write wrapper script: %w", err)
+	}
+
+	return tempDir, nil
+}
+
 // configureHostConfig sets up the host configuration for the container based on the
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
 func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, mounts []mount.Mount) container.HostConfig {
 	var hostConfig container.HostConfig
+
 	switch vendor {
 	case types.GPUVendorNvidia:
 		deviceIDs := make([]string, len(params.Resources.GPUs))
@@ -335,7 +532,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				DeviceRequests: []container.DeviceRequest{
 					{
@@ -353,7 +550,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -383,7 +580,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 				"/dev/dri:/dev/dri",
 			},
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 				Devices: []container.DeviceMapping{
 					{
@@ -398,7 +595,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		hostConfig = container.HostConfig{
 			Mounts: mounts,
 			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores),
+				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
 				CPUCount: int64(params.Resources.CPU.Cores),
 			},
 		}

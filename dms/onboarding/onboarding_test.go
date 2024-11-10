@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package onboarding
 
 import (
@@ -7,15 +15,13 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	repositories_gorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
-	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/types"
 )
-
-const testWalletAddress = "addr_test1vzgxkngaw5dayp8xqzpmajrkm7f7fleyzqrjj8l8fp5e8jcc2p2dk"
 
 type TestSuite struct {
 	service *Onboarding
@@ -33,7 +39,7 @@ func NewTestSuite(t *testing.T) *TestSuite {
 		t.Fatalf("failed to open database: %v", err)
 	}
 
-	service := NewTestService(db, fs)
+	service := NewTestService(db, fs, t)
 
 	return &TestSuite{
 		service: service,
@@ -42,37 +48,30 @@ func NewTestSuite(t *testing.T) *TestSuite {
 	}
 }
 
-func NewTestService(db *gorm.DB, fs afero.Fs) *Onboarding {
+func NewTestService(db *gorm.DB, fs afero.Fs, t *testing.T) *Onboarding {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
 	oConfig := Config{
-		Fs:             afero.Afero{Fs: fs},
-		P2PRepo:        repositories_gorm.NewLibp2pInfo(db),
-		UUIDRepo:       repositories_gorm.NewMachineUUID(db),
-		AvResourceRepo: repositories_gorm.NewAvailableResources(db),
-		ParamsRepo:     repositories_gorm.NewOnboardingParams(db),
-		ResourceManager: resources.NewResourceManager(resources.ManagerRepos{
-			FreeResources:      repositories_gorm.NewFreeResources(db),
-			OnboardedResources: repositories_gorm.NewOnboardedResources(db),
-			ResourceAllocation: repositories_gorm.NewResourceAllocation(db),
-		}),
-		WorkDir:      "/test",
-		DatabasePath: "/test/db.sqlite",
+		Fs:              afero.Afero{Fs: fs},
+		ConfigRepo:      repositories_gorm.NewOnboardingConfig(db),
+		ResourceManager: NewMockResourceManager(ctrl),
+		Hardware:        NewMockHardwareManager(ctrl),
 	}
+	workDir, err := oConfig.Fs.TempDir("test", "")
+	require.NoError(t, err)
+	oConfig.WorkDir = workDir
+
+	dbDir, err := oConfig.Fs.TempDir("testdb", "")
+	require.NoError(t, err)
+	oConfig.DatabasePath = dbDir + "/test.db"
+
 	o := New(&oConfig)
 	return o
 }
 
 func (ts *TestSuite) setupDB() {
-	_ = ts.db.AutoMigrate(&types.AvailableResources{})
-	_ = ts.db.AutoMigrate(&types.Libp2pInfo{})
-	_ = ts.db.AutoMigrate(&types.MachineUUID{})
-}
-
-func (ts *TestSuite) savePrivateKey(ctx context.Context) error {
-	p2p := types.Libp2pInfo{
-		PrivateKey: []byte("1234"),
-	}
-	_, err := ts.service.P2PRepo.Save(ctx, p2p)
-	return err
+	_ = ts.db.AutoMigrate(&types.OnboardingConfig{})
 }
 
 func TestIsOnboarded(t *testing.T) {
@@ -81,100 +80,118 @@ func TestIsOnboarded(t *testing.T) {
 	ts.setupDB()
 
 	ctx := context.Background()
-	if err := ts.savePrivateKey(ctx); err != nil {
-		t.Errorf("unable to save private key: %v", err)
-	}
 
 	t.Run("happy case", func(t *testing.T) {
 		onboarded, err := ts.service.IsOnboarded(ctx)
-		assert.NoError(t, err)
+		assert.Error(t, err)
 		assert.False(t, onboarded)
 	})
 }
 
 func TestOnboard(t *testing.T) {
-	ts := NewTestSuite(t)
-
-	ts.setupDB()
-
-	ctx := context.Background()
-
-	total, err := ts.service.ResourceManager.SystemSpecs().GetMachineResources()
-	require.NoError(t, err)
-
-	capacity := types.CapacityForNunet{
-		CPU:               3,
-		Memory:            4,
-		PaymentAddress:    "0x1234567890abcdef",
-		NTXPricePerMinute: 10,
-		ServerMode:        true,
-		IsAvailable:       true,
-	}
+	t.Parallel()
 
 	t.Run("unhappy case - config dir doesn't exist", func(t *testing.T) {
-		config, err := ts.service.Onboard(ctx, capacity)
-		assert.Nil(t, config)
+		t.Parallel()
+		ts := NewTestSuite(t)
+		ts.setupDB()
+		ctx := context.Background()
+
+		config := types.OnboardingConfig{}
+		ts.service.WorkDir = "/non/existent/dir"
+		err := ts.service.Onboard(ctx, config)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "working directory does not exist")
 	})
 
-	t.Run("unhappy case - invalid payment address", func(t *testing.T) {
-		err = ts.fs.Mkdir(ts.service.WorkDir, 0o755)
-		require.NoError(t, err)
-
-		capacity.PaymentAddress = "invalid"
-
-		config, err := ts.service.Onboard(ctx, capacity)
-		assert.Nil(t, config)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "could not validate payment address")
-	})
-
 	t.Run("unhappy case - insufficient memory", func(t *testing.T) {
-		capacity.PaymentAddress = testWalletAddress
-		capacity.CPU = int64(total.CPU.Cores) / 2                      // 50% of total CPU cores
-		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 20 // 5% of total RAM
+		t.Parallel()
+		ts := NewTestSuite(t)
+		ts.setupDB()
+		ctx := context.Background()
 
-		config, err := ts.service.Onboard(ctx, capacity)
-		assert.Nil(t, config)
+		config := types.OnboardingConfig{
+			OnboardedResources: types.Resources{
+				CPU: types.CPU{Cores: 2, ClockSpeed: 1000},
+				RAM: types.RAM{
+					Size: 10000000,
+				},
+			},
+		}
+		machineResources := types.MachineResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 1000,
+				},
+				RAM: types.RAM{Size: 10000000000},
+			},
+		}
+		ts.service.Hardware.(*MockHardwareManager).EXPECT().GetMachineResources().Return(machineResources, nil)
+		err := ts.service.Onboard(ctx, config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "memory should be between")
+		assert.Contains(t, err.Error(), "could not validate capacity data: expected RAM to be between")
 	})
 
 	t.Run("unhappy case - insufficient cpu", func(t *testing.T) {
-		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 2 // 50% of total RAM
-		capacity.CPU = int64(total.CPU.Cores) / 20                    // 5% of total CPU cores
+		t.Parallel()
+		ts := NewTestSuite(t)
+		ts.setupDB()
+		ctx := context.Background()
 
-		config, err := ts.service.Onboard(ctx, capacity)
-		assert.Nil(t, config)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "CPU should be between")
-	})
+		machineResources := types.MachineResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 1000,
+				},
+			},
+		}
+		ts.service.Hardware.(*MockHardwareManager).EXPECT().GetMachineResources().Return(machineResources, nil)
 
-	t.Run("unhappy case - unmigrated schema", func(t *testing.T) {
-		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 2 // 50% of total RAM
-		capacity.CPU = int64(total.CPU.Cores) / 2                     // 50% of total CPU cores
-		config, err := ts.service.Onboard(ctx, capacity)
-		assert.Nil(t, config)
+		config := types.OnboardingConfig{
+			OnboardedResources: types.Resources{
+				CPU: types.CPU{Cores: 0.00001},
+			},
+		}
+		err := ts.service.Onboard(ctx, config)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "no such table")
+		assert.Contains(t, err.Error(), "cores must be between")
 	})
 
 	t.Run("happy case", func(t *testing.T) {
-		capacity.Memory = (total.RAM.Size / (1024 * 1024 * 1024)) / 2 // 50% of total RAM
-		capacity.CPU = int64(total.CPU.Cores) / 2                     // 50% of total CPU
+		t.Parallel()
+		ts := NewTestSuite(t)
+		ts.setupDB()
+		ctx := context.Background()
 
-		// migrate tables
-		err = ts.db.AutoMigrate(&types.OnboardingConfig{})
-		require.NoError(t, err)
-		err = ts.db.AutoMigrate(&types.MachineResources{})
-		require.NoError(t, err)
-		err = ts.db.AutoMigrate(&types.OnboardedResources{})
-		require.NoError(t, err)
+		machineResources := types.MachineResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 1000,
+				},
+				RAM: types.RAM{
+					Size: 100000,
+				},
+				Disk: types.Disk{
+					Size: 100000,
+				},
+			},
+		}
+		ts.service.Hardware.(*MockHardwareManager).EXPECT().GetMachineResources().Return(machineResources, nil)
 
-		config, err := ts.service.Onboard(ctx, capacity)
-		assert.NotNil(t, config)
+		config := types.OnboardingConfig{
+			OnboardedResources: types.Resources{
+				CPU:  types.CPU{Cores: 2, ClockSpeed: 1000},
+				RAM:  types.RAM{Size: 10000},
+				Disk: types.Disk{Size: 10000},
+			},
+		}
+		ts.service.Hardware.(*MockHardwareManager).EXPECT().GetFreeResources().Return(machineResources.Resources, nil)
+		ts.service.ResourceManager.(*MockResourceManager).EXPECT().
+			UpdateOnboardedResources(ctx, config.OnboardedResources).Return(nil)
+		err := ts.service.Onboard(ctx, config)
 		assert.NoError(t, err)
-		assert.Equal(t, capacity.PaymentAddress, config.PublicKey)
 	})
 }

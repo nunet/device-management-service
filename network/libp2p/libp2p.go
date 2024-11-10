@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package libp2p
 
 import (
@@ -33,6 +41,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/observability"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -103,6 +112,9 @@ type Libp2p struct {
 
 	// dependencies (db, filesystem...)
 	fs afero.Fs
+
+	subnets                         map[string]*subnet
+	isSubnetWriteProtocolRegistered int32
 }
 
 // New creates a libp2p instance.
@@ -126,6 +138,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		topicValidators:   make(map[string]map[uint64]Validator),
 		sendSemaphore:     make(chan struct{}, sendSemaphoreLimit),
 		fs:                fs,
+		subnets:           make(map[string]*subnet),
 	}, nil
 }
 
@@ -148,6 +161,11 @@ func (l *Libp2p) Init() error {
 	l.pubsub = pubsub
 	l.handlerRegistry = NewHandlerRegistry(host)
 
+	// Initialize the observability package with the host
+	if err := observability.Initialize(l.Host); err != nil {
+		return fmt.Errorf("failed to initialize observability: %w", err)
+	}
+
 	return nil
 }
 
@@ -159,15 +177,17 @@ func (l *Libp2p) Start() error {
 	// connect to bootstrap nodes
 	err := l.ConnectToBootstrapNodes(l.ctx)
 	if err != nil {
-		log.Errorf("failed to connect to bootstrap nodes: %v", err)
+		log.Errorf("libp2p_bootstrap_failure", "error", err)
 		return err
 	}
+	log.Infow("libp2p_bootstrap_success")
 
 	err = l.BootstrapDHT(l.ctx)
 	if err != nil {
-		log.Errorf("failed to bootstrap dht: %v", err)
+		log.Errorf("libp2p_bootstrap_failure", "error", err)
 		return err
 	}
+	log.Infow("libp2p_bootstrap_success")
 
 	// Start random walk
 	l.startRandomWalk(l.ctx)
@@ -183,12 +203,16 @@ func (l *Libp2p) Start() error {
 		// advertise randevouz discovery
 		err = l.advertiseForRendezvousDiscovery(l.ctx)
 		if err != nil {
-			log.Warnf("failed to advertise rendezvous point: %v", err)
+			log.Warnf("libp2p_advertise_rendezvous_failure", "error", err)
+		} else {
+			log.Infow("libp2p_advertise_rendezvous_success")
 		}
 
 		err = l.DiscoverDialPeers(l.ctx)
 		if err != nil {
-			log.Warnf("failed to discover peers: %v", err)
+			log.Warnf("libp2p_peer_discover_failure", "error", err)
+		} else {
+			log.Infow("libp2p_peer_discover_success", "foundPeers", len(l.discoveredPeers))
 		}
 	}()
 
@@ -505,6 +529,23 @@ func (l *Libp2p) Stat() types.NetworkStats {
 		ID:         l.Host.ID().String(),
 		ListenAddr: strings.Join(lAddrs, ", "),
 	}
+}
+
+// GetPeerIP gets the ip of the peer from the peer store
+func (l *Libp2p) GetPeerIP(p PeerID) string {
+	addrs := l.Host.Peerstore().Addrs(p)
+
+	for _, addr := range addrs {
+		addrParts := strings.Split(addr.String(), "/")
+
+		for i, part := range addrParts {
+			if part == "ip4" || part == "ip6" {
+				return addrParts[i+1]
+			}
+		}
+	}
+
+	return ""
 }
 
 // Ping the remote address. The remote address is the encoded peer id which will be decoded and used here.

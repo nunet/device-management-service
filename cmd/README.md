@@ -213,3 +213,40 @@ This command will create a TAP interface named 'tap0' bridged to your host's 'et
 * Ensure you have the necessary permissions to execute this command.
 
 * Be cautious when configuring network settings, as incorrect configurations can disrupt your network connectivity.
+
+## GPU Command
+
+### `nunet gpu`
+
+**Purpose:** The `nunet gpu` command provides gpu related apis.
+
+**Usage:**
+
+```bash
+nunet gpu <operation>
+```
+
+**Available Operations:**
+
+* `list`: List all the available GPUs on the system.
+* `test`: Test the GPU deployment on the system using docker.
+
+**Flags:**
+
+* `-h, --help`: Display help information for the `gpu` command and its subcommands.
+
+**Example:**
+
+```bash
+nunet gpu list
+```
+
+This command will list all the available GPUs on the system.
+
+```bash
+nunet gpu test
+```
+
+This command will test the GPU deployment on the system using docker.
+
+

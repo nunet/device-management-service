@@ -1,23 +1,28 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package api
 
 import (
 	"fmt"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/types"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
-	"gitlab.com/nunet/device-management-service/telemetry/logger"
+	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type RESTServerConfig struct {
 	P2P        *libp2p.Libp2p
 	Onboarding *onboarding.Onboarding
-	Logger     *logger.Logger
 	Resource   types.ResourceManager
 	MidW       []gin.HandlerFunc
 	Port       uint32
@@ -33,10 +38,16 @@ type RESTServer struct {
 // NewRESTServer is a constructor function for RESTServer
 // It returns a pointer to RESTServer
 func NewRESTServer(config *RESTServerConfig) *RESTServer {
-	return &RESTServer{
+	endTrace := observability.StartTrace("rest_server_init_duration")
+	defer endTrace()
+
+	rs := &RESTServer{
 		router: setupRouter(config.MidW),
 		config: config,
 	}
+
+	log.Infow("rest_server_init_success", "addr", config.Addr, "port", config.Port)
+	return rs
 }
 
 func setupRouter(mid []gin.HandlerFunc) *gin.Engine {
@@ -48,6 +59,9 @@ func setupRouter(mid []gin.HandlerFunc) *gin.Engine {
 
 // InitializeRoutes sets up all the endpoint routes
 func (rs *RESTServer) InitializeRoutes() {
+	endTrace := observability.StartTrace("rest_server_route_init_duration")
+	defer endTrace()
+
 	v1 := rs.router.Group("/api/v1")
 
 	// /actor routes
@@ -58,11 +72,23 @@ func (rs *RESTServer) InitializeRoutes() {
 		actor.POST("/invoke", rs.ActorInvoke)
 		actor.POST("/broadcast", rs.ActorBroadcast)
 	}
+
+	log.Infow("rest_server_route_init_success", "endpoint", "/api/v1/actor")
 }
 
 // Run starts the server on the specified port
 func (rs *RESTServer) Run() error {
-	return rs.router.Run(fmt.Sprintf("%s:%d", rs.config.Addr, rs.config.Port))
+	endTrace := observability.StartTrace("rest_server_run_duration")
+	defer endTrace()
+
+	addr := fmt.Sprintf("%s:%d", rs.config.Addr, rs.config.Port)
+	if err := rs.router.Run(addr); err != nil {
+		log.Errorw("rest_server_run_failure", "addr", addr, "error", err)
+		return err
+	}
+
+	log.Infow("rest_server_run_success", "addr", addr)
+	return nil
 }
 
 func getCustomCorsConfig() cors.Config {

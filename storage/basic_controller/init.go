@@ -1,18 +1,16 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package basiccontroller
 
-import "gitlab.com/nunet/device-management-service/telemetry"
-
-var st = telemetry.GetTelemetry()
-
-// contextKey is a custom type to avoid context key collisions.
-type contextKey string
-
-const (
-	pathKey        contextKey = "path"
-	errorKey       contextKey = "error"
-	identifierKey  contextKey = "identifier"
-	idTypeKey      contextKey = "idType"
-	volumeCountKey contextKey = "volume_count"
-	sizeKey        contextKey = "size"
-	volumeIDKey    contextKey = "volumeID"
+import (
+	logging "github.com/ipfs/go-log/v2"
 )
+
+// log is the logger for the basiccontroller package
+var log = logging.Logger("basiccontroller")

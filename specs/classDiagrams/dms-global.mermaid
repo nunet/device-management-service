@@ -96,12 +96,10 @@ classDiagram
         class WalletManager  {
             <<interface>>
             +GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error)
-            +GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error)
         }
         
         class Wallet {
             +GetCardanoAddressAndMnemonic() (*models.BlockchainAddressPrivKey, error)
-            +GetEthereumAddressAndPrivateKey() (*models.BlockchainAddressPrivKey, error)
         }
         
         class WebSocketClient  {

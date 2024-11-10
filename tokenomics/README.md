@@ -10,22 +10,22 @@
 
 ## Table of Contents
 
-1. [Description](#description)
-2. [Structure and Organisation](#structure-and-organisation)
-3. [Class Diagram](#class-diagram)
-4. [Functionality](#functionality)
-5. [Data Types](#data-types)
-6. [Testing](#testing)
-7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
-8. [References](#references)
+1. [Description](#1-description)
+2. [Structure and Organisation](#2-structure-and-organisation)
+3. [Class Diagram](#3-class-diagram)
+4. [Functionality](#4-functionality)
+5. [Data Types](#5-data-types)
+6. [Testing](#6-testing)
+7. [Proposed Functionality/Requirements](#7-proposed-functionality--requirements)
+8. [References](#8-references)
 
 ## Specification
 
-### Description
+### 1. Description
 
 This repository contains implementations for managing contracts, proofs, and payments in tokenomics. Initiated within milestone [Device Management Service Version 0.5.x](https://gitlab.com/groups/nunet/-/milestones/44#tab-issues), it offers a comprehensive set of interfaces and methods. To implement these functions, we first define key datatypes and interfaces.
 
-### Structure and Organisation
+### 2. Structure and Organisation
 
 Here is quick overview of the contents of this directory:
 
@@ -42,10 +42,11 @@ Here is quick overview of the contents of this directory:
 *Subpackages*
 
 - [./specs/](https://gitlab.com/nunet/device-management-service/-/tree/main/tokenomics/specs): Directory containing package specifications, including package class diagram.
+- [./private_ledger/](https://gitlab.com/nunet/device-management-service/tokenomics/private_ledger): Directory containing implementation of private ledger.
 
 - [./Sequences/:](https://gitlab.com/nunet/open-api/platform-data-model/-/tree/proposed/device-management-service/tokenomics/sequences?ref_type=heads) Contains the sequence diagram for the tokenomics package
 
-### Class Diagram
+### 3. Class Diagram
 
 #### Source File
 
@@ -61,15 +62,15 @@ Here is quick overview of the contents of this directory:
 !include $packageUrlGitlab/specs/class_diagram.puml
 ```
 
-### Functionality
+### 4. Functionality
 
 Note: the functionality of Tokenomics is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.
 
-### Data Types
+### 5. Data Types
 
-Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.
+Note: the functionality of Tokenomics is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested data types.
 
-### Testing
+### 6. Testing
 
 #### Unit Tests
 
@@ -79,26 +80,29 @@ Note: the functionality of DMS is being currently developed. See the [proposed](
 
 To be determined (`TBD`).
 
-### Proposed Functionality / Requirements
+### 7. Proposed Functionality / Requirements
 
 List of issues related to the design of the tokenomics package can be found below. These include proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
 - [Tokenomics Package Issues](https://gitlab.com/groups/nunet/-/issues/?sort=created_date&state=opened&search=tokenomics&first_page_size=20)
 
-#### Interfaces and Methods:
+### Interfaces and Methods:
 
-##### Proposed Contract Interface
+#### Proposed Contract Interface
+
+```go
 
 ```go
 // Contract defines the methods for contract operations
 type contract interface {
 	NewContract() Contract
-	InitiateContractClosure(n1 dms.NodeID, n2 dms.NodeID, bid dms.orchestrator.Bid)
-	InitiateContractSettlement(n1 dms.NodeID, n2 dms.NodeID, contractID int, verificationResult dms.orchestrator.JobVerificationResult)
+	InitiateContractClosure(n1 dms.NodeID, n2 dms.NodeID, bid orchestrator.Bid)
+	InitiateContractSettlement(n1 dms.NodeID, n2 dms.NodeID, contractID int, verificationResult orchestrator.JobVerificationResult)
+	processContractSettlement(ctx context.Context, contract *Contract, verificationResult jobs.Status) 
 }
 ```
-
 **NewContract()**: Creates new contract
+
 **InitiateContractClosure:** function initializes and closes a contract between two nodes within the system. It follows the sequence:
 
 1. Creates a new contract instance.
@@ -109,20 +113,24 @@ type contract interface {
  **InitiateContractSettlement:** function initiates the settlement process for a specified contract between two nodes (n1 and n2). It executes the following steps:
 
 1. Updates the contract with the provided verification result.
-2. Executes settlement procedures.
-3. Marks the contract as settled.
-4. Notifies both nodes (n1 and n2) about the settlement.
-5. Updates the contract details in the central database.
+2. Handles settlement based on the job status and processes payments.
+3. Notifies both nodes (n1 and n2) about the settlement.
+4. Updates the contract details in the central database.
 
-##### Proposed Proof Interface
+**ProcessContractSettlement:** processes the contract settlement based on the pricing method and verification result
+1. Calculates payment based on the pricing method and processes it.
+2. Handles job failure by issuing refunds if required.
+
+#### Proposed Proof Interface
 
 ```go
 
+ProofInterface defines the methods for handling proof-based operations
 type proofs interface {
-	InitiateContractApproval() error
-	CreateContractProof() (string, error)
-	SaveProof(contractID, proof string) error
-	VerifyProof(contractID, proof string) (bool, error)
+	InitiateContractApproval() 
+	CreateContractProof() 
+	SaveProof()
+	VerifyProof()
 }
 ```
 
@@ -134,13 +142,13 @@ type proofs interface {
 
 **The VerifyProof(contractID, proof string) (bool, error):** verifies the authenticity of a contract proof, ensuring its validity before further processing.
 
-##### **Proposed Payment Interface**
+#### **Proposed Payment Interface**
 
 ```go
 // Payment defines the operations for managing payments and settlements
-type payments interface {
-	Deposit(contractID int, payment tokenomics.Payment, pricing tokenomics.PricingMethod) error
-	SettleContract(contractID int, verificationResult dms.jobs.JobVerificationResult) error
+type PaymentGateway interface {
+	Deposit(contractID int, payment Payment) error
+	SettleContract(contractID int, verificationResult jobs.JobVerificationResult) error
 }
 ```
 
@@ -150,27 +158,40 @@ type payments interface {
 
 - contractID (int): Identifier of the contract associated with the payment.
 - payment (Payment): Struct containing details of the payment, including its method (direct or escrow) and payment type (fiat or crypto).
-- pricing (PricingMethod): Defines the method used to determine the pricing for the deposit (not fully implemented in this function).
 
-  **SettleContract:**  manages the settlement process for contracts based on job verification results. It calculates the payment amount based on the job's completion percentage and processes payments either directly or via escrow, depending on the contract's payment method (direct or escrow). It also handles scenarios where job verification fails and ensures appropriate actions such as refunds for escrow payments.
 
-##### **Data types** `proposed`
+**SettleContract:**  manages the settlement process for contracts based on job verification results. It calculates the payment amount based on the job's completion percentage and processes payments either directly or via escrow, depending on the contract's payment method (direct or escrow). It also handles scenarios where job verification fails and ensures appropriate actions such as refunds for escrow payments.
+
+  ```go
+
+  // PricingMethod is an interface that can hold either FixedJobPricing or PeriodicPricing
+  type PricingMethod interface {
+    GetFixedJobPricing() *FixedJobPricing
+    GetPeriodicPricing() *PeriodicPricing
+}
+```
+
+
+**FixedJobPricing:** It holds pricing details for jobs with fixed payment terms.
+
+**PeriodicPricing:** It is used for jobs with periodic payment structures. It also includes usage limits to define quotas.
+
+
+### **Data types** `proposed`
 
 **proposed tokenomics.Contract:** Consists of detailed information regarding an agreement between a requestor and a provider within the network. This data type includes the following fields:
 
-```go
-// Contract represents the contract details between nodes
-type Contract struct {
-	ContractID     int //A unique identifier for the contract.
-	JobID          int  //The identifier of the job associated with the contract.
-	Requestor      string  //The entity requesting the service.
-	Provider       string  //  The entity providing the service.
-	PaymentDetails tokenomics.Payment  //An instance of the payments.Payment type, detailing the payment arrangements for the contract.
-	Signatures     []dms.nodeID     //A slice of dms.nodeID values, representing the digital signatures of involved parties.
-	Settled        bool       //A boolean indicating whether the contract has been settled.
-	Verification   dms.orchestrator.JobVerificationResult  //An instance of the orchestrator.JobVerificationResult type, containing the result of the job verification process.
-	ContractProof  dms.orchestrator.ContractProof    // An instance of the orchestrator.ContractProof type, providing proof of the contract's terms and conditions.
 
+```go
+// Contract struct defines a contract with the following fields:
+type Contract struct {
+	ContractID     int
+	JobID          int         // Example default: 1001
+	PaymentDetails Payment     // Zero value: zero value of payments.Payment struct
+	Signatures     []byte      // Changed to []byte to hold binary signature data or encrypted
+	Settled        bool        // Example default: false
+	Verification   jobs.Status // Zero value: zero value of jobs.Status
+	ContractProof  string      // Example default: "Pending"
 }
 ```
 
@@ -180,29 +201,28 @@ type Contract struct {
 
 ```go
 
+// Payment represents a payment transaction
 type Payment struct {
-    Requestor      string        // The entity initiating the payment
-    Provider       string        // The entity receiving the payment
-    Currency       string        // The currency in which the payment is made
-    Timestamp      time.Time     // The time when the payment was made
-    PaymentType    string        // The type of payment (e.g., escrow, direct)
-    PaymentChannel PaymentChannel // The channel through which the payment is processed
-    Pricing        PricingMethod  // The method used for pricing the payment
+    Requestor      string
+    Provider       string
+	Currency       string 
+    Timestamp      time.Time
+    PaymentType    string          //PaymentType (like escrow vs. direct) 
+    PaymentChannel PaymentChannel 
+	Pricing        PricingMethod
+   
 }
 
-type PricingMethod struct {
-    `TBD`
-}
-
-type PaymentChannel struct {
-    `TBD`
+type PricingMethod interface {
+    GetFixedJobPricing() *FixedJobPricing
+    GetPeriodicPricing() *PeriodicPricing
 }
 ```
 
 **tokenomics.FixedJobPricing:** Consists of information related to the fixed pricing for a job, detailing the cost and platform fee involved.
 
 ```go
-goCopy code
+
 // FixedJobPricing represents the details for fixed job pricing
 type FixedJobPricing struct {
     // Price is the total cost for the fixed job.
@@ -217,7 +237,7 @@ type FixedJobPricing struct {
 **tokenomics.PeriodicPricing:** Consists of information related to the periodic pricing model, including the cost, period, usage limits, and platform fee.
 
 ```go
-goCopy code
+
 // PeriodicPricing represents the details for periodic pricing
 type PeriodicPricing struct {
     // Price is the cost for the periodic service.
@@ -236,7 +256,7 @@ type PeriodicPricing struct {
 **tokenomics.UsageLimits:** Consists of information regarding the resource usage limits or quotas associated with periodic pricing, specifying the maximum allowable usage for various resources.
 
 ```go
-goCopy code
+
 // UsageLimits represents the usage limits or quotas for periodic pricing
 type UsageLimits struct {
     // MaxCPUHours is the maximum number of CPU hours allowed within the pricing period.
@@ -275,8 +295,17 @@ type OffChainData struct {
 }
 ```
 
+### Private_ledger
+The `private_ledger` sub package provides a `DatabaseManager` to manage PostgreSQL databases for contracts database. It allows users to initialize database connections, insert contract data, retrieve contract, and close connections safely.
 
-### References
+### Features
+
+- **Database Initialization**: Create and manage a connection to a PostgreSQL database.
+- **Contract Retrieval**: Fetch all records from a specified  table.
+- **Storing Contract**: Insert contract records into table.
+- **Connection Management**: Close database connections safely.
+
+### 8. References
 
 - [proposed design](https://www.notion.so/Tokenomics-2e3696cde66a4179b96e9a3a9daeaa10?pvs=21)
 

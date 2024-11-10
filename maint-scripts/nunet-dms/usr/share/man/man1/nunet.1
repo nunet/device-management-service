@@ -1,0 +1,291 @@
+.TH NUNET 1 "September 2024" "NuNet CLI" "User Commands"
+
+.SH NAME
+nunet \- command-line interface for the NuNet ecosystem
+
+.SH SYNOPSIS
+.B nunet
+[\fIOPTIONS\fR] \fICOMMAND\fR
+
+.SH DESCRIPTION
+The NuNet Command-Line Interface (CLI) is a powerful tool for interacting with the NuNet ecosystem. It enables users to manage network configurations, control capabilities, handle cryptographic keys and interact with actors.
+
+.SH COMMANDS
+.TP
+.B nunet actor
+Interact with the NuActor System.
+.TP
+.B nunet cap
+Manage capabilities within the NuNet ecosystem.
+.TP
+.B nunet config
+Manage the NuNet configuration file.
+.TP
+.B nunet key
+Manage identities using public-key cryptography.
+.TP
+.B nunet run
+Start the NuNet Device Management Service (DMS) process. It initiates and connects your node to the network.
+.TP
+.B nunet tap
+Create and configure a TAP (network tap) interface to bridge the host network with a virtual machine.
+.TP
+.B nunet version
+Display version and additional information for the current build
+.SH OPTIONS
+Options vary depending on the command. Use \fBnunet [COMMAND] --help\fR for command-specific options.
+
+.SH CONFIGURATION MANAGEMENT
+NuNet DMS uses a configuration file to manage various settings. DMS searches for a \fIdms_config.json\fR file in one of the following paths, listed in order of priority:
+.RS
+.IP 1.
+Current directory (\fI.\fR)
+.IP 2.
+User-wide directory (\fI$HOME/.nunet\fR)
+.IP 3.
+System-wide directory (\fI/etc/nunet\fR)
+.RE
+It only supports JSON format and allows customization of network, storage, and other DMS behaviors. For a comprehensive list of configurable options, refer to the main README file in the project repository.
+.TP
+.B nunet config edit
+Open the configuration file with the default text editor.
+.TP
+.B nunet config get \fIKEY\fR
+Retrieve the current value of a specific configuration key.
+.TP
+.B nunet config set \fIKEY\fR \fIVALUE\fR
+Set a new value for a specific configuration key.
+.SH KEY MANAGEMENT
+Cryptographic keys are necessary for authorization and authentication in NuNet. All keys are associated with a Decentralized Identifier (DID) and stored under user configuration directory. Additionally, NuNet supports the use of hardware wallets, specifically Ledger devices, for enhanced security.
+
+.TP
+.B nunet key new \fI<KEY>\fR | \fIledger:<KEY>\fR
+Generate a new keypair and store it securely. By default, keys are generated using Ed25519 scheme.
+.TP
+.B nunet key did \fI<KEY>\fR | \fIledger:<KEY>\fR
+Retrieve the DID associated with a specified key.
+.SH CAPABILITY MANAGEMENT
+Capabilities are a key concept in NuNet's security model. A capability is a communicable and unforgeable token of authority. To perform any operation on NuNet, you must have the necessary capabilities. The NuNet CLI provides commands to create, modify, delegate, and list capabilities.
+
+.TP
+.B nunet cap new \fI<NAME>\fR
+Create a new persistent capability context for DMS or personal usage. If a key exists with the same name, both will be associated.
+
+\fBIMPORTANT\fR: generally, for each key created with \fBnunet key new\fR, you must create a capability with the same name.
+.TP
+.B nunet cap anchor [\fIOPTIONS\fR]
+Add or modify capability anchors in a capability context. Anchors serve as the foundation for defining capabilities, establishing core permissions and restrictions.
+.RS
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Specify the operation context (default: "user").
+.TP
+\fB--provide\fR \fISTRING\fR
+Add tokens as a "provide" anchor in JSON format.
+.TP
+\fB--require\fR \fISTRING\fR
+Add tokens as a "require" anchor in JSON format.
+.TP
+\fB--root\fR \fISTRING\fR
+Add a DID as a "root" anchor.
+.RE
+.TP
+.B nunet cap delegate \fI<subjectDID>\fR [\fIOPTIONS\fR]
+Delegate specific capabilities to a subject, granting them permissions within the system. Capabilities are delegated based on set \fBprovide\fR anchors.
+.RS
+.TP
+\fB-a, --audience\fR \fISTRING\fR
+Specify the audience DID (optional).
+.TP
+\fB--cap\fR \fISTRINGS\fR
+Define the capabilities to be granted or delegated (can be specified multiple times).
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Specify the operation context (default: "user").
+.TP
+\fB-d, --depth\fR \fIUINT\fR
+Set the delegation depth (default: 0).
+.TP
+\fB--duration\fR \fIDURATION\fR
+Set the duration for which the delegation is valid.
+.TP
+\fB-e, --expiry\fR \fITIME\fR
+Set an expiration time for the delegation.
+.TP
+\fB--auto-expire\fR
+Automatically set the expiration time of the token right above on the delegation chain.
+.TP
+\fB--self-sign\fR \fISTRING\fR
+Specify self-signing options: 'no' (default), 'also', or 'only'.
+.TP
+\fB-t, --topic\fR \fISTRINGS\fR
+Define the topics for which capabilities are granted or delegated (can be specified multiple times).
+.RE
+.TP
+.B nunet cap grant \fI<subjectDID>\fR [\fIOPTIONS\fR]
+Grant (delegate) capabilities having the granter as root issuer. Granting is a self-signed operation by default.
+.RS
+.TP
+\fB-a, --audience\fR \fISTRING\fR
+Specify the audience DID (optional).
+.TP
+\fB--cap\fR \fISTRINGS\fR
+Define the capabilities to be granted or delegated.
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Specify the operation context (default: "user").
+.TP
+\fB-d, --depth\fR \fIUINT\fR
+Set the delegation depth.
+.TP
+\fB--duration\fR \fIDURATION\fR
+Set the duration for which the grant is valid.
+.TP
+\fB-e, --expiry\fR \fITIME\fR
+Set an expiration time for the grant.
+.TP
+\fB-t, --topic\fR \fISTRINGS\fR
+Define the topics for which capabilities are granted.
+.RE
+.TP
+.B nunet cap list [\fIOPTIONS\fR]
+List all capability anchors in a capability context.
+.RS
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Specify the operation context (default: "user").
+.RE
+.TP
+.B nunet cap remove [\fIOPTIONS\fR]
+Remove capability anchors from a capability context.
+.RS
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Specify the operation context (default: "user").
+.TP
+\fB--provide\fR \fISTRING\fR
+Remove tokens from the "provide" anchor in JSON format.
+.TP
+\fB--require\fR \fISTRING\fR
+Remove tokens from the "require" anchor in JSON format.
+.TP
+\fB--root\fR \fISTRING\fR
+Remove a DID from the "root" anchor.
+.RE
+.SH ACTOR SYSTEM
+The NuActor System is an implementation of the Actor Model. Actors are entities that communicate via immutable messages. The \fBnunet actor\fR command provides various subcommands for interacting with the actor system.
+
+.TP
+.B nunet actor msg \fI<behavior>\fR \fI<payload>\fR [\fIOPTIONS\fR]
+Construct a message for an actor. The \fI<behavior>\fR specifies the action to be performed, and \fI<payload>\fR provides the associated data.
+.RS
+.TP
+\fB-b, --broadcast\fR \fISTRING\fR
+Designate the topic for broadcasting the message.
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Specify the capability context name.
+.TP
+\fB-d, --dest\fR \fISTRING\fR
+Identify the destination handle for the message.
+.TP
+\fB-e, --expiry\fR \fITIME\fR
+Set an expiration time for the message.
+.TP
+\fB-i, --invoke\fR
+Mark the message as an invocation, requesting a response from the actor.
+.TP
+\fB-t, --timeout\fR \fIDURATION\fR
+Set a timeout for awaiting a response after invoking a behavior.
+.RE
+
+.TP
+.B nunet actor send \fI<msg>\fR
+Send a previously constructed message to an actor.
+
+.TP
+.B nunet actor invoke \fI<msg>\fR
+Directly invoke a specific behavior on an actor and expect a response.
+
+.TP
+.B nunet actor broadcast \fI<msg>\fR
+Disseminate a message to a designated topic, potentially reaching multiple actors.
+
+.TP
+.B nunet actor cmd [\fICOMMAND\fR] [\fIOPTIONS\fR]
+Invoke a predefined public behavior on an actor. To list all available subcommands, use the \fB--help\fR option.
+.RS
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Capability context name.
+.TP
+\fB-d, --dest\fR \fISTRING\fR
+Destination DMS DID, peer ID or handle.
+.TP
+\fB-e, --expiry\fR \fITIME\fR
+Expiration time.
+.TP
+\fB-t, --timeout\fR \fIDURATION\fR
+Timeout duration.
+.RE
+
+.RE
+.SH RUN THE DEVICE MANAGEMENT SERVICE
+
+.TP
+.B nunet run [\fIOPTIONS\fR]
+.RS
+.TP
+\fB-c, --context\fR \fISTRING\fR
+Capability context name (default: "dms").
+.RE
+
+.SH EXAMPLES
+.TP
+Generate a new keypair:
+.B nunet key new mykey
+.TP
+Retrieve the DID associated with a key:
+.B nunet key did mykey
+.TP
+Start the DMS:
+.B nunet run
+.TP
+Create a TAP interface:
+.B sudo nunet tap eth0 tap0 172.16.0.1/24
+.TP
+Create a new capability context:
+.B nunet cap new mycapability
+.TP
+Add a "provide" anchor to a capability context:
+.B nunet cap anchor --context mycapability --provide '{"action": "read"}'
+.TP
+Delegate a capability to another DID:
+.B nunet cap delegate did:example:123 --cap /public --topic /nunet/public
+.TP
+Construct and send a message to an actor:
+.B nunet actor msg /public/hello 'Hello, World!' --dest did:example:456 | nunet actor send
+.TP
+Invoke a predefined command on an actor:
+.B nunet actor cmd --context dms /dms/node/peers/list
+
+.SH NOTES
+.IP \[bu] 2
+Some commands may require root or administrator privileges.
+.IP \[bu]
+Be cautious when configuring network settings to avoid disrupting network connectivity.
+.IP \[bu]
+Keep private keys secure, as they provide access to your identity and associated capabilities within the NuNet DMS.
+.SH SEE ALSO
+For more detailed information on specific commands, use the \fB--help\fR option with any command.
+
+.SH AUTHOR
+Written and maintained by Gustavo Silva <gustavo.silva@nunet.io>.
+
+.SH ENVIRONMENT
+.TP
+.B DMS_PASSPHRASE
+If set, this environment variable shares the passphrase across all cryptographic keys stored, avoiding interactive prompts. Use with caution to prevent exposing the passphrase.
+
+.SH REPORTING BUGS
+Report bugs to the NuNet issue tracker at <https://gitlab.com/nunet/device-management-service/-/issues>

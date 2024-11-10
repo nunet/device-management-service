@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package utils
 
 import (
@@ -18,11 +26,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/afero"
 	"golang.org/x/exp/slices"
 
-	"gitlab.com/nunet/device-management-service/db"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -34,8 +40,7 @@ const (
 )
 
 // DownloadFile downloads a file from a url and saves it to a filepath
-func DownloadFile(url string, filepath string) (err error) {
-	zlog.Sugar().Infof("Downloading file '", filepath, "' from '", url, "'")
+func DownloadFile(url string, filepath string, maxBytes int64) (err error) {
 	file, err := os.Create(filepath)
 	if err != nil {
 		return err
@@ -47,14 +52,23 @@ func DownloadFile(url string, filepath string) (err error) {
 		return err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 
 	defer resp.Body.Close()
 
-	_, err = io.Copy(file, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download file: server returned %s", resp.Status)
+	}
+
+	reader := io.LimitReader(resp.Body, maxBytes)
+	_, err = io.Copy(file, reader)
 	if err != nil {
 		return err
 	}
@@ -100,36 +114,6 @@ func RandomString(n int) (string, error) {
 	return sb.String(), nil
 }
 
-// GenerateMachineUUID generates a machine uuid
-func GenerateMachineUUID() (string, error) {
-	var machine types.MachineUUID
-
-	machineUUID, err := uuid.NewDCEGroup()
-	if err != nil {
-		return "", err
-	}
-	machine.UUID = machineUUID.String()
-
-	return machine.UUID, nil
-}
-
-// GetMachineUUID returns the machine uuid from the DB
-func GetMachineUUID() string {
-	var machine types.MachineUUID
-	uuid, err := GenerateMachineUUID()
-	if err != nil {
-		zlog.Sugar().Errorf("could not generate machine uuid: %v", err)
-	}
-
-	machine.UUID = uuid
-
-	result := db.DB.FirstOrCreate(&machine)
-	if result.Error != nil {
-		zlog.Sugar().Errorf("could not find or create machine uuid record in DB: %v", result.Error)
-	}
-	return machine.UUID
-}
-
 // SliceContains checks if a string exists in a slice
 func SliceContains(s []string, str string) bool {
 	for _, v := range s {
@@ -148,13 +132,6 @@ func DeleteFile(path string, backup bool) (err error) {
 		err = os.Remove(path)
 	}
 	return
-}
-
-// ReadyForElastic checks if the device is ready to send logs to elastic
-func ReadyForElastic() bool {
-	elasticToken := types.ElasticToken{}
-	db.DB.Find(&elasticToken)
-	return elasticToken.NodeID != "" && elasticToken.ChannelName != ""
 }
 
 // CreateDirectoryIfNotExists creates a directory if it does not exist
@@ -219,7 +196,7 @@ func SanitizeArchivePath(d, t string) (v string, err error) {
 }
 
 // ExtractTarGzToPath extracts a tar.gz file to a specified path
-func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
+func ExtractTarGzToPath(tarGzFilePath, extractedPath string, maxBytes int64) error {
 	// Ensure the target directory exists; create it if it doesn't.
 	if err := os.MkdirAll(extractedPath, os.ModePerm); err != nil {
 		return fmt.Errorf("error creating target directory: %v", err)
@@ -239,6 +216,8 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 	tarReader := tar.NewReader(gzipReader)
 
+	var totalSize int64
+
 	for {
 		header, err := tarReader.Next()
 
@@ -248,6 +227,10 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 		if err != nil {
 			return fmt.Errorf("error reading tar header: %v", err)
+		}
+
+		if header.Size > maxBytes {
+			return fmt.Errorf("file %s exceeds the maximum allowed size of %d bytes", header.Name, maxBytes)
 		}
 
 		// Construct the full target path by joining the target directory with
@@ -278,7 +261,13 @@ func ExtractTarGzToPath(tarGzFilePath, extractedPath string) error {
 
 			// Copy the file contents from the tar archive to the new file.
 			for {
-				_, err := io.CopyN(newFile, tarReader, 1024)
+				n, err := io.CopyN(newFile, tarReader, 1024)
+				totalSize += n
+
+				if totalSize > maxBytes {
+					return fmt.Errorf("extracted data exceeds allowed limit of %d bytes", maxBytes)
+				}
+
 				if err != nil {
 					if err == io.EOF {
 						break
@@ -313,24 +302,6 @@ func CheckWSL(afs afero.Afero) (bool, error) {
 	}
 
 	return false, nil
-}
-
-// SaveServiceInfo updates service info into SP's DMS for claim Reward by SP user
-func SaveServiceInfo(cpService types.Services) error {
-	var spService types.Services
-	err := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Find(&spService).Error
-	if err != nil {
-		return fmt.Errorf("unable to find service on SP side: %v", err)
-	}
-	cpService.ID = spService.ID
-	cpService.CreatedAt = spService.CreatedAt
-
-	result := db.DB.Model(&types.Services{}).Where("tx_hash = ?", cpService.TxHash).Updates(&cpService)
-	if result.Error != nil {
-		return fmt.Errorf("unable to update service info on SP side: %v", result.Error.Error())
-	}
-
-	return nil
 }
 
 func RandomBool() (bool, error) {

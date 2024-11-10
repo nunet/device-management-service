@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
 
 import (
@@ -7,10 +15,10 @@ import (
 
 // Resources represents the resources of the machine
 type Resources struct {
-	CPU  CPU  `gorm:"embedded;embeddedPrefix:cpu_"`
-	GPUs GPUs `gorm:"foreignKey:ResourceID"`
-	RAM  RAM  `gorm:"embedded;embeddedPrefix:ram_"`
-	Disk Disk `gorm:"embedded;embeddedPrefix:disk_"`
+	CPU  CPU  `json:"cpu" gorm:"embedded;embeddedPrefix:cpu_"`
+	GPUs GPUs `json:"gpus,omitempty" gorm:"foreignKey:ResourceID"`
+	RAM  RAM  `json:"ram" gorm:"embedded;embeddedPrefix:ram_"`
+	Disk Disk `json:"disk" gorm:"embedded;embeddedPrefix:disk_"`
 }
 
 // implements the Calculable and Comparable interfaces
@@ -20,18 +28,50 @@ var (
 )
 
 // Compare compares two Resources objects
-func (r *Resources) Compare(other Resources) Comparison {
-	comparisonMap := ComplexComparison{
-		"CPU":  r.CPU.Compare(other.CPU),
-		"RAM":  r.RAM.Compare(other.RAM),
-		"Disk": r.Disk.Compare(other.Disk),
-		"GPUs": r.GPUs.Compare(other.GPUs),
+func (r *Resources) Compare(other Resources) (Comparison, error) {
+	cpuComp, err := r.CPU.Compare(other.CPU)
+	if err != nil {
+		return None, fmt.Errorf("error comparing CPU: %v", err)
 	}
-	return comparisonMap.Result()
+
+	ramComp, err := r.RAM.Compare(other.RAM)
+	if err != nil {
+		return None, fmt.Errorf("error comparing RAM: %v", err)
+	}
+
+	diskComp, err := r.Disk.Compare(other.Disk)
+	if err != nil {
+		return None, fmt.Errorf("error comparing Disk: %v", err)
+	}
+
+	gpuComp, err := r.GPUs.Compare(other.GPUs)
+	if err != nil {
+		return None, fmt.Errorf("error comparing GPUs: %v", err)
+	}
+
+	return cpuComp.And(ramComp).And(diskComp).And(gpuComp), nil
+}
+
+// Equal returns true if the resources are equal
+func (r *Resources) Equal(other Resources) bool {
+	if r.RAM.Size != other.RAM.Size {
+		return false
+	}
+
+	if r.CPU.Cores != other.CPU.Cores {
+		return false
+	}
+
+	if r.Disk.Size != other.Disk.Size {
+		return false
+	}
+
+	return true
 }
 
 // Add returns the sum of the resources
 func (r *Resources) Add(other Resources) error {
+	log.Debugf("adding resources: %+v + %+v", r, other)
 	if err := r.CPU.Add(other.CPU); err != nil {
 		return fmt.Errorf("error adding CPU: %v", err)
 	}
@@ -53,6 +93,7 @@ func (r *Resources) Add(other Resources) error {
 
 // Subtract returns the difference of the resources
 func (r *Resources) Subtract(other Resources) error {
+	log.Debugf("subtracting resources: %+v - %+v", r, other)
 	if err := r.CPU.Subtract(other.CPU); err != nil {
 		return fmt.Errorf("error subtracting CPU: %v", err)
 	}
@@ -84,6 +125,13 @@ type FreeResources struct {
 	Resources
 }
 
+// CommittedResources represents the committed resources of the machine
+type CommittedResources struct {
+	BaseDBModel
+	Resources
+	JobID string `json:"job_id"`
+}
+
 // OnboardedResources represents the onboarded resources of the machine
 type OnboardedResources struct {
 	BaseDBModel
@@ -93,24 +141,16 @@ type OnboardedResources struct {
 // ResourceAllocation represents the allocation of resources for a job
 type ResourceAllocation struct {
 	BaseDBModel
-	JobID string
+	JobID string `json:"job_id"`
 	Resources
-}
-
-// SystemSpecs is an interface that defines the methods to get the system specifications of the machine
-type SystemSpecs interface {
-	// GetMachineResources returns the machine resources
-	GetMachineResources() (MachineResources, error)
-}
-
-// UsageMonitor defines the methods to monitor the system usage
-type UsageMonitor interface {
-	// GetUsage returns the resources used by the machine
-	GetUsage(context.Context) (Resources, error)
 }
 
 // ResourceManager is an interface that defines the methods to manage the resources of the machine
 type ResourceManager interface {
+	// CommitResources preallocates the resources required by the jobs
+	CommitResources(context.Context, CommittedResources) error
+	// UncommitResources releases the resources that were preallocated for the jobs
+	UncommitResources(context.Context, string) error
 	// AllocateResources allocates the resources required by a job
 	AllocateResources(context.Context, ResourceAllocation) error
 	// DeallocateResources deallocates the resources required by a job
@@ -122,9 +162,5 @@ type ResourceManager interface {
 	// GetOnboardedResources returns the onboarded resources of the machine
 	GetOnboardedResources(context.Context) (OnboardedResources, error)
 	// UpdateOnboardedResources updates the onboarded resources of the machine in the database
-	UpdateOnboardedResources(context.Context, OnboardedResources) error
-	// SystemSpecs returns the SystemSpecs instance
-	SystemSpecs() SystemSpecs
-	// UsageMonitor returns the UsageMonitor instance
-	UsageMonitor() UsageMonitor
+	UpdateOnboardedResources(context.Context, Resources) error
 }

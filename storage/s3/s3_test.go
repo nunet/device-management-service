@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 //go:build integration || !unit
 
 package s3
@@ -18,8 +26,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 
+	"gitlab.com/nunet/device-management-service/observability"
 	basicController "gitlab.com/nunet/device-management-service/storage/basic_controller"
-	"gitlab.com/nunet/device-management-service/telemetry"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -63,9 +71,9 @@ type S3ProviderTestSuite struct {
 
 // SetupTest is mainly setting up a volume controller based on its test suite and a S3 client.
 func (s *S3ProviderTestSuite) SetupTest() {
+	// Set observability to no-op mode for testing
+	observability.SetNoOpMode(true)
 	s.ctx = context.Background()
-	// Initialize telemetry in test mode, replacing the global st
-	st = telemetry.NewTelemetry(nil, nil, true)
 
 	volumes := map[string]*types.StorageVolume{
 		"volume1": {

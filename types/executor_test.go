@@ -1,8 +1,18 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecutorType_Comparable(t *testing.T) {
@@ -21,19 +31,19 @@ func TestExecutorType_Comparable(t *testing.T) {
 			want: Equal,
 		},
 		{
-			name: "Error",
+			name: "None",
 			l:    ExecutorTypeDocker,
 			r:    ExecutorTypeFirecracker,
-			want: Error,
+			want: None,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.l.Compare(tt.r); got != tt.want {
-				t.Errorf("ExecutorType.ComplexCompare() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.l.Compare(tt.r)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -58,23 +68,23 @@ func TestExecutor_Comparable(t *testing.T) {
 			want: Equal,
 		},
 		{
-			name: "Error",
+			name: "None",
 			e: &Executor{
 				ExecutorType: ExecutorTypeDocker,
 			},
 			r: Executor{
 				ExecutorType: ExecutorTypeFirecracker,
 			},
-			want: Error,
+			want: None,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.e.Compare(tt.r); got != tt.want {
-				t.Errorf("Executor.ComplexCompare() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.e.Compare(tt.r)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -137,7 +147,7 @@ func TestExecutors_Comparable(t *testing.T) {
 			want: Better,
 		},
 		{
-			name: "Error",
+			name: "None",
 			l: Executors{
 				Executor{
 					ExecutorType: ExecutorTypeDocker,
@@ -148,16 +158,16 @@ func TestExecutors_Comparable(t *testing.T) {
 					ExecutorType: ExecutorTypeFirecracker,
 				},
 			},
-			want: Error,
+			want: None,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.l.Compare(tt.r); got != tt.want {
-				t.Errorf("ExecutorsComparator() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.l.Compare(tt.r)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

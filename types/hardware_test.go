@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
 
 import (
@@ -98,7 +106,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.c1.Compare(tt.c2)
+				got, err := tt.c1.Compare(tt.c2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -146,7 +155,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.r1.Compare(tt.r2)
+				got, err := tt.r1.Compare(tt.r2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -194,7 +204,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.d1.Compare(tt.d2)
+				got, err := tt.d1.Compare(tt.d2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -219,13 +230,14 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 				name: "Unequal GPUVendor",
 				v1:   GPUVendorNvidia,
 				v2:   GPUVendorIntel,
-				want: Error,
+				want: None,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.v1.Compare(tt.v2)
+				got, err := tt.v1.Compare(tt.v2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -240,56 +252,56 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 			want Comparison
 		}{
 			{
-				name: "Equal TotalVRAM",
+				name: "Equal VRAM",
 				g1: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
+					VRAM:       16384,
 				},
 				g2: GPU{
 					Index:      1,
 					Vendor:     GPUVendorIntel,
 					PCIAddress: "AAAA:BB:CC.D",
 					Model:      "IntelA770",
-					TotalVRAM:  16384,
+					VRAM:       16384,
 				},
 				want: Equal,
 			},
 			{
-				name: "Worse TotalVRAM",
+				name: "Worse VRAM",
 				g1: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  8450,
+					VRAM:       8450,
 				},
 				g2: GPU{
 					Index:      1,
 					Vendor:     GPUVendorIntel,
 					PCIAddress: "AAAA:BB:CC.D",
 					Model:      "IntelA770",
-					TotalVRAM:  16384,
+					VRAM:       16384,
 				},
 				want: Worse,
 			},
 			{
-				name: "Better TotalVRAM",
+				name: "Better VRAM",
 				g1: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
+					VRAM:       16384,
 				},
 				g2: GPU{
 					Index:      1,
 					Vendor:     GPUVendorIntel,
 					PCIAddress: "AAAA:BB:CC.D",
 					Model:      "IntelA770",
-					TotalVRAM:  8192,
+					VRAM:       8192,
 				},
 				want: Better,
 			},
@@ -297,7 +309,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.g1.Compare(tt.g2)
+				got, err := tt.g1.Compare(tt.g2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -313,49 +326,49 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 			want Comparison
 		}{
 			{
-				name: "Equal TotalVRAM",
+				name: "Equal VRAM",
 				g1: []GPU{
 					{
-						Index:     0,
-						TotalVRAM: 16384,
+						Index: 0,
+						VRAM:  16384,
 					},
 				},
 				g2: []GPU{
 					{
-						Index:     1,
-						TotalVRAM: 16384,
+						Index: 1,
+						VRAM:  16384,
 					},
 				},
 				want: Equal,
 			},
 			{
-				name: "Worse TotalVRAM",
+				name: "Worse VRAM",
 				g1: []GPU{
 					{
-						Index:     0,
-						TotalVRAM: 8450,
+						Index: 0,
+						VRAM:  8450,
 					},
 				},
 				g2: []GPU{
 					{
-						Index:     1,
-						TotalVRAM: 16384,
+						Index: 1,
+						VRAM:  16384,
 					},
 				},
 				want: Worse,
 			},
 			{
-				name: "Better TotalVRAM",
+				name: "Better VRAM",
 				g1: []GPU{
 					{
-						Index:     0,
-						TotalVRAM: 16384,
+						Index: 0,
+						VRAM:  16384,
 					},
 				},
 				g2: []GPU{
 					{
-						Index:     1,
-						TotalVRAM: 8192,
+						Index: 1,
+						VRAM:  8192,
 					},
 				},
 				want: Better,
@@ -364,7 +377,8 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := tt.g1.Compare(tt.g2)
+				got, err := tt.g1.Compare(tt.g2)
+				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
 			})
 		}
@@ -485,21 +499,21 @@ func TestHardware_Calculable_Add(t *testing.T) {
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
+					VRAM:       16384,
 				},
 				g2: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  8192,
+					VRAM:       8192,
 				},
 				want: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  24576,
+					VRAM:       24576,
 				},
 			},
 		}
@@ -529,7 +543,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  16384,
+						VRAM:       16384,
 					},
 				},
 				g2: []GPU{
@@ -538,7 +552,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  8192,
+						VRAM:       8192,
 					},
 				},
 				want: []GPU{
@@ -547,7 +561,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  24576,
+						VRAM:       24576,
 					},
 				},
 			},
@@ -734,38 +748,38 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
+					VRAM:       16384,
 				},
 				g2: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  8192,
+					VRAM:       8192,
 				},
 				want: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  8192,
+					VRAM:       8192,
 				},
 			},
 			{
-				name: "Subtract two GPUs with the other having more TotalVRAM",
+				name: "Subtract two GPUs with the other having more VRAM",
 				g1: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  8192,
+					VRAM:       8192,
 				},
 				g2: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
+					VRAM:       16384,
 				},
 				wantErr: true,
 				want:    "total VRAM: underflow",
@@ -804,7 +818,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  16384,
+						VRAM:       16384,
 					},
 				},
 				g2: []GPU{
@@ -813,7 +827,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  8192,
+						VRAM:       8192,
 					},
 				},
 				want: []GPU{
@@ -822,19 +836,19 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  8192,
+						VRAM:       8192,
 					},
 				},
 			},
 			{
-				name: "Subtract two GPUs with the other having more TotalVRAM",
+				name: "Subtract two GPUs with the other having more VRAM",
 				g1: []GPU{
 					{
 						Index:      0,
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  8192,
+						VRAM:       8192,
 					},
 				},
 				g2: []GPU{
@@ -843,7 +857,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 						Vendor:     GPUVendorNvidia,
 						PCIAddress: "AAAA:BB:CC.C",
 						Model:      "Tesla T4A100",
-						TotalVRAM:  16384,
+						VRAM:       16384,
 					},
 				},
 				wantErr: true,
@@ -888,18 +902,14 @@ func TestHardware_Equal(t *testing.T) {
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
-					FreeVRAM:   8192,
-					UsedVRAM:   8192,
+					VRAM:       16384,
 				},
 				g2: GPU{
 					Index:      0,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
-					FreeVRAM:   8192,
-					UsedVRAM:   8192,
+					VRAM:       16384,
 				},
 				want: true,
 			},
@@ -910,18 +920,14 @@ func TestHardware_Equal(t *testing.T) {
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.C",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
-					FreeVRAM:   8192,
-					UsedVRAM:   8192,
+					VRAM:       16384,
 				},
 				g2: GPU{
 					Index:      1,
 					Vendor:     GPUVendorNvidia,
 					PCIAddress: "AAAA:BB:CC.D",
 					Model:      "Tesla T4A100",
-					TotalVRAM:  16384,
-					FreeVRAM:   8192,
-					UsedVRAM:   8192,
+					VRAM:       16384,
 				},
 				want: false,
 			},

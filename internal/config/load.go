@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package config
 
 import (
@@ -30,8 +38,11 @@ func setDefaultConfig() *viper.Viper {
 	v := getViper()
 	v.SetDefault("general.user_dir", fmt.Sprintf("%s/.nunet", homeDir))
 	v.SetDefault("general.work_dir", fmt.Sprintf("%s/nunet", homeDir))
-	v.SetDefault("general.data_dir", "/var/nunet")
+	v.SetDefault("general.data_dir", fmt.Sprintf("%s/nunet/data", homeDir))
 	v.SetDefault("general.debug", false)
+	v.SetDefault("general.port_available_range_from", 16384)
+	v.SetDefault("general.port_available_range_to", 32768)
+
 	v.SetDefault("rest.addr", "127.0.0.1")
 	v.SetDefault("rest.port", 9999)
 	v.SetDefault("profiler.enabled", true)
@@ -52,10 +63,23 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("job.target_peer", "")
 	v.SetDefault("job.cleanup_interval", 3)
 
-	v.SetDefault("telemetry.service_name", "NunetDMS")
-	v.SetDefault("telemetry.global_endpoint", "otel-collector.telemetry.nunet.io:4318")
-	v.SetDefault("telemetry.observability_level", "INFO")
-	v.SetDefault("telemetry.telemetry_mode", "production")
+	// default observability settings
+	v.SetDefault("observability.log_level", "INFO")
+	v.SetDefault("observability.log_file", fmt.Sprintf("%s/nunet/logs/nunet-dms.log", homeDir))
+	v.SetDefault("observability.max_size", 100) // megabytes
+	v.SetDefault("observability.max_backups", 3)
+	v.SetDefault("observability.max_age", 28) // days
+	v.SetDefault("observability.elasticsearch_url", "http://localhost:9200")
+	v.SetDefault("observability.elasticsearch_index", "nunet-dms")
+	v.SetDefault("observability.flush_interval", 5) // Default flush interval is 5 seconds
+	v.SetDefault("observability.elasticsearch_enabled", false)
+	v.SetDefault("observability.elasticsearch_api_key", "")
+
+	// default APM settings
+	v.SetDefault("apm.server_url", "http://apm.telemetry.nunet.io")
+	v.SetDefault("apm.service_name", "nunet-dms")
+	v.SetDefault("apm.environment", "production")
+	v.SetDefault("apm.api_key", v.GetString("observability.elasticsearch_api_key"))
 
 	return v
 }
@@ -144,4 +168,19 @@ func GetPath() string {
 		return setDefaultConfig().ConfigFileUsed()
 	}
 	return v.ConfigFileUsed()
+}
+
+func CreateConfigFileIfNotExists(fs afero.Fs) error {
+	exists, err := FileExists(fs)
+	if err != nil {
+		return fmt.Errorf("failed to check if config file exists: %w", err)
+	}
+	if !exists {
+		v := setDefaultConfig()
+		v.SetFs(fs)
+		if err := v.SafeWriteConfig(); err != nil {
+			return fmt.Errorf("failed to create config file: %w", err)
+		}
+	}
+	return nil
 }

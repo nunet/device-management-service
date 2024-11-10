@@ -862,7 +862,7 @@ type ElasticToken struct {
 - `types.BlockchainAddressPrivKey`
 
 ```
-// BlockchainAddressPrivKey holds Ethereum wallet address and private key from which the
+// BlockchainAddressPrivKey holds Ethereum/Cardano wallet address and private key from which the
 // address is derived.
 type BlockchainAddressPrivKey struct {
 	Address    string `json:"address,omitempty"`
@@ -1010,15 +1010,13 @@ const (
 type GPU struct {
 	// Index is the self-reported index of the device in the system
 	Index int
-	// Name is the model name of the GPU e.g. Tesla T4
-	Name string
 	// Vendor is the maker of the GPU, e.g. NVidia, AMD, Intel
 	Vendor types.GPUVendor
 	// PCIAddress is the PCI address of the device, in the format AAAA:BB:CC.C
 	// Used to discover the correct device rendering cards
 	PCIAddress string
-	// Model of the GPU, e.g. A100
-	Model string `json:"model" description:"GPU model, ex A100"`
+	// Model represents the GPU model name, e.g., "Tesla T4", "A100"
+	Model string `json:"model" description:"GPU model, e.g., Tesla T4, A100"`
 	// TotalVRAM is the total amount of VRAM on the device
 	TotalVRAM uint64
 	// UsedVRAM is the amount of VRAM currently in use

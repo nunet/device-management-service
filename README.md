@@ -21,13 +21,17 @@
       - [Dependencies](#dependencies)
     - [Installation on VMs](#installation-on-vms)
     - [Installation on WSL](#installation-on-wsl)
+    - [Permissions and features (for compute providers)](#permissions-and-features)
+      - [Net-admin permission and IP over libp2p](#net-admin-permission-and-ip-over-libp2p)
+      - [Firecracker (for compute providers)](#optional-firecracker)
     - [System Requirements](#system-requirements)
       - [CPU-only machines](#cpu-only-machines)
         - [Minimum System Requirements](#minimum-system-requirements)
         - [Recommended System Requirements](#recommended-system-requirements)
       - [GPU Machines](#gpu-machines)
-        - [Minimum System Requirements](#minimum-system-requirements-1)
-        - [Recommended System Requirements](#recommended-system-requirements-1)
+        - [Minimum System Requirements](#minimum-system-requirements)
+        - [Recommended System Requirements](#recommended-system-requirements)
+    - [GPU Driver Installation](#gpu-driver-installation)
   - [Usage](#usage)
     - [Quick Start](#quick-start)
       - [Creating identities](#creating-identities)
@@ -73,7 +77,9 @@ You can install Device Management Service (DMS) via [binary releases](#binary-re
 ### Binary releases
 
 You can find all binary releases [here](https://gitlab.com/nunet/device-management-service/-/releases) and other builds in-between releases in the [package registry](https://gitlab.com/nunet/device-management-service/-/packages).
-We currently support ARM and AMD64 architectures.
+We currently support ARM and AMD64 architectures. You may check your architecture with appropriate command (`uname -p` for linux) and refer to the architecture name mapping e.g. [here](https://itsfoss.com/arm-aarch64-x86_64/) for figuring correct package to download.
+
+**Note**: If you intalled the binary from a release and you would like to act as compute provider, you may need to check [permissions and features](#permissions-and-features) to enable some _required_ and optional features.
 
 #### Ubuntu/Debian
 
@@ -99,7 +105,7 @@ We currently support Linux and MacOS (Darwin).
 #### Dependencies
 
 - iproute2 (linux only)
-- build-essential (linux only)s
+- build-essential (linux only)
 - libsystemd-dev (linux only)
 - go (v1.21.7 or later)
 
@@ -118,6 +124,9 @@ make
 
 This will result in a binary file in builds/ folder named as `dms_linux_amd64` or `dms_darwin_arm64` depending on the platform.
 
+**Note**: If you built from source and would like to act as a compute provider,
+you may need to check [permissions and features](#permissions-and-features) to enable some _required_ and optional features.
+
 To cross compile to arm, cross compilers need to be installed. In particular arm-linux-gnueabihf and aarch64-linux-gnu.
 For debian systems, install with:
 
@@ -126,6 +135,50 @@ apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 ```
 
 You can add the compiled binary to a directory in your `$PATH`. See the [Usage](#usage) section for more information.
+
+### Permissions and features (for compute providers)
+
+The following applies _only_ for **compute providers**. If you're running a client/orchestrator, you do _not_ need to set any permissions.
+
+If you built DMS from source or installed the binary from one of our releases, you may need to set some permissions
+to the binary to enable some features.
+
+> **Darwin users**: unfortunately, the DMS can't work with granular permissions on Mac.
+> So, for now, if running a compute provider, you will have to run the nunet daemon (`nunet run`) as root.
+
+For Linux users, granular permissions will have to be set to the binary (optionally, but *NOT* recommended, you can run the binary as root).
+
+#### Net-admin permission and IP over libp2p
+
+**Note**: `cap_net_admin` is a **required** capability for **compute providers**.
+
+Setting the permission enables IP over libp2p which is a feature that enhances the capabilities of compute providers, allowing them to participate in a wider
+range of jobs. One capability enabled with this feature is to do port forwarding which it won't be possible without setting the right
+unix permissions.
+
+> One of the reasons for requiring this permission is because this feature depends on creating and managing tun interfaces.
+
+To enable this feature, the `nunet` binary requires `network-admin` capabilities. These capabilities allow the application to perform
+network configuration tasks without needing to run the entire application as root, which is a more secure approach.
+
+To set the necessary capabilities, run the following command:
+
+```shell
+sudo setcap cap_net_admin+ep /usr/bin/nunet
+```
+
+The above command depends on: `libcap2-bin` (Debian/Ubuntu) or `libcap` (CentOS/RHEL/Arch...)
+
+#### Firecracker (for compute providers)
+
+**Note**: Linux only.
+
+To act as a compute provider capable of receiving and running jobs with Firecracker,
+ensure your user is part of the `kvm` group. You can do this by running:
+
+```shell
+sudo usermod -aG kvm $USER
+```
 
 ### Installation on VMs
 
@@ -176,27 +229,66 @@ If the above CPU has 4 cores, your available CPU would be around 8000 MHz. So if
 
 - CPU: 3 GHz
 - RAM: 8 GB
-- NVIDIA GPU: 4 GB VRAM
+- GPU: 4 GB VRAM (NVIDIA, AMD, or Intel discrete GPU with manually installed drivers)
 - Free Disk Space: 50 GB
 - Internet Download/Upload Speed: 50 Mbps
+
+Note: For AMD64 platforms, we recommend using HiveOS as it comes with all necessary drivers pre-installed. For other setups, proper GPU drivers must be manually installed. See the [GPU Driver Installation](#gpu-driver-installation) section for instructions.
 
 ##### Recommended System Requirements
 
 - CPU: 4 GHz
 - RAM: 16-32 GB
-- NVIDIA GPU: 8-12 GB VRAM
+- GPU: 8-12 GB VRAM (NVIDIA, AMD, or Intel discrete GPU with manually installed drivers)
 - Free Disk Space: 100 GB
 - Internet Download/Upload Speed: 100 Mbps
+
+### GPU Driver Installation
+
+NuNet DMS requires properly installed GPU drivers to function correctly. We do not automatically install drivers to ensure compatibility and flexibility across different user setups.
+
+#### For AMD64 Platforms:
+
+We recommend using the [Ubuntu](https://ubuntu.com/)-based [HiveOS](https://hiveon.com/install/) for the easiest setup.
+
+If you prefer to use a different operating system or need to install drivers manually, please follow these steps:
+
+#### NVIDIA GPUs:
+
+1. Visit the [NVIDIA Official Driver Downloads](https://www.nvidia.com/en-us/drivers/) page.
+2. Select your GPU model and operating system.
+3. Download and install the recommended driver.
+4. Reboot your system after installation.
+
+#### AMD GPUs:
+
+1. Visit the [AMD Drivers and Support for Processors and Graphics](https://www.amd.com/en/support/download/drivers.html) page.
+2. Select your GPU model and operating system.
+3. Download and install the recommended driver.
+4. Reboot your system after installation.
+
+#### Intel Discrete GPUs:
+
+1. Visit the [Intel® software for general purpose GPU capabilities documentation](https://dgpu-docs.intel.com/driver/overview.html) page.
+2. Select your GPU model and operating system.
+3. Download and install the recommended driver.
+4. Reboot your system after installation.
+
+For detailed instructions specific to your operating system, please refer to the documentation provided by NVIDIA, AMD, or Intel.
+
+Note: Ensure that you have the correct permissions to install drivers on your system. On Linux systems, you may need to use `sudo` or log in as root to install drivers.
 
 ## Usage
 
 ### Quick Start
 
+Before starting, ensure that you have properly installed GPU drivers if you're using a GPU-enabled machine. For AMD64 platforms, we recommend using HiveOS for the easiest setup. For other configurations, refer to the [GPU Driver Installation](#gpu-driver-installation) section for instructions.
+
 This quick start guide will walk you through the process of setting up a Device Management Service (DMS) instance for the first time and getting it running. We'll cover creating identities, setting up capabilities, and running the DMS.
 
 **The NuNet CLI**
 
-The Nunet CLI is the command-line interface for interacting with the Nunet Device Management Service (DMS). It provides commands for managing keys, capabilities, configuration, running the DMS, and more. It's essential for setting up and administering your DMS instance.
+The NuNet CLI is the command-line interface for interacting with the Nunet Device Management Service (DMS). It provides commands for managing keys, capabilities, configuration, running the DMS, and more. It's essential for setting up and administering your DMS instance.
 
 **Key Concepts**
 
@@ -210,7 +302,7 @@ You can find a detailed documentation [here](./cmd/README.md).
 
 The first step is to generate identities/keys and capability contexts. It is recommended that two keys are setup: one for the user (default name `user`) and another for the dms (default name `dms`)
 
-A capability context is created with the `dms cap new <context>` command and it is anchored on a key with the context name.
+A capability context is created with the `nunet cap new <context>` command and it is anchored on a key with the context name.
 
 To set up a new identity/create a new key, run the command:
 
@@ -227,10 +319,13 @@ $ nunet cap new <identity>
 In this example, we are going to set up two identities:
 
 First for the user
+
 ```shell
 $ nunet key new user
 ```
+
 then for the dms instance.
+
 ```shell
 $ nunet key new dms
 ```
@@ -238,10 +333,13 @@ $ nunet key new dms
 We then setup the capability contexts for each identity:
 
 First the user
+
 ```shell
 $ nunet cap new user
 ```
+
 then the dms instance.
+
 ```shell
 $ nunet cap new dms
 ```
@@ -249,10 +347,13 @@ $ nunet cap new dms
 If you use a ledger wallet for your personal key, you can create the user context as follows:
 
 Create a new key for the user
+
 ```shell
 $ nunet key did ledger
 ```
+
 Then create the capability context for the user
+
 ```shell
 $ nunet cap new ledger:user
 ```
@@ -320,6 +421,7 @@ $ nunet key did <user>
 ```
 
 or if you are using a Ledger Wallet
+
 ```shell
 $ nunet key did ledger
 ```
@@ -335,16 +437,19 @@ did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
 1. **Create a capability anchor for public behaviors**
 
 Create the grant
+
 ```shell
 $ nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-did>
 ```
 
 or if you are using a Ledger Wallet
+
 ```shell
 $ nunet cap grant --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <nunet-did>
 ```
 
 And the granted token as a require anchor
+
 ```shell
 $ nunet cap anchor --context dms --require <the-grant-output>
 ```
@@ -360,30 +465,34 @@ To request tokens for participating in the testnet, please go to [did.nunet.io](
 3. **Use the NuNet granted token to authorize public behavior invocations in the public network**
 
 3.1 **Add the provide anchor to your personal context**
+
 ```shell
 $ nunet cap anchor --context user --provide <the-token-you-got-from-nunet>
 ```
 
 or if you are using a Ledger Wallet
+
 ```shell
 $ nunet cap anchor --context ledger:user --provide <the-token-you-got-from-nunet>
 ```
 
 3.2 **Delegate to your DMS**
+
 ```shell
 $ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-did>
 ```
 
 or if you are using a Ledger Wallet
+
 ```shell
 $ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2024-12-31 <your-dms-did>
 
 ```
 
-3.3 **Add the delegation token as a require anchor in your DMS**
+3.3 **Add the delegation token as a provide anchor in your DMS**
 
 ```shell
-$ nunet cap anchor --context dms --require <the-delegate-output>
+$ nunet cap anchor --context dms --provide <the-delegate-output>
 ```
 
 The first command ingests the NuNet provided token and the last two commands use this token to delegate the public behavior capabilities to your DMS.
@@ -395,6 +504,9 @@ If everything was setup properly, you should be able to run:
 ```shell
 $ nunet run
 ```
+
+> **Darwin users**: If you plan to onboard your computer power to the network, You may need to run with `sudo`.
+> See the [optional features and permissions](#permissions-and-features) section for more information.
 
 By default, DMS runs on port 9999.
 

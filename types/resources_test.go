@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
 
 import (
@@ -22,7 +30,6 @@ func TestResources_Calculable_Add(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -32,8 +39,8 @@ func TestResources_Calculable_Add(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -41,7 +48,6 @@ func TestResources_Calculable_Add(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -51,8 +57,8 @@ func TestResources_Calculable_Add(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -61,7 +67,6 @@ func TestResources_Calculable_Add(t *testing.T) {
 				CPU: CPU{
 					Cores:      2,
 					ClockSpeed: 1000,
-					Compute:    2000,
 				},
 				RAM: RAM{
 					Size: 2048,
@@ -71,8 +76,8 @@ func TestResources_Calculable_Add(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 16384,
+						Model: "GTX 1080",
+						VRAM:  16384,
 					},
 				},
 			},
@@ -107,7 +112,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      2,
 					ClockSpeed: 1000,
-					Compute:    2000,
 				},
 				RAM: RAM{
 					Size: 2048,
@@ -117,8 +121,8 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 16384,
+						Model: "GTX 1080",
+						VRAM:  16384,
 					},
 				},
 			},
@@ -126,7 +130,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -136,8 +139,8 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -146,7 +149,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -156,8 +158,8 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				},
 				GPUs: GPUs{
 					{
-						Model:     "GTX 1080",
-						TotalVRAM: 8192,
+						Model: "GTX 1080",
+						VRAM:  8192,
 					},
 				},
 			},
@@ -168,7 +170,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 				RAM: RAM{
 					Size: 1024,
@@ -181,7 +182,6 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 				CPU: CPU{
 					Cores:      2,
 					ClockSpeed: 1000,
-					Compute:    2000,
 				},
 				RAM: RAM{
 					Size: 2048,
@@ -264,14 +264,12 @@ func TestResources_Comparable_Compare(t *testing.T) {
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 			},
 			other: Resources{
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
-					Compute:    1000,
 				},
 			},
 			want: Equal,
@@ -281,9 +279,9 @@ func TestResources_Comparable_Compare(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.r.Compare(tt.other); got != tt.want {
-				t.Errorf("Resources.Compare() = %v, want %v", got, tt.want)
-			}
+			got, err := tt.r.Compare(tt.other)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -294,7 +292,6 @@ func assertResources(t *testing.T, r1, r2 Resources) {
 	// CPU
 	require.Equal(t, r1.CPU.Cores, r2.CPU.Cores)
 	require.Equal(t, r1.CPU.ClockSpeed, r2.CPU.ClockSpeed)
-	require.Equal(t, r1.CPU.Compute, r2.CPU.Compute)
 
 	// RAM
 	require.Equal(t, r1.RAM.Size, r2.RAM.Size)
@@ -306,6 +303,6 @@ func assertResources(t *testing.T, r1, r2 Resources) {
 	require.Len(t, r1.GPUs, len(r2.GPUs))
 	for i := range r1.GPUs {
 		require.Equal(t, r1.GPUs[i].Model, r2.GPUs[i].Model)
-		require.Equal(t, r1.GPUs[i].TotalVRAM, r2.GPUs[i].TotalVRAM)
+		require.Equal(t, r1.GPUs[i].VRAM, r2.GPUs[i].VRAM)
 	}
 }

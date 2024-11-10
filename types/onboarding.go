@@ -1,48 +1,25 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
-
-// BlockchainAddressPrivKey holds Ethereum wallet address and private key from which the
-// address is derived.
-type BlockchainAddressPrivKey struct {
-	Address    string `json:"address,omitempty"`
-	PrivateKey string `json:"private_key,omitempty"`
-	Mnemonic   string `json:"mnemonic,omitempty"`
-}
-
-// CapacityForNunet is a struct required in request body for the onboarding
-type CapacityForNunet struct {
-	Memory            uint64  `json:"memory,omitempty"`
-	CPU               int64   `json:"cpu,omitempty"`
-	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
-	PaymentAddress    string  `json:"payment_addr,omitempty"`
-	ServerMode        bool    `json:"server_mode,omitempty,"`
-	IsAvailable       bool    `json:"is_available"`
-}
-
-// Provisioned struct holds data about how much total resource
-// host machine is equipped with
-type Provisioned struct {
-	CPU      float64 `json:"cpu,omitempty"`
-	Memory   uint64  `json:"memory,omitempty"`
-	NumCores uint64  `json:"total_cores,omitempty"`
-}
 
 // OnboardingConfig - parameters to configure onboarding
 type OnboardingConfig struct {
 	BaseDBModel
-	Name               string             `json:"name,omitempty"`
-	UpdateTimestamp    int64              `json:"update_timestamp,omitempty"`
-	TotalResources     MachineResources   `json:"total_resources,omitempty" gorm:"foreignKey:ID"`
-	OnboardedResources OnboardedResources `json:"onboarded_resources,omitempty" gorm:"foreignKey:ID"`
-	PublicKey          string             `json:"public_key,omitempty"`
-	Dashboard          string             `json:"dashboard,omitempty"`
-	NTXPricePerMinute  float64            `json:"ntx_price,omitempty"`
-}
+	Name string `json:"name,omitempty"`
 
-type OnboardingStatus struct {
-	Onboarded        bool             `json:"onboarded"`
-	Error            error            `json:"error"`
-	MachineUUID      string           `json:"machine_uuid"`
-	WorkDir          string           `json:"work_dir"`
-	DatabasePath     string           `json:"database_path"`
-	OnboardingConfig OnboardingConfig `json:"onboarding_config"`
+	PublicKey string `json:"public_key,omitempty"`
+
+	Dashboard         string  `json:"dashboard,omitempty"`
+	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
+
+	// These are not stored in the database, but are part of the onboarding config
+	// during the get onboarding config call these are populated from the resource manager and hardware
+	OnboardedResources Resources `json:"onboarded_resources,omitempty" gorm:"-" clover:"-"`
+	MachineResources   Resources `json:"machine_resources,omitempty" gorm:"-" clover:"-"`
 }

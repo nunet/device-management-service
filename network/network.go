@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package network
 
 import (
@@ -86,6 +94,36 @@ type Network interface {
 	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
 	Stop() error
+
+	// GetPeerIP returns the ipv4 or v6 of a peer
+	GetPeerIP(p PeerID) string
+
+	// CreateSubnet creates a subnet with the given subnetID and CIDR
+	CreateSubnet(ctx context.Context, subnetID string, routingTable map[string]string) error
+
+	// RemoveSubnet removes a subnet
+	DestroySubnet(subnetID string) error
+
+	// AddSubnetPeer adds a peer to the subnet
+	AddSubnetPeer(subnetID, peerID, ip string) error
+
+	// RemoveSubnetPeer removes a peer from the subnet
+	RemoveSubnetPeer(subnetID, peerID string) error
+
+	// AcceptSubnetPeer accepts a peer to the subnet
+	AcceptSubnetPeer(subnetID, peerID, ip string) error
+
+	// MapPort maps a sourceIp:sourcePort to destIP:destPort
+	MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
+
+	// UnmapPort removes a previous port map
+	UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
+
+	// AddDNSRecord adds a dns record to our local resolver
+	AddSubnetDNSRecord(subnetID, name, ip string) error
+
+	// RemoveDNSRecord removes a dns record from our local resolver
+	RemoveSubnetDNSRecord(subnetID, name string) error
 }
 
 // NewNetwork returns a new network given the configuration.

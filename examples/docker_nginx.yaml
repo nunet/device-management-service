@@ -1,0 +1,31 @@
+version: "V1"
+
+allocations:
+    alloc1:
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 102
+            disk:
+                size: 20
+        execution:
+            type: docker
+            image: nginxdemos/hello
+            working_directory: /
+        dnsname: mydocker
+        keys: []
+        provision: []
+        healthcheck: ""
+nodes:
+    node1:
+        allocations:
+            - alloc1
+        ports:
+            - private: 1
+              allocation: alloc1
+        location:
+            accept: []
+            reject: []

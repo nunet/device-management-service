@@ -9,14 +9,13 @@ set -xeuo pipefail
 
 # golang is required to build the nunet binary
 # dpkg-deb is required to create the .deb package
-# pandoc is required to convert the markdown into a man page
 
 projectRoot=$(pwd)
 outputDir="$projectRoot/dist"
 
-noCommits=$(git rev-list $(git describe --tags --abbrev=0)..HEAD --count)
-fullVersion=$(git describe --tags --abbrev=0 --dirty)-$noCommits
-version="$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')-${noCommits}"
+noCommits=$(git rev-list $(git describe --tags --always --abbrev=0)..HEAD --count)
+fullVersion=$(git describe --tags --always --abbrev=0 --dirty)-$noCommits-$(git rev-parse --short HEAD)
+version=$(echo $fullVersion | cut -c 2-)
 
 mkdir -p $outputDir
 
@@ -46,9 +45,7 @@ do
     ls -R $archDir/usr # to allow checking all files are where they're supposed to be
 
     # create man page
-    pandoc -s -t man $archDir/usr/share/man/man1/nunet-cli-man.md -o $archDir/usr/share/man/man1/nunet.1
     gzip $archDir/usr/share/man/man1/nunet.1
-    rm $archDir/usr/share/man/man1/nunet-cli-man.md
 
     DMS_INST_SIZE=$(du -sB1 $archDir | awk '{ print $1 }')
     sed -i "s/Installed-Size:.*/Installed-Size: $DMS_INST_SIZE/g" $archDir/DEBIAN/control
@@ -67,6 +64,6 @@ do
 
     if [[ ! -z ${NUNETBOT_BUILD_ENDPOINT+x} ]] ; then
         # notify the bot about the build
-        curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$version\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_${arch}.deb\"}" $NUNETBOT_BUILD_ENDPOINT
+        curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$fullVersion\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_${arch}.deb\"}" $NUNETBOT_BUILD_ENDPOINT
     fi
 done

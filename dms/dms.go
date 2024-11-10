@@ -1,6 +1,15 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package dms
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -9,11 +18,13 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/oschwald/geoip2-golang"
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/api"
 	"gitlab.com/nunet/device-management-service/db"
 	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
@@ -24,7 +35,6 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
-	"gitlab.com/nunet/device-management-service/telemetry/logger"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -35,6 +45,9 @@ const (
 	KeystoreDir        = "key/"
 	CapstoreDir        = "cap/"
 )
+
+//go:embed data/GeoLite2-Country.mmdb
+var geoLite2Country []byte
 
 // NewP2P is stub, real implementation is needed in order to pass it to
 // routers which access them in some handlers.
@@ -48,9 +61,17 @@ func Run(ksPassphrase string, contextName string) error {
 		contextName = DefaultContextName
 	}
 
+	gcfg := config.GetConfig()
+
+	// load geoip2 database
+	geoip2db, err := geoip2.FromBytes(geoLite2Country)
+	if err != nil {
+		return fmt.Errorf("unable to load geoip2 database: %w", err)
+	}
+
 	fs := afero.NewOsFs()
 
-	keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, KeystoreDir)
+	keyStoreDir := filepath.Join(gcfg.UserDir, KeystoreDir)
 	keyStore, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
 		return fmt.Errorf("unable to create keystore: %w", err)
@@ -75,42 +96,39 @@ func Run(ksPassphrase string, contextName string) error {
 	}
 	pubKey := priv.GetPublic()
 
-	db, err := db.ConnectDatabase(config.GetConfig().General.WorkDir)
+	db, err := db.ConnectDatabase(gcfg.WorkDir)
 	if err != nil {
 		return fmt.Errorf("unable to connect to database: %w", err)
 	}
 
+	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
-		FreeResources:      gdb.NewFreeResources(db),
 		OnboardedResources: gdb.NewOnboardedResources(db),
 		ResourceAllocation: gdb.NewResourceAllocation(db),
 	}
-	resourceManager := resources.NewResourceManager(repos)
+	resourceManager, err := resources.NewResourceManager(repos, hardwareManager)
+	if err != nil {
+		return fmt.Errorf("unable to create resource manager: %w", err)
+	}
 
-	onboardR := gdb.NewOnboardingParams(db)
-	p2pR := gdb.NewLibp2pInfo(db)
-	uuidR := gdb.NewMachineUUID(db)
-	avResR := gdb.NewAvailableResources(db)
+	onboardR := gdb.NewOnboardingConfig(db)
 
 	onboard := onboarding.New(&onboarding.Config{
 		Fs:              afero.Afero{Fs: fs},
-		ParamsRepo:      onboardR,
-		P2PRepo:         p2pR,
-		UUIDRepo:        uuidR,
+		ConfigRepo:      onboardR,
+		Hardware:        hardwareManager,
 		ResourceManager: resourceManager,
-		AvResourceRepo:  avResR,
-		WorkDir:         config.GetConfig().WorkDir,
-		DatabasePath:    fmt.Sprintf("%s/nunet.db", config.GetConfig().General.WorkDir),
+		WorkDir:         gcfg.WorkDir,
+		DatabasePath:    fmt.Sprintf("%s/nunet.db", gcfg.WorkDir),
 	})
 
 	var p2pNet *libp2p.Libp2p
 
-	bootstrapPeers := make([]multiaddr.Multiaddr, len(config.GetConfig().P2P.BootstrapPeers))
-	for i, addr := range config.GetConfig().P2P.BootstrapPeers {
+	bootstrapPeers := make([]multiaddr.Multiaddr, len(gcfg.P2P.BootstrapPeers))
+	for i, addr := range gcfg.P2P.BootstrapPeers {
 		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
 	}
 
-	gcfg := config.GetConfig()
 	cfg := &types.Libp2pConfig{
 		PrivateKey:              priv,
 		BootstrapPeers:          bootstrapPeers,
@@ -144,7 +162,7 @@ func Run(ksPassphrase string, contextName string) error {
 		return fmt.Errorf("unable to create trust context: %w", err)
 	}
 
-	capStoreDir := filepath.Join(config.GetConfig().General.UserDir, CapstoreDir)
+	capStoreDir := filepath.Join(gcfg.UserDir, CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", contextName))
 	var capCtx ucan.CapabilityContext
 
@@ -188,8 +206,19 @@ func Run(ksPassphrase string, contextName string) error {
 	trustCtx.Start(time.Hour)
 	capCtx.Start(5 * time.Minute)
 
+	hostLocation := node.HostGeolocation{
+		HostCountry:   gcfg.HostCountry,
+		HostCity:      gcfg.HostCity,
+		HostContinent: gcfg.HostContinent,
+	}
+
+	portConfig := node.PortConfig{
+		AvailableRangeFrom: gcfg.PortAvailableRangeFrom,
+		AvailableRangeTo:   gcfg.PortAvailableRangeTo,
+	}
+
 	hostID := p2p.Host.ID().String()
-	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler)
+	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager, geoip2db, hostLocation, portConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create node: %s", err)
 	}
@@ -203,11 +232,10 @@ func Run(ksPassphrase string, contextName string) error {
 	restConfig := api.RESTServerConfig{
 		P2P:        p2pNet,
 		Onboarding: onboard,
-		Logger:     logger.New("rest-server"),
 		Resource:   resourceManager,
 		MidW:       nil,
-		Port:       config.GetConfig().Rest.Port,
-		Addr:       config.GetConfig().Rest.Addr,
+		Port:       gcfg.Rest.Port,
+		Addr:       gcfg.Rest.Addr,
 	}
 	rServer := api.NewRESTServer(&restConfig)
 	rServer.InitializeRoutes()

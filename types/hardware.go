@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
 
 import (
@@ -6,6 +14,13 @@ import (
 	"strings"
 )
 
+// HardwareManager defines the interface for managing machine resources.
+type HardwareManager interface {
+	GetMachineResources() (MachineResources, error)
+	GetUsage() (Resources, error)
+	GetFreeResources() (Resources, error)
+}
+
 type GPUVendor string
 
 const (
@@ -13,17 +28,17 @@ const (
 	GPUVendorAMDATI  GPUVendor = "AMD/ATI"
 	GPUVendorIntel   GPUVendor = "Intel"
 	GPUVendorUnknown GPUVendor = "Unknown"
-	None             GPUVendor = "None"
+	GPUVendorNone    GPUVendor = "None"
 )
 
 // implementing Comparable interface
 var _ Comparable[GPUVendor] = (*GPUVendor)(nil)
 
-func (g GPUVendor) Compare(other GPUVendor) Comparison {
+func (g GPUVendor) Compare(other GPUVendor) (Comparison, error) {
 	if g == other {
-		return Equal
+		return Equal, nil
 	}
-	return Error
+	return None, nil
 }
 
 // ParseGPUVendor parses the GPU vendor string and returns the corresponding GPUVendor enum
@@ -44,26 +59,20 @@ func ParseGPUVendor(vendor string) GPUVendor {
 // GPU represents the GPU information
 type GPU struct {
 	// Index is the self-reported index of the device in the system
-	Index int
-	// Name is the model name of the GPU e.g. Tesla T4
-	Name string
+	Index int `json:"index" description:"GPU index in the system"`
 	// Vendor is the maker of the GPU, e.g. NVidia, AMD, Intel
-	Vendor GPUVendor
+	Vendor GPUVendor `json:"vendor" description:"GPU vendor, e.g., NVidia, AMD, Intel"`
 	// PCIAddress is the PCI address of the device, in the format AAAA:BB:CC.C
 	// Used to discover the correct device rendering cards
-	PCIAddress string
-	// Model of the GPU, e.g. A100
-	Model string `json:"model" description:"GPU model, ex A100"`
-	// TotalVRAM is the total amount of VRAM on the device
-	TotalVRAM uint64
-	// UsedVRAM is the amount of VRAM currently in use
-	UsedVRAM uint64
-	// FreeVRAM is the amount of VRAM currently free
-	FreeVRAM uint64
+	PCIAddress string `json:"pci_address" description:"PCI address of the device, in the format AAAA:BB:CC.C"`
+	// Model represents the GPU model name, e.g., "Tesla T4", "A100"
+	Model string `json:"model" description:"GPU model, e.g., Tesla T4, A100"`
+	// VRAM is the total amount of VRAM on the device
+	VRAM float64 `json:"vram" description:"Total amount of VRAM on the device"`
 
 	// Gorm fields
 	// Team, is this the right way to do this? What is the best practice we're following?
-	ResourceID uint `gorm:"foreignKey:ID"`
+	ResourceID string `json:"-" gorm:"foreignKey:ID"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -72,17 +81,17 @@ var (
 	_ Calculable[GPU] = (*GPU)(nil)
 )
 
-func (g *GPU) Compare(other GPU) Comparison {
+func (g *GPU) Compare(other GPU) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
-	// compare the TotalVRAM
+	// compare the VRAM
 	switch {
-	case g.TotalVRAM > other.TotalVRAM:
-		comparison["TotalVRAM"] = Better
-	case g.TotalVRAM < other.TotalVRAM:
-		comparison["TotalVRAM"] = Worse
+	case g.VRAM > other.VRAM:
+		comparison["VRAM"] = Better
+	case g.VRAM < other.VRAM:
+		comparison["VRAM"] = Worse
 	default:
-		comparison["TotalVRAM"] = Equal
+		comparison["VRAM"] = Equal
 	}
 
 	// currently this is a very simple comparison, based on the assumption
@@ -91,28 +100,26 @@ func (g *GPU) Compare(other GPU) Comparison {
 	// it could be, that we want to compare types.of GPUs and rank them in some way;
 	// using e.g. benchmarking data from Tom's Hardware or some other source;
 
-	return comparison["TotalVRAM"]
+	return comparison["VRAM"], nil
 }
 
 func (g *GPU) Add(other GPU) error {
-	g.TotalVRAM += other.TotalVRAM
+	g.VRAM += other.VRAM
 	return nil
 }
 
 func (g *GPU) Subtract(other GPU) error {
-	if g.TotalVRAM < other.TotalVRAM {
-		return fmt.Errorf("total VRAM: underflow, cannot subtract %v from %v", g.TotalVRAM, other.TotalVRAM)
+	if g.VRAM < other.VRAM {
+		return fmt.Errorf("total VRAM: underflow, cannot subtract %v from %v", other.VRAM, g.VRAM)
 	}
 
-	g.TotalVRAM -= other.TotalVRAM
+	g.VRAM -= other.VRAM
 	return nil
 }
 
 func (g *GPU) Equal(other GPU) bool {
 	return g.Model == other.Model &&
-		g.TotalVRAM == other.TotalVRAM &&
-		g.UsedVRAM == other.UsedVRAM &&
-		g.FreeVRAM == other.FreeVRAM &&
+		g.VRAM == other.VRAM &&
 		g.Index == other.Index &&
 		g.Vendor == other.Vendor &&
 		g.PCIAddress == other.PCIAddress
@@ -126,12 +133,16 @@ var (
 	_ Comparable[GPUs] = (*GPUs)(nil)
 )
 
-func (gpus GPUs) Compare(other GPUs) Comparison {
+func (gpus GPUs) Compare(other GPUs) (Comparison, error) {
 	interimComparison1 := make([][]Comparison, 0)
 	for _, otherGPU := range other {
 		var interimComparison2 []Comparison
 		for _, ownGPU := range gpus {
-			interimComparison2 = append(interimComparison2, ownGPU.Compare(otherGPU))
+			c, err := ownGPU.Compare(otherGPU)
+			if err != nil {
+				return None, fmt.Errorf("error comparing GPU: %v", err)
+			}
+			interimComparison2 = append(interimComparison2, c)
 		}
 		// this matrix structure will hold the comparison results for each GPU on the right
 		// with each GPU on the left in the order they are in the slices
@@ -153,16 +164,13 @@ func (gpus GPUs) Compare(other GPUs) Comparison {
 		interimComparison1 = removeIndex(interimComparison1, index)
 	}
 
-	if slices.Contains(finalComparison, Error) {
-		return Error
-	}
 	if slices.Contains(finalComparison, Worse) {
-		return Worse
+		return Worse, nil
 	}
 	if SliceContainsOneValue(finalComparison, Equal) {
-		return Equal
+		return Equal, nil
 	}
-	return Better
+	return Better, nil
 }
 
 func (gpus GPUs) Add(other GPUs) error {
@@ -207,53 +215,55 @@ func (gpus GPUs) Subtract(other GPUs) error {
 	return nil
 }
 
-// GetGPUWithHighestFreeVRAM Determine the GPU vendor with the highest free VRAM: NVIDIA, AMD, or Intel.
-// Useful for selecting the best GPU if multiple vendors are available,
-// especially in multi-GPU systems or mining rigs.
-func (gpus GPUs) GetGPUWithHighestFreeVRAM() (GPU, error) {
+// MaxFreeVRAMGPU returns the GPU with the maximum free VRAM from the list of GPUs
+func (gpus GPUs) MaxFreeVRAMGPU() (GPU, error) {
 	if len(gpus) == 0 {
-		// Return a GPU with Vendor set to None if no GPUs are detected - Useful for launching CPU-only containers
-		return GPU{Vendor: None}, nil
+		return GPU{}, fmt.Errorf("no GPUs found")
 	}
 
-	var maxFreeVRAMGpu GPU
-	maxFreeVRAM := uint64(0)
+	var maxFreeVRAMGPU GPU
 	for _, gpu := range gpus {
-		if gpu.FreeVRAM > maxFreeVRAM {
-			maxFreeVRAM = gpu.FreeVRAM
-			maxFreeVRAMGpu = gpu
+		if gpu.VRAM > maxFreeVRAMGPU.VRAM {
+			maxFreeVRAMGPU = gpu
 		}
 	}
 
-	return maxFreeVRAMGpu, nil
+	return maxFreeVRAMGPU, nil
+}
+
+// GetWithIndex returns the GPU with the specified index
+func (gpus GPUs) GetWithIndex(index int) (GPU, error) {
+	for _, gpu := range gpus {
+		if gpu.Index == index {
+			return gpu, nil
+		}
+	}
+	return GPU{}, fmt.Errorf("GPU with index %d not found", index)
 }
 
 // CPU represents the CPU information
 type CPU struct {
 	// ClockSpeed represents the CPU clock speed in Hz
-	ClockSpeed float64
+	ClockSpeed float64 `json:"clock_speed" description:"CPU clock speed in Hz"`
 
 	// Cores represents the number of physical CPU cores
-	Cores float32
-
-	// TotalCompute represents the total compute power of the CPU
-	Compute float64
+	Cores float32 `json:"cores" description:"Number of physical CPU cores"`
 
 	// TODO: capture the below fields if required
 	// Model represents the CPU model, e.g., "Intel Core i7-9700K", "AMD Ryzen 9 5900X"
-	Model string
+	Model string `json:"model,omitempty" description:"CPU model, e.g., Intel Core i7-9700K, AMD Ryzen 9 5900X"`
 
 	// Vendor represents the CPU manufacturer, e.g., "Intel", "AMD"
-	Vendor string
+	Vendor string `json:"vendor,omitempty" description:"CPU manufacturer, e.g., Intel, AMD"`
 
 	// Threads represents the number of logical CPU threads (including hyperthreading)
-	Threads int
+	Threads int `json:"threads,omitempty" description:"Number of logical CPU threads (including hyperthreading)"`
 
 	// Architecture represents the CPU architecture, e.g., "x86", "x86_64", "arm64"
-	Architecture string
+	Architecture string `json:"architecture,omitempty" description:"CPU architecture, e.g., x86, x86_64, arm64"`
 
 	// Cache size in bytes
-	CacheSize uint64
+	CacheSize uint64 `json:"cache_size,omitempty" description:"CPU cache size in bytes"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -262,22 +272,18 @@ var (
 	_ Comparable[CPU] = (*CPU)(nil)
 )
 
-func (c *CPU) Compare(other CPU) Comparison {
+func (c *CPU) Compare(other CPU) (Comparison, error) {
 	perfComparison := NumericComparator(
 		float64(c.Cores)*c.ClockSpeed,
 		float64(other.Cores)*other.ClockSpeed,
 	)
 
 	archComparison := LiteralComparator(c.Architecture, other.Architecture)
-
-	if archComparison == Error {
-		return Error
-	}
-	if archComparison != Equal {
-		return Worse
+	if archComparison == Equal {
+		return perfComparison, nil
 	}
 
-	return perfComparison
+	return None, nil
 
 	// currently this is a very simple comparison, based on the assumption
 	// that more cores / or equal amount of cores and frequency is acceptable, but nothing less;
@@ -288,35 +294,33 @@ func (c *CPU) Compare(other CPU) Comparison {
 
 func (c *CPU) Add(other CPU) error {
 	c.Cores = round(c.Cores+other.Cores, 2)
-	c.Compute = round(c.Compute+other.Compute, 2)
 	return nil
 }
 
 func (c *CPU) Subtract(other CPU) error {
-	if c.Compute < other.Compute {
-		return fmt.Errorf("compute: underflow, cannot subtract %v from %v", c.Compute, other.Compute)
-	}
-
 	if c.Cores < other.Cores {
-		return fmt.Errorf("core: underflow, cannot subtract %v from %v", c.Cores, other.Cores)
+		return fmt.Errorf("core: underflow, cannot subtract %v from %v", other.Cores, c.Cores)
 	}
 
 	c.Cores = round(c.Cores-other.Cores, 2)
-	c.Compute = round(c.Compute-other.Compute, 2)
 	return nil
+}
+
+func (c *CPU) Compute() float64 {
+	return float64(c.Cores) * c.ClockSpeed
 }
 
 // RAM represents the RAM information
 type RAM struct {
 	// Size in bytes
-	Size uint64
+	Size float64 `json:"size" description:"Size of the RAM in bytes"`
 
 	// TODO: capture the below fields if required
 	// Clock speed in Hz
-	ClockSpeed uint64
+	ClockSpeed uint64 `json:"clock_speed,omitempty" description:"Clock speed of the RAM in Hz"`
 
 	// Type represents the RAM type, e.g., "DDR4", "DDR5", "LPDDR4"
-	Type string
+	Type string `json:"type,omitempty" description:"RAM type, e.g., DDR4, DDR5, LPDDR4"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -325,14 +329,14 @@ var (
 	_ Comparable[RAM] = (*RAM)(nil)
 )
 
-func (r *RAM) Compare(other RAM) Comparison {
+func (r *RAM) Compare(other RAM) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
 	// compare the Size
 	comparison["Size"] = NumericComparator(r.Size, other.Size)
 	comparison["ClockSpeed"] = NumericComparator(r.ClockSpeed, other.ClockSpeed)
 
-	return comparison["Size"]
+	return comparison["Size"], nil
 }
 
 func (r *RAM) Add(other RAM) error {
@@ -342,7 +346,7 @@ func (r *RAM) Add(other RAM) error {
 
 func (r *RAM) Subtract(other RAM) error {
 	if r.Size < other.Size {
-		return fmt.Errorf("size: underflow, cannot subtract %v from %v", r.Size, other.Size)
+		return fmt.Errorf("size: underflow, cannot subtract %v from %v", other.Size, r.Size)
 	}
 
 	r.Size -= other.Size
@@ -352,26 +356,26 @@ func (r *RAM) Subtract(other RAM) error {
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
-	Size uint64
+	Size float64 `json:"size" description:"Size of the disk in bytes"`
 
 	// TODO: capture the below fields if required
 	// Model represents the disk model, e.g., "Samsung 970 EVO Plus", "Western Digital Blue SN550"
-	Model string
+	Model string `json:"model,omitempty" description:"Disk model, e.g., Samsung 970 EVO Plus, Western Digital Blue SN550"`
 
 	// Vendor represents the disk manufacturer, e.g., "Samsung", "Western Digital"
-	Vendor string
+	Vendor string `json:"vendor,omitempty" description:"Disk manufacturer, e.g., Samsung, Western Digital"`
 
 	// Type represents the disk type, e.g., "SSD", "HDD", "NVMe"
-	Type string
+	Type string `json:"type,omitempty" description:"Disk type, e.g., SSD, HDD, NVMe"`
 
 	// Interface represents the disk interface, e.g., "SATA", "PCIe", "M.2"
-	Interface string
+	Interface string `json:"interface,omitempty" description:"Disk interface, e.g., SATA, PCIe, M.2"`
 
 	// Read speed in bytes per second
-	ReadSpeed uint64
+	ReadSpeed uint64 `json:"read_speed,omitempty" description:"Read speed in bytes per second"`
 
 	// Write speed in bytes per second
-	WriteSpeed uint64
+	WriteSpeed uint64 `json:"write_speed,omitempty" description:"Write speed in bytes per second"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -380,13 +384,13 @@ var (
 	_ Comparable[Disk] = (*Disk)(nil)
 )
 
-func (d *Disk) Compare(other Disk) Comparison {
+func (d *Disk) Compare(other Disk) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
 	// compare the Size
 	comparison["Size"] = NumericComparator(d.Size, other.Size)
 
-	return comparison["Size"]
+	return comparison["Size"], nil
 }
 
 func (d *Disk) Add(other Disk) error {
@@ -396,7 +400,7 @@ func (d *Disk) Add(other Disk) error {
 
 func (d *Disk) Subtract(other Disk) error {
 	if d.Size < other.Size {
-		return fmt.Errorf("size: underflow, cannot subtract %v from %v", d.Size, other.Size)
+		return fmt.Errorf("size: underflow, cannot subtract %v from %v", other.Size, d.Size)
 	}
 
 	d.Size -= other.Size
@@ -411,4 +415,24 @@ type NetworkInfo struct {
 
 	// NetworkType represents the network type, e.g., "Ethernet", "Wi-Fi", "Cellular"
 	NetworkType string
+}
+
+// ConvertBytesToGB converts bytes to gigabytes
+func ConvertBytesToGB(bytes float64) float64 {
+	return float64(bytes) / 1e9
+}
+
+// ConvertGBToBytes converts gigabytes to bytes
+func ConvertGBToBytes(gb float64) float64 {
+	return gb * 1e9
+}
+
+// ConvertMiBToGB converts mebibytes to gigabytes
+func ConvertMiBToGB(mib float64) float64 {
+	return (mib * 1024 * 1024) / 1_000_000_000
+}
+
+// ConvertMibToBytes converts mebibytes to bytes
+func ConvertMibToBytes(mib float64) float64 {
+	return mib * 1024 * 1024
 }

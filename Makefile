@@ -7,9 +7,9 @@ PROTOC := protoc
 UNAME=$(shell uname)
 ARCH=$(shell uname -m)
 
-NO_COMMITS=$(shell git rev-list $(git describe --tags --abbrev=0)..HEAD --count )
+NO_COMMITS=$(shell git rev-list $(shell git describe --tags --always --abbrev=0)..HEAD --count )
 
-DMS_VERSION=$(shell git describe --tags --abbrev=0 --dirty)-$(NO_COMMITS)
+DMS_VERSION=$(shell git describe --tags --always --abbrev=0 --dirty)-$(NO_COMMITS)-$(shell git rev-parse --short HEAD)
 GO_VERSION := $(shell go version | awk '{print $$3}' | sed 's/go//')
 BUILD_DATE := $(shell date -Iseconds)
 BUILD_HASH := $(shell git rev-parse HEAD)
@@ -22,7 +22,7 @@ LDFLAGS := \
 
 GOFLAGS := "-buildvcs=false"
 
-.PHONY: all clean linux_amd64 darwin_arm64
+.PHONY: all clean linux_amd64 darwin_arm64 license
 
 all:
 	@if [ $(UNAME) = Linux ]; then\
@@ -80,6 +80,24 @@ clean:
 
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
+
+LICENSE_FLAGS := -v \
+		-l="apache" \
+		-f copyright.txt \
+		-c "NuNet" \
+		-ignore "**/*.md" \
+		-ignore "**/*.html" \
+		-ignore "**/*.css" \
+		-ignore "**/*.scss" \
+		-ignore "**/*.yml" \
+		-ignore "**/*.yaml" \
+		-ignore "**/*.js" \
+		-ignore "**/*.sh" \
+		-ignore "*Dockerfile"
+
+license:
+	@echo "  →→  \033[1;36m$(if $(CHECK),Checking,Adding) license headers...\033[0m"
+	addlicense $(LICENSE_FLAGS) $(if $(CHECK),-check) .
 
 arch=$(shell uname -m)
 FC_TEST_DATA_PATH = ./executor/firecracker/testdata

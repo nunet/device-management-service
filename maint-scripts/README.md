@@ -24,7 +24,6 @@ There are 3 files/subdirectory in this directory. Here are what they are for:
 ### Requirements/dependencies:
 
 - `golang` is required to build the _nunet_ binary
-- `gcc` is required to build go-ethereum
 - `dpkg-deb` is required to build the debian package
 
 ### Invoking a build

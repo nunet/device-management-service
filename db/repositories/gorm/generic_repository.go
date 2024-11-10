@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package gorm
 
 import (
@@ -8,7 +16,19 @@ import (
 	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 )
+
+// Note: our GORM implementation does not support:
+//
+// - Structs with maps
+//
+// - Structs with nested NAMED structs, e.g.:
+//     type ComputerSpecs struct {
+//      types.BaseDBModel
+//      CPU     int
+//      Another AnotherStruct
+//     }
 
 // GenericRepositoryGORM is a generic repository implementation using GORM as an ORM.
 // It is intended to be embedded in model repositories to provide basic database operations.
@@ -19,6 +39,10 @@ type GenericRepositoryGORM[T repositories.ModelType] struct {
 // NewGenericRepository creates a new instance of GenericRepositoryGORM.
 // It initializes and returns a repository with the provided GORM database.
 func NewGenericRepository[T repositories.ModelType](db *gorm.DB) repositories.GenericRepository[T] {
+	endTrace := observability.StartTrace("gorm_db_repo_init_duration")
+	defer endTrace()
+
+	logger.Infow("gorm_db_repo_init_success", "repository", fmt.Sprintf("%T", *new(T)))
 	return &GenericRepositoryGORM[T]{db: db}
 }
 
@@ -29,29 +53,62 @@ func (repo *GenericRepositoryGORM[T]) GetQuery() repositories.Query[T] {
 
 // Create adds a new record to the repository and returns the created data.
 func (repo *GenericRepositoryGORM[T]) Create(ctx context.Context, data T) (T, error) {
+	endTrace := observability.StartTrace("gorm_db_create_duration")
+	defer endTrace()
+
 	err := repo.db.WithContext(ctx).Create(&data).Error
+	if err != nil {
+		logger.Errorw("gorm_db_create_failure", "error", err)
+		return data, handleDBError(err)
+	}
+
+	logger.Infow("gorm_db_create_success", "record", fmt.Sprintf("%+v", data))
 	return data, handleDBError(err)
 }
 
 // Get retrieves a record by its identifier.
 func (repo *GenericRepositoryGORM[T]) Get(ctx context.Context, id interface{}) (T, error) {
+	endTrace := observability.StartTrace("gorm_db_get_duration")
+	defer endTrace()
+
 	var result T
 	err := repo.db.WithContext(ctx).First(&result, "id = ?", id).Error
 	if err != nil {
+		logger.Errorw("gorm_db_get_failure", "id", id, "error", err)
 		return result, handleDBError(err)
 	}
+
+	logger.Infow("gorm_db_get_success", "record", fmt.Sprintf("%+v", result))
 	return result, handleDBError(err)
 }
 
 // Update modifies a record by its identifier.
 func (repo *GenericRepositoryGORM[T]) Update(ctx context.Context, id interface{}, data T) (T, error) {
+	endTrace := observability.StartTrace("gorm_db_update_duration")
+	defer endTrace()
+
 	err := repo.db.WithContext(ctx).Model(new(T)).Where("id = ?", id).Updates(data).Error
+	if err != nil {
+		logger.Errorw("gorm_db_update_failure", "id", id, "error", err)
+		return data, handleDBError(err)
+	}
+
+	logger.Infow("gorm_db_update_success", "id", id, "data", fmt.Sprintf("%+v", data))
 	return data, handleDBError(err)
 }
 
 // Delete removes a record by its identifier.
 func (repo *GenericRepositoryGORM[T]) Delete(ctx context.Context, id interface{}) error {
+	endTrace := observability.StartTrace("gorm_db_delete_duration")
+	defer endTrace()
+
 	err := repo.db.WithContext(ctx).Delete(new(T), "id = ?", id).Error
+	if err != nil {
+		logger.Errorw("gorm_db_delete_failure", "id", id, "error", err)
+		return err
+	}
+
+	logger.Infow("gorm_db_delete_success", "id", id)
 	return err
 }
 
@@ -60,12 +117,21 @@ func (repo *GenericRepositoryGORM[T]) Find(
 	ctx context.Context,
 	query repositories.Query[T],
 ) (T, error) {
+	endTrace := observability.StartTrace("gorm_db_find_duration")
+	defer endTrace()
+
 	var result T
 	db := repo.db.WithContext(ctx).Model(new(T))
 
 	db = applyConditions(db, query)
 
 	err := db.First(&result).Error
+	if err != nil {
+		logger.Errorw("gorm_db_find_failure", "error", err)
+		return result, handleDBError(err)
+	}
+
+	logger.Infow("gorm_db_find_success", "record", fmt.Sprintf("%+v", result))
 	return result, handleDBError(err)
 }
 
@@ -74,12 +140,21 @@ func (repo *GenericRepositoryGORM[T]) FindAll(
 	ctx context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
+	endTrace := observability.StartTrace("gorm_db_find_all_duration")
+	defer endTrace()
+
 	var results []T
 	db := repo.db.WithContext(ctx).Model(new(T))
 
 	db = applyConditions(db, query)
 
 	err := db.Find(&results).Error
+	if err != nil {
+		logger.Errorw("gorm_db_find_all_failure", "error", err)
+		return results, handleDBError(err)
+	}
+
+	logger.Infow("gorm_db_find_all_success", "recordCount", len(results))
 	return results, handleDBError(err)
 }
 

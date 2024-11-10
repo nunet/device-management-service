@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package resources
 
 import (
@@ -17,32 +25,15 @@ import (
 // used by tests.
 func setupManagerRepos(t *testing.T, db *gorm.DB) ManagerRepos {
 	err := db.AutoMigrate(
-		&types.FreeResources{},
 		&types.OnboardedResources{},
 		&types.ResourceAllocation{},
 	)
 	require.NoError(t, err)
 
 	return ManagerRepos{
-		FreeResources:      gormRepo.NewFreeResources(db),
 		OnboardedResources: gormRepo.NewOnboardedResources(db),
 		ResourceAllocation: gormRepo.NewResourceAllocation(db),
 	}
-}
-
-// setUpFreeResources sets up the mock free resources using the repository
-func setUpFreeResources(repo repositories.FreeResources, freeResources types.FreeResources, t *testing.T) {
-	t.Helper()
-	_, err := repo.Save(context.Background(), freeResources)
-	require.NoError(t, err)
-}
-
-// getFreeResourcesFromDB gets the free resources using the repository
-func getFreeResourcesFromDB(repo repositories.FreeResources, t *testing.T) types.FreeResources {
-	t.Helper()
-	freeResources, err := repo.Get(context.Background())
-	require.NoError(t, err)
-	return freeResources
 }
 
 // getOnboardedResourcesFromDB gets the onboarded resources using the repository
@@ -58,39 +49,19 @@ func assertResources(t *testing.T, expected, actual types.Resources) {
 
 	require.Equal(t, expected.CPU.Cores, actual.CPU.Cores)
 	require.Equal(t, expected.CPU.ClockSpeed, actual.CPU.ClockSpeed)
-	require.Equal(t, expected.CPU.Compute, actual.CPU.Compute)
 	require.Equal(t, expected.RAM, actual.RAM)
 	require.Equal(t, expected.Disk, actual.Disk)
 	// TODO: GPU
 }
 
-// newMockResourceManager creates a new mockResourceManager
-func newMockResourceManager(
-	repos ManagerRepos,
-	mockUsageMonitor types.UsageMonitor, //nolint:unparam // will be removed after the implementation
-	mockSystemSpecs types.SystemSpecs,
-	t *testing.T,
-) *DefaultManager {
-	t.Helper()
-
-	return &DefaultManager{
-		repos:        repos,
-		usageMonitor: mockUsageMonitor,
-		systemSpecs:  mockSystemSpecs,
-		store:        newStore(),
-	}
-}
-
 // newMockManagerRepos creates a new mock ManagerRepos
 func newMockManagerRepos(t *testing.T,
-	freeResources repositories.FreeResources,
 	onboardedResources repositories.OnboardedResources,
 	resourceAllocation repositories.ResourceAllocation,
 ) ManagerRepos {
 	t.Helper()
 
 	return ManagerRepos{
-		FreeResources:      freeResources,
 		OnboardedResources: onboardedResources,
 		ResourceAllocation: resourceAllocation,
 	}

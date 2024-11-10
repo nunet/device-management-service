@@ -1,0 +1,27 @@
+version: "V1"
+
+allocations:
+    alloc1:
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 1024
+            disk:
+                size: 20
+        execution:
+            type: docker
+            image: hello-world
+        dnsname: mydocker
+        keys: []
+        provision: []
+        healthcheck: ""
+nodes:
+    node1:
+        allocations:
+            - alloc1
+        location:
+            accept: []
+            reject: []

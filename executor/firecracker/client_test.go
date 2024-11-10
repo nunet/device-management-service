@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 //go:build linux
 // +build linux
 
@@ -17,6 +25,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 const (
@@ -33,6 +42,9 @@ type ClientTestSuite struct {
 
 // SetupTest sets up the test suite by initializing a new Firecracker client.
 func (s *ClientTestSuite) SetupTest() {
+	// Set observability to no-op mode for this test
+	observability.SetNoOpMode(true)
+
 	c, err := firecracker.NewFirecrackerClient()
 	require.NoError(s.T(), err)
 	s.client = c
@@ -88,34 +100,17 @@ func (s *ClientTestSuite) createTestVM(socketPath string) *firecrackerSdk.Machin
 	}
 	m, err := s.client.CreateVM(context.Background(), cfg)
 	require.NoError(s.T(), err)
+
 	s.T().Cleanup(func() {
 		_ = s.client.DestroyVM(context.Background(), m, 10*time.Second)
 	})
-	go func(m *firecrackerSdk.Machine) {
-		time.Sleep(3 * time.Second)
-		_ = m.StopVMM()
-	}(m)
+
 	return m
 }
 
 // TestIsInstalled tests the IsInstalled method of the Firecracker client.
 func (s *ClientTestSuite) TestIsInstalled() {
 	assert.True(s.T(), s.client.IsInstalled(context.Background()))
-}
-
-// TestCreateVM tests the CreateVM method of the Firecracker client.
-func (s *ClientTestSuite) TestCreateVM() {
-	m := s.createTestVM(defaultSocketPath)
-	require.NotNil(s.T(), m)
-}
-
-// TestStartVM tests the StartVM method of the Firecracker client.
-func (s *ClientTestSuite) TestStartVM() {
-	m := s.createTestVM(defaultSocketPath)
-	require.NotNil(s.T(), m)
-
-	err := s.client.StartVM(context.Background(), m)
-	require.NoError(s.T(), err)
 }
 
 // TestFindVM tests the FindVM method of the Firecracker client.
@@ -129,4 +124,22 @@ func (s *ClientTestSuite) TestFindVM() {
 	vm, err := s.client.FindVM(context.Background(), m.Cfg.SocketPath)
 	require.NoError(s.T(), err)
 	require.NotNil(s.T(), vm)
+}
+
+// TestVMLifecycle tests the lifecycle of a Firecracker VM.
+func (s *ClientTestSuite) TestVMLifecycle() {
+	m := s.createTestVM(defaultSocketPath)
+	require.NotNil(s.T(), m)
+
+	err := s.client.StartVM(context.Background(), m)
+	require.NoError(s.T(), err)
+
+	err = s.client.PauseVM(context.Background(), m)
+	require.NoError(s.T(), err)
+
+	err = s.client.ResumeVM(context.Background(), m)
+	require.NoError(s.T(), err)
+
+	err = s.client.ShutdownVM(context.Background(), m)
+	require.NoError(s.T(), err)
 }

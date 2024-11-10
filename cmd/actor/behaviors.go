@@ -1,12 +1,26 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package actor
 
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var ErrInvalidArgument = errors.New("invalid argument")
@@ -22,12 +36,17 @@ type behaviorConfig struct {
 	Type        string
 	Topic       string
 	Payload     func() any
-	PayloadEnc  func(cmd *Command, payload any) (any, error)
+	PayloadEnc  func(payload any) (any, error)
 	SetFlags    func(cmd *Command, payload any)
+	PreRunE     func(cmd *Command, payload any) error
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
 	Long        string
 	Short       string
+}
+
+type NewDeploymentRequestCmd struct {
+	Config string
 }
 
 var behaviors = map[string]behaviorConfig{
@@ -104,7 +123,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.Host, "host", "H", "", "host address to ping (required)")
 			_ = cmd.MarkFlagRequired("host")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.PingRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -140,7 +159,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.Address, "address", "a", "", "peer address to connect to (required)")
 			_ = cmd.MarkFlagRequired("address")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.PeerConnectRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -167,26 +186,28 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/score`,
 	},
 	// /dms/node/onboarding/onboard
-	node.OnboardBehaviour: {
+	node.OnboardBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.OnboardRequest{} },
 		SetFlags: func(cmd *Command, payload any) {
 			// infer the type of the payload
 			p := payload.(*node.OnboardRequest)
-			cmd.Flags().Uint64VarP(&p.Config.Memory, "memory", "m", 0, "set amount of memory in GB  (required)")
-			cmd.Flags().Int64VarP(&p.Config.CPU, "cpu", "z", 0, "set number of CPU cores (required)")
-			cmd.Flags().StringVarP(&p.Config.PaymentAddress, "wallet", "w", "", "set wallet address (optional)")
-			cmd.Flags().Float64VarP(&p.Config.NTXPricePerMinute, "ntx-price", "x", 0, "price in NTX per minute for onboarded compute resource")
-			cmd.Flags().BoolVarP(&p.Config.IsAvailable, "available", "a", false, "unavailable for job deployment (default: false)")
-			cmd.Flags().BoolVarP(&p.Config.ServerMode, "local-enable", "l", true, "set server mode (enable for local)")
-			cmd.MarkFlagsOneRequired("memory", "cpu")
-			cmd.MarkFlagsRequiredTogether("memory", "cpu")
+			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.RAM.Size, "ram", "R", 0, "set the amount of memory in GB to reserve for NuNet")
+			cmd.Flags().Float32VarP(&p.Config.OnboardedResources.CPU.Cores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
+			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.Disk.Size, "disk", "D", 0, "set the amount of disk size in GB to reserve for NuNet")
+			cmd.MarkFlagsOneRequired("ram", "cpu", "disk")
+			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PreRunE: onboardBehaviorPreRun,
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.OnboardRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
+
+			// convert RAM and Disk from GB to bytes
+			req.Config.OnboardedResources.RAM.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.RAM.Size)
+			req.Config.OnboardedResources.Disk.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.Disk.Size)
 			return req, nil
 		},
 		Short: "Onboard a node to the network",
@@ -198,7 +219,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/onboard --memory 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
-	node.OffboardBehaviour: {
+	node.OffboardBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.OffboardRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -206,7 +227,7 @@ Examples:
 
 			cmd.Flags().BoolVarP(&p.Force, "force", "f", false, "force offboard")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.OffboardRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -223,7 +244,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/offboard --force`,
 	},
 	// /dms/node/onboarding/status
-	node.OnboardStatusBehaviour: {
+	node.OnboardStatusBehavior: {
 		Type:  bInvoke,
 		Short: "Retrieve onboarding status of a node",
 		Long: `Invokes the /dms/node/onboarding/status behavior on an actor
@@ -233,19 +254,96 @@ This behavior is used to check the onboarding status of a node.
 Examples:
   nunet actor cmd --context user /dms/node/onboarding/status`,
 	},
-	// /dms/node/onboarding/resource
-	node.OnboardResourceBehaviour: {
-		Type:  bInvoke,
-		Short: "Retrieve or manage resources of a node",
-		Long: `Invokes the /dms/node/onboarding/resource behavior on an actor
 
-This behavior retrieves or manages resource information related to the onboarding process.
+	// /dms/node/deployment/list
+	node.DeploymentListBehavior: {
+		Type:  bInvoke,
+		Short: "List deployments",
+		Long: `Invokes the /dms/node/deployment/list behavior on an actor
+
+This behavior retrieves a list of all deployments on the node.
 
 Examples:
-  nunet actor cmd --context user /dms/node/onboarding/resource`,
+  nunet actor cmd --context user /dms/node/deployment/list`,
 	},
+
+	// /dms/node/deployment/status
+	node.DeploymentStatusBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentStatusRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentStatusRequest)
+			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentStatusRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Get deployment status",
+		Long: `Invokes the /dms/node/deployment/status behavior on an actor
+
+This behavior retrieves the status of a specific deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>`,
+	},
+
+	// /dms/node/deployment/manifest
+	node.DeploymentManifestBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentManifestRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentManifestRequest)
+			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentManifestRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Get deployment manifest",
+		Long: `Invokes the /dms/node/deployment/manifest behavior on an actor
+
+This behavior retrieves the manifest of a specific deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/manifest --id <deployment_id>`,
+	},
+
+	// /dms/node/deployment/shutdown
+	node.DeploymentShutdownBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentShutdownRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentShutdownRequest)
+			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentShutdownRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Shutdown a deployment",
+		Long: `Invokes the /dms/node/deployment/shutdown behavior on an actor
+
+This behavior shuts down a specific deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/shutdown --id <deployment_id>`,
+	},
+
 	// /dms/node/vm/start/custom
-	node.CustomVMStart: {
+	node.VMStartBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &vmStartOpts{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -254,18 +352,20 @@ Examples:
 			cmd.Flags().StringVarP(&p.Engine.RootFileSystem, "rootfs", "r", "", "path to root fs image file (required)")
 			cmd.Flags().StringVarP(&p.Engine.Initrd, "initrd", "i", "", "path to initial ram disk")
 			cmd.Flags().StringVarP(&p.Engine.KernelArgs, "args", "a", "", "arguments to pas to the kernel")
-			cmd.Flags().Float32VarP(&p.Resources.CPU.Cores, "cpu", "z", 1, "CPU cores to allocate")
-			cmd.Flags().Uint64VarP(&p.Resources.RAM.Size, "memory", "m", 1024, "Memory to allocate")
+			cmd.Flags().Float32Var(&p.Resources.CPU.Cores, "cpu", 1, "CPU cores to allocate")
+			cmd.Flags().Float64VarP(&p.Resources.RAM.Size, "ram", "m", 1, "Memory to allocate in GB")
+			cmd.Flags().Float64Var(&p.Resources.Disk.Size, "disk", 0.5, "path to disk image file")
 			_ = cmd.MarkFlagRequired("kernel")
 			_ = cmd.MarkFlagFilename("kernel")
 			_ = cmd.MarkFlagRequired("rootfs")
 			_ = cmd.MarkFlagFilename("rootfs")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			opts, ok := payload.(*vmStartOpts)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
+
 			return newCustomVMStartRequest(opts)
 		},
 		Short: "Starts a custom VM",
@@ -277,15 +377,15 @@ Examples:
   nunet actor cmd --context user /dms/node/vm/start/custom --kernel /path/to/kernel --rootfs /path/to/rootfs --cpu 2 --memory 2048`,
 	},
 	// /dms/node/vm/stop
-	node.VMStop: {
+	node.VMStopBehavior: {
 		Payload: func() any { return &node.VMStopRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.VMStopRequest)
-
+			p.ExecutionType = jobs.ExecutorFirecracker
 			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(_ *Command, payload any) (any, error) {
+		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.VMStopRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -302,7 +402,12 @@ Examples:
   nunet actor cmd --context user /dms/node/vm/stop --id <execution_id>`,
 	},
 	// /dms/node/vm/list
-	node.VMList: {
+	node.VMListBehavior: {
+		Payload: func() any {
+			return &node.ListVMResponse{
+				ExecutionType: jobs.ExecutorFirecracker,
+			}
+		},
 		Type:  bInvoke,
 		Short: "List running VMs",
 		Long: `Invokes the /dms/node/vm/list behavior on an actor
@@ -312,4 +417,387 @@ This behavior retrieves a list of virtual machines (VMs) running on the node.
 Examples:
   nunet actor cmd --context user /dms/node/vm/list`,
 	},
+	node.NewDeploymentBehavior: {
+		Type:  bInvoke,
+		Short: "Create a new deployment",
+		Long: `Invokes the /dms/node/deployment/new behavior on an actor
+
+This behavior creates a new deployment.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/new --spec-file <path to ensemble specification file>`,
+		Payload: func() any { return &NewDeploymentRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*NewDeploymentRequestCmd)
+			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file (required)")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*NewDeploymentRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			data, err := os.ReadFile(req.Config)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read config file: %w", err)
+			}
+
+			cfg := &node.NewDeploymentRequest{}
+			err = parser.Parse(parser.SpecTypeEnsembleV1, data, &cfg.Ensemble)
+			if err != nil {
+				return nil, err
+			}
+
+			for name, script := range cfg.Ensemble.V1.Scripts {
+				fmt.Println(name, string(script))
+				scriptData, err := os.ReadFile(string(script))
+				if err != nil {
+					return nil, fmt.Errorf("failed to read script file: %w", err)
+				}
+				cfg.Ensemble.V1.Scripts[name] = scriptData
+
+			}
+
+			for name, key := range cfg.Ensemble.V1.Keys {
+				key, err := os.ReadFile(key)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read script file: %w", err)
+				}
+				cfg.Ensemble.V1.Keys[name] = string(key)
+
+			}
+
+			return cfg, nil
+		},
+	},
+
+	jobs.SubnetCreateBehavior: {
+		Payload: func() any { return &jobs.SubnetCreateRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetCreateRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetCreateRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Create a subnet",
+		Long: `Invokes the /dms/node/subnet/create behavior on an actor
+
+This behavior creates a new subnet with the specified subnet ID, IP address, and routing table.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
+	},
+
+	jobs.SubnetDestroyBehavior: {
+		Payload: func() any { return &jobs.SubnetDestroyRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetDestroyRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetDestroyRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Destroy a subnet",
+		Long: `Invokes the /dms/node/subnet/destroy behavior on an actor
+
+This behavior destroys the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/destroy --subnet-id <subnet_id>`,
+	},
+
+	jobs.SubnetAddPeerBehavior: {
+		Payload: func() any { return &jobs.SubnetAddPeerRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetAddPeerRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
+			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "peer IP address (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("peer-id")
+			_ = cmd.MarkFlagRequired("ip")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetAddPeerRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Add a peer to a subnet",
+		Long: `Invokes the /dms/node/subnet/add-peer behavior on an actor
+
+This behavior adds a peer to the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/add-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
+	},
+
+	jobs.SubnetRemovePeerBehavior: {
+		Payload: func() any { return &jobs.SubnetRemovePeerRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetRemovePeerRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("peer-id")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetRemovePeerRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Remove a peer from a subnet",
+		Long: `Invokes the /dms/node/subnet/remove-peer behavior on an actor
+
+This behavior removes a peer from the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/remove-peer --subnet-id <subnet_id> --peer-id <peer_id>`,
+	},
+
+	jobs.SubnetAcceptPeerBehavior: {
+		Payload: func() any { return &jobs.SubnetAcceptPeerRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetAcceptPeerRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
+			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "peer IP address (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("peer-id")
+			_ = cmd.MarkFlagRequired("ip")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetAcceptPeerRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Accept a peer to a subnet",
+		Long: `Invokes the /dms/node/subnet/accept-peer behavior on an actor
+
+This behavior accepts a peer to the specified subnet.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/accept-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
+	},
+
+	jobs.SubnetMapPortBehavior: {
+		Payload: func() any { return &jobs.SubnetMapPortRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetMapPortRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "i", "", "subnet-id (required)")
+			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
+			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
+			cmd.Flags().StringVarP(&p.SourcePort, "source-port", "o", "", "source port (required)")
+			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "d", "", "destination IP address (required)")
+			cmd.Flags().StringVarP(&p.DestPort, "dest-port", "n", "", "destination port (required)")
+			_ = cmd.MarkFlagRequired("protocol")
+			_ = cmd.MarkFlagRequired("source-ip")
+			_ = cmd.MarkFlagRequired("source-port")
+			_ = cmd.MarkFlagRequired("dest-ip")
+			_ = cmd.MarkFlagRequired("dest-port")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetMapPortRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Map a port",
+		Long: `Invokes the /dms/node/subnet/map-port behavior on an actor
+
+This behavior maps a port from the source to the destination.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
+	},
+
+	jobs.SubnetDNSAddRecordBehavior: {
+		Payload: func() any { return &jobs.SubnetDNSAddRecordRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetDNSAddRecordRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
+			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "IP address (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("name")
+			_ = cmd.MarkFlagRequired("ip")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetDNSAddRecordRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Add a DNS record",
+		Long: `Invokes the /dms/node/subnet/dns/add-record behavior on an actor
+This behavior adds a DNS record to the local resolver.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/dns/add-record --subnet-id <subnet_id> --name <record_name> --ip <ip>`,
+	},
+
+	jobs.SubnetUnmapPortBehavior: {
+		Payload: func() any { return &jobs.SubnetUnmapPortRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetUnmapPortRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "i", "", "subnet-id (required)")
+			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
+			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
+			cmd.Flags().StringVarP(&p.SourcePort, "source-port", "o", "", "source port (required)")
+			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "d", "", "destination IP address (required)")
+			cmd.Flags().StringVarP(&p.DestPort, "dest-port", "n", "", "destination port (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("protocol")
+			_ = cmd.MarkFlagRequired("source-ip")
+			_ = cmd.MarkFlagRequired("source-port")
+			_ = cmd.MarkFlagRequired("dest-ip")
+			_ = cmd.MarkFlagRequired("dest-port")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetUnmapPortRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Unmap a port",
+		Long: `Invokes the /dms/node/subnet/unmap-port behavior on an actor
+
+This behavior removes a port mapping.
+
+Examples:
+  nunet actor cmd --context user /dms/node/subnet/unmap-port --subnet-id <subnet_id> --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
+	},
+
+	jobs.SubnetDNSRemoveRecordBehavior: {
+		Payload: func() any { return &jobs.SubnetDNSRemoveRecordRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*jobs.SubnetDNSRemoveRecordRequest)
+
+			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
+			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
+			_ = cmd.MarkFlagRequired("subnet-id")
+			_ = cmd.MarkFlagRequired("name")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*jobs.SubnetDNSRemoveRecordRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Remove a DNS record",
+		Long: `Invokes the /dms/node/subnet/dns/remove-record behavior on an actor
+
+This behavior removes a DNS record from the local resolver.
+
+Examples:
+
+  nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
+	},
+}
+
+func onboardBehaviorPreRun(_ *Command, payload any) error {
+	p, ok := payload.(*node.OnboardRequest)
+	if !ok {
+		return ErrInvalidArgument
+	}
+
+	// TODO: we need to have single instance of hardware manager
+	// Should we do an api call here?
+	hardwareManager := hardware.NewHardwareManager()
+	machineResources, err := hardwareManager.GetMachineResources()
+	if err != nil {
+		return fmt.Errorf("could not get machine resources: %w", err)
+	}
+
+	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
+	if len(machineResources.GPUs) != 0 {
+		var (
+			gpuMap         = make(map[string]types.GPU)
+			gpuPromptItems []*selectPromptItem
+		)
+		for _, gpu := range machineResources.GPUs {
+			gpuMap[gpu.Model] = gpu
+			gpuPromptItems = append(gpuPromptItems, &selectPromptItem{
+				Label: gpu.Model,
+			})
+		}
+
+		res, err := selectPrompt("Select GPU", gpuPromptItems)
+		if err != nil {
+			return fmt.Errorf("could not select GPU: %w", err)
+		}
+
+		vramValidator := func(input string) error {
+			if _, err := strconv.ParseFloat(input, 64); err != nil {
+				return fmt.Errorf("invalid input: %w", err)
+			}
+			return nil
+		}
+		for _, gpuName := range res {
+			input, err := prompt("Enter VRAM in GB", vramValidator)
+			if err != nil {
+				return fmt.Errorf("could not prompt for VRAM: %w", err)
+			}
+
+			vram, err := strconv.ParseFloat(input, 64)
+			if err != nil {
+				return fmt.Errorf("could not parse VRAM: %w", err)
+			}
+
+			gpu := gpuMap[gpuName]
+			gpu.VRAM = types.ConvertGBToBytes(vram)
+			p.Config.OnboardedResources.GPUs = append(p.Config.OnboardedResources.GPUs, gpu)
+		}
+	} else {
+		fmt.Println("No GPUs found. Skipping GPU selection.")
+	}
+
+	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
+	return nil
 }

@@ -1,8 +1,17 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package null
 
 import (
 	"context"
 	"io"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/types"
@@ -54,5 +63,25 @@ func (e *Executor) List() []types.ExecutionListItem {
 
 // Cleanup does nothing and returns nil.
 func (e *Executor) Cleanup(_ context.Context) error {
+	return nil
+}
+
+// GetStatus returns an empty ExecutionStatus.
+func (e *Executor) GetStatus(_ context.Context, _ string) (types.ExecutionStatus, error) {
+	return "", nil
+}
+
+// Pause does nothing and returns nil.
+func (e *Executor) Pause(_ context.Context, _ string) error {
+	return nil
+}
+
+// Resume does nothing and returns nil.
+func (e *Executor) Resume(_ context.Context, _ string) error {
+	return nil
+}
+
+// WaitForStatus does nothing and returns nil.
+func (e *Executor) WaitForStatus(_ context.Context, _ string, _ types.ExecutionStatus, _ *time.Duration) error {
 	return nil
 }

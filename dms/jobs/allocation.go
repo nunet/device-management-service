@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package jobs
 
 import (
@@ -7,8 +15,10 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/executor"
+	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -34,6 +44,13 @@ type AllocationDetails struct {
 	SourceID string
 }
 
+type Job struct {
+	ID               string
+	Resources        types.Resources
+	Execution        types.SpecConfig
+	ProvisionScripts map[string][]byte
+}
+
 // Allocation represents an allocation
 type Allocation struct {
 	ID string
@@ -45,7 +62,7 @@ type Allocation struct {
 	sourceID    string
 	executionID string
 
-	Actor           *actor.BasicActor
+	Actor           actor.Actor
 	executor        executor.Executor
 	resourceManager types.ResourceManager
 
@@ -55,7 +72,7 @@ type Allocation struct {
 }
 
 // NewAllocation creates a new allocation given the actor.
-func NewAllocation(actor *actor.BasicActor, details AllocationDetails, resourceManager types.ResourceManager) (*Allocation, error) {
+func NewAllocation(actor actor.Actor, details AllocationDetails, resourceManager types.ResourceManager) (*Allocation, error) {
 	if resourceManager == nil {
 		return nil, errors.New("resource manager is nil")
 	}
@@ -72,9 +89,9 @@ func NewAllocation(actor *actor.BasicActor, details AllocationDetails, resourceM
 
 	return &Allocation{
 		ID:              id.String(),
-		Job:             details.Job,
 		nodeID:          details.NodeID,
 		sourceID:        details.SourceID,
+		Job:             details.Job,
 		Actor:           actor,
 		executionID:     executorID.String(),
 		resourceManager: resourceManager,
@@ -88,14 +105,11 @@ func (a *Allocation) Run(ctx context.Context) error {
 	defer a.mx.Unlock()
 
 	if a.status == running {
+		log.Warnf("allocation %s is already running", a.ID)
 		return nil
 	}
 
-	resourceAllocation := types.ResourceAllocation{JobID: a.Job.ID, Resources: a.Job.Resources}
-	err := a.resourceManager.AllocateResources(ctx, resourceAllocation)
-	if err != nil {
-		return fmt.Errorf("failed to allocate resources: %w", err)
-	}
+	var err error
 
 	defer func() {
 		if a.status != running {
@@ -113,12 +127,13 @@ func (a *Allocation) Run(ctx context.Context) error {
 	}
 
 	err = a.executor.Start(ctx, &types.ExecutionRequest{
-		JobID:       a.Job.ID,
-		ExecutionID: a.executionID,
-		EngineSpec:  &a.Job.Execution,
-		Resources:   &a.Job.Resources,
+		JobID:            a.Job.ID,
+		ExecutionID:      a.executionID,
+		EngineSpec:       &a.Job.Execution,
+		Resources:        &a.Job.Resources,
+		ProvisionScripts: a.Job.ProvisionScripts,
 		// TODO add the following
-		Inputs:     []*types.StorageVolumeExecutor{},
+		Inputs:     []*types.StorageVolumeExecutor{}, // Question: what are those?
 		Outputs:    []*types.StorageVolumeExecutor{},
 		ResultsDir: "",
 	})
@@ -174,11 +189,18 @@ func (a *Allocation) Start() error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
+	// add allocation behaviors
+	err := a.Actor.AddBehavior(AllocationStartBehavior, a.handleAllocationStart)
+	if err != nil {
+		return fmt.Errorf("failed to add allocation start behavior to allocation actor: %w", err)
+	}
+
+	// start actor
 	if a.actorRunning {
 		return nil
 	}
 
-	err := a.Actor.Start()
+	err = a.Actor.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start allocation actor: %w", err)
 	}
@@ -186,4 +208,60 @@ func (a *Allocation) Start() error {
 	a.actorRunning = true
 
 	return nil
+}
+
+func (a *Allocation) createExecutor(ctx context.Context, execution types.SpecConfig) error {
+	switch execution.Type {
+	case types.ExecutorTypeDocker.String():
+		id := uuid.New().String()
+		exec, err := docker.NewExecutor(ctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to create executor: %w", err)
+		}
+		a.executor = exec
+	default:
+		return fmt.Errorf("unsupported executor type: %s", execution.Type)
+	}
+
+	return nil
+}
+
+func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
+	log.Infof("behavior allocation start from: %+v", msg.From)
+	defer msg.Discard()
+
+	var resp AllocationStartResponse
+
+	if err := a.Run(context.TODO()); err != nil {
+		err = fmt.Errorf("failed to run allocation: %w", err)
+		log.Error(err)
+
+		resp.Error = err.Error()
+		resp.OK = false
+		a.sendReply(msg, resp)
+		return
+	}
+
+	log.Info("Running allocation's job: ", a.ID)
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+// TODO: make send reply a helper func from actor pkg
+func (a *Allocation) sendReply(msg actor.Envelope, payload interface{}) {
+	var opt []actor.MessageOption
+	if msg.IsBroadcast() {
+		opt = append(opt, actor.WithMessageSource(a.Actor.Handle()))
+	}
+
+	reply, err := actor.ReplyTo(msg, payload, opt...)
+	if err != nil {
+		log.Debugf("error creating reply: %s", err)
+		return
+	}
+
+	if err := a.Actor.Send(reply); err != nil {
+		log.Debugf("error sending  reply: %s", err)
+	}
 }

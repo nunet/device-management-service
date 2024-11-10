@@ -1,10 +1,18 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package types
 
 import "reflect"
 
 // Comparable public Comparable interface to be enforced on types that can be compared
 type Comparable[T any] interface {
-	Compare(other T) Comparison
+	Compare(other T) (Comparison, error)
 }
 
 type Calculable[T any] interface {
@@ -62,7 +70,7 @@ func ComplexCompare(l, r interface{}) ComplexComparison {
 			result := compareMethod.Call([]reflect.Value{field2})[0].Interface().(Comparison)
 			complexComparison[val1.Type().Field(i).Name] = result
 		} else {
-			complexComparison[val1.Type().Field(i).Name] = Error
+			complexComparison[val1.Type().Field(i).Name] = None
 		}
 	}
 
@@ -81,11 +89,9 @@ func NumericComparator[T float64 | float32 | int | int32 | int64 | uint64](l, r 
 	case l < r:
 		return Worse
 
-	case l > r:
+	default:
 		return Better
 	}
-
-	return Error
 }
 
 func LiteralComparator[T ~string](l, r T, _ ...Preference) Comparison {
@@ -99,5 +105,5 @@ func LiteralComparator[T ~string](l, r T, _ ...Preference) Comparison {
 		return Equal
 	}
 
-	return Error
+	return None
 }
