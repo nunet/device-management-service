@@ -174,6 +174,18 @@ func createFileCore(observabilityConfig config.Observability, levelEnabler zapco
 
 // createElasticsearchCore creates an Elasticsearch logging core
 func createElasticsearchCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) (zapcore.Core, error) {
+	// Validate necessary configurations
+	if observabilityConfig.ElasticsearchURL == "" {
+		return nil, fmt.Errorf("elasticsearch URL is not configured")
+	}
+	if observabilityConfig.ElasticsearchIndex == "" {
+		return nil, fmt.Errorf("elasticsearch index is not configured")
+	}
+	// If Elasticsearch requires an API key, check for it
+	if observabilityConfig.ElasticsearchAPIKey == "" {
+		return nil, fmt.Errorf("elasticsearch API key is not configured")
+	}
+
 	esWS, err := newElasticsearchWriteSyncer(
 		observabilityConfig.ElasticsearchURL,
 		observabilityConfig.ElasticsearchIndex,
@@ -206,16 +218,22 @@ func newElasticsearchWriteSyncer(url string, index string, flushInterval time.Du
 		},
 	}
 
-	// Create Elasticsearch client with API key authentication
-	client, err := elastic.NewClient(
+	// Prepare client options
+	clientOptions := []elastic.ClientOptionFunc{
 		elastic.SetURL(url),
 		elastic.SetHttpClient(httpClient),
 		elastic.SetSniff(false),
 		elastic.SetHealthcheck(false),
-		elastic.SetHeaders(http.Header{
+	}
+
+	if apiKey != "" {
+		clientOptions = append(clientOptions, elastic.SetHeaders(http.Header{
 			"Authorization": []string{"ApiKey " + apiKey},
-		}),
-	)
+		}))
+	}
+
+	// Create Elasticsearch client
+	client, err := elastic.NewClient(clientOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -239,6 +257,7 @@ type bufferedElasticsearchSyncer struct {
 	flushInterval time.Duration
 	lastErrorTime time.Time
 	errorCount    int
+	warnLogged    bool
 }
 
 // newBufferedElasticsearchSyncer creates a new bufferedElasticsearchSyncer
@@ -297,6 +316,16 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 		return
 	}
 
+	if b.client == nil {
+		if !b.warnLogged {
+			log.Warn("Elasticsearch client is not initialized, cannot flush logs")
+			b.warnLogged = true
+		}
+		return
+	}
+
+	// Reset warnLogged if client becomes available
+	b.warnLogged = false
 	bufferCopy := b.buffer
 	b.buffer = make([]string, 0)
 
