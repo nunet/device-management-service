@@ -53,6 +53,10 @@ const (
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 
+	AllocatedResourcesBehavior = "/dms/node/resources/allocated"
+	FreeResourcesBehavior      = "/dms/node/resources/free"
+	OnboardedResourcesBehavior = "/dms/node/resources/onboarded"
+
 	LoggerConfigBehavior = "/dms/node/logger/config"
 
 	pingTimeout = 1 * time.Second
@@ -817,5 +821,55 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 		}
 	}
 	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+type resourcesResponse struct {
+	Resources types.Resources
+	Error     string
+}
+
+func (n *Node) getAllocatedResources(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	allocatedResources, err := n.resourceManager.GetTotalAllocation()
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = allocatedResources
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) getFreeResources(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	freeResources, err := n.resourceManager.GetFreeResources(context.Background())
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = freeResources.Resources
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) getOnboardedResources(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	onboardedResources, err := n.resourceManager.GetOnboardedResources(context.Background())
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = onboardedResources.Resources
 	n.sendReply(msg, resp)
 }

@@ -739,6 +739,42 @@ Examples:
 
   nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
+
+	node.AllocatedResourcesBehavior: {
+		Type:  bInvoke,
+		Short: "Get allocated resources",
+		Long: `Invokes the /dms/node/resources/allocated behavior on an actor
+
+This behavior retrieves the resources allocated by the node. The resources include CPU, RAM, GPU and disk space.
+The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk space.
+
+Examples:
+	  nunet actor cmd --context user /dms/node/resources/allocated`,
+	},
+
+	node.FreeResourcesBehavior: {
+		Type:  bInvoke,
+		Short: "Get free resources",
+		Long: `Invokes the /dms/node/resources/free behavior on an actor
+
+This behavior retrieves the free resources available on the node. The resources include CPU, RAM, GPU and disk space.
+The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk space.
+
+Examples:
+	  nunet actor cmd --context user /dms/node/resources/free`,
+	},
+
+	node.OnboardedResourcesBehavior: {
+		Type:  bInvoke,
+		Short: "Get onboarded resources",
+		Long: `Invokes the /dms/node/resources/onboarded behavior on an actor
+
+This behavior retrieves the resources onboarded to the node. The resources include CPU, RAM, GPU and disk space.
+The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk space.
+
+Examples:
+	  nunet actor cmd --context user /dms/node/resources/onboarded`,
+	},
 	node.LoggerConfigBehavior: {
 		Payload: func() any { return &node.LoggerConfigRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
