@@ -320,6 +320,15 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
 		},
+		AllocatedResourcesBehavior: {
+			fn: n.getAllocatedResources,
+		},
+		FreeResourcesBehavior: {
+			fn: n.getFreeResources,
+		},
+		OnboardedResourcesBehavior: {
+			fn: n.getOnboardedResources,
+		},
 		LoggerConfigBehavior: {
 			fn: n.handleLoggerConfig,
 		},
