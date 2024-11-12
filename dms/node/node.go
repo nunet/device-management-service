@@ -320,6 +320,9 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
 		},
+		LoggerConfigBehavior: {
+			fn: n.handleLoggerConfig,
+		},
 	}
 	for behavior, handler := range dmsBehaviors {
 		if err := nodeActor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {

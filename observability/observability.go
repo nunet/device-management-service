@@ -22,6 +22,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/natefinch/lumberjack"
 	"github.com/olivere/elastic/v7"
+	"github.com/spf13/afero"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -377,7 +378,9 @@ func SetElasticsearchEndpoint(url string) error {
 	}
 
 	// Update configuration
-	cfg.Observability.ElasticsearchURL = url
+	if err := config.Set(afero.NewOsFs(), "observability.elasticsearch_url", url); err != nil {
+		return fmt.Errorf("failed to set config value: %w", err)
+	}
 
 	// Flush existing logs before switching client
 	esSyncerInstance.Flush()
@@ -484,8 +487,9 @@ func SetLogLevel(level string) error {
 	}
 
 	// Update the configuration
-	cfg := config.GetConfig()
-	cfg.Observability.LogLevel = level
+	if err := config.Set(afero.NewOsFs(), "observability.log_level", level); err != nil {
+		return fmt.Errorf("failed to set config value: %w", err)
+	}
 
 	// Set the new log level in atomicLevel
 	atomicLevel.SetLevel(logLevel)
@@ -495,9 +499,14 @@ func SetLogLevel(level string) error {
 
 // SetFlushInterval sets the flush interval for Elasticsearch logging dynamically
 func SetFlushInterval(seconds int) error {
+	if seconds <= 0 {
+		return fmt.Errorf("interval must be greater than 0")
+	}
+
 	// Update the configuration
-	cfg := config.GetConfig()
-	cfg.Observability.FlushInterval = seconds
+	if err := config.Set(afero.NewOsFs(), "observability.flush_interval", seconds); err != nil {
+		return fmt.Errorf("failed to set config value: %w", err)
+	}
 
 	// Update the flush interval in the elasticsearchWriteSyncer
 	if esSyncerInstance != nil {
