@@ -306,7 +306,6 @@ type OnboardResourceResponse struct {
 }
 
 type DeploymentListResponse struct {
-	// Deployment ID -> Deployment Status
 	Deployments map[string]string
 }
 
@@ -315,6 +314,7 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 
 	var resp DeploymentListResponse
 
+	resp.Deployments = make(map[string]string)
 	for ID, dep := range n.deployments {
 		resp.Deployments[ID] = jobs.DeploymentStatusString(dep.Status())
 	}
@@ -327,7 +327,7 @@ type DeploymentStatusRequest struct {
 }
 
 type DeploymentStatusResponse struct {
-	Status jobs.DeploymentStatus
+	Status string
 	Error  string
 }
 
@@ -343,7 +343,9 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
+	n.mx.Lock()
 	d, ok := n.deployments[request.ID]
+	n.mx.Unlock()
 	if !ok {
 		// TODO: check database for persisted deployments data
 		resp.Error = ErrDeploymentNotFound.Error()
@@ -351,7 +353,7 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
-	resp.Status = d.Status()
+	resp.Status = jobs.DeploymentStatusString(d.Status())
 	n.sendReply(msg, resp)
 }
 
@@ -376,7 +378,9 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 		return
 	}
 
+	n.mx.Lock()
 	d, ok := n.deployments[request.ID]
+	n.mx.Unlock()
 	if !ok {
 		// TODO: check database for persisted deployments data
 		resp.Error = ErrDeploymentNotFound.Error()
