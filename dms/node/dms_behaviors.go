@@ -23,6 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -51,6 +52,8 @@ const (
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
+
+	LoggerConfigBehavior = "/dms/node/logger/config"
 
 	pingTimeout = 1 * time.Second
 )
@@ -763,6 +766,56 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 		return
 	}
 
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+type LoggerConfigRequest struct {
+	Interval int
+	URL      string
+	Level    string
+}
+
+type LoggerConfigResponse struct {
+	Error string `json:"error,omitempty"`
+	OK    bool
+}
+
+func (n *Node) handleLoggerConfig(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var (
+		req  LoggerConfigRequest
+		resp LoggerConfigResponse
+	)
+
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	if req.Interval != 0 {
+		if err := observability.SetFlushInterval(req.Interval); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.Level != "" {
+		if err := observability.SetLogLevel(req.Level); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.URL != "" {
+		if err := observability.SetElasticsearchEndpoint(req.URL); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
 	resp.OK = true
 	n.sendReply(msg, resp)
 }
