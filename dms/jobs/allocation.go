@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	pending AllocationStatus = "pending"
-	running AllocationStatus = "running"
-	stopped AllocationStatus = "stopped"
+	pending   AllocationStatus = "pending"
+	running   AllocationStatus = "running"
+	stopped   AllocationStatus = "stopped"
+	completed AllocationStatus = "completed"
 )
 
 // AllocationStatus is a representation of the execution status
@@ -111,13 +112,6 @@ func (a *Allocation) Run(ctx context.Context) error {
 
 	var err error
 
-	defer func() {
-		if a.status != running {
-			// If not running, ensure deallocation of resources
-			err = a.resourceManager.DeallocateResources(ctx, a.Job.ID)
-		}
-	}()
-
 	// if executor is nil create it
 	if a.executor == nil {
 		err = a.createExecutor(ctx, a.Job.Execution)
@@ -142,7 +136,56 @@ func (a *Allocation) Run(ctx context.Context) error {
 	}
 
 	a.status = running
+
+	go a.monitorExecutor(ctx)
+
 	return nil
+}
+
+func (a *Allocation) monitorExecutor(ctx context.Context) {
+	resChan, errChan := a.executor.Wait(ctx, a.executionID)
+
+	var finalResult *types.ExecutionResult
+	var finalError error
+
+	for {
+		select {
+		case res, ok := <-resChan:
+			if !ok {
+				resChan = nil // no more reads
+			} else {
+				finalResult = res
+			}
+
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil // no more reads
+			} else {
+				finalError = err
+			}
+		}
+
+		if resChan == nil && errChan == nil {
+			break
+		}
+	}
+
+	a.mx.Lock()
+	if finalError != nil {
+		a.status = stopped
+		log.Warnf("execution failed: %v", finalError)
+	}
+
+	if finalResult != nil {
+		a.status = completed
+	}
+	a.mx.Unlock()
+
+	// deallocate resources after everything is done.
+	err := a.resourceManager.DeallocateResources(ctx, a.Job.ID)
+	if err != nil {
+		log.Errorf("failed to deallocate resources for %s: %v", a.Job.ID, err)
+	}
 }
 
 // Stop stops the running executor
@@ -168,10 +211,6 @@ func (a *Allocation) Stop(ctx context.Context) error {
 	}
 
 	a.status = stopped
-
-	if err := a.resourceManager.DeallocateResources(ctx, a.Job.ID); err != nil {
-		return fmt.Errorf("failed to deallocate resources: %w", err)
-	}
 
 	return nil
 }
