@@ -14,6 +14,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/transform"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
+	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 )
 
 func NewEnsemblev1Transformer() transform.Transformer {
@@ -117,12 +118,12 @@ func TransformVolume(root *map[string]interface{}, data any, path tree.Path) (an
 		// Handle volume inheritance
 		parent := tree.NewPath("")
 
-		c, err := transform.GetConfigAtPath(*root, parent.Next("volumes"))
+		c, err := utils.GetConfigAtPath(*root, parent.Next("volumes"))
 		if err != nil {
 			return config, nil
 		}
 
-		volumes, _ := transform.ToAnySlice(c)
+		volumes, _ := utils.ToAnySlice(c)
 		for _, v := range volumes {
 			if volume, ok := v.(map[string]any); ok && volume["name"] == config["name"] {
 				// Merge the configurations
@@ -158,12 +159,12 @@ func TransformResources(root *map[string]interface{}, data any, path tree.Path) 
 		// Handle volume inheritance
 		parent := tree.NewPath("")
 
-		c, err := transform.GetConfigAtPath(*root, parent.Next("resources"))
+		c, err := utils.GetConfigAtPath(*root, parent.Next("resources"))
 		if err != nil {
 			return config, nil
 		}
 
-		resources, _ := transform.ToAnySlice(c)
+		resources, _ := utils.ToAnySlice(c)
 		for _, v := range resources {
 			if rcs, ok := v.(map[string]any); ok && rcs["name"] == config["name"] {
 				// Merge the configurations
