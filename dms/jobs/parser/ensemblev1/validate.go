@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
+	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/validate"
 )
 
@@ -21,6 +22,7 @@ func NewEnsembleV1Validator() validate.Validator {
 		map[tree.Path]validate.ValidatorFunc{
 			"V1":               ValidateSpec,
 			"V1.allocations.*": ValidateAllocation,
+			"V1.edges.[]":      ValidateEdgeConstraints,
 		},
 	)
 }
@@ -54,5 +56,40 @@ func ValidateAllocation(_ *map[string]any, data any, _ tree.Path) error {
 	if allocation["execution"] == nil {
 		return fmt.Errorf("allocation must have an execution")
 	}
+	return nil
+}
+
+func ValidateEdgeConstraints(root *map[string]any, data any, p tree.Path) error {
+	edgeConstraints, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid edge constraints configuration: %v", data)
+	}
+
+	// Check if "S" and "T" keys exist and are non-empty
+	s, sOk := edgeConstraints["S"].(string)
+	t, tOk := edgeConstraints["T"].(string)
+	if !sOk || s == "" || !tOk || t == "" {
+		return fmt.Errorf("invalid edge constraints configuration: edges should be a pair of named nodes")
+	}
+
+	// Check if "nodes" key exists
+	nodesConfig, err := utils.GetConfigAtPath(*root, p.Parent().Parent().Next("nodes"))
+	if err != nil {
+		return fmt.Errorf("invalid edge constraints configuration: nodes must be defined")
+	}
+	nodes, nodesOk := nodesConfig.(map[string]any)
+	if !nodesOk {
+		return fmt.Errorf("invalid edge constraints configuration: nodes must be a map")
+	}
+
+	// Check if S and T are present in the "nodes" map
+	if _, ok := nodes[s]; !ok {
+		return fmt.Errorf("invalid edge constraints configuration: node '%s' not found", s)
+	}
+
+	if _, ok := nodes[t]; !ok {
+		return fmt.Errorf("invalid edge constraints configuration: node '%s' not found", t)
+	}
+
 	return nil
 }
