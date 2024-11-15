@@ -1007,12 +1007,6 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		}
 	}
 
-	// consume granted tokens for allocation capabilities
-	err = o.actor.Security().Consume(h.DID, response.Tokens)
-	if err != nil {
-		return nil, fmt.Errorf("failed to consume tokens for %s: %w", n, err)
-	}
-
 	return response.Allocations, nil
 }
 
