@@ -7,6 +7,7 @@
 - [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
 - [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
+- [EnsembleConfig Documentation](https://gitlab.com/nunet/device-management-service/-/blob/main/jobs/ensemble_fields_reference.md)
 
 ## Table of Contents
 
