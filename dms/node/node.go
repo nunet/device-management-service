@@ -41,6 +41,8 @@ const (
 	helloAttempts                   = 3
 	clearCommitedResourcesFrequency = 60 * time.Second
 
+	grantAllocationCapsFreq = 1 * time.Hour
+
 	rootProto = "actor/root/messages/0.0.1"
 )
 
@@ -677,7 +679,7 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	return e, nil
 }
 
-func (n *Node) createAllocations(ensembleID string, _ string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
+func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
 	allocHandles := make(map[string]actor.Handle, len(allocations))
 	for allocationID, config := range allocations {
 		if _, ok := n.allocations[allocationID]; ok {
@@ -695,6 +697,28 @@ func (n *Node) createAllocations(ensembleID string, _ string, allocations map[st
 		}
 
 		allocHandles[allocationID] = allocation.Actor.Handle()
+
+		// grant capabilities to the orchestrator upon its allocation
+		if err := n.grantAllocationCaps(orchestrator, allocation); err != nil {
+			return nil, fmt.Errorf("failed to grant allocation caps: %w", err)
+		}
+
+		// refresh allocation caps grants periodically
+		go func() {
+			ticker := time.NewTicker(grantAllocationCapsFreq)
+			defer ticker.Stop()
+
+			for allocation.Status(context.TODO()).Status != jobs.AllocationStatus("stopped") {
+				select {
+				case <-n.ctx.Done():
+					return
+				case <-ticker.C:
+					if err := n.grantAllocationCaps(orchestrator, allocation); err != nil {
+						log.Warnf("failed to grant allocation %s caps: %s", allocationID, err)
+					}
+				}
+			}
+		}()
 	}
 
 	return allocHandles, nil
@@ -758,6 +782,28 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	n.updateAllocations(allocation)
 
 	return allocation, nil
+}
+
+func (n *Node) grantAllocationCaps(orchestrator did.DID, allocation *jobs.Allocation) error {
+	tokens, err := n.rootCap.Grant(
+		ucan.Delegate,
+		orchestrator,
+		allocation.Actor.Handle().DID,
+		[]string{},
+		actor.MakeExpiry(grantAllocationCapsFreq),
+		1,
+		[]ucan.Capability{jobs.AllocationStartBehavior},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create granting token for allocation %s caps: %w", allocation.ID, err)
+	}
+
+	err = n.rootCap.AddRoots([]did.DID{}, tokens, ucan.TokenList{})
+	if err != nil {
+		return fmt.Errorf("failed to add roots for allocation %s: %w", allocation.ID, err)
+	}
+
+	return nil
 }
 
 func (n *Node) updateAllocations(alloc *jobs.Allocation) {

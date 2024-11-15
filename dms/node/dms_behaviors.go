@@ -11,7 +11,6 @@ package node
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -20,7 +19,6 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -657,26 +655,15 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.AllocationDeploymentResponse{}
-	allocations, err := n.createAllocations(request.EnsembleID, request.NodeID, request.Allocations)
+	allocations, err := n.createAllocations(msg.From.DID, request.EnsembleID, request.NodeID, request.Allocations)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
 	}
 
-	// TODO: what should be the expire time?
-	// TODO: should we keep depth 0?
-	// grant allocation capabilities to orchestrator
-	tokens, err := n.rootCap.Grant(ucan.Invoke, msg.From.DID, n.rootCap.DID(), []string{}, actor.MakeExpiry(24*time.Hour), 0, []ucan.Capability{jobs.AllocationStartBehavior})
-	if err != nil {
-		resp.Error = fmt.Sprintf("failed to create granting token for allocation caps: %s", err.Error())
-		n.sendReply(msg, resp)
-		return
-	}
-
 	resp.OK = true
 	resp.Allocations = allocations
-	resp.Tokens = tokens
 	n.sendReply(msg, resp)
 }
 

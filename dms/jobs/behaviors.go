@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -87,7 +86,6 @@ type AllocationDeploymentResponse struct {
 	OK          bool
 	Error       string
 	Allocations map[string]actor.Handle
-	Tokens      ucan.TokenList // tokens granted for allocation capabilities
 }
 
 type RevertDeploymentMessage struct {
