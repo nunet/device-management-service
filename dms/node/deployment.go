@@ -219,10 +219,18 @@ loop:
 
 		// if the desired executable is not found stop
 		for _, e := range v.V1.Executors {
-			_, err := n.getExecutor(e)
+			executor, err := n.getExecutor(e)
 			if err != nil {
 				log.Debugf("failed to get executor: %+v", e)
 				continue loop
+			}
+			if executor.executionType == jobs.ExecutorDocker {
+				if v.V1.GeneralRequirements.PrivilegedDocker {
+					if !n.allowPrivilegedDocker {
+						log.Debugf("node does not allow privileged docker")
+						continue loop
+					}
+				}
 			}
 		}
 

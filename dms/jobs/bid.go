@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/types"
@@ -46,6 +47,9 @@ type BidRequestV1 struct {
 	PublicPorts struct {
 		Static  []int // statically configured public ports
 		Dynamic int   // number of dynamic ports
+	}
+	GeneralRequirements struct {
+		PrivilegedDocker bool
 	}
 }
 

@@ -75,6 +75,12 @@ type Node struct {
 	portConfig        PortConfig
 	portAllocator     *PortAllocator
 	commitedResources map[string]*bidState
+
+	// TODO: we may handle the following differently.
+	// We may have other kinds of constraints that are not related to edge, resources or locations
+	// What we need is a configuration file for compute providers where they might set their
+	// preferences
+	allowPrivilegedDocker bool
 }
 
 type peerState struct {
@@ -114,6 +120,7 @@ func New(onboarder *onboarding.Onboarding,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
 	geoip types.GeoIPLocator, hostLocation HostGeolocation, portConfig PortConfig,
+	allowPrivilegedDocker bool,
 ) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
@@ -174,26 +181,27 @@ func New(onboarder *onboarding.Onboarding,
 	ctx, cancel := context.WithCancel(context.Background())
 
 	n := &Node{
-		hostID:            hostID,
-		network:           net,
-		bids:              make(map[string]*bidState),
-		deployments:       make(map[string]*jobs.Orchestrator),
-		allocations:       make(map[string]*jobs.Allocation),
-		peers:             make(map[peer.ID]*peerState),
-		resourceManager:   resourceManager,
-		hardware:          hardware,
-		actor:             nodeActor,
-		rootCap:           rootCap,
-		scheduler:         scheduler,
-		onboarder:         onboarder,
-		executors:         make(map[string]executorMetadata),
-		ctx:               ctx,
-		cancel:            cancel,
-		geoip:             geoip,
-		hostLocation:      hostLocation,
-		portConfig:        portConfig,
-		portAllocator:     NewPortAllocator(portConfig),
-		commitedResources: make(map[string]*bidState),
+		hostID:                hostID,
+		network:               net,
+		bids:                  make(map[string]*bidState),
+		deployments:           make(map[string]*jobs.Orchestrator),
+		allocations:           make(map[string]*jobs.Allocation),
+		peers:                 make(map[peer.ID]*peerState),
+		resourceManager:       resourceManager,
+		hardware:              hardware,
+		actor:                 nodeActor,
+		rootCap:               rootCap,
+		scheduler:             scheduler,
+		onboarder:             onboarder,
+		executors:             make(map[string]executorMetadata),
+		ctx:                   ctx,
+		cancel:                cancel,
+		geoip:                 geoip,
+		hostLocation:          hostLocation,
+		portConfig:            portConfig,
+		portAllocator:         NewPortAllocator(portConfig),
+		commitedResources:     make(map[string]*bidState),
+		allowPrivilegedDocker: allowPrivilegedDocker,
 	}
 
 	if err := n.initSupportedExecutors(ctx); err != nil {

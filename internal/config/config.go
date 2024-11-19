@@ -49,9 +49,7 @@ type P2P struct {
 }
 
 type Job struct {
-	LogUpdateInterval int    `mapstructure:"log_update_interval" json:"log_update_interval"` // in minutes
-	TargetPeer        string `mapstructure:"target_peer" json:"target_peer"`                 // specific peer to send deployment requests to - XXX probably not a good idea. Remove after testing stage.
-	CleanupInterval   int    `mapstructure:"cleanup_interval" json:"cleanup_interval"`       // docker container and images clean up interval in days
+	AllowPrivilegedDocker bool `mapstructure:"allow_privileged_docker" json:"allow_privileged_docker"`
 }
 
 type Observability struct {
