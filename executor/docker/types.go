@@ -36,6 +36,8 @@ type EngineSpec struct {
 	Environment []string `json:"environment,omitempty"`
 	// WorkingDirectory inside the container
 	WorkingDirectory string `json:"working_directory,omitempty"`
+	// Privileged indicates whether the container should run with --privileged mode
+	Privileged bool `json:"privileged,omitempty"`
 }
 
 // Validate checks if the engine spec is valid

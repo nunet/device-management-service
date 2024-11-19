@@ -18,13 +18,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
-	"gitlab.com/nunet/device-management-service/observability"
-
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/pkg/errors"
 
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -465,7 +464,7 @@ func (e *Executor) newDockerExecutionContainer(
 	}
 
 	log.Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
-	hostConfig := configureHostConfig(chosenGPUVendor, params, mounts)
+	hostConfig := configureHostConfig(chosenGPUVendor, params, dockerArgs, mounts)
 
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
@@ -520,7 +519,7 @@ func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
 
 // configureHostConfig sets up the host configuration for the container based on the
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
-func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, mounts []mount.Mount) container.HostConfig {
+func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) container.HostConfig {
 	var hostConfig container.HostConfig
 
 	switch vendor {
@@ -600,6 +599,8 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 			},
 		}
 	}
+
+	hostConfig.Privileged = dockerArgs.Privileged
 	return hostConfig
 }
 

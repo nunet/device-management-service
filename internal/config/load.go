@@ -59,9 +59,6 @@ func setDefaultConfig() *viper.Viper {
 	})
 	v.SetDefault("p2p.memory", 1024)
 	v.SetDefault("p2p.fd", 512)
-	v.SetDefault("job.log_update_interval", 2)
-	v.SetDefault("job.target_peer", "")
-	v.SetDefault("job.cleanup_interval", 3)
 
 	// default observability settings
 	v.SetDefault("observability.log_level", "INFO")
@@ -80,6 +77,9 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("apm.service_name", "nunet-dms")
 	v.SetDefault("apm.environment", "production")
 	v.SetDefault("apm.api_key", v.GetString("observability.elasticsearch_api_key"))
+
+	// jobs
+	v.SetDefault("job.allow_privileged_docker", false)
 
 	return v
 }

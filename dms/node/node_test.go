@@ -12,20 +12,16 @@ import (
 	"net"
 	"testing"
 
-	// "gitlab.com/nunet/device-management-service/dms/jobs"
-	"go.uber.org/mock/gomock"
-
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-
 	"github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
-	// "gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
@@ -118,7 +114,7 @@ func TestNew(t *testing.T) {
 			}
 
 			hardwareManager := NewMockHardwareManager(ctrl)
-			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler, hardwareManager, tt.geoip, tt.hostLocation, tt.portConfig)
+			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler, hardwareManager, tt.geoip, tt.hostLocation, tt.portConfig, false)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -139,7 +135,7 @@ func TestNodeAllocationMessaging(t *testing.T) {
 	resourceManager := NewMockResourceManager(ctrl)
 	hardwareManager := NewMockHardwareManager(ctrl)
 
-	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1), hardwareManager, &geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535})
+	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1), hardwareManager, &geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535}, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)
 	err = node1.Start()

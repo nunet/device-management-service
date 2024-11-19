@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
@@ -1513,6 +1514,18 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (Ensem
 
 			if !containsExecutor(executors, allocationConfig.Executor) {
 				executors = append(executors, allocationConfig.Executor)
+			}
+
+			if allocationConfig.Executor == ExecutorDocker {
+				// check if bid includes allocation requiring privileged docker
+				dockerCfg, err := docker.DecodeSpec(&allocationConfig.Execution)
+				if err != nil {
+					return EnsembleBidRequest{}, fmt.Errorf("decoding docker spec: %w", err)
+				}
+
+				if dockerCfg.Privileged {
+					bidRequest.V1.GeneralRequirements.PrivilegedDocker = true
+				}
 			}
 
 			err := aggregateResources.Add(allocationConfig.Resources)
