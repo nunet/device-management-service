@@ -41,7 +41,8 @@
           - [Add a root anchor for your DMS context](#add-a-root-anchor-for-your-dms-context)
         - [Setup your DMS for the public testnet](#setup-your-dms-for-the-public-testnet)
       - [Running DMS](#running-dms)
-    - [Onboarding](#onboarding)
+    - [Provide Compute Power to the Network](#provide-compute-power-to-the-network)
+    - [Deploy Jobs on the Network](#deploy-jobs-on-the-network)
     - [REST Endpoints](#rest-endpoints)
   - [Configuration](#configuration)
     - [Config file](#config-file)
@@ -146,7 +147,7 @@ to the binary to enable some features.
 > **Darwin users**: unfortunately, the DMS can't work with granular permissions on Mac.
 > So, for now, if running a compute provider, you will have to run the nunet daemon (`nunet run`) as root.
 
-For Linux users, granular permissions will have to be set to the binary (optionally, but *NOT* recommended, you can run the binary as root).
+For Linux users, granular permissions will have to be set to the binary (optionally, but _NOT_ recommended, you can run the binary as root).
 
 #### Net-admin permission and IP over libp2p
 
@@ -510,11 +511,15 @@ $ nunet run
 
 By default, DMS runs on port 9999.
 
-### Onboarding
+### Provide Compute Power to the Network
 
-You don't necessarily need to onboard for development, but that depends on which part you're working on. To onboard during development, `/etc/nunet` needs to be manually created since it is created with the package during installation.
+If you want to contribute your computer's resources (CPU, RAM, GPU, storage) to the network, you have to onboard your machine.
 
-Refer to `dms/onboarding` package [README](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/onboarding/README.md) for details of onboarding functionality for compute provider users.
+Follow our [Compute Provider Guide](docs/onboarding.md) to get started.
+
+### Deploy Jobs on the Network
+
+Every node on the network can deploy workloads across available compute resources, given the necessary capabilities. Learn how deployments work by following our [Deployments Guide](docs/deployments.md).
 
 ### REST Endpoints
 
