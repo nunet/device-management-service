@@ -42,8 +42,8 @@ const (
 	SubnetRemovePeerBehavior      = "/dms/node/subnet/remove-peer"
 	SubnetAcceptPeerBehavior      = "/dms/node/subnet/accept-peer"
 	SubnetMapPortBehavior         = "/dms/node/subnet/map-port"
-	SubnetDNSAddRecordBehavior    = "/dms/node/subnet/dns/add-record"
 	SubnetUnmapPortBehavior       = "/dms/node/subnet/unmap-port"
+	SubnetDNSAddRecordBehavior    = "/dms/node/subnet/dns/add-record"
 	SubnetDNSRemoveRecordBehavior = "/dms/node/subnet/dns/remove-record"
 )
 
