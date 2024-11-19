@@ -289,38 +289,17 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.RevertDeploymentBehavior: {
 			fn: n.handleRevertDeployment,
 		},
-		jobs.SubnetCreateBehavior: {
-			fn: n.handleSubnetCreate,
-		},
-		jobs.SubnetDestroyBehavior: {
-			fn: n.handleSubnetDestroy,
-		},
-		jobs.SubnetAddPeerBehavior: {
-			fn: n.handleSubnetAddPeer,
-		},
-		jobs.SubnetRemovePeerBehavior: {
-			fn: n.handleSubnetRemovePeer,
-		},
-		jobs.SubnetAcceptPeerBehavior: {
-			fn: n.handleSubnetAcceptPeer,
-		},
-		jobs.SubnetMapPortBehavior: {
-			fn: n.handleSubnetMapPort,
-		},
-		jobs.SubnetDNSAddRecordBehavior: {
-			fn: n.handleSubnetDNSAddRecord,
-		},
-		jobs.SubnetUnmapPortBehavior: {
-			fn: n.handleSubnetUnmapPort,
-		},
-		jobs.SubnetDNSRemoveRecordBehavior: {
-			fn: n.handleSubnetDNSRemoveRecord,
-		},
 		jobs.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,
 		},
 		jobs.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
+		},
+		jobs.SubnetCreateBehavior: {
+			fn: n.handleSubnetCreate,
+		},
+		jobs.SubnetDestroyBehavior: {
+			fn: n.handleSubnetDestroy,
 		},
 		AllocatedResourcesBehavior: {
 			fn: n.getAllocatedResources,
@@ -698,8 +677,29 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 
 		allocHandles[allocationID] = allocation.Actor.Handle()
 
-		// grant capabilities to the orchestrator upon its allocation
-		if err := n.grantAllocationCaps(orchestrator, allocation); err != nil {
+		// node grants subnet create/destroy caps to the orchestrator
+		if err := n.grantAllocationCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+			jobs.SubnetCreateBehavior,
+			jobs.SubnetDestroyBehavior,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to grant node caps: %w", err)
+		}
+
+		// allocation grants subnet manage caps to the orchestrator
+		allocDID, err := did.FromID(allocation.Actor.Handle().ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get did from id: %w", err)
+		}
+
+		if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
+			jobs.SubnetAddPeerBehavior,
+			jobs.SubnetRemovePeerBehavior,
+			jobs.SubnetAcceptPeerBehavior,
+			jobs.SubnetMapPortBehavior,
+			jobs.SubnetUnmapPortBehavior,
+			jobs.SubnetDNSAddRecordBehavior,
+			jobs.SubnetDNSRemoveRecordBehavior,
+		}); err != nil {
 			return nil, fmt.Errorf("failed to grant allocation caps: %w", err)
 		}
 
@@ -713,8 +713,25 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 				case <-n.ctx.Done():
 					return
 				case <-ticker.C:
-					if err := n.grantAllocationCaps(orchestrator, allocation); err != nil {
-						log.Warnf("failed to grant allocation %s caps: %s", allocationID, err)
+					// node grants subnet create/destroy caps to the orchestrator
+					if err := n.grantAllocationCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+						jobs.SubnetCreateBehavior,
+						jobs.SubnetDestroyBehavior,
+					}); err != nil {
+						log.Warnf("failed to grant node caps: %w", err)
+					}
+
+					// allocation grants subnet manage caps to the orchestrator
+					if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
+						jobs.SubnetAddPeerBehavior,
+						jobs.SubnetRemovePeerBehavior,
+						jobs.SubnetAcceptPeerBehavior,
+						jobs.SubnetMapPortBehavior,
+						jobs.SubnetUnmapPortBehavior,
+						jobs.SubnetDNSAddRecordBehavior,
+						jobs.SubnetDNSRemoveRecordBehavior,
+					}); err != nil {
+						log.Warnf("failed to grant allocation caps: %w", err)
 					}
 				}
 			}
@@ -732,8 +749,6 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to generate random keypair for allocation job %s: %w", job.ID, err)
 	}
 
-	// TODO: all allocations are using the root cap, is that correct?
-	// we may be granting capabilities to all allocations running in the actor instead for specific ones
 	security, err := actor.NewBasicSecurityContext(pub, priv, n.rootCap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create security context: %w", err)
@@ -769,7 +784,12 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	delete(n.commitedResources, job.ID)
 	n.mx.Unlock()
 
-	allocation, err := jobs.NewAllocation(allocActor, jobs.AllocationDetails{Job: job, NodeID: n.hostID}, n.resourceManager)
+	allocation, err := jobs.NewAllocation(
+		allocActor,
+		jobs.AllocationDetails{Job: job, NodeID: n.hostID},
+		n.resourceManager,
+		n.network,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation: %w", err)
 	}
@@ -784,23 +804,23 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	return allocation, nil
 }
 
-func (n *Node) grantAllocationCaps(orchestrator did.DID, allocation *jobs.Allocation) error {
+func (n *Node) grantAllocationCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capability) error {
 	tokens, err := n.rootCap.Grant(
 		ucan.Delegate,
 		orchestrator,
-		allocation.Actor.Handle().DID,
+		aud,
 		[]string{},
 		actor.MakeExpiry(grantAllocationCapsFreq),
 		1,
-		[]ucan.Capability{jobs.AllocationStartBehavior},
+		caps,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create granting token for allocation %s caps: %w", allocation.ID, err)
+		return fmt.Errorf("failed to create granting token for audience %s caps: %w", aud, err)
 	}
 
 	err = n.rootCap.AddRoots([]did.DID{}, tokens, ucan.TokenList{})
 	if err != nil {
-		return fmt.Errorf("failed to add roots for allocation %s: %w", allocation.ID, err)
+		return fmt.Errorf("failed to add roots for audience %s: %w", aud, err)
 	}
 
 	return nil
