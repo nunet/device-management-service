@@ -813,57 +813,71 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 		return ErrInvalidArgument
 	}
 
-	// TODO: we need to have single instance of hardware manager
-	// Should we do an api call here?
 	hardwareManager := hardware.NewHardwareManager()
 	machineResources, err := hardwareManager.GetMachineResources()
 	if err != nil {
 		return fmt.Errorf("could not get machine resources: %w", err)
 	}
 
+	// Set the CPU clock speed
 	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
-	if len(machineResources.GPUs) != 0 {
-		var (
-			gpuMap         = make(map[string]types.GPU)
-			gpuPromptItems []*selectPromptItem
-		)
-		for _, gpu := range machineResources.GPUs {
-			gpuMap[gpu.Model] = gpu
-			gpuPromptItems = append(gpuPromptItems, &selectPromptItem{
-				Label: gpu.Model,
-			})
-		}
 
-		res, err := selectPrompt("Select GPU", gpuPromptItems)
-		if err != nil {
-			return fmt.Errorf("could not select GPU: %w", err)
-		}
-
-		vramValidator := func(input string) error {
-			if _, err := strconv.ParseFloat(input, 64); err != nil {
-				return fmt.Errorf("invalid input: %w", err)
-			}
-			return nil
-		}
-		for _, gpuName := range res {
-			input, err := prompt("Enter VRAM in GB", vramValidator)
-			if err != nil {
-				return fmt.Errorf("could not prompt for VRAM: %w", err)
-			}
-
-			vram, err := strconv.ParseFloat(input, 64)
-			if err != nil {
-				return fmt.Errorf("could not parse VRAM: %w", err)
-			}
-
-			gpu := gpuMap[gpuName]
-			gpu.VRAM = types.ConvertGBToBytes(vram)
-			p.Config.OnboardedResources.GPUs = append(p.Config.OnboardedResources.GPUs, gpu)
-		}
-	} else {
+	if len(machineResources.GPUs) == 0 {
 		fmt.Println("No GPUs found. Skipping GPU selection.")
 	}
 
-	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
+	// GPU onboarding
+	machineResourceUsage, err := hardwareManager.GetUsage()
+	if err != nil {
+		return fmt.Errorf("could not get machine resource usage: %w", err)
+	}
+
+	var (
+		gpuMap         = make(map[string]types.GPU)
+		gpuPromptItems = make([]*selectPromptItem, 0)
+	)
+	for _, gpu := range machineResources.GPUs {
+		gpuMap[gpu.Model] = gpu
+		gpuPromptItems = append(gpuPromptItems, &selectPromptItem{
+			Label: gpu.Model,
+		})
+	}
+
+	res, err := selectPrompt("Select GPU", gpuPromptItems)
+	if err != nil {
+		return fmt.Errorf("could not select GPU: %w", err)
+	}
+
+	vramValidator := func(input string) error {
+		if _, err := strconv.ParseFloat(input, 64); err != nil {
+			return fmt.Errorf("invalid input: %w", err)
+		}
+		return nil
+	}
+	for _, gpuName := range res {
+		fmt.Printf("-----------------------------------\n")
+		fmt.Printf("Selected GPU: %s\n", gpuName)
+		fmt.Printf("Total VRAM: %.2f GB\n", types.ConvertBytesToGB(gpuMap[gpuName].VRAM))
+		gpuUsage, err := machineResourceUsage.GPUs.GetWithIndex(gpuMap[gpuName].Index)
+		if err != nil {
+			return fmt.Errorf("could not get GPU usage: %w", err)
+		}
+		fmt.Printf("Used VRAM: %.2f GB\n", types.ConvertBytesToGB(gpuUsage.VRAM))
+		fmt.Printf("Available VRAM: %.2f GB\n", types.ConvertBytesToGB(gpuMap[gpuName].VRAM-gpuUsage.VRAM))
+		input, err := prompt("Enter new VRAM allocation in GB", vramValidator)
+		if err != nil {
+			return fmt.Errorf("could not prompt for VRAM: %w", err)
+		}
+
+		vram, err := strconv.ParseFloat(input, 64)
+		if err != nil {
+			return fmt.Errorf("could not parse VRAM: %w", err)
+		}
+
+		gpu := gpuMap[gpuName]
+		gpu.VRAM = types.ConvertGBToBytes(vram)
+		p.Config.OnboardedResources.GPUs = append(p.Config.OnboardedResources.GPUs, gpu)
+	}
+
 	return nil
 }
