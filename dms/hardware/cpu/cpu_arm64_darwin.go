@@ -15,8 +15,8 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// GetCPU returns the  types.CPU information for the system
-func GetCPU() (types.CPU, error) {
+// getCPU returns the  types.CPU information for the system
+func getCPU() (types.CPU, error) {
 	var (
 		totalCompute float64
 		totalCores   uint64
@@ -26,9 +26,8 @@ func GetCPU() (types.CPU, error) {
 	totalCompute = eCompute + pCompute
 	totalCores = uint64(m1cpu.ECoreCount() + m1cpu.PCoreCount())
 
-	cpuInfo := types.CPU{
+	return types.CPU{
 		Cores:      float32(totalCores),
 		ClockSpeed: totalCompute / float64(m1cpu.ECoreCount()+m1cpu.PCoreCount()),
-	}
-	return cpuInfo, nil
+	}, nil
 }
