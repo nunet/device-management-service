@@ -16,8 +16,8 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// GetCPU returns the CPU information for the system
-func GetCPU() (types.CPU, error) {
+// getCPU returns the CPU information for the system
+func getCPU() (types.CPU, error) {
 	cores, err := cpu.Info()
 	if err != nil {
 		return types.CPU{}, fmt.Errorf("failed to get CPU info: %s", err)
