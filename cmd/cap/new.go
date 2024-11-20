@@ -10,6 +10,7 @@ package cap
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/afero"
@@ -18,12 +19,14 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
 func newNewCmd(afs afero.Afero) *cobra.Command {
+	var force bool
+
 	cmd := &cobra.Command{
 		Use:   "new <name>",
 		Short: "Create a new capability context",
@@ -51,12 +54,51 @@ Example:
 				rootDID = provider.DID()
 				context = LedgerContext(context)
 			} else {
-				var priv crypto.PrivKey
-				var err error
-				trustCtx, priv, err = CreateTrustContextFromKeyStore(afs, context)
+				keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
+				ks, err := keystore.New(afs.Fs, keyStoreDir)
 				if err != nil {
-					return fmt.Errorf("failed to create trust context: %w", err)
+					return fmt.Errorf("failed to open keystore: %w", err)
 				}
+
+				passphrase := os.Getenv("DMS_PASSPHRASE")
+				if ks.Exists(context) {
+					cmd.Printf("Using identity at %s/%s.json...\n", keyStoreDir, context)
+					if passphrase == "" {
+						passphrase, err = utils.PromptForPassphrase(false)
+						if err != nil {
+							return fmt.Errorf("failed to get passphrase: %w", err)
+						}
+					}
+				} else {
+					cmd.Printf("A new identity will be created for '%s' context...\n", context)
+					if passphrase == "" {
+						passphrase, err = utils.PromptForPassphrase(true)
+						if err != nil {
+							return fmt.Errorf("failed to get passphrase: %w", err)
+						}
+					}
+
+					_, err = dms.GenerateAndStorePrivKey(ks, passphrase, context)
+					if err != nil {
+						return fmt.Errorf("failed to create new key: %w", err)
+					}
+				}
+
+				key, err := ks.Get(context, passphrase)
+				if err != nil {
+					return fmt.Errorf("failed to get key from keystore: %w", err)
+				}
+
+				priv, err := key.PrivKey()
+				if err != nil {
+					return fmt.Errorf("unable to convert key from keystore to private key: %w", err)
+				}
+
+				trustCtx, err = did.NewTrustContextWithPrivateKey(priv)
+				if err != nil {
+					return fmt.Errorf("unable to create trust context: %w", err)
+				}
+
 				rootDID = did.FromPublicKey(priv.GetPublic())
 			}
 
@@ -68,7 +110,7 @@ Example:
 				return fmt.Errorf("unable to check if capability context file exists: %w", err)
 			}
 
-			if fileExists {
+			if fileExists && !force {
 				confirmed, err := utils.PromptYesNo(
 					cmd.InOrStdin(),
 					cmd.OutOrStdout(),
@@ -101,6 +143,8 @@ Example:
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVarP(&force, fnForce, "f", false, "force overwrite of existing context")
 
 	return cmd
 }

@@ -27,6 +27,7 @@ const (
 	fnProvide    = "provide"
 	fnRoot       = "root"
 	fnRequire    = "require"
+	fnForce      = "force"
 )
 
 // NewCapCmd returns the cap command that adds other commands

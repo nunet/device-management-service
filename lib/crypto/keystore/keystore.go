@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/spf13/afero"
@@ -93,6 +94,15 @@ func (ks *BasicKeyStore) Get(keyID string, passphrase string) (*Key, error) {
 	}
 
 	return key, err
+}
+
+// Exists returns whether a key is stored
+func (ks *BasicKeyStore) Exists(key string) bool {
+	keys, err := ks.ListKeys()
+	if err != nil {
+		return false
+	}
+	return slices.Contains(keys, key)
 }
 
 // Delete removes the file referencing the given key.
