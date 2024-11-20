@@ -29,6 +29,13 @@ func initTracing(apmConfig config.APM) {
 		return
 	}
 
+	// Check if the necessary configurations are present
+	if apmConfig.ServerURL == "" || apmConfig.ServiceName == "" || apmConfig.Environment == "" {
+		fmt.Fprintf(os.Stderr, "Warning: APM configurations are incomplete, tracing will be disabled\n")
+		tracingNoOpMode = true
+		return
+	}
+
 	// Create a new APM transport
 	tr, err := transport.NewHTTPTransport()
 	if err != nil {

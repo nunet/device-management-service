@@ -11,7 +11,6 @@ package node
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -20,9 +19,9 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -51,6 +50,12 @@ const (
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
+
+	AllocatedResourcesBehavior = "/dms/node/resources/allocated"
+	FreeResourcesBehavior      = "/dms/node/resources/free"
+	OnboardedResourcesBehavior = "/dms/node/resources/onboarded"
+
+	LoggerConfigBehavior = "/dms/node/logger/config"
 
 	pingTimeout = 1 * time.Second
 )
@@ -299,7 +304,6 @@ type OnboardResourceResponse struct {
 }
 
 type DeploymentListResponse struct {
-	// Deployment ID -> Deployment Status
 	Deployments map[string]string
 }
 
@@ -308,6 +312,7 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 
 	var resp DeploymentListResponse
 
+	resp.Deployments = make(map[string]string)
 	for ID, dep := range n.deployments {
 		resp.Deployments[ID] = jobs.DeploymentStatusString(dep.Status())
 	}
@@ -320,7 +325,7 @@ type DeploymentStatusRequest struct {
 }
 
 type DeploymentStatusResponse struct {
-	Status jobs.DeploymentStatus
+	Status string
 	Error  string
 }
 
@@ -336,7 +341,9 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
+	n.mx.Lock()
 	d, ok := n.deployments[request.ID]
+	n.mx.Unlock()
 	if !ok {
 		// TODO: check database for persisted deployments data
 		resp.Error = ErrDeploymentNotFound.Error()
@@ -344,7 +351,7 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
-	resp.Status = d.Status()
+	resp.Status = jobs.DeploymentStatusString(d.Status())
 	n.sendReply(msg, resp)
 }
 
@@ -369,7 +376,9 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 		return
 	}
 
+	n.mx.Lock()
 	d, ok := n.deployments[request.ID]
+	n.mx.Unlock()
 	if !ok {
 		// TODO: check database for persisted deployments data
 		resp.Error = ErrDeploymentNotFound.Error()
@@ -542,101 +551,6 @@ func (n *Node) handlePeerScore(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) handleSubnetCreate(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetCreateRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetCreateResponse{}
-	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetAddPeer(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetAddPeerRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetAddPeerResponse{}
-	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetAcceptPeer(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetAcceptPeerRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetAcceptPeerResponse{}
-	err := n.network.AcceptSubnetPeer(request.SubnetID, request.PeerID, request.IP)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetMapPort(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetMapPortRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetMapPortResponse{}
-	err := n.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetDNSAddRecord(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetDNSAddRecordRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetDNSAddRecordResponse{}
-	err := n.network.AddSubnetDNSRecord(request.SubnetID, request.DomainName, request.IP)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
 func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -646,104 +560,15 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.AllocationDeploymentResponse{}
-	allocations, err := n.createAllocations(request.EnsembleID, request.NodeID, request.Allocations)
+	allocations, err := n.createAllocations(msg.From.DID, request.EnsembleID, request.NodeID, request.Allocations)
 	if err != nil {
 		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	// TODO: what should be the expire time?
-	// TODO: should we keep depth 0?
-	// grant allocation capabilities to orchestrator
-	tokens, err := n.rootCap.Grant(ucan.Invoke, msg.From.DID, n.rootCap.DID(), []string{}, actor.MakeExpiry(24*time.Hour), 0, []ucan.Capability{jobs.AllocationStartBehavior})
-	if err != nil {
-		resp.Error = fmt.Sprintf("failed to create granting token for allocation caps: %s", err.Error())
 		n.sendReply(msg, resp)
 		return
 	}
 
 	resp.OK = true
 	resp.Allocations = allocations
-	resp.Tokens = tokens
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetUnmapPort(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetUnmapPortRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetUnmapPortResponse{}
-	err := n.network.UnmapPort(
-		request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort,
-	)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetDNSRemoveRecordRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetDNSRemoveRecordResponse{}
-	err := n.network.RemoveSubnetDNSRecord(request.SubnetID, request.DomainName)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetDestroyRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetDestroyResponse{}
-	err := n.network.DestroySubnet(request.SubnetID)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetRemovePeer(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetRemovePeerRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.SubnetRemovePeerResponse{}
-	err := n.network.RemoveSubnetPeer(request.SubnetID, request.PeerID)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
 	n.sendReply(msg, resp)
 }
 
@@ -764,5 +589,150 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	}
 
 	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetCreate(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetCreateRequest
+	resp := jobs.SubnetCreateResponse{}
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetDestroyRequest
+	resp := jobs.SubnetDestroyResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err := n.network.DestroySubnet(request.SubnetID)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+type LoggerConfigRequest struct {
+	Interval int
+	URL      string
+	Level    string
+}
+
+type LoggerConfigResponse struct {
+	Error string `json:"error,omitempty"`
+	OK    bool
+}
+
+func (n *Node) handleLoggerConfig(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var (
+		req  LoggerConfigRequest
+		resp LoggerConfigResponse
+	)
+
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	if req.Interval != 0 {
+		if err := observability.SetFlushInterval(req.Interval); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.Level != "" {
+		if err := observability.SetLogLevel(req.Level); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.URL != "" {
+		if err := observability.SetElasticsearchEndpoint(req.URL); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+type resourcesResponse struct {
+	Resources types.Resources
+	Error     string
+}
+
+func (n *Node) getAllocatedResources(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	allocatedResources, err := n.resourceManager.GetTotalAllocation()
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = allocatedResources
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) getFreeResources(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	freeResources, err := n.resourceManager.GetFreeResources(context.Background())
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = freeResources.Resources
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) getOnboardedResources(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	onboardedResources, err := n.resourceManager.GetOnboardedResources(context.Background())
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = onboardedResources.Resources
 	n.sendReply(msg, resp)
 }

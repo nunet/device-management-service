@@ -5,11 +5,11 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
-
 package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -19,13 +19,15 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
-	pending AllocationStatus = "pending"
-	running AllocationStatus = "running"
-	stopped AllocationStatus = "stopped"
+	pending   AllocationStatus = "pending"
+	running   AllocationStatus = "running"
+	stopped   AllocationStatus = "stopped"
+	completed AllocationStatus = "completed"
 )
 
 // AllocationStatus is a representation of the execution status
@@ -66,13 +68,20 @@ type Allocation struct {
 	executor        executor.Executor
 	resourceManager types.ResourceManager
 
+	network network.Network
+
 	actorRunning bool
 
 	Job Job
 }
 
 // NewAllocation creates a new allocation given the actor.
-func NewAllocation(actor actor.Actor, details AllocationDetails, resourceManager types.ResourceManager) (*Allocation, error) {
+func NewAllocation(
+	actor actor.Actor,
+	details AllocationDetails,
+	resourceManager types.ResourceManager,
+	network network.Network,
+) (*Allocation, error) {
 	if resourceManager == nil {
 		return nil, errors.New("resource manager is nil")
 	}
@@ -96,10 +105,11 @@ func NewAllocation(actor actor.Actor, details AllocationDetails, resourceManager
 		executionID:     executorID.String(),
 		resourceManager: resourceManager,
 		status:          pending,
+		network:         network,
 	}, nil
 }
 
-// Run creates the executor based on the execution engine configuration.
+// Run creates the executor based on th e execution engine configuration.
 func (a *Allocation) Run(ctx context.Context) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
@@ -110,13 +120,6 @@ func (a *Allocation) Run(ctx context.Context) error {
 	}
 
 	var err error
-
-	defer func() {
-		if a.status != running {
-			// If not running, ensure deallocation of resources
-			err = a.resourceManager.DeallocateResources(ctx, a.Job.ID)
-		}
-	}()
 
 	// if executor is nil create it
 	if a.executor == nil {
@@ -142,7 +145,56 @@ func (a *Allocation) Run(ctx context.Context) error {
 	}
 
 	a.status = running
+
+	go a.monitorExecutor(ctx)
+
 	return nil
+}
+
+func (a *Allocation) monitorExecutor(ctx context.Context) {
+	resChan, errChan := a.executor.Wait(ctx, a.executionID)
+
+	var finalResult *types.ExecutionResult
+	var finalError error
+
+	for {
+		select {
+		case res, ok := <-resChan:
+			if !ok {
+				resChan = nil // no more reads
+			} else {
+				finalResult = res
+			}
+
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil // no more reads
+			} else {
+				finalError = err
+			}
+		}
+
+		if resChan == nil && errChan == nil {
+			break
+		}
+	}
+
+	a.mx.Lock()
+	if finalError != nil {
+		a.status = stopped
+		log.Warnf("execution failed: %v", finalError)
+	}
+
+	if finalResult != nil {
+		a.status = completed
+	}
+	a.mx.Unlock()
+
+	// deallocate resources after everything is done.
+	err := a.resourceManager.DeallocateResources(ctx, a.Job.ID)
+	if err != nil {
+		log.Errorf("failed to deallocate resources for %s: %v", a.Job.ID, err)
+	}
 }
 
 // Stop stops the running executor
@@ -169,10 +221,6 @@ func (a *Allocation) Stop(ctx context.Context) error {
 
 	a.status = stopped
 
-	if err := a.resourceManager.DeallocateResources(ctx, a.Job.ID); err != nil {
-		return fmt.Errorf("failed to deallocate resources: %w", err)
-	}
-
 	return nil
 }
 
@@ -189,10 +237,23 @@ func (a *Allocation) Start() error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
+	behaviors := map[string]func(actor.Envelope){
+		AllocationStartBehavior:       a.handleAllocationStart,
+		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
+		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
+		SubnetAcceptPeerBehavior:      a.handleSubnetAcceptPeer,
+		SubnetMapPortBehavior:         a.handleSubnetMapPort,
+		SubnetUnmapPortBehavior:       a.handleSubnetUnmapPort,
+		SubnetDNSAddRecordBehavior:    a.handleSubnetDNSAddRecord,
+		SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
+	}
+
 	// add allocation behaviors
-	err := a.Actor.AddBehavior(AllocationStartBehavior, a.handleAllocationStart)
-	if err != nil {
-		return fmt.Errorf("failed to add allocation start behavior to allocation actor: %w", err)
+	for behavior, handler := range behaviors {
+		err := a.Actor.AddBehavior(behavior, handler)
+		if err != nil {
+			return fmt.Errorf("failed to add allocation start behavior to allocation actor: %w", err)
+		}
 	}
 
 	// start actor
@@ -200,7 +261,7 @@ func (a *Allocation) Start() error {
 		return nil
 	}
 
-	err = a.Actor.Start()
+	err := a.Actor.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start allocation actor: %w", err)
 	}
@@ -264,4 +325,167 @@ func (a *Allocation) sendReply(msg actor.Envelope, payload interface{}) {
 	if err := a.Actor.Send(reply); err != nil {
 		log.Debugf("error sending  reply: %s", err)
 	}
+}
+
+func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetAddPeerRequest
+	resp := SubnetAddPeerResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	err := a.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetAcceptPeerRequest
+	resp := SubnetAcceptPeerResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	err := a.network.AcceptSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetMapPortRequest
+	resp := SubnetMapPortResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	err := a.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleSubnetDNSAddRecord(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetDNSAddRecordRequest
+	resp := SubnetDNSAddRecordResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	err := a.network.AddSubnetDNSRecord(request.SubnetID, request.DomainName, request.IP)
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleSubnetUnmapPort(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetUnmapPortRequest
+	resp := SubnetUnmapPortResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	err := a.network.UnmapPort(
+		request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort,
+	)
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetDNSRemoveRecordRequest
+	resp := SubnetDNSRemoveRecordResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	err := a.network.RemoveSubnetDNSRecord(request.SubnetID, request.DomainName)
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request SubnetRemovePeerRequest
+	resp := SubnetRemovePeerResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	err := a.network.RemoveSubnetPeer(request.SubnetID, request.PeerID)
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	a.sendReply(msg, resp)
 }

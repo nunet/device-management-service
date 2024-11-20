@@ -16,13 +16,17 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
+	"net"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -1007,12 +1011,6 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		}
 	}
 
-	// consume granted tokens for allocation capabilities
-	err = o.actor.Security().Consume(h.DID, response.Tokens)
-	if err != nil {
-		return nil, fmt.Errorf("failed to consume tokens for %s: %w", n, err)
-	}
-
 	return response.Allocations, nil
 }
 
@@ -1083,307 +1081,305 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 		return aggErr
 	}
 
-	// TODO #741
-	//
-	// // 1. create subnet
-	// // 1.a generate routing table
-	// cidr, err := utils.GetRandomCIDRInRange(
-	// 	24,
-	// 	net.ParseIP("10.0.0.0"),
-	// 	net.ParseIP("10.255.255.255"),
-	// 	[]string{},
-	// )
-	// if err != nil {
-	// 	return fmt.Errorf("error getting random CIDR: %w", err)
-	// }
+	// 1. create subnet
+	// 1.a generate routing table
+	cidr, err := utils.GetRandomCIDRInRange(
+		24,
+		net.ParseIP("10.0.0.0"),
+		net.ParseIP("10.255.255.255"),
+		[]string{},
+	)
+	if err != nil {
+		return fmt.Errorf("error getting random CIDR: %w", err)
+	}
 
-	// usedIPs := make(map[string]bool)
+	usedIPs := make(map[string]bool)
 
-	// routingTable := make(map[string]string)
-	// indexRoutingTable := make(map[string]string)
-	// for _, manifest := range em.Allocations {
-	// 	ip, err := utils.GetNextIP(cidr, usedIPs)
-	// 	if err != nil {
-	// 		return fmt.Errorf("error getting next IP: %w", err)
-	// 	}
-	// 	routingTable[ip.String()] = em.Nodes[manifest.NodeID].Peer
-	// 	indexRoutingTable[manifest.NodeID] = ip.String()
-	// }
+	routingTable := make(map[string]string)
+	indexRoutingTable := make(map[string]string)
+	for _, manifest := range em.Allocations {
+		ip, err := utils.GetNextIP(cidr, usedIPs)
+		if err != nil {
+			return fmt.Errorf("error getting next IP: %w", err)
+		}
+		routingTable[ip.String()] = em.Nodes[manifest.NodeID].Peer
+		indexRoutingTable[manifest.NodeID] = ip.String()
+	}
 
-	// errCh = make(chan error, len(em.Allocations))
-	// wg = sync.WaitGroup{}
-	// for _, manifest := range em.Allocations {
-	// 	wg.Add(1)
-	// 	go func() {
-	// 		defer wg.Done()
+	errCh = make(chan error, len(em.Allocations))
+	wg = sync.WaitGroup{}
+	for _, manifest := range em.Nodes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-	// 		msg, err := actor.Message(
-	// 			o.actor.Handle(),
-	// 			manifest.Handle,
-	// 			SubnetCreateBehavior,
-	// 			SubnetCreateRequest{
-	// 				SubnetID:     em.ID,
-	// 				RoutingTable: routingTable,
-	// 			},
-	// 			actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
-	// 		)
-	// 		if err != nil {
-	// 			errCh <- fmt.Errorf("error creating subnet message: %w", err)
-	// 			return
-	// 		}
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				manifest.Handle,
+				SubnetCreateBehavior,
+				SubnetCreateRequest{
+					SubnetID:     em.ID,
+					RoutingTable: routingTable,
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating subnet message: %w", err)
+				return
+			}
 
-	// 		replyCh, err := o.actor.Invoke(msg)
-	// 		if err != nil {
-	// 			errCh <- fmt.Errorf("error invoking subnet message: %w", err)
-	// 			return
-	// 		}
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking subnet message: %w", err)
+				return
+			}
 
-	// 		var reply actor.Envelope
-	// 		select {
-	// 		case reply = <-replyCh:
-	// 		case <-time.After(2 * time.Minute):
-	// 			errCh <- fmt.Errorf("timeout creating subnet: %w", ErrDeploymentFailed)
-	// 			return
-	// 		}
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("timeout creating subnet: %w", ErrDeploymentFailed)
+				return
+			}
 
-	// 		defer reply.Discard()
+			defer reply.Discard()
 
-	// 		var response struct {
-	// 			OK    bool
-	// 			Error string
-	// 		}
+			var response struct {
+				OK    bool
+				Error string
+			}
 
-	// 		if err := json.Unmarshal(reply.Message, &response); err != nil {
-	// 			errCh <- fmt.Errorf("error unmarshalling subnet response: %w", err)
-	// 			return
-	// 		}
+			if err := json.Unmarshal(reply.Message, &response); err != nil {
+				errCh <- fmt.Errorf("error unmarshalling subnet response: %w", err)
+				return
+			}
 
-	// 		if !response.OK {
-	// 			errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
-	// 			return
-	// 		}
-	// 	}()
-	// }
+			if !response.OK {
+				errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
+				return
+			}
+		}()
+	}
 
-	// wg.Wait()
-	// close(errCh)
-	// aggErr = nil
-	// for err := range errCh {
-	// 	if aggErr == nil {
-	// 		aggErr = err
-	// 		continue
-	// 	} else if err != nil {
-	// 		aggErr = fmt.Errorf("%w\n%w", aggErr, err)
-	// 	}
-	// }
-	// if aggErr != nil {
-	// 	return aggErr
-	// }
+	wg.Wait()
+	close(errCh)
+	aggErr = nil
+	for err := range errCh {
+		if aggErr == nil {
+			aggErr = err
+			continue
+		} else if err != nil {
+			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+		}
+	}
+	if aggErr != nil {
+		return aggErr
+	}
 
-	// // 1.b create and plug IPs
-	// wg = sync.WaitGroup{}
-	// errCh = make(chan error, len(em.Allocations))
-	// for _, manifest := range em.Allocations {
-	// 	wg.Add(1)
-	// 	go func() {
-	// 		defer wg.Done()
-	// 		msg, err := actor.Message(
-	// 			o.actor.Handle(),
-	// 			manifest.Handle,
-	// 			SubnetAddPeerBehavior,
-	// 			SubnetAddPeerRequest{
-	// 				SubnetID: em.ID,
-	// 				IP:       indexRoutingTable[manifest.NodeID],
-	// 				PeerID:   em.Nodes[manifest.NodeID].Peer,
-	// 			},
-	// 			actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
-	// 		)
-	// 		if err != nil {
-	// 			errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
-	// 			return
-	// 		}
+	// 1.b create and plug IPs
+	wg = sync.WaitGroup{}
+	errCh = make(chan error, len(em.Allocations))
+	for _, manifest := range em.Allocations {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				manifest.Handle,
+				SubnetAddPeerBehavior,
+				SubnetAddPeerRequest{
+					SubnetID: em.ID,
+					IP:       indexRoutingTable[manifest.NodeID],
+					PeerID:   em.Nodes[manifest.NodeID].Peer,
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
+				return
+			}
 
-	// 		replyCh, err := o.actor.Invoke(msg)
-	// 		if err != nil {
-	// 			errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
-	// 			return
-	// 		}
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
+				return
+			}
 
-	// 		var reply actor.Envelope
-	// 		select {
-	// 		case reply = <-replyCh:
-	// 		case <-time.After(2 * time.Minute):
-	// 			errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
-	// 			return
-	// 		}
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
+				return
+			}
 
-	// 		defer reply.Discard()
+			defer reply.Discard()
 
-	// 		var response struct {
-	// 			OK    bool
-	// 			Error string
-	// 		}
+			var response struct {
+				OK    bool
+				Error string
+			}
 
-	// 		if err := json.Unmarshal(reply.Message, &response); err != nil {
-	// 			errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
-	// 			return
-	// 		}
+			if err := json.Unmarshal(reply.Message, &response); err != nil {
+				errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
+				return
+			}
 
-	// 		if !response.OK {
-	// 			errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
-	// 			return
-	// 		}
-	// 	}()
-	// }
+			if !response.OK {
+				errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+				return
+			}
+		}()
+	}
 
-	// wg.Wait()
-	// close(errCh)
-	// aggErr = nil
-	// for err := range errCh {
-	// 	if aggErr == nil {
-	// 		aggErr = err
-	// 		continue
-	// 	} else if err != nil {
-	// 		aggErr = fmt.Errorf("%w\n%w", aggErr, err)
-	// 	}
-	// }
-	// if aggErr != nil {
-	// 	return aggErr
-	// }
+	wg.Wait()
+	close(errCh)
+	aggErr = nil
+	for err := range errCh {
+		if aggErr == nil {
+			aggErr = err
+			continue
+		} else if err != nil {
+			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+		}
+	}
+	if aggErr != nil {
+		return aggErr
+	}
 
-	// // 1.c configure DNS
-	// wg = sync.WaitGroup{}
-	// errCh = make(chan error, len(em.Allocations))
-	// for _, manifest := range em.Allocations {
-	// 	wg.Add(1)
-	// 	go func() {
-	// 		defer wg.Done()
-	// 		msg, err := actor.Message(
-	// 			o.actor.Handle(),
-	// 			manifest.Handle,
-	// 			SubnetDNSAddRecordBehavior,
-	// 			SubnetDNSAddRecordRequest{
-	// 				SubnetID:   em.ID,
-	// 				DomainName: manifest.DNSName,
-	// 				IP:         indexRoutingTable[manifest.NodeID],
-	// 			},
-	// 			actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
-	// 		)
-	// 		if err != nil {
-	// 			errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
-	// 			return
-	// 		}
+	// 1.c configure DNS
+	wg = sync.WaitGroup{}
+	errCh = make(chan error, len(em.Allocations))
+	for _, manifest := range em.Allocations {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				manifest.Handle,
+				SubnetDNSAddRecordBehavior,
+				SubnetDNSAddRecordRequest{
+					SubnetID:   em.ID,
+					DomainName: manifest.DNSName,
+					IP:         indexRoutingTable[manifest.NodeID],
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
+				return
+			}
 
-	// 		replyCh, err := o.actor.Invoke(msg)
-	// 		if err != nil {
-	// 			errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
-	// 			return
-	// 		}
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
+				return
+			}
 
-	// 		var reply actor.Envelope
-	// 		select {
-	// 		case reply = <-replyCh:
-	// 		case <-time.After(2 * time.Minute):
-	// 			errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
-	// 			return
-	// 		}
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
+				return
+			}
 
-	// 		defer reply.Discard()
+			defer reply.Discard()
 
-	// 		var response struct {
-	// 			OK    bool
-	// 			Error string
-	// 		}
+			var response struct {
+				OK    bool
+				Error string
+			}
 
-	// 		if err := json.Unmarshal(reply.Message, &response); err != nil {
-	// 			errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
-	// 			return
-	// 		}
+			if err := json.Unmarshal(reply.Message, &response); err != nil {
+				errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
+				return
+			}
 
-	// 		if !response.OK {
-	// 			errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
-	// 			return
-	// 		}
-	// 	}()
-	// }
+			if !response.OK {
+				errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+				return
+			}
+		}()
+	}
 
-	// wg.Wait()
-	// close(errCh)
-	// aggErr = nil
-	// for err := range errCh {
-	// 	if aggErr == nil {
-	// 		aggErr = err
-	// 		continue
-	// 	} else if err != nil {
-	// 		aggErr = fmt.Errorf("%w\n%w", aggErr, err)
-	// 	}
-	// }
-	// if aggErr != nil {
-	// 	return aggErr
-	// }
+	wg.Wait()
+	close(errCh)
+	aggErr = nil
+	for err := range errCh {
+		if aggErr == nil {
+			aggErr = err
+			continue
+		} else if err != nil {
+			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+		}
+	}
+	if aggErr != nil {
+		return aggErr
+	}
 
-	// // 1.d configure port mapping
-	// wg = sync.WaitGroup{}
-	// errCh = make(chan error, len(em.Allocations))
-	// for _, manifest := range em.Allocations {
-	// 	for srcPort, destPort := range manifest.Ports {
-	// 		wg.Add(1)
-	// 		go func() {
-	// 			defer wg.Done()
-	// 			msg, err := actor.Message(
-	// 				o.actor.Handle(),
-	// 				manifest.Handle,
-	// 				SubnetMapPortBehavior,
-	// 				SubnetMapPortRequest{
-	// 					Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
-	// 					SourceIP:   "0.0.0.0",
-	// 					SourcePort: strconv.Itoa(srcPort),
-	// 					DestIP:     indexRoutingTable[manifest.NodeID],
-	// 					DestPort:   strconv.Itoa(destPort),
-	// 				},
-	// 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
-	// 			)
-	// 			if err != nil {
-	// 				errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
-	// 				return
-	// 			}
+	// 1.d configure port mapping
+	wg = sync.WaitGroup{}
+	errCh = make(chan error, len(em.Allocations))
+	for _, manifest := range em.Allocations {
+		for srcPort, destPort := range manifest.Ports {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				msg, err := actor.Message(
+					o.actor.Handle(),
+					manifest.Handle,
+					SubnetMapPortBehavior,
+					SubnetMapPortRequest{
+						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
+						SourceIP:   "0.0.0.0",
+						SourcePort: strconv.Itoa(srcPort),
+						DestIP:     indexRoutingTable[manifest.NodeID],
+						DestPort:   strconv.Itoa(destPort),
+					},
+					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+				)
+				if err != nil {
+					errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
+					return
+				}
 
-	// 			replyCh, err := o.actor.Invoke(msg)
-	// 			if err != nil {
-	// 				errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
-	// 				return
-	// 			}
+				replyCh, err := o.actor.Invoke(msg)
+				if err != nil {
+					errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
+					return
+				}
 
-	// 			var reply actor.Envelope
-	// 			select {
-	// 			case reply = <-replyCh:
-	// 			case <-time.After(2 * time.Minute):
-	// 				errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
-	// 				return
-	// 			}
+				var reply actor.Envelope
+				select {
+				case reply = <-replyCh:
+				case <-time.After(2 * time.Minute):
+					errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
+					return
+				}
 
-	// 			defer reply.Discard()
+				defer reply.Discard()
 
-	// 			var response struct {
-	// 				OK    bool
-	// 				Error string
-	// 			}
+				var response struct {
+					OK    bool
+					Error string
+				}
 
-	// 			if err := json.Unmarshal(reply.Message, &response); err != nil {
-	// 				errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
-	// 				return
-	// 			}
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
+					return
+				}
 
-	// 			if !response.OK {
-	// 				errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
-	// 				return
-	// 			}
-	// 		}()
-	// 	}
-	// }
+				if !response.OK {
+					errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+					return
+				}
+			}()
+		}
+	}
 
-	// wg.Wait()
-	// close(errCh)
+	wg.Wait()
+	close(errCh)
 	aggErr = nil
 	for err := range errCh {
 		if aggErr == nil {
@@ -1518,6 +1514,18 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (Ensem
 
 			if !containsExecutor(executors, allocationConfig.Executor) {
 				executors = append(executors, allocationConfig.Executor)
+			}
+
+			if allocationConfig.Executor == ExecutorDocker {
+				// check if bid includes allocation requiring privileged docker
+				dockerCfg, err := docker.DecodeSpec(&allocationConfig.Execution)
+				if err != nil {
+					return EnsembleBidRequest{}, fmt.Errorf("decoding docker spec: %w", err)
+				}
+
+				if dockerCfg.Privileged {
+					bidRequest.V1.GeneralRequirements.PrivilegedDocker = true
+				}
 			}
 
 			err := aggregateResources.Add(allocationConfig.Resources)

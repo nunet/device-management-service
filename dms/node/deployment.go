@@ -174,6 +174,12 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		return
 	}
 
+	_, bidExists := n.getBid(request.ID)
+	if bidExists {
+		log.Debugf("bid already sent for request: %s", request.ID)
+		return
+	}
+
 	machineResources, err := n.hardware.GetMachineResources()
 	if err != nil {
 		log.Debugf("failed to get machine resources")
@@ -213,10 +219,18 @@ loop:
 
 		// if the desired executable is not found stop
 		for _, e := range v.V1.Executors {
-			_, err := n.getExecutor(e)
+			executor, err := n.getExecutor(e)
 			if err != nil {
 				log.Debugf("failed to get executor: %+v", e)
 				continue loop
+			}
+			if executor.executionType == jobs.ExecutorDocker {
+				if v.V1.GeneralRequirements.PrivilegedDocker {
+					if !n.allowPrivilegedDocker {
+						log.Debugf("node does not allow privileged docker")
+						continue loop
+					}
+				}
 			}
 		}
 
@@ -374,6 +388,15 @@ func (n *Node) rememberBid(eid string, req jobs.BidRequest, ports []int) {
 		request: req,
 		ports:   ports,
 	}
+}
+
+func (n *Node) getBid(eid string) (*bidState, bool) {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	b, exists := n.bids[eid]
+
+	return b, exists
 }
 
 func (n *Node) gcBidState() {

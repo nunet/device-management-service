@@ -739,6 +739,72 @@ Examples:
 
   nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
+
+	node.AllocatedResourcesBehavior: {
+		Type:  bInvoke,
+		Short: "Get allocated resources",
+		Long: `Invokes the /dms/node/resources/allocated behavior on an actor
+
+This behavior retrieves the resources allocated by the node. The resources include CPU, RAM, GPU and disk space.
+The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk space.
+
+Examples:
+	  nunet actor cmd --context user /dms/node/resources/allocated`,
+	},
+
+	node.FreeResourcesBehavior: {
+		Type:  bInvoke,
+		Short: "Get free resources",
+		Long: `Invokes the /dms/node/resources/free behavior on an actor
+
+This behavior retrieves the free resources available on the node. The resources include CPU, RAM, GPU and disk space.
+The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk space.
+
+Examples:
+	  nunet actor cmd --context user /dms/node/resources/free`,
+	},
+
+	node.OnboardedResourcesBehavior: {
+		Type:  bInvoke,
+		Short: "Get onboarded resources",
+		Long: `Invokes the /dms/node/resources/onboarded behavior on an actor
+
+This behavior retrieves the resources onboarded to the node. The resources include CPU, RAM, GPU and disk space.
+The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk space.
+
+Examples:
+	  nunet actor cmd --context user /dms/node/resources/onboarded`,
+	},
+	node.LoggerConfigBehavior: {
+		Payload: func() any { return &node.LoggerConfigRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.LoggerConfigRequest)
+
+			cmd.Flags().StringVarP(&p.URL, "url", "u", "", "Elasticsearch URL")
+			cmd.Flags().StringVarP(&p.Level, "level", "l", "", "logging level (info, warn, debug etc.)")
+			cmd.Flags().IntVarP(&p.Interval, "interval", "i", 0, "flush interval in seconds")
+			cmd.MarkFlagsOneRequired("url", "level", "interval")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.LoggerConfigRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return req, nil
+		},
+		Type:  bInvoke,
+		Short: "Adjust logger settings",
+		Long: `Invokes the /dms/node/logger/config behavior on an actor
+
+This behavior allows the user to adjust logger settings, i.e. logging level, flush interval and Elasticsearch URL.
+
+Examples:
+
+  nunet actor cmd --context user /dms/node/logger/config --level debug # set debug level
+  nunet actor cmd --context user /dms/node/logger/config --url <elasticsearch-url> 
+  nunet actor cmd --context user /dms/node/logger/config --interval 10 # flush logs each 10 seconds`,
+	},
 }
 
 func onboardBehaviorPreRun(_ *Command, payload any) error {

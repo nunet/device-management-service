@@ -22,6 +22,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/natefinch/lumberjack"
 	"github.com/olivere/elastic/v7"
+	"github.com/spf13/afero"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -174,6 +175,18 @@ func createFileCore(observabilityConfig config.Observability, levelEnabler zapco
 
 // createElasticsearchCore creates an Elasticsearch logging core
 func createElasticsearchCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) (zapcore.Core, error) {
+	// Validate necessary configurations
+	if observabilityConfig.ElasticsearchURL == "" {
+		return nil, fmt.Errorf("elasticsearch URL is not configured")
+	}
+	if observabilityConfig.ElasticsearchIndex == "" {
+		return nil, fmt.Errorf("elasticsearch index is not configured")
+	}
+	// If Elasticsearch requires an API key, check for it
+	if observabilityConfig.ElasticsearchAPIKey == "" {
+		return nil, fmt.Errorf("elasticsearch API key is not configured")
+	}
+
 	esWS, err := newElasticsearchWriteSyncer(
 		observabilityConfig.ElasticsearchURL,
 		observabilityConfig.ElasticsearchIndex,
@@ -206,16 +219,22 @@ func newElasticsearchWriteSyncer(url string, index string, flushInterval time.Du
 		},
 	}
 
-	// Create Elasticsearch client with API key authentication
-	client, err := elastic.NewClient(
+	// Prepare client options
+	clientOptions := []elastic.ClientOptionFunc{
 		elastic.SetURL(url),
 		elastic.SetHttpClient(httpClient),
 		elastic.SetSniff(false),
 		elastic.SetHealthcheck(false),
-		elastic.SetHeaders(http.Header{
+	}
+
+	if apiKey != "" {
+		clientOptions = append(clientOptions, elastic.SetHeaders(http.Header{
 			"Authorization": []string{"ApiKey " + apiKey},
-		}),
-	)
+		}))
+	}
+
+	// Create Elasticsearch client
+	client, err := elastic.NewClient(clientOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -239,6 +258,7 @@ type bufferedElasticsearchSyncer struct {
 	flushInterval time.Duration
 	lastErrorTime time.Time
 	errorCount    int
+	warnLogged    bool
 }
 
 // newBufferedElasticsearchSyncer creates a new bufferedElasticsearchSyncer
@@ -297,6 +317,16 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 		return
 	}
 
+	if b.client == nil {
+		if !b.warnLogged {
+			log.Warn("Elasticsearch client is not initialized, cannot flush logs")
+			b.warnLogged = true
+		}
+		return
+	}
+
+	// Reset warnLogged if client becomes available
+	b.warnLogged = false
 	bufferCopy := b.buffer
 	b.buffer = make([]string, 0)
 
@@ -377,7 +407,9 @@ func SetElasticsearchEndpoint(url string) error {
 	}
 
 	// Update configuration
-	cfg.Observability.ElasticsearchURL = url
+	if err := config.Set(afero.NewOsFs(), "observability.elasticsearch_url", url); err != nil {
+		return fmt.Errorf("failed to set config value: %w", err)
+	}
 
 	// Flush existing logs before switching client
 	esSyncerInstance.Flush()
@@ -484,8 +516,9 @@ func SetLogLevel(level string) error {
 	}
 
 	// Update the configuration
-	cfg := config.GetConfig()
-	cfg.Observability.LogLevel = level
+	if err := config.Set(afero.NewOsFs(), "observability.log_level", level); err != nil {
+		return fmt.Errorf("failed to set config value: %w", err)
+	}
 
 	// Set the new log level in atomicLevel
 	atomicLevel.SetLevel(logLevel)
@@ -495,9 +528,14 @@ func SetLogLevel(level string) error {
 
 // SetFlushInterval sets the flush interval for Elasticsearch logging dynamically
 func SetFlushInterval(seconds int) error {
+	if seconds <= 0 {
+		return fmt.Errorf("interval must be greater than 0")
+	}
+
 	// Update the configuration
-	cfg := config.GetConfig()
-	cfg.Observability.FlushInterval = seconds
+	if err := config.Set(afero.NewOsFs(), "observability.flush_interval", seconds); err != nil {
+		return fmt.Errorf("failed to set config value: %w", err)
+	}
 
 	// Update the flush interval in the elasticsearchWriteSyncer
 	if esSyncerInstance != nil {

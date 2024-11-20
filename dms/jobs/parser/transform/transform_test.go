@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
+	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 )
 
 type TransformerTestSuite struct {
@@ -58,7 +59,7 @@ func (s *TransformerTestSuite) TestTransform() {
 
 	result, err := transformer.Transform(&rawConfig)
 	s.NoError(err)
-	s.Equal(Normalize(expectedConfig), result)
+	s.Equal(utils.Normalize(expectedConfig), result)
 }
 
 func (s *TransformerTestSuite) TestTransformWithNestedData() {
@@ -79,7 +80,7 @@ func (s *TransformerTestSuite) TestTransformWithNestedData() {
 
 	result, err := transformer.Transform(&rawConfig)
 	s.NoError(err)
-	s.Equal(Normalize(expectedConfig), result)
+	s.Equal(utils.Normalize(expectedConfig), result)
 }
 
 func (s *TransformerTestSuite) TestTransformWithDifferentOrder() {
@@ -113,5 +114,5 @@ func (s *TransformerTestSuite) TestTransformWithDifferentOrder() {
 
 	result, err := transformer.Transform(&rawConfig)
 	s.NoError(err)
-	s.Equal(Normalize(expectedConfig), Normalize(result))
+	s.Equal(utils.Normalize(expectedConfig), utils.Normalize(result))
 }

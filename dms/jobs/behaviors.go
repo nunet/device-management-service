@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -43,8 +42,8 @@ const (
 	SubnetRemovePeerBehavior      = "/dms/node/subnet/remove-peer"
 	SubnetAcceptPeerBehavior      = "/dms/node/subnet/accept-peer"
 	SubnetMapPortBehavior         = "/dms/node/subnet/map-port"
-	SubnetDNSAddRecordBehavior    = "/dms/node/subnet/dns/add-record"
 	SubnetUnmapPortBehavior       = "/dms/node/subnet/unmap-port"
+	SubnetDNSAddRecordBehavior    = "/dms/node/subnet/dns/add-record"
 	SubnetDNSRemoveRecordBehavior = "/dms/node/subnet/dns/remove-record"
 )
 
@@ -87,7 +86,6 @@ type AllocationDeploymentResponse struct {
 	OK          bool
 	Error       string
 	Allocations map[string]actor.Handle
-	Tokens      ucan.TokenList // tokens granted for allocation capabilities
 }
 
 type RevertDeploymentMessage struct {
