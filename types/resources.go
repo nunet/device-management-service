@@ -66,6 +66,10 @@ func (r *Resources) Equal(other Resources) bool {
 		return false
 	}
 
+	if !r.GPUs.Equal(other.GPUs) {
+		return false
+	}
+
 	return true
 }
 
