@@ -11,6 +11,8 @@ package cmd
 import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/executor/docker"
 
 	"gitlab.com/nunet/device-management-service/cmd/actor"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
@@ -40,6 +42,12 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero) *cobra.Command {
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
-	cmd.AddCommand(newGPUCommand())
+
+	hardwareManager := hardware.NewHardwareManager()
+	dockerClient, err := docker.NewDockerClient()
+	if err != nil {
+		panic(err)
+	}
+	cmd.AddCommand(newGPUCommand(hardwareManager, dockerClient))
 	return cmd
 }
