@@ -822,6 +822,7 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 	// Set the CPU clock speed
 	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
 
+	// If no GPUs are found, skip GPU selection
 	if len(machineResources.GPUs) == 0 {
 		fmt.Println("No GPUs found. Skipping GPU selection.")
 	}
@@ -843,38 +844,44 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 		})
 	}
 
+	// Prompt for GPU selection
 	res, err := selectPrompt("Select GPU", gpuPromptItems)
 	if err != nil {
 		return fmt.Errorf("could not select GPU: %w", err)
 	}
 
+	// Validate VRAM input
 	vramValidator := func(input string) error {
 		if _, err := strconv.ParseFloat(input, 64); err != nil {
 			return fmt.Errorf("invalid input: %w", err)
 		}
 		return nil
 	}
+
+	// Update the VRAM allocation for each selected GPU
 	for _, gpuName := range res {
+		gpu := gpuMap[gpuName]
 		fmt.Printf("-----------------------------------\n")
 		fmt.Printf("Selected GPU: %s\n", gpuName)
-		fmt.Printf("Total VRAM: %.2f GB\n", types.ConvertBytesToGB(gpuMap[gpuName].VRAM))
-		gpuUsage, err := machineResourceUsage.GPUs.GetWithIndex(gpuMap[gpuName].Index)
+		fmt.Printf("Total VRAM: %.2f GB\n", gpu.VRAMInGB())
+		gpuUsage, err := machineResourceUsage.GPUs.GetWithIndex(gpu.Index)
 		if err != nil {
 			return fmt.Errorf("could not get GPU usage: %w", err)
 		}
-		fmt.Printf("Used VRAM: %.2f GB\n", types.ConvertBytesToGB(gpuUsage.VRAM))
-		fmt.Printf("Available VRAM: %.2f GB\n", types.ConvertBytesToGB(gpuMap[gpuName].VRAM-gpuUsage.VRAM))
+		fmt.Printf("Used VRAM: %.2f GB\n", gpuUsage.VRAMInGB())
+		fmt.Printf("Available VRAM: %.2f GB\n", types.ConvertBytesToGB(gpu.VRAM-gpuUsage.VRAM))
+
+		// Prompt for VRAM allocation
 		input, err := prompt("Enter new VRAM allocation in GB", vramValidator)
 		if err != nil {
 			return fmt.Errorf("could not prompt for VRAM: %w", err)
 		}
 
+		// Update the GPU with the new VRAM allocation
 		vram, err := strconv.ParseFloat(input, 64)
 		if err != nil {
 			return fmt.Errorf("could not parse VRAM: %w", err)
 		}
-
-		gpu := gpuMap[gpuName]
 		gpu.VRAM = types.ConvertGBToBytes(vram)
 		p.Config.OnboardedResources.GPUs = append(p.Config.OnboardedResources.GPUs, gpu)
 	}
