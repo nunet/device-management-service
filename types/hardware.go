@@ -81,6 +81,7 @@ var (
 	_ Calculable[GPU] = (*GPU)(nil)
 )
 
+// Compare compares the GPU with the other GPU
 func (g *GPU) Compare(other GPU) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
@@ -103,11 +104,13 @@ func (g *GPU) Compare(other GPU) (Comparison, error) {
 	return comparison["VRAM"], nil
 }
 
+// Add adds the other GPU to the current GPU
 func (g *GPU) Add(other GPU) error {
 	g.VRAM += other.VRAM
 	return nil
 }
 
+// Subtract subtracts the other GPU from the current GPU
 func (g *GPU) Subtract(other GPU) error {
 	if g.VRAM < other.VRAM {
 		return fmt.Errorf("total VRAM: underflow, cannot subtract %v from %v", other.VRAM, g.VRAM)
@@ -117,12 +120,18 @@ func (g *GPU) Subtract(other GPU) error {
 	return nil
 }
 
+// Equal checks if the two GPUs are equal
 func (g *GPU) Equal(other GPU) bool {
 	return g.Model == other.Model &&
 		g.VRAM == other.VRAM &&
 		g.Index == other.Index &&
 		g.Vendor == other.Vendor &&
 		g.PCIAddress == other.PCIAddress
+}
+
+// VRAMInGB returns the VRAM in gigabytes
+func (g *GPU) VRAMInGB() float64 {
+	return ConvertBytesToGB(g.VRAM)
 }
 
 type GPUs []GPU
@@ -272,6 +281,7 @@ var (
 	_ Comparable[CPU] = (*CPU)(nil)
 )
 
+// Compare compares the CPU with the other CPU
 func (c *CPU) Compare(other CPU) (Comparison, error) {
 	perfComparison := NumericComparator(
 		float64(c.Cores)*c.ClockSpeed,
@@ -292,11 +302,13 @@ func (c *CPU) Compare(other CPU) (Comparison, error) {
 	// using e.g. benchmarking data from Tom's Hardware or some other source;
 }
 
+// Add adds the other CPU to the current CPU
 func (c *CPU) Add(other CPU) error {
 	c.Cores = round(c.Cores+other.Cores, 2)
 	return nil
 }
 
+// Subtract subtracts the other CPU from the current CPU
 func (c *CPU) Subtract(other CPU) error {
 	if c.Cores < other.Cores {
 		return fmt.Errorf("core: underflow, cannot subtract %v from %v", other.Cores, c.Cores)
@@ -306,8 +318,19 @@ func (c *CPU) Subtract(other CPU) error {
 	return nil
 }
 
+// Compute returns the total compute power of the CPU in Hz
 func (c *CPU) Compute() float64 {
 	return float64(c.Cores) * c.ClockSpeed
+}
+
+// ComputeInGHz returns the total compute power of the CPU in GHz
+func (c *CPU) ComputeInGHz() float64 {
+	return ConvertHzToGHz(c.Compute())
+}
+
+// ClockSpeedInGHz returns the clock speed in GHz
+func (c *CPU) ClockSpeedInGHz() float64 {
+	return ConvertHzToGHz(c.ClockSpeed)
 }
 
 // RAM represents the RAM information
@@ -329,6 +352,7 @@ var (
 	_ Comparable[RAM] = (*RAM)(nil)
 )
 
+// Compare compares the RAM with the other RAM
 func (r *RAM) Compare(other RAM) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
@@ -339,11 +363,13 @@ func (r *RAM) Compare(other RAM) (Comparison, error) {
 	return comparison["Size"], nil
 }
 
+// Add adds the other RAM to the current RAM
 func (r *RAM) Add(other RAM) error {
 	r.Size += other.Size
 	return nil
 }
 
+// Subtract subtracts the other RAM from the current RAM
 func (r *RAM) Subtract(other RAM) error {
 	if r.Size < other.Size {
 		return fmt.Errorf("size: underflow, cannot subtract %v from %v", other.Size, r.Size)
@@ -351,6 +377,11 @@ func (r *RAM) Subtract(other RAM) error {
 
 	r.Size -= other.Size
 	return nil
+}
+
+// SizeInGB returns the size in gigabytes
+func (r *RAM) SizeInGB() float64 {
+	return ConvertBytesToGB(r.Size)
 }
 
 // Disk represents the disk information
@@ -384,6 +415,7 @@ var (
 	_ Comparable[Disk] = (*Disk)(nil)
 )
 
+// Compare compares the Disk with the other Disk
 func (d *Disk) Compare(other Disk) (Comparison, error) {
 	comparison := make(ComplexComparison)
 
@@ -393,11 +425,13 @@ func (d *Disk) Compare(other Disk) (Comparison, error) {
 	return comparison["Size"], nil
 }
 
+// Add adds the other Disk to the current Disk
 func (d *Disk) Add(other Disk) error {
 	d.Size += other.Size
 	return nil
 }
 
+// Subtract subtracts the other Disk from the current Disk
 func (d *Disk) Subtract(other Disk) error {
 	if d.Size < other.Size {
 		return fmt.Errorf("size: underflow, cannot subtract %v from %v", other.Size, d.Size)
@@ -405,6 +439,11 @@ func (d *Disk) Subtract(other Disk) error {
 
 	d.Size -= other.Size
 	return nil
+}
+
+// SizeInGB returns the size in gigabytes
+func (d *Disk) SizeInGB() float64 {
+	return ConvertBytesToGB(d.Size)
 }
 
 // NetworkInfo represents the network information
@@ -419,7 +458,7 @@ type NetworkInfo struct {
 
 // ConvertBytesToGB converts bytes to gigabytes
 func ConvertBytesToGB(bytes float64) float64 {
-	return float64(bytes) / 1e9
+	return bytes / 1e9
 }
 
 // ConvertGBToBytes converts gigabytes to bytes
@@ -427,12 +466,12 @@ func ConvertGBToBytes(gb float64) float64 {
 	return gb * 1e9
 }
 
-// ConvertMiBToGB converts mebibytes to gigabytes
-func ConvertMiBToGB(mib float64) float64 {
-	return (mib * 1024 * 1024) / 1_000_000_000
-}
-
 // ConvertMibToBytes converts mebibytes to bytes
 func ConvertMibToBytes(mib float64) float64 {
 	return mib * 1024 * 1024
+}
+
+// ConvertHzToGHz converts hertz to gigahertz
+func ConvertHzToGHz(hz float64) float64 {
+	return hz / 1e9
 }
