@@ -224,6 +224,29 @@ func (gpus GPUs) Subtract(other GPUs) error {
 	return nil
 }
 
+func (gpus GPUs) Equal(other GPUs) bool {
+	if len(gpus) != len(other) {
+		return false
+	}
+
+	used := make([]bool, len(other))
+	for _, gpu := range gpus {
+		found := false
+		for j, otherGPU := range other {
+			if !used[j] && gpu.Equal(otherGPU) {
+				used[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
 // MaxFreeVRAMGPU returns the GPU with the maximum free VRAM from the list of GPUs
 func (gpus GPUs) MaxFreeVRAMGPU() (GPU, error) {
 	if len(gpus) == 0 {

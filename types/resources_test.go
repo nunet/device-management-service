@@ -223,6 +223,27 @@ func TestResources_Calculable_Subtract(t *testing.T) {
 			wantErr: true,
 			err:     "error subtracting Disk",
 		},
+		{
+			name: "gpu underflow scenario",
+			r: Resources{
+				GPUs: GPUs{
+					{
+						Model: "GTX 1080",
+						VRAM:  8192,
+					},
+				},
+			},
+			other: Resources{
+				GPUs: GPUs{
+					{
+						Model: "GTX 1080",
+						VRAM:  16384,
+					},
+				},
+			},
+			wantErr: true,
+			err:     "error subtracting GPUs",
+		},
 	}
 
 	for _, tt := range tests {
@@ -253,17 +274,32 @@ func TestResources_Comparable_Compare(t *testing.T) {
 		want  Comparison
 	}{
 		{
-			name:  "Equal",
+			name:  "Default state",
 			r:     &Resources{},
 			other: Resources{},
 			want:  Equal,
 		},
 		{
-			name: "Equal",
+			name: "Equal resources",
 			r: &Resources{
 				CPU: CPU{
 					Cores:      1,
 					ClockSpeed: 1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:      "GTX 1080",
+						VRAM:       8192,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "0000:00:00.0",
+						Index:      0,
+					},
 				},
 			},
 			other: Resources{
@@ -271,8 +307,115 @@ func TestResources_Comparable_Compare(t *testing.T) {
 					Cores:      1,
 					ClockSpeed: 1000,
 				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:      "GTX 1080",
+						VRAM:       8192,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "0000:00:00.0",
+						Index:      0,
+					},
+				},
 			},
 			want: Equal,
+		},
+		{
+			name: "Better resources",
+			r: &Resources{
+				CPU: CPU{
+					Cores:      2,
+					ClockSpeed: 2000,
+				},
+				RAM: RAM{
+					Size: 2048,
+				},
+				Disk: Disk{
+					Size: 2048,
+				},
+				GPUs: GPUs{
+					{
+						Model:      "GTX 1080",
+						VRAM:       16384,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "0000:00:00.0",
+						Index:      0,
+					},
+				},
+			},
+			other: Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:      "GTX 1080",
+						VRAM:       8192,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "0000:00:00.0",
+						Index:      0,
+					},
+				},
+			},
+			want: Better,
+		},
+		{
+			name: "Worse resources",
+			r: &Resources{
+				CPU: CPU{
+					Cores:      1,
+					ClockSpeed: 1000,
+				},
+				RAM: RAM{
+					Size: 1024,
+				},
+				Disk: Disk{
+					Size: 1024,
+				},
+				GPUs: GPUs{
+					{
+						Model:      "GTX 1080",
+						VRAM:       8192,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "0000:00:00.0",
+						Index:      0,
+					},
+				},
+			},
+			other: Resources{
+				CPU: CPU{
+					Cores:      2,
+					ClockSpeed: 2000,
+				},
+				RAM: RAM{
+					Size: 2048,
+				},
+				Disk: Disk{
+					Size: 2048,
+				},
+				GPUs: GPUs{
+					{
+						Model:      "GTX 1080",
+						VRAM:       16384,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "0000:00:00.0",
+						Index:      0,
+					},
+				},
+			},
+			want: Worse,
 		},
 	}
 
@@ -282,6 +425,107 @@ func TestResources_Comparable_Compare(t *testing.T) {
 			got, err := tt.r.Compare(tt.other)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResources_Equal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		r     Resources
+		other Resources
+		want  bool
+	}{
+		{
+			name:  "Equal CPUs",
+			r:     Resources{CPU: CPU{Cores: 1, ClockSpeed: 1000}},
+			other: Resources{CPU: CPU{Cores: 1, ClockSpeed: 1000}},
+			want:  true,
+		},
+		{
+			name:  "Different CPUs",
+			r:     Resources{CPU: CPU{Cores: 1, ClockSpeed: 1000}},
+			other: Resources{CPU: CPU{Cores: 2, ClockSpeed: 1000}},
+			want:  false,
+		},
+		{
+			name:  "Equal RAM",
+			r:     Resources{RAM: RAM{Size: 1024}},
+			other: Resources{RAM: RAM{Size: 1024}},
+			want:  true,
+		},
+		{
+			name:  "Different RAM",
+			r:     Resources{RAM: RAM{Size: 1024}},
+			other: Resources{RAM: RAM{Size: 2048}},
+			want:  false,
+		},
+		{
+			name:  "Equal Disk",
+			r:     Resources{Disk: Disk{Size: 1024}},
+			other: Resources{Disk: Disk{Size: 1024}},
+			want:  true,
+		},
+		{
+			name:  "Different Disk",
+			r:     Resources{Disk: Disk{Size: 1024}},
+			other: Resources{Disk: Disk{Size: 2048}},
+			want:  false,
+		},
+		{
+			name:  "Equal GPUs",
+			r:     Resources{GPUs: GPUs{{Model: "GTX 1080", VRAM: 8192, Index: 0, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.0"}}},
+			other: Resources{GPUs: GPUs{{Model: "GTX 1080", VRAM: 8192, Index: 0, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.0"}}},
+			want:  true,
+		},
+		{
+			name:  "Different GPUs",
+			r:     Resources{GPUs: GPUs{{Model: "GTX 1080", VRAM: 8192, Index: 0, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.0"}}},
+			other: Resources{GPUs: GPUs{{Model: "An AMD GPU", VRAM: 8192, Index: 1, Vendor: GPUVendorAMDATI, PCIAddress: "0000:00:00.1"}}},
+			want:  false,
+		},
+		{
+			name: "Different number of GPUs",
+			r: Resources{
+				GPUs: GPUs{
+					{Model: "GTX 1080", VRAM: 8192, Index: 0, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.0"},
+					{Model: "GTX 1080", VRAM: 8192, Index: 1, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.1"},
+				},
+			},
+			other: Resources{
+				GPUs: GPUs{
+					{Model: "GTX 1080", VRAM: 8192, Index: 0, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.0"},
+				},
+			},
+		},
+		{
+			name: "Equal resources",
+			r: Resources{
+				CPU:  CPU{Cores: 1, ClockSpeed: 1000},
+				RAM:  RAM{Size: 1024},
+				Disk: Disk{Size: 1024},
+				GPUs: GPUs{
+					{Model: "GTX 1080", VRAM: 8192, Index: 0, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.0"},
+				},
+			},
+			other: Resources{
+				CPU:  CPU{Cores: 1, ClockSpeed: 1000},
+				RAM:  RAM{Size: 1024},
+				Disk: Disk{Size: 1024},
+				GPUs: GPUs{
+					{Model: "GTX 1080", VRAM: 8192, Index: 0, Vendor: GPUVendorNvidia, PCIAddress: "0000:00:00.0"},
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, tt.r.Equal(tt.other))
 		})
 	}
 }
