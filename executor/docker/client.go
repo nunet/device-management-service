@@ -31,10 +31,51 @@ import (
 	"go.uber.org/multierr"
 )
 
+type ClientInterface interface {
+	IsInstalled(ctx context.Context) bool
+	CreateContainer(
+		ctx context.Context,
+		config *container.Config,
+		hostConfig *container.HostConfig,
+		networkingConfig *network.NetworkingConfig,
+		platform *v1.Platform,
+		name string,
+		pullImage bool,
+	) (string, error)
+	InspectContainer(ctx context.Context, id string) (types.ContainerJSON, error)
+	FollowLogs(ctx context.Context, id string) (stdout, stderr io.Reader, err error)
+	StartContainer(ctx context.Context, containerID string) error
+	WaitContainer(
+		ctx context.Context,
+		containerID string,
+	) (<-chan container.WaitResponse, <-chan error)
+	PauseContainer(ctx context.Context, containerID string) error
+	ResumeContainer(ctx context.Context, containerID string) error
+	StopContainer(
+		ctx context.Context,
+		containerID string,
+		options container.StopOptions,
+	) error
+	RemoveContainer(ctx context.Context, containerID string) error
+	RemoveObjectsWithLabel(ctx context.Context, label string, value string) error
+	FindContainer(ctx context.Context, label string, value string) (string, error)
+	GetImage(ctx context.Context, imageName string) (image.Summary, error)
+	PullImage(ctx context.Context, imageName string) (string, error)
+	GetOutputStream(
+		ctx context.Context,
+		containerID string,
+		since string,
+		follow bool,
+	) (io.ReadCloser, error)
+}
+
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
 type Client struct {
 	client *client.Client // Embed the Docker client.
 }
+
+// Ensure that Client implements the ClientInterface.
+var _ ClientInterface = (*Client)(nil)
 
 // NewDockerClient initializes a new Docker client with environment variables and API version negotiation.
 func NewDockerClient() (*Client, error) {
