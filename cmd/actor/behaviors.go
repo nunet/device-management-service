@@ -825,6 +825,7 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 	// If no GPUs are found, skip GPU selection
 	if len(machineResources.GPUs) == 0 {
 		fmt.Println("No GPUs found. Skipping GPU selection.")
+		return nil
 	}
 
 	// GPU onboarding
