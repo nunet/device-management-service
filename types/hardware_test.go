@@ -889,6 +889,7 @@ func TestHardware_Equal(t *testing.T) {
 	// gpu.Equal() works as a deep equal
 	t.Run("GPU Checks", func(t *testing.T) {
 		t.Parallel()
+
 		tests := []struct {
 			name string
 			g1   GPU
@@ -937,6 +938,145 @@ func TestHardware_Equal(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				t.Parallel()
 				got := tt.g1.Equal(tt.g2)
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+}
+
+func TestHardware_CPU(t *testing.T) {
+	t.Run("ClockSpeedInGHz", func(t *testing.T) {
+		tests := []struct {
+			name string
+			cpu  CPU
+			want float64
+		}{
+			{
+				name: "lower value",
+				cpu: CPU{
+					ClockSpeed: 1000000000,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				cpu: CPU{
+					ClockSpeed: 200000000000000000000,
+				},
+				want: 200000000000,
+			},
+			{
+				name: "zero value",
+				cpu: CPU{
+					ClockSpeed: 0,
+				},
+				want: 0,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.cpu.ClockSpeedInGHz()
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+
+	t.Run("ComputeInGHz", func(t *testing.T) {
+		tests := []struct {
+			name string
+			cpu  CPU
+			want float64
+		}{
+			{
+				name: "lower value",
+				cpu: CPU{
+					Cores:      1,
+					ClockSpeed: 1000000000,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				cpu: CPU{
+					Cores:      2,
+					ClockSpeed: 200000000000000000000,
+				},
+				want: 400000000000,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.cpu.ComputeInGHz()
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+}
+
+func TestHardware_RAM(t *testing.T) {
+	t.Run("SizeInGB", func(t *testing.T) {
+		tests := []struct {
+			name string
+			ram  RAM
+			want float64
+		}{
+			{
+				name: "lower value",
+				ram: RAM{
+					Size: 1e9,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				ram: RAM{
+					Size: 100 * 1e9,
+				},
+				want: 100,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.ram.SizeInGB()
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+}
+
+func TestHardware_Disk(t *testing.T) {
+	t.Run("SizeInGB", func(t *testing.T) {
+		tests := []struct {
+			name string
+			disk Disk
+			want float64
+		}{
+			{
+				name: "lower value",
+				disk: Disk{
+					Size: 1e9,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				disk: Disk{
+					Size: 100 * 1e9,
+				},
+				want: 100,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.disk.SizeInGB()
 				require.Equal(t, tt.want, got)
 			})
 		}

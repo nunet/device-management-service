@@ -177,9 +177,9 @@ func (o *Onboarding) validateCapacity(resources types.Resources) error {
 	); err != nil {
 		if errors.Is(err, ErrOutOfRange) {
 			return fmt.Errorf("expected RAM to be between %.2f and %.2f, got %.2f ",
-				types.ConvertBytesToGB(machineResources.RAM.Size/10),
-				types.ConvertBytesToGB(machineResources.RAM.Size*9/10),
-				types.ConvertBytesToGB(resources.RAM.Size),
+				machineResources.RAM.SizeInGB()/10,
+				machineResources.RAM.SizeInGB()*9/10,
+				resources.RAM.SizeInGB(),
 			)
 		}
 
@@ -200,9 +200,9 @@ func (o *Onboarding) validateCapacity(resources types.Resources) error {
 			if errors.Is(err, ErrOutOfRange) {
 				return fmt.Errorf("expected GPU %d VRAM to be between %.2f and %.2f, got %.2f",
 					gpu.Index,
-					types.ConvertBytesToGB(selectedGPU.VRAM/10),
-					types.ConvertBytesToGB(selectedGPU.VRAM*9/10),
-					types.ConvertBytesToGB(gpu.VRAM),
+					selectedGPU.VRAMInGB()/10,
+					selectedGPU.VRAMInGB()*9/10,
+					gpu.VRAMInGB(),
 				)
 			}
 
