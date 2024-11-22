@@ -62,7 +62,7 @@ Example:
 
 				passphrase := os.Getenv("DMS_PASSPHRASE")
 				if ks.Exists(context) {
-					cmd.Printf("Using identity at %s/%s.json...\n", keyStoreDir, context)
+					fmt.Fprintf(cmd.OutOrStdout(), "Using identity at %s/%s.json...\n", keyStoreDir, context)
 					if passphrase == "" {
 						passphrase, err = utils.PromptForPassphrase(false)
 						if err != nil {
@@ -70,7 +70,7 @@ Example:
 						}
 					}
 				} else {
-					cmd.Printf("A new identity will be created for '%s' context...\n", context)
+					fmt.Fprintf(cmd.OutOrStdout(), "A new identity will be created for '%s' context...\n", context)
 					if passphrase == "" {
 						passphrase, err = utils.PromptForPassphrase(true)
 						if err != nil {
