@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -68,7 +69,7 @@ func TestConfigGetCmd(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := newConfigGetCmd()
+			cmd := newConfigGetCmd(afero.NewMemMapFs())
 			out, err := ExecuteCommand(cmd, tt.args...)
 
 			if tt.wantErr {
@@ -76,7 +77,15 @@ func TestConfigGetCmd(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				if len(tt.args) == 0 {
-					assert.NoError(t, json.Unmarshal([]byte(out), &config.Config{}))
+					// The first line of the output should be the path to the config file
+					// The json, which is the second line, should be unmarshalled into a Config struct
+					lines := strings.SplitN(out, "\n", 2)
+					if len(lines) > 1 {
+						jsonOutput := lines[1]
+						assert.NoError(t, json.Unmarshal([]byte(jsonOutput), &config.Config{}))
+					} else {
+						assert.Fail(t, "output is empty")
+					}
 				}
 			}
 		})
