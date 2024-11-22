@@ -35,13 +35,13 @@ Search for the configuration file is done in the following locations and order:
 2. "$HOME/.nunet"
 3. "/etc/nunet"`,
 	}
-	cmd.AddCommand(newConfigGetCmd())
+	cmd.AddCommand(newConfigGetCmd(fs))
 	cmd.AddCommand(newConfigSetCmd(fs))
 	cmd.AddCommand(newConfigEditCmd(fs))
 	return cmd
 }
 
-func newConfigGetCmd() *cobra.Command {
+func newConfigGetCmd(fs afero.Fs) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <key>",
 		Short: "Display configuration",
@@ -53,6 +53,12 @@ Example:
   nunet config get rest.port`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			err := config.CreateConfigFileIfNotExists(fs)
+			if err != nil {
+				return fmt.Errorf("failed to create config file: %w", err)
+			}
+			cmd.Println("Found config file at:", config.GetPath())
+
 			if len(args) == 0 {
 				info, err := json.MarshalIndent(config.GetConfig(), "", "    ")
 				if err != nil {
