@@ -53,7 +53,7 @@ func (repo *GenericRepositoryGORM[T]) GetQuery() repositories.Query[T] {
 
 // Create adds a new record to the repository and returns the created data.
 func (repo *GenericRepositoryGORM[T]) Create(ctx context.Context, data T) (T, error) {
-	endTrace := observability.StartTrace("gorm_db_create_duration")
+	endTrace := observability.StartTrace(ctx, "gorm_db_create_duration")
 	defer endTrace()
 
 	err := repo.db.WithContext(ctx).Create(&data).Error
@@ -68,7 +68,7 @@ func (repo *GenericRepositoryGORM[T]) Create(ctx context.Context, data T) (T, er
 
 // Get retrieves a record by its identifier.
 func (repo *GenericRepositoryGORM[T]) Get(ctx context.Context, id interface{}) (T, error) {
-	endTrace := observability.StartTrace("gorm_db_get_duration")
+	endTrace := observability.StartTrace(ctx, "gorm_db_get_duration")
 	defer endTrace()
 
 	var result T
@@ -84,7 +84,7 @@ func (repo *GenericRepositoryGORM[T]) Get(ctx context.Context, id interface{}) (
 
 // Update modifies a record by its identifier.
 func (repo *GenericRepositoryGORM[T]) Update(ctx context.Context, id interface{}, data T) (T, error) {
-	endTrace := observability.StartTrace("gorm_db_update_duration")
+	endTrace := observability.StartTrace(ctx, "gorm_db_update_duration")
 	defer endTrace()
 
 	err := repo.db.WithContext(ctx).Model(new(T)).Where("id = ?", id).Updates(data).Error
@@ -99,7 +99,7 @@ func (repo *GenericRepositoryGORM[T]) Update(ctx context.Context, id interface{}
 
 // Delete removes a record by its identifier.
 func (repo *GenericRepositoryGORM[T]) Delete(ctx context.Context, id interface{}) error {
-	endTrace := observability.StartTrace("gorm_db_delete_duration")
+	endTrace := observability.StartTrace(ctx, "gorm_db_delete_duration")
 	defer endTrace()
 
 	err := repo.db.WithContext(ctx).Delete(new(T), "id = ?", id).Error
@@ -117,7 +117,7 @@ func (repo *GenericRepositoryGORM[T]) Find(
 	ctx context.Context,
 	query repositories.Query[T],
 ) (T, error) {
-	endTrace := observability.StartTrace("gorm_db_find_duration")
+	endTrace := observability.StartTrace(ctx, "gorm_db_find_duration")
 	defer endTrace()
 
 	var result T
@@ -140,7 +140,7 @@ func (repo *GenericRepositoryGORM[T]) FindAll(
 	ctx context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
-	endTrace := observability.StartTrace("gorm_db_find_all_duration")
+	endTrace := observability.StartTrace(ctx, "gorm_db_find_all_duration")
 	defer endTrace()
 
 	var results []T

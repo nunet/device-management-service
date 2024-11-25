@@ -63,6 +63,7 @@ type Observability struct {
 	FlushInterval        int    `mapstructure:"flush_interval" json:"flush_interval"`               // in seconds
 	ElasticsearchEnabled bool   `mapstructure:"elasticsearch_enabled" json:"elasticsearch_enabled"` // disable elastic logging
 	ElasticsearchAPIKey  string `mapstructure:"elasticsearch_api_key" json:"elasticsearch_api_key"`
+	InsecureSkipVerify   bool   `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify"` // allow insecure TLS connections
 }
 
 type APM struct {

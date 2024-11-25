@@ -638,9 +638,12 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 }
 
 type LoggerConfigRequest struct {
-	Interval int
-	URL      string
-	Level    string
+	Interval       int    `json:"interval,omitempty"`
+	URL            string `json:"url,omitempty"`
+	Level          string `json:"level,omitempty"`
+	APIKey         string `json:"api_key,omitempty"`
+	APMURL         string `json:"apm_url,omitempty"`
+	ElasticEnabled *bool  `json:"elastic_enabled,omitempty"`
 }
 
 type LoggerConfigResponse struct {
@@ -683,6 +686,28 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 	}
+	if req.APIKey != "" { // Handle API Key
+		if err := observability.SetAPIKey(req.APIKey); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.APMURL != "" { // Handle APM URL
+		if err := observability.SetAPMURL(req.APMURL); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.ElasticEnabled != nil { // Handle Elasticsearch Enabled
+		if err := observability.EnableElasticsearchLogging(*req.ElasticEnabled); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+
 	resp.OK = true
 	n.sendReply(msg, resp)
 }

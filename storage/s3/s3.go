@@ -62,7 +62,7 @@ func NewClient(config aws.Config, volController storage.VolumeController) (*Stor
 
 // Size calculates the size of a given object in S3.
 func (s *Storage) Size(ctx context.Context, source *types.SpecConfig) (uint64, error) {
-	endTrace := observability.StartTrace("s3_size_duration")
+	endTrace := observability.StartTrace(ctx, "s3_size_duration")
 	defer endTrace()
 
 	inputSource, err := DecodeInputSpec(source)

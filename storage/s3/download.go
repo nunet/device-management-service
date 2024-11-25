@@ -33,7 +33,7 @@ import (
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
 func (s *Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig) (types.StorageVolume, error) {
-	endTrace := observability.StartTrace("s3_download_duration")
+	endTrace := observability.StartTrace(ctx, "s3_download_duration")
 	defer endTrace()
 
 	var storageVol types.StorageVolume
@@ -76,7 +76,7 @@ func (s *Storage) Download(ctx context.Context, sourceSpecs *types.SpecConfig) (
 }
 
 func (s *Storage) downloadObject(ctx context.Context, source *InputSource, object s3Object, volPath string) error {
-	endTrace := observability.StartTrace("s3_download_object_duration")
+	endTrace := observability.StartTrace(ctx, "s3_download_object_duration")
 	defer endTrace()
 
 	outputPath := filepath.Join(volPath, *object.key)

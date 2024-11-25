@@ -66,7 +66,7 @@ func (l *Libp2p) ConnectToBootstrapNodes(ctx context.Context) error {
 
 // Start dht bootstrapper
 func (l *Libp2p) BootstrapDHT(ctx context.Context) error {
-	endTrace := observability.StartTrace("libp2p_bootstrap_duration")
+	endTrace := observability.StartTrace(ctx, "libp2p_bootstrap_duration")
 	defer endTrace()
 
 	if err := l.DHT.Bootstrap(ctx); err != nil {
