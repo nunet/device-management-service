@@ -68,8 +68,8 @@ func (repo *GenericRepositoryClover[T]) queryWithID(
 }
 
 // Create adds a new record to the repository and returns the created data.
-func (repo *GenericRepositoryClover[T]) Create(_ context.Context, data T) (T, error) {
-	endTrace := observability.StartTrace("clover_db_create_duration")
+func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, error) {
+	endTrace := observability.StartTrace(ctx, "clover_db_create_duration")
 	defer endTrace()
 
 	var model T
@@ -93,8 +93,8 @@ func (repo *GenericRepositoryClover[T]) Create(_ context.Context, data T) (T, er
 }
 
 // Get retrieves a record by its identifier.
-func (repo *GenericRepositoryClover[T]) Get(_ context.Context, id interface{}) (T, error) {
-	endTrace := observability.StartTrace("clover_db_get_duration")
+func (repo *GenericRepositoryClover[T]) Get(ctx context.Context, id interface{}) (T, error) {
+	endTrace := observability.StartTrace(ctx, "clover_db_get_duration")
 	defer endTrace()
 
 	var model T
@@ -123,7 +123,7 @@ func (repo *GenericRepositoryClover[T]) Update(
 	id interface{},
 	data T,
 ) (T, error) {
-	endTrace := observability.StartTrace("clover_db_update_duration")
+	endTrace := observability.StartTrace(ctx, "clover_db_update_duration")
 	defer endTrace()
 
 	updates := toCloverDoc(data).AsMap()
@@ -141,8 +141,8 @@ func (repo *GenericRepositoryClover[T]) Update(
 }
 
 // Delete removes a record by its identifier.
-func (repo *GenericRepositoryClover[T]) Delete(_ context.Context, id interface{}) error {
-	endTrace := observability.StartTrace("clover_db_delete_duration")
+func (repo *GenericRepositoryClover[T]) Delete(ctx context.Context, id interface{}) error {
+	endTrace := observability.StartTrace(ctx, "clover_db_delete_duration")
 	defer endTrace()
 
 	err := repo.db.Delete(
@@ -159,10 +159,10 @@ func (repo *GenericRepositoryClover[T]) Delete(_ context.Context, id interface{}
 
 // Find retrieves a single record based on a query.
 func (repo *GenericRepositoryClover[T]) Find(
-	_ context.Context,
+	ctx context.Context,
 	query repositories.Query[T],
 ) (T, error) {
-	endTrace := observability.StartTrace("clover_db_find_duration")
+	endTrace := observability.StartTrace(ctx, "clover_db_find_duration")
 	defer endTrace()
 
 	var model T
@@ -190,10 +190,10 @@ func (repo *GenericRepositoryClover[T]) Find(
 
 // FindAll retrieves multiple records based on a query.
 func (repo *GenericRepositoryClover[T]) FindAll(
-	_ context.Context,
+	ctx context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
-	endTrace := observability.StartTrace("clover_db_find_all_duration")
+	endTrace := observability.StartTrace(ctx, "clover_db_find_all_duration")
 	defer endTrace()
 
 	var models []T

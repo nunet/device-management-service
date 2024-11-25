@@ -73,7 +73,7 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 
 // Start begins the execution of a request by starting a Docker container.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
-	endTrace := observability.StartTrace("docker_executor_start_duration")
+	endTrace := observability.StartTrace(ctx, "docker_executor_start_duration")
 	defer endTrace()
 
 	// Log starting execution
@@ -159,7 +159,7 @@ func (e *Executor) Wait(
 	ctx context.Context,
 	executionID string,
 ) (<-chan *types.ExecutionResult, <-chan error) {
-	endTrace := observability.StartTrace("docker_executor_wait_duration")
+	endTrace := observability.StartTrace(ctx, "docker_executor_wait_duration")
 	defer endTrace()
 
 	log.Infow("docker_executor_wait_begin", "executionID", executionID)
@@ -347,7 +347,7 @@ func (e *Executor) Run(
 // This includes removing containers including networks and volumes with the executor's label.
 // It also removes all temporary directories created for init scripts.
 func (e *Executor) Cleanup(ctx context.Context) error {
-	endTrace := observability.StartTrace("docker_executor_cleanup_duration")
+	endTrace := observability.StartTrace(ctx, "docker_executor_cleanup_duration")
 	defer endTrace()
 
 	log.Infow("docker_executor_cleanup_begin", "executorID", e.ID)

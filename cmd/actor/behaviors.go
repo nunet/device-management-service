@@ -784,6 +784,22 @@ Examples:
 			cmd.Flags().StringVarP(&p.Level, "level", "l", "", "logging level (info, warn, debug etc.)")
 			cmd.Flags().IntVarP(&p.Interval, "interval", "i", 0, "flush interval in seconds")
 			cmd.MarkFlagsOneRequired("url", "level", "interval")
+			cmd.Flags().StringVar(&p.APIKey, "api-key", "", "API Key for Elasticsearch and APM")
+			cmd.Flags().StringVar(&p.APMURL, "apm-url", "", "APM Server URL")
+			cmd.Flags().Bool("enable-elastic", false, "Enable Elasticsearch logging")
+
+			// PreRunE function to capture if 'enable-elastic' flag was provided
+			cmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+				flag := cmd.Flags().Lookup("enable-elastic")
+				if flag != nil && flag.Changed {
+					val, err := strconv.ParseBool(flag.Value.String())
+					if err != nil {
+						return fmt.Errorf("invalid value for --enable-elastic: %v", err)
+					}
+					p.ElasticEnabled = &val
+				}
+				return nil
+			}
 		},
 		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.LoggerConfigRequest)
@@ -803,7 +819,10 @@ Examples:
 
   nunet actor cmd --context user /dms/node/logger/config --level debug # set debug level
   nunet actor cmd --context user /dms/node/logger/config --url <elasticsearch-url> 
-  nunet actor cmd --context user /dms/node/logger/config --interval 10 # flush logs each 10 seconds`,
+  nunet actor cmd --context user /dms/node/logger/config --interval 10 # flush logs each 10 seconds
+  nunet actor cmd --context user /dms/node/logger/config --api-key <api-key>
+  nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
+  nunet actor cmd --context user /dms/node/logger/config --enable-elastic`,
 	},
 }
 
