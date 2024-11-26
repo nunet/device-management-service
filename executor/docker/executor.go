@@ -21,6 +21,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/pkg/errors"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -52,10 +53,12 @@ type Executor struct {
 
 	handlers utils.SyncMap[string, *executionHandler] // Maps execution IDs to their handlers.
 	client   *Client                                  // Docker client for container management.
+
+	fs afero.Afero
 }
 
 // NewExecutor initializes a new Executor instance with a Docker client.
-func NewExecutor(ctx context.Context, id string) (*Executor, error) {
+func NewExecutor(ctx context.Context, fs afero.Afero, id string) (*Executor, error) {
 	dockerClient, err := NewDockerClient()
 	if err != nil {
 		return nil, err
@@ -67,6 +70,7 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 
 	return &Executor{
 		ID:     id,
+		fs:     fs,
 		client: dockerClient,
 	}, nil
 }
@@ -103,16 +107,18 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	}
 
 	handler := &executionHandler{
-		client:      e.client,
-		ID:          e.ID,
-		executionID: request.ExecutionID,
-		containerID: containerID,
-		resultsDir:  request.ResultsDir,
-		waitCh:      make(chan bool),
-		activeCh:    make(chan bool),
-		running:     &atomic.Bool{},
-		TTYEnabled:  true,
-		initScripts: request.ProvisionScripts,
+		client:              e.client,
+		ID:                  e.ID,
+		fs:                  e.fs,
+		executionID:         request.ExecutionID,
+		containerID:         containerID,
+		resultsDir:          request.ResultsDir,
+		persistLogsDuration: request.PersistLogsDuration,
+		waitCh:              make(chan bool),
+		activeCh:            make(chan bool),
+		running:             &atomic.Bool{},
+		TTYEnabled:          true,
+		initScripts:         request.ProvisionScripts,
 	}
 
 	// register the handler for this executionID
@@ -637,11 +643,6 @@ func makeContainerMounts(
 		if resultsDir == "" {
 			return nil, fmt.Errorf("results directory is empty")
 		}
-
-		if err := os.MkdirAll(resultsDir, os.ModePerm); err != nil {
-			return nil, fmt.Errorf("failed to create results directory: %w", err)
-		}
-
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: output.Source,

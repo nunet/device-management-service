@@ -1564,6 +1564,48 @@ func (o *Orchestrator) Stop() {
 	// TODO
 }
 
+func (o *Orchestrator) GetAllocationLogs(name string) ([]byte, error) {
+	allocation, ok := o.manifest.Allocations[name]
+	if !ok {
+		return nil, fmt.Errorf("allocation %s not found", name)
+	}
+	msg, err := actor.Message(
+		o.actor.Handle(),
+		allocation.Handle,
+		AllocationGetLogsBehavior,
+		AllocationGetLogsRequest{},
+		actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating get logs message: %w", err)
+	}
+
+	replyCh, err := o.actor.Invoke(msg)
+	if err != nil {
+		return nil, fmt.Errorf("invoking get logs message: %w", err)
+	}
+
+	var reply actor.Envelope
+	select {
+	case reply = <-replyCh:
+	case <-time.After(2 * time.Minute):
+		return nil, fmt.Errorf("timeout getting logs for %s: %w", name, ErrDeploymentFailed)
+	}
+
+	defer reply.Discard()
+
+	var resp AllocationGetLogsResponse
+	if err := json.Unmarshal(reply.Message, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshalling get logs response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return nil, fmt.Errorf("replied with error getting logs for %s: %s", name, resp.Error)
+	}
+
+	return resp.Data, nil
+}
+
 func containsExecutor(executors []AllocationExecutor, executor AllocationExecutor) bool {
 	for _, e := range executors {
 		if e == executor {

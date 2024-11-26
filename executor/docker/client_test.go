@@ -9,12 +9,12 @@
 package docker_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -152,44 +152,48 @@ func (s *ClientTestSuite) TestContainerLifecycle() {
 }
 
 // TestFollowLogs tests the FollowLogs method of the Docker client.
+// It tests if logs are uploaded continuously.
 func (s *ClientTestSuite) TestFollowLogs() {
-	// Create a container that outputs some logs
-	id := s.createTestContainer(defaultImage, []string{"sh", "-c", "echo stdout message && echo stderr message >&2"})
+	wordBeforeSleep := "one"
+	wordAfterSleep := "two"
+
+	// Create command that prints first word, sleeps, then prints second word
+	id := s.createTestContainer(defaultImage, []string{
+		"sh", "-c",
+		fmt.Sprintf("echo '%s'; sleep 3; echo '%s'", wordBeforeSleep, wordAfterSleep),
+	})
 	s.NotEmpty(id)
 
 	err := s.client.StartContainer(context.Background(), id)
 	s.NoError(err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	stdout, stderr, err := s.client.FollowLogs(ctx, id)
+	stdout, stderr, err := s.client.FollowLogs(context.Background(), id)
 	s.NoError(err)
 
-	// Use a WaitGroup to ensure we've read all the output
-	var wg sync.WaitGroup
-	wg.Add(2)
+	// Create buffers for stdout and stderr
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
 
-	var stdoutContent, stderrContent []byte
-	var stdoutErr, stderrErr error
-
+	// Copy the output streams to our buffers
 	go func() {
-		defer wg.Done()
-		stdoutContent, stdoutErr = io.ReadAll(stdout)
+		_, err := io.Copy(stdoutBuf, stdout)
+		s.NoError(err)
 	}()
 
 	go func() {
-		defer wg.Done()
-		stderrContent, stderrErr = io.ReadAll(stderr)
+		_, err := io.Copy(stderrBuf, stderr)
+		s.NoError(err)
 	}()
 
-	// Wait for both goroutines to finish
-	wg.Wait()
+	// Check for first message
+	time.Sleep(1 * time.Second)
+	stdoutStr := stdoutBuf.String()
+	s.Contains(stdoutStr, wordBeforeSleep, "First message should appear when starting container")
+	s.NotContains(stdoutStr, wordAfterSleep, "Second message should not appear yet")
 
-	s.NoError(stdoutErr)
-	s.NoError(stderrErr)
-
-	// Check the content of stdout and stderr
-	s.Contains(string(stdoutContent), "stdout message")
-	s.Contains(string(stderrContent), "stderr message")
+	// Check for second message
+	time.Sleep(3 * time.Second)
+	stdoutStr = stdoutBuf.String()
+	s.Contains(stdoutStr, wordBeforeSleep, "First message should appear when starting container")
+	s.Contains(stdoutStr, wordAfterSleep, "Second message should appear after ~3 seconds")
 }

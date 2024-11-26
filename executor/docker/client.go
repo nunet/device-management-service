@@ -9,7 +9,6 @@
 package docker
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -170,26 +169,22 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 		return nil, nil, errors.Wrap(err, "failed to get container logs")
 	}
 
-	stdoutReader, stdoutWriter := io.Pipe()
-	stderrReader, stderrWriter := io.Pipe()
-	go func() {
-		stdoutBuffer := bufio.NewWriter(stdoutWriter)
-		stderrBuffer := bufio.NewWriter(stderrWriter)
-		defer func() {
-			logsReader.Close()
-			stdoutBuffer.Flush()
-			stdoutWriter.Close()
-			stderrBuffer.Flush()
-			stderrWriter.Close()
-		}()
+	stdoutR, stdoutW := io.Pipe()
+	stderrR, stderrW := io.Pipe()
 
-		_, err = stdcopy.StdCopy(stdoutBuffer, stderrBuffer, logsReader)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Warnf("context closed while getting logs: %v\n", err)
+	go func() {
+		defer logsReader.Close()
+		defer stdoutW.Close()
+		defer stderrW.Close()
+
+		// Copy the multiplexed streams to the appropriate pipes
+		_, err := stdcopy.StdCopy(stdoutW, stderrW, logsReader)
+		if err != nil {
+			log.Errorf("failed to copy logs: %v", err)
 		}
 	}()
 
-	return stdoutReader, stderrReader, nil
+	return stdoutR, stderrR, nil
 }
 
 // StartContainer starts a specified Docker container.

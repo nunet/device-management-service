@@ -10,6 +10,7 @@ package dms
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/afero"
 
@@ -24,6 +25,16 @@ func init() {
 		err := fs.MkdirAll(workDir, os.FileMode(0o700))
 		if err != nil {
 			log.Warnf("unable to create work directory: %v", err)
+		}
+
+		err = fs.Mkdir(filepath.Join(workDir, "jobs"), os.FileMode(0o700))
+		if err != nil {
+			log.Warnf("unable to create jobs directory within workDir: %v", err)
+		}
+
+		err = fs.MkdirAll(filepath.Join(workDir, "deployments"), os.FileMode(0o700))
+		if err != nil {
+			log.Warnf("unable to create deployments directory within workDir: %v", err)
 		}
 	}
 

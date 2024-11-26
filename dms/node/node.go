@@ -21,12 +21,14 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/executor"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -76,11 +78,8 @@ type Node struct {
 	portAllocator     *PortAllocator
 	commitedResources map[string]*bidState
 
-	// TODO: we may handle the following differently.
-	// We may have other kinds of constraints that are not related to edge, resources or locations
-	// What we need is a configuration file for compute providers where they might set their
-	// preferences
-	allowPrivilegedDocker bool
+	dmsConfig config.Config
+	fs        afero.Afero
 }
 
 type peerState struct {
@@ -113,14 +112,14 @@ type PortConfig struct {
 }
 
 // New creates a new node, attaches an actor to the node.
-func New(onboarder *onboarding.Onboarding,
+func New(cfg config.Config, fs afero.Afero,
+	onboarder *onboarding.Onboarding,
 	rootCap ucan.CapabilityContext,
 	hostID string, net network.Network,
 	resourceManager types.ResourceManager,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
 	geoip types.GeoIPLocator, hostLocation HostGeolocation, portConfig PortConfig,
-	allowPrivilegedDocker bool,
 ) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
@@ -181,27 +180,28 @@ func New(onboarder *onboarding.Onboarding,
 	ctx, cancel := context.WithCancel(context.Background())
 
 	n := &Node{
-		hostID:                hostID,
-		network:               net,
-		bids:                  make(map[string]*bidState),
-		deployments:           make(map[string]*jobs.Orchestrator),
-		allocations:           make(map[string]*jobs.Allocation),
-		peers:                 make(map[peer.ID]*peerState),
-		resourceManager:       resourceManager,
-		hardware:              hardware,
-		actor:                 nodeActor,
-		rootCap:               rootCap,
-		scheduler:             scheduler,
-		onboarder:             onboarder,
-		executors:             make(map[string]executorMetadata),
-		ctx:                   ctx,
-		cancel:                cancel,
-		geoip:                 geoip,
-		hostLocation:          hostLocation,
-		portConfig:            portConfig,
-		portAllocator:         NewPortAllocator(portConfig),
-		commitedResources:     make(map[string]*bidState),
-		allowPrivilegedDocker: allowPrivilegedDocker,
+		hostID:            hostID,
+		network:           net,
+		bids:              make(map[string]*bidState),
+		deployments:       make(map[string]*jobs.Orchestrator),
+		allocations:       make(map[string]*jobs.Allocation),
+		peers:             make(map[peer.ID]*peerState),
+		resourceManager:   resourceManager,
+		hardware:          hardware,
+		actor:             nodeActor,
+		rootCap:           rootCap,
+		scheduler:         scheduler,
+		onboarder:         onboarder,
+		executors:         make(map[string]executorMetadata),
+		ctx:               ctx,
+		cancel:            cancel,
+		geoip:             geoip,
+		hostLocation:      hostLocation,
+		portConfig:        portConfig,
+		portAllocator:     NewPortAllocator(portConfig),
+		commitedResources: make(map[string]*bidState),
+		dmsConfig:         cfg,
+		fs:                fs,
 	}
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
@@ -275,6 +275,9 @@ func New(onboarder *onboarding.Onboarding,
 		},
 		DeploymentListBehavior: {
 			fn: n.handleDeploymentList,
+		},
+		DeploymentLogsBehavior: {
+			fn: n.handleDeploymentLogs,
 		},
 		DeploymentStatusBehavior: {
 			fn: n.handleDeploymentStatus,
@@ -700,6 +703,8 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 		}
 
 		if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
+			jobs.AllocationStartBehavior,
+			jobs.AllocationGetLogsBehavior,
 			jobs.SubnetAddPeerBehavior,
 			jobs.SubnetRemovePeerBehavior,
 			jobs.SubnetAcceptPeerBehavior,
@@ -731,6 +736,8 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 
 					// allocation grants subnet manage caps to the orchestrator
 					if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
+						jobs.AllocationStartBehavior,
+						jobs.AllocationGetLogsBehavior,
 						jobs.SubnetAddPeerBehavior,
 						jobs.SubnetRemovePeerBehavior,
 						jobs.SubnetAcceptPeerBehavior,
@@ -793,6 +800,8 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	n.mx.Unlock()
 
 	allocation, err := jobs.NewAllocation(
+		n.fs,
+		n.dmsConfig,
 		allocActor,
 		jobs.AllocationDetails{Job: job, NodeID: n.hostID},
 		n.resourceManager,

@@ -21,6 +21,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -114,7 +115,11 @@ func TestNew(t *testing.T) {
 			}
 
 			hardwareManager := NewMockHardwareManager(ctrl)
-			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler, hardwareManager, tt.geoip, tt.hostLocation, tt.portConfig, false)
+			act, err := New(
+				*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
+				tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager,
+				tt.scheduler, hardwareManager, tt.geoip, tt.hostLocation, tt.portConfig,
+			)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -135,7 +140,12 @@ func TestNodeAllocationMessaging(t *testing.T) {
 	resourceManager := NewMockResourceManager(ctrl)
 	hardwareManager := NewMockHardwareManager(ctrl)
 
-	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1), hardwareManager, &geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535}, false)
+	node1, err := New(
+		*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
+		&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net,
+		resourceManager, bt.NewScheduler(1), hardwareManager,
+		&geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
+	)
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)
 	err = node1.Start()

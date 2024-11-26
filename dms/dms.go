@@ -218,7 +218,7 @@ func Run(ksPassphrase string, contextName string) error {
 	}
 
 	hostID := p2p.Host.ID().String()
-	node, err := node.New(onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager, geoip2db, hostLocation, portConfig, gcfg.AllowPrivilegedDocker)
+	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager, geoip2db, hostLocation, portConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create node: %s", err)
 	}

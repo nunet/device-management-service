@@ -226,7 +226,7 @@ loop:
 			}
 			if executor.executionType == jobs.ExecutorDocker {
 				if v.V1.GeneralRequirements.PrivilegedDocker {
-					if !n.allowPrivilegedDocker {
+					if !n.dmsConfig.AllowPrivilegedDocker {
 						log.Debugf("node does not allow privileged docker")
 						continue loop
 					}
