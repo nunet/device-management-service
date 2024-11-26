@@ -109,11 +109,19 @@ We currently support Linux and MacOS (Darwin).
 - build-essential (linux only)
 - libsystemd-dev (linux only)
 - go (v1.21.7 or later)
+- [git-lfs](https://git-lfs.com/) (for downloading large files)
 
 Clone the repository:
 
 ```
 git clone https://gitlab.com/nunet/device-management-service.git
+```
+
+Configure git-lfs:
+```
+git lfs install && \
+git lfs fetch && \
+git lfs pull
 ```
 
 Build the CLI:
