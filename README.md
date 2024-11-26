@@ -267,7 +267,8 @@ If you prefer to use a different operating system or need to install drivers man
 1. Visit the [NVIDIA Official Driver Downloads](https://www.nvidia.com/en-us/drivers/) page.
 2. Select your GPU model and operating system.
 3. Download and install the recommended driver.
-4. Reboot your system after installation.
+4. Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+5. Reboot your system after installation.
 
 #### AMD GPUs:
 
