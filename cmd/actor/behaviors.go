@@ -292,6 +292,34 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>`,
 	},
 
+	// /dms/node/deployment/logs
+	node.DeploymentLogsBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentLogsRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentLogsRequest)
+			cmd.Flags().StringVarP(&p.EnsembleID, "id", "i", "", "ensemble ID (required)")
+			cmd.Flags().StringVarP(&p.AllocationName, "allocation", "a", "", "allocation name (required)")
+			_ = cmd.MarkFlagRequired("id")
+			_ = cmd.MarkFlagRequired("allocation")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentLogsRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Get deployment logs",
+		Long: `Invokes the /dms/node/deployment/logs behavior on an actor
+
+This behavior retrieves the logs of a specific deployment, writing it to a file
+with path returned in the response.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/logs --id <deployment_id> --allocation <allocation_name>`,
+	},
+
 	// /dms/node/deployment/manifest
 	node.DeploymentManifestBehavior: {
 		Type:    bInvoke,

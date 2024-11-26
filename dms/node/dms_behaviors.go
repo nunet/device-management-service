@@ -11,6 +11,8 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"path/filepath"
 	"time"
 
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -48,6 +50,7 @@ const (
 
 	DeploymentListBehavior     = "/dms/node/deployment/list"
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
+	DeploymentLogsBehavior     = "/dms/node/deployment/logs"
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 
@@ -317,6 +320,69 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 		resp.Deployments[ID] = jobs.DeploymentStatusString(dep.Status())
 	}
 
+	n.sendReply(msg, resp)
+}
+
+type DeploymentLogsRequest struct {
+	EnsembleID     string
+	AllocationName string
+}
+
+type DeploymentLogsResponse struct {
+	LogsWrittenTo string
+	Error         string
+}
+
+func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request DeploymentLogsRequest
+	var resp DeploymentLogsResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.mx.Lock()
+	d, ok := n.deployments[request.EnsembleID]
+	n.mx.Unlock()
+	if !ok {
+		resp.Error = ErrDeploymentNotFound.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	data, err := d.GetAllocationLogs(request.AllocationName)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	ensembleDir := filepath.Join(
+		n.dmsConfig.WorkDir,
+		"deployments",
+		request.EnsembleID,
+	)
+
+	err = n.fs.MkdirAll(ensembleDir, 0o744)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to create ensemble directory %s: %s", ensembleDir, err.Error())
+		n.sendReply(msg, resp)
+		return
+	}
+
+	writeLogsTo := filepath.Join(ensembleDir, fmt.Sprintf("%s.logs", request.AllocationName))
+	err = n.fs.WriteFile(writeLogsTo, data, 0o644)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to write logs to %s: %s", writeLogsTo, err.Error())
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.LogsWrittenTo = writeLogsTo
 	n.sendReply(msg, resp)
 }
 

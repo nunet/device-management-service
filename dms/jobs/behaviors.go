@@ -30,6 +30,7 @@ const (
 	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
 	AllocationStartBehavior      = "/dms/deployment/start"
+	AllocationGetLogsBehavior    = "/dms/deployment/logs"
 	AllocationStartTimeout       = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
@@ -97,6 +98,13 @@ type AllocationStartRequest struct{}
 
 type AllocationStartResponse struct {
 	OK    bool
+	Error string
+}
+
+type AllocationGetLogsRequest struct{}
+
+type AllocationGetLogsResponse struct {
+	Data  []byte
 	Error string
 }
 

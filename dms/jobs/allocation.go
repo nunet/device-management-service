@@ -12,13 +12,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -28,6 +32,8 @@ const (
 	running   AllocationStatus = "running"
 	stopped   AllocationStatus = "stopped"
 	completed AllocationStatus = "completed"
+
+	deleteLogsAfter = 30 * time.Minute
 )
 
 // AllocationStatus is a representation of the execution status
@@ -58,6 +64,7 @@ type Allocation struct {
 	ID string
 
 	mx sync.Mutex
+	fs afero.Afero
 
 	status      AllocationStatus
 	nodeID      string
@@ -67,16 +74,20 @@ type Allocation struct {
 	Actor           actor.Actor
 	executor        executor.Executor
 	resourceManager types.ResourceManager
+	dmsConfig       config.Config
 
 	network network.Network
 
 	actorRunning bool
 
-	Job Job
+	Job        Job
+	resultsDir string
 }
 
 // NewAllocation creates a new allocation given the actor.
 func NewAllocation(
+	fs afero.Afero,
+	dmsConfig config.Config,
 	actor actor.Actor,
 	details AllocationDetails,
 	resourceManager types.ResourceManager,
@@ -98,12 +109,14 @@ func NewAllocation(
 
 	return &Allocation{
 		ID:              id.String(),
+		fs:              fs,
 		nodeID:          details.NodeID,
 		sourceID:        details.SourceID,
 		Job:             details.Job,
 		Actor:           actor,
 		executionID:     executorID.String(),
 		resourceManager: resourceManager,
+		dmsConfig:       dmsConfig,
 		status:          pending,
 		network:         network,
 	}, nil
@@ -129,6 +142,12 @@ func (a *Allocation) Run(ctx context.Context) error {
 		}
 	}
 
+	a.resultsDir = filepath.Join(a.dmsConfig.WorkDir, "jobs", a.Job.ID)
+	err = a.fs.MkdirAll(a.resultsDir, 0o700)
+	if err != nil {
+		return fmt.Errorf("failed to create results directory: %w", err)
+	}
+
 	err = a.executor.Start(ctx, &types.ExecutionRequest{
 		JobID:            a.Job.ID,
 		ExecutionID:      a.executionID,
@@ -136,9 +155,10 @@ func (a *Allocation) Run(ctx context.Context) error {
 		Resources:        &a.Job.Resources,
 		ProvisionScripts: a.Job.ProvisionScripts,
 		// TODO add the following
-		Inputs:     []*types.StorageVolumeExecutor{}, // Question: what are those?
-		Outputs:    []*types.StorageVolumeExecutor{},
-		ResultsDir: "",
+		Inputs:              []*types.StorageVolumeExecutor{}, // Question: what are those?
+		Outputs:             []*types.StorageVolumeExecutor{},
+		ResultsDir:          a.resultsDir,
+		PersistLogsDuration: deleteLogsAfter,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start executor: %w", err)
@@ -238,7 +258,9 @@ func (a *Allocation) Start() error {
 	defer a.mx.Unlock()
 
 	behaviors := map[string]func(actor.Envelope){
-		AllocationStartBehavior:       a.handleAllocationStart,
+		AllocationStartBehavior:   a.handleAllocationStart,
+		AllocationGetLogsBehavior: a.handleAllocationGetLogs,
+
 		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
 		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
 		SubnetAcceptPeerBehavior:      a.handleSubnetAcceptPeer,
@@ -275,7 +297,7 @@ func (a *Allocation) createExecutor(ctx context.Context, execution types.SpecCon
 	switch execution.Type {
 	case types.ExecutorTypeDocker.String():
 		id := uuid.New().String()
-		exec, err := docker.NewExecutor(ctx, id)
+		exec, err := docker.NewExecutor(ctx, a.fs, id)
 		if err != nil {
 			return fmt.Errorf("failed to create executor: %w", err)
 		}
@@ -288,7 +310,7 @@ func (a *Allocation) createExecutor(ctx context.Context, execution types.SpecCon
 }
 
 func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
-	log.Infof("behavior allocation start from: %+v", msg.From)
+	log.Infof("behavior allocation start invoked by: %+v", msg.From)
 	defer msg.Discard()
 
 	var resp AllocationStartResponse
@@ -306,6 +328,23 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	log.Info("Running allocation's job: ", a.ID)
 
 	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleAllocationGetLogs(msg actor.Envelope) {
+	log.Infof("behavior get logs invoked by: %+v", msg.From)
+	defer msg.Discard()
+
+	var resp AllocationGetLogsResponse
+
+	data, err := a.fs.ReadFile(filepath.Join(a.resultsDir, "stdout.log"))
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to read results file: %s", err.Error())
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.Data = data
 	a.sendReply(msg, resp)
 }
 
