@@ -31,7 +31,7 @@ func (n *Node) initSupportedExecutors(ctx context.Context) error {
 		executionType: jobs.ExecutorNull,
 	}
 
-	dockerExec, err := docker.NewExecutor(ctx, "root")
+	dockerExec, err := docker.NewExecutor(ctx, n.fs, "root")
 	if err == nil {
 		n.executors[string(jobs.ExecutorDocker)] = executorMetadata{
 			executor:      dockerExec,
