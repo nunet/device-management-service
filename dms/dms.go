@@ -36,7 +36,6 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
@@ -111,16 +110,11 @@ func Run(ksPassphrase string, contextName string) error {
 		return fmt.Errorf("unable to create resource manager: %w", err)
 	}
 
-	onboardR := gdb.NewOnboardingConfig(db)
-
-	onboard := onboarding.New(&onboarding.Config{
-		Fs:              afero.Afero{Fs: fs},
-		ConfigRepo:      onboardR,
-		Hardware:        hardwareManager,
-		ResourceManager: resourceManager,
-		WorkDir:         gcfg.WorkDir,
-		DatabasePath:    fmt.Sprintf("%s/nunet.db", gcfg.WorkDir),
-	})
+	onboardingConfigRepo := gdb.NewOnboardingConfig(db)
+	onboardingManager, err := onboarding.New(resourceManager, hardwareManager, onboardingConfigRepo)
+	if err != nil {
+		return fmt.Errorf("unable to create onboarding manager: %w", err)
+	}
 
 	var p2pNet *libp2p.Libp2p
 
@@ -218,7 +212,10 @@ func Run(ksPassphrase string, contextName string) error {
 	}
 
 	hostID := p2p.Host.ID().String()
-	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboard, capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager, geoip2db, hostLocation, portConfig)
+	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
+		capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager,
+		geoip2db, hostLocation, portConfig,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create node: %s", err)
 	}
@@ -231,7 +228,7 @@ func Run(ksPassphrase string, contextName string) error {
 	// initialize rest api server
 	restConfig := api.RESTServerConfig{
 		P2P:        p2pNet,
-		Onboarding: onboard,
+		Onboarding: onboardingManager,
 		Resource:   resourceManager,
 		MidW:       nil,
 		Port:       gcfg.Rest.Port,
@@ -293,14 +290,4 @@ func GenerateAndStorePrivKey(ks keystore.KeyStore, passphrase string, keyID stri
 	}
 
 	return priv, nil
-}
-
-func ValidateOnboarding(oConf *types.OnboardingConfig) {
-	// Check 1: Check if payment address is valid
-	err := utils.ValidateAddress(oConf.PublicKey)
-	if err != nil {
-		log.Errorf("the payment address %s is not valid", oConf.PublicKey)
-		log.Error("exiting DMS")
-		return
-	}
 }

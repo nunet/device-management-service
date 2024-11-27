@@ -8,18 +8,23 @@
 
 package types
 
+import "context"
+
 // OnboardingConfig - parameters to configure onboarding
 type OnboardingConfig struct {
 	BaseDBModel
-	Name string `json:"name,omitempty"`
-
-	PublicKey string `json:"public_key,omitempty"`
-
-	Dashboard         string  `json:"dashboard,omitempty"`
-	NTXPricePerMinute float64 `json:"ntx_price,omitempty"`
+	IsOnboarded bool `json:"is_onboarded"`
 
 	// These are not stored in the database, but are part of the onboarding config
 	// during the get onboarding config call these are populated from the resource manager and hardware
 	OnboardedResources Resources `json:"onboarded_resources,omitempty" gorm:"-" clover:"-"`
 	MachineResources   Resources `json:"machine_resources,omitempty" gorm:"-" clover:"-"`
+}
+
+// OnboardingManager - interface for onboarding
+type OnboardingManager interface {
+	IsOnboarded() (bool, error)
+	Info(ctx context.Context) (OnboardingConfig, error)
+	Onboard(ctx context.Context, config OnboardingConfig) (OnboardingConfig, error)
+	Offboard(ctx context.Context) error
 }

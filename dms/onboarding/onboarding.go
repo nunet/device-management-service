@@ -12,8 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/spf13/afero"
+	"sync"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/types"
@@ -24,57 +23,64 @@ var (
 	ErrOutOfRange          = errors.New("out of range")
 )
 
-type Config struct {
-	Fs              afero.Afero
-	WorkDir         string
-	DatabasePath    string
-	ConfigRepo      repositories.OnboardingConfig
+// Onboarding implements the OnboardingManager interface
+type Onboarding struct {
 	ResourceManager types.ResourceManager
 	Hardware        types.HardwareManager
+	ConfigRepo      repositories.OnboardingConfig
+	Config          types.OnboardingConfig
+	Lock            sync.RWMutex
 }
 
-// NewConfig is a constructor for Config
-func NewConfig(
-	fs afero.Afero,
-	workDir, dbPath string,
-	configRepo repositories.OnboardingConfig,
-) *Config {
-	return &Config{
-		Fs:           fs,
-		WorkDir:      workDir,
-		DatabasePath: dbPath,
-		ConfigRepo:   configRepo,
-	}
-}
-
-// Onboarding acts a receiver for methods related to onboarding
-type Onboarding struct {
-	Config
-}
+// Ensure Onboarding implements the OnboardingManager interface
+var _ types.OnboardingManager = (*Onboarding)(nil)
 
 // New is a constructor for Onboarding
-func New(config *Config) *Onboarding {
-	return &Onboarding{Config: *config}
+func New(resourceManager types.ResourceManager,
+	hardwareManager types.HardwareManager,
+	configRepo repositories.OnboardingConfig,
+) (*Onboarding, error) {
+	if resourceManager == nil {
+		return nil, fmt.Errorf("resource manager is required")
+	}
+
+	if hardwareManager == nil {
+		return nil, fmt.Errorf("hardware manager is required")
+	}
+
+	if configRepo == nil {
+		return nil, fmt.Errorf("config repo is required")
+	}
+
+	config, err := configRepo.Get(context.Background())
+	if err != nil {
+		if !errors.Is(err, repositories.ErrNotFound) {
+			return nil, fmt.Errorf("could not get onboarding config: %w", err)
+		}
+
+		config = types.OnboardingConfig{}
+	}
+
+	return &Onboarding{
+		ResourceManager: resourceManager,
+		Hardware:        hardwareManager,
+		ConfigRepo:      configRepo,
+		Config:          config,
+	}, nil
 }
 
 // IsOnboarded checks whether the machine is onboarded or not
-func (o *Onboarding) IsOnboarded(ctx context.Context) (bool, error) {
-	_, err := o.ConfigRepo.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-	// TODO: validate onboarding params
-	return true, nil
+func (o *Onboarding) IsOnboarded() (bool, error) {
+	o.Lock.RLock()
+	defer o.Lock.RUnlock()
+	return o.Config.IsOnboarded, nil
 }
 
 // Info returns the onboarding configuration
-// It fetches the onboarding config from the database and the onboarded resources from the resource manager
-// It also fetches the machine resources from the hardware package
 func (o *Onboarding) Info(ctx context.Context) (types.OnboardingConfig, error) {
-	info, err := o.ConfigRepo.Get(ctx)
-	if err != nil {
-		return types.OnboardingConfig{}, fmt.Errorf("could not get onboarding config: %w", err)
-	}
+	o.Lock.RLock()
+	info := o.Config
+	o.Lock.RUnlock()
 
 	// get onboarded resources from the resource manager
 	resources, err := o.ResourceManager.GetOnboardedResources(ctx)
@@ -94,56 +100,50 @@ func (o *Onboarding) Info(ctx context.Context) (types.OnboardingConfig, error) {
 }
 
 // Onboard validates the onboarding params and onboards the machine to the network
-// It saves the onboarding config to the database and updates the onboarded resources in the resource manager
-func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig) error {
+func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig) (types.OnboardingConfig, error) {
+	o.Lock.Lock()
+	defer o.Lock.Unlock()
 	log.Debugf("onboarding the machine with the config: %+v", config)
+	// populate the config with machine resources
+	machineResources, err := o.Hardware.GetMachineResources()
+	if err != nil {
+		return types.OnboardingConfig{}, fmt.Errorf("could not get machine resources: %w", err)
+	}
+	config.MachineResources = machineResources.Resources
+
 	if err := o.validatePrerequisites(config); err != nil {
-		return fmt.Errorf("could not validate onboarding prerequisites: %w", err)
+		return types.OnboardingConfig{}, fmt.Errorf("could not validate onboarding prerequisites: %w", err)
 	}
 
 	if err := o.ResourceManager.UpdateOnboardedResources(ctx, config.OnboardedResources); err != nil {
-		return fmt.Errorf("could not update onboarded resources: %w", err)
+		return types.OnboardingConfig{}, fmt.Errorf("could not update onboarded resources: %w", err)
 	}
 
+	config.IsOnboarded = true
 	if _, err := o.ConfigRepo.Save(ctx, config); err != nil {
-		return fmt.Errorf("could not save onboarding config: %w", err)
+		return types.OnboardingConfig{}, fmt.Errorf("could not save onboarding config: %w", err)
 	}
 
-	return nil
+	o.Config = config
+	return o.Config, nil
 }
 
 // Offboard offboards the machine from the network by clearing the onboarding config from the database
-func (o *Onboarding) Offboard(ctx context.Context, force bool) error {
-	onboarded, err := o.IsOnboarded(ctx)
-	if err != nil && !force {
-		if errors.Is(err, ErrMachineNotOnboarded) {
-			return ErrMachineNotOnboarded
-		}
+func (o *Onboarding) Offboard(ctx context.Context) error {
+	o.Lock.Lock()
+	defer o.Lock.Unlock()
 
-		return fmt.Errorf("could not retrieve onboard status: %w", err)
+	if !o.Config.IsOnboarded {
+		return ErrMachineNotOnboarded
 	}
 
+	log.Info("offboarding the machine")
+	err := o.ConfigRepo.Clear(ctx)
 	if err != nil {
-		log.Errorf("problem with onboarding state: %v", err)
-		log.Info("continuing with offboarding because forced")
-	}
-
-	if !onboarded {
-		return fmt.Errorf("machine is not onboarded")
-	}
-
-	// TODO: shutdown routine to stop networking etc... here
-
-	err = o.ConfigRepo.Clear(ctx)
-	if err != nil && !force {
 		return fmt.Errorf("failed to clear onboarding config from db: %w", err)
 	}
 
-	if err != nil {
-		log.Errorf("failed to clear onboarding config from db: %v", err)
-		log.Info("continuing with offboarding because forced")
-	}
-
+	o.Config.IsOnboarded = false
 	// clear the onboarded resources
 	if err := o.ResourceManager.UpdateOnboardedResources(ctx, types.Resources{}); err != nil {
 		return fmt.Errorf("could not clear onboarded resources: %w", err)
@@ -159,34 +159,31 @@ func validateRange(actual, min, max float64) error {
 	return nil
 }
 
-func (o *Onboarding) validateCapacity(resources types.Resources) error {
-	// TODO: https://gitlab.com/nunet/device-management-service/-/merge_requests/563#note_2139212199
-	machineResources, err := o.Hardware.GetMachineResources()
-	if err != nil {
-		return fmt.Errorf("retrieve provisioned machine resources: %w", err)
-	}
-
-	if resources.CPU.Cores < 1 || resources.CPU.Cores > machineResources.CPU.Cores {
+// validateCapacity validates the machine capacity for the requested onboarding resources
+func (o *Onboarding) validateCapacity(onboardedResources, machineResources types.Resources) error {
+	if onboardedResources.CPU.Cores < 1 || onboardedResources.CPU.Cores > machineResources.CPU.Cores {
 		return fmt.Errorf("cores must be between %d and %.0f", 1, machineResources.CPU.Cores)
 	}
 
 	if err := validateRange(
-		resources.RAM.Size,
+		onboardedResources.RAM.Size,
 		machineResources.RAM.Size/10,
 		machineResources.RAM.Size*9/10,
 	); err != nil {
 		if errors.Is(err, ErrOutOfRange) {
-			return fmt.Errorf("expected RAM to be between %.2f and %.2f, got %.2f ",
+			return fmt.Errorf("expected RAM to be between %.2f GB and %.2f GB, got %.2f GB",
 				machineResources.RAM.SizeInGB()/10,
 				machineResources.RAM.SizeInGB()*9/10,
-				resources.RAM.SizeInGB(),
+				onboardedResources.RAM.SizeInGB(),
 			)
 		}
 
 		return fmt.Errorf("validating resource range for RAM: %w", err)
 	}
 
-	for _, gpu := range resources.GPUs {
+	// TODO: validate disk size
+
+	for _, gpu := range onboardedResources.GPUs {
 		selectedGPU, err := machineResources.GPUs.GetWithIndex(gpu.Index)
 		if err != nil {
 			return fmt.Errorf("could not get find gpu: %w", err)
@@ -213,8 +210,7 @@ func (o *Onboarding) validateCapacity(resources types.Resources) error {
 	return nil
 }
 
-// validateUsage validates the resource usage data
-// It checks if the there is enough resources available to onboard
+// validateUsage validates the machine usage for the requested onboarding resources
 func (o *Onboarding) validateUsage(resources types.Resources) error {
 	freeResources, err := o.Hardware.GetFreeResources()
 	if err != nil {
@@ -222,12 +218,14 @@ func (o *Onboarding) validateUsage(resources types.Resources) error {
 	}
 
 	if resources.CPU.Compute() > freeResources.CPU.Compute() {
-		return fmt.Errorf("CPU usage is too high: %.2f", freeResources.CPU.Compute())
+		return fmt.Errorf("not enough free compute available on the system: %.2f GHz", freeResources.CPU.ComputeInGHz())
 	}
 
 	if resources.RAM.Size > freeResources.RAM.Size {
-		return fmt.Errorf("memory usage is too high: %.2f", freeResources.RAM.Size)
+		return fmt.Errorf("not enough free RAM available on the system: %.2f GB", freeResources.RAM.SizeInGB())
 	}
+
+	// TODO: validate disk usage
 
 	for _, gpu := range resources.GPUs {
 		selectedGPU, err := freeResources.GPUs.GetWithIndex(gpu.Index)
@@ -236,7 +234,7 @@ func (o *Onboarding) validateUsage(resources types.Resources) error {
 		}
 
 		if gpu.VRAM > selectedGPU.VRAM {
-			return fmt.Errorf("GPU %s usage is too high: %.2f", gpu.Model, gpu.VRAM)
+			return fmt.Errorf("not enough free VRAM available on GPU %s: %.2f GB", gpu.Model, selectedGPU.VRAMInGB())
 		}
 	}
 
@@ -245,15 +243,7 @@ func (o *Onboarding) validateUsage(resources types.Resources) error {
 
 // validatePrerequisites validates the onboarding prerequisites
 func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error {
-	ok, err := o.Fs.DirExists(o.WorkDir)
-	if err != nil {
-		return fmt.Errorf("could not check if config directory exists: %w", err)
-	}
-	if !ok {
-		return fmt.Errorf("working directory does not exist")
-	}
-
-	if err := o.validateCapacity(config.OnboardedResources); err != nil {
+	if err := o.validateCapacity(config.OnboardedResources, config.MachineResources); err != nil {
 		return fmt.Errorf("could not validate capacity data: %w", err)
 	}
 

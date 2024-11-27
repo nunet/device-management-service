@@ -147,10 +147,9 @@ nunet actor cmd [command]
 
    * **Description:**  Invokes the `/dms/node/onboarding/offboard` behavior on an actor. This is used to offboard a node from the DMS (Device Management Service).
 
-   * **Usage:** `nunet actor cmd /dms/node/onboarding/offboard [<param> ...] [flags]`
+   * **Usage:** `nunet actor cmd /dms/node/onboarding/offboard [<param> ...]`
 
    * **Flags:**
-     * `-f, --force`: Force the offboarding process overriding any safety checks and invalid states.
      * `-h, --help`: Display help information for the `/dms/node/onboarding/offboard` command.
 
 * **`/dms/node/onboarding/onboard`**

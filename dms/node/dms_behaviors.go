@@ -35,10 +35,9 @@ const (
 	PeerConnectBehavior  = "/dms/node/peers/connect"
 	PeerScoreBehavior    = "/dms/node/peers/score"
 
-	OnboardBehavior         = "/dms/node/onboarding/onboard"
-	OffboardBehavior        = "/dms/node/onboarding/offboard"
-	OnboardStatusBehavior   = "/dms/node/onboarding/status"
-	OnboardResourceBehavior = "/dms/node/onboarding/resource"
+	OnboardBehavior       = "/dms/node/onboarding/onboard"
+	OffboardBehavior      = "/dms/node/onboarding/offboard"
+	OnboardStatusBehavior = "/dms/node/onboarding/status"
 
 	ContainerStartBehavior = "/dms/node/container/start"
 	ContainerStopBehavior  = "/dms/node/container/stop"
@@ -216,8 +215,9 @@ type OnboardRequest struct {
 }
 
 type OnboardResponse struct {
-	Error  string
-	Config types.OnboardingConfig
+	Success bool                   `json:"success"`
+	Error   string                 `json:"error,omitempty"`
+	Config  types.OnboardingConfig `json:"config,omitempty"`
 }
 
 func (n *Node) handleOnboard(msg actor.Envelope) {
@@ -232,45 +232,33 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 		return
 	}
 
-	machineResources, err := n.hardware.GetMachineResources()
+	config, err := n.onboarder.Onboard(context.Background(), request.Config)
 	if err != nil {
 		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-	request.Config.MachineResources = machineResources.Resources
-
-	if err := n.onboarder.Onboard(context.Background(), request.Config); err != nil {
-		resp.Error = err.Error()
+		resp.Success = false
 		n.sendReply(msg, resp)
 		return
 	}
 
-	resp.Config = request.Config
+	resp.Config = config
+	resp.Success = true
 	n.sendReply(msg, resp)
 }
 
-type OffboardRequest struct {
-	Force bool
-}
+type OffboardRequest struct{}
 
 type OffboardResponse struct {
-	Success bool
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
 }
 
 func (n *Node) handleOffboard(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request OffboardRequest
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		// TODO log
-		return
-	}
-
 	resp := OffboardResponse{}
-	if err := n.onboarder.Offboard(context.Background(), request.Force); err != nil {
+	if err := n.onboarder.Offboard(context.Background()); err != nil {
 		resp.Success = false
+		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
 	}
@@ -280,15 +268,15 @@ func (n *Node) handleOffboard(msg actor.Envelope) {
 }
 
 type OnboardStatusResponse struct {
-	Onboarded bool
-	Error     string
+	Onboarded bool   `json:"onboarded"`
+	Error     string `json:"error,omitempty"`
 }
 
 func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := OnboardStatusResponse{}
 
-	onboarded, err := n.onboarder.IsOnboarded(context.Background())
+	onboarded, err := n.onboarder.IsOnboarded()
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -297,15 +285,6 @@ func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 
 	resp.Onboarded = onboarded
 	n.sendReply(msg, resp)
-}
-
-type OnboardResourceRequest struct {
-	Config types.OnboardingConfig
-}
-
-type OnboardResourceResponse struct {
-	Error  string
-	Result types.OnboardingConfig
 }
 
 type DeploymentListResponse struct {
