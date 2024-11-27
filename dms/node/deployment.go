@@ -159,7 +159,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 
 	log.Debugf("got a bid request from: %+v", &msg.From.Address)
 
-	onboarded, err := n.onboarder.IsOnboarded(n.ctx)
+	onboarded, err := n.onboarder.IsOnboarded()
 	if err != nil {
 		log.Debugf("got some error while checking onboarding: %w", err)
 		return

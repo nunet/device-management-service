@@ -76,17 +76,15 @@ The class diagram for the `onboarding` package is shown below.
 
 ### Offboard
 
-- signature: `Offboard(ctx context.Context, force bool) error`
+- signature: `Offboard(ctx context.Context) error`
 
 - input #1: `Context object`
-
-- input #2: `force parameter`
 
 - output: None
 
 - output (error): Error message
 
-`Offboard` removes the resources onboarded to Nunet. If the `force` parameter is `True`, then offboarding process will continue even in the presence of errors. 
+`Offboard` removes the resources onboarded to Nunet.
 
 ### IsOnboarded
 

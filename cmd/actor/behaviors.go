@@ -221,13 +221,9 @@ Examples:
 	},
 	// /dms/node/onboarding/offboard
 	node.OffboardBehavior: {
-		Type:    bInvoke,
-		Payload: func() any { return &node.OffboardRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.OffboardRequest)
-
-			cmd.Flags().BoolVarP(&p.Force, "force", "f", false, "force offboard")
-		},
+		Type:     bInvoke,
+		Payload:  func() any { return &node.OffboardRequest{} },
+		SetFlags: func(_ *cobra.Command, _ any) {},
 		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.OffboardRequest)
 			if !ok {
