@@ -97,6 +97,7 @@ LICENSE_FLAGS := -v \
 
 license:
 	@echo "  →→  \033[1;36m$(if $(CHECK),Checking,Adding) license headers...\033[0m"
+	go install github.com/google/addlicense@v1.1.1
 	addlicense $(LICENSE_FLAGS) $(if $(CHECK),-check) .
 
 arch=$(shell uname -m)
