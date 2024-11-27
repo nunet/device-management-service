@@ -16,7 +16,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	"gitlab.com/nunet/device-management-service/dms/node"
@@ -195,6 +194,8 @@ Examples:
 			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.RAM.Size, "ram", "R", 0, "set the amount of memory in GB to reserve for NuNet")
 			cmd.Flags().Float32VarP(&p.Config.OnboardedResources.CPU.Cores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
 			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.Disk.Size, "disk", "D", 0, "set the amount of disk size in GB to reserve for NuNet")
+			cmd.Flags().StringVarP(&p.GPUs, "gpus", "G", "", "comma-separated list of GPU Index and VRAM in GB (e.g. 0:4,1:8). The gpu index can be obtained from 'nunet gpu list' command")
+			cmd.Flags().BoolVarP(&p.NoGPU, "no-gpu", "N", false, "do not reserve any GPU resources")
 			cmd.MarkFlagsOneRequired("ram", "cpu", "disk")
 			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
@@ -852,87 +853,4 @@ Examples:
   nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
   nunet actor cmd --context user /dms/node/logger/config --enable-elastic`,
 	},
-}
-
-func onboardBehaviorPreRun(_ *Command, payload any) error {
-	p, ok := payload.(*node.OnboardRequest)
-	if !ok {
-		return ErrInvalidArgument
-	}
-
-	hardwareManager := hardware.NewHardwareManager()
-	machineResources, err := hardwareManager.GetMachineResources()
-	if err != nil {
-		return fmt.Errorf("could not get machine resources: %w", err)
-	}
-
-	// Set the CPU clock speed
-	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
-
-	// If no GPUs are found, skip GPU selection
-	if len(machineResources.GPUs) == 0 {
-		fmt.Println("No GPUs found. Skipping GPU selection.")
-		return nil
-	}
-
-	// GPU onboarding
-	machineResourceUsage, err := hardwareManager.GetUsage()
-	if err != nil {
-		return fmt.Errorf("could not get machine resource usage: %w", err)
-	}
-
-	var (
-		gpuMap         = make(map[string]types.GPU)
-		gpuPromptItems = make([]*selectPromptItem, 0)
-	)
-	for _, gpu := range machineResources.GPUs {
-		gpuMap[gpu.Model] = gpu
-		gpuPromptItems = append(gpuPromptItems, &selectPromptItem{
-			Label: gpu.Model,
-		})
-	}
-
-	// Prompt for GPU selection
-	res, err := selectPrompt("Select GPU", gpuPromptItems)
-	if err != nil {
-		return fmt.Errorf("could not select GPU: %w", err)
-	}
-
-	// Validate VRAM input
-	vramValidator := func(input string) error {
-		if _, err := strconv.ParseFloat(input, 64); err != nil {
-			return fmt.Errorf("invalid input: %w", err)
-		}
-		return nil
-	}
-
-	// Update the VRAM allocation for each selected GPU
-	for _, gpuName := range res {
-		gpu := gpuMap[gpuName]
-		fmt.Printf("-----------------------------------\n")
-		fmt.Printf("Selected GPU: %s\n", gpuName)
-		fmt.Printf("Total VRAM: %.2f GB\n", gpu.VRAMInGB())
-		gpuUsage, err := machineResourceUsage.GPUs.GetWithIndex(gpu.Index)
-		if err != nil {
-			return fmt.Errorf("could not get GPU usage: %w", err)
-		}
-		fmt.Printf("Used VRAM: %.2f GB\n", gpuUsage.VRAMInGB())
-		fmt.Printf("Available VRAM: %.2f GB\n", types.ConvertBytesToGB(gpu.VRAM-gpuUsage.VRAM))
-
-		// Prompt for VRAM allocation
-		input, err := prompt("Enter new VRAM allocation in GB", vramValidator)
-		if err != nil {
-			return fmt.Errorf("could not prompt for VRAM: %w", err)
-		}
-
-		// Update the GPU with the new VRAM allocation
-		vram, err := strconv.ParseFloat(input, 64)
-		if err != nil {
-			return fmt.Errorf("could not parse VRAM: %w", err)
-		}
-		gpu.VRAM = types.ConvertGBToBytes(vram)
-		p.Config.OnboardedResources.GPUs = append(p.Config.OnboardedResources.GPUs, gpu)
-	}
-
-	return nil
 }

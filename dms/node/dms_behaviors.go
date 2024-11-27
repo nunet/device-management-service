@@ -210,6 +210,8 @@ func (n *Node) handlePeerConnect(msg actor.Envelope) {
 }
 
 type OnboardRequest struct {
+	NoGPU  bool
+	GPUs   string
 	Config types.OnboardingConfig
 }
 
