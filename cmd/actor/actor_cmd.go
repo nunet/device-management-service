@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	dmsUtil "gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -32,7 +33,7 @@ const (
 	bSend      = "send"
 )
 
-func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero) *cobra.Command {
+func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cmd",
 		Short: "Invoke a predefined behavior on an actor",
@@ -64,7 +65,7 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 
 	for behavior := range behaviors {
 		if behaviorCfg, ok := behaviors[behavior]; ok {
-			cmd.AddCommand(newActorCmdCmd(client, afs, behavior, behaviorCfg))
+			cmd.AddCommand(newActorCmdCmd(client, afs, behavior, behaviorCfg, cfg))
 		}
 	}
 
@@ -76,7 +77,7 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 	return cmd
 }
 
-func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string, behaviorCfg behaviorConfig) *cobra.Command {
+func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string, behaviorCfg behaviorConfig, cfg *config.Config) *cobra.Command {
 	payload := &Payload{val: nil}
 	if behaviorCfg.Payload != nil {
 		payload.val = behaviorCfg.Payload()
@@ -119,7 +120,7 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 
 			invocation := behaviorCfg.Type == bInvoke
 
-			msg, err := newActorMessage(afs, dmsHandle, dest, topic, behavior, payload.val, timeout, expiry, invocation, contextName)
+			msg, err := newActorMessage(afs, dmsHandle, dest, topic, behavior, payload.val, timeout, expiry, invocation, contextName, cfg)
 			if err != nil {
 				return fmt.Errorf("could not create message: %w", err)
 			}

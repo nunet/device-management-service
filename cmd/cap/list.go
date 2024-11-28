@@ -15,10 +15,11 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 )
 
-func newListCmd(afs afero.Afero) *cobra.Command {
+func newListCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	var context string
 
 	cmd := &cobra.Command{
@@ -39,13 +40,13 @@ It outputs DIDs and capability tokens set for root, provide and require anchors.
 				context = LedgerContext(context)
 			} else {
 				var err error
-				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
+				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context, cfg)
 				if err != nil {
 					return fmt.Errorf("failed to create trust context: %w", err)
 				}
 			}
 
-			capCtx, err := LoadCapabilityContext(trustCtx, context)
+			capCtx, err := LoadCapabilityContext(trustCtx, context, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}

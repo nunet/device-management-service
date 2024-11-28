@@ -64,14 +64,12 @@ type CustomEvent struct {
 }
 
 // Initialize sets up the logger, tracing, and event bus
-func Initialize(host host.Host, did did.DID) error {
+func Initialize(host host.Host, did did.DID, cfg *config.Config) error {
 	if IsNoOpMode() {
 		return nil
 	}
 	// Store the DID
 	didID = did
-	// Load the configuration
-	cfg := config.GetConfig()
 
 	// Initialize the event bus
 	if err := initEventBus(host); err != nil {

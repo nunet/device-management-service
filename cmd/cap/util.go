@@ -41,8 +41,8 @@ func LedgerContext(context string) string {
 	return ledger
 }
 
-func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string) (did.TrustContext, crypto.PrivKey, error) {
-	keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
+func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, cfg *config.Config) (did.TrustContext, crypto.PrivKey, error) {
+	keyStoreDir := filepath.Join(cfg.General.UserDir, dms.KeystoreDir)
 
 	ks, err := keystore.New(afs.Fs, keyStoreDir)
 	if err != nil {
@@ -75,8 +75,8 @@ func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string) (did.Tru
 	return trustCtx, priv, nil
 }
 
-func LoadCapabilityContext(trustCtx did.TrustContext, name string) (ucan.CapabilityContext, error) {
-	capStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.CapstoreDir)
+func LoadCapabilityContext(trustCtx did.TrustContext, name string, cfg *config.Config) (ucan.CapabilityContext, error) {
+	capStoreDir := filepath.Join(cfg.General.UserDir, dms.CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 
 	f, err := os.Open(capStoreFile)
@@ -93,8 +93,8 @@ func LoadCapabilityContext(trustCtx did.TrustContext, name string) (ucan.Capabil
 	return capCtx, nil
 }
 
-func SaveCapabilityContext(capCtx ucan.CapabilityContext, name string) error {
-	capStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.CapstoreDir)
+func SaveCapabilityContext(capCtx ucan.CapabilityContext, name string, cfg *config.Config) error {
+	capStoreDir := filepath.Join(cfg.General.UserDir, dms.CapstoreDir)
 	capCtxFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 	capCtxBackup := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap.%d", name, time.Now().Unix()))
 

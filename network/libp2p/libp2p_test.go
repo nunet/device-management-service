@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -421,11 +422,13 @@ func TestBroadcastScoreInspect(t *testing.T) {
 
 func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp2p) {
 	// setup peer1
+	cfg := &config.Config{}
+
 	peer1Config := setupPeerConfig(t, port1, []multiaddr.Multiaddr{})
 	peer1, err := New(peer1Config, afero.NewMemMapFs())
 	assert.NoError(t, err)
 	assert.NotNil(t, peer1)
-	err = peer1.Init()
+	err = peer1.Init(cfg)
 	assert.NoError(t, err)
 	err = peer1.Start()
 	assert.NoError(t, err)
@@ -441,7 +444,7 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	assert.NoError(t, err)
 	assert.NotNil(t, peer2)
 
-	err = peer2.Init()
+	err = peer2.Init(cfg)
 	assert.NoError(t, err)
 	err = peer2.Start()
 	assert.NoError(t, err)
@@ -460,7 +463,7 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	assert.NoError(t, err)
 	assert.NotNil(t, peer3)
 
-	err = peer3.Init()
+	err = peer3.Init(cfg)
 	assert.NoError(t, err)
 	err = peer3.Start()
 	assert.NoError(t, err)

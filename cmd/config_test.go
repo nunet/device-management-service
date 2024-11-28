@@ -69,7 +69,7 @@ func TestConfigGetCmd(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := newConfigGetCmd(afero.NewMemMapFs())
+			cmd := newConfigGetCmd(afero.NewMemMapFs(), nil)
 			out, err := ExecuteCommand(cmd, tt.args...)
 
 			if tt.wantErr {

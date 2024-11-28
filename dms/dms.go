@@ -28,7 +28,6 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
-	"gitlab.com/nunet/device-management-service/internal"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
@@ -48,24 +47,58 @@ const (
 //go:embed data/GeoLite2-Country.mmdb
 var geoLite2Country []byte
 
-// NewP2P is stub, real implementation is needed in order to pass it to
-// routers which access them in some handlers.
-func NewP2P() libp2p.Libp2p {
-	return libp2p.Libp2p{}
+type DMS struct {
+	P2P        *libp2p.Libp2p
+	Node       *node.Node
+	RestServer *api.RESTServer
 }
 
-// QUESTION(dms-initialization): should the db instance be constructed here?
-func Run(ksPassphrase string, contextName string) error {
+func initialize(gcfg *config.Config) {
+	fs := afero.NewOsFs()
+
+	workDir := gcfg.WorkDir
+	if workDir != "" {
+		err := fs.MkdirAll(workDir, os.FileMode(0o700))
+		if err != nil {
+			log.Warnf("unable to create work directory: %v", err)
+		}
+	}
+
+	dataDir := gcfg.DataDir
+	if dataDir != "" {
+		err := fs.MkdirAll(dataDir, os.FileMode(0o700))
+		if err != nil {
+			log.Warnf("unable to create data directory: %v", err)
+		}
+	}
+
+	userDir := gcfg.UserDir
+	if userDir != "" {
+		err := fs.MkdirAll(userDir, os.FileMode(0o700))
+		if err != nil {
+			log.Warnf("unable to create user directory: %v", err)
+		}
+	}
+
+	libp2pLogging := os.Getenv("LIBP2P_LOGGING")
+	if libp2pLogging == "false" || libp2pLogging == "" {
+		err := silenceLibp2pLogging()
+		if err != nil {
+			log.Warnf("unable to set libp2p logging: %v", err)
+		}
+	}
+}
+
+func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error) {
 	if contextName == "" {
 		contextName = DefaultContextName
 	}
 
-	gcfg := config.GetConfig()
+	initialize(gcfg)
 
-	// load geoip2 database
 	geoip2db, err := geoip2.FromBytes(geoLite2Country)
 	if err != nil {
-		return fmt.Errorf("unable to load geoip2 database: %w", err)
+		return nil, fmt.Errorf("unable to load geoip2 database: %w", err)
 	}
 
 	fs := afero.NewOsFs()
@@ -73,7 +106,7 @@ func Run(ksPassphrase string, contextName string) error {
 	keyStoreDir := filepath.Join(gcfg.UserDir, KeystoreDir)
 	keyStore, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
-		return fmt.Errorf("unable to create keystore: %w", err)
+		return nil, fmt.Errorf("unable to create keystore: %w", err)
 	}
 
 	var priv crypto.PrivKey
@@ -82,22 +115,22 @@ func Run(ksPassphrase string, contextName string) error {
 		if errors.Is(err, keystore.ErrKeyNotFound) {
 			priv, err = GenerateAndStorePrivKey(keyStore, ksPassphrase, contextName)
 			if err != nil {
-				return fmt.Errorf("couldn't generate and store priv key into keystore: %w", err)
+				return nil, fmt.Errorf("couldn't generate and store priv key into keystore: %w", err)
 			}
 		} else {
-			return fmt.Errorf("failed to get private key from keystore; Error: %v", err)
+			return nil, fmt.Errorf("failed to get private key from keystore; Error: %v", err)
 		}
 	} else {
 		priv, err = ksPrivKey.PrivKey()
 		if err != nil {
-			return fmt.Errorf("unable to convert key from keystore to private key: %v", err)
+			return nil, fmt.Errorf("unable to convert key from keystore to private key: %v", err)
 		}
 	}
 	pubKey := priv.GetPublic()
 
 	db, err := db.ConnectDatabase(gcfg.WorkDir)
 	if err != nil {
-		return fmt.Errorf("unable to connect to database: %w", err)
+		return nil, fmt.Errorf("unable to connect to database: %w", err)
 	}
 
 	hardwareManager := hardware.NewHardwareManager()
@@ -107,16 +140,14 @@ func Run(ksPassphrase string, contextName string) error {
 	}
 	resourceManager, err := resources.NewResourceManager(repos, hardwareManager)
 	if err != nil {
-		return fmt.Errorf("unable to create resource manager: %w", err)
+		return nil, fmt.Errorf("unable to create resource manager: %w", err)
 	}
 
 	onboardingConfigRepo := gdb.NewOnboardingConfig(db)
 	onboardingManager, err := onboarding.New(resourceManager, hardwareManager, onboardingConfigRepo)
 	if err != nil {
-		return fmt.Errorf("unable to create onboarding manager: %w", err)
+		return nil, fmt.Errorf("unable to create onboarding manager: %w", err)
 	}
-
-	var p2pNet *libp2p.Libp2p
 
 	bootstrapPeers := make([]multiaddr.Multiaddr, len(gcfg.P2P.BootstrapPeers))
 	for i, addr := range gcfg.P2P.BootstrapPeers {
@@ -136,24 +167,18 @@ func Run(ksPassphrase string, contextName string) error {
 		FileDescriptors:         gcfg.P2P.FileDescriptors,
 	}
 
-	p2p, err := libp2p.New(cfg, fs)
+	p2pNet, err := libp2p.New(cfg, fs)
 	if err != nil {
-		return fmt.Errorf("unable to create libp2p instance: %v", err)
+		return nil, fmt.Errorf("unable to create libp2p instance: %v", err)
 	}
 
-	if err = p2p.Init(); err != nil {
-		return fmt.Errorf("unable to initialize libp2p: %v", err)
+	if err = p2pNet.Init(gcfg); err != nil {
+		return nil, fmt.Errorf("unable to initialize libp2p: %v", err)
 	}
-
-	if err = p2p.Start(); err != nil {
-		return fmt.Errorf("unable to start libp2p: %v", err)
-	}
-
-	p2pNet = p2p
 
 	trustCtx, err := did.NewTrustContextWithPrivateKey(priv)
 	if err != nil {
-		return fmt.Errorf("unable to create trust context: %w", err)
+		return nil, fmt.Errorf("unable to create trust context: %w", err)
 	}
 
 	capStoreDir := filepath.Join(gcfg.UserDir, CapstoreDir)
@@ -162,38 +187,38 @@ func Run(ksPassphrase string, contextName string) error {
 
 	if _, err := os.Stat(capStoreFile); err != nil {
 		if err := fs.MkdirAll(capStoreDir, os.FileMode(0o700)); err != nil {
-			return fmt.Errorf("unable to create capability context directory: %w", err)
+			return nil, fmt.Errorf("unable to create capability context directory: %w", err)
 		}
 		// does not exist; create it
 		rootDID := did.FromPublicKey(pubKey)
 		capCtx, err = ucan.NewCapabilityContext(trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{})
 		if err != nil {
-			return fmt.Errorf("unable to create capability context: %w", err)
+			return nil, fmt.Errorf("unable to create capability context: %w", err)
 		}
 
 		// Save it!
 		f, err := os.Create(capStoreFile)
 		if err != nil {
-			return fmt.Errorf("unable to create capability context file: %w", err)
+			return nil, fmt.Errorf("unable to create capability context file: %w", err)
 		}
 
 		err = ucan.SaveCapabilityContext(capCtx, f)
 		_ = f.Close()
 
 		if err != nil {
-			return fmt.Errorf("unable to save capability context: %w", err)
+			return nil, fmt.Errorf("unable to save capability context: %w", err)
 		}
 	} else {
 		f, err := os.Open(capStoreFile)
 		if err != nil {
-			return fmt.Errorf("unable to open capability context: %w", err)
+			return nil, fmt.Errorf("unable to open capability context: %w", err)
 		}
 
 		capCtx, err = ucan.LoadCapabilityContext(trustCtx, f)
 		_ = f.Close()
 
 		if err != nil {
-			return fmt.Errorf("unable to load capability context: %w", err)
+			return nil, fmt.Errorf("unable to load capability context: %w", err)
 		}
 	}
 
@@ -211,18 +236,13 @@ func Run(ksPassphrase string, contextName string) error {
 		AvailableRangeTo:   gcfg.PortAvailableRangeTo,
 	}
 
-	hostID := p2p.Host.ID().String()
+	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
-		capCtx, hostID, p2p, resourceManager, cfg.Scheduler, hardwareManager,
+		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
 		geoip2db, hostLocation, portConfig,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create node: %s", err)
-	}
-
-	err = node.Start()
-	if err != nil {
-		return fmt.Errorf("failed to start node: %s", err)
+		return nil, fmt.Errorf("failed to create node: %s", err)
 	}
 
 	// initialize rest api server
@@ -237,34 +257,43 @@ func Run(ksPassphrase string, contextName string) error {
 	rServer := api.NewRESTServer(&restConfig)
 	rServer.InitializeRoutes()
 
+	return &DMS{
+		P2P:        p2pNet,
+		Node:       node,
+		RestServer: rServer,
+	}, nil
+}
+
+func (d *DMS) Run() error {
+	if err := d.P2P.Start(); err != nil {
+		return fmt.Errorf("unable to start libp2p: %v", err)
+	}
+
+	err := d.Node.Start()
+	if err != nil {
+		return fmt.Errorf("failed to start node: %s", err)
+	}
+
 	go func() {
-		err := rServer.Run()
+		err := d.RestServer.Run()
 		if err != nil {
 			log.Fatal(err)
 		}
 	}()
 
-	// wait for SIGINT or SIGTERM
-	sig := <-internal.ShutdownChan
-
-	// clean up
-	go func() {
-		err = node.Stop()
-		if err != nil {
-			log.Errorf("failed to stop node: %s", err)
-		}
-		err = p2p.Stop()
-		if err != nil {
-			log.Errorf("failed to stop libp2p network: %s", err)
-		}
-		log.Infof("Shutting down after receiving %v...\n", sig)
-		os.Exit(0)
-	}()
-
-	sig = <-internal.ShutdownChan
-	log.Infof("Shutting down after receiving %v...\n", sig)
-	os.Exit(1)
 	return nil
+}
+
+func (d *DMS) Stop() {
+	err := d.Node.Stop()
+	if err != nil {
+		log.Errorf("failed to stop node: %s", err)
+	}
+	err = d.P2P.Stop()
+	if err != nil {
+		log.Errorf("failed to stop libp2p network: %s", err)
+	}
+	log.Infof("Shutting down after receiving")
 }
 
 // GenerateAndStorePrivKey generates a new key pair using Secp256k1,

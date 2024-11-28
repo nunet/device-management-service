@@ -213,7 +213,7 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 		},
 	}, afero.NewMemMapFs())
 	assert.NoError(t, err)
-	err = net.Init()
+	err = net.Init(&config.Config{})
 	assert.NoError(t, err)
 
 	err = net.Start()

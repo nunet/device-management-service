@@ -78,6 +78,21 @@ clean:
 	@echo "Cleaning up..."
 	rm -rf builds/
 
+build_e2e_tests: 
+	go test -tags exclude -c ./test/e2e/ -o ./test/e2e/testbinary
+
+setcap: 
+	sudo setcap cap_net_admin+ep ./test/e2e/testbinary
+
+run_e2e_tests: 
+	./test/e2e/testbinary
+
+e2e_test:
+	@echo "Running e2e test"
+	make build_e2e_tests
+	make setcap
+	make run_e2e_tests
+
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
 

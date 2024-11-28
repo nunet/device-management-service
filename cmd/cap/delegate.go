@@ -16,11 +16,12 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newDelegateCmd(afs afero.Afero) *cobra.Command {
+func newDelegateCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	var (
 		context    string
 		caps       []string
@@ -44,7 +45,7 @@ Example:
   nunet cap anchor --context user --provide '<token>'
   nunet cap delegate --context user --cap /public --duration 1h did:key:<some-key>`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			subject := args[0]
 
 			var expirationTime uint64
@@ -99,13 +100,13 @@ Example:
 				trustCtx = did.NewTrustContextWithProvider(provider)
 				context = LedgerContext(context)
 			} else {
-				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
+				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context, cfg)
 				if err != nil {
 					return fmt.Errorf("failed to create trust context: %w", err)
 				}
 			}
 
-			capCtx, err := LoadCapabilityContext(trustCtx, context)
+			capCtx, err := LoadCapabilityContext(trustCtx, context, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}
@@ -120,7 +121,7 @@ Example:
 				return fmt.Errorf("unable to marshal tokens to json: %w", err)
 			}
 
-			fmt.Println(string(tokensJSON))
+			fmt.Fprintln(cmd.OutOrStdout(), string(tokensJSON))
 			return nil
 		},
 	}

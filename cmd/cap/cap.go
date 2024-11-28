@@ -11,6 +11,7 @@ package cap
 import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
 const (
@@ -31,19 +32,19 @@ const (
 )
 
 // NewCapCmd returns the cap command that adds other commands
-func NewCapCmd(afs afero.Afero) *cobra.Command {
+func NewCapCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cap",
 		Short: "Manage capabilities",
 		Long:  `Manage capabilities for the Device Management Service`,
 	}
 
-	cmd.AddCommand(newGrantCmd(afs))
-	cmd.AddCommand(newAnchorCmd(afs))
-	cmd.AddCommand(newNewCmd(afs))
-	cmd.AddCommand(newDelegateCmd(afs))
-	cmd.AddCommand(newListCmd(afs))
-	cmd.AddCommand(newRemoveCmd(afs))
+	cmd.AddCommand(newGrantCmd(afs, cfg))
+	cmd.AddCommand(newAnchorCmd(afs, cfg))
+	cmd.AddCommand(newNewCmd(afs, cfg))
+	cmd.AddCommand(newDelegateCmd(afs, cfg))
+	cmd.AddCommand(newListCmd(afs, cfg))
+	cmd.AddCommand(newRemoveCmd(afs, cfg))
 
 	return cmd
 }

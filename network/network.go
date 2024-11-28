@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/spf13/afero"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 
 	"gitlab.com/nunet/device-management-service/network/libp2p"
@@ -51,7 +52,7 @@ type Network interface {
 	Messenger
 
 	// Init initializes the network
-	Init() error
+	Init(*config.Config) error
 	// Start starts the network
 	Start() error
 	// Stat returns the network information

@@ -8,7 +8,10 @@
 
 package main
 
-import "gitlab.com/nunet/device-management-service/cmd"
+import (
+	"gitlab.com/nunet/device-management-service/cmd"
+	"gitlab.com/nunet/device-management-service/internal/config"
+)
 
 //	@title			Device Management Service
 //	@version		0.4.185
@@ -28,5 +31,6 @@ import "gitlab.com/nunet/device-management-service/cmd"
 //
 // @BasePath	/api/v1
 func main() {
-	cmd.Execute()
+	cfg := config.GetConfig()
+	cmd.Execute(cfg)
 }
