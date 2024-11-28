@@ -12,193 +12,101 @@ package gpu
 
 import (
 	"fmt"
-	"os/exec"
-	"regexp"
 	"strconv"
-	"strings"
+	"sync"
 
+	"gitlab.com/nunet/device-management-service/lib/xpum"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// runXpuSmiCommand runs the xpu-smi command with the provided arguments and returns the output as a string.
-func runXpuSmiCommand(args ...string) (string, error) {
-	cmd := exec.Command("xpu-smi", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("xpu-smi command failed: %s", err)
-	}
-	return string(output), nil
+var (
+	xpumInitOnce sync.Once
+	xpumInitErr  error
+)
+
+// initializeXPUM ensures that xpum.InitIntel() is called only once.
+func initializeXPUM() error {
+	xpumInitOnce.Do(func() {
+		ok, err := xpum.InitIntel()
+		if err != nil {
+			xpumInitErr = fmt.Errorf("initialize Intel XPUM: %w", err)
+			return
+		}
+		if !ok {
+			xpumInitErr = fmt.Errorf("intel XPUM initialization was unsuccessful")
+		}
+	})
+	return xpumInitErr
 }
 
-// getIntelGPUDeviceIDs extracts the device IDs of Intel GPUs from the xpu-smi output.
-func getIntelGPUDeviceIDs(output string) ([]string, error) {
-	deviceIDRegex := regexp.MustCompile(`(?i)\| Device ID\s+\|\s+(\d+)\s+\|`)
-	deviceIDMatches := deviceIDRegex.FindAllStringSubmatch(output, -1)
-
-	if len(deviceIDMatches) == 0 {
-		return nil, fmt.Errorf("failed to find any Intel GPUs")
+// fetchIntelGPUs is a helper function that retrieves GPU information based on the vRAMSelector.
+// The selector determines which VRAM value (e.g., total or used) to populate in the types.GPU struct.
+func fetchIntelGPUs(vRAMSelector func(deviceID int32) (float64, error)) ([]types.GPU, error) {
+	if err := initializeXPUM(); err != nil {
+		return nil, err
 	}
 
-	deviceIDs := make([]string, len(deviceIDMatches))
-	for i, match := range deviceIDMatches {
-		deviceIDs[i] = match[1]
+	deviceList, err := xpum.GetDeviceList()
+	if err != nil {
+		return nil, fmt.Errorf("retrieve Intel GPU device list: %w", err)
 	}
 
-	return deviceIDs, nil
+	gpus := make([]types.GPU, 0, len(deviceList))
+	for _, device := range deviceList {
+		// Use the vRAMSelector to get the VRAM value (total or used))
+		vram, err := vRAMSelector(device.DeviceID)
+		if err != nil {
+			return nil, err
+		}
+
+		gpu := types.GPU{
+			Model:      device.DeviceName,
+			VRAM:       vram, // VRAM in bytes
+			Vendor:     types.GPUVendorIntel,
+			PCIAddress: device.PCIBDFAddress,
+		}
+		gpus = append(gpus, gpu)
+	}
+	return gpus, nil
 }
 
-// getIntelGPUDiscoveryInfo retrieves the GPU name and total memory for a specific Intel GPU.
-func getIntelGPUDiscoveryInfo(deviceID string) (string, float64, error) {
-	output, err := runXpuSmiCommand("discovery", "-d", deviceID)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to get discovery info for Intel GPU %s: %s", deviceID, err)
-	}
-
-	// Extract the GPU name and total memory
-	nameRegex := regexp.MustCompile(`(?i)Device Name:\s+([^\n|]+)`)
-	totalMemRegex := regexp.MustCompile(`(?i)Memory Physical Size:\s+([^\s]+)\s+MiB`)
-
-	nameMatch := nameRegex.FindStringSubmatch(output)
-	totalMemMatch := totalMemRegex.FindStringSubmatch(output)
-
-	if nameMatch == nil || totalMemMatch == nil {
-		return "", 0, fmt.Errorf("failed to parse discovery info for Intel GPU %s", deviceID)
-	}
-
-	gpuName := strings.TrimSpace(nameMatch[1])
-	totalMemoryMiB, err := strconv.ParseFloat(totalMemMatch[1], 64)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to parse total memory for Intel GPU %s: %s", deviceID, err)
-	}
-
-	return gpuName, types.ConvertMibToBytes(totalMemoryMiB), nil
-}
-
-// getIntelGPUPCIAddress extracts the PCI bus ID from the xpu-smi output.
-func getIntelGPUPCIAddress(deviceID string) (string, error) {
-	output, err := runXpuSmiCommand("discovery", "-d", deviceID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get PCI address for Intel GPU %s: %s", deviceID, err)
-	}
-
-	// Extract the PCI bus address
-	pciRegex := regexp.MustCompile(`(?i)PCI\s+BDF\s+Address:\s+([^\n|]+)`)
-	pciMatch := pciRegex.FindStringSubmatch(output)
-
-	if pciMatch == nil {
-		return "", fmt.Errorf("failed to parse PCI bus address for Intel GPU %s", deviceID)
-	}
-
-	pciAddress := strings.TrimSpace(pciMatch[1])
-	return pciAddress, nil
-}
-
-// getIntelGPUUsedMemory retrieves the used memory for a specific Intel GPU.
-func getIntelGPUUsedMemory(deviceID string) (float64, error) {
-	output, err := runXpuSmiCommand("stats", "-d", deviceID)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get stats for Intel GPU %s: %s", deviceID, err)
-	}
-
-	// Extract the used memory
-	usedMemRegex := regexp.MustCompile(`(?i)GPU Memory Used \(MiB\)\s+\|\s+(\d+)\s+\|`)
-	usedMemMatch := usedMemRegex.FindStringSubmatch(output)
-
-	if usedMemMatch == nil {
-		return 0, fmt.Errorf("failed to parse used memory for Intel GPU %s", deviceID)
-	}
-
-	usedMemory, err := strconv.ParseFloat(usedMemMatch[1], 64)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse used memory for Intel GPU %s: %s", deviceID, err)
-	}
-
-	return types.ConvertMibToBytes(usedMemory), nil
-}
-
-// getIntelGPUs returns the GPU information for Intel GPUs.
+// getIntelGPUs returns the GPU information for Intel GPUs, specifically the total VRAM.
 func getIntelGPUs() ([]types.GPU, error) {
-	// Get the list of Intel GPU devices
-	output, err := runXpuSmiCommand("health", "-l")
-	if err != nil {
-		return nil, fmt.Errorf("xpu-smi not installed, initialized, or configured: %s", err)
-	}
-
-	// Get Intel GPU device IDs
-	deviceIDs, err := getIntelGPUDeviceIDs(output)
-	if err != nil {
-		return nil, err
-	}
-
-	gpuInfos := make([]types.GPU, 0, len(deviceIDs))
-	for _, deviceID := range deviceIDs {
-		// Get GPU discovery info
-		gpuName, totalMemoryMiB, err := getIntelGPUDiscoveryInfo(deviceID)
+	return fetchIntelGPUs(func(deviceID int32) (float64, error) {
+		deviceProps, err := xpum.GetDeviceProperties(deviceID)
 		if err != nil {
-			return nil, err
+			return 0, fmt.Errorf("get properties for device %d: %w", deviceID, err)
 		}
 
-		// Get PCI address
-		pciAddress, err := getIntelGPUPCIAddress(deviceID)
-		if err != nil {
-			return nil, fmt.Errorf("get PCI address for Intel GPU %s: %s", deviceID, err)
+		for _, prop := range deviceProps {
+			if prop.Name == xpum.DevicePropertyMemoryPhysicalSizeByte {
+				totalMemory, err := strconv.ParseFloat(prop.Value, 64)
+				if err != nil {
+					return 0, fmt.Errorf("parse total memory for device %d: %w", deviceID, err)
+				}
+				return totalMemory, nil
+			}
 		}
-
-		// Populate GPU info
-		gpuInfo := types.GPU{
-			Model:      gpuName,
-			VRAM:       totalMemoryMiB,
-			Vendor:     types.GPUVendorIntel,
-			PCIAddress: pciAddress,
-		}
-
-		gpuInfos = append(gpuInfos, gpuInfo)
-	}
-
-	return gpuInfos, nil
+		return 0, fmt.Errorf("total memory property not found for device %d", deviceID)
+	})
 }
 
-// getIntelGPUUsage returns the GPU usage for Intel GPUs.
+// getIntelGPUUsage returns the GPU usage for Intel GPUs, specifically the used VRAM.
 func getIntelGPUUsage() ([]types.GPU, error) {
-	// Reuse xpu-smi output and Intel GPU device IDs to avoid multiple executions
-	output, err := runXpuSmiCommand("health", "-l")
-	if err != nil {
-		return nil, fmt.Errorf("xpu-smi not installed, initialized, or configured: %s", err)
-	}
-
-	// Get Intel GPU device IDs
-	deviceIDs, err := getIntelGPUDeviceIDs(output)
-	if err != nil {
-		return nil, err
-	}
-
-	gpuInfos := make([]types.GPU, 0, len(deviceIDs))
-	for _, deviceID := range deviceIDs {
-		gpuName, _, err := getIntelGPUDiscoveryInfo(deviceID)
+	return fetchIntelGPUs(func(deviceID int32) (float64, error) {
+		stats, err := xpum.GetDeviceStats(deviceID, 0)
 		if err != nil {
-			return nil, err
+			return 0, fmt.Errorf("getting device stats for %d: %w", deviceID, err)
 		}
 
-		usedMemory, err := getIntelGPUUsedMemory(deviceID)
-		if err != nil {
-			return nil, err
+		for _, stat := range stats {
+			for _, data := range stat.DataList {
+				if data.MetricsType == xpum.StatsMemoryUsed {
+					usedMemory := float64(data.Value)
+					return usedMemory, nil
+				}
+			}
 		}
-
-		pciAddress, err := getIntelGPUPCIAddress(deviceID)
-		if err != nil {
-			return nil, fmt.Errorf("get PCI address for Intel GPU %s: %s", deviceID, err)
-		}
-
-		// Populate GPU info
-		gpuInfo := types.GPU{
-			PCIAddress: pciAddress,
-			Model:      gpuName,
-			VRAM:       usedMemory,
-			Vendor:     types.GPUVendorIntel,
-		}
-
-		gpuInfos = append(gpuInfos, gpuInfo)
-	}
-
-	return gpuInfos, nil
+		return 0, fmt.Errorf("used memory not found for device %d", deviceID)
+	})
 }
