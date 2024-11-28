@@ -292,6 +292,8 @@ $ sudo amdgpu-install --usecase=rocm
 3. Download and install the recommended driver.
 4. Reboot your system after installation.
 
+Along with the drivers, you will need to install XPU SMI for Intel GPUs. You can find the installation instructions [here](https://intel.github.io/xpumanager/smi_install_guide.html#).
+
 For detailed instructions specific to your operating system, please refer to the documentation provided by NVIDIA, AMD, or Intel.
 
 Note: Ensure that you have the correct permissions to install drivers on your system. On Linux systems, you may need to use `sudo` or log in as root to install drivers.
