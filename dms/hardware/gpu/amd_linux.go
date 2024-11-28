@@ -12,170 +12,131 @@ package gpu
 
 import (
 	"fmt"
-	"os/exec"
-	"regexp"
-	"strconv"
+	"sync"
 
+	goamdsmi "gitlab.com/nunet/device-management-service/lib/amdsmi"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// runROCmSmiCommand executes the rocm-smi command and returns the output as a string.
-func runROCmSmiCommand() (string, error) {
-	cmd := exec.Command("rocm-smi", "--showid", "--showproductname", "--showmeminfo", "vram", "--showbus")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("AMD ROCm not installed, initialized, or configured (reboot recommended for newly installed AMD GPU Drivers): %s", err)
-	}
-	return string(output), nil
-}
+// Initialize AMD SMI once using sync.Once
+var (
+	initOnce sync.Once
+	initErr  error
+)
 
-// parseRegex extracts all matches from the given regex pattern and returns the matches.
-func parseRegex(pattern, output string) [][]string {
-	regex := regexp.MustCompile(pattern)
-	return regex.FindAllStringSubmatch(output, -1)
-}
-
-// getAMDGPUPCIAddress extracts the PCI bus ID from the command output.
-func getAMDGPUPCIAddress(output string) ([]string, error) {
-	pciMatches := parseRegex(`GPU\[\d+\]\s+: PCI Bus:\s+([^\n]+)`, output)
-	if len(pciMatches) == 0 {
-		return nil, fmt.Errorf("find PCI bus IDs in the output")
-	}
-
-	pciAddresses := make([]string, len(pciMatches))
-	for i, match := range pciMatches {
-		pciAddresses[i] = match[1]
-	}
-	return pciAddresses, nil
-}
-
-// getAMDGPUTotalVRAM extracts the total VRAM from the command output and converts it to MiB.
-func getAMDGPUTotalVRAM(output string) ([]float64, error) {
-	totalMatches := parseRegex(`GPU\[\d+\]\s+: VRAM Total Memory \(B\):\s+(\d+)`, output)
-	if len(totalMatches) == 0 {
-		return nil, fmt.Errorf("find total VRAM in the output")
-	}
-
-	totalVRAMs := make([]float64, len(totalMatches))
-	for i, match := range totalMatches {
-		memoryBytes, err := strconv.ParseFloat(match[1], 64)
+// initializeAMD ensures that goamdsmi.Init() is called only once.
+func initializeAMD() error {
+	initOnce.Do(func() {
+		ok, err := goamdsmi.Init()
 		if err != nil {
-			return nil, fmt.Errorf("parse total VRAM for GPU %d: %s", i, err)
+			initErr = fmt.Errorf("failed to initialize AMD SMI: %w", err)
+			return
 		}
-		totalVRAMs[i] = memoryBytes
-	}
-	return totalVRAMs, nil
+
+		if !ok {
+			initErr = fmt.Errorf("AMD SMI initialization was unsuccessful")
+			return
+		}
+	})
+	return initErr
 }
 
-// getAMDGPUUsedVRAM extracts the used VRAM from the command output and converts it to MiB.
-func getAMDGPUUsedVRAM(output string) ([]float64, error) {
-	usedMatches := parseRegex(`GPU\[\d+\]\s+: VRAM Total Used Memory \(B\):\s+(\d+)`, output)
-	if len(usedMatches) == 0 {
-		return nil, fmt.Errorf("find used VRAM in the output")
+// fetchAMDGPUs is a helper function that retrieves GPU information based on the VRAM selector.
+// The selector determines which VRAM field (Total or Used) to populate in the types.GPU struct.
+func fetchAMDGPUs(vRAMSelector func(vRAM goamdsmi.VRAM) float64) ([]types.GPU, error) {
+	// Initialize AMD SMI
+	if err := initializeAMD(); err != nil {
+		return nil, err
 	}
 
-	usedVRAMs := make([]float64, len(usedMatches))
-	for i, match := range usedMatches {
-		memoryBytes, err := strconv.ParseFloat(match[1], 64)
+	// Retrieve socket handles
+	sockets, err := goamdsmi.GetSocketHandles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get socket handles: %w", err)
+	}
+
+	var gpus []types.GPU
+
+	// Iterate over each socket
+	for _, socket := range sockets {
+		// Retrieve processor handles for the current socket
+		processors, err := goamdsmi.GetProcessorHandles(socket)
 		if err != nil {
-			return nil, fmt.Errorf("parse used VRAM for GPU %d: %s", i, err)
-		}
-		usedVRAMs[i] = memoryBytes
-	}
-	return usedVRAMs, nil
-}
-
-// getAMDGPUName extracts the GPU name from the command output.
-func getAMDGPUName(output string) ([]string, error) {
-	nameMatches := parseRegex(`GPU\[\d+\]\s+: Card Series:\s+([^\n]+)`, output)
-	if len(nameMatches) == 0 {
-		return nil, fmt.Errorf("find GPU names in the output")
-	}
-
-	names := make([]string, len(nameMatches))
-	for i, match := range nameMatches {
-		names[i] = match[1]
-	}
-	return names, nil
-}
-
-// getAMDGPUs returns the GPU information for AMD GPUs.
-func getAMDGPUs() ([]types.GPU, error) {
-	output, err := runROCmSmiCommand()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU information: %s", err)
-	}
-
-	gpuNameMatches, err := getAMDGPUName(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU names: %s", err)
-	}
-
-	totalVRAMs, err := getAMDGPUTotalVRAM(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU total VRAM: %s", err)
-	}
-
-	pciAddresses, err := getAMDGPUPCIAddress(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU PCI addresses: %s", err)
-	}
-
-	if len(gpuNameMatches) != len(totalVRAMs) || len(gpuNameMatches) != len(pciAddresses) {
-		return nil, fmt.Errorf("failed to get AMD GPU information: mismatched GPU details")
-	}
-
-	gpuInfos := make([]types.GPU, 0, len(gpuNameMatches))
-	for i := range gpuNameMatches {
-		gpuInfo := types.GPU{
-			Model:      gpuNameMatches[i],
-			VRAM:       totalVRAMs[i],
-			Vendor:     types.GPUVendorAMDATI,
-			PCIAddress: pciAddresses[i],
+			return nil, fmt.Errorf("failed to get processor handles: %w", err)
 		}
 
-		gpuInfos = append(gpuInfos, gpuInfo)
-	}
+		// Iterate over each processor
+		for _, processor := range processors {
+			boardInfo, err := goamdsmi.GetGPUBoardInfo(processor)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get board info: %w", err)
+			}
 
-	return gpuInfos, nil
-}
+			vRAM, err := goamdsmi.GetGPUVRAM(processor)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GPU VRAM: %w", err)
+			}
 
-// getAMDGPUUsage returns the GPU usage for AMD GPUs.
-func getAMDGPUUsage() ([]types.GPU, error) {
-	output, err := runROCmSmiCommand()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU information: %s", err)
-	}
+			bdfID, err := goamdsmi.GetGPUBDFID(processor)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GPU BDFID: %w", err)
+			}
 
-	gpuNameMatches, err := getAMDGPUName(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU names: %s", err)
-	}
-
-	pciAddresses, err := getAMDGPUPCIAddress(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU PCI addresses: %s", err)
-	}
-
-	usedVRAMs, err := getAMDGPUUsedVRAM(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AMD GPU used VRAM: %s", err)
-	}
-
-	if len(gpuNameMatches) != len(usedVRAMs) || len(gpuNameMatches) != len(pciAddresses) {
-		return nil, fmt.Errorf("failed to get AMD GPU information: mismatched GPU details")
-	}
-
-	gpus := make([]types.GPU, 0, len(usedVRAMs))
-	for i, usedVRAM := range usedVRAMs {
-		gpuInfo := types.GPU{
-			Model:      gpuNameMatches[i],
-			VRAM:       usedVRAM,
-			Vendor:     types.GPUVendorAMDATI,
-			PCIAddress: pciAddresses[i],
+			gpu := types.GPU{
+				Model:      boardInfo.ProductName,
+				VRAM:       vRAMSelector(vRAM),
+				Vendor:     types.GPUVendorAMDATI,
+				PCIAddress: bdfIDToPCIAddress(bdfID),
+			}
+			gpus = append(gpus, gpu)
 		}
-		gpus = append(gpus, gpuInfo)
 	}
 
 	return gpus, nil
+}
+
+// getAMDGPUs returns the GPU information for AMD GPUs, specifically the total VRAM.
+func getAMDGPUs() ([]types.GPU, error) {
+	return fetchAMDGPUs(func(vRAM goamdsmi.VRAM) float64 {
+		return types.ConvertMibToBytes(float64(vRAM.Total))
+	})
+}
+
+// getAMDGPUUsage returns the GPU usage for AMD GPUs, specifically the used VRAM.
+func getAMDGPUUsage() ([]types.GPU, error) {
+	return fetchAMDGPUs(func(vRAM goamdsmi.VRAM) float64 {
+		return types.ConvertMibToBytes(float64(vRAM.Used))
+	})
+}
+
+// bdfIDToPCIAddress converts a 64-bit BDFID to a standard PCI address string.
+// The PCI address format is 'domain:bus:device.function'.
+//
+// Taken from the AMD SMI library:
+// BDFID = ((DOMAIN & 0xffffffff) << 32) | ((BUS & 0xff) << 8) |
+// ((DEVICE & 0x1f) <<3 ) | (FUNCTION & 0x7)
+//
+// | Name     | Field   |
+// ---------- | ------- |
+// | Domain   | [64:32] |
+// | Reserved | [31:16] |
+// | Bus      | [15: 8] |
+// | Device   | [ 7: 3] |
+// | Function | [ 2: 0] |
+func bdfIDToPCIAddress(bdfID uint64) string {
+	// Extract Domain: Bits [63:32]
+	domain := (bdfID >> 32) & 0xFFFFFFFF
+
+	// Extract Bus: Bits [15:8]
+	bus := (bdfID >> 8) & 0xFF
+
+	// Extract Device: Bits [7:3]
+	device := (bdfID >> 3) & 0x1F
+
+	// Extract Function: Bits [2:0]
+	function := bdfID & 0x7
+
+	// Format each component into hexadecimal with appropriate padding
+	// Domain: 4 hex digits, Bus: 2 hex digits, Device: 2 hex digits, Function: 1 hex digit
+	return fmt.Sprintf("%04X:%02X:%02X.%X", domain, bus, device, function)
 }

@@ -277,6 +277,14 @@ If you prefer to use a different operating system or need to install drivers man
 3. Download and install the recommended driver.
 4. Reboot your system after installation.
 
+Along with the drivers, you will need to install amdgpu using ROCm for AMD GPUs. You can find the installation instructions [here](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/amdgpu-install.html).
+
+Make sure you select the rocm usecase when installing the amdgpu.
+
+```bash```
+$ sudo amdgpu-install --usecase=rocm
+```
+
 #### Intel Discrete GPUs:
 
 1. Visit the [Intel® software for general purpose GPU capabilities documentation](https://dgpu-docs.intel.com/driver/overview.html) page.
