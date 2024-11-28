@@ -22,15 +22,15 @@ import (
 
 // Execute is a wrapper for cobra.Command method with same name
 // It makes use of cobra.CheckErr to facilitate error handling
-func Execute() {
+func Execute(cfg *config.Config) {
 	afs := afero.Afero{Fs: afero.NewOsFs()}
 
 	client := utils.NewHTTPClient(
 		fmt.Sprintf("http://%s:%d",
-			config.GetConfig().Rest.Addr,
-			config.GetConfig().Rest.Port),
+			cfg.Rest.Addr,
+			cfg.Rest.Port),
 		"/api/v1",
 	)
 
-	cobra.CheckErr(newRootCmd(client, afs).Execute())
+	cobra.CheckErr(NewRootCMD(client, afs, cfg).Execute())
 }

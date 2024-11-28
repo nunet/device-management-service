@@ -464,14 +464,6 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 		return
 	}
 
-	if d.Status() != jobs.DeploymentStatusRunning {
-		// maybe-TODO: if it's still provisioning/committing,
-		// we should stop the deployment process anyway
-		resp.Error = ErrDeploymentNotRunning.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
 	err := d.Shutdown()
 	if err != nil {
 		resp.Error = err.Error()

@@ -20,7 +20,7 @@ import (
 	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
-func newConfigCmd(fs afero.Fs) *cobra.Command {
+func newConfigCmd(fs afero.Fs, cfg *config.Config) *cobra.Command {
 	if fs == nil {
 		cobra.CheckErr("Fs is nil")
 	}
@@ -35,13 +35,13 @@ Search for the configuration file is done in the following locations and order:
 2. "$HOME/.nunet"
 3. "/etc/nunet"`,
 	}
-	cmd.AddCommand(newConfigGetCmd(fs))
+	cmd.AddCommand(newConfigGetCmd(fs, cfg))
 	cmd.AddCommand(newConfigSetCmd(fs))
 	cmd.AddCommand(newConfigEditCmd(fs))
 	return cmd
 }
 
-func newConfigGetCmd(fs afero.Fs) *cobra.Command {
+func newConfigGetCmd(fs afero.Fs, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <key>",
 		Short: "Display configuration",
@@ -60,7 +60,7 @@ Example:
 			cmd.Println("Found config file at:", config.GetPath())
 
 			if len(args) == 0 {
-				info, err := json.MarshalIndent(config.GetConfig(), "", "    ")
+				info, err := json.MarshalIndent(cfg, "", "    ")
 				if err != nil {
 					return fmt.Errorf("failed to indent config JSON: %w", err)
 				}

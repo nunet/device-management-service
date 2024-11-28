@@ -17,10 +17,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
-func newActorMsgCmd(client *dmsUtils.HTTPClient, afs afero.Afero) *cobra.Command {
+func newActorMsgCmd(client *dmsUtils.HTTPClient, afs afero.Afero, cfg *config.Config) *cobra.Command {
 	fnDest := "dest"
 	fnBroadcast := "broadcast"
 	fnTimeout := "timeout"
@@ -55,7 +56,7 @@ Example:
 				return fmt.Errorf("could not get source handle: %w", err)
 			}
 
-			msg, err := newActorMessage(afs, dmsHandle, destStr, topic, behavior, payload, timeout, expiry, invocation, contextName)
+			msg, err := newActorMessage(afs, dmsHandle, destStr, topic, behavior, payload, timeout, expiry, invocation, contextName, cfg)
 			if err != nil {
 				return fmt.Errorf("could not create message: %w", err)
 			}

@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -75,7 +76,7 @@ func newUserHandle(id crypto.ID, did did.DID, dmsHandle actor.Handle, inbox stri
 	}
 }
 
-func newSecurityContext(fs afero.Afero, context string) (actor.SecurityContext, error) {
+func newSecurityContext(fs afero.Afero, context string, cfg *config.Config) (actor.SecurityContext, error) {
 	if context == "" {
 		context = DefaultUserContextName
 	}
@@ -98,14 +99,14 @@ func newSecurityContext(fs afero.Afero, context string) (actor.SecurityContext, 
 		context = cap.LedgerContext(context)
 	} else {
 		var err error
-		trustCtx, _, err = cap.CreateTrustContextFromKeyStore(fs, context)
+		trustCtx, _, err = cap.CreateTrustContextFromKeyStore(fs, context, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create trust context: %w", err)
 		}
 	}
 
 	// Load capability context
-	capCtx, err := cap.LoadCapabilityContext(trustCtx, context)
+	capCtx, err := cap.LoadCapabilityContext(trustCtx, context, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load capability context: %w", err)
 	}
@@ -113,12 +114,12 @@ func newSecurityContext(fs afero.Afero, context string) (actor.SecurityContext, 
 	return actor.NewBasicSecurityContext(pubk, privk, capCtx)
 }
 
-func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, topic, behavior string, payload interface{}, timeout time.Duration, expiry time.Time, invocation bool, context string) (actor.Envelope, error) {
+func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, topic, behavior string, payload interface{}, timeout time.Duration, expiry time.Time, invocation bool, context string, cfg *config.Config) (actor.Envelope, error) {
 	var msg actor.Envelope
 	var src actor.Handle
 	var dest actor.Handle
 
-	sctx, err := newSecurityContext(fs, context)
+	sctx, err := newSecurityContext(fs, context, cfg)
 	if err != nil {
 		return msg, fmt.Errorf("failed to create security context: %w", err)
 	}

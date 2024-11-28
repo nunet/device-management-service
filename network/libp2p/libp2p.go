@@ -41,6 +41,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/observability"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
@@ -144,7 +145,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 }
 
 // Init initializes a libp2p host with its dependencies.
-func (l *Libp2p) Init() error {
+func (l *Libp2p) Init(cfg *config.Config) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	host, dht, pubsub, err := NewHost(ctx, l.config, l.broadcastAppScore, l.broadcastScoreInspect)
 	if err != nil {
@@ -174,7 +175,7 @@ func (l *Libp2p) Init() error {
 	log.Infof("Derived DID: %s", didInstance.URI)
 
 	// Initialize the observability package with the host and DID
-	if err := observability.Initialize(l.Host, didInstance); err != nil {
+	if err := observability.Initialize(l.Host, didInstance, cfg); err != nil {
 		return fmt.Errorf("failed to initialize observability: %w", err)
 	}
 

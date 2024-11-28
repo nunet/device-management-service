@@ -24,7 +24,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newNewCmd(afs afero.Afero) *cobra.Command {
+func newNewCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
@@ -54,7 +54,7 @@ Example:
 				rootDID = provider.DID()
 				context = LedgerContext(context)
 			} else {
-				keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
+				keyStoreDir := filepath.Join(cfg.General.UserDir, dms.KeystoreDir)
 				ks, err := keystore.New(afs.Fs, keyStoreDir)
 				if err != nil {
 					return fmt.Errorf("failed to open keystore: %w", err)
@@ -102,7 +102,7 @@ Example:
 				rootDID = did.FromPublicKey(priv.GetPublic())
 			}
 
-			capStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.CapstoreDir)
+			capStoreDir := filepath.Join(cfg.General.UserDir, dms.CapstoreDir)
 			capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", context))
 
 			fileExists, err := afs.Exists(capStoreFile)
@@ -136,7 +136,7 @@ Example:
 				return fmt.Errorf("unable to create capability context: %w", err)
 			}
 
-			if err := SaveCapabilityContext(capCtx, context); err != nil {
+			if err := SaveCapabilityContext(capCtx, context, cfg); err != nil {
 				return fmt.Errorf("save capability context: %w", err)
 			}
 

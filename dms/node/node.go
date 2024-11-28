@@ -345,6 +345,19 @@ func New(cfg config.Config, fs afero.Afero,
 	return n, nil
 }
 
+// GetBidRequests returns the bid requests for the node.
+func (n *Node) GetBidRequests() []jobs.BidRequest {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	reqs := []jobs.BidRequest{}
+	for _, v := range n.bids {
+		reqs = append(reqs, v.request)
+	}
+
+	return reqs
+}
+
 // GetAllocation gets an allocation by id.
 func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
 	n.allocmx.Lock()
@@ -356,6 +369,20 @@ func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
 	}
 
 	return alloc, nil
+}
+
+// GetAllocations returns a list of allocations in the node.
+func (n *Node) GetAllocations() []*jobs.Allocation {
+	n.allocmx.Lock()
+	defer n.allocmx.Unlock()
+
+	allAllocs := []*jobs.Allocation{}
+
+	for _, v := range n.allocations {
+		allAllocs = append(allAllocs, v)
+	}
+
+	return allAllocs
 }
 
 // Start node
@@ -609,19 +636,18 @@ func (n *Node) sayHello(p peer.ID) {
 
 // Stop node
 func (n *Node) Stop() error {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
 	if !atomic.CompareAndSwapInt32(&n.running, 1, 0) {
 		return nil
 	}
 
+	n.mx.Lock()
 	// stop all allocations
 	for k, alloc := range n.allocations {
 		if err := alloc.Stop(n.ctx); err != nil {
 			log.Warnf("error stopping allocation %s: %err", k, err)
 		}
 	}
+	n.mx.Unlock()
 
 	if err := n.saveDeployments(); err != nil {
 		log.Errorf("error saving active deployments: %s", err)

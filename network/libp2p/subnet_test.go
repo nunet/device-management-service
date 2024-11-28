@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
 func TestSubnetCreate(t *testing.T) {
@@ -259,7 +260,7 @@ func createPeer(t *testing.T, port int) *Libp2p { //nolint
 	peer1, err := New(peerConfig, afero.NewMemMapFs())
 
 	require.NoError(t, err)
-	require.NoError(t, peer1.Init())
+	require.NoError(t, peer1.Init(&config.Config{}))
 
 	return peer1
 }
