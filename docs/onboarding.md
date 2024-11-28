@@ -32,6 +32,20 @@ Example:
 nunet actor cmd --context user /dms/node/onboarding/onboard --ram 4 --cpu 2 --disk 20
 ```
 
+
+If a GPU is detected on the machine, an interactive prompt will be displayed that allows choosing the GPU and the amount of VRAM to onboard from it.
+
+To onboard a GPU without the interactive prompt, `--gpus  "<GPU_INDEX>:<VRAM_IN_GB>"` can be used where index can be obtained from the `gpu list` command. In case of multiple GPUs, the pair can be expanded for each GPU separated by a comma.
+
+Example:
+
+```bash
+# Onboard 4GB RAM, 2 CPU cores, 20GB disk space and 2GB VRAM of GPU at index 0
+nunet actor cmd --context user /dms/node/onboarding/onboard --ram 4 --cpu 2 --disk 20 --gpus "0:2"
+```
+
+If GPU is detected on the machine but it shouldn't be onboarded, use the `--no-gpu` flag.
+
 ## Managing Your Resources
 
 ### Verify Onboarding Status
