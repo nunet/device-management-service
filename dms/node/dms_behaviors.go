@@ -21,6 +21,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -298,7 +299,7 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 
 	resp.Deployments = make(map[string]string)
 	for ID, dep := range n.deployments {
-		resp.Deployments[ID] = jobs.DeploymentStatusString(dep.Status())
+		resp.Deployments[ID] = job_types.DeploymentStatusString(dep.Status())
 	}
 
 	n.sendReply(msg, resp)
@@ -398,7 +399,7 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
-	resp.Status = jobs.DeploymentStatusString(d.Status())
+	resp.Status = job_types.DeploymentStatusString(d.Status())
 	n.sendReply(msg, resp)
 }
 
@@ -491,9 +492,9 @@ func (n *Node) handleVMContainerStart(msg actor.Envelope) {
 
 	var executionType jobs.AllocationExecutor
 	if request.Execution.EngineSpec.IsType(types.ExecutorTypeFirecracker.String()) {
-		executionType = jobs.ExecutorFirecracker
+		executionType = job_types.ExecutorFirecracker
 	} else if request.Execution.EngineSpec.IsType(types.ExecutorTypeDocker.String()) {
-		executionType = jobs.ExecutorDocker
+		executionType = job_types.ExecutorDocker
 	}
 
 	resp := CustomVMStartResponse{}

@@ -19,11 +19,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
+	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/api"
-	"gitlab.com/nunet/device-management-service/db"
-	gdb "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	clover_db "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
@@ -100,6 +100,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load geoip2 database: %w", err)
 	}
+	log.Debugf("loaded geoip2 database: %v", geoip2db)
 
 	fs := afero.NewOsFs()
 
@@ -128,23 +129,25 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	}
 	pubKey := priv.GetPublic()
 
-	db, err := db.ConnectDatabase(gcfg.WorkDir)
+	db, err := NewDMSDB(gcfg.General.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
 	}
 
 	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
-		OnboardedResources: gdb.NewOnboardedResources(db),
-		ResourceAllocation: gdb.NewResourceAllocation(db),
+		OnboardedResources: clover_db.NewOnboardedResources(db),
+		ResourceAllocation: clover_db.NewResourceAllocation(db),
 	}
 	resourceManager, err := resources.NewResourceManager(repos, hardwareManager)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create resource manager: %w", err)
 	}
 
-	onboardingConfigRepo := gdb.NewOnboardingConfig(db)
-	onboardingManager, err := onboarding.New(resourceManager, hardwareManager, onboardingConfigRepo)
+	onboardR := clover_db.NewOnboardingConfig(db)
+	orchestR := clover_db.NewOrchestratorView(db)
+
+	onboardingManager, err := onboarding.New(resourceManager, hardwareManager, onboardR)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create onboarding manager: %w", err)
 	}
@@ -239,7 +242,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
-		geoip2db, hostLocation, portConfig,
+		orchestR, geoip2db, hostLocation, portConfig,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -319,4 +322,21 @@ func GenerateAndStorePrivKey(ks keystore.KeyStore, passphrase string, keyID stri
 	}
 
 	return priv, nil
+}
+
+// NewDMSDB creates a clover database with all known dms collections
+func NewDMSDB(path string) (*clover.DB, error) {
+	return clover_db.NewDB(
+		path,
+		[]string{
+			"free_resources",
+			"request_tracker",
+			"onboarded_resources",
+			"machine_resources",
+			"onboarding_config",
+			"resource_allocation",
+			"orchestrator_view",
+			"gpu",
+		},
+	)
 }

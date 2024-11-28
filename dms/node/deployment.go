@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -26,12 +28,15 @@ const (
 	// Minimum time for deployment
 	MinDeploymentTime = time.Minute - time.Second
 
-	bidStateGCInterval = time.Minute
-	bidStateTimeout    = 5 * time.Minute
+	RestoreDeadlineCommitting   = 1 * time.Minute
+	RestoreDeadlineProvisioning = 1 * time.Minute
+	RestoreDeadlineRunning      = 5 * time.Minute
+	bidStateGCInterval          = time.Minute
+	bidStateTimeout             = 5 * time.Minute
 )
 
 type NewDeploymentRequest struct {
-	Ensemble jobs.EnsembleConfig
+	Ensemble job_types.EnsembleConfig
 }
 
 type NewDeploymentResponse struct {
@@ -95,7 +100,7 @@ func (n *Node) newDeployment(msg actor.Envelope) {
 
 	// save the deployment
 	n.mx.Lock()
-	if err := n.saveDeployment(orchestrator.ID()); err != nil {
+	if err := n.saveDeployment(orchestrator); err != nil {
 		log.Errorf("error saving deployment %s: %s", orchestrator.ID(), err)
 	}
 	n.mx.Unlock()
@@ -116,7 +121,7 @@ func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 	// TODO
 }
 
-func (n *Node) createOrchestrator(ensemble jobs.EnsembleConfig) (*jobs.Orchestrator, error) {
+func (n *Node) createOrchestrator(ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
 	orch, err := jobs.NewOrchestrator(n.actor, n.network, ensemble)
 	if err != nil {
 		return nil, err
@@ -130,8 +135,8 @@ func (n *Node) saveDeployments() error {
 	defer n.mx.Unlock()
 
 	var failed []string
-	for oid := range n.deployments {
-		if err := n.saveDeployment(oid); err != nil {
+	for oid, deployment := range n.deployments {
+		if err := n.saveDeployment(deployment); err != nil {
 			log.Errorf("error saving deployment %s: %s", oid, err)
 			failed = append(failed, oid)
 		}
@@ -144,13 +149,85 @@ func (n *Node) saveDeployments() error {
 	return nil
 }
 
-func (n *Node) saveDeployment(_ string) error {
-	// TODO
+func (n *Node) saveDeployment(deployment *jobs.Orchestrator) error {
+	view := job_types.OrchestratorView{
+		DeploymentID:       deployment.ID(),
+		Cfg:                deployment.Config(),
+		Manifest:           deployment.Manifest(),
+		Status:             deployment.Status(),
+		DeploymentSnapshot: deployment.DeploymentSnapshot(),
+	}
+
+	_, err := n.orchestratorRepo.Create(n.ctx, view)
+	if err != nil {
+		return fmt.Errorf("couldn't save deployment on database: %w", err)
+	}
+
 	return nil
 }
 
 func (n *Node) restoreDeployments() error {
-	// TODO
+	query := n.orchestratorRepo.GetQuery()
+	query.Conditions = append(
+		query.Conditions,
+		repositories.LTE("Status", job_types.DeploymentStatusRunning),
+	)
+
+	orchestratorsViews, err := n.orchestratorRepo.FindAll(n.ctx, query)
+	if err != nil {
+		if err == repositories.ErrNotFound {
+			return nil
+		}
+		return fmt.Errorf("couldn't query the database for hanging deployments: %w", err)
+	}
+
+	var failedToRestore []string
+	for _, d := range orchestratorsViews {
+		if d.Status < job_types.DeploymentStatusCommitting {
+			log.Warnf(
+				"deployment %s will not be restaured because it was not previously committed",
+				d.DeploymentID,
+			)
+			continue
+		}
+
+		// Check restore deadline based on deployment status
+		// TODO: on the compute provider side, if the deployer stops to answer
+		// for more than the restore deadlines, they should free any resources alocated
+		// and consider the deployment as canceled
+		var restoreDeadline time.Duration
+		switch d.Status {
+		case job_types.DeploymentStatusCommitting:
+			restoreDeadline = RestoreDeadlineCommitting
+		case job_types.DeploymentStatusProvisioning:
+			restoreDeadline = RestoreDeadlineProvisioning
+		case job_types.DeploymentStatusRunning:
+			restoreDeadline = RestoreDeadlineRunning
+		default:
+			log.Warnf("Unknown restorable deployment status for %s, skipping restoration", d.DeploymentID)
+			continue
+		}
+
+		if time.Since(d.CreatedAt) > restoreDeadline {
+			log.Warnf("Deployment %s has exceeded its restore deadline, skipping restoration", d.DeploymentID)
+			continue
+		}
+
+		orchestrator, err := jobs.RestoreDeployment(n.actor, n.network, d.DeploymentID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
+		if err != nil {
+			log.Errorf("couldn't restore orchestrator of id %s; Error: %w", d.DeploymentID, err)
+			failedToRestore = append(failedToRestore, d.DeploymentID)
+			continue
+		}
+
+		log.Debugf("deployment %s restored!\n", orchestrator.ID())
+		n.deployments[orchestrator.ID()] = orchestrator
+	}
+
+	if len(failedToRestore) > 0 {
+		return fmt.Errorf("failed to restore the following deployment(s): %v", failedToRestore)
+	}
+
 	return nil
 }
 
@@ -169,7 +246,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		return
 	}
 
-	var request jobs.EnsembleBidRequest
+	var request job_types.EnsembleBidRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		return
 	}
@@ -192,7 +269,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 	})
 
 	// find the first bid request that matches
-	var toAnswer jobs.BidRequest
+	var toAnswer job_types.BidRequest
 	var found bool
 loop:
 	for _, v := range request.Request {
@@ -224,7 +301,7 @@ loop:
 				log.Debugf("failed to get executor: %+v", e)
 				continue loop
 			}
-			if executor.executionType == jobs.ExecutorDocker {
+			if executor.executionType == job_types.ExecutorDocker {
 				if v.V1.GeneralRequirements.PrivilegedDocker {
 					if !n.dmsConfig.AllowPrivilegedDocker {
 						log.Debugf("node does not allow privileged docker")
@@ -275,12 +352,12 @@ loop:
 	}
 	log.Debugf("signing bid with provider: %+v", provider)
 
-	bid := jobs.Bid{
-		V1: &jobs.BidV1{
+	bid := job_types.Bid{
+		V1: &job_types.BidV1{
 			EnsembleID: request.ID,
 			NodeID:     toAnswer.V1.NodeID,
 			Peer:       n.hostID,
-			Location: jobs.Location{
+			Location: job_types.Location{
 				Region:  n.hostLocation.HostContinent,
 				Country: n.hostLocation.HostCountry,
 				City:    n.hostLocation.HostCity,
@@ -373,7 +450,7 @@ func (n *Node) releaseAllocation(allocID string) error {
 	return nil
 }
 
-func (n *Node) rememberBid(eid string, req jobs.BidRequest, ports []int) {
+func (n *Node) rememberBid(eid string, req job_types.BidRequest, ports []int) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 

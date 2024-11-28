@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/utils"
@@ -32,38 +33,15 @@ import (
 
 const MaxPermutations = 1_000_000
 
-type DeploymentStatus int
-
-const (
-	DeploymentStatusPreparing DeploymentStatus = iota
-	DeploymentStatusGenerating
-	DeploymentStatusCommitting
-	DeploymentStatusProvisioning
-	DeploymentStatusRunning
-	DeploymentStatusFailed
-)
-
-func DeploymentStatusString(d DeploymentStatus) string {
-	switch d {
-	case DeploymentStatusPreparing:
-		return "Preparing"
-	case DeploymentStatusGenerating:
-		return "Generating"
-	case DeploymentStatusCommitting:
-		return "Committing"
-	case DeploymentStatusProvisioning:
-		return "Provisioning"
-	case DeploymentStatusRunning:
-		return "Running"
-	case DeploymentStatusFailed:
-		return "Failed"
-	default:
-		return "Unknown"
-	}
-}
-
 type Orchestrator struct {
-	actor   actor.Actor
+	actor actor.Actor
+
+	// TODO: does the orchestrator needs the network at all?
+	// The Orchestrator's actor already has network embbeded, doesn't it?
+	// The node controlling the orchestrator already owns network
+	//
+	// Otherwise, we'll have this value triplicated for each orchestrator
+	// (node, actor and orchestrator)
 	network network.Network
 	geo     *GeoLocator
 
@@ -72,6 +50,8 @@ type Orchestrator struct {
 	cfg      EnsembleConfig
 	manifest EnsembleManifest
 	status   DeploymentStatus
+
+	deploymentSnapshot DeploymentSnapshot
 
 	ctx    context.Context
 	cancel func()
@@ -107,48 +87,35 @@ func (o *Orchestrator) setStatus(status DeploymentStatus) {
 	o.mx.Lock()
 	defer o.mx.Unlock()
 
-	log.Infof("setting status to: %s", DeploymentStatusString(status))
+	log.Infof("setting status to: %s", job_types.DeploymentStatusString(status))
 	o.status = status
-}
-
-func (o *Orchestrator) Status() DeploymentStatus {
-	o.mx.Lock()
-	defer o.mx.Unlock()
-
-	return o.status
-}
-
-func (o *Orchestrator) Manifest() EnsembleManifest {
-	o.mx.Lock()
-	defer o.mx.Unlock()
-
-	return o.manifest.Clone()
-}
-
-func (o *Orchestrator) Config() EnsembleConfig {
-	o.mx.Lock()
-	defer o.mx.Unlock()
-
-	return o.cfg.Clone()
-}
-
-func (o *Orchestrator) ID() string {
-	return o.id
 }
 
 func (o *Orchestrator) Deploy(expiry time.Time) error {
 	defer func() {
-		if o.Status() != DeploymentStatusRunning {
+		if o.status != DeploymentStatusRunning {
 			o.setStatus(DeploymentStatusFailed)
 		}
 	}()
 	o.setStatus(DeploymentStatusPreparing)
 
+	return o.deploy(expiry)
+}
+
+func (o *Orchestrator) deploy(expiry time.Time) error {
+	o.deploymentSnapshot.Expiry = expiry
 	edgeConstraintCache := make(map[string]bool)
+
 deploy:
 	for time.Now().Before(expiry) {
 		o.setStatus(DeploymentStatusPreparing)
 
+		// delete old state of candidates if any
+		for c := range o.deploymentSnapshot.Candidates {
+			o.mx.Lock()
+			delete(o.deploymentSnapshot.Candidates, c)
+			o.mx.Unlock()
+		}
 		// 0. check if one of the ensemble nodes have peer specified
 		// If bid request to peer specified fails, the entire deployment must fail
 		nodeForTargetPeer := make(map[string]string)
@@ -283,6 +250,7 @@ deploy:
 
 		// 5. Commit the deployment
 		o.setStatus(DeploymentStatusCommitting)
+		o.deploymentSnapshot.Candidates = candidate
 
 		log.Info("committing candidate bids")
 		manifest, err := o.commit(candidate)
@@ -299,8 +267,8 @@ deploy:
 		o.setStatus(DeploymentStatusProvisioning)
 
 		log.Info("provisioning network")
-		if err := o.provision(manifest); err != nil {
-			log.Errorf("failed to provision network: %s", err)
+		if err := o.provision(o.manifest); err != nil {
+			log.Errorf("failed to privision network: %s", err)
 			o.revert(manifest)
 			continue deploy
 		}
@@ -328,7 +296,49 @@ func (o *Orchestrator) Shutdown() error {
 	return nil
 }
 
-func (o *Orchestrator) requestBids(bidrq EnsembleBidRequest, expiry time.Time) (chan Bid, chan struct{}, time.Time, error) {
+// Restore restores deployments where the status is either provisioning, committing or running
+func RestoreDeployment(
+	actor actor.Actor, net network.Network, id string,
+	cfg EnsembleConfig, manifest EnsembleManifest,
+	status DeploymentStatus, restoreInfo DeploymentSnapshot,
+) (*Orchestrator, error) {
+	o := &Orchestrator{
+		id:                 id,
+		actor:              actor,
+		network:            net,
+		cfg:                cfg,
+		manifest:           manifest,
+		status:             status,
+		deploymentSnapshot: restoreInfo,
+	}
+
+	if o.status == DeploymentStatusCommitting {
+		log.Debug("reverting deployment of old candidates and restarting deployment from the beginning")
+		for nodeID, bid := range restoreInfo.Candidates {
+			o.revertDeployment(nodeID, bid.Handle())
+		}
+
+		return o, o.deploy(restoreInfo.Expiry)
+	}
+
+	if o.status == DeploymentStatusProvisioning {
+		log.Debug("restoring deployment from manifest")
+		if err := o.provision(o.manifest); err != nil {
+			log.Errorf("failed to provision network: %s", err)
+			o.revert(manifest)
+			return o, o.deploy(restoreInfo.Expiry)
+		}
+
+		o.setStatus(DeploymentStatusRunning)
+	}
+
+	o.ctx, o.cancel = context.WithCancel(context.Background())
+	go o.supervise()
+
+	return o, nil
+}
+
+func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry time.Time) (chan Bid, chan struct{}, time.Time, error) {
 	log.Debugf("requesting bids: %+v", bidrq)
 
 	bidExpiryTime := time.Now().Add(BidRequestTimeout)
@@ -1445,15 +1455,15 @@ func (o *Orchestrator) acceptPeerLocation(nodeID, peerID string, loc Location) b
 	return true
 }
 
-func (o *Orchestrator) makeInitialBidRequest() (EnsembleBidRequest, error) {
+func (o *Orchestrator) makeInitialBidRequest() (job_types.EnsembleBidRequest, error) {
 	return o.ensembleConfigToBidRequest(&o.cfg)
 }
 
-func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclusion map[string]struct{}) (EnsembleBidRequest, error) {
+func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclusion map[string]struct{}) (job_types.EnsembleBidRequest, error) {
 	residualConfig := EnsembleConfig{
-		V1: &EnsembleConfigV1{
-			Allocations: make(map[string]AllocationConfig),
-			Nodes:       make(map[string]NodeConfig),
+		V1: &job_types.EnsembleConfigV1{
+			Allocations: make(map[string]job_types.AllocationConfig),
+			Nodes:       make(map[string]job_types.NodeConfig),
 		},
 	}
 
@@ -1484,17 +1494,17 @@ func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclus
 	return result, nil
 }
 
-func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (EnsembleBidRequest, error) {
+func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (job_types.EnsembleBidRequest, error) {
 	v1Config := config.V1
 
-	ensembleBidRequest := EnsembleBidRequest{
+	ensembleBidRequest := job_types.EnsembleBidRequest{
 		ID: o.id,
 	}
 
 	log.Infof("creating bid request for nodes: %+v", v1Config.Nodes)
 	for nodeID, nodeConfig := range v1Config.Nodes {
-		bidRequest := BidRequest{
-			V1: &BidRequestV1{
+		bidRequest := job_types.BidRequest{
+			V1: &job_types.BidRequestV1{
 				NodeID:   nodeID,
 				Location: nodeConfig.Location,
 			},
@@ -1516,7 +1526,7 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (Ensem
 				executors = append(executors, allocationConfig.Executor)
 			}
 
-			if allocationConfig.Executor == ExecutorDocker {
+			if allocationConfig.Executor == job_types.ExecutorDocker {
 				// check if bid includes allocation requiring privileged docker
 				dockerCfg, err := docker.DecodeSpec(&allocationConfig.Execution)
 				if err != nil {
@@ -1530,7 +1540,7 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (Ensem
 
 			err := aggregateResources.Add(allocationConfig.Resources)
 			if err != nil {
-				return EnsembleBidRequest{}, err
+				return job_types.EnsembleBidRequest{}, err
 			}
 
 			for _, portConfig := range nodeConfig.Ports {
@@ -1613,4 +1623,36 @@ func containsExecutor(executors []AllocationExecutor, executor AllocationExecuto
 		}
 	}
 	return false
+}
+
+func (o *Orchestrator) Status() DeploymentStatus {
+	o.mx.Lock()
+	defer o.mx.Unlock()
+
+	return o.status
+}
+
+func (o *Orchestrator) Manifest() EnsembleManifest {
+	o.mx.Lock()
+	defer o.mx.Unlock()
+
+	return o.manifest.Clone()
+}
+
+func (o *Orchestrator) Config() EnsembleConfig {
+	o.mx.Lock()
+	defer o.mx.Unlock()
+
+	return o.cfg.Clone()
+}
+
+func (o *Orchestrator) ID() string {
+	return o.id
+}
+
+func (o *Orchestrator) DeploymentSnapshot() DeploymentSnapshot {
+	o.mx.Lock()
+	defer o.mx.Unlock()
+
+	return o.deploymentSnapshot
 }
