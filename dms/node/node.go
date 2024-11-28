@@ -24,7 +24,9 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/executor"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
@@ -72,6 +74,7 @@ type Node struct {
 	allocations map[string]*jobs.Allocation
 	running     int32
 
+	orchestratorRepo  repositories.OrchestratorView
 	geoip             types.GeoIPLocator
 	hostLocation      HostGeolocation
 	portConfig        PortConfig
@@ -91,7 +94,7 @@ type peerState struct {
 
 type bidState struct {
 	expire  time.Time
-	request jobs.BidRequest
+	request job_types.BidRequest
 	ports   []int
 }
 
@@ -119,6 +122,7 @@ func New(cfg config.Config, fs afero.Afero,
 	resourceManager types.ResourceManager,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
+	orchestratorRepo repositories.OrchestratorView,
 	geoip types.GeoIPLocator, hostLocation HostGeolocation, portConfig PortConfig,
 ) (*Node, error) {
 	if onboarder == nil {
@@ -195,6 +199,7 @@ func New(cfg config.Config, fs afero.Afero,
 		executors:         make(map[string]executorMetadata),
 		ctx:               ctx,
 		cancel:            cancel,
+		orchestratorRepo:  orchestratorRepo,
 		geoip:             geoip,
 		hostLocation:      hostLocation,
 		portConfig:        portConfig,

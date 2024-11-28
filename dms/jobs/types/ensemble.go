@@ -6,14 +6,62 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package jobs
+package jobtypes
 
 import (
 	"encoding/json"
 	"errors"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+type DeploymentStatus int
+
+const (
+	DeploymentStatusPreparing DeploymentStatus = iota
+	DeploymentStatusGenerating
+	DeploymentStatusCommitting
+	DeploymentStatusProvisioning
+	DeploymentStatusRunning
+	DeploymentStatusFailed
+)
+
+func DeploymentStatusString(d DeploymentStatus) string {
+	switch d {
+	case DeploymentStatusPreparing:
+		return "Preparing"
+	case DeploymentStatusGenerating:
+		return "Generating"
+	case DeploymentStatusCommitting:
+		return "Committing"
+	case DeploymentStatusProvisioning:
+		return "Provisioning"
+	case DeploymentStatusRunning:
+		return "Running"
+	case DeploymentStatusFailed:
+		return "Failed"
+	default:
+		return "Unknown"
+	}
+}
+
+type OrchestratorView struct {
+	types.BaseDBModel
+	DeploymentID       string
+	Cfg                EnsembleConfig
+	Manifest           EnsembleManifest
+	Status             DeploymentStatus
+	DeploymentSnapshot DeploymentSnapshot
+}
+
+type DeploymentSnapshot struct {
+	// candidates keeps state of candidates while committing.
+	Candidates map[string]Bid
+
+	// Expiry is the time passed as an argument when calling Deploy()
+	Expiry time.Time
+}
 
 // EnsembleConfig is the versioned structure that contains the ensemble configuration
 type EnsembleConfig struct {

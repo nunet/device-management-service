@@ -30,6 +30,7 @@ cover.out
 
 # others
 .aider*
+sync_remote.sh
 
 # emacs
 *~

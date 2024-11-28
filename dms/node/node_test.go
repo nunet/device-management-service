@@ -9,7 +9,9 @@
 package node
 
 import (
+	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/multiformats/go-multiaddr"
@@ -19,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	repo "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -115,10 +118,22 @@ func TestNew(t *testing.T) {
 			}
 
 			hardwareManager := NewMockHardwareManager(ctrl)
+
+			path, err := tempDir()
+			assert.NoError(t, err)
+			defer os.RemoveAll(path)
+
+			collections := []string{"orchestrator_view"}
+
+			db, err := repo.NewDB(path, collections)
+			assert.NoError(t, err)
+			assert.NotNil(t, db)
+
 			act, err := New(
 				*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
 				tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager,
-				tt.scheduler, hardwareManager, tt.geoip, tt.hostLocation, tt.portConfig,
+				tt.scheduler, hardwareManager, repo.NewOrchestratorView(db),
+				tt.geoip, tt.hostLocation, tt.portConfig,
 			)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
@@ -140,10 +155,20 @@ func TestNodeAllocationMessaging(t *testing.T) {
 	resourceManager := NewMockResourceManager(ctrl)
 	hardwareManager := NewMockHardwareManager(ctrl)
 
+	path, err := tempDir()
+	assert.NoError(t, err)
+	defer os.RemoveAll(path)
+
+	collections := []string{"orchestrator_view"}
+
+	db, err := repo.NewDB(path, collections)
+	assert.NoError(t, err)
+	assert.NotNil(t, db)
+
 	node1, err := New(
 		*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
 		&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net,
-		resourceManager, bt.NewScheduler(1), hardwareManager,
+		resourceManager, bt.NewScheduler(1), hardwareManager, repo.NewOrchestratorView(db),
 		&geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
 	)
 	assert.NoError(t, err)
@@ -221,6 +246,14 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 
 	libp2pInstance, _ := net.(*libp2p.Libp2p)
 	return libp2pInstance
+}
+
+func tempDir() (string, error) {
+	dir, err := os.MkdirTemp("", "nunet-test-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	return dir, nil
 }
 
 type geoipMock struct {

@@ -13,7 +13,9 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/actor"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 )
@@ -28,7 +30,7 @@ func TestValidation(t *testing.T) {
 	testDID := did.FromPublicKey(pubK)
 
 	testBid := Bid{
-		V1: &BidV1{
+		V1: &job_types.BidV1{
 			EnsembleID: "testEnsembleID",
 			NodeID:     "testnodeID",
 			Peer:       peerID.String(),

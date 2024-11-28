@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
@@ -41,8 +42,8 @@ func TestProvision(t *testing.T) {
 	actr := actor.CreateActor(t, peer, capa)
 	require.NoError(t, actr.Start())
 	orchestrator, err := NewOrchestrator(actr, peer, EnsembleConfig{
-		V1: &EnsembleConfigV1{
-			Allocations: map[string]AllocationConfig{
+		V1: &job_types.EnsembleConfigV1{
+			Allocations: map[string]job_types.AllocationConfig{
 				"allocation1": {
 					Executor: "docker",
 					Resources: types.Resources{
@@ -78,7 +79,7 @@ func TestProvision(t *testing.T) {
 					Execution: types.SpecConfig{},
 				},
 			},
-			Nodes: map[string]NodeConfig{
+			Nodes: map[string]job_types.NodeConfig{
 				"node1": {
 					Allocations: []string{"allocation1"},
 				},

@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -406,7 +407,7 @@ Examples:
 		Payload: func() any { return &node.VMStopRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.VMStopRequest)
-			p.ExecutionType = jobs.ExecutorFirecracker
+			p.ExecutionType = job_types.ExecutorFirecracker
 			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
@@ -430,7 +431,7 @@ Examples:
 	node.VMListBehavior: {
 		Payload: func() any {
 			return &node.ListVMResponse{
-				ExecutionType: jobs.ExecutorFirecracker,
+				ExecutionType: job_types.ExecutorFirecracker,
 			}
 		},
 		Type:  bInvoke,
