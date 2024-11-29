@@ -744,12 +744,6 @@ github.com/jstemmer/go-junit-report v0.9.1/go.mod h1:Brl9GWCQeLvo8nXZwPNNblvFj/X
 github.com/jtolds/gls v4.20.0+incompatible h1:xdiiI2gbIgH/gLH7ADydsJ1uDOEzR8yvV7C0MuV77Wo=
 github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfVYBRgL+9YlvaHOwJU=
 github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
-github.com/kanishkatn/amdsmi/lib/go v0.0.0-20241022135617-952e07ab0a0b h1:o/9ejPfIIPTgxzNAkuFj4LvafS/abk9f4W+f8GCkXH0=
-github.com/kanishkatn/amdsmi/lib/go v0.0.0-20241022135617-952e07ab0a0b/go.mod h1:t6l3lW9kWdeOJ3fX9tdxbYc+QuBXGgzZvoGMP8iQPQc=
-github.com/kanishkatn/amdsmi/lib/go v0.0.0-20241023065738-ce9a7564f42e h1:eiCCAshj9OSeAmbnpKdaZdniGJjFHv4t2dRFJim6zM4=
-github.com/kanishkatn/amdsmi/lib/go v0.0.0-20241023065738-ce9a7564f42e/go.mod h1:t6l3lW9kWdeOJ3fX9tdxbYc+QuBXGgzZvoGMP8iQPQc=
-github.com/kanishkatn/amdsmi/lib/go v0.0.0-20241023091611-e12039a49bcd h1:Eq56Kfu5emj14Pii4kPzSG2dh2gcofarAH4nFV9gVdg=
-github.com/kanishkatn/amdsmi/lib/go v0.0.0-20241023091611-e12039a49bcd/go.mod h1:t6l3lW9kWdeOJ3fX9tdxbYc+QuBXGgzZvoGMP8iQPQc=
 github.com/karrick/godirwalk v1.8.0/go.mod h1:H5KPZjojv4lE+QYImBI8xVtrBRgYrIVsaRPx4tDPEn4=
 github.com/karrick/godirwalk v1.10.3/go.mod h1:RoGL9dQei4vP9ilrpETWE8CLOZ1kiN0LhBygSwrAsHA=
 github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
