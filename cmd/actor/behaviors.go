@@ -766,7 +766,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
 
-	node.AllocatedResourcesBehavior: {
+	node.ResourcesAllocatedBehavior: {
 		Type:  bInvoke,
 		Short: "Get allocated resources",
 		Long: `Invokes the /dms/node/resources/allocated behavior on an actor
@@ -778,7 +778,7 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/allocated`,
 	},
 
-	node.FreeResourcesBehavior: {
+	node.ResourcesFreeBehavior: {
 		Type:  bInvoke,
 		Short: "Get free resources",
 		Long: `Invokes the /dms/node/resources/free behavior on an actor
@@ -790,7 +790,7 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/free`,
 	},
 
-	node.OnboardedResourcesBehavior: {
+	node.ResourcesOnboardedBehavior: {
 		Type:  bInvoke,
 		Short: "Get onboarded resources",
 		Long: `Invokes the /dms/node/resources/onboarded behavior on an actor
@@ -849,5 +849,27 @@ Examples:
   nunet actor cmd --context user /dms/node/logger/config --api-key <api-key>
   nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
   nunet actor cmd --context user /dms/node/logger/config --enable-elastic`,
+	},
+	node.HardwareSpecBehavior: {
+		Type:  bInvoke,
+		Short: "Get hardware specifications",
+		Long: `Invokes the /dms/node/hardware/spec behavior on an actor
+
+This behavior retrieves the hardware specifications of the system.
+
+Examples:
+
+	nunet actor cmd --context user /dms/node/hardware/spec`,
+	},
+	node.HardwareUsageBehavior: {
+		Type:  bInvoke,
+		Short: "Get hardware usage",
+		Long: `Invokes the /dms/node/hardware/usage behavior on an actor
+
+This behavior retrieves the hardware usage of the system.
+
+Examples:
+
+	nunet actor cmd --context user /dms/node/hardware/usage`,
 	},
 }
