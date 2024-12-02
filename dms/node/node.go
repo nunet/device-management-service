@@ -317,17 +317,23 @@ func New(cfg config.Config, fs afero.Afero,
 		jobs.SubnetDestroyBehavior: {
 			fn: n.handleSubnetDestroy,
 		},
-		AllocatedResourcesBehavior: {
-			fn: n.getAllocatedResources,
+		ResourcesAllocatedBehavior: {
+			fn: n.handleAllocatedResources,
 		},
-		FreeResourcesBehavior: {
-			fn: n.getFreeResources,
+		ResourcesFreeBehavior: {
+			fn: n.handleFreeResources,
 		},
-		OnboardedResourcesBehavior: {
-			fn: n.getOnboardedResources,
+		ResourcesOnboardedBehavior: {
+			fn: n.handleOnboardedResources,
 		},
 		LoggerConfigBehavior: {
 			fn: n.handleLoggerConfig,
+		},
+		HardwareSpecBehavior: {
+			fn: n.handleHardwareSpec,
+		},
+		HardwareUsageBehavior: {
+			fn: n.handleHardwareUsage,
 		},
 	}
 	for behavior, handler := range dmsBehaviors {

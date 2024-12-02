@@ -54,9 +54,12 @@ const (
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 
-	AllocatedResourcesBehavior = "/dms/node/resources/allocated"
-	FreeResourcesBehavior      = "/dms/node/resources/free"
-	OnboardedResourcesBehavior = "/dms/node/resources/onboarded"
+	ResourcesAllocatedBehavior = "/dms/node/resources/allocated"
+	ResourcesFreeBehavior      = "/dms/node/resources/free"
+	ResourcesOnboardedBehavior = "/dms/node/resources/onboarded"
+
+	HardwareSpecBehavior  = "/dms/node/hardware/spec"
+	HardwareUsageBehavior = "/dms/node/hardware/usage"
 
 	LoggerConfigBehavior = "/dms/node/logger/config"
 
@@ -754,10 +757,10 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 
 type resourcesResponse struct {
 	Resources types.Resources
-	Error     string
+	Error     string `json:"error,omitempty"`
 }
 
-func (n *Node) getAllocatedResources(msg actor.Envelope) {
+func (n *Node) handleAllocatedResources(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := resourcesResponse{}
 
@@ -772,7 +775,7 @@ func (n *Node) getAllocatedResources(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) getFreeResources(msg actor.Envelope) {
+func (n *Node) handleFreeResources(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := resourcesResponse{}
 
@@ -787,7 +790,7 @@ func (n *Node) getFreeResources(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) getOnboardedResources(msg actor.Envelope) {
+func (n *Node) handleOnboardedResources(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := resourcesResponse{}
 
@@ -799,5 +802,35 @@ func (n *Node) getOnboardedResources(msg actor.Envelope) {
 	}
 
 	resp.Resources = onboardedResources.Resources
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleHardwareSpec(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	hardwareSpec, err := n.hardware.GetMachineResources()
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = hardwareSpec.Resources
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleHardwareUsage(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	hardwareUsage, err := n.hardware.GetUsage()
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = hardwareUsage
 	n.sendReply(msg, resp)
 }
