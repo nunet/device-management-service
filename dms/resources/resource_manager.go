@@ -44,18 +44,11 @@ func NewResourceManager(repos ManagerRepos, hardware types.HardwareManager) (*De
 	if hardware == nil {
 		return nil, fmt.Errorf("hardware manager cannot be nil")
 	}
-	rmStore := newStore()
-
-	defaultManager := &DefaultManager{
+	return &DefaultManager{
 		repos:    repos,
-		store:    rmStore,
+		store:    newStore(),
 		hardware: hardware,
-	}
-	if err := defaultManager.loadAllocationsFromDB(context.Background()); err != nil {
-		return nil, fmt.Errorf("loading allocations from db: %w", err)
-	}
-
-	return defaultManager, nil
+	}, nil
 }
 
 var _ types.ResourceManager = (*DefaultManager)(nil)
@@ -305,19 +298,6 @@ func (d *DefaultManager) checkCapacity(ctx context.Context, resources types.Reso
 	}
 	log.Debugf("System Free Resources after subtraction: %+v", systemFreeResources)
 
-	return nil
-}
-
-// loadAllocationsFromDB fetches the allocations from the database
-func (d *DefaultManager) loadAllocationsFromDB(ctx context.Context) error {
-	allocations, err := d.repos.ResourceAllocation.FindAll(ctx, d.repos.ResourceAllocation.GetQuery())
-	if err != nil {
-		return fmt.Errorf("loading allocations from db: %w", err)
-	}
-
-	for _, allocation := range allocations {
-		d.store.allocations[allocation.JobID] = allocation
-	}
 	return nil
 }
 
