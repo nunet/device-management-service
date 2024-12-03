@@ -1050,77 +1050,6 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		require.NoError(t, err)
 		assertResources(t, totalDemand, actualDemand)
 	})
-
-	t.Run("Must be able to get total allocations from DB", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_GetTotalDemand2?mode=memory&cache=shared"), &gorm.Config{})
-		require.NoError(t, err)
-
-		repos := setupManagerRepos(t, mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      7,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 3064},
-				Disk: types.Disk{Size: 2048},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demands := []types.ResourceAllocation{
-			{
-				JobID: "job1",
-				Resources: types.Resources{
-					CPU: types.CPU{
-						Cores:      3,
-						ClockSpeed: 10000,
-					},
-					RAM:  types.RAM{Size: 1024},
-					Disk: types.Disk{Size: 512},
-				},
-			},
-			{
-				JobID: "job2",
-				Resources: types.Resources{
-					CPU: types.CPU{
-						Cores:      2,
-						ClockSpeed: 10000,
-					},
-					RAM:  types.RAM{Size: 1024},
-					Disk: types.Disk{Size: 1024},
-				},
-			},
-		}
-
-		var totalDemand types.Resources
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil).Times(len(demands))
-		for _, demand := range demands {
-			err = rm.AllocateResources(context.Background(), demand)
-			require.NoErrorf(t, err, "failed to allocate resources for job %s", demand.JobID)
-			err = totalDemand.Add(demand.Resources)
-			require.NoError(t, err)
-		}
-
-		// Create a new instance of the manager to test if the allocations are loaded from the DB
-		repos = setupManagerRepos(t, mockDB)
-		rm, err = NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		actualDemand, err := rm.GetTotalAllocation()
-		require.NoError(t, err)
-		assertResources(t, totalDemand, actualDemand)
-	})
 }
 
 func TestDefaultManager_Concurrency(t *testing.T) {
@@ -1139,9 +1068,6 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
-
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
-		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
@@ -1263,8 +1189,6 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
-		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
 
@@ -1356,9 +1280,6 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
-
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
-		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
@@ -1463,8 +1384,6 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
 		hm := NewMockHardwareManager(ctrl)
-		resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
-		resourceAllocationRepo.EXPECT().FindAll(gomock.Any(), gomock.Any()).Return([]types.ResourceAllocation{}, nil)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
 
