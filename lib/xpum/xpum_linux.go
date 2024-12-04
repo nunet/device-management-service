@@ -91,9 +91,6 @@ int load_xpum_library() {
 
     lib_handle = dlopen("libxpum.so", RTLD_LAZY);
     if (!lib_handle) {
-        fprintf(stderr, "[Info] could not load libxpum.so: %s\n", dlerror());
-		fprintf(stderr, "The Intel XPU Manager package is not installed or configured. This is required only if you are using an Intel GPU.\n");
-		fprintf(stderr, "To install the package, visit: https://gitlab.com/nunet/device-management-service#intel-gpus\n\n");
         return 0;
     }
 

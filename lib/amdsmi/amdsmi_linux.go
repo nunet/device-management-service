@@ -99,9 +99,6 @@ int load_amdsmi_library() {
 
     lib_handle = dlopen("libamd_smi.so", RTLD_LAZY);
     if (!lib_handle) {
-        fprintf(stderr, "[Info] could not load libamd_smi.so: %s\n", dlerror());
-		fprintf(stderr, "The AMD ROCm package is not installed or configured. This is required only if you are using an AMD GPU.\n");
-		fprintf(stderr, "To install the AMD ROCm package, visit: https://gitlab.com/nunet/device-management-service#amd-gpus\n\n");
         return 0;
     }
 
