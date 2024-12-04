@@ -42,7 +42,8 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 	//
 	// If no GPUs are found, skip GPU selection
 	if len(machineResources.GPUs) == 0 {
-		fmt.Println("No GPUs found. Skipping GPU selection.")
+		fmt.Println("No usable GPUs detected; prerequisites may not be met. Skipping GPU selection.\n" +
+			"Read more: https://gitlab.com/nunet/device-management-service#gpu-machines")
 		return nil
 	}
 
