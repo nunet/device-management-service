@@ -15,10 +15,10 @@ type OnboardingConfig struct {
 	BaseDBModel
 	IsOnboarded bool `json:"is_onboarded"`
 
-	// These are not stored in the database, but are part of the onboarding config
-	// during the get onboarding config call these are populated from the resource manager and hardware
+	// OnboardedResources - resources that are onboarded
+	// this is a transient field and not stored in the database directly
+	// it is populated using the ResourceManager
 	OnboardedResources Resources `json:"onboarded_resources,omitempty" gorm:"-" clover:"-"`
-	MachineResources   Resources `json:"machine_resources,omitempty" gorm:"-" clover:"-"`
 }
 
 // OnboardingManager - interface for onboarding

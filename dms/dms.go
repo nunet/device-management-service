@@ -9,6 +9,7 @@
 package dms
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -147,7 +148,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	onboardR := clover_db.NewOnboardingConfig(db)
 	orchestR := clover_db.NewOrchestratorView(db)
 
-	onboardingManager, err := onboarding.New(resourceManager, hardwareManager, onboardR)
+	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardR)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create onboarding manager: %w", err)
 	}
