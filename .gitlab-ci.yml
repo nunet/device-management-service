@@ -17,7 +17,7 @@ variables:
   # ALLOW_LINT_FAIL: true
   # ALLOW_UNIT_TESTS_FAIL: true
   # ALLOW_INTEGRATION_TESTS_FAIL: true
-  # ALLOW_LICENSE_CHECK_FAIL: true
+  ALLOW_LICENSE_CHECK_FAIL: true
 
 include:
 - project: "nunet/gitlab-ci/templates"
