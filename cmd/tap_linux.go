@@ -10,7 +10,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/lib/sys"
@@ -30,11 +29,6 @@ Note: The command requires root privileges or CAP_NET_ADMIN=ep capability.
 `,
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// check if running with privilege
-			if err := sys.RequiredCaps(); err != nil && os.Getuid() != 0 {
-				return fmt.Errorf("this command requires the CAP_NET_ADMIN=ep capability or run as root")
-			}
-
 			mainInterface := args[0]
 			vmInterface := args[1]
 			cidr := args[2]
