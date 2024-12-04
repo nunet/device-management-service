@@ -44,7 +44,6 @@ require (
 	google.golang.org/protobuf v1.35.1
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.12
-	kernel.org/pub/linux/libs/security/libcap/cap v1.2.70
 )
 
 require (
@@ -293,7 +292,6 @@ require (
 require (
 	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
-	kernel.org/pub/linux/libs/security/libcap/psx v1.2.70 // indirect
 )
 
 require (
