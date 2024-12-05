@@ -6,6 +6,8 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
+//go:build linux && (amd64 || amd)
+
 package amdsmi
 
 /*
@@ -93,7 +95,6 @@ static amdsmi_functions_t amdsmi_funcs;
 // Load the AMD SMI library and resolve all required symbols
 int load_amdsmi_library() {
     if (lib_handle) {
-        fprintf(stderr, "libamd_smi.so is already loaded.\n");
         return 1;
     }
 
@@ -199,62 +200,43 @@ import (
 	"unsafe"
 )
 
-// SocketHandle is a Go type that encapsulates the C amdsmi_socket_handle (void*).
-type SocketHandle struct {
-	handle unsafe.Pointer
-}
-
-// ProcessorHandle is a Go type that encapsulates the C amdsmi_processor_handle (void*).
-type ProcessorHandle struct {
-	handle unsafe.Pointer
-}
-
 // ProcessorType is a Go type to represent processor_type_t from C.
 // TODO: Use a Go type instead of C type.
 type ProcessorType C.processor_type_t
 
-// BoardInfo is a Go representation of the C amdsmi_board_info_t struct.
-type BoardInfo struct {
-	ModelNumber      string
-	ProductSerial    string
-	FruID            string
-	ProductName      string
-	ManufacturerName string
-}
-
-// VRAM is a Go representation of the C amdsmi_vram_info_t struct.
-type VRAM struct {
-	Total    uint32
-	Used     uint32
-	Reserved [5]uint64
-}
-
 // Init initializes the AMD SMI library with GPUs.
-func Init() (bool, error) {
+func Init() (Status, error) {
 	if C.load_amdsmi_library() == 0 {
-		return false, fmt.Errorf("failed to load AMD SMI library")
+		return Status{}, fmt.Errorf("failed to load AMD SMI library")
 	}
 
-	return C.call_amdsmi_init(C.AMDSMI_INIT_AMD_GPUS) == C.AMDSMI_STATUS_SUCCESS, nil
+	ret := C.call_amdsmi_init(0)
+	return Status{
+		Code: StatusCode(ret),
+	}, nil
 }
 
 // Shutdown shuts down the AMD SMI library.
-func Shutdown() bool {
-	return C.call_amdsmi_shut_down() == C.AMDSMI_STATUS_SUCCESS
+func Shutdown() Status {
+	ret := C.call_amdsmi_shut_down()
+	C.unload_amdsmi_library()
+	return Status{
+		Code: StatusCode(ret),
+	}
 }
 
 // GetSocketHandles returns the socket handles of the GPUs.
-func GetSocketHandles() ([]SocketHandle, error) {
+func GetSocketHandles() ([]SocketHandle, Status) {
 	var socketCount C.uint32_t
 	ret := C.call_amdsmi_get_socket_handles(&socketCount, nil)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return nil, fmt.Errorf("failed to get socket count: %d", ret)
+		return nil, Status{Code: StatusCode(ret), Message: "get socket count"}
 	}
 
 	sockets := make([]C.amdsmi_socket_handle, socketCount)
 	ret = C.call_amdsmi_get_socket_handles(&socketCount, (*C.amdsmi_socket_handle)(unsafe.Pointer(&sockets[0])))
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return nil, fmt.Errorf("failed to get socket handles: %d", ret)
+		return nil, Status{Code: StatusCode(ret), Message: "get socket handles"}
 	}
 
 	goSockets := make([]SocketHandle, socketCount)
@@ -262,34 +244,34 @@ func GetSocketHandles() ([]SocketHandle, error) {
 		goSockets[i] = SocketHandle{handle: unsafe.Pointer(socket)}
 	}
 
-	return goSockets, nil
+	return goSockets, Status{Code: StatusSuccess}
 }
 
 // GetSocketName retrieves the socket name for a given socket handle.
-func GetSocketName(socketHandle SocketHandle, maxLen int) (string, error) {
+func GetSocketName(socketHandle SocketHandle, maxLen int) (string, Status) {
 	name := make([]C.char, maxLen)
 
 	ret := C.call_amdsmi_get_socket_info(C.amdsmi_socket_handle(socketHandle.handle), C.size_t(maxLen), (*C.char)(unsafe.Pointer(&name[0])))
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return "", fmt.Errorf("failed to get socket info: %d", ret)
+		return "", Status{Code: StatusCode(ret), Message: "get socket info"}
 	}
 
 	socketInfo := C.GoString(&name[0])
-	return socketInfo, nil
+	return socketInfo, Status{Code: StatusSuccess}
 }
 
 // GetProcessorHandles retrieves all processor handles for a given socket.
-func GetProcessorHandles(socket SocketHandle) ([]ProcessorHandle, error) {
+func GetProcessorHandles(socket SocketHandle) ([]ProcessorHandle, Status) {
 	var processorCount C.uint32_t
 	ret := C.call_amdsmi_get_processor_handles(C.amdsmi_socket_handle(socket.handle), &processorCount, nil)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return nil, fmt.Errorf("failed to get processor count for socket: %d", ret)
+		return nil, Status{Code: StatusCode(ret), Message: "get processor count"}
 	}
 
 	processors := make([]C.amdsmi_processor_handle, processorCount)
 	ret = C.call_amdsmi_get_processor_handles(C.amdsmi_socket_handle(socket.handle), &processorCount, (*C.amdsmi_processor_handle)(unsafe.Pointer(&processors[0])))
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return nil, fmt.Errorf("failed to get processor handles for socket: %d", ret)
+		return nil, Status{Code: StatusCode(ret), Message: "get processor handles"}
 	}
 
 	goProcessors := make([]ProcessorHandle, processorCount)
@@ -297,27 +279,27 @@ func GetProcessorHandles(socket SocketHandle) ([]ProcessorHandle, error) {
 		goProcessors[i] = ProcessorHandle{handle: unsafe.Pointer(processor)}
 	}
 
-	return goProcessors, nil
+	return goProcessors, Status{Code: StatusSuccess}
 }
 
 // GetProcessorType retrieves the type of a given processor.
-func GetProcessorType(processor ProcessorHandle) (ProcessorType, error) {
+func GetProcessorType(processor ProcessorHandle) (ProcessorType, Status) {
 	var processorType C.processor_type_t
 	ret := C.call_amdsmi_get_processor_type(C.amdsmi_processor_handle(processor.handle), &processorType)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return 0, fmt.Errorf("failed to get processor type: %d", ret)
+		return 0, Status{Code: StatusCode(ret), Message: "get processor type"}
 	}
 
-	return ProcessorType(processorType), nil
+	return ProcessorType(processorType), Status{Code: StatusSuccess}
 }
 
 // GetGPUBoardInfo retrieves the board information for a given GPU processor handle.
-func GetGPUBoardInfo(processor ProcessorHandle) (BoardInfo, error) {
+func GetGPUBoardInfo(processor ProcessorHandle) (BoardInfo, Status) {
 	var boardInfo C.amdsmi_board_info_t
 
 	ret := C.call_amdsmi_get_gpu_board_info(C.amdsmi_processor_handle(processor.handle), &boardInfo)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return BoardInfo{}, fmt.Errorf("failed to get GPU board info: %d", ret)
+		return BoardInfo{}, Status{Code: StatusCode(ret), Message: "get GPU board info"}
 	}
 
 	goBoardInfo := BoardInfo{
@@ -327,54 +309,54 @@ func GetGPUBoardInfo(processor ProcessorHandle) (BoardInfo, error) {
 		ProductName:      C.GoString(&boardInfo.product_name[0]),
 		ManufacturerName: C.GoString(&boardInfo.manufacturer_name[0]),
 	}
-	return goBoardInfo, nil
+	return goBoardInfo, Status{Code: StatusSuccess}
 }
 
 // GetGPUID retrieves the GPU ID for a given processor handle.
-func GetGPUID(processor ProcessorHandle) (uint32, error) {
+func GetGPUID(processor ProcessorHandle) (uint32, Status) {
 	var gpuID C.uint16_t
 	ret := C.call_amdsmi_get_gpu_id(C.amdsmi_processor_handle(processor.handle), &gpuID)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return 0, fmt.Errorf("failed to get GPU ID: %v", ret)
+		return 0, Status{Code: StatusCode(ret), Message: "get GPU ID"}
 	}
 
-	return uint32(gpuID), nil
+	return uint32(gpuID), Status{Code: StatusSuccess}
 }
 
 // GetGPUBDFID retrieves the GPU BDF ID for a given processor handle.
-func GetGPUBDFID(processor ProcessorHandle) (uint64, error) {
+func GetGPUBDFID(processor ProcessorHandle) (uint64, Status) {
 	var bdfID C.uint64_t
 	ret := C.call_amdsmi_get_gpu_bdf_id(C.amdsmi_processor_handle(processor.handle), &bdfID)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return 0, fmt.Errorf("failed to get GPU BDF ID: %v", ret)
+		return 0, Status{Code: StatusCode(ret), Message: "get GPU BDF ID"}
 	}
 
-	return uint64(bdfID), nil
+	return uint64(bdfID), Status{Code: StatusSuccess}
 }
 
 // GetGPUUUID retrieves the GPU UUID for a given processor handle.
-func GetGPUUUID(processor ProcessorHandle) (string, error) {
+func GetGPUUUID(processor ProcessorHandle) (string, Status) {
 	var uuid [38]C.char
 	var length C.uint = 38
 	ret := C.call_amdsmi_get_gpu_device_uuid(C.amdsmi_processor_handle(processor.handle), &length, (*C.char)(unsafe.Pointer(&uuid)))
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return "", fmt.Errorf("failed to get GPU UUID: %d", ret)
+		return "", Status{Code: StatusCode(ret), Message: "get GPU UUID"}
 	}
 
-	return C.GoString(&uuid[0]), nil
+	return C.GoString(&uuid[0]), Status{Code: StatusSuccess}
 }
 
 // GetGPUVRAM retrieves the GPU VRAM stats for a given processor handle.
-func GetGPUVRAM(processor ProcessorHandle) (VRAM, error) {
+func GetGPUVRAM(processor ProcessorHandle) (VRAM, Status) {
 	var vramUsage C.amdsmi_vram_usage_t
 	ret := C.call_amdsmi_get_gpu_vram_usage(C.amdsmi_processor_handle(processor.handle), &vramUsage)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
-		return VRAM{}, fmt.Errorf("failed to get GPU VRAM info: %v", ret)
+		return VRAM{}, Status{Code: StatusCode(ret), Message: "get GPU VRAM usage"}
 	}
 
 	goVRAM := VRAM{
 		Total: uint32(vramUsage.vram_total),
 		Used:  uint32(vramUsage.vram_used),
 	}
-	return goVRAM, nil
+	return goVRAM, Status{Code: StatusSuccess}
 }

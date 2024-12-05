@@ -6,6 +6,8 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
+//go:build linux && (amd64 || amd)
+
 package gpu
 
 import (
@@ -13,7 +15,7 @@ import (
 	"strconv"
 	"sync"
 
-	"gitlab.com/nunet/device-management-service/lib/xpum"
+	"gitlab.com/nunet/device-management-service/lib/gpu/xpum"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -32,13 +34,13 @@ func initializeXPUM() error {
 
 	var xpumInitErr error
 	xpumInitOnce.Do(func() {
-		ok, err := xpum.InitIntel()
+		ret, err := xpum.Init()
 		if err != nil {
 			xpumInitErr = fmt.Errorf("initialize Intel XPUM: %w", err)
 			return
 		}
-		if !ok {
-			xpumInitErr = fmt.Errorf("intel XPUM initialization was unsuccessful")
+		if ret.Code != xpum.ResultOk {
+			xpumInitErr = fmt.Errorf("intel XPUM initialization was unsuccessful: %w", ret.Error())
 			return
 		}
 		isXPUMInit = true
@@ -52,9 +54,9 @@ func getIntelTotalVRAM(deviceID int32) (float64, error) {
 		return 0, fmt.Errorf("intel XPUM not initialized")
 	}
 
-	deviceProps, err := xpum.GetDeviceProperties(deviceID)
-	if err != nil {
-		return 0, fmt.Errorf("get properties for device %d: %w", deviceID, err)
+	deviceProps, ret := xpum.GetDeviceProperties(deviceID)
+	if ret.Code != xpum.ResultOk {
+		return 0, fmt.Errorf("get properties for device %d: %w", deviceID, ret.Error())
 	}
 
 	for _, prop := range deviceProps {
@@ -75,9 +77,9 @@ func GetIntelGPUs() ([]types.GPU, error) {
 		return nil, err
 	}
 
-	deviceList, err := xpum.GetDeviceList()
-	if err != nil {
-		return nil, fmt.Errorf("retrieve Intel GPU device list: %w", err)
+	deviceList, ret := xpum.GetDeviceList()
+	if ret.Code != xpum.ResultOk {
+		return nil, fmt.Errorf("retrieve Intel GPU device list: %w", ret.Error())
 	}
 
 	gpus := make([]types.GPU, 0, len(deviceList))

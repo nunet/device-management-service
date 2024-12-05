@@ -6,13 +6,15 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
+//go:build linux && (amd64 || amd)
+
 package gpu
 
 import (
 	"fmt"
 	"sync"
 
-	goamdsmi "gitlab.com/nunet/device-management-service/lib/amdsmi"
+	goamdsmi "gitlab.com/nunet/device-management-service/lib/gpu/amdsmi"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -32,14 +34,14 @@ func initializeAMD() error {
 
 	var initErr error
 	amdInitOnce.Do(func() {
-		ok, err := goamdsmi.Init()
+		status, err := goamdsmi.Init()
 		if err != nil {
-			initErr = fmt.Errorf("failed to initialize AMD SMI: %w", err)
+			initErr = fmt.Errorf("initialize AMD SMI: %w", err)
 			return
 		}
 
-		if !ok {
-			initErr = fmt.Errorf("AMD SMI initialization was unsuccessful")
+		if status.Code != goamdsmi.StatusSuccess {
+			initErr = fmt.Errorf("AMD SMI initialization was unsuccessful: %w", status.Error())
 			return
 		}
 		isAMDInit = true
@@ -55,9 +57,9 @@ func GetAMDGPUs() ([]types.GPU, error) {
 	}
 
 	// Retrieve socket handles
-	sockets, err := goamdsmi.GetSocketHandles()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get socket handles: %w", err)
+	sockets, ret := goamdsmi.GetSocketHandles()
+	if ret.Code != goamdsmi.StatusSuccess {
+		return nil, fmt.Errorf("get socket handles: %w", ret.Error())
 	}
 
 	var gpus []types.GPU
@@ -65,31 +67,31 @@ func GetAMDGPUs() ([]types.GPU, error) {
 	// Iterate over each socket
 	for _, socket := range sockets {
 		// Retrieve processor handles for the current socket
-		processors, err := goamdsmi.GetProcessorHandles(socket)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get processor handles: %w", err)
+		processors, ret := goamdsmi.GetProcessorHandles(socket)
+		if ret.Code != goamdsmi.StatusSuccess {
+			return nil, fmt.Errorf("get processor handles: %w", ret.Error())
 		}
 
 		// Iterate over each processor
 		for _, processor := range processors {
-			boardInfo, err := goamdsmi.GetGPUBoardInfo(processor)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get board info: %w", err)
+			boardInfo, ret := goamdsmi.GetGPUBoardInfo(processor)
+			if ret.Code != goamdsmi.StatusSuccess {
+				return nil, fmt.Errorf("get board info: %w", ret.Error())
 			}
 
-			vRAM, err := goamdsmi.GetGPUVRAM(processor)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get GPU VRAM: %w", err)
+			vRAM, ret := goamdsmi.GetGPUVRAM(processor)
+			if ret.Code != goamdsmi.StatusSuccess {
+				return nil, fmt.Errorf("get GPU VRAM: %w", ret.Error())
 			}
 
-			bdfID, err := goamdsmi.GetGPUBDFID(processor)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get GPU BDFID: %w", err)
+			bdfID, ret := goamdsmi.GetGPUBDFID(processor)
+			if ret.Code != goamdsmi.StatusSuccess {
+				return nil, fmt.Errorf("get GPU BDFID: %w", ret.Error())
 			}
 
-			uuid, err := goamdsmi.GetGPUUUID(processor)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get GPU UUID: %w", err)
+			uuid, ret := goamdsmi.GetGPUUUID(processor)
+			if ret.Code != goamdsmi.StatusSuccess {
+				return nil, fmt.Errorf("failed to get GPU UUID: %w", ret.Error())
 			}
 
 			gpu := types.GPU{
@@ -125,9 +127,9 @@ func GetAMDDeviceUsage(uuid string) (float64, error) {
 		return 0, fmt.Errorf("AMD device with UUID %s not found", uuid)
 	}
 
-	vram, err := goamdsmi.GetGPUVRAM(processor)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get GPU usage: %w", err)
+	vram, ret := goamdsmi.GetGPUVRAM(processor)
+	if ret.Code != goamdsmi.StatusSuccess {
+		return 0, fmt.Errorf("get GPU usage: %w", ret.Error())
 	}
 
 	return types.ConvertMibToBytes(float64(vram.Used)), nil
