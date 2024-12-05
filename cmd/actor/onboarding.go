@@ -70,6 +70,8 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 	return nil
 }
 
+// commandLineGPUOnboarding parses the GPU arguments from the command line and allocates VRAM for each selected GPU
+// The GPU arguments are in the format "index:VRAM,index:VRAM,..."
 func commandLineGPUOnboarding(machineResources types.MachineResources, gpuArgs string) (types.GPUs, error) {
 	var gpus types.GPUs
 	gpuIndices := strings.Split(gpuArgs, ",")
@@ -101,6 +103,7 @@ func commandLineGPUOnboarding(machineResources types.MachineResources, gpuArgs s
 	return gpus, nil
 }
 
+// interactiveGPUOnboarding prompts the user to select GPUs and allocate VRAM for each selected GPU
 func interactiveGPUOnboarding(machineResources types.MachineResources, machineResourceUsage types.Resources) (types.GPUs, error) {
 	var (
 		gpuMap         = make(map[string]types.GPU)

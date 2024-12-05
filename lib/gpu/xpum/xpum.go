@@ -6,6 +6,8 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
+//go:build linux && (amd64 || amd)
+
 package xpum
 
 /*
@@ -141,67 +143,65 @@ import (
 	"github.com/avast/retry-go"
 )
 
+/*
+===============================================================================
+Adding a New XPUM Function to the Cgo Block
+===============================================================================
+
+To add a new XPUM function, follow these steps:
+
+1. **Define the Function Pointer Type:**
+   - Use `DEFINE_XPUM_FUNC_TYPE` to create a typedef for the new function.
+   - Example:
+     `DEFINE_XPUM_FUNC_TYPE(xpum_result_t, xpum_new_function, (int arg1, float arg2));`
+
+2. **Add to the Struct:**
+   - Add the new function pointer to `xpum_functions_t`.
+   - Example:
+     `xpum_new_function_fp xpum_new_function;`
+
+3. **Load the Symbol:**
+   - In `load_xpum_library`, load the new symbol using `LOAD_XPUM_SYMBOL`.
+   - Example:
+     `LOAD_XPUM_SYMBOL(xpum_new_function)`
+
+4. **Create a Wrapper Function:**
+   - Define a wrapper using `DEFINE_XPUM_WRAPPER`.
+   - Example:
+     `DEFINE_XPUM_WRAPPER(xpum_result_t, call_xpum_new_function, xpum_new_function, (int arg1, float arg2), arg1, arg2)`
+
+5. **Rebuild and Test:**
+   - Rebuild and verify the new function works as expected.
+
+===============================================================================
+*/
+
 const (
 	StatsMemoryUsed                      = C.XPUM_STATS_MEMORY_USED
 	DevicePropertyMemoryPhysicalSizeByte = C.XPUM_DEVICE_PROPERTY_MEMORY_PHYSICAL_SIZE_BYTE
 )
 
-// DeviceBasicInfo is the Go representation of the C struct xpum_device_basic_info.
-type DeviceBasicInfo struct {
-	DeviceID      int32
-	FunctionType  int32
-	UUID          string
-	DeviceName    string
-	PCIDeviceID   string
-	PCIBDFAddress string
-	VendorName    string
-	DRMDevice     string
-}
-
-// DeviceStatsData is the Go representation of the C struct xpum_device_stats_data.
-type DeviceStatsData struct {
-	MetricsType int32
-	IsCounter   bool
-	Value       uint64
-	Accumulated uint64
-	Min         uint64
-	Avg         uint64
-	Max         uint64
-	Scale       uint32
-}
-
-// DeviceStats is the Go representation of the C struct xpum_device_stats.
-type DeviceStats struct {
-	DeviceID   int32
-	IsTileData bool
-	TileID     int32
-	Count      int32
-	DataList   []DeviceStatsData
-}
-
-// DeviceProperty represents a single device property
-type DeviceProperty struct {
-	Name  int32 // xpum_device_property_name_t
-	Value string
-}
-
-// InitIntel initializes the Intel XPUM library.
-func InitIntel() (bool, error) {
+// Init initializes the Intel XPUM library.
+func Init() (Result, error) {
 	// TODO: Set the log level based on the dms log level
 	os.Setenv("SPDLOG_LEVEL", "off")
 	if C.load_xpum_library() == 0 {
-		return false, fmt.Errorf("load Intel XPUM library")
+		return Result{}, fmt.Errorf("could not load XPUM library")
 	}
-	return C.call_xpumInit() == C.XPUM_OK, nil
+
+	ret := C.call_xpumInit()
+	return Result{Code: ResultCode(ret)}, nil
 }
 
-// ShutdownIntel shuts down the Intel XPUM library.
-func ShutdownIntel() bool {
-	return C.call_xpumShutdown() == C.XPUM_OK
+// Shutdown shuts down the Intel XPUM library.
+func Shutdown() Result {
+	ret := C.call_xpumShutdown()
+	C.unload_xpum_library()
+	return Result{Code: ResultCode(ret)}
 }
 
 // GetDeviceList retrieves the list of devices and converts them to Go structs.
-func GetDeviceList() ([]DeviceBasicInfo, error) {
+func GetDeviceList() ([]DeviceBasicInfo, Result) {
 	const maxDevices = 32
 	var count C.int = maxDevices
 	var deviceList [maxDevices]C.xpum_device_basic_info
@@ -209,7 +209,7 @@ func GetDeviceList() ([]DeviceBasicInfo, error) {
 	// Call the C wrapper function
 	ret := C.call_xpumGetDeviceList((*C.xpum_device_basic_info)(unsafe.Pointer(&deviceList[0])), &count)
 	if ret != C.XPUM_OK {
-		return nil, fmt.Errorf("get device list: %v", ret)
+		return nil, Result{Code: ResultCode(ret), Message: fmt.Sprintf("get device list: %v", ret)}
 	}
 
 	// Convert C array to Go slice of DeviceBasicInfo
@@ -227,7 +227,7 @@ func GetDeviceList() ([]DeviceBasicInfo, error) {
 		}
 	}
 
-	return goDevices, nil
+	return goDevices, Result{Code: ResultOk}
 }
 
 // GetDeviceStats retrieves device statistics for the specified device ID.
@@ -246,7 +246,7 @@ func GetDeviceStats(deviceID int32, sessionID uint64) ([]DeviceStats, error) {
 			// Call the C wrapper function
 			ret := C.call_xpumGetStats(C.xpum_device_id_t(deviceID), (*C.xpum_device_stats_t)(unsafe.Pointer(&statsList[0])), &count, &begin, &end, C.uint64_t(sessionID))
 			if ret != C.XPUM_OK {
-				return fmt.Errorf("get device stats: %v", ret)
+				return fmt.Errorf("get device stats: %v", ResultCode(ret).String())
 			}
 
 			// Convert C array to Go slice of DeviceStats
@@ -295,7 +295,7 @@ func GetDeviceStats(deviceID int32, sessionID uint64) ([]DeviceStats, error) {
 	return goStats, nil
 }
 
-func GetDeviceProperties(deviceID int32) ([]DeviceProperty, error) {
+func GetDeviceProperties(deviceID int32) ([]DeviceProperty, Result) {
 	const xpumMaxNumProperties = 100
 
 	// Prepare the properties struct
@@ -307,7 +307,7 @@ func GetDeviceProperties(deviceID int32) ([]DeviceProperty, error) {
 	// Call the C wrapper function
 	ret := C.call_xpumGetDeviceProperties(C.xpum_device_id_t(deviceID), &cProperties)
 	if ret != C.XPUM_OK {
-		return nil, fmt.Errorf("get device properties: %v", ret)
+		return nil, Result{Code: ResultCode(ret), Message: fmt.Sprintf("get device properties: %v", ret)}
 	}
 
 	numProperties := int(cProperties.propertyLen)
@@ -320,5 +320,5 @@ func GetDeviceProperties(deviceID int32) ([]DeviceProperty, error) {
 			Value: C.GoString(&cProp.value[0]),
 		}
 	}
-	return goProperties, nil
+	return goProperties, Result{Code: ResultOk}
 }

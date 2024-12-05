@@ -6,6 +6,8 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
+//go:build linux && (amd64 || amd)
+
 package gpu
 
 import (
@@ -77,8 +79,7 @@ func GetGPUUsage(uuid ...string) ([]types.GPU, error) {
 	var gpus []types.GPU
 	if len(uuid) == 0 {
 		// copy the GPU cache
-		gpus = make([]types.GPU, len(gpuCache))
-		copy(gpus, gpuCache)
+		gpus = copyCache()
 	} else {
 		// Get the GPUs based on the UUID
 		for _, u := range uuid {
