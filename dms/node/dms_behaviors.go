@@ -624,7 +624,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.CommitDeploymentResponse{}
-	err := n.commitDeployment(request.EnsembleID)
+	err := n.commitDeployment(request.EnsembleID, request.AllocationID, request.Resources)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)

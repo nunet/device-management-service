@@ -133,7 +133,7 @@ type FreeResources struct {
 type CommittedResources struct {
 	BaseDBModel
 	Resources
-	JobID string `json:"job_id"`
+	AllocationID string `json:"allocationID"`
 }
 
 // OnboardedResources represents the onboarded resources of the machine
@@ -145,7 +145,8 @@ type OnboardedResources struct {
 // ResourceAllocation represents the allocation of resources for a job
 type ResourceAllocation struct {
 	BaseDBModel
-	JobID string `json:"job_id"`
+	JobID        string `json:"job_id"`
+	AllocationID string `json:"allocation_id"`
 	Resources
 }
 

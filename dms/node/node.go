@@ -715,6 +715,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 
 		allocation, err := n.createAllocation(jobs.Job{
 			ID:               ensembleID,
+			AllocationID:     allocationID,
 			Resources:        config.Resources,
 			Execution:        config.Execution,
 			ProvisionScripts: config.ProvisionScripts,
@@ -817,23 +818,27 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	}
 
 	n.mx.Lock()
-	_, alreadyCommited := n.commitedResources[job.ID]
+	_, alreadyCommited := n.commitedResources[job.AllocationID]
 
 	if !alreadyCommited {
-		return nil, fmt.Errorf("no committed resources for ensemble id: %s", job.ID)
+		return nil, fmt.Errorf("no committed resources for ensemble id: %s", job.AllocationID)
 	}
 
-	if err := n.resourceManager.UncommitResources(context.Background(), job.ID); err != nil {
+	if err := n.resourceManager.UncommitResources(context.Background(), job.AllocationID); err != nil {
 		log.Errorf("failed to uncommit resources for ensemble id: %s: %w", job.ID, err)
 	}
 
-	resourceAllocation := types.ResourceAllocation{JobID: job.ID, Resources: job.Resources}
+	resourceAllocation := types.ResourceAllocation{
+		JobID:        job.ID,
+		AllocationID: job.AllocationID,
+		Resources:    job.Resources,
+	}
 	err = n.resourceManager.AllocateResources(n.ctx, resourceAllocation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate resources: %w", err)
 	}
 
-	delete(n.commitedResources, job.ID)
+	delete(n.commitedResources, job.AllocationID)
 	n.mx.Unlock()
 
 	allocation, err := jobs.NewAllocation(
@@ -886,7 +891,7 @@ func (n *Node) updateAllocations(alloc *jobs.Allocation) {
 	n.allocmx.Unlock()
 }
 
-func (n *Node) commitDeployment(ensembleID string) error {
+func (n *Node) commitDeployment(ensembleID, allocationID string, resources types.Resources) error {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -899,19 +904,19 @@ func (n *Node) commitDeployment(ensembleID string) error {
 		return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
 	}
 
-	_, alreadyCommited := n.commitedResources[ensembleID]
+	_, alreadyCommited := n.commitedResources[allocationID]
 	if alreadyCommited {
 		return nil
 	}
 
 	if err := n.resourceManager.CommitResources(context.TODO(), types.CommittedResources{
-		JobID:     ensembleID,
-		Resources: bidState.request.V1.Resources,
+		AllocationID: allocationID,
+		Resources:    resources,
 	}); err != nil {
-		return fmt.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
+		return fmt.Errorf("failed to preallocate resources for ensemble id: %s: %w", allocationID, err)
 	}
 
-	n.commitedResources[ensembleID] = bidState
+	n.commitedResources[allocationID] = bidState
 
 	return nil
 }
@@ -920,15 +925,15 @@ func (n *Node) clearCommitedResources() {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
-	for ensembleID, v := range n.commitedResources {
+	for allocationID, v := range n.commitedResources {
 		// if allocation not found for this commitment and bid is expired release resources
-		_, allocFound := n.allocations[ensembleID]
+		_, allocFound := n.allocations[allocationID]
 		if !allocFound && time.Now().After(v.expire) {
-			if err := n.resourceManager.UncommitResources(context.Background(), ensembleID); err != nil {
-				log.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
+			if err := n.resourceManager.UncommitResources(context.Background(), allocationID); err != nil {
+				log.Errorf("failed to preallocate resources for ensemble id: %s: %w", allocationID, err)
 			}
-			delete(n.bids, ensembleID)
-			delete(n.commitedResources, ensembleID)
+			delete(n.bids, allocationID)
+			delete(n.commitedResources, allocationID)
 		}
 	}
 }

@@ -70,7 +70,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		require.NoError(t, err)
 
 		demand := types.CommittedResources{
-			JobID: "job1",
+			AllocationID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      3,
@@ -86,7 +86,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check if the committed resources are stored in the map
-		demandFromMap, ok := rm.store.committedResources[demand.JobID]
+		demandFromMap, ok := rm.store.committedResources[demand.AllocationID]
 		require.True(t, ok)
 		assertResources(t, demand.Resources, demandFromMap.Resources)
 	})
@@ -106,7 +106,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		require.NoError(t, err)
 
 		demand := types.CommittedResources{
-			JobID: "job1",
+			AllocationID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      3,
@@ -116,9 +116,9 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			},
 		}
 		rm.store.withCommittedLock(func() {
-			rm.store.committedResources[demand.JobID] = &types.CommittedResources{
-				Resources: demand.Resources,
-				JobID:     demand.JobID,
+			rm.store.committedResources[demand.AllocationID] = &types.CommittedResources{
+				Resources:    demand.Resources,
+				AllocationID: demand.AllocationID,
 			}
 		})
 
@@ -163,7 +163,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			{
 				name: "CPU allocations exceeds",
 				demand: types.CommittedResources{
-					JobID: "job1",
+					AllocationID: "job1",
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      6,
@@ -178,7 +178,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			{
 				name: "RAM allocations exceeds",
 				demand: types.CommittedResources{
-					JobID: "job1",
+					AllocationID: "job1",
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      3,
@@ -193,7 +193,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			{
 				name: "Disk allocations exceeds",
 				demand: types.CommittedResources{
-					JobID: "job1",
+					AllocationID: "job1",
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      3,
@@ -248,7 +248,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		require.NoError(t, err)
 
 		demand := types.CommittedResources{
-			JobID: "job1",
+			AllocationID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      3,
@@ -308,7 +308,7 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		// Since this demand is higher than the actual resources on the machine
 		// it shouldn't have free resources to allocate
 		demand := types.CommittedResources{
-			JobID: "job1",
+			AllocationID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      4,
@@ -356,7 +356,7 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		require.NoError(t, err)
 
 		demand := types.CommittedResources{
-			JobID: "job1",
+			AllocationID: "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      3,
@@ -371,12 +371,12 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		err = rm.CommitResources(context.Background(), demand)
 		require.NoError(t, err)
 
-		err = rm.UncommitResources(context.Background(), demand.JobID)
+		err = rm.UncommitResources(context.Background(), demand.AllocationID)
 
 		require.NoError(t, err)
 
 		// Check if the committed resources were removed from the map
-		_, ok := rm.store.committedResources[demand.JobID]
+		_, ok := rm.store.committedResources[demand.AllocationID]
 		require.False(t, ok)
 
 		// check if the resources are added back to the free resources
@@ -437,7 +437,8 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		demand := types.ResourceAllocation{
-			JobID: "job1",
+			JobID:        "job1",
+			AllocationID: "alloc1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      3,
@@ -453,7 +454,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check if the allocations is stored in the map
-		demandFromMap, ok := rm.store.allocations[demand.JobID]
+		demandFromMap, ok := rm.store.allocations[demand.AllocationID]
 		require.True(t, ok)
 		assertResources(t, demand.Resources, demandFromMap.Resources)
 	})
@@ -473,7 +474,8 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		demand := types.ResourceAllocation{
-			JobID: "job1",
+			JobID:        "job1",
+			AllocationID: "alloc1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      3,
@@ -483,7 +485,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 			},
 		}
 		rm.store.withAllocationsLock(func() {
-			rm.store.allocations[demand.JobID] = demand
+			rm.store.allocations[demand.AllocationID] = demand
 		})
 
 		err = rm.AllocateResources(context.Background(), demand)
@@ -720,7 +722,8 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		require.NoError(t, err)
 
 		demand := types.ResourceAllocation{
-			JobID: "job1",
+			AllocationID: "alloc1",
+			JobID:        "job1",
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      3,
@@ -734,11 +737,11 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		err = rm.AllocateResources(context.Background(), demand)
 		require.NoError(t, err)
 
-		err = rm.DeallocateResources(context.Background(), demand.JobID)
+		err = rm.DeallocateResources(context.Background(), demand.AllocationID)
 		require.NoError(t, err)
 
 		// Check if the allocations is removed from the map
-		_, ok := rm.store.allocations[demand.JobID]
+		_, ok := rm.store.allocations[demand.AllocationID]
 		require.False(t, ok)
 
 		// check if the resources are added back to the free resources
@@ -1014,7 +1017,8 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 
 		demands := []types.ResourceAllocation{
 			{
-				JobID: "job1",
+				JobID:        "job1",
+				AllocationID: "alloc1",
 				Resources: types.Resources{
 					CPU: types.CPU{
 						Cores:      3,
@@ -1025,7 +1029,8 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 				},
 			},
 			{
-				JobID: "job2",
+				JobID:        "job2",
+				AllocationID: "alloc2",
 				Resources: types.Resources{
 					CPU: types.CPU{
 						Cores:      2,
@@ -1046,6 +1051,79 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 			require.NoError(t, err)
 		}
 
+		actualDemand, err := rm.GetTotalAllocation()
+		require.NoError(t, err)
+		assertResources(t, totalDemand, actualDemand)
+	})
+
+	t.Run("Must be able to get total allocations from DB", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := gorm.Open(sqlite.Open("file:test_GetTotalDemand2?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+
+		repos := setupManagerRepos(t, mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
+
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      7,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 3064},
+				Disk: types.Disk{Size: 2048},
+			},
+		}
+
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		demands := []types.ResourceAllocation{
+			{
+				JobID:        "job1",
+				AllocationID: "alloc1",
+				Resources: types.Resources{
+					CPU: types.CPU{
+						Cores:      3,
+						ClockSpeed: 10000,
+					},
+					RAM:  types.RAM{Size: 1024},
+					Disk: types.Disk{Size: 512},
+				},
+			},
+			{
+				JobID:        "job2",
+				AllocationID: "alloc2",
+				Resources: types.Resources{
+					CPU: types.CPU{
+						Cores:      2,
+						ClockSpeed: 10000,
+					},
+					RAM:  types.RAM{Size: 1024},
+					Disk: types.Disk{Size: 1024},
+				},
+			},
+		}
+
+		var totalDemand types.Resources
+		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil).Times(len(demands))
+		for _, demand := range demands {
+			err = rm.AllocateResources(context.Background(), demand)
+			require.NoErrorf(t, err, "failed to allocate resources for job %s", demand.JobID)
+			err = totalDemand.Add(demand.Resources)
+			require.NoError(t, err)
+		}
+
+		// Create a new instance of the manager to test if the allocations are loaded from the DB
+		repos = setupManagerRepos(t, mockDB)
+		rm, err = NewResourceManager(repos, hm)
+		require.NoError(t, err)
 		actualDemand, err := rm.GetTotalAllocation()
 		require.NoError(t, err)
 		assertResources(t, totalDemand, actualDemand)
@@ -1095,7 +1173,8 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				demand := types.ResourceAllocation{
-					JobID: fmt.Sprintf("job%d", index),
+					JobID:        fmt.Sprintf("job%d", index),
+					AllocationID: fmt.Sprintf("alloc%d", index),
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      0.1,
@@ -1120,10 +1199,10 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		// Check if the resources are allocated for all the jobs
 		for i := 0; i < numGoroutines; i++ {
-			jobID := fmt.Sprintf("job%d", i)
-			demand, ok := rm.store.allocations[jobID]
+			allocationID := fmt.Sprintf("alloc%d", i)
+			demand, ok := rm.store.allocations[allocationID]
 			require.True(t, ok)
-			require.Equal(t, jobID, demand.JobID)
+			require.Equal(t, allocationID, demand.AllocationID)
 		}
 
 		// Check if the free resources are updated correctly
@@ -1142,7 +1221,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		assertResources(t, expectedFreeResources.Resources, freeResources.Resources)
 		// Deallocate the resources
 		for i := 0; i < numGoroutines; i++ {
-			jobID := fmt.Sprintf("job%d", i)
+			allocationID := fmt.Sprintf("alloc%d", i)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -1157,7 +1236,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				})
 				resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil)
 				mutex.Unlock()
-				err := rm.DeallocateResources(context.Background(), jobID)
+				err := rm.DeallocateResources(context.Background(), allocationID)
 				require.NoError(t, err)
 			}()
 		}
@@ -1166,8 +1245,8 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 
 		// Check if the resources are deallocated for all the jobs
 		for i := 0; i < numGoroutines; i++ {
-			jobID := fmt.Sprintf("job%d", i)
-			_, ok := rm.store.allocations[jobID]
+			allocationID := fmt.Sprintf("alloc%d", i)
+			_, ok := rm.store.allocations[allocationID]
 			require.False(t, ok)
 		}
 
@@ -1214,7 +1293,8 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				demand := types.ResourceAllocation{
-					JobID: fmt.Sprintf("job%d", index),
+					AllocationID: fmt.Sprintf("alloc%d", index),
+					JobID:        fmt.Sprintf("job%d", index),
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      0.1,
@@ -1248,7 +1328,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				require.NoError(t, err)
 
 				// Deallocate the resources
-				err = rm.DeallocateResources(context.Background(), demand.JobID)
+				err = rm.DeallocateResources(context.Background(), demand.AllocationID)
 				require.NoError(t, err)
 			}()
 		}
@@ -1307,7 +1387,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				demand := types.CommittedResources{
-					JobID: fmt.Sprintf("job%d", index),
+					AllocationID: fmt.Sprintf("job%d", index),
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      0.1,
@@ -1334,7 +1414,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			jobID := fmt.Sprintf("job%d", i)
 			demand, ok := rm.store.committedResources[jobID]
 			require.True(t, ok)
-			require.Equal(t, jobID, demand.JobID)
+			require.Equal(t, jobID, demand.AllocationID)
 		}
 
 		// Check if the free resources are updated correctly
@@ -1408,7 +1488,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				demand := types.CommittedResources{
-					JobID: fmt.Sprintf("job%d", index),
+					AllocationID: fmt.Sprintf("job%d", index),
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      0.1,
@@ -1426,7 +1506,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				require.NoError(t, err)
 
 				// Deallocate the resources
-				err = rm.UncommitResources(context.Background(), demand.JobID)
+				err = rm.UncommitResources(context.Background(), demand.AllocationID)
 				require.NoError(t, err)
 			}()
 		}

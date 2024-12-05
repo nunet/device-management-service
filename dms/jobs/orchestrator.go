@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -897,40 +898,72 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 }
 
 func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
-	msg, err := actor.Message(
-		o.actor.Handle(),
-		h,
-		CommitDeploymentBehavior,
-		CommitDeploymentRequest{
-			EnsembleID: o.id,
-			NodeID:     n,
-		},
-		actor.WithMessageTimeout(CommitDeploymentTimeout),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create commit message for %s: %w", n, err)
+	ncfg, _ := o.cfg.Node(n)
+
+	wg := sync.WaitGroup{}
+	errCh := make(chan error, len(ncfg.Allocations))
+	for _, ID := range ncfg.Allocations {
+		wg.Add(1)
+		go func(ID string) {
+			defer wg.Done()
+			allocation, ok := o.cfg.V1.Allocations[ID]
+			if !ok {
+				errCh <- fmt.Errorf("allocation %s not found: %w", ID, ErrDeploymentFailed)
+			}
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				h,
+				CommitDeploymentBehavior,
+				CommitDeploymentRequest{
+					EnsembleID:   o.id,
+					AllocationID: ID,
+					NodeID:       n,
+					Resources:    allocation.Resources,
+				},
+				actor.WithMessageTimeout(CommitDeploymentTimeout),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to create commit message for %s: %w", n, err)
+			}
+
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to invoke commit for %s: %w", n, err)
+			}
+
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+			case <-time.After(CommitDeploymentTimeout):
+				errCh <- fmt.Errorf("timeout committing for %s: %w", n, ErrDeploymentFailed)
+			}
+			defer reply.Discard()
+
+			var response CommitDeploymentResponse
+			if err := json.Unmarshal(reply.Message, &response); err != nil {
+				errCh <- fmt.Errorf("error unmarshalling commit response for %s: %w", n, err)
+			}
+
+			if !response.OK {
+				errCh <- fmt.Errorf("error committing for %s: %s: %w", n, response.Error, ErrDeploymentFailed)
+			}
+		}(ID)
 	}
 
-	replyCh, err := o.actor.Invoke(msg)
-	if err != nil {
-		return fmt.Errorf("failed to invoke commit for %s: %w", n, err)
-	}
+	wg.Wait()
+	close(errCh)
 
-	var reply actor.Envelope
-	select {
-	case reply = <-replyCh:
-	case <-time.After(CommitDeploymentTimeout):
-		return fmt.Errorf("timeout committing for %s: %w", n, ErrDeploymentFailed)
+	var aggErr error
+	for err := range errCh {
+		if aggErr == nil {
+			aggErr = err
+			continue
+		} else if err != nil {
+			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+		}
 	}
-	defer reply.Discard()
-
-	var response CommitDeploymentResponse
-	if err := json.Unmarshal(reply.Message, &response); err != nil {
-		return fmt.Errorf("error unmarshalling commit response for %s: %w", n, err)
-	}
-
-	if !response.OK {
-		return fmt.Errorf("error committing for %s: %s: %w", n, response.Error, ErrDeploymentFailed)
+	if aggErr != nil {
+		return aggErr
 	}
 
 	return nil
@@ -1103,17 +1136,25 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 		return fmt.Errorf("error getting random CIDR: %w", err)
 	}
 
-	usedIPs := make(map[string]bool)
+	parts := strings.Split(strings.Split(cidr, "/")[0], ".")
+	gatewayIP := fmt.Sprintf("%s.%s.%s.%s", parts[0], parts[1], parts[2], "1")
+	broadcastIP := fmt.Sprintf("%s.%s.%s.%s", parts[0], parts[1], parts[2], "255")
+	usedIPs := map[string]bool{
+		gatewayIP:   true,
+		broadcastIP: true,
+	}
 
 	routingTable := make(map[string]string)
 	indexRoutingTable := make(map[string]string)
-	for _, manifest := range em.Allocations {
+	for allocationID, manifest := range em.Allocations {
 		ip, err := utils.GetNextIP(cidr, usedIPs)
+		log.Debug("Generated IP", ip, "for alllocation", allocationID)
 		if err != nil {
 			return fmt.Errorf("error getting next IP: %w", err)
 		}
 		routingTable[ip.String()] = em.Nodes[manifest.NodeID].Peer
-		indexRoutingTable[manifest.NodeID] = ip.String()
+		indexRoutingTable[allocationID] = ip.String()
+		usedIPs[ip.String()] = true
 	}
 
 	errCh = make(chan error, len(em.Allocations))
@@ -1189,7 +1230,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	// 1.b create and plug IPs
 	wg = sync.WaitGroup{}
 	errCh = make(chan error, len(em.Allocations))
-	for _, manifest := range em.Allocations {
+	for allocationID, manifest := range em.Allocations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1199,7 +1240,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				SubnetAddPeerBehavior,
 				SubnetAddPeerRequest{
 					SubnetID: em.ID,
-					IP:       indexRoutingTable[manifest.NodeID],
+					IP:       indexRoutingTable[allocationID],
 					PeerID:   em.Nodes[manifest.NodeID].Peer,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -1260,7 +1301,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	// 1.c configure DNS
 	wg = sync.WaitGroup{}
 	errCh = make(chan error, len(em.Allocations))
-	for _, manifest := range em.Allocations {
+	for allocationID, manifest := range em.Allocations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1271,7 +1312,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				SubnetDNSAddRecordRequest{
 					SubnetID:   em.ID,
 					DomainName: manifest.DNSName,
-					IP:         indexRoutingTable[manifest.NodeID],
+					IP:         indexRoutingTable[allocationID],
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
@@ -1331,7 +1372,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	// 1.d configure port mapping
 	wg = sync.WaitGroup{}
 	errCh = make(chan error, len(em.Allocations))
-	for _, manifest := range em.Allocations {
+	for allocationID, manifest := range em.Allocations {
 		for srcPort, destPort := range manifest.Ports {
 			wg.Add(1)
 			go func() {
@@ -1344,7 +1385,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
 						SourcePort: strconv.Itoa(srcPort),
-						DestIP:     indexRoutingTable[manifest.NodeID],
+						DestIP:     indexRoutingTable[allocationID],
 						DestPort:   strconv.Itoa(destPort),
 					},
 					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
