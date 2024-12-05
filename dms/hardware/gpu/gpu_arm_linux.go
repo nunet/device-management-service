@@ -8,18 +8,19 @@
 
 //go:build linux && (arm || arm64)
 
+//nolint:all // This is a stub file for arm linux
 package gpu
 
 import "gitlab.com/nunet/device-management-service/types"
 
-// GetGPUs returns the GPUs based on the specified vendors. If no vendors are provided, it returns the information of all the GPUs
-func GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error) {
+// GetGPUs returns the GPUs in the system
+func GetGPUs() ([]types.GPU, error) {
 	// TODO: Implement this function
 	return nil, nil
 }
 
-// GetGPUUsage returns the GPU usage based on the specified vendors. If no vendors are provided, it returns the information of all the GPUs
-func GetGPUUsage(vendors ...types.GPUVendor) ([]types.GPU, error) {
+// GetGPUUsage returns the GPU usage for the GPUs with the specified UUIDs. If no UUIDs are provided, it returns the usage of all the GPUs
+func GetGPUUsage(uuid ...string) ([]types.GPU, error) {
 	// TODO: Implement this function
 	return nil, nil
 }

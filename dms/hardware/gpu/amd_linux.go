@@ -6,8 +6,6 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-//go:build linux && amd64
-
 package gpu
 
 import (
@@ -20,13 +18,20 @@ import (
 
 // Initialize AMD SMI once using sync.Once
 var (
-	initOnce sync.Once
-	initErr  error
+	amdInitOnce sync.Once
+	isAMDInit   bool
+
+	amdProcessorMap = make(map[string]goamdsmi.ProcessorHandle) // UUID to processor map
 )
 
 // initializeAMD ensures that goamdsmi.Init() is called only once.
 func initializeAMD() error {
-	initOnce.Do(func() {
+	if isAMDInit {
+		return nil
+	}
+
+	var initErr error
+	amdInitOnce.Do(func() {
 		ok, err := goamdsmi.Init()
 		if err != nil {
 			initErr = fmt.Errorf("failed to initialize AMD SMI: %w", err)
@@ -37,13 +42,13 @@ func initializeAMD() error {
 			initErr = fmt.Errorf("AMD SMI initialization was unsuccessful")
 			return
 		}
+		isAMDInit = true
 	})
 	return initErr
 }
 
-// fetchAMDGPUs is a helper function that retrieves GPU information based on the VRAM selector.
-// The selector determines which VRAM field (Total or Used) to populate in the types.GPU struct.
-func fetchAMDGPUs(vRAMSelector func(vRAM goamdsmi.VRAM) float64) ([]types.GPU, error) {
+// GetAMDGPUs returns the GPU information for AMD GPUs.
+func GetAMDGPUs() ([]types.GPU, error) {
 	// Initialize AMD SMI
 	if err := initializeAMD(); err != nil {
 		return nil, err
@@ -82,61 +87,48 @@ func fetchAMDGPUs(vRAMSelector func(vRAM goamdsmi.VRAM) float64) ([]types.GPU, e
 				return nil, fmt.Errorf("failed to get GPU BDFID: %w", err)
 			}
 
+			uuid, err := goamdsmi.GetGPUUUID(processor)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GPU UUID: %w", err)
+			}
+
 			gpu := types.GPU{
+				UUID:       uuid,
 				Model:      boardInfo.ProductName,
-				VRAM:       vRAMSelector(vRAM),
+				VRAM:       types.ConvertMibToBytes(float64(vRAM.Total)),
 				Vendor:     types.GPUVendorAMDATI,
 				PCIAddress: bdfIDToPCIAddress(bdfID),
 			}
 			gpus = append(gpus, gpu)
+
+			// Add the processor to the processor map
+			amdProcessorMap[uuid] = processor
 		}
 	}
 
 	return gpus, nil
 }
 
-// getAMDGPUs returns the GPU information for AMD GPUs, specifically the total VRAM.
-func getAMDGPUs() ([]types.GPU, error) {
-	return fetchAMDGPUs(func(vRAM goamdsmi.VRAM) float64 {
-		return types.ConvertMibToBytes(float64(vRAM.Total))
-	})
-}
+// GetAMDDeviceUsage returns the GPU usage for the device with the given UUID.
+func GetAMDDeviceUsage(uuid string) (float64, error) {
+	if !isAMDInit {
+		return 0, fmt.Errorf("AMD SMI not initialized")
+	}
 
-// getAMDGPUUsage returns the GPU usage for AMD GPUs, specifically the used VRAM.
-func getAMDGPUUsage() ([]types.GPU, error) {
-	return fetchAMDGPUs(func(vRAM goamdsmi.VRAM) float64 {
-		return types.ConvertMibToBytes(float64(vRAM.Used))
-	})
-}
+	// Initialize AMD SMI
+	if err := initializeAMD(); err != nil {
+		return 0, err
+	}
 
-// bdfIDToPCIAddress converts a 64-bit BDFID to a standard PCI address string.
-// The PCI address format is 'domain:bus:device.function'.
-//
-// Taken from the AMD SMI library:
-// BDFID = ((DOMAIN & 0xffffffff) << 32) | ((BUS & 0xff) << 8) |
-// ((DEVICE & 0x1f) <<3 ) | (FUNCTION & 0x7)
-//
-// | Name     | Field   |
-// ---------- | ------- |
-// | Domain   | [64:32] |
-// | Reserved | [31:16] |
-// | Bus      | [15: 8] |
-// | Device   | [ 7: 3] |
-// | Function | [ 2: 0] |
-func bdfIDToPCIAddress(bdfID uint64) string {
-	// Extract Domain: Bits [63:32]
-	domain := (bdfID >> 32) & 0xFFFFFFFF
+	processor, ok := amdProcessorMap[uuid]
+	if !ok {
+		return 0, fmt.Errorf("AMD device with UUID %s not found", uuid)
+	}
 
-	// Extract Bus: Bits [15:8]
-	bus := (bdfID >> 8) & 0xFF
+	vram, err := goamdsmi.GetGPUVRAM(processor)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get GPU usage: %w", err)
+	}
 
-	// Extract Device: Bits [7:3]
-	device := (bdfID >> 3) & 0x1F
-
-	// Extract Function: Bits [2:0]
-	function := bdfID & 0x7
-
-	// Format each component into hexadecimal with appropriate padding
-	// Domain: 4 hex digits, Bus: 2 hex digits, Device: 2 hex digits, Function: 1 hex digit
-	return fmt.Sprintf("%04X:%02X:%02X.%X", domain, bus, device, function)
+	return types.ConvertMibToBytes(float64(vram.Used)), nil
 }

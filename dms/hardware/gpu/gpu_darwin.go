@@ -8,16 +8,19 @@
 
 //go:build darwin
 
+//nolint:all // This is a stub file for darwin
 package gpu
 
 import "gitlab.com/nunet/device-management-service/types"
 
-func GetGPUs(_ ...types.GPUVendor) ([]types.GPU, error) {
+// GetGPUs returns the GPUs in the system
+func GetGPUs() ([]types.GPU, error) {
 	// GPUs are not supported on Darwin yet
 	return []types.GPU{}, nil
 }
 
-func GetGPUUsage(_ ...types.GPUVendor) ([]types.GPU, error) {
+// GetGPUUsage returns the GPU usage for the GPUs with the specified UUIDs. If no UUIDs are provided, it returns the usage of all the GPUs
+func GetGPUUsage(uuid ...string) ([]types.GPU, error) {
 	// GPUs are not supported on Darwin yet
 	return []types.GPU{}, nil
 }
