@@ -6,12 +6,9 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-//go:build linux && amd64
-
 package gpu
 
 import (
-	"fmt"
 	"sync"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -19,86 +16,101 @@ import (
 )
 
 var (
-	// TODO: refactor cache usage while implementing #712 (comment from !682)
-	gpuCache map[types.GPUVendor][]types.GPU
-	mu       sync.Mutex
-	log      = logging.Logger("hardware/gpu")
+	gpuIndexCache map[string]int // UUID to gpuCache index map
+	gpuCache      []types.GPU    // Cache of GPUs
+
+	mu  sync.Mutex
+	log = logging.Logger("hardware/gpu")
 )
 
-// GetGPUs returns the GPU information based on the specified vendors.
-// If no vendors are provided, it returns the information of all the GPUs.
-func GetGPUs(vendors ...types.GPUVendor) ([]types.GPU, error) {
-	return getGPUsHelper(assignIndexToGPUs, map[types.GPUVendor]func() ([]types.GPU, error){
-		types.GPUVendorIntel:  getIntelGPUs,
-		types.GPUVendorNvidia: getNVIDIAGPUs,
-		types.GPUVendorAMDATI: getAMDGPUs,
-	}, false, vendors...)
+func copyCache() []types.GPU {
+	gpuCopy := make([]types.GPU, len(gpuCache))
+	copy(gpuCopy, gpuCache)
+	return gpuCopy
 }
 
-// GetGPUUsage returns the GPU usage based on the specified vendors.
-// If no vendors are provided, it returns the information of all the GPUs.
-func GetGPUUsage(vendors ...types.GPUVendor) ([]types.GPU, error) {
-	return getGPUsHelper(assignIndexToGPUs, map[types.GPUVendor]func() ([]types.GPU, error){
-		types.GPUVendorIntel:  getIntelGPUUsage,
-		types.GPUVendorNvidia: getNVIDIAGPUUsage,
-		types.GPUVendorAMDATI: getAMDGPUUsage,
-	}, false, vendors...)
-}
-
-// getGPUsHelper is a helper function to avoid code duplication in GetGPUs and GetGPUUsage.
-// It fetches GPU information from different vendors and aggregates the results.
-func getGPUsHelper(assignFunc func([]types.GPU) []types.GPU,
-	fetchFuncs map[types.GPUVendor]func() ([]types.GPU, error),
-	useCache bool,
-	vendors ...types.GPUVendor,
-) ([]types.GPU, error) {
-	var gpus []types.GPU
+// GetGPUs returns the GPUs in the system
+func GetGPUs() ([]types.GPU, error) {
+	// Check if the GPUs are cached
+	if len(gpuCache) > 0 {
+		return copyCache(), nil
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
 
-	if gpuCache == nil {
-		gpuCache = make(map[types.GPUVendor][]types.GPU)
+	nvidiaGPUs, err := GetNVIDIAGPUs()
+	if err != nil {
+		log.Warnf("couldn't get NVIDIA GPUs: %v", err)
 	}
+	gpuCache = append(gpuCache, nvidiaGPUs...)
 
-	// Helper function to fetch and append GPU info for a vendor
-	fetchAndAppendGPUs := func(fetchFunc func() ([]types.GPU, error), vendor types.GPUVendor) {
-		gpuList, err := fetchFunc()
-		if err != nil {
-			log.Warnf("error fetching %v GPUs: %v", vendor, err)
-			return
-		}
-		gpuCache[vendor] = gpuList
-		gpus = append(gpus, gpuList...)
+	amdGPUs, err := GetAMDGPUs()
+	if err != nil {
+		log.Warnf("couldn't get AMD GPUs: %v", err)
 	}
+	gpuCache = append(gpuCache, amdGPUs...)
 
-	if len(vendors) == 0 {
-		// No specific vendor requested, fetch all types of GPUs
-		for vendor, fetchFunc := range fetchFuncs {
-			if !useCache || len(gpuCache[vendor]) == 0 {
-				fetchAndAppendGPUs(fetchFunc, vendor)
-			} else {
-				log.Infof("using cached %v GPUs", vendor)
-				gpus = append(gpus, gpuCache[vendor]...)
-			}
-		}
-	} else {
-		// Fetch GPUs for the specified vendor only
-		for _, vendor := range vendors {
-			fetchFunc, ok := fetchFuncs[vendor]
-			if !ok {
-				return nil, fmt.Errorf("unsupported GPU vendor: %v", vendor)
-			}
-			if !useCache || len(gpuCache[vendor]) == 0 {
-				fetchAndAppendGPUs(fetchFunc, vendor)
-			} else {
-				log.Infof("using cached %v GPUs", vendor)
-				gpus = append(gpus, gpuCache[vendor]...)
-			}
-		}
+	intelGPUs, err := GetIntelGPUs()
+	if err != nil {
+		log.Warnf("couldn't get Intel GPUs: %v", err)
 	}
+	gpuCache = append(gpuCache, intelGPUs...)
 
-	// Assign index to GPUs and return
+	// Assign index to GPUs
 	// Note: The index is internal to dms and is not the same as the device index
-	return assignFunc(gpus), nil
+	gpuCache = assignIndexToGPUs(gpuCache)
+
+	// Cache the GPU index
+	gpuIndexCache = make(map[string]int)
+	for i, gpu := range gpuCache {
+		gpuIndexCache[gpu.UUID] = i
+	}
+
+	return copyCache(), nil
+}
+
+// GetGPUUsage returns the GPU usage based on the specified uuid.
+// if uuid is empty, it returns the usage of all GPUs.
+func GetGPUUsage(uuid ...string) ([]types.GPU, error) {
+	// Get the GPUs based on the UUID
+	var gpus []types.GPU
+	if len(uuid) == 0 {
+		// copy the GPU cache
+		gpus = make([]types.GPU, len(gpuCache))
+		copy(gpus, gpuCache)
+	} else {
+		// Get the GPUs based on the UUID
+		for _, u := range uuid {
+			if index, ok := gpuIndexCache[u]; ok {
+				gpus = append(gpus, gpuCache[index])
+			}
+		}
+	}
+
+	// Get the GPU usage
+	for i, gpu := range gpus {
+		switch gpu.Vendor {
+		case types.GPUVendorNvidia:
+			usage, err := GetNVIDIADeviceUsage(gpu.UUID)
+			if err != nil {
+				log.Warnf("get NVIDIA GPU usage: %v", err)
+			}
+			gpus[i].VRAM = usage
+		case types.GPUVendorAMDATI:
+			usage, err := GetAMDDeviceUsage(gpu.UUID)
+			if err != nil {
+				log.Warnf("get AMD GPU usage: %v", err)
+			}
+			gpus[i].VRAM = usage
+		case types.GPUVendorIntel:
+			usage, err := GetIntelDeviceUsage(gpu.UUID)
+			if err != nil {
+				log.Warnf("get Intel GPU usage: %v", err)
+			}
+			gpus[i].VRAM = usage
+		}
+	}
+
+	return gpus, nil
 }

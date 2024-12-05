@@ -69,6 +69,8 @@ type GPU struct {
 	Model string `json:"model" description:"GPU model, e.g., Tesla T4, A100"`
 	// VRAM is the total amount of VRAM on the device
 	VRAM float64 `json:"vram" description:"Total amount of VRAM on the device"`
+	// UUID is the unique identifier of the device
+	UUID string `json:"uuid" description:"Unique identifier of the device"`
 
 	// Gorm fields
 	// Team, is this the right way to do this? What is the best practice we're following?
