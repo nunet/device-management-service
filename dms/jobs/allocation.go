@@ -54,6 +54,7 @@ type AllocationDetails struct {
 
 type Job struct {
 	ID               string
+	AllocationID     string
 	Resources        types.Resources
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
@@ -211,9 +212,9 @@ func (a *Allocation) monitorExecutor(ctx context.Context) {
 	a.mx.Unlock()
 
 	// deallocate resources after everything is done.
-	err := a.resourceManager.DeallocateResources(ctx, a.Job.ID)
+	err := a.resourceManager.DeallocateResources(ctx, a.Job.AllocationID)
 	if err != nil {
-		log.Errorf("failed to deallocate resources for %s: %v", a.Job.ID, err)
+		log.Errorf("failed to deallocate resources for %s: %v", a.Job.AllocationID, err)
 	}
 }
 
@@ -518,7 +519,7 @@ func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
 		return
 	}
 
-	err := a.network.RemoveSubnetPeer(request.SubnetID, request.PeerID)
+	err := a.network.RemoveSubnetPeer(request.SubnetID, request.PeerID, request.IP)
 	if err != nil {
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)

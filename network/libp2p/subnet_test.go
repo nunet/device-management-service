@@ -54,17 +54,17 @@ func TestSubnetAddRemovePeer(t *testing.T) {
 	assert.Equal(t, 1, len(peer1.subnets["subnet1"].ifaces))
 	assert.Equal(t, 1, len(peer1.subnets["subnet1"].info.rtable.All()))
 
-	ip, ok := peer1.subnets["subnet1"].info.rtable.Get(peer1.Host.ID())
+	ips, ok := peer1.subnets["subnet1"].info.rtable.Get(peer1.Host.ID())
 	require.True(t, ok)
 
-	assert.Equal(t, "10.0.0.2", ip)
+	assert.Equal(t, "10.0.0.2", ips[0])
 
 	peerID, ok := peer1.subnets["subnet1"].info.rtable.GetByIP("10.0.0.2")
 	require.True(t, ok)
 
 	assert.Equal(t, peer1.Host.ID(), peerID)
 
-	err = peer1.RemoveSubnetPeer("subnet1", peer1.Host.ID().String())
+	err = peer1.RemoveSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(peer1.subnets))

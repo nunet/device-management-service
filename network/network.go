@@ -109,7 +109,7 @@ type Network interface {
 	AddSubnetPeer(subnetID, peerID, ip string) error
 
 	// RemoveSubnetPeer removes a peer from the subnet
-	RemoveSubnetPeer(subnetID, peerID string) error
+	RemoveSubnetPeer(subnetID, peerID, ip string) error
 
 	// AcceptSubnetPeer accepts a peer to the subnet
 	AcceptSubnetPeer(subnetID, peerID, ip string) error

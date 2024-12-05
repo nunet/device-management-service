@@ -61,8 +61,10 @@ type VerifyEdgeConstraintResponse struct {
 }
 
 type CommitDeploymentRequest struct {
-	EnsembleID string
-	NodeID     string
+	EnsembleID   string
+	AllocationID string
+	NodeID       string
+	Resources    types.Resources
 }
 
 type CommitDeploymentResponse struct {
@@ -149,6 +151,7 @@ type SubnetAddPeerResponse struct {
 }
 
 type SubnetRemovePeerRequest struct {
+	IP       string
 	SubnetID string
 	PeerID   string
 }

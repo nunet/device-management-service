@@ -221,7 +221,7 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	return nil
 }
 
-func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
+func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID, ip string) error {
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -232,11 +232,20 @@ func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
 		return fmt.Errorf("failed to decode peer ID %s: %w", peerID, err)
 	}
 
-	ip, ok := s.info.rtable.Get(peerIDObj)
+	ips, ok := s.info.rtable.Get(peerIDObj)
 	if !ok {
 		return fmt.Errorf("peer with ID %s is not in the subnet", peerID)
 	}
 
+	for _, i := range ips {
+		if i == ip {
+			goto delete_iface
+		}
+	}
+
+	return nil
+
+delete_iface:
 	s.mx.Lock()
 	iface, ok := s.ifaces[ip]
 	if ok {
@@ -247,7 +256,7 @@ func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
 	}
 	s.mx.Unlock()
 
-	s.info.rtable.Remove(peerIDObj)
+	s.info.rtable.Remove(peerIDObj, ip)
 	return nil
 }
 
