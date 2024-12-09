@@ -14,11 +14,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/node"
 )
 
 func useFlagContext(cmd *cobra.Command, context *string) {
-	cmd.Flags().StringVarP(context, fnContext, "c", dms.UserContextName, "specifies capability context")
+	cmd.Flags().StringVarP(context, fnContext, "c", node.UserContextName, "specifies capability context")
 }
 
 func useFlagAudience(cmd *cobra.Command, audience *string) {
@@ -59,4 +59,8 @@ func useFlagRequire(cmd *cobra.Command, require *string) {
 
 func useFlagProvide(cmd *cobra.Command, provide *string) {
 	cmd.Flags().StringVar(provide, fnProvide, "", "JWT to add as provide anchor (for output trust)")
+}
+
+func useFlagRevoke(cmd *cobra.Command, revoke *string) {
+	cmd.Flags().StringVar(revoke, fnRevoke, "", "JWT to add as revoke anchor (for output trust)")
 }

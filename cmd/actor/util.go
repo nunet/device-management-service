@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/cmd/cap"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -89,24 +89,24 @@ func newSecurityContext(fs afero.Afero, context string, cfg *config.Config) (act
 
 	// Create trust context
 	var trustCtx did.TrustContext
-	if cap.IsLedgerContext(context) {
+	if node.IsLedgerContext(context) {
 		provider, err := did.NewLedgerWalletProvider(0)
 		if err != nil {
 			return nil, err
 		}
 
 		trustCtx = did.NewTrustContextWithProvider(provider)
-		context = cap.LedgerContext(context)
+		context = node.LedgerContext(context)
 	} else {
 		var err error
-		trustCtx, _, err = cap.CreateTrustContextFromKeyStore(fs, context, cfg)
+		trustCtx, _, err = node.CreateTrustContextFromKeyStore(fs, context, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create trust context: %w", err)
 		}
 	}
 
 	// Load capability context
-	capCtx, err := cap.LoadCapabilityContext(trustCtx, context, cfg)
+	capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load capability context: %w", err)
 	}

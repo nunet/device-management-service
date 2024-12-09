@@ -38,13 +38,6 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-const (
-	DefaultContextName = "dms"
-	UserContextName    = "user"
-	KeystoreDir        = "key/"
-	CapstoreDir        = "cap/"
-)
-
 //go:embed data/GeoLite2-Country.mmdb
 var geoLite2Country []byte
 
@@ -92,7 +85,7 @@ func initialize(gcfg *config.Config) {
 
 func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error) {
 	if contextName == "" {
-		contextName = DefaultContextName
+		contextName = node.DefaultContextName
 	}
 
 	initialize(gcfg)
@@ -105,7 +98,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 
 	fs := afero.NewOsFs()
 
-	keyStoreDir := filepath.Join(gcfg.UserDir, KeystoreDir)
+	keyStoreDir := filepath.Join(gcfg.UserDir, node.KeystoreDir)
 	keyStore, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create keystore: %w", err)
@@ -185,7 +178,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		return nil, fmt.Errorf("unable to create trust context: %w", err)
 	}
 
-	capStoreDir := filepath.Join(gcfg.UserDir, CapstoreDir)
+	capStoreDir := filepath.Join(gcfg.UserDir, node.CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", contextName))
 	var capCtx ucan.CapabilityContext
 
@@ -195,7 +188,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		}
 		// does not exist; create it
 		rootDID := did.FromPublicKey(pubKey)
-		capCtx, err = ucan.NewCapabilityContext(trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{})
+		capCtx, err = ucan.NewCapabilityContextWithName(contextName, trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
 		if err != nil {
 			return nil, fmt.Errorf("unable to create capability context: %w", err)
 		}
@@ -218,7 +211,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 			return nil, fmt.Errorf("unable to open capability context: %w", err)
 		}
 
-		capCtx, err = ucan.LoadCapabilityContext(trustCtx, f)
+		capCtx, err = ucan.LoadCapabilityContextWithName(contextName, trustCtx, f)
 		_ = f.Close()
 
 		if err != nil {

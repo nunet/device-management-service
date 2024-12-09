@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -46,23 +47,23 @@ Example:
   nunet cap remove --context user --require '<the-token>'`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var trustCtx did.TrustContext
-			if IsLedgerContext(context) {
+			if node.IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
 				}
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = LedgerContext(context)
+				context = node.LedgerContext(context)
 			} else {
 				var err error
-				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context, cfg)
+				trustCtx, _, err = node.CreateTrustContextFromKeyStore(afs, context, cfg)
 				if err != nil {
 					return fmt.Errorf("failed to create trust context: %w", err)
 				}
 			}
 
-			capCtx, err := LoadCapabilityContext(trustCtx, context, cfg)
+			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}
@@ -96,7 +97,7 @@ Example:
 				return fmt.Errorf("one of --provide, --root, or --require must be specified")
 			}
 
-			if err := SaveCapabilityContext(capCtx, context, cfg); err != nil {
+			if err := node.SaveCapabilityContext(capCtx, cfg); err != nil {
 				return fmt.Errorf("save capability context: %w", err)
 			}
 

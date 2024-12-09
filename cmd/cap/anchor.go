@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -26,12 +27,14 @@ func newAnchorCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 		root    string
 		provide string
 		require string
+		revoke  string
 	)
 
 	const (
 		fnProvide = "provide"
 		fnRoot    = "root"
 		fnRequire = "require"
+		fnRevoke  = "revoke"
 	)
 
 	cmd := &cobra.Command{
@@ -56,27 +59,28 @@ Usage examples:
   nunet cap anchor --context user --root did:example:123456789abcdefghi
   nunet cap anchor --context dms  --require '{"some": "json", "token": "here"}'
   nunet cap anchor --context user --provide '{"another": "json", "token": "example"}'
+  nunet cap anchor --context user --revoke '{"another": "revocation", "token": "example"}'
 
 Note: The --context flag is required to specify the capability context.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var trustCtx did.TrustContext
-			if IsLedgerContext(context) {
+			if node.IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
 				}
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = LedgerContext(context)
+				context = node.LedgerContext(context)
 			} else {
 				var err error
-				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context, cfg)
+				trustCtx, _, err = node.CreateTrustContextFromKeyStore(afs, context, cfg)
 				if err != nil {
 					return fmt.Errorf("failed to create trust context: %w", err)
 				}
 			}
 
-			capCtx, err := LoadCapabilityContext(trustCtx, context, cfg)
+			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}
@@ -88,7 +92,7 @@ Note: The --context flag is required to specify the capability context.`,
 					return fmt.Errorf("invalid root DID: %w", err)
 				}
 
-				if err := capCtx.AddRoots([]did.DID{rootDID}, ucan.TokenList{}, ucan.TokenList{}); err != nil {
+				if err := capCtx.AddRoots([]did.DID{rootDID}, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{}); err != nil {
 					return fmt.Errorf("failed to add root anchors: %w", err)
 				}
 
@@ -98,7 +102,7 @@ Note: The --context flag is required to specify the capability context.`,
 					return fmt.Errorf("unmarshal tokens: %w", err)
 				}
 
-				if err := capCtx.AddRoots(nil, tokens, ucan.TokenList{}); err != nil {
+				if err := capCtx.AddRoots(nil, tokens, ucan.TokenList{}, ucan.TokenList{}); err != nil {
 					return fmt.Errorf("failed to add require anchors: %w", err)
 				}
 
@@ -108,15 +112,24 @@ Note: The --context flag is required to specify the capability context.`,
 					return fmt.Errorf("unmarshal tokens: %w", err)
 				}
 
-				if err := capCtx.AddRoots(nil, ucan.TokenList{}, tokens); err != nil {
+				if err := capCtx.AddRoots(nil, ucan.TokenList{}, tokens, ucan.TokenList{}); err != nil {
 					return fmt.Errorf("failed to add provide anchors: %w", err)
+				}
+			case revoke != "":
+				var tokens ucan.TokenList
+				if err := json.Unmarshal([]byte(revoke), &tokens); err != nil {
+					return fmt.Errorf("unmarshal tokens: %w", err)
+				}
+
+				if err := capCtx.AddRoots(nil, ucan.TokenList{}, ucan.TokenList{}, tokens); err != nil {
+					return fmt.Errorf("failed to add revoke anchors: %w", err)
 				}
 
 			default:
-				return fmt.Errorf("one of --provide, --root, or --require must be specified")
+				return fmt.Errorf("one of --provide, --root, or --require or --revoke must be specified")
 			}
 
-			if err := SaveCapabilityContext(capCtx, context, cfg); err != nil {
+			if err := node.SaveCapabilityContext(capCtx, cfg); err != nil {
 				return fmt.Errorf("save capability context: %w", err)
 			}
 
@@ -128,10 +141,11 @@ Note: The --context flag is required to specify the capability context.`,
 	useFlagRoot(cmd, &root)
 	useFlagRequire(cmd, &require)
 	useFlagProvide(cmd, &provide)
+	useFlagRevoke(cmd, &revoke)
 
 	_ = cmd.MarkFlagRequired(fnContext)
-	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire)
-	cmd.MarkFlagsMutuallyExclusive(fnProvide, fnRoot, fnRequire)
+	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire, fnRevoke)
+	cmd.MarkFlagsMutuallyExclusive(fnProvide, fnRoot, fnRequire, fnRevoke)
 
 	return cmd
 }

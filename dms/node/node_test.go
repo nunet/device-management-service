@@ -215,7 +215,7 @@ func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {
 	trustCtx := did.NewTrustContext()
 	trustCtx.AddProvider(provider)
 
-	capCtx, err := ucan.NewCapabilityContext(trustCtx, provider.DID(), nil, ucan.TokenList{}, ucan.TokenList{})
+	capCtx, err := ucan.NewCapabilityContext(trustCtx, provider.DID(), nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
 	require.NoError(t, err, "make capability context")
 
 	return capCtx

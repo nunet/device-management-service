@@ -18,19 +18,24 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newListCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newRevokeCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	var context string
 
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List capability anchors",
-		Long: `List all capability anchors in a capability context
+		Use:   "revoke <token>",
+		Short: "Revoke a token",
+		Long: `Revoke a granted or deleated token
 
-It outputs DIDs and capability tokens set for root, provide, require and revoke anchors.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+Example:
+  nunet cap revoke --context user --token '{"some": "json", "token": "here"}'
+
+The above command revokes a token`,
+		RunE: func(cmd *cobra.Command, args []string) error {
 			var trustCtx did.TrustContext
+			var err error
 			if node.IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
@@ -40,7 +45,6 @@ It outputs DIDs and capability tokens set for root, provide, require and revoke 
 				trustCtx = did.NewTrustContextWithProvider(provider)
 				context = node.LedgerContext(context)
 			} else {
-				var err error
 				trustCtx, _, err = node.CreateTrustContextFromKeyStore(afs, context, cfg)
 				if err != nil {
 					return fmt.Errorf("failed to create trust context: %w", err)
@@ -52,44 +56,33 @@ It outputs DIDs and capability tokens set for root, provide, require and revoke 
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}
 
-			roots, require, provide, revoke := capCtx.ListRoots()
-
-			fmt.Println("roots:")
-			for _, root := range roots {
-				fmt.Printf("\t%s\n", root)
+			var tokens ucan.TokenList
+			if err := json.Unmarshal([]byte(args[0]), &tokens); err != nil {
+				return fmt.Errorf("unmarshal tokens: %w", err)
 			}
 
-			fmt.Println("require:")
-			for _, t := range require.Tokens {
-				data, err := json.Marshal(t)
+			var outputJSON []byte
+			for _, token := range tokens.Tokens {
+				revocationTokens, err := capCtx.Revoke(token)
 				if err != nil {
-					return fmt.Errorf("failed to marshal capability token: %w", err)
+					return fmt.Errorf("failed to grant capabilities: %w", err)
 				}
-				fmt.Printf("\t%s\n", string(data))
-			}
-
-			fmt.Println("provide:")
-			for _, t := range provide.Tokens {
-				data, err := json.Marshal(t)
+				tokensJSON, err := json.Marshal(revocationTokens)
 				if err != nil {
-					return fmt.Errorf("failed to marshal capability token: %w", err)
+					return fmt.Errorf("unable to marshal tokens to json: %w", err)
 				}
-				fmt.Printf("\t%s\n", string(data))
-			}
 
-			fmt.Println("revoke:")
-			for _, t := range revoke.Tokens {
-				data, err := json.Marshal(t)
-				if err != nil {
-					return fmt.Errorf("failed to marshal capability token: %w", err)
-				}
-				fmt.Printf("\t%s\n", string(data))
+				outputJSON = append(outputJSON, tokensJSON...)
+				outputJSON = append(outputJSON, []byte("\n")...)
 			}
+			fmt.Fprintln(cmd.OutOrStdout(), string(outputJSON))
+
 			return nil
 		},
 	}
 
 	useFlagContext(cmd, &context)
+	_ = cmd.MarkFlagRequired(fnContext)
 
 	return cmd
 }
