@@ -320,7 +320,7 @@ func TestProvision(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.NoError(t, cap1.AddRoots([]did.DID{}, tokenlist, ucan.TokenList{}))
+	require.NoError(t, cap1.AddRoots([]did.DID{}, tokenlist, ucan.TokenList{}, ucan.TokenList{}))
 
 	err = orchestrator.provision(manifest)
 	require.NoError(t, err)

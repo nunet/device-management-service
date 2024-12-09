@@ -9,6 +9,7 @@
 package actor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -20,6 +21,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -47,6 +50,14 @@ type behaviorConfig struct {
 
 type NewDeploymentRequestCmd struct {
 	Config string
+}
+
+type CapAnchorRequestCmd struct {
+	Root    bool
+	Require bool
+	Provide bool
+	Revoke  bool
+	Data    string
 }
 
 var behaviors = map[string]behaviorConfig{
@@ -844,7 +855,7 @@ This behavior allows the user to adjust logger settings, i.e. logging level, flu
 Examples:
 
   nunet actor cmd --context user /dms/node/logger/config --level debug # set debug level
-  nunet actor cmd --context user /dms/node/logger/config --url <elasticsearch-url> 
+  nunet actor cmd --context user /dms/node/logger/config --url <elasticsearch-url>
   nunet actor cmd --context user /dms/node/logger/config --interval 10 # flush logs each 10 seconds
   nunet actor cmd --context user /dms/node/logger/config --api-key <api-key>
   nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
@@ -871,5 +882,83 @@ This behavior retrieves the hardware usage of the system.
 Examples:
 
 	nunet actor cmd --context user /dms/node/hardware/usage`,
+	},
+	node.CapListBehavior: {
+		Type:    bInvoke,
+		Short:   "List capabilities",
+		Payload: func() any { return &node.CapListRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.CapListRequest)
+			cmd.Flags().StringVarP(&p.Context, "context", "c", "", "context name")
+		},
+		Long: `Invokes the /dms/cap/list behavior on an actor
+
+This behavior retrieves a list of capabilities available on the node.
+
+Examples:
+  nunet actor cmd --context user /dms/cap/list`,
+	},
+	node.CapAnchorBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &CapAnchorRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CapAnchorRequestCmd)
+			cmd.Flags().BoolVarP(&p.Root, "root", "", false, "add root anchor")
+			cmd.Flags().BoolVarP(&p.Require, "require", "", false, "add require anchor")
+			cmd.Flags().BoolVarP(&p.Provide, "provide", "", false, "add provide anchor")
+			cmd.Flags().BoolVarP(&p.Revoke, "revoke", "", false, "add revoke anchor")
+			cmd.Flags().StringVarP(&p.Data, "data", "", "", "capability token or DID to anchor")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*CapAnchorRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			result := &node.CapAnchorRequest{}
+			switch {
+			case req.Root:
+				root, err := did.FromString(req.Data)
+				if err != nil {
+					return nil, err
+				}
+				result.Root = append(result.Root, root)
+
+			case req.Require:
+				var token ucan.Token
+				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
+					return nil, err
+				}
+				result.Require.Tokens = append(result.Require.Tokens, &token)
+
+			case req.Provide:
+				var token ucan.Token
+				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
+					return nil, err
+				}
+				result.Provide.Tokens = append(result.Provide.Tokens, &token)
+
+			case req.Revoke:
+				var token ucan.Token
+				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
+					return nil, err
+				}
+				result.Revoke.Tokens = append(result.Revoke.Tokens, &token)
+
+			}
+
+			return req, nil
+		},
+		Short: "Add capability anchors",
+		Long: `Invokes the /dms/cap/anchor behavior on an actor
+
+This behavior anchors capabilities on the node.
+
+Examples:
+
+  nunet actor cmd --context user /dms/cap/anchor --root did
+  nunet actor cmd --context user /dms/cap/anchor --require token
+  nunet actor cmd --context user /dms/cap/anchor --provide token
+  nunet actor cmd --context user /dms/cap/anchor --revoke token`,
 	},
 }

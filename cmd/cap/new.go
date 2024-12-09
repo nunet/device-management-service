@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -37,14 +38,14 @@ Example:
   nunet cap new ledger:user  # if using ledger`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			context := dms.UserContextName
+			context := node.UserContextName
 			if len(args) > 0 {
 				context = args[0]
 			}
 
 			var trustCtx did.TrustContext
 			var rootDID did.DID
-			if IsLedgerContext(context) {
+			if node.IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
@@ -52,9 +53,9 @@ Example:
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
 				rootDID = provider.DID()
-				context = LedgerContext(context)
+				context = node.LedgerContext(context)
 			} else {
-				keyStoreDir := filepath.Join(cfg.General.UserDir, dms.KeystoreDir)
+				keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
 				ks, err := keystore.New(afs.Fs, keyStoreDir)
 				if err != nil {
 					return fmt.Errorf("failed to open keystore: %w", err)
@@ -102,7 +103,7 @@ Example:
 				rootDID = did.FromPublicKey(priv.GetPublic())
 			}
 
-			capStoreDir := filepath.Join(cfg.General.UserDir, dms.CapstoreDir)
+			capStoreDir := filepath.Join(cfg.General.UserDir, node.CapstoreDir)
 			capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", context))
 
 			fileExists, err := afs.Exists(capStoreFile)
@@ -131,12 +132,12 @@ Example:
 				}
 			}
 
-			capCtx, err := ucan.NewCapabilityContext(trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{})
+			capCtx, err := ucan.NewCapabilityContextWithName(context, trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
 			if err != nil {
 				return fmt.Errorf("unable to create capability context: %w", err)
 			}
 
-			if err := SaveCapabilityContext(capCtx, context, cfg); err != nil {
+			if err := node.SaveCapabilityContext(capCtx, cfg); err != nil {
 				return fmt.Errorf("save capability context: %w", err)
 			}
 

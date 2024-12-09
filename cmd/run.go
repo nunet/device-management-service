@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
 )
@@ -96,6 +97,6 @@ Or manually create a dms_config.json file and refer to the README for available 
 	cmd.Flags().BoolVar(&pprof, "pprof", pprof, "enable profiling")
 	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", pprofAddr, "enable profiling")
 	cmd.Flags().Uint32Var(&pprofPort, "pprof-port", pprofPort, "enable profiling")
-	cmd.Flags().StringVarP(&context, "context", "c", dms.DefaultContextName, "specify a capability context")
+	cmd.Flags().StringVarP(&context, "context", "c", node.DefaultContextName, "specify a capability context")
 	return cmd
 }

@@ -335,6 +335,12 @@ func New(cfg config.Config, fs afero.Afero,
 		HardwareUsageBehavior: {
 			fn: n.handleHardwareUsage,
 		},
+		CapListBehavior: {
+			fn: n.handleCapList,
+		},
+		CapAnchorBehavior: {
+			fn: n.handleCapAnchor,
+		},
 	}
 	for behavior, handler := range dmsBehaviors {
 		if err := nodeActor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
@@ -877,7 +883,7 @@ func (n *Node) grantAllocationCaps(orchestrator did.DID, aud did.DID, caps []uca
 		return fmt.Errorf("failed to create granting token for audience %s caps: %w", aud, err)
 	}
 
-	err = n.rootCap.AddRoots([]did.DID{}, tokens, ucan.TokenList{})
+	err = n.rootCap.AddRoots([]did.DID{}, tokens, ucan.TokenList{}, ucan.TokenList{})
 	if err != nil {
 		return fmt.Errorf("failed to add roots for audience %s: %w", aud, err)
 	}

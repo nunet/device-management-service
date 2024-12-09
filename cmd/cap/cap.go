@@ -26,9 +26,11 @@ const (
 	fnSelfSign   = "self-sign"
 	fnDepth      = "depth"
 	fnProvide    = "provide"
+	fnRevoke     = "revoke"
 	fnRoot       = "root"
 	fnRequire    = "require"
 	fnForce      = "force"
+	fnToken      = "token"
 )
 
 // NewCapCmd returns the cap command that adds other commands
@@ -41,6 +43,7 @@ func NewCapCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 
 	cmd.AddCommand(newGrantCmd(afs, cfg))
 	cmd.AddCommand(newAnchorCmd(afs, cfg))
+	cmd.AddCommand(newRevokeCmd(afs, cfg))
 	cmd.AddCommand(newNewCmd(afs, cfg))
 	cmd.AddCommand(newDelegateCmd(afs, cfg))
 	cmd.AddCommand(newListCmd(afs, cfg))

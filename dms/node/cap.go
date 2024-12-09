@@ -6,7 +6,7 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package cap
+package node
 
 import (
 	"fmt"
@@ -18,12 +18,18 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
+)
+
+const (
+	DefaultContextName = "dms"
+	UserContextName    = "user"
+	KeystoreDir        = "key/"
+	CapstoreDir        = "cap/"
 )
 
 const ledger = "ledger"
@@ -42,7 +48,7 @@ func LedgerContext(context string) string {
 }
 
 func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, cfg *config.Config) (did.TrustContext, crypto.PrivKey, error) {
-	keyStoreDir := filepath.Join(cfg.General.UserDir, dms.KeystoreDir)
+	keyStoreDir := filepath.Join(cfg.General.UserDir, KeystoreDir)
 
 	ks, err := keystore.New(afs.Fs, keyStoreDir)
 	if err != nil {
@@ -76,7 +82,7 @@ func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, cfg *con
 }
 
 func LoadCapabilityContext(trustCtx did.TrustContext, name string, cfg *config.Config) (ucan.CapabilityContext, error) {
-	capStoreDir := filepath.Join(cfg.General.UserDir, dms.CapstoreDir)
+	capStoreDir := filepath.Join(cfg.General.UserDir, CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 
 	f, err := os.Open(capStoreFile)
@@ -85,7 +91,7 @@ func LoadCapabilityContext(trustCtx did.TrustContext, name string, cfg *config.C
 	}
 	defer f.Close()
 
-	capCtx, err := ucan.LoadCapabilityContext(trustCtx, f)
+	capCtx, err := ucan.LoadCapabilityContextWithName(name, trustCtx, f)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load capability context: %w", err)
 	}
@@ -93,8 +99,9 @@ func LoadCapabilityContext(trustCtx did.TrustContext, name string, cfg *config.C
 	return capCtx, nil
 }
 
-func SaveCapabilityContext(capCtx ucan.CapabilityContext, name string, cfg *config.Config) error {
-	capStoreDir := filepath.Join(cfg.General.UserDir, dms.CapstoreDir)
+func SaveCapabilityContext(capCtx ucan.CapabilityContext, cfg *config.Config) error {
+	name := capCtx.Name()
+	capStoreDir := filepath.Join(cfg.General.UserDir, CapstoreDir)
 	capCtxFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 	capCtxBackup := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap.%d", name, time.Now().Unix()))
 
