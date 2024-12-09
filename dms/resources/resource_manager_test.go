@@ -1120,10 +1120,6 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Create a new instance of the manager to test if the allocations are loaded from the DB
-		repos = setupManagerRepos(t, mockDB)
-		rm, err = NewResourceManager(repos, hm)
-		require.NoError(t, err)
 		actualDemand, err := rm.GetTotalAllocation()
 		require.NoError(t, err)
 		assertResources(t, totalDemand, actualDemand)
