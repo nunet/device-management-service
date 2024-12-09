@@ -41,65 +41,6 @@ include:
 
 image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:$DMS_BUILDER_VERSION
 
-Build:
-  stage: build
-  dependencies: []
-  needs: []
-  script:
-    - echo "Building debian archives..."
-    - bash maint-scripts/build.sh
-  artifacts:
-    untracked: false
-    when: on_success
-    expire_in: "30 days"
-    paths:
-      - dist/
-  rules:
-    - if: $BUILD_IMAGE_ONLY == "true"
-      when: never
-    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
-      when: never
-    - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
-      when: never
-    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
-    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
-      when: manual
-    - when: never
-
-build:osx:
-  stage: build
-  tags:
-    - saas-macos-medium-m1
-  image: macos-14-xcode-15
-  dependencies: []
-  needs: []
-  variables:
-    HOMEBREW_NO_AUTO_UPDATE: 1
-  script:
-    - echo "Building darwin binaries..."
-    - bash maint-scripts/build-bsd.sh
-  artifacts:
-    untracked: false
-    when: on_success
-    expire_in: "30 days"
-    paths:
-      - dist/
-  allow_failure: true
-  rules:
-    - if: $BUILD_IMAGE_ONLY == "true"
-      when: never
-    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
-      when: never
-    - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
-      when: never
-    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
-    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
-      when: manual
-    - when: never
-
-
 Build DMS Builder:
   stage: build
   extends:
