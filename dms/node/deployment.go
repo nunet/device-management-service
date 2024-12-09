@@ -288,12 +288,6 @@ loop:
 			}
 		}
 
-		// TODO allow static ports
-		if len(v.V1.PublicPorts.Static) > 0 {
-			log.Debug("bid request has static public ports")
-			continue loop
-		}
-
 		// if the desired executable is not found stop
 		for _, e := range v.V1.Executors {
 			executor, err := n.getExecutor(e)
@@ -331,6 +325,8 @@ loop:
 		log.Debugf("bid requirements were not satisfied")
 		return
 	}
+
+	// TODO-MR: handle static port allocation via port allocator
 
 	// handle dynamic port allocs
 	// TODO: dynamic port allocs should be on committing phase

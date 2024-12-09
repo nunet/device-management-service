@@ -14,12 +14,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 
@@ -45,6 +47,8 @@ const (
 	statusWaitTimeout  = 10 * time.Second
 
 	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
+
+	dnsResolverIP = "10.0.0.1"
 )
 
 // Executor manages the lifecycle of Docker containers for execution requests.
@@ -470,7 +474,10 @@ func (e *Executor) newDockerExecutionContainer(
 	}
 
 	log.Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
-	hostConfig := configureHostConfig(chosenGPUVendor, params, dockerArgs, mounts)
+	hostConfig, err := configureHostConfig(chosenGPUVendor, params, dockerArgs, mounts)
+	if err != nil {
+		return "", fmt.Errorf("failed to configure host config: %w", err)
+	}
 
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
@@ -525,7 +532,7 @@ func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
 
 // configureHostConfig sets up the host configuration for the container based on the
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
-func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) container.HostConfig {
+func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) (container.HostConfig, error) {
 	var hostConfig container.HostConfig
 
 	switch vendor {
@@ -606,8 +613,36 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		}
 	}
 
+	// configure port binding
+	portMaps := make(map[nat.Port][]nat.PortBinding)
+	for _, toBind := range params.PortsToBind {
+		natPort, err := nat.NewPort("tcp", strconv.Itoa(toBind.ExecutorPort))
+		if err != nil {
+			return hostConfig, fmt.Errorf("failed to create port: %w", err)
+		}
+
+		if _, ok := portMaps[natPort]; ok {
+			portMaps[natPort] = append(portMaps[natPort], nat.PortBinding{
+				HostIP:   toBind.IP,
+				HostPort: fmt.Sprintf("%d", toBind.HostPort),
+			})
+			continue
+		}
+
+		portMaps[natPort] = []nat.PortBinding{
+			{
+				HostIP:   toBind.IP,
+				HostPort: fmt.Sprintf("%d", toBind.HostPort),
+			},
+		}
+	}
+
+	hostConfig.PortBindings = portMaps
 	hostConfig.Privileged = dockerArgs.Privileged
-	return hostConfig
+	hostConfig.DNS = []string{"1.1.1.1", dnsResolverIP}
+	hostConfig.DNSSearch = []string{"internal"}
+
+	return hostConfig, nil
 }
 
 // makeContainerMounts creates the mounts for the container based on the input and output
