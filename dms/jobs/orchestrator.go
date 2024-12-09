@@ -885,14 +885,14 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		mf.Nodes[n] = nmf
 	}
 
-	for a := range o.cfg.Allocations() {
+	for id, alloc := range o.cfg.Allocations() {
 		amf := AllocationManifest{
-			ID:      a,
-			NodeID:  allocationNodes[a],
-			Handle:  allocations[a],
-			DNSName: a + ".internal",
+			ID:      id,
+			NodeID:  allocationNodes[id],
+			Handle:  allocations[id],
+			DNSName: alloc.DNSName + ".internal",
 		}
-		mf.Allocations[a] = amf
+		mf.Allocations[id] = amf
 	}
 
 	return mf, nil
