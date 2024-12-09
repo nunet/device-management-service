@@ -19,12 +19,14 @@ allocations:
         keys: []
         provision: []
         healthcheck: ""
+        dns_name: nginxdemo-alloc
 nodes:
     node1:
         allocations:
             - alloc1
         ports:
-            - private: 1
+            - static: 8080
+              private: 1
               allocation: alloc1
         location:
             accept: []
