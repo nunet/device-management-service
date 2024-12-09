@@ -34,6 +34,13 @@ type ExecutionRequest struct {
 	ResultsDir          string                   // Directory to store the results
 	PersistLogsDuration time.Duration            // Duration to persist logs on disk
 	ProvisionScripts    map[string][]byte        // (named) Scripts to run when initiating the execution
+	PortsToBind         []PortsToBind            // List of ports to bind
+}
+
+type PortsToBind struct {
+	IP           string
+	HostPort     int
+	ExecutorPort int
 }
 
 // ExecutionListItem is the result of the current executions.

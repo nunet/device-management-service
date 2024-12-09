@@ -887,9 +887,10 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 
 	for a := range o.cfg.Allocations() {
 		amf := AllocationManifest{
-			ID:     a,
-			NodeID: allocationNodes[a],
-			Handle: allocations[a],
+			ID:      a,
+			NodeID:  allocationNodes[a],
+			Handle:  allocations[a],
+			DNSName: a + ".internal",
 		}
 		mf.Allocations[a] = amf
 	}
@@ -1059,70 +1060,8 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 
 func (o *Orchestrator) provision(em EnsembleManifest) error {
 	log.Infof("provisioning ensemble manifest: %+v", em)
-	// 0. start the allocations
-	errCh := make(chan error, len(em.Allocations))
-	wg := sync.WaitGroup{}
-	for _, manifest := range em.Allocations {
-		wg.Add(1)
-		go func(manifest AllocationManifest) {
-			defer wg.Done()
 
-			msg, err := actor.Message(
-				o.actor.Handle(),
-				manifest.Handle,
-				AllocationStartBehavior,
-				AllocationStartRequest{},
-				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
-			)
-			if err != nil {
-				errCh <- fmt.Errorf("error creating allocation start message: %w", err)
-				return
-			}
-
-			replyCh, err := o.actor.Invoke(msg)
-			if err != nil {
-				errCh <- fmt.Errorf("error invoking allocation start: %w", err)
-				return
-			}
-
-			var reply actor.Envelope
-			select {
-			case reply = <-replyCh:
-			case <-time.After(2 * time.Minute):
-				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
-				return
-			}
-
-			defer reply.Discard()
-
-			var response AllocationStartResponse
-			if err := json.Unmarshal(reply.Message, &response); err != nil {
-				errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
-				return
-			}
-
-			if !response.OK {
-				errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
-				return
-			}
-			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
-		}(manifest)
-	}
-
-	wg.Wait()
-	close(errCh)
 	var aggErr error
-	for err := range errCh {
-		if aggErr == nil {
-			aggErr = err
-			continue
-		} else if err != nil {
-			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
-		}
-	}
-	if aggErr != nil {
-		return aggErr
-	}
 
 	// 1. create subnet
 	// 1.a generate routing table
@@ -1157,8 +1096,8 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 		usedIPs[ip.String()] = true
 	}
 
-	errCh = make(chan error, len(em.Allocations))
-	wg = sync.WaitGroup{}
+	errCh := make(chan error, len(em.Allocations))
+	wg := sync.WaitGroup{}
 	for _, manifest := range em.Nodes {
 		wg.Add(1)
 		go func() {
@@ -1427,6 +1366,74 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				}
 			}()
 		}
+	}
+
+	wg.Wait()
+	close(errCh)
+	aggErr = nil
+	for err := range errCh {
+		if aggErr == nil {
+			aggErr = err
+			continue
+		} else if err != nil {
+			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+		}
+	}
+	if aggErr != nil {
+		return aggErr
+	}
+
+	// 2. start the allocations
+	errCh = make(chan error, len(em.Allocations))
+	wg = sync.WaitGroup{}
+	for allocName, manifest := range em.Allocations {
+		wg.Add(1)
+		go func(manifest AllocationManifest) {
+			defer wg.Done()
+
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				manifest.Handle,
+				AllocationStartBehavior,
+				AllocationStartRequest{
+					SubnetIP:    indexRoutingTable[allocName],
+					PortMapping: manifest.Ports,
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating allocation start message: %w", err)
+				return
+			}
+
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking allocation start: %w", err)
+				return
+			}
+
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
+				return
+			}
+
+			defer reply.Discard()
+
+			var response AllocationStartResponse
+			if err := json.Unmarshal(reply.Message, &response); err != nil {
+				errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
+				return
+			}
+
+			if !response.OK {
+				errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
+				return
+			}
+			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
+		}(manifest)
 	}
 
 	wg.Wait()

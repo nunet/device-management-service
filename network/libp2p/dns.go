@@ -11,6 +11,7 @@ package libp2p
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/miekg/dns"
 )
@@ -28,7 +29,7 @@ func resolveDNS(query *dns.Msg, records map[string]string) *dns.Msg {
 			continue
 		}
 
-		ip, ok := records[question.Name]
+		ip, ok := records[strings.TrimSuffix(question.Name, ".")]
 		if !ok {
 			// Not found in our map, set answer to NXDOMAIN
 			m.SetRcode(query, dns.RcodeNameError)

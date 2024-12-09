@@ -124,7 +124,7 @@ func NewAllocation(
 }
 
 // Run creates the executor based on th e execution engine configuration.
-func (a *Allocation) Run(ctx context.Context) error {
+func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[int]int) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
@@ -149,7 +149,7 @@ func (a *Allocation) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create results directory: %w", err)
 	}
 
-	err = a.executor.Start(ctx, &types.ExecutionRequest{
+	executionRequest := &types.ExecutionRequest{
 		JobID:            a.Job.ID,
 		ExecutionID:      a.executionID,
 		EngineSpec:       &a.Job.Execution,
@@ -160,7 +160,20 @@ func (a *Allocation) Run(ctx context.Context) error {
 		Outputs:             []*types.StorageVolumeExecutor{},
 		ResultsDir:          a.resultsDir,
 		PersistLogsDuration: deleteLogsAfter,
-	})
+	}
+
+	for hostPort, executorPort := range portMapping {
+		executionRequest.PortsToBind = append(
+			executionRequest.PortsToBind,
+			types.PortsToBind{
+				IP:           subnetIP,
+				HostPort:     hostPort,
+				ExecutorPort: executorPort,
+			},
+		)
+	}
+
+	err = a.executor.Start(ctx, executionRequest)
 	if err != nil {
 		return fmt.Errorf("failed to start executor: %w", err)
 	}
@@ -314,9 +327,14 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	log.Infof("behavior allocation start invoked by: %+v", msg.From)
 	defer msg.Discard()
 
-	var resp AllocationStartResponse
+	var req AllocationStartRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		log.Errorf("error unmarshalling allocation start request: %s", err)
+		return
+	}
 
-	if err := a.Run(context.TODO()); err != nil {
+	var resp AllocationStartResponse
+	if err := a.Run(context.TODO(), req.SubnetIP, req.PortMapping); err != nil {
 		err = fmt.Errorf("failed to run allocation: %w", err)
 		log.Error(err)
 
@@ -386,6 +404,8 @@ func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
 		return
 	}
 
+	log.Debugf("added peer: %q to subnet: %q", request.PeerID, request.SubnetID)
+
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -408,6 +428,8 @@ func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
 		a.sendReply(msg, resp)
 		return
 	}
+
+	log.Debugf("accepted peer: %q to subnet: %q", request.PeerID, request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -432,6 +454,8 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 		return
 	}
 
+	log.Debugf("mapped port: %d to subnet: %q", request.SourcePort, request.SubnetID)
+
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -454,6 +478,8 @@ func (a *Allocation) handleSubnetDNSAddRecord(msg actor.Envelope) {
 		a.sendReply(msg, resp)
 		return
 	}
+
+	log.Debugf("added dns record: %q to subnet: %q", request.DomainName, request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -480,6 +506,8 @@ func (a *Allocation) handleSubnetUnmapPort(msg actor.Envelope) {
 		return
 	}
 
+	log.Debugf("unmapped port: %d from subnet: %q", request.SourcePort, request.SubnetID)
+
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -503,6 +531,8 @@ func (a *Allocation) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
 		return
 	}
 
+	log.Debugf("removed dns record: %q from subnet: %q", request.DomainName, request.SubnetID)
+
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -525,6 +555,8 @@ func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
 		a.sendReply(msg, resp)
 		return
 	}
+
+	log.Debugf("removed peer: %q from subnet: %q", request.PeerID, request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)

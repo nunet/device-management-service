@@ -96,7 +96,10 @@ type RevertDeploymentMessage struct {
 	AllocationsIDs []string
 }
 
-type AllocationStartRequest struct{}
+type AllocationStartRequest struct {
+	SubnetIP    string
+	PortMapping map[int]int
+}
 
 type AllocationStartResponse struct {
 	OK    bool
