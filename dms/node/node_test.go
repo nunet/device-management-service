@@ -21,7 +21,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	repo "gitlab.com/nunet/device-management-service/db/repositories/clover"
+
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -47,8 +49,8 @@ func TestNew(t *testing.T) {
 		geoip               types.GeoIPLocator
 		hostLocation        HostGeolocation
 		portConfig          PortConfig
-
-		expErr string
+		contractStore       repositories.Contract
+		expErr              string
 	}{
 		"no onboarer": {
 			expErr: "onboarder is nil",
@@ -94,13 +96,22 @@ func TestNew(t *testing.T) {
 			scheduler: bt.NewScheduler(1),
 			expErr:    "geoip is nil",
 		},
-		"success": {
+		"no contract store": {
 			onboarder: &onboarding.Onboarding{},
 			rootCap:   rootCap,
 			hostID:    "123",
 			net:       createNetwork(t, nil, "14950"),
 			scheduler: bt.NewScheduler(1),
 			geoip:     &geoipMock{},
+		},
+		"success": {
+			onboarder:     &onboarding.Onboarding{},
+			rootCap:       rootCap,
+			hostID:        "123",
+			net:           createNetwork(t, nil, "14950"),
+			scheduler:     bt.NewScheduler(1),
+			geoip:         &geoipMock{},
+			contractStore: repo.ContractRepoClover{},
 		},
 	}
 
@@ -133,7 +144,7 @@ func TestNew(t *testing.T) {
 				*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
 				tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager,
 				tt.scheduler, hardwareManager, repo.NewOrchestratorView(db),
-				tt.geoip, tt.hostLocation, tt.portConfig,
+				tt.geoip, tt.hostLocation, tt.portConfig, tt.contractStore,
 			)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
@@ -159,17 +170,21 @@ func TestNodeAllocationMessaging(t *testing.T) {
 	assert.NoError(t, err)
 	defer os.RemoveAll(path)
 
-	collections := []string{"orchestrator_view"}
+	collections := []string{"orchestrator_view", "contract"}
 
 	db, err := repo.NewDB(path, collections)
 	assert.NoError(t, err)
 	assert.NotNil(t, db)
+
+	contractR := repo.NewContractRepo(db)
+	assert.NoError(t, err)
 
 	node1, err := New(
 		*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
 		&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net,
 		resourceManager, bt.NewScheduler(1), hardwareManager, repo.NewOrchestratorView(db),
 		&geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
+		contractR,
 	)
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)

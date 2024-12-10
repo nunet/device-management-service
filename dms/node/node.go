@@ -83,6 +83,8 @@ type Node struct {
 
 	dmsConfig config.Config
 	fs        afero.Afero
+
+	contractRepo repositories.Contract
 }
 
 type peerState struct {
@@ -124,6 +126,7 @@ func New(cfg config.Config, fs afero.Afero,
 	hardware types.HardwareManager,
 	orchestratorRepo repositories.OrchestratorView,
 	geoip types.GeoIPLocator, hostLocation HostGeolocation, portConfig PortConfig,
+	contractRepo repositories.Contract,
 ) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
@@ -207,6 +210,7 @@ func New(cfg config.Config, fs afero.Afero,
 		commitedResources: make(map[string]*bidState),
 		dmsConfig:         cfg,
 		fs:                fs,
+		contractRepo:      contractRepo,
 	}
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
