@@ -253,6 +253,12 @@ func (a *Allocation) Stop(ctx context.Context) error {
 		return fmt.Errorf("failed to stop execution: %w", err)
 	}
 
+	// deallocate resources after everything is done.
+	err := a.resourceManager.DeallocateResources(ctx, a.Job.AllocationID)
+	if err != nil {
+		log.Errorf("failed to deallocate resources for %s: %v", a.Job.AllocationID, err)
+	}
+
 	a.status = stopped
 
 	return nil
