@@ -280,7 +280,7 @@ func (a *Allocation) Start() error {
 		SubnetAcceptPeerBehavior:      a.handleSubnetAcceptPeer,
 		SubnetMapPortBehavior:         a.handleSubnetMapPort,
 		SubnetUnmapPortBehavior:       a.handleSubnetUnmapPort,
-		SubnetDNSAddRecordBehavior:    a.handleSubnetDNSAddRecord,
+		SubnetDNSAddRecordsBehavior:   a.handleSubnetDNSAddRecords,
 		SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
 	}
 
@@ -460,11 +460,11 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-func (a *Allocation) handleSubnetDNSAddRecord(msg actor.Envelope) {
+func (a *Allocation) handleSubnetDNSAddRecords(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request SubnetDNSAddRecordRequest
-	resp := SubnetDNSAddRecordResponse{}
+	var request SubnetDNSAddRecordsRequest
+	resp := SubnetDNSAddRecordsResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
@@ -472,14 +472,14 @@ func (a *Allocation) handleSubnetDNSAddRecord(msg actor.Envelope) {
 		return
 	}
 
-	err := a.network.AddSubnetDNSRecord(request.SubnetID, request.DomainName, request.IP)
+	err := a.network.AddSubnetDNSRecords(request.SubnetID, request.Records)
 	if err != nil {
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
 		return
 	}
 
-	log.Debugf("added dns record: %q to subnet: %q", request.DomainName, request.SubnetID)
+	log.Debugf("added dns record(s): %q to subnet: %q", request.Records, request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)

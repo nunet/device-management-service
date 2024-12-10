@@ -120,8 +120,8 @@ type Network interface {
 	// UnmapPort removes a previous port map
 	UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
 
-	// AddDNSRecord adds a dns record to our local resolver
-	AddSubnetDNSRecord(subnetID, name, ip string) error
+	// AddSubnetDNSRecords adds dns records to our local resolver
+	AddSubnetDNSRecords(subnetID string, records map[string]string) error
 
 	// RemoveDNSRecord removes a dns record from our local resolver
 	RemoveSubnetDNSRecord(subnetID, name string) error

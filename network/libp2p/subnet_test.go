@@ -161,7 +161,7 @@ func TestSubnetAddRemoveDNSRecord(t *testing.T) {
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
-	err = peer1.AddSubnetDNSRecord("subnet1", "example.com.", "10.20.30.40")
+	err = peer1.AddSubnetDNSRecords("subnet1", map[string]string{"example.com.": "10.20.30.40"})
 	require.NoError(t, err)
 
 	<-time.After(3 * time.Second)
@@ -207,7 +207,7 @@ func TestSubnetDestroy(t *testing.T) {
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
-	err = peer1.AddSubnetDNSRecord("subnet1", "example.com.", "10.20.30.40")
+	err = peer1.AddSubnetDNSRecords("subnet1", map[string]string{"example.com.": "10.20.30.40"})
 	require.NoError(t, err)
 
 	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")

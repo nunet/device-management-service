@@ -1240,18 +1240,22 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	// 1.c configure DNS
 	wg = sync.WaitGroup{}
 	errCh = make(chan error, len(em.Allocations))
+	dnsRecords := make(map[string]string, 0)
 	for allocationID, manifest := range em.Allocations {
+		dnsRecords[manifest.DNSName] = indexRoutingTable[allocationID]
+	}
+
+	for _, manifest := range em.Allocations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				SubnetDNSAddRecordBehavior,
-				SubnetDNSAddRecordRequest{
-					SubnetID:   em.ID,
-					DomainName: manifest.DNSName,
-					IP:         indexRoutingTable[allocationID],
+				SubnetDNSAddRecordsBehavior,
+				SubnetDNSAddRecordsRequest{
+					SubnetID: em.ID,
+					Records:  dnsRecords,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
