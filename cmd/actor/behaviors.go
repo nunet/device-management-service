@@ -683,20 +683,25 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
 	},
 
-	jobs.SubnetDNSAddRecordBehavior: {
-		Payload: func() any { return &jobs.SubnetDNSAddRecordRequest{} },
+	jobs.SubnetDNSAddRecordsBehavior: {
+		Payload: func() any { return &jobs.SubnetDNSAddRecordsRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetDNSAddRecordRequest)
+			p := payload.(*jobs.SubnetDNSAddRecordsRequest)
+
+			var domainName string
+			var ip string
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
-			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "IP address (required)")
+			cmd.Flags().StringVarP(&domainName, "domain-name", "n", "", "A record name (required)")
+			cmd.Flags().StringVarP(&ip, "ip", "i", "", "IP address (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("name")
 			_ = cmd.MarkFlagRequired("ip")
+
+			p.Records = map[string]string{domainName: ip}
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*jobs.SubnetDNSAddRecordRequest)
+			req, ok := payload.(*jobs.SubnetDNSAddRecordsRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}

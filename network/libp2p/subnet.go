@@ -286,15 +286,16 @@ func (l *Libp2p) AcceptSubnetPeer(subnetID, peerID, ip string) error {
 	return nil
 }
 
-// AddDNSRecord adds a dns record to our local resolver
-func (l *Libp2p) AddSubnetDNSRecord(subnetID, name, ip string) error {
+func (l *Libp2p) AddSubnetDNSRecords(subnetID string, records map[string]string) error {
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
 	}
 
 	s.dnsmx.Lock()
-	s.dnsRecords[name] = ip
+	for name, ip := range records {
+		s.dnsRecords[name] = ip
+	}
 	s.dnsmx.Unlock()
 
 	return nil

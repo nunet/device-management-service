@@ -758,7 +758,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 			jobs.SubnetAcceptPeerBehavior,
 			jobs.SubnetMapPortBehavior,
 			jobs.SubnetUnmapPortBehavior,
-			jobs.SubnetDNSAddRecordBehavior,
+			jobs.SubnetDNSAddRecordsBehavior,
 			jobs.SubnetDNSRemoveRecordBehavior,
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant allocation caps: %w", err)
@@ -791,7 +791,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 						jobs.SubnetAcceptPeerBehavior,
 						jobs.SubnetMapPortBehavior,
 						jobs.SubnetUnmapPortBehavior,
-						jobs.SubnetDNSAddRecordBehavior,
+						jobs.SubnetDNSAddRecordsBehavior,
 						jobs.SubnetDNSRemoveRecordBehavior,
 					}); err != nil {
 						log.Warnf("failed to grant allocation caps: %w", err)

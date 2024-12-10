@@ -207,15 +207,15 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	_ = actr1.AddBehavior(SubnetDNSAddRecordBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(SubnetDNSAddRecordsBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
-		var request SubnetDNSAddRecordRequest
+		var request SubnetDNSAddRecordsRequest
 		if err := json.Unmarshal(msg.Message, &request); err != nil {
 			return
 		}
 
-		response := SubnetDNSAddRecordResponse{
+		response := SubnetDNSAddRecordsResponse{
 			OK: true,
 		}
 
@@ -224,7 +224,9 @@ func TestProvision(t *testing.T) {
 			response.OK = false
 			response.Error = "subnet not found"
 		} else {
-			subnet.dns[request.DomainName] = request.IP
+			for name, ip := range request.Records {
+				subnet.dns[name] = ip
+			}
 		}
 
 		reply, err := actor.ReplyTo(msg, response)
@@ -315,7 +317,7 @@ func TestProvision(t *testing.T) {
 			ucan.Capability(SubnetCreateBehavior),
 			ucan.Capability(SubnetAddPeerBehavior),
 			ucan.Capability(SubnetAcceptPeerBehavior),
-			ucan.Capability(SubnetDNSAddRecordBehavior),
+			ucan.Capability(SubnetDNSAddRecordsBehavior),
 			ucan.Capability(SubnetMapPortBehavior),
 		},
 	)

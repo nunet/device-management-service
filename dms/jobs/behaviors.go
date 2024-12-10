@@ -44,7 +44,7 @@ const (
 	SubnetAcceptPeerBehavior      = "/dms/node/subnet/accept-peer"
 	SubnetMapPortBehavior         = "/dms/node/subnet/map-port"
 	SubnetUnmapPortBehavior       = "/dms/node/subnet/unmap-port"
-	SubnetDNSAddRecordBehavior    = "/dms/node/subnet/dns/add-record"
+	SubnetDNSAddRecordsBehavior   = "/dms/node/subnet/dns/add-records"
 	SubnetDNSRemoveRecordBehavior = "/dms/node/subnet/dns/remove-record"
 )
 
@@ -189,13 +189,13 @@ type SubnetMapPortResponse struct {
 	Error string
 }
 
-type SubnetDNSAddRecordRequest struct {
-	SubnetID   string
-	DomainName string
-	IP         string
+type SubnetDNSAddRecordsRequest struct {
+	SubnetID string
+	// map of domain name:ip
+	Records map[string]string
 }
 
-type SubnetDNSAddRecordResponse struct {
+type SubnetDNSAddRecordsResponse struct {
 	OK    bool
 	Error string
 }
