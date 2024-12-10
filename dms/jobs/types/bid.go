@@ -51,6 +51,9 @@ type BidRequestV1 struct {
 	GeneralRequirements struct {
 		PrivilegedDocker bool
 	}
+
+	// contract attached to a bid request
+	ContractDID did.DID
 }
 
 // Bid is the version struct for Bids in response to a bid request

@@ -140,6 +140,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 
 	onboardR := clover_db.NewOnboardingConfig(db)
 	orchestR := clover_db.NewOrchestratorView(db)
+	contractR := clover_db.NewContractRepo(db)
 
 	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardR)
 	if err != nil {
@@ -237,6 +238,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
 		orchestR, geoip2db, hostLocation, portConfig,
+		contractR,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -331,6 +333,7 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"resource_allocation",
 			"orchestrator_view",
 			"gpu",
+			"contract",
 		},
 	)
 }
