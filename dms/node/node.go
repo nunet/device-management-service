@@ -485,7 +485,7 @@ func (n *Node) broadcastScore(p peer.ID) float64 {
 }
 
 func (n *Node) peerConnected(p peer.ID) {
-	log.Debugf("peer connected: %s", p)
+	logConns.Debugf("peer connected: %s", p)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -499,7 +499,7 @@ func (n *Node) peerConnected(p peer.ID) {
 }
 
 func (n *Node) peerPreConnected(p peer.ID, protos []protocol.ID, conns int) {
-	log.Debugf("peer preconnected: %s %s (%d)", p, protos, conns)
+	logConns.Debugf("peer preconnected: %s %s (%d)", p, protos, conns)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -515,7 +515,7 @@ func (n *Node) peerPreConnected(p peer.ID, protos []protocol.ID, conns int) {
 }
 
 func (n *Node) peerIdentified(p peer.ID, protos []protocol.ID) {
-	log.Debugf("peer identified: %s %s", p, protos)
+	logConns.Debugf("peer identified: %s %s", p, protos)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -536,7 +536,7 @@ func (n *Node) peerIdentified(p peer.ID, protos []protocol.ID) {
 }
 
 func (n *Node) peerDisconnected(p peer.ID) {
-	log.Debugf("peer disconnected: %s", p)
+	logConns.Debugf("peer disconnected: %s", p)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -608,7 +608,7 @@ func (n *Node) sayHello(p peer.ID) {
 		return
 	}
 
-	log.Debugf("saying hello to %s", handle.Address.HostID)
+	logConns.Debugf("saying hello to %s", handle.Address.HostID)
 	replyCh, err := n.actor.Invoke(msg)
 	if err != nil {
 		n.mx.Lock()
@@ -621,7 +621,7 @@ func (n *Node) sayHello(p peer.ID) {
 			}
 		}
 		n.mx.Unlock()
-		log.Debugf("error invoking hello: %s", err)
+		logConns.Debugf("error invoking hello: %s", err)
 		return
 	}
 
@@ -651,7 +651,7 @@ func (n *Node) sayHello(p peer.ID) {
 			}
 		}
 		n.mx.Unlock()
-		log.Debugf("hello timeout for %s", handle.Address.HostID)
+		logConns.Debugf("hello timeout for %s", handle.Address.HostID)
 	}
 }
 
