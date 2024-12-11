@@ -41,7 +41,9 @@ func TestProvision(t *testing.T) {
 	capa := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
 	actr := actor.CreateActor(t, peer, capa)
 	require.NoError(t, actr.Start())
-	orchestrator, err := NewOrchestrator(actr, peer, EnsembleConfig{
+	orchestratorID, err := uuid.NewUUID()
+	require.NoError(t, err)
+	orchestrator, err := NewOrchestrator(orchestratorID.String(), actr, peer, EnsembleConfig{
 		V1: &job_types.EnsembleConfigV1{
 			Allocations: map[string]job_types.AllocationConfig{
 				"allocation1": {

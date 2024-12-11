@@ -53,6 +53,7 @@ type OrchestratorView struct {
 	Manifest           EnsembleManifest
 	Status             DeploymentStatus
 	DeploymentSnapshot DeploymentSnapshot
+	PrivKey            []byte
 }
 
 type DeploymentSnapshot struct {
