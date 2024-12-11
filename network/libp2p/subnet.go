@@ -680,8 +680,6 @@ func (s *subnet) writePackets(stream network.Stream) {
 
 				log.Debug("read packet from stream", "subnet", s.info.id, "src", stream.Conn().RemotePeer().String())
 
-				log.Debug("read packet from stream", "subnet", s.info.id, "src", stream.Conn().RemotePeer().String())
-
 				// write_packet
 				destIP := net.IPv4(packet[16], packet[17], packet[18], packet[19]).String()
 

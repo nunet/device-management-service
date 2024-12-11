@@ -1,0 +1,19 @@
+@startuml creation actor wihin supervisor strategy
+participant "NodeSupervisor-1"
+participant "Allocation-11"
+participant "AllocationSupervisor-11"
+participant "Allocation-12"
+
+"Allocation-11" -> "NodeSupervisor-1": issues request to create \na child actor -\nCreateActor('Allocation-12')
+"NodeSupervisor-1" -> "Allocation-12" **: Instantiates new allocation
+"NodeSupervisor-1" -> "NodeSupervisor-1" : Registers Allocation-12\nin *control_hierarchy*
+"NodeSupervisor-1" -> "AllocationSupervisor-11": Informs about Allocation-12\ncreation
+"AllocationSupervisor-11" -> "AllocationSupervisor-11": Adds Allocation-12\nin *children*
+"AllocationSupervisor-11" -> "Allocation-12": Asks to send heartbeats\nas defined in\nSupervisionFlags
+"Allocation-12" -> "Allocation-12": registers\n*backtround_task*\nfor heartbeats
+"Allocation-12" -> "AllocationSupervisor-11": Sends periodic heartbeats
+"AllocationSupervisor-11" --> "AllocationSupervisor-11": Create period healtchecks\nif requested in\nSupervisionFlags
+"AllocationSupervisor-11" --> "Allocation-12": Periodic healtchecks\nif requested
+
+@enduml
+

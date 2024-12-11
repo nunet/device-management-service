@@ -27,6 +27,14 @@ func NewExecutor(_ context.Context, _ string) (executor.Executor, error) {
 
 var _ executor.Executor = (*Executor)(nil)
 
+func (e *Executor) GetID() string {
+	return ""
+}
+
+func (e *Executor) Exec(_ context.Context, _ string, _ []string) (int, string, error) {
+	return 0, "", nil
+}
+
 // Start does nothing and returns nil.
 func (e *Executor) Start(_ context.Context, _ *types.ExecutionRequest) error {
 	return nil

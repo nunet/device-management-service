@@ -64,7 +64,9 @@ const (
 	HardwareSpecBehavior  = "/dms/node/hardware/spec"
 	HardwareUsageBehavior = "/dms/node/hardware/usage"
 
-	LoggerConfigBehavior = "/dms/node/logger/config"
+	LoggerConfigBehavior      = "/dms/node/logger/config"
+	RestartAllocationBehavior = "/dms/node/allocation/restart"
+	StopAllocationBehavior    = "/dms/node/allocation/stop"
 
 	CapListBehavior   = "/dms/cap/list"
 	CapAnchorBehavior = "/dms/cap/anchor"
@@ -452,6 +454,7 @@ type DeploymentShutdownRequest struct {
 }
 
 type DeploymentShutdownResponse struct {
+	OK    bool
 	Error string
 }
 
@@ -474,11 +477,16 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 		return
 	}
 
-	err := d.Shutdown()
-	if err != nil {
-		resp.Error = err.Error()
+	if d.Status() != jobs.DeploymentStatusRunning {
+		// maybe-TODO: if it's still provisioning/committing,
+		// we should stop the deployment process anyway
+		resp.Error = ErrDeploymentNotRunning.Error()
+		n.sendReply(msg, resp)
+		return
 	}
 
+	d.Shutdown()
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
 
@@ -600,6 +608,46 @@ func (n *Node) handlePeerScore(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
+func (n *Node) handleSubnetCreate(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetCreateRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetCreateResponse{}
+	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetDestroyRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetDestroyResponse{}
+	err := n.network.DestroySubnet(request.SubnetID)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
 func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -631,51 +679,6 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 
 	resp := jobs.CommitDeploymentResponse{}
 	err := n.commitDeployment(request.EnsembleID, request.AllocationID, request.Resources)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	resp.OK = true
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetCreate(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetCreateRequest
-	resp := jobs.SubnetCreateResponse{}
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	resp.OK = true
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetDestroyRequest
-	resp := jobs.SubnetDestroyResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	err := n.network.DestroySubnet(request.SubnetID)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -762,6 +765,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 }
 
 type resourcesResponse struct {
+	OK        bool
 	Resources types.Resources
 	Error     string `json:"error,omitempty"`
 }
@@ -808,21 +812,26 @@ func (n *Node) handleOnboardedResources(msg actor.Envelope) {
 	}
 
 	resp.Resources = onboardedResources.Resources
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) handleHardwareSpec(msg actor.Envelope) {
+func (n *Node) handleRestartAllocation(msg actor.Envelope) {
 	defer msg.Discard()
-	resp := resourcesResponse{}
 
-	hardwareSpec, err := n.hardware.GetMachineResources()
-	if err != nil {
+	var request jobs.RestartAllocationRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.RestartAllocationResponse{}
+	if err := n.restartAllocation(request.AllocationID); err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
 	}
 
-	resp.Resources = hardwareSpec.Resources
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
 

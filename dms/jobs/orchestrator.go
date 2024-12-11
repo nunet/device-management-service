@@ -58,7 +58,13 @@ type Orchestrator struct {
 	cancel func()
 }
 
-func NewOrchestrator(id string, actor actor.Actor, network network.Network, cfg EnsembleConfig) (*Orchestrator, error) {
+func NewOrchestrator(
+	ctx context.Context,
+	id string,
+	actor actor.Actor,
+	network network.Network,
+	cfg EnsembleConfig,
+) (*Orchestrator, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
 	}
@@ -74,6 +80,7 @@ func NewOrchestrator(id string, actor actor.Actor, network network.Network, cfg 
 		geo:     geo,
 		id:      id,
 		cfg:     cfg,
+		ctx:     ctx,
 	}
 
 	return o, nil
@@ -277,7 +284,11 @@ deploy:
 
 		log.Infof("deployment successful, starting supervisor")
 		o.setStatus(DeploymentStatusRunning)
-		go o.supervise()
+		allocations := make(map[string]actor.Handle, len(manifest.Allocations))
+		for _, allocation := range manifest.Allocations {
+			allocations[allocation.ID] = allocation.Handle
+		}
+		go o.supervise(allocations, manifest)
 
 		return nil
 	}
@@ -287,94 +298,127 @@ deploy:
 	return ErrDeploymentFailed
 }
 
-func (o *Orchestrator) Shutdown() error {
-	var mx sync.Mutex
-	mx.Lock()
+func (o *Orchestrator) Shutdown() {
+	allocations := o.manifest.Allocations
 
-	// shutdown the allocations
-	o.setStatus(DeploymentStatusShuttingDown)
+	o.mx.Lock()
+	defer o.mx.Unlock()
 
-	var aggErr error
-	errCh := make(chan error, len(o.manifest.Allocations))
+	if o.cancel != nil {
+		o.cancel()
+	}
+
 	wg := sync.WaitGroup{}
-	for _, allocations := range o.manifest.Allocations {
+	for _, allocation := range allocations {
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
 
+		go func(h actor.Handle, id string) {
 			msg, err := actor.Message(
 				o.actor.Handle(),
-				allocations.Handle,
-				AllocationShutdownBehavior,
-				AllocationShutdownRequest{
-					AllocationID: allocations.ID,
+				h,
+				SubnetDestroyBehavior,
+				SubnetDestroyRequest{
+					SubnetID: o.manifest.ID,
 				},
-				actor.WithMessageExpiry(uint64(time.Now().Add(AllocationShutdownTimeout).UnixNano())),
+				actor.WithMessageExpiry(actor.MakeExpiry(5*time.Second)),
 			)
 			if err != nil {
-				errCh <- fmt.Errorf("error creating allocation shutdown message: %w", err)
+				log.Errorf("error creating stop message for %s: %s", id, err)
 				return
 			}
 
+			// invoke the stop message
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
-				errCh <- fmt.Errorf("error invoking allocation shutdown message: %w", err)
+				log.Errorf("error invoking stop message for %s: %s", id, err)
 				return
 			}
 
 			var reply actor.Envelope
+			// wait for the reply
 			select {
 			case reply = <-replyCh:
-			case <-time.After(2 * time.Minute):
-				errCh <- fmt.Errorf("timeout shutting down allocation: %w", ErrDeploymentFailed)
+				defer reply.Discard()
+				var resp SubnetDestroyResponse
+				if err := json.Unmarshal(msg.Message, &resp); err != nil {
+					log.Errorf("error unmarshalling subnet destroy response: %s", err)
+					return
+				}
+				if !resp.OK {
+					log.Errorf("failed to destroy subnet %s", id)
+					return
+				}
+
+			case <-time.After(StopAllocationTimeout):
+				log.Errorf("timeout stopping allocation %s", id)
 				return
 			}
 
-			defer reply.Discard()
-
-			var response AllocationShutdownResponse
-
-			if err := json.Unmarshal(reply.Message, &response); err != nil {
-				errCh <- fmt.Errorf("error unmarshalling allocation shutdown response: %w", err)
-				return
-			}
-
-			if !response.OK {
-				errCh <- fmt.Errorf("error shutting down allocation: %s: %w", response.Error, ErrDeploymentFailed)
-				return
-			}
-		}()
+			log.Infof("subnet %s destroyed", o.manifest.ID)
+		}(allocation.Handle, allocation.ID)
 	}
 
 	wg.Wait()
-	close(errCh)
-	aggErr = nil
-	for err := range errCh {
-		if aggErr == nil {
-			aggErr = err
-			continue
-		} else if err != nil {
-			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
-		}
-	}
-	if aggErr != nil {
-		return aggErr
+
+	wg = sync.WaitGroup{}
+	for _, allocation := range allocations {
+		wg.Add(1)
+		go func(h actor.Handle, id string) {
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				h,
+				StopAllocationBehavior,
+				StopAllocationRequest{
+					AllocationID: id,
+				},
+				actor.WithMessageExpiry(actor.MakeExpiry(StopAllocationTimeout)),
+			)
+			if err != nil {
+				log.Errorf("error creating stop message for %s: %s", id, err)
+				return
+			}
+
+			// invoke the stop message
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				log.Errorf("error invoking stop message for %s: %s", id, err)
+				return
+			}
+
+			// wait for the reply
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+				defer reply.Discard()
+				var resp StopAllocationResponse
+				if err := json.Unmarshal(msg.Message, &resp); err != nil {
+					log.Errorf("error unmarshalling stop allocation response: %s", err)
+					return
+				}
+				if !resp.OK {
+					log.Errorf("failed to stop allocation %s", id)
+					return
+				}
+			case <-time.After(StopAllocationTimeout):
+				log.Errorf("timeout stopping allocation %s", allocation.ID)
+				return
+			}
+			log.Infof("allocation %s stopped", id)
+		}(allocation.Handle, allocation.ID)
 	}
 
-	// set the status to shutting down
-	o.setStatus(DeploymentStatusCompleted)
-	return nil
+	wg.Wait()
 }
 
 // Restore restores deployments where the status is either provisioning, committing or running
 func RestoreDeployment(
-	actor actor.Actor, net network.Network, id string,
+	actr actor.Actor, net network.Network, id string,
 	cfg EnsembleConfig, manifest EnsembleManifest,
 	status DeploymentStatus, restoreInfo DeploymentSnapshot,
 ) (*Orchestrator, error) {
 	o := &Orchestrator{
 		id:                 id,
-		actor:              actor,
+		actor:              actr,
 		network:            net,
 		cfg:                cfg,
 		manifest:           manifest,
@@ -403,7 +447,12 @@ func RestoreDeployment(
 	}
 
 	o.ctx, o.cancel = context.WithCancel(context.Background())
-	go o.supervise()
+
+	allocations := make(map[string]actor.Handle, len(manifest.Allocations))
+	for _, allocation := range manifest.Allocations {
+		allocations[allocation.ID] = allocation.Handle
+	}
+	go o.supervise(allocations, manifest)
 
 	return o, nil
 }
@@ -956,10 +1005,11 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 
 	for id, alloc := range o.cfg.Allocations() {
 		amf := AllocationManifest{
-			ID:      id,
-			NodeID:  allocationNodes[id],
-			Handle:  allocations[id],
-			DNSName: alloc.DNSName + ".internal",
+			ID:          id,
+			NodeID:      allocationNodes[id],
+			Handle:      allocations[id],
+			DNSName:     alloc.DNSName + ".internal",
+			Healthcheck: alloc.HealthCheck,
 		}
 		mf.Allocations[id] = amf
 	}
@@ -1095,6 +1145,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		return nil, fmt.Errorf("failed to create allocation message for %s: %w", n, err)
 	}
 
+	log.Debugf("Invoking allocation for node: %s", n)
 	replyCh, err := o.actor.Invoke(msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to invoke allocate for %s: %w", n, err)
@@ -1124,13 +1175,12 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		}
 	}
 
+	log.Debugf("Allocation successful for node: %s", n)
 	return response.Allocations, nil
 }
 
 func (o *Orchestrator) provision(em EnsembleManifest) error {
 	log.Infof("provisioning ensemble manifest: %+v", em)
-
-	var aggErr error
 
 	// 1. create subnet
 	// 1.a generate routing table
@@ -1196,32 +1246,35 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			var reply actor.Envelope
 			select {
 			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response struct {
+					OK    bool
+					Error string
+				}
+
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling subnet response: %w", err)
+					return
+				}
+
+				if !response.OK {
+					errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
+					return
+				}
 			case <-time.After(2 * time.Minute):
 				errCh <- fmt.Errorf("timeout creating subnet: %w", ErrDeploymentFailed)
 				return
 			}
 
-			defer reply.Discard()
-
-			var response struct {
-				OK    bool
-				Error string
-			}
-
-			if err := json.Unmarshal(reply.Message, &response); err != nil {
-				errCh <- fmt.Errorf("error unmarshalling subnet response: %w", err)
-				return
-			}
-
-			if !response.OK {
-				errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
-				return
-			}
+			log.Info("subnet successfully created on peer", manifest.Handle)
 		}()
 	}
 
 	wg.Wait()
 	close(errCh)
+
+	var aggErr error
 	aggErr = nil
 	for err := range errCh {
 		if aggErr == nil {
@@ -1267,27 +1320,28 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			var reply actor.Envelope
 			select {
 			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response struct {
+					OK    bool
+					Error string
+				}
+
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
+					return
+				}
+
+				if !response.OK {
+					errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+					return
+				}
 			case <-time.After(2 * time.Minute):
 				errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
 				return
 			}
 
-			defer reply.Discard()
-
-			var response struct {
-				OK    bool
-				Error string
-			}
-
-			if err := json.Unmarshal(reply.Message, &response); err != nil {
-				errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
-				return
-			}
-
-			if !response.OK {
-				errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
-				return
-			}
+			log.Info("peer successfully added to subnet on peer", manifest.Handle)
 		}()
 	}
 
@@ -1342,27 +1396,29 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			var reply actor.Envelope
 			select {
 			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response struct {
+					OK    bool
+					Error string
+				}
+
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
+					return
+				}
+
+				if !response.OK {
+					errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+					return
+				}
+
 			case <-time.After(2 * time.Minute):
 				errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
 				return
 			}
 
-			defer reply.Discard()
-
-			var response struct {
-				OK    bool
-				Error string
-			}
-
-			if err := json.Unmarshal(reply.Message, &response); err != nil {
-				errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
-				return
-			}
-
-			if !response.OK {
-				errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
-				return
-			}
+			log.Info("DNS records successfully added to subnet on peer", manifest.Handle)
 		}()
 	}
 
@@ -1416,27 +1472,28 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				var reply actor.Envelope
 				select {
 				case reply = <-replyCh:
+					defer reply.Discard()
+
+					var response struct {
+						OK    bool
+						Error string
+					}
+
+					if err := json.Unmarshal(reply.Message, &response); err != nil {
+						errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
+						return
+					}
+
+					if !response.OK {
+						errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+						return
+					}
 				case <-time.After(2 * time.Minute):
 					errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
 					return
 				}
 
-				defer reply.Discard()
-
-				var response struct {
-					OK    bool
-					Error string
-				}
-
-				if err := json.Unmarshal(reply.Message, &response); err != nil {
-					errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
-					return
-				}
-
-				if !response.OK {
-					errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
-					return
-				}
+				log.Info("port mapping successfully added to subnet on peer", manifest.Handle)
 			}()
 		}
 	}
@@ -1488,23 +1545,23 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			var reply actor.Envelope
 			select {
 			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response AllocationStartResponse
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
+					return
+				}
+
+				if !response.OK {
+					errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
+					return
+				}
 			case <-time.After(2 * time.Minute):
 				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
 				return
 			}
 
-			defer reply.Discard()
-
-			var response AllocationStartResponse
-			if err := json.Unmarshal(reply.Message, &response); err != nil {
-				errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
-				return
-			}
-
-			if !response.OK {
-				errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
-				return
-			}
 			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
 		}(manifest)
 	}
@@ -1687,8 +1744,184 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (job_t
 	return ensembleBidRequest, nil
 }
 
-func (o *Orchestrator) supervise() {
-	// TODO
+func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest EnsembleManifest) {
+	log.Debugf("Starting supervision for allocations: %+v", allocations)
+	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
+	wg := sync.WaitGroup{}
+
+	for id, allocation := range allocations {
+		msg, err := actor.Message(
+			o.actor.Handle(),
+			allocation,
+			RegisterHealthcheckBehavior,
+			RegisterHealthcheckRequest{
+				EnsembleID:  o.id,
+				HealthCheck: manifest.Allocations[id].Healthcheck,
+			},
+			actor.WithMessageExpiry(expiry),
+		)
+		if err != nil {
+			log.Errorf("Failed to create supervisor message: %s", err)
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				log.Errorf("failed to invoke heartbeat on allocation: %s", err)
+				return
+			}
+
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response RegisterHealthcheckResponse
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					log.Errorf("error unmarshalling supervisor reply: %s", err)
+					return
+				}
+
+				if !response.OK {
+					log.Errorf("error registering healthcheck: %s", response.Error)
+					return
+				}
+			case <-time.After(time.Second * 5):
+				log.Errorf("timeout waiting for supervisor reply")
+				return
+			}
+
+			log.Info("successfully registered healthcheck for allocation", id)
+		}()
+	}
+
+	wg.Wait()
+
+	ticker := time.NewTicker(actor.HealthCheckInterval)
+	defer ticker.Stop()
+
+	failures := map[string]int{}
+	for {
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
+			wg := sync.WaitGroup{}
+			for id, allocation := range allocations {
+				msg, err := actor.Message(
+					o.actor.Handle(),
+					allocation,
+					actor.HealthCheckBehavior,
+					struct{}{},
+					actor.WithMessageExpiry(expiry),
+				)
+				if err != nil {
+					log.Errorf("failed to create supervisor message: %s", err)
+					continue
+				}
+
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+
+					replyCh, err := o.actor.Invoke(msg)
+					if err != nil {
+						log.Errorf("failed to invoke heartbeat on allocation: %s", err)
+						return
+					}
+
+					ticker := time.NewTicker(time.Second * 5)
+					defer ticker.Stop()
+
+					var reply actor.Envelope
+					select {
+					case reply = <-replyCh:
+						defer reply.Discard()
+						resp := struct {
+							OK    bool
+							Error string
+						}{}
+
+						if err := json.Unmarshal(reply.Message, &resp); err != nil {
+							log.Errorf("error unmarshalling supervisor reply: %s", err)
+							return
+						}
+
+						if !resp.OK {
+							log.Errorf("error in healthcheck: %s", resp.Error)
+							failures[allocation.ID.String()]++
+							v := failures[allocation.ID.String()]
+							if v >= 3 {
+								if err := o.escalateFailure(id, allocation); err != nil {
+									log.Errorf("failed to escalate failure: %s", err)
+								} else {
+									delete(failures, allocation.ID.String())
+								}
+							}
+							return
+						} else {
+							delete(failures, allocation.ID.String())
+						}
+
+					case <-ticker.C:
+						log.Warnf("timeout waiting for supervisor reply")
+						failures[allocation.ID.String()]++
+						v := failures[allocation.ID.String()]
+						if v >= 3 {
+							if err := o.escalateFailure(id, allocation); err != nil {
+								log.Errorf("failed to escalate failure: %s", err)
+							} else {
+								delete(failures, allocation.ID.String())
+							}
+						}
+					}
+
+					log.Infof("successfully healthchecked allocation %s", id)
+				}()
+			}
+
+			wg.Wait()
+		}
+	}
+}
+
+func (o *Orchestrator) escalateFailure(allocationID string, allocHandle actor.Handle) error {
+	// TODO we need to decide how to handle repeated failures and also correlated failures
+	//      from a node.
+	//      Also, we should not restart at first failure, but wait for a number of
+	//      consecutive failures.
+	//      See https://gitlab.com/nunet/device-management-service/-/issues/794
+	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
+	msg, err := actor.Message(
+		o.actor.Handle(),
+		allocHandle,
+		RestartAllocationBehavior,
+		RestartAllocationRequest{
+			AllocationID: allocationID,
+		},
+		actor.WithMessageExpiry(expiry),
+	)
+	if err != nil {
+		return err
+	}
+
+	replyCh, err := o.actor.Invoke(msg)
+	if err != nil {
+		return err
+	}
+
+	select {
+	case reply := <-replyCh:
+		reply.Discard()
+		return nil
+	case <-time.After(time.Minute * 2):
+		return fmt.Errorf("timeout waiting for supervisor reply")
+	}
 }
 
 func (o *Orchestrator) Stop() {

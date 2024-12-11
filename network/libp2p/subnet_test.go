@@ -244,15 +244,6 @@ func TestSubnetDestroy(t *testing.T) {
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "0.0.0.0/0"))
-
-	<-time.After(15 * time.Second)
-
-	// // Command to list POSTROUTING rules in the nat table and grep for the port
-	// cmd = exec.Command("sh", "-c", "ifconfig | grep dms")
-	// op, err = cmd.CombinedOutput()
-	// require.NoError(t, err)
-	// fmt.Println("PPPPP", string(op))
-	// assert.True(t, 0 == len(strings.TrimSpace(string(op))))
 }
 
 func createPeer(t *testing.T, port int) *Libp2p { //nolint

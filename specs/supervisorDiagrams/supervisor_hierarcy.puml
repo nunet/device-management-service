@@ -1,0 +1,46 @@
+node "DMS-1" {
+    frame "Node-1" {
+        frame "NodeSupervisor-1" 
+    }
+    frame "Allocation-11" {
+        frame "AllocationSupervisor-11"
+    }
+    frame "Allocation-12" {
+    }
+    frame "Allocation-13" {
+    }
+    frame "Allocation-14" {
+    }
+}
+node "DMS-2" {
+    frame "Node-2" {
+        frame "NodeSupervisor-2" 
+    }
+    frame "Allocation-21" {
+        frame "AllocationSupervisor-21"
+    }
+    frame "Allocation-22" {
+        frame "AllocationSupervisor-22"
+    }
+    frame "Allocation-23" {
+    }
+}
+' control hierarcy dms-1
+    "NodeSupervisor-1" *-[#red]-> "Allocation-11": control
+    "NodeSupervisor-1" *-[#red]-> "Allocation-12": control
+    "NodeSupervisor-1" *-[#red]-> "Allocation-13": control
+    "NodeSupervisor-1" *-[#red]-> "Allocation-14": control
+
+' control hierarcy dms-2
+    "NodeSupervisor-2" *-[#red]-> "Allocation-21": control
+    "NodeSupervisor-2" *-[#red]-> "Allocation-22": control
+    "NodeSupervisor-2" *-[#red]-> "Allocation-23": control
+
+' parent-child hierarchy job-1
+    "AllocationSupervisor-11" -[#blue]-> "Allocation-12": parent-child
+    "AllocationSupervisor-11" -[#blue]-> "Allocation-13": parent-child
+
+' parent-child hierarchy job-2
+    "AllocationSupervisor-21" -[#blue]-> "Allocation-22": parent-child
+    "AllocationSupervisor-21" -[#blue]-> "Allocation-14": parent-child
+    "AllocationSupervisor-22" -[#blue]-> "Allocation-23": parent-child

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type EnsembleManifest struct {
@@ -22,12 +23,13 @@ type EnsembleManifest struct {
 }
 
 type AllocationManifest struct {
-	ID       string       // allocation unique id
-	NodeID   string       // allocation node
-	Handle   actor.Handle // handle of the allocation control actor
-	DNSName  string       // (internal) DNS name of the allocation
-	PrivAddr string       // (VPN) private IP address of the allocation peer
-	Ports    map[int]int  // port mapping, public -> private
+	ID          string                    // allocation unique id
+	NodeID      string                    // allocation node
+	Handle      actor.Handle              // handle of the allocation control actor
+	DNSName     string                    // (internal) DNS name of the allocation
+	PrivAddr    string                    // (VPN) private IP address of the allocation peer
+	Ports       map[int]int               // port mapping, public -> private
+	Healthcheck types.HealthCheckManifest // healthcheck configuration
 }
 
 type NodeManifest struct {

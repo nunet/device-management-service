@@ -35,6 +35,10 @@ const (
 	AllocationStartTimeout       = 5 * time.Second
 	AllocationShutdownTimeout    = 5 * time.Second
 
+	RestartAllocationBehavior = "/dms/node/allocation/restart"
+	StopAllocationBehavior    = "/dms/node/allocation/stop"
+	StopAllocationTimeout     = 3 * time.Second
+
 	MinEnsembleDeploymentTime = 15 * time.Second
 
 	MaxBidMultiplier = 8
@@ -48,6 +52,8 @@ const (
 	SubnetUnmapPortBehavior       = "/dms/node/subnet/unmap-port"
 	SubnetDNSAddRecordsBehavior   = "/dms/node/subnet/dns/add-records"
 	SubnetDNSRemoveRecordBehavior = "/dms/node/subnet/dns/remove-record"
+
+	RegisterHealthcheckBehavior = "/dms/actor/healthcheck/register"
 )
 
 type VerifyEdgeConstraintRequest struct {
@@ -231,6 +237,25 @@ type SubnetDNSRemoveRecordRequest struct {
 }
 
 type SubnetDNSRemoveRecordResponse struct {
+	OK    bool
+	Error string
+}
+
+type StopAllocationRequest struct {
+	AllocationID string
+}
+
+type StopAllocationResponse struct {
+	OK    bool
+	Error string
+}
+
+type RegisterHealthcheckRequest struct {
+	EnsembleID  string
+	HealthCheck types.HealthCheckManifest
+}
+
+type RegisterHealthcheckResponse struct {
 	OK    bool
 	Error string
 }

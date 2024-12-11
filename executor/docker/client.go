@@ -66,6 +66,7 @@ type ClientInterface interface {
 		since string,
 		follow bool,
 	) (io.ReadCloser, error)
+	Exec(ctx context.Context, containerID string, cmd []string) (int, string, error)
 }
 
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
@@ -446,4 +447,49 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 
 	log.Infow("docker_pull_image_success", "digest", digest)
 	return digest, nil
+}
+
+func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (int, string, error) {
+	log.Infow("docker_container_exec_started", "container ID", containerID)
+
+	idresp, err := c.client.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	hijconn, err := c.client.ContainerExecAttach(ctx, idresp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	defer hijconn.Close()
+
+	var outputStr string
+
+	out, err := io.ReadAll(hijconn.Reader)
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	outputStr = string(out)
+
+	log.Infow("docker_container_exec_success", "output string", outputStr)
+
+	execInspect, err := c.client.ContainerExecInspect(ctx, idresp.ID)
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	return execInspect.ExitCode, outputStr, nil
 }

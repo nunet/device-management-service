@@ -315,7 +315,8 @@ func startTrace(ctx context.Context, operationName string, keyValues ...interfac
 		}
 	}
 
-	logger.Info("Operation started")
+	// disabled because a bit too verbose
+	// logger.Info("Operation started")
 
 	// Return the end function
 	return func() {
@@ -346,7 +347,7 @@ func startTrace(ctx context.Context, operationName string, keyValues ...interfac
 			}
 		}
 
-		logger.Info("Operation ended")
+		// logger.Info("Operation ended")
 
 		tx.End()
 	}

@@ -179,7 +179,7 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, fmt.Errorf("failed to create security context: %w", err)
 	}
 
-	nodeActor, err := createActor(rootSec, actor.NewRateLimiter(actor.DefaultRateLimiterConfig()), hostID, "root", net, scheduler)
+	nodeActor, err := createActor(rootSec, actor.NewRateLimiter(actor.DefaultRateLimiterConfig()), hostID, "root", net, actor.Handle{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node actor: %w", err)
 	}
@@ -309,12 +309,6 @@ func New(cfg config.Config, fs afero.Afero,
 		jobs.RevertDeploymentBehavior: {
 			fn: n.handleRevertDeployment,
 		},
-		jobs.AllocationDeploymentBehavior: {
-			fn: n.handleAllocationDeployment,
-		},
-		jobs.CommitDeploymentBehavior: {
-			fn: n.handleCommitDeployment,
-		},
 		jobs.SubnetCreateBehavior: {
 			fn: n.handleSubnetCreate,
 		},
@@ -333,9 +327,6 @@ func New(cfg config.Config, fs afero.Afero,
 		LoggerConfigBehavior: {
 			fn: n.handleLoggerConfig,
 		},
-		HardwareSpecBehavior: {
-			fn: n.handleHardwareSpec,
-		},
 		HardwareUsageBehavior: {
 			fn: n.handleHardwareUsage,
 		},
@@ -344,6 +335,15 @@ func New(cfg config.Config, fs afero.Afero,
 		},
 		CapAnchorBehavior: {
 			fn: n.handleCapAnchor,
+		},
+		jobs.AllocationDeploymentBehavior: {
+			fn: n.handleAllocationDeployment,
+		},
+		jobs.CommitDeploymentBehavior: {
+			fn: n.handleCommitDeployment,
+		},
+		RestartAllocationBehavior: {
+			fn: n.handleRestartAllocation,
 		},
 	}
 	for behavior, handler := range dmsBehaviors {
@@ -761,6 +761,8 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 			jobs.SubnetUnmapPortBehavior,
 			jobs.SubnetDNSAddRecordsBehavior,
 			jobs.SubnetDNSRemoveRecordBehavior,
+			jobs.RegisterHealthcheckBehavior,
+			actor.HealthCheckBehavior,
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant allocation caps: %w", err)
 		}
@@ -795,6 +797,8 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 						jobs.SubnetUnmapPortBehavior,
 						jobs.SubnetDNSAddRecordsBehavior,
 						jobs.SubnetDNSRemoveRecordBehavior,
+						jobs.RegisterHealthcheckBehavior,
+						actor.HealthCheckBehavior,
 					}); err != nil {
 						log.Warnf("failed to grant allocation caps: %w", err)
 					}
@@ -803,6 +807,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 		}()
 	}
 
+	log.Infof("Finished createAllocations for ensembleID: %s", ensembleID)
 	return allocHandles, nil
 }
 
@@ -827,6 +832,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	_, alreadyCommited := n.commitedResources[job.AllocationID]
 
 	if !alreadyCommited {
+		n.mx.Unlock()
 		return nil, fmt.Errorf("no committed resources for ensemble id: %s", job.AllocationID)
 	}
 
@@ -841,6 +847,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	}
 	err = n.resourceManager.AllocateResources(n.ctx, resourceAllocation)
 	if err != nil {
+		n.mx.Unlock()
 		return nil, fmt.Errorf("failed to allocate resources: %w", err)
 	}
 
@@ -951,7 +958,7 @@ func (n *Node) createChildActor(pvkey crypto.PrivKey, inbox string) (*actor.Basi
 		return nil, fmt.Errorf("failed to create security context: %w", err)
 	}
 
-	childActor, err := createActor(security, n.actor.Limiter(), n.hostID, inbox, n.network, n.scheduler)
+	childActor, err := createActor(security, n.actor.Limiter(), n.hostID, inbox, n.network, n.actor.Handle())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child actor: %w", err)
 	}
@@ -959,10 +966,25 @@ func (n *Node) createChildActor(pvkey crypto.PrivKey, inbox string) (*actor.Basi
 	return childActor, nil
 }
 
+func (n *Node) restartAllocation(id string) error {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	allocation, ok := n.allocations[id]
+	if !ok {
+		return errors.New("allocation not found")
+	}
+
+	return allocation.Restart(n.ctx)
+}
+
 // createActor creates an actor.
 func createActor(
-	sctx *actor.BasicSecurityContext, limiter actor.RateLimiter, hostID,
-	inboxAddress string, net network.Network, scheduler *bt.Scheduler,
+	sctx *actor.BasicSecurityContext,
+	limiter actor.RateLimiter,
+	hostID, inboxAddress string,
+	net network.Network,
+	supervisor actor.Handle,
 ) (*actor.BasicActor, error) {
 	self := actor.Handle{
 		ID:  sctx.ID(),
@@ -972,7 +994,7 @@ func createActor(
 			InboxAddress: inboxAddress,
 		},
 	}
-	actor, err := actor.New(scheduler, net, sctx, limiter, actor.BasicActorParams{}, self)
+	actor, err := actor.New(supervisor, net, sctx, limiter, actor.BasicActorParams{}, self)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create actor: %w", err)
 	}
