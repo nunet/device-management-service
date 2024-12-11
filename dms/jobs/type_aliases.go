@@ -37,4 +37,6 @@ const (
 	DeploymentStatusProvisioning = job_types.DeploymentStatusProvisioning
 	DeploymentStatusRunning      = job_types.DeploymentStatusRunning
 	DeploymentStatusFailed       = job_types.DeploymentStatusFailed
+	DeploymentStatusShuttingDown = job_types.DeploymentStatusShuttingDown
+	DeploymentStatusCompleted    = job_types.DeploymentStatusCompleted
 )
