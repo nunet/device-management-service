@@ -49,6 +49,8 @@ const (
 	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
 
 	dnsResolverIP = "10.0.0.1"
+
+	enableTTY = false
 )
 
 // Executor manages the lifecycle of Docker containers for execution requests.
@@ -103,7 +105,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		}
 
 		// Create a new handler for the execution.
-		containerID, err = e.newDockerExecutionContainer(ctx, request)
+		containerID, err = e.newDockerExecutionContainer(ctx, request, enableTTY)
 		if err != nil {
 			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", err)
 			return fmt.Errorf("failed to create new container: %w", err)
@@ -121,7 +123,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		waitCh:              make(chan bool),
 		activeCh:            make(chan bool),
 		running:             &atomic.Bool{},
-		TTYEnabled:          true,
+		TTYEnabled:          enableTTY,
 		initScripts:         request.ProvisionScripts,
 	}
 
@@ -396,6 +398,7 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 func (e *Executor) newDockerExecutionContainer(
 	ctx context.Context,
 	params *types.ExecutionRequest,
+	tty bool,
 ) (string, error) {
 	dockerArgs, err := DecodeSpec(params.EngineSpec)
 	if err != nil {
@@ -436,10 +439,8 @@ func (e *Executor) newDockerExecutionContainer(
 		Cmd:        dockerArgs.Cmd,
 		Labels:     e.containerLabels(params.JobID, params.ExecutionID),
 		WorkingDir: dockerArgs.WorkingDirectory,
-		// TODO (Tty): tty currently breaks the logs and consequently the `Run()` methods and `GetLogStream()`.
-		// to enable Tty, besides setting to true, we must handle the logs correctly.
 		// Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
-		// Tty:        true,
+		Tty: tty,
 	}
 
 	mounts, err := makeContainerMounts(params.Inputs, params.Outputs, params.ResultsDir)

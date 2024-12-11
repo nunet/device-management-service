@@ -753,6 +753,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 		if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
 			jobs.AllocationStartBehavior,
 			jobs.AllocationGetLogsBehavior,
+			jobs.AllocationShutdownBehavior,
 			jobs.SubnetAddPeerBehavior,
 			jobs.SubnetRemovePeerBehavior,
 			jobs.SubnetAcceptPeerBehavior,
@@ -786,6 +787,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 					if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
 						jobs.AllocationStartBehavior,
 						jobs.AllocationGetLogsBehavior,
+						jobs.AllocationShutdownBehavior,
 						jobs.SubnetAddPeerBehavior,
 						jobs.SubnetRemovePeerBehavior,
 						jobs.SubnetAcceptPeerBehavior,

@@ -177,8 +177,14 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 		defer stdoutW.Close()
 		defer stderrW.Close()
 
-		// Copy the multiplexed streams to the appropriate pipes
-		_, err := stdcopy.StdCopy(stdoutW, stderrW, logsReader)
+		// Copy logs to stdout and stderr
+		if cont.Config.Tty {
+			// If TTY is enabled, everything goes to stdout
+			_, err = io.Copy(stdoutW, logsReader)
+		} else {
+			// If TTY is not enabled, use stdcopy.StdCopy to demultiplex the streams
+			_, err = stdcopy.StdCopy(stdoutW, stderrW, logsReader)
+		}
 		if err != nil {
 			log.Errorf("failed to copy logs: %v", err)
 		}

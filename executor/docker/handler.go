@@ -134,27 +134,22 @@ func (h *executionHandler) run(ctx context.Context) {
 		}
 	}()
 
-	if !h.TTYEnabled {
-		// TTYEnabled combines stderr and stdout in one file (the stdout)
-		// Start copying stderr in background
-		go func() {
-			defer close(stderrDone)
-			defer func() {
-				if h.stderrFile != nil {
-					err := h.stderrFile.Close()
-					if err != nil {
-						log.Warnf("Error closing stdout file: %v", err)
-					}
+	// Start copying stderr in background
+	go func() {
+		defer close(stderrDone)
+		defer func() {
+			if h.stderrFile != nil {
+				err := h.stderrFile.Close()
+				if err != nil {
+					log.Warnf("Error closing stderr file: %v", err)
 				}
-			}()
-
-			if _, err := io.Copy(h.stderrFile, stderrPipe); err != nil {
-				log.Warnf("Error copying stderr: %v", err)
 			}
 		}()
-	} else {
-		close(stderrDone)
-	}
+
+		if _, err := io.Copy(h.stderrFile, stderrPipe); err != nil {
+			log.Warnf("Error copying stderr: %v", err)
+		}
+	}()
 
 	// Wait for container exit status while logs are being copied
 	statusCh, errCh := h.client.WaitContainer(ctx, h.containerID)
@@ -214,11 +209,10 @@ func (h *executionHandler) run(ctx context.Context) {
 		log.Errorf("failed to read stdout logs file and retrieve logs: %v", err)
 	}
 
-	if !h.TTYEnabled {
-		if stderr, err := os.ReadFile(filepath.Join(h.resultsDir, "stderr.log")); err == nil {
-			h.result.STDERR = string(stderr)
-			log.Errorf("failed to read stderr logs file and retrieve logs: %v", err)
-		}
+	if stderr, err := os.ReadFile(filepath.Join(h.resultsDir, "stderr.log")); err == nil {
+		h.result.STDERR = string(stderr)
+	} else {
+		log.Errorf("failed to read stderr logs file and retrieve logs: %v", err)
 	}
 
 	log.Infow("docker_execution_handler_run_logs_success", "executionID", h.executionID)

@@ -25,6 +25,8 @@ const (
 	DeploymentStatusProvisioning
 	DeploymentStatusRunning
 	DeploymentStatusFailed
+	DeploymentStatusShuttingDown
+	DeploymentStatusCompleted
 )
 
 func DeploymentStatusString(d DeploymentStatus) string {
@@ -41,6 +43,10 @@ func DeploymentStatusString(d DeploymentStatus) string {
 		return "Running"
 	case DeploymentStatusFailed:
 		return "Failed"
+	case DeploymentStatusShuttingDown:
+		return "ShuttingDown"
+	case DeploymentStatusCompleted:
+		return "Completed"
 	default:
 		return "Unknown"
 	}

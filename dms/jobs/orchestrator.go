@@ -293,7 +293,81 @@ deploy:
 }
 
 func (o *Orchestrator) Shutdown() error {
-	// TODO shutdown the deployment
+	var mx sync.Mutex
+	mx.Lock()
+
+	// shutdown the allocations
+	o.setStatus(DeploymentStatusShuttingDown)
+
+	var aggErr error
+	errCh := make(chan error, len(o.manifest.Allocations))
+	wg := sync.WaitGroup{}
+	for _, allocations := range o.manifest.Allocations {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				allocations.Handle,
+				AllocationShutdownBehavior,
+				AllocationShutdownRequest{
+					AllocationID: allocations.ID,
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(AllocationShutdownTimeout).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating allocation shutdown message: %w", err)
+				return
+			}
+
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking allocation shutdown message: %w", err)
+				return
+			}
+
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("timeout shutting down allocation: %w", ErrDeploymentFailed)
+				return
+			}
+
+			defer reply.Discard()
+
+			var response AllocationShutdownResponse
+
+			if err := json.Unmarshal(reply.Message, &response); err != nil {
+				errCh <- fmt.Errorf("error unmarshalling allocation shutdown response: %w", err)
+				return
+			}
+
+			if !response.OK {
+				errCh <- fmt.Errorf("error shutting down allocation: %s: %w", response.Error, ErrDeploymentFailed)
+				return
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errCh)
+	aggErr = nil
+	for err := range errCh {
+		if aggErr == nil {
+			aggErr = err
+			continue
+		} else if err != nil {
+			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+		}
+	}
+	if aggErr != nil {
+		return aggErr
+	}
+
+	// set the status to shutting down
+	o.setStatus(DeploymentStatusCompleted)
 	return nil
 }
 

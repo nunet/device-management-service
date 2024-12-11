@@ -188,62 +188,38 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 func (a *Allocation) monitorExecutor(ctx context.Context) {
 	resChan, errChan := a.executor.Wait(ctx, a.executionID)
 
-	var finalResult *types.ExecutionResult
-	var finalError error
+	var result *types.ExecutionResult
+	var err error
 
-	for {
-		select {
-		case res, ok := <-resChan:
-			if !ok {
-				resChan = nil // no more reads
-			} else {
-				finalResult = res
-			}
-
-		case err, ok := <-errChan:
-			if !ok {
-				errChan = nil // no more reads
-			} else {
-				finalError = err
-			}
-		}
-
-		if resChan == nil && errChan == nil {
-			break
-		}
+	select {
+	case result = <-resChan:
+	case err = <-errChan:
+	case <-ctx.Done():
+		err = ctx.Err()
 	}
 
 	a.mx.Lock()
-	if finalError != nil {
+	if err != nil {
 		a.status = stopped
-		log.Warnf("execution failed: %v", finalError)
+		log.Warnf("execution failed: %v", err)
 	}
 
-	if finalResult != nil {
+	if result != nil {
 		a.status = completed
 	}
 	a.mx.Unlock()
 
 	// deallocate resources after everything is done.
-	err := a.resourceManager.DeallocateResources(ctx, a.Job.AllocationID)
+	err = a.resourceManager.DeallocateResources(ctx, a.Job.AllocationID)
 	if err != nil {
 		log.Errorf("failed to deallocate resources for %s: %v", a.Job.AllocationID, err)
 	}
 }
 
-// Stop stops the running executor
-func (a *Allocation) Stop(ctx context.Context) error {
+// Cancel stops the running executor
+func (a *Allocation) stopExecution(ctx context.Context) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
-
-	defer func() {
-		if a.actorRunning {
-			if err := a.Actor.Stop(); err != nil {
-				log.Warnf("error stopping allocation actor: %s", err)
-			}
-			a.actorRunning = false
-		}
-	}()
 
 	if a.status != running {
 		return nil
@@ -264,6 +240,35 @@ func (a *Allocation) Stop(ctx context.Context) error {
 	return nil
 }
 
+// StopActor stops the allocation actor
+func (a *Allocation) stopActor() error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	if a.actorRunning {
+		if err := a.Actor.Stop(); err != nil {
+			log.Warnf("error stopping allocation actor: %s", err)
+		}
+		a.actorRunning = false
+	}
+	return nil
+}
+
+// Stop stops the running executor and the allocation actor
+func (a *Allocation) Stop(ctx context.Context) error {
+	err := a.stopExecution(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to stop execution: %w", err)
+	}
+
+	err = a.stopActor()
+	if err != nil {
+		return fmt.Errorf("failed to stop actor: %w", err)
+	}
+
+	return nil
+}
+
 // Status returns information about the allocated/usage of resources and execution status of workload.
 func (a *Allocation) Status(_ context.Context) Status {
 	return Status{
@@ -278,8 +283,9 @@ func (a *Allocation) Start() error {
 	defer a.mx.Unlock()
 
 	behaviors := map[string]func(actor.Envelope){
-		AllocationStartBehavior:   a.handleAllocationStart,
-		AllocationGetLogsBehavior: a.handleAllocationGetLogs,
+		AllocationStartBehavior:    a.handleAllocationStart,
+		AllocationGetLogsBehavior:  a.handleAllocationGetLogs,
+		AllocationShutdownBehavior: a.handleAllocationShutdown,
 
 		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
 		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
@@ -370,6 +376,45 @@ func (a *Allocation) handleAllocationGetLogs(msg actor.Envelope) {
 	}
 
 	resp.Data = data
+	a.sendReply(msg, resp)
+}
+
+// handleAllocationShutdown handles the shutdown of the allocation.
+func (a *Allocation) handleAllocationShutdown(msg actor.Envelope) {
+	log.Infof("behavior allocation shutdown invoked by: %+v", msg.From)
+	defer func() {
+		// Wait until the message expires to ensure reply is sent
+		<-time.After(time.Until(msg.Expiry()))
+		err := a.stopActor()
+		if err != nil {
+			log.Errorf("error stopping allocation actor when shutting down: %s", err)
+		}
+	}()
+	defer msg.Discard()
+
+	var req AllocationShutdownRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		log.Errorf("error unmarshalling allocation shutdown request: %s", err)
+		return
+	}
+
+	var resp AllocationShutdownResponse
+	if err := a.stopExecution(context.TODO()); err != nil {
+		err = fmt.Errorf("error stopping allocation: %s", err)
+		log.Error(err)
+		resp.Error = err.Error()
+		resp.OK = false
+		a.sendReply(msg, resp)
+		return
+	}
+
+	// deallocate resources incase monitorExecutor didn't.
+	err := a.resourceManager.DeallocateResources(context.TODO(), a.Job.AllocationID)
+	if err != nil {
+		log.Warnf("failed to deallocate resources for %s: %v, probably already deallocated", a.Job.AllocationID, err)
+	}
+
+	resp.OK = true
 	a.sendReply(msg, resp)
 }
 
