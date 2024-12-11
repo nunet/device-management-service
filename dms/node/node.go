@@ -808,15 +808,9 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 
 // createAllocation creates an allocation
 func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
-	// generate random keypair
-	priv, pub, err := crypto.GenerateKeyPair(crypto.Ed25519)
+	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate random keypair for allocation job %s: %w", job.ID, err)
-	}
-
-	security, err := actor.NewBasicSecurityContext(pub, priv, n.rootCap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create security context: %w", err)
+		return nil, fmt.Errorf("failed to generate keypair for allocation job %s: %w", job.ID, err)
 	}
 
 	allocationInbox, err := uuid.NewUUID()
@@ -824,7 +818,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
 	}
 
-	allocActor, err := createActor(security, n.actor.Limiter(), n.hostID, allocationInbox.String(), n.network, n.scheduler)
+	allocActor, err := n.createChildActor(priv, allocationInbox.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
@@ -950,8 +944,26 @@ func (n *Node) clearCommitedResources() {
 	}
 }
 
+// createChildActor creates a child actor using node's limiter, scheduler and network.
+func (n *Node) createChildActor(pvkey crypto.PrivKey, inbox string) (*actor.BasicActor, error) {
+	security, err := actor.NewBasicSecurityContext(pvkey.GetPublic(), pvkey, n.rootCap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create security context: %w", err)
+	}
+
+	childActor, err := createActor(security, n.actor.Limiter(), n.hostID, inbox, n.network, n.scheduler)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create child actor: %w", err)
+	}
+
+	return childActor, nil
+}
+
 // createActor creates an actor.
-func createActor(sctx *actor.BasicSecurityContext, limiter actor.RateLimiter, hostID, inboxAddress string, net network.Network, scheduler *bt.Scheduler) (*actor.BasicActor, error) {
+func createActor(
+	sctx *actor.BasicSecurityContext, limiter actor.RateLimiter, hostID,
+	inboxAddress string, net network.Network, scheduler *bt.Scheduler,
+) (*actor.BasicActor, error) {
 	self := actor.Handle{
 		ID:  sctx.ID(),
 		DID: sctx.DID(),

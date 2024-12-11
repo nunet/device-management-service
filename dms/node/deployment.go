@@ -15,10 +15,14 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/libp2p/go-libp2p/core/crypto"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	dms_crypto "gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -122,9 +126,29 @@ func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 }
 
 func (n *Node) createOrchestrator(ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
-	orch, err := jobs.NewOrchestrator(n.actor, n.network, ensemble)
+	priv, _, err := dms_crypto.GenerateKeyPair(crypto.Ed25519)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate keypair for orchestrator's actor: %w", err)
+	}
+
+	ensembleID, err := uuid.NewUUID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
+	}
+
+	actor, err := n.createChildActor(priv, ensembleID.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create child actor: %w", err)
+	}
+
+	orch, err := jobs.NewOrchestrator(ensembleID.String(), actor, n.network, ensemble)
 	if err != nil {
 		return nil, err
+	}
+
+	err = actor.Start()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start actor: %w", err)
 	}
 
 	return orch, nil
@@ -150,15 +174,24 @@ func (n *Node) saveDeployments() error {
 }
 
 func (n *Node) saveDeployment(deployment *jobs.Orchestrator) error {
+	pvkey := deployment.ActorPrivateKey()
+
+	pkRaw, err := pvkey.Raw()
+	if err != nil {
+		return fmt.Errorf("failed to convert priv key to raw: %w", err)
+	}
+
+	// TODO (not sensitive now): encrypt the orchestrator's pvkey before storing
 	view := job_types.OrchestratorView{
 		DeploymentID:       deployment.ID(),
 		Cfg:                deployment.Config(),
 		Manifest:           deployment.Manifest(),
 		Status:             deployment.Status(),
 		DeploymentSnapshot: deployment.DeploymentSnapshot(),
+		PrivKey:            pkRaw,
 	}
 
-	_, err := n.orchestratorRepo.Create(n.ctx, view)
+	_, err = n.orchestratorRepo.Create(n.ctx, view)
 	if err != nil {
 		return fmt.Errorf("couldn't save deployment on database: %w", err)
 	}
@@ -213,7 +246,28 @@ func (n *Node) restoreDeployments() error {
 			continue
 		}
 
-		orchestrator, err := jobs.RestoreDeployment(n.actor, n.network, d.DeploymentID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
+		// recreate actor given priv key
+		pvkey, err := crypto.UnmarshalPrivateKey(d.PrivKey)
+		if err != nil {
+			log.Errorf("couldn't unmarshall orchestrator's actor priv key: %w", err)
+			failedToRestore = append(failedToRestore, d.DeploymentID)
+			continue
+		}
+
+		actor, err := n.createChildActor(pvkey, d.DeploymentID)
+		if err != nil {
+			log.Errorf("couldn't restore orchestrator actor of ensemble %s: %v", d.DeploymentID, err)
+			failedToRestore = append(failedToRestore, d.DeploymentID)
+			continue
+		}
+
+		err = actor.Start()
+		if err != nil {
+			log.Errorf("failed to start actor: %w", err)
+			continue
+		}
+
+		orchestrator, err := jobs.RestoreDeployment(actor, n.network, d.DeploymentID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
 		if err != nil {
 			log.Errorf("couldn't restore orchestrator of id %s; Error: %w", d.DeploymentID, err)
 			failedToRestore = append(failedToRestore, d.DeploymentID)
@@ -248,6 +302,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 
 	var request job_types.EnsembleBidRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		log.Debugf("error unmarshalling bid request: %s", err)
 		return
 	}
 
@@ -344,6 +399,7 @@ loop:
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
 		cleanup()
+		log.Debugf("bid request: failed to get provider: %w", err)
 		return
 	}
 	log.Debugf("signing bid with provider: %+v", provider)
@@ -365,6 +421,7 @@ loop:
 	err = bid.Sign(provider)
 	if err != nil {
 		cleanup()
+		log.Debugf("bid request: failed to sign bid: %w", err)
 		return
 	}
 

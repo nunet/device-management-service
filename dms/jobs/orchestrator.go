@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
@@ -58,14 +58,9 @@ type Orchestrator struct {
 	cancel func()
 }
 
-func NewOrchestrator(actor actor.Actor, network network.Network, cfg EnsembleConfig) (*Orchestrator, error) {
+func NewOrchestrator(id string, actor actor.Actor, network network.Network, cfg EnsembleConfig) (*Orchestrator, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
-	}
-
-	uuid, err := uuid.NewUUID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create orchestrator id: %w", err)
 	}
 
 	geo, err := NewGeoLocator()
@@ -77,7 +72,7 @@ func NewOrchestrator(actor actor.Actor, network network.Network, cfg EnsembleCon
 		actor:   actor,
 		network: network,
 		geo:     geo,
-		id:      uuid.String(),
+		id:      id,
 		cfg:     cfg,
 	}
 
@@ -1698,6 +1693,11 @@ func (o *Orchestrator) supervise() {
 
 func (o *Orchestrator) Stop() {
 	// TODO
+
+	err := o.actor.Stop()
+	if err != nil {
+		log.Warnf("error stopping orchestrator's actor: %s", err)
+	}
 }
 
 func (o *Orchestrator) GetAllocationLogs(name string) ([]byte, error) {
@@ -1774,6 +1774,10 @@ func (o *Orchestrator) Config() EnsembleConfig {
 
 func (o *Orchestrator) ID() string {
 	return o.id
+}
+
+func (o *Orchestrator) ActorPrivateKey() crypto.PrivKey {
+	return o.actor.Security().PrivKey()
 }
 
 func (o *Orchestrator) DeploymentSnapshot() DeploymentSnapshot {
