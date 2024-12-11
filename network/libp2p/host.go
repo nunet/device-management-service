@@ -23,7 +23,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
-	"github.com/libp2p/go-libp2p/p2p/host/resource-manager"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
@@ -119,7 +119,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 			libp2p.Transport(webtransport.New),
 			libp2p.Transport(ws.New),
 		),
-		libp2p.EnableNATService(),
+		// libp2p.EnableNATService(),
 		libp2p.ConnectionManager(connmgr),
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),

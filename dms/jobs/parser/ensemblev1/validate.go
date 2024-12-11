@@ -24,14 +24,15 @@ import (
 func NewEnsembleV1Validator() validate.Validator {
 	return validate.NewValidator(
 		map[tree.Path]validate.ValidatorFunc{
-			"V1":                         ValidateSpec,
-			"V1.allocations.*":           ValidateAllocation,
-			"V1.edges.[]":                ValidateEdgeConstraints,
-			"V1.nodes.*":                 ValidateNode,
-			"V1.supervisor":              ValidateSupervisor,
-			"V1.supervisor.children.[]":  ValidateSupervisor,
-			"V1.allocations.*.resources": ValidateResources,
-			"V1.allocations.*.execution": ValidateExecution,
+			"V1":                           ValidateSpec,
+			"V1.allocations.*":             ValidateAllocation,
+			"V1.edges.[]":                  ValidateEdgeConstraints,
+			"V1.nodes.*":                   ValidateNode,
+			"V1.supervisor":                ValidateSupervisor,
+			"V1.supervisor.children.[]":    ValidateSupervisor,
+			"V1.allocations.*.resources":   ValidateResources,
+			"V1.allocations.*.execution":   ValidateExecution,
+			"V1.allocations.*.healthcheck": ValidateHealthCheck,
 		},
 	)
 }
@@ -153,21 +154,6 @@ func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
 			if _, exists := rootScriptsMap[scriptStr]; !exists {
 				return fmt.Errorf("referenced script '%s' not found", scriptStr)
 			}
-		}
-	}
-
-	// Validate health check script if specified
-	if healthCheck, ok := allocation["health_check"].(string); ok && healthCheck != "" {
-		rootScripts, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.scripts"))
-		if err != nil || rootScripts == nil {
-			return fmt.Errorf("scripts must be defined when health_check is specified")
-		}
-		rootScriptsMap, ok := rootScripts.(map[string]any)
-		if !ok {
-			return fmt.Errorf("invalid scripts configuration")
-		}
-		if _, exists := rootScriptsMap[healthCheck]; !exists {
-			return fmt.Errorf("referenced health_check script '%s' not found", healthCheck)
 		}
 	}
 
@@ -671,6 +657,40 @@ func ValidateEdgeConstraints(root *map[string]any, data any, _ tree.Path) error 
 
 	if bw, ok := edgeConstraints["BW"].(uint); ok {
 		edgeConstraints["BW"] = bw
+	}
+
+	return nil
+}
+
+// ValidateHealthCheck checks the healthcheck configuration.
+func ValidateHealthCheck(_ *map[string]any, data any, _ tree.Path) error {
+	healthcheck, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid healthcheck configuration: %v", data)
+	}
+
+	if len(healthcheck) == 0 {
+		return fmt.Errorf("healthcheck cannot be empty if specified")
+	}
+
+	// Check healthcheck type
+	hcType, ok := healthcheck["type"]
+	if !ok || hcType == "" {
+		return fmt.Errorf("healthcheck must have a type")
+	}
+
+	// Must have exec or endpoint
+	switch hcType {
+	case "http":
+		if _, ok := healthcheck["endpoint"]; !ok {
+			return fmt.Errorf("http type healthcheck must have an endpoint")
+		}
+	case "command":
+		if _, ok := healthcheck["exec"]; !ok {
+			return fmt.Errorf("command type healthcheck must have exec")
+		}
+	default:
+		return fmt.Errorf("unsupported healthcheck type: %s", hcType)
 	}
 
 	return nil

@@ -9,8 +9,8 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -41,9 +41,7 @@ func TestProvision(t *testing.T) {
 	capa := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
 	actr := actor.CreateActor(t, peer, capa)
 	require.NoError(t, actr.Start())
-	orchestratorID, err := uuid.NewUUID()
-	require.NoError(t, err)
-	orchestrator, err := NewOrchestrator(orchestratorID.String(), actr, peer, EnsembleConfig{
+	orchestrator, err := NewOrchestrator(context.Background(), "id", actr, peer, job_types.EnsembleConfig{
 		V1: &job_types.EnsembleConfigV1{
 			Allocations: map[string]job_types.AllocationConfig{
 				"allocation1": {
@@ -95,6 +93,9 @@ func TestProvision(t *testing.T) {
 	actorDID1, trust1 := actor.MakeTrustContext(t, privKey1)
 	cap1 := actor.MakeCapabilityContext(t, actorDID1, rootDID1, trust1, root1)
 
+	// actor.AllowReciprocal(t, cap, root, rootDID, rootDID1, "/dms")
+	// actor.AllowReciprocal(t, cap1, root1, rootDID1, rootDID, "/dms")
+
 	actr1 := actor.CreateActor(t, peer1, cap1)
 	require.NoError(t, actr1.Start())
 
@@ -102,7 +103,7 @@ func TestProvision(t *testing.T) {
 	_ = actr1.AddBehavior(SubnetCreateBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
-		fmt.Println("got msg for create")
+		t.Log("got msg for create")
 		var request SubnetCreateRequest
 		if err := json.Unmarshal(msg.Message, &request); err != nil {
 			return
@@ -348,4 +349,154 @@ func TestProvision(t *testing.T) {
 	// assert.Equal(t, subnet.dns["actor.com."], ownIP)
 
 	// assert.Equal(t, subnet.ports[8080], 8888)
+}
+
+func TestSupervise(t *testing.T) {
+	addrs, privKey, peer := actor.NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
+	rootDID, root := actor.MakeRootTrustContext(t)
+	actorDID, trust := actor.MakeTrustContext(t, privKey)
+	capa := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+	actr := actor.CreateActor(t, peer, capa)
+	require.NoError(t, actr.Start())
+	orchestrator, err := NewOrchestrator(context.Background(), "id", actr, peer, job_types.EnsembleConfig{
+		V1: &job_types.EnsembleConfigV1{
+			Allocations: map[string]job_types.AllocationConfig{
+				"allocation1": {
+					Executor: "docker",
+					Resources: types.Resources{
+						CPU: types.CPU{
+							ClockSpeed: 2.4,
+							Cores:      2,
+							Model:      "Intel Core i7",
+							Vendor:     "Intel",
+						},
+						GPUs: []types.GPU{
+							{
+								Model:      "NVIDIA GeForce GTX 1080",
+								Vendor:     "NVIDIA",
+								VRAM:       8,
+								Index:      0,
+								PCIAddress: "0000:01:00.0",
+							},
+						},
+						RAM: types.RAM{
+							Size:       16,
+							ClockSpeed: 2400,
+						},
+						Disk: types.Disk{
+							Size:       256,
+							Model:      "Samsung 970 EVO",
+							Vendor:     "Samsung",
+							Type:       "SSD",
+							Interface:  "NVMe",
+							ReadSpeed:  3500,
+							WriteSpeed: 2500,
+						},
+					},
+					Execution: types.SpecConfig{},
+				},
+			},
+			Nodes: map[string]NodeConfig{
+				"node1": {
+					Allocations: []string{"allocation1"},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, privKey1, peer1 := actor.NewLibp2pNetwork(t, addrs)
+	rootDID1, root1 := actor.MakeRootTrustContext(t)
+	actorDID1, trust1 := actor.MakeTrustContext(t, privKey1)
+	cap1 := actor.MakeCapabilityContext(t, actorDID1, rootDID1, trust1, root1)
+
+	actr1 := actor.CreateActor(t, peer1, cap1)
+	require.NoError(t, actr1.Start())
+
+	times := 0
+	_ = actr1.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
+		defer msg.Discard()
+
+		t.Log("got msg for create")
+		var request struct{}
+		if err := json.Unmarshal(msg.Message, &request); err != nil {
+			return
+		}
+
+		t.Log("Responding to healthcheck")
+		if times >= 1 {
+			t.Log("Not going through")
+			return
+		}
+
+		reply, err := actor.ReplyTo(msg, nil)
+		if err != nil {
+			log.Debugf("error creating reply: %s", err)
+			return
+		}
+
+		if err := actr1.Send(reply); err != nil {
+			log.Debugf("error sending  reply: %s", err)
+		}
+
+		times++
+	})
+
+	restartedAllocations := make(map[string]bool)
+	ch := make(chan struct{})
+	_ = actr1.AddBehavior(RestartAllocationBehavior, func(msg actor.Envelope) {
+		defer msg.Discard()
+
+		var request RestartAllocationRequest
+		if err := json.Unmarshal(msg.Message, &request); err != nil {
+			return
+		}
+
+		t.Log("Restarting allocation", request.AllocationID)
+
+		restartedAllocations[request.AllocationID] = true
+
+		response := RestartAllocationResponse{
+			OK: true,
+		}
+
+		reply, err := actor.ReplyTo(msg, response)
+		if err != nil {
+			log.Debugf("error creating reply: %s", err)
+			return
+		}
+
+		if err := actr1.Send(reply); err != nil {
+			log.Debugf("error sending  reply: %s", err)
+		}
+		ch <- struct{}{}
+	})
+
+	actrdid, err := did.FromID(actr1.Handle().ID)
+	require.NoError(t, err)
+	tokenlist, err := cap1.Grant(
+		ucan.Delegate,
+		actr.Handle().DID,
+		actrdid,
+		[]string{"/nunet"},
+		actor.MakeExpiry(time.Hour),
+		0,
+		[]ucan.Capability{
+			ucan.Capability(actor.HealthCheckBehavior),
+			ucan.Capability(RestartAllocationBehavior),
+		},
+	)
+	require.NoError(t, err)
+	require.NoError(t, cap1.AddRoots([]did.DID{}, tokenlist, ucan.TokenList{}, ucan.TokenList{}))
+
+	allocations := map[string]actor.Handle{}
+	allocations["allocation1"] = actr1.Handle()
+	go orchestrator.supervise(allocations, orchestrator.manifest)
+
+	<-time.After(actor.HealthCheckInterval)
+	require.Equal(t, 0, len(restartedAllocations))
+
+	<-ch
+	require.Equal(t, 1, len(restartedAllocations))
+	require.Equal(t, true, restartedAllocations["allocation1"])
 }

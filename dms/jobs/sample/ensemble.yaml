@@ -54,10 +54,9 @@ resources:
     disk:
       size: 5000  # MB
 
-# Scripts for provisioning and health checks (will be transformed to bytes)
+# Scripts for provisioning (will be transformed to bytes)
 scripts:
   setup: "scripts/setup.sh"
-  healthcheck: "scripts/healthcheck.sh"
   cleanup: "scripts/cleanup.sh"
 
 # Key definitions
@@ -81,7 +80,12 @@ allocations:
         - "DEBUG=1"
         - "WORKER_ID=1"
       working_directory: "/app"
-    health_check: "healthcheck"  # Reference to script in scripts section
+    healthcheck:
+      type: "command"
+      exec: ["echo", "worker1 healthy"]
+      response:
+        type: "string"
+        value: "worker1 healthy"
     provision:
       - "setup"     # Reference to script in scripts section
       - "cleanup"   # Reference to script in scripts section

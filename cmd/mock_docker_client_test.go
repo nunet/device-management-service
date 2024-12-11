@@ -45,6 +45,16 @@ func (m *MockClientInterface) EXPECT() *MockClientInterfaceMockRecorder {
 	return m.recorder
 }
 
+// Exec mocks base method.
+func (m *MockClientInterface) Exec(ctx context.Context, containerID string, cmd []string) (int, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Exec", ctx, containerID, cmd)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
 // CreateContainer mocks base method.
 func (m *MockClientInterface) CreateContainer(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, platform *v1.Platform, name string, pullImage bool) (string, error) {
 	m.ctrl.T.Helper()

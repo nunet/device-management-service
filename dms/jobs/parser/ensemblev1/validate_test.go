@@ -358,72 +358,6 @@ func TestValidateAllocation(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		{
-			// Health check reference not defined in spec
-			name: "health check script reference not defined",
-			root: map[string]any{},
-			alloc: map[string]any{
-				"execution": map[string]any{
-					"type": "docker",
-				},
-				"executor":     "docker",
-				"resources":    map[string]any{},
-				"health_check": "valid-script",
-			},
-			wantErr:  true,
-			errorMsg: "scripts must be defined",
-		},
-		{
-			// Health check reference not found in spec
-			name: "health check script reference not found",
-			root: map[string]any{
-				"scripts": map[string]any{
-					"valid-script": "script",
-				},
-			},
-			alloc: map[string]any{
-				"execution": map[string]any{
-					"type": "docker",
-				},
-				"executor":     "docker",
-				"resources":    map[string]any{},
-				"health_check": "non-existent-health-check",
-			},
-			wantErr:  true,
-			errorMsg: "health_check script 'non-existent-health-check' not found",
-		},
-		{
-			// Empty health_check reference should pass without validation
-			name: "empty health_check reference",
-			root: map[string]any{},
-			alloc: map[string]any{
-				"execution": map[string]any{
-					"type": "docker",
-				},
-				"executor":     "docker",
-				"resources":    map[string]any{},
-				"health_check": "",
-			},
-			wantErr: false,
-		},
-		{
-			// Valid health check reference
-			name: "valid health check reference",
-			root: map[string]any{
-				"scripts": map[string]any{
-					"valid-script": "script",
-				},
-			},
-			alloc: map[string]any{
-				"execution": map[string]any{
-					"type": "docker",
-				},
-				"executor":     "docker",
-				"resources":    map[string]any{},
-				"health_check": "valid-script",
-			},
-			wantErr: false,
-		},
 	}
 
 	for _, tt := range tests {
@@ -433,7 +367,7 @@ func TestValidateAllocation(t *testing.T) {
 			}
 			err := ValidateAllocation(&tt.root, tt.alloc, "")
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.Error(t, err, "expected error: %q", tt.errorMsg)
 				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
 				assert.NoError(t, err)
@@ -1851,6 +1785,62 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 				if tt.errorMsg != "" {
 					assert.Equal(t, tt.errorMsg, err.Error())
 				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateHealthCheck(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     any
+		wantErr  bool
+		errorMsg string
+	}{
+		{
+			// Empty health_check reference should pass without validation
+			name:     "empty health_check reference",
+			data:     map[string]any{},
+			wantErr:  true,
+			errorMsg: "healthcheck cannot be empty if specified",
+		},
+		{
+			// Invalid health check without exec
+			name: "invalid health check wihtout exec",
+			data: map[string]any{
+				"type": "command",
+				"response": map[string]any{
+					"type":  "string",
+					"value": "hello",
+				},
+				"interval": "10s",
+			},
+			wantErr:  true,
+			errorMsg: "command type healthcheck must have exec",
+		},
+		{
+			// Valid health check config
+			name: "valid health check reference",
+			data: map[string]any{
+				"type": "command",
+				"exec": []string{"echo", "hello"},
+				"response": map[string]any{
+					"type":  "string",
+					"value": "hello",
+				},
+				"interval": "10s",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHealthCheck(nil, tt.data, "")
+			if tt.wantErr {
+				assert.Error(t, err, "expected error: %q", tt.errorMsg)
+				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
 				assert.NoError(t, err)
 			}

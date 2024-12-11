@@ -81,6 +81,10 @@ func NewExecutor(ctx context.Context, fs afero.Afero, id string) (*Executor, err
 	}, nil
 }
 
+func (e *Executor) GetID() string {
+	return e.ID
+}
+
 // Start begins the execution of a request by starting a Docker container.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
 	endTrace := observability.StartTrace(ctx, "docker_executor_start_duration")
@@ -388,6 +392,11 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// Exec executes a command in the container with the given containerID.
+func (e *Executor) Exec(ctx context.Context, containerID string, command []string) (int, string, error) {
+	return e.client.Exec(ctx, containerID, command)
 }
 
 // newDockerExecutionContainer is an internal method called by Start to set up a new Docker container

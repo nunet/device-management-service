@@ -78,6 +78,11 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	return fe, nil
 }
 
+// ID returns the ID of the executor.
+func (e *Executor) GetID() string {
+	return e.ID
+}
+
 // List the current executions.
 func (e *Executor) List() []types.ExecutionListItem {
 	executions := make([]types.ExecutionListItem, 0)
@@ -340,6 +345,14 @@ func (e *Executor) Cleanup() error {
 
 	log.Infow("firecracker_cleanup_complete", "executorID", e.ID)
 	return errs
+}
+
+func (e *Executor) Exec(
+	_ context.Context,
+	_ string,
+	_ []string,
+) (int, string, error) {
+	return 0, "", fmt.Errorf("not implemented")
 }
 
 // newFirecrackerExecutionVM is an internal method called by Start to set up a new Firecracker VM

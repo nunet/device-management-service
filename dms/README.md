@@ -10,14 +10,28 @@
 
 ## Table of Contents
 
-1. [Description](#description)
-2. [Structure and Organisation](#structure-and-organisation)
-3. [Class Diagram](#class-diagram)
-4. [Functionality](#functionality)
-5. [Data Types](#data-types)
-6. [Testing](#testing)
-7. [Proposed Functionality/Requirements](#proposed-functionality--requirements)
-8. [References](#references)
+- [dms](#dms)
+  - [Table of Contents](#table-of-contents)
+  - [Specification](#specification)
+    - [1. Description](#1-description)
+    - [2. Structure and organisation](#2-structure-and-organisation)
+    - [3. Class Diagram](#3-class-diagram)
+      - [Source file](#source-file)
+      - [Rendered from source file](#rendered-from-source-file)
+    - [4. Functionality](#4-functionality)
+      - [Supervision](#supervision)
+    - [5. Data Types](#5-data-types)
+    - [6. Testing](#6-testing)
+    - [7. Proposed Functionality / Requirements](#7-proposed-functionality--requirements)
+      - [List of issues](#list-of-issues)
+      - [Interfaces \& Methods](#interfaces--methods)
+        - [`proposed` Capability\_interface](#proposed-capability_interface)
+      - [Data types](#data-types)
+        - [`proposed` Capability](#proposed-capability)
+        - [`proposed` Connectivity](#proposed-connectivity)
+        - [`proposed` PriceInformation](#proposed-priceinformation)
+        - [`proposed` TimeInformation](#proposed-timeinformation)
+    - [8. References](#8-references)
 
 
 ## Specification
@@ -80,6 +94,13 @@ The class diagram for the `dms` package is shown below.
 
 **Note: the functionality of DMS is being currently developed. See the [proposed](#7-proposed-functionality--requirements) section for the suggested design of interfaces and methods.**
 
+#### Supervision
+
+`TBD as per proposed implementation`
+
+* Supervisor
+* SupervisorStrategy
+* Statistics
 
 ### Data Types
 

@@ -22,7 +22,7 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	dms_crypto "gitlab.com/nunet/device-management-service/lib/crypto"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -72,7 +72,8 @@ func (n *Node) newDeployment(msg actor.Envelope) {
 		return
 	}
 
-	orchestrator, err := n.createOrchestrator(request.Ensemble)
+	childCtx := context.WithoutCancel(n.ctx)
+	orchestrator, err := n.createOrchestrator(childCtx, request.Ensemble)
 	if err != nil {
 		log.Warnf("creating orchestrator: %s", err)
 		n.sendReply(msg, NewDeploymentResponse{
@@ -125,30 +126,20 @@ func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 	// TODO
 }
 
-func (n *Node) createOrchestrator(ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
-	priv, _, err := dms_crypto.GenerateKeyPair(crypto.Ed25519)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate keypair for orchestrator's actor: %w", err)
-	}
-
+func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
 	ensembleID, err := uuid.NewUUID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
 	}
 
-	actor, err := n.createChildActor(priv, ensembleID.String())
+	actor, err := n.actor.CreateChild(n.actor.Handle(), actor.BasicActorParams{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child actor: %w", err)
 	}
 
-	orch, err := jobs.NewOrchestrator(ensembleID.String(), actor, n.network, ensemble)
+	orch, err := jobs.NewOrchestrator(ctx, ensembleID.String(), actor, n.network, ensemble)
 	if err != nil {
 		return nil, err
-	}
-
-	err = actor.Start()
-	if err != nil {
-		return nil, fmt.Errorf("failed to start actor: %w", err)
 	}
 
 	return orch, nil

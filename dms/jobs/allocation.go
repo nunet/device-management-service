@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,11 @@ import (
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+type HealthCheckResponse struct {
+	OK    bool
+	Error string
+}
 
 const (
 	pending   AllocationStatus = "pending"
@@ -83,6 +89,13 @@ type Allocation struct {
 
 	Job        Job
 	resultsDir string
+
+	healthcheck func() error
+
+	state struct {
+		subnetIP    string
+		portMapping map[int]int
+	}
 }
 
 // NewAllocation creates a new allocation given the actor.
@@ -120,6 +133,10 @@ func NewAllocation(
 		dmsConfig:       dmsConfig,
 		status:          pending,
 		network:         network,
+		state: struct {
+			subnetIP    string
+			portMapping map[int]int
+		}{},
 	}, nil
 }
 
@@ -294,6 +311,8 @@ func (a *Allocation) Start() error {
 		SubnetUnmapPortBehavior:       a.handleSubnetUnmapPort,
 		SubnetDNSAddRecordsBehavior:   a.handleSubnetDNSAddRecords,
 		SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
+		RegisterHealthcheckBehavior:   a.handleRegisterHealthcheck,
+		actor.HealthCheckBehavior:     a.handleHealthcheck,
 	}
 
 	// add allocation behaviors
@@ -315,6 +334,32 @@ func (a *Allocation) Start() error {
 	}
 
 	a.actorRunning = true
+
+	return nil
+}
+
+func (a *Allocation) ExecutionID() string {
+	return a.executionID
+}
+
+func (a *Allocation) Restart(ctx context.Context) error {
+	if a.state.subnetIP == "" {
+		// if you get this error, did you start the allocation properly before restart?
+		return fmt.Errorf("allocation: state is empty, no subnet ip is provided")
+	}
+
+	if err := a.Stop(ctx); err != nil {
+		return err
+	}
+
+	if err := a.Start(); err != nil {
+		return err
+	}
+
+	if err := a.Run(ctx, a.state.subnetIP, a.state.portMapping); err != nil {
+		_ = a.Stop(ctx)
+		return err
+	}
 
 	return nil
 }
@@ -357,6 +402,9 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	}
 
 	log.Info("Running allocation's job: ", a.ID)
+
+	a.state.subnetIP = req.SubnetIP
+	a.state.portMapping = req.PortMapping
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -611,4 +659,82 @@ func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
 
 	resp.OK = true
 	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request RegisterHealthcheckRequest
+	resp := RegisterHealthcheckResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
+		// TODO: get container name from executor
+		containerName := fmt.Sprintf("%s_%s_%s", a.executor.GetID(), a.Job.ID, a.ExecutionID())
+		exitCode, outputStr, err := a.executor.Exec(context.TODO(), containerName, mf.Exec)
+		if err != nil {
+			return fmt.Errorf("health check command failed: %w", err)
+		}
+
+		if exitCode != 0 {
+			return fmt.Errorf("health check command failed with exit code %d", exitCode)
+		}
+
+		if strings.Contains(outputStr, mf.Response.Value) {
+			return fmt.Errorf("unexpected health check command output: %s", outputStr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	a.SetHealthCheck(healthcheck)
+	resp.OK = true
+
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleHealthcheck(msg actor.Envelope) {
+	defer msg.Discard()
+
+	a.mx.Lock()
+	healthcheck := a.healthcheck
+	a.mx.Unlock()
+
+	var resp HealthCheckResponse
+	if healthcheck != nil {
+		if err := healthcheck(); err != nil {
+			log.Warnf("healthcheck failure: %s", err)
+			resp.Error = err.Error()
+		} else {
+			resp.OK = true
+		}
+	} else {
+		resp.OK = true
+	}
+
+	reply, err := actor.ReplyTo(msg, resp)
+	if err != nil {
+		log.Warnf("failed to create healthcheck reply: %s", err)
+		return
+	}
+	if err := a.Actor.Send(reply); err != nil {
+		log.Warnf("failed to send healthcheck reply: %s", err)
+	}
+}
+
+func (a *Allocation) SetHealthCheck(f func() error) {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	a.healthcheck = f
 }

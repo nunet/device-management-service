@@ -108,8 +108,7 @@ func TestGenerateEnsemble(t *testing.T) {
 
 	yamlData, err := yaml.Marshal(&ens)
 	if err != nil {
-		fmt.Printf("Error encoding YAML: %v\n", err)
-		return
+		t.Fatal(err)
 	}
 
 	t.Log(string(yamlData))

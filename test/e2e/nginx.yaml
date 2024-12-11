@@ -18,8 +18,14 @@ allocations:
         dnsname: mydocker
         keys: []
         provision: []
-        healthcheck: ""
+        healthcheck:
+            type: command
+            exec: ["nginx", "-t"]
+            response:
+                type: string
+                value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
         dns_name: nginxdemo-alloc
+
 nodes:
     node1:
         allocations:
