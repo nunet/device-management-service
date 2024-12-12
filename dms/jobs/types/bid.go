@@ -28,9 +28,14 @@ import (
 // bid requests for related group of nodes and also handle them with bid request
 // aggregators who control multiple nodes.
 type EnsembleBidRequest struct {
-	ID            string       // unique identifier of an ensemble (in the context of the orchestrator)
-	Request       []BidRequest // list of node bid requests
-	PeerExclusion []string     // list of peers to exclude from bidding
+	// ID is the unique identifier of an ensemble (in the context of the orchestrator)
+	ID string `json:"id"`
+
+	// Request is the list of node bid requests
+	Request []BidRequest `json:"request"`
+
+	// PeerExclusion is the list of peers to exclude from bidding
+	PeerExclusion []string `json:"peer_exclusion,omitempty"`
 }
 
 // BidRequest is a versioned bid request
@@ -40,17 +45,26 @@ type BidRequest struct {
 
 // BidRequestV1 is v1 of bid requests for a node to use for deployment
 type BidRequestV1 struct {
-	NodeID      string               // unique identifier for a node, within the context of an ensemble
-	Executors   []AllocationExecutor // list of required executors to support the allocation(s)
-	Resources   types.Resources      // (aggregate) required hardware resources
-	Location    LocationConstraints  // node location constraints
+	// NodeID is the unique identifier for a node, within the context of an ensemble
+	NodeID string `json:"node_id"`
+
+	// Executors list of required executors to support the allocation(s)
+	Executors []AllocationExecutor `json:"executors"`
+
+	// Resources (aggregate) required hardware resources
+	Resources types.Resources `json:"resources"`
+
+	// Location is the node location constraints
+	Location LocationConstraints `json:"location,omitempty"`
+
 	PublicPorts struct {
-		Static  []int // statically configured public ports
-		Dynamic int   // number of dynamic ports
-	}
+		Static  []int `json:"static,omitempty"`  // statically configured public ports
+		Dynamic int   `json:"dynamic,omitempty"` // number of dynamic ports
+	} `json:"public_ports,omitempty"`
+
 	GeneralRequirements struct {
-		PrivilegedDocker bool
-	}
+		PrivilegedDocker bool `json:"privileged_docker,omitempty"`
+	} `json:"general_requirements,omitempty"`
 
 	// contract attached to a bid request
 	ContractDID did.DID
