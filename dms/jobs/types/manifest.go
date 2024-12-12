@@ -23,22 +23,22 @@ type EnsembleManifest struct {
 }
 
 type AllocationManifest struct {
-	ID          string                    // allocation unique id
-	NodeID      string                    // allocation node
-	Handle      actor.Handle              // handle of the allocation control actor
-	DNSName     string                    // (internal) DNS name of the allocation
-	PrivAddr    string                    // (VPN) private IP address of the allocation peer
-	Ports       map[int]int               // port mapping, public -> private
-	Healthcheck types.HealthCheckManifest // healthcheck configuration
+	ID          string                    `json:"id"`              // allocation unique id
+	NodeID      string                    `json:"node_id"`         // allocation node
+	Handle      actor.Handle              `json:"handle"`          // handle of the allocation control actor
+	DNSName     string                    `json:"dns_name"`        // (internal) DNS name of the allocation
+	PrivAddr    string                    `json:"priv_addr"`       // (VPN) private IP address of the allocation peer
+	Ports       map[int]int               `json:"ports,omitempty"` // port mapping, public -> private
+	Healthcheck types.HealthCheckManifest `json:"healthcheck"`     // healthcheck configuration
 }
 
 type NodeManifest struct {
-	ID          string       // node unique id
-	Peer        string       // peer where the node is running
-	Handle      actor.Handle // handle of the control actor for the node
-	PubAddrss   []string     // public IP4/6 address of the node peer
-	Location    Location     // location of the peer
-	Allocations []string     // allocations in the nod
+	ID          string       `json:"id"`             // node unique id
+	Peer        string       `json:"peer,omitempty"` // peer where the node is running
+	Handle      actor.Handle `json:"handle"`         // handle of the control actor for the node
+	PubAddrss   []string     `json:"pub_addrss"`     // public IP4/6 address of the node peer
+	Location    Location     `json:"location"`       // location of the peer
+	Allocations []string     `json:"allocations"`    // allocations in the nod
 }
 
 func (mf *EnsembleManifest) Clone() EnsembleManifest {
