@@ -313,6 +313,7 @@ func (o *Orchestrator) Shutdown() {
 		wg.Add(1)
 
 		go func(h actor.Handle, id string) {
+			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
@@ -364,6 +365,7 @@ func (o *Orchestrator) Shutdown() {
 	for _, allocation := range allocations {
 		wg.Add(1)
 		go func(h actor.Handle, id string) {
+			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
@@ -841,6 +843,7 @@ func (o *Orchestrator) verifyEdgeConstraints(candidate map[string]Bid, cache map
 	wg.Add(len(toVerify))
 	for _, cst := range toVerify {
 		go func(cst EdgeConstraint) {
+			defer wg.Done()
 			result := o.verifyEdgeConstraint(candidate, cst)
 			bidS := candidate[cst.S]
 			bidT := candidate[cst.T]

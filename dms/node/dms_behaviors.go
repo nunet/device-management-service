@@ -478,6 +478,7 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	}
 
 	if d.Status() != jobs.DeploymentStatusRunning {
+		log.Debugf("deployment %q is not running(status=%q), cannot shutdown", request.ID, d.Status())
 		// maybe-TODO: if it's still provisioning/committing,
 		// we should stop the deployment process anyway
 		resp.Error = ErrDeploymentNotRunning.Error()
