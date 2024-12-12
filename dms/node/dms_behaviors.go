@@ -816,25 +816,6 @@ func (n *Node) handleOnboardedResources(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) handleRestartAllocation(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.RestartAllocationRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		return
-	}
-
-	resp := jobs.RestartAllocationResponse{}
-	if err := n.restartAllocation(request.AllocationID); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	resp.OK = true
-	n.sendReply(msg, resp)
-}
-
 func (n *Node) handleHardwareUsage(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := resourcesResponse{}
