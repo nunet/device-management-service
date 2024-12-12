@@ -172,8 +172,8 @@ func TestDMS(t *testing.T) {
 		status := clidms2.deploymentStatus(t, dms2Pass, manifestID)
 		extractedStatus := extractStatus(status)
 
-		return extractedStatus == "Provisioning"
-	}, 180*time.Second, 100*time.Millisecond, "Provisioning failed within the expected time")
+		return extractedStatus == "Running"
+	}, 180*time.Second, 100*time.Millisecond, "failed to run within the expected time")
 
 	allAllocations := dms1.Node.GetAllocations()
 	require.Len(t, allAllocations, 1)
