@@ -342,9 +342,6 @@ func New(cfg config.Config, fs afero.Afero,
 		jobs.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
 		},
-		RestartAllocationBehavior: {
-			fn: n.handleRestartAllocation,
-		},
 	}
 	for behavior, handler := range dmsBehaviors {
 		if err := nodeActor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
@@ -964,18 +961,6 @@ func (n *Node) createChildActor(pvkey crypto.PrivKey, inbox string) (*actor.Basi
 	}
 
 	return childActor, nil
-}
-
-func (n *Node) restartAllocation(id string) error {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	allocation, ok := n.allocations[id]
-	if !ok {
-		return errors.New("allocation not found")
-	}
-
-	return allocation.Restart(n.ctx)
 }
 
 // createActor creates an actor.

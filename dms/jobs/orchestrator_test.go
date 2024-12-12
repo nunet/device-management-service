@@ -444,19 +444,12 @@ func TestSupervise(t *testing.T) {
 
 	restartedAllocations := make(map[string]bool)
 	ch := make(chan struct{})
-	_ = actr1.AddBehavior(RestartAllocationBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(AllocationRestartBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
-		var request RestartAllocationRequest
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
+		restartedAllocations[msg.To.ID.String()] = true
 
-		t.Log("Restarting allocation", request.AllocationID)
-
-		restartedAllocations[request.AllocationID] = true
-
-		response := RestartAllocationResponse{
+		response := AllocationRestartResponse{
 			OK: true,
 		}
 
@@ -483,7 +476,7 @@ func TestSupervise(t *testing.T) {
 		0,
 		[]ucan.Capability{
 			ucan.Capability(actor.HealthCheckBehavior),
-			ucan.Capability(RestartAllocationBehavior),
+			ucan.Capability(AllocationRestartBehavior),
 		},
 	)
 	require.NoError(t, err)
@@ -498,5 +491,5 @@ func TestSupervise(t *testing.T) {
 
 	<-ch
 	require.Equal(t, 1, len(restartedAllocations))
-	require.Equal(t, true, restartedAllocations["allocation1"])
+	require.Equal(t, true, restartedAllocations[actr1.Handle().ID.String()])
 }

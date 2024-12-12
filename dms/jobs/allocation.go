@@ -301,8 +301,9 @@ func (a *Allocation) Start() error {
 
 	behaviors := map[string]func(actor.Envelope){
 		AllocationStartBehavior:    a.handleAllocationStart,
-		AllocationGetLogsBehavior:  a.handleAllocationGetLogs,
+		AllocationRestartBehavior:  a.handleAllocationRestart,
 		AllocationShutdownBehavior: a.handleAllocationShutdown,
+		AllocationGetLogsBehavior:  a.handleAllocationGetLogs,
 
 		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
 		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
@@ -410,20 +411,21 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-func (a *Allocation) handleAllocationGetLogs(msg actor.Envelope) {
-	log.Infof("behavior get logs invoked by: %+v", msg.From)
+func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var resp AllocationGetLogsResponse
+	resp := AllocationRestartResponse{}
+	if err := a.Restart(context.TODO()); err != nil { // TODO: fix context.TODO()
+		err = fmt.Errorf("failed to restart allocation: %w", err)
+		log.Error(err)
 
-	data, err := a.fs.ReadFile(filepath.Join(a.resultsDir, "stdout.log"))
-	if err != nil {
-		resp.Error = fmt.Sprintf("failed to read results file: %s", err.Error())
+		resp.Error = err.Error()
+		resp.OK = false
 		a.sendReply(msg, resp)
 		return
 	}
 
-	resp.Data = data
+	resp.OK = true
 	a.sendReply(msg, resp)
 }
 
@@ -463,6 +465,23 @@ func (a *Allocation) handleAllocationShutdown(msg actor.Envelope) {
 	}
 
 	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleAllocationGetLogs(msg actor.Envelope) {
+	log.Infof("behavior get logs invoked by: %+v", msg.From)
+	defer msg.Discard()
+
+	var resp AllocationGetLogsResponse
+
+	data, err := a.fs.ReadFile(filepath.Join(a.resultsDir, "stdout.log"))
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to read results file: %s", err.Error())
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.Data = data
 	a.sendReply(msg, resp)
 }
 

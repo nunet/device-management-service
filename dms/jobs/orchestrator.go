@@ -1761,7 +1761,7 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 			actor.WithMessageExpiry(expiry),
 		)
 		if err != nil {
-			log.Errorf("Failed to create supervisor message: %s", err)
+			log.Errorf("failed to create supervisor message: %s", err)
 			continue
 		}
 
@@ -1857,7 +1857,7 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 							failures[allocation.ID.String()]++
 							v := failures[allocation.ID.String()]
 							if v >= 3 {
-								if err := o.escalateFailure(id, allocation); err != nil {
+								if err := o.escalateFailure(allocation); err != nil {
 									log.Errorf("failed to escalate failure: %s", err)
 								} else {
 									delete(failures, allocation.ID.String())
@@ -1873,7 +1873,7 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 						failures[allocation.ID.String()]++
 						v := failures[allocation.ID.String()]
 						if v >= 3 {
-							if err := o.escalateFailure(id, allocation); err != nil {
+							if err := o.escalateFailure(allocation); err != nil {
 								log.Errorf("failed to escalate failure: %s", err)
 							} else {
 								delete(failures, allocation.ID.String())
@@ -1890,7 +1890,7 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 	}
 }
 
-func (o *Orchestrator) escalateFailure(allocationID string, allocHandle actor.Handle) error {
+func (o *Orchestrator) escalateFailure(allocHandle actor.Handle) error {
 	// TODO we need to decide how to handle repeated failures and also correlated failures
 	//      from a node.
 	//      Also, we should not restart at first failure, but wait for a number of
@@ -1900,10 +1900,8 @@ func (o *Orchestrator) escalateFailure(allocationID string, allocHandle actor.Ha
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		allocHandle,
-		RestartAllocationBehavior,
-		RestartAllocationRequest{
-			AllocationID: allocationID,
-		},
+		AllocationRestartBehavior,
+		struct{}{},
 		actor.WithMessageExpiry(expiry),
 	)
 	if err != nil {

@@ -30,14 +30,14 @@ const (
 	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
 	AllocationStartBehavior      = "/dms/deployment/start"
+	AllocationRestartBehavior    = "/dms/deployment/restart"
 	AllocationGetLogsBehavior    = "/dms/deployment/logs"
 	AllocationShutdownBehavior   = "/dms/deployment/shutdown"
 	AllocationStartTimeout       = 5 * time.Second
 	AllocationShutdownTimeout    = 5 * time.Second
 
-	RestartAllocationBehavior = "/dms/node/allocation/restart"
-	StopAllocationBehavior    = "/dms/node/allocation/stop"
-	StopAllocationTimeout     = 3 * time.Second
+	StopAllocationBehavior = "/dms/node/allocation/stop"
+	StopAllocationTimeout  = 3 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 
@@ -130,11 +130,7 @@ type AllocationShutdownResponse struct {
 	Error string
 }
 
-type RestartAllocationRequest struct {
-	AllocationID string
-}
-
-type RestartAllocationResponse struct {
+type AllocationRestartResponse struct {
 	OK    bool
 	Error string
 }
