@@ -1,0 +1,8 @@
+{
+    "name": "github.com/libp2p/go-libp2p-pubsub",
+    "licenceFile": "LICENSE-MIT"
+}
+{
+    "name": "github.com/miekg/dns",
+    "licenceFile": "LICENSE"
+}

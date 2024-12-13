@@ -14,45 +14,143 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_ParseGPUVendor(t *testing.T) {
-	tests := []struct {
-		name   string
-		vendor string
-		want   GPUVendor
-	}{
-		{
-			name:   "Parse NVIDIA GPU vendor",
-			vendor: "some NVIDIA Corporation gpu",
-			want:   GPUVendorNvidia,
-		},
-		{
-			name:   "Parse AMD GPU vendor",
-			vendor: "a amd gpu with some other stuff",
-			want:   GPUVendorAMDATI,
-		},
-		{
-			name:   "Parse Intel GPU vendor",
-			vendor: "intel gpu",
-			want:   GPUVendorIntel,
-		},
-		{
-			name:   "Parse AMD GPU vendor",
-			vendor: "a gpu with ati in the name",
-			want:   GPUVendorAMDATI,
-		},
-		{
-			name:   "Parse unknown GPU vendor",
-			vendor: "some other gpu",
-			want:   GPUVendorUnknown,
-		},
-	}
+func TestHardware_GPU(t *testing.T) {
+	t.Parallel()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ParseGPUVendor(tt.vendor)
-			require.Equal(t, tt.want, got)
-		})
-	}
+	t.Run("parseGPUVendor", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name   string
+			vendor string
+			want   GPUVendor
+		}{
+			{
+				name:   "Parse NVIDIA GPU vendor",
+				vendor: "some NVIDIA Corporation gpu",
+				want:   GPUVendorNvidia,
+			},
+			{
+				name:   "Parse AMD GPU vendor",
+				vendor: "a amd gpu with some other stuff",
+				want:   GPUVendorAMDATI,
+			},
+			{
+				name:   "Parse Intel GPU vendor",
+				vendor: "intel gpu",
+				want:   GPUVendorIntel,
+			},
+			{
+				name:   "Parse AMD GPU vendor",
+				vendor: "a gpu with ati in the name",
+				want:   GPUVendorAMDATI,
+			},
+			{
+				name:   "Parse unknown GPU vendor",
+				vendor: "some other gpu",
+				want:   GPUVendorUnknown,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := ParseGPUVendor(tt.vendor)
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+
+	t.Run("MaxFreeVRAMGPU", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			gpus GPUs
+			want GPU
+		}{
+			{
+				name: "MaxFreeVRAMGPU",
+				gpus: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				want: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla T4A100",
+					VRAM:       16384,
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got, err := tt.gpus.MaxFreeVRAMGPU()
+				require.NoError(t, err)
+				require.True(t, tt.want.Equal(got))
+			})
+		}
+	})
+
+	t.Run("GetWithIndex", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			gpus GPUs
+			idx  int
+			want GPU
+		}{
+			{
+				name: "Get GPU with index 0",
+				gpus: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				idx: 0,
+				want: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla T4A100",
+					VRAM:       16384,
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got, err := tt.gpus.GetWithIndex(tt.idx)
+				require.NoError(t, err)
+				require.True(t, tt.want.Equal(got))
+			})
+		}
+	})
 }
 
 func TestHardware_Comparable_Compare(t *testing.T) {
@@ -106,6 +204,7 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := tt.c1.Compare(tt.c2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
@@ -155,6 +254,7 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := tt.r1.Compare(tt.r2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
@@ -204,6 +304,7 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := tt.d1.Compare(tt.d2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
@@ -236,6 +337,7 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := tt.v1.Compare(tt.v2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
@@ -309,6 +411,7 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := tt.g1.Compare(tt.g2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
@@ -377,6 +480,7 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := tt.g1.Compare(tt.g2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, got)
@@ -415,6 +519,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.c1.Add(tt.c2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, tt.c1)
@@ -446,6 +551,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.r1.Add(tt.r2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, tt.r1)
@@ -477,6 +583,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.d1.Add(tt.d2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, tt.d1)
@@ -520,6 +627,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.g1.Add(tt.g2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, tt.g1)
@@ -569,6 +677,7 @@ func TestHardware_Calculable_Add(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.g1.Add(tt.g2)
 				require.NoError(t, err)
 				require.Equal(t, tt.want, tt.g1)
@@ -621,6 +730,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.c1.Subtract(tt.c2)
 				if tt.wantErr {
 					errorMessage := tt.want.(string)
@@ -670,6 +780,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.r1.Subtract(tt.r2)
 				if tt.wantErr {
 					errorMessage := tt.want.(string)
@@ -719,6 +830,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.d1.Subtract(tt.d2)
 				if tt.wantErr {
 					errorMessage := tt.want.(string)
@@ -788,6 +900,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.g1.Subtract(tt.g2)
 				if tt.wantErr {
 					errorMessage := tt.want.(string)
@@ -867,6 +980,7 @@ func TestHardware_Calculable_Subtract(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				err := tt.g1.Subtract(tt.g2)
 				if tt.wantErr {
 					errorMessage := tt.want.(string)
@@ -889,6 +1003,7 @@ func TestHardware_Equal(t *testing.T) {
 	// gpu.Equal() works as a deep equal
 	t.Run("GPU Checks", func(t *testing.T) {
 		t.Parallel()
+
 		tests := []struct {
 			name string
 			g1   GPU
@@ -937,6 +1052,305 @@ func TestHardware_Equal(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				t.Parallel()
 				got := tt.g1.Equal(tt.g2)
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+
+	t.Run("GPUs Checks", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name string
+			g1   GPUs
+			g2   GPUs
+			want bool
+		}{
+			{
+				name: "Equal GPUs",
+				g1: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				g2: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				want: true,
+			},
+			{
+				name: "Equal GPUs with different order",
+				g1: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				g2: []GPU{
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+				},
+				want: true,
+			},
+			{
+				name: "Different GPUs",
+				g1: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				g2: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+				},
+				want: false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.g1.Equal(tt.g2)
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+}
+
+func TestHardware_CPU(t *testing.T) {
+	t.Parallel()
+	t.Run("ClockSpeedInGHz", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			cpu  CPU
+			want float64
+		}{
+			{
+				name: "lower value",
+				cpu: CPU{
+					ClockSpeed: 1000000000,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				cpu: CPU{
+					ClockSpeed: 200000000000000000000,
+				},
+				want: 200000000000,
+			},
+			{
+				name: "zero value",
+				cpu: CPU{
+					ClockSpeed: 0,
+				},
+				want: 0,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.cpu.ClockSpeedInGHz()
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+
+	t.Run("ComputeInGHz", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			cpu  CPU
+			want float64
+		}{
+			{
+				name: "lower value",
+				cpu: CPU{
+					Cores:      1,
+					ClockSpeed: 1000000000,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				cpu: CPU{
+					Cores:      2,
+					ClockSpeed: 200000000000000000000,
+				},
+				want: 400000000000,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.cpu.ComputeInGHz()
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+
+	t.Run("Compute", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			c    CPU
+			want float64
+		}{
+			{
+				name: "Compute CPU",
+				c: CPU{
+					Cores:      2,
+					ClockSpeed: 1000,
+				},
+				want: 2000,
+			},
+			{
+				name: "Compute CPU with 0 Cores",
+				c: CPU{
+					Cores:      0,
+					ClockSpeed: 1000,
+				},
+				want: 0,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.c.Compute()
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+}
+
+func TestHardware_RAM(t *testing.T) {
+	t.Run("SizeInGB", func(t *testing.T) {
+		tests := []struct {
+			name string
+			ram  RAM
+			want float64
+		}{
+			{
+				name: "lower value",
+				ram: RAM{
+					Size: 1e9,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				ram: RAM{
+					Size: 100 * 1e9,
+				},
+				want: 100,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.ram.SizeInGB()
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+}
+
+func TestHardware_Disk(t *testing.T) {
+	t.Parallel()
+	t.Run("SizeInGB", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			disk Disk
+			want float64
+		}{
+			{
+				name: "lower value",
+				disk: Disk{
+					Size: 1e9,
+				},
+				want: 1,
+			},
+			{
+				name: "higher value",
+				disk: Disk{
+					Size: 100 * 1e9,
+				},
+				want: 100,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := tt.disk.SizeInGB()
 				require.Equal(t, tt.want, got)
 			})
 		}

@@ -1,77 +1,132 @@
----
-version: "V1"
+version: "ensembleV1"
 
+# Node definitions for edge constraints
+nodes:
+  node1:
+    location:
+      accept:
+        - region: "us-west"
+          country: "US"
+          city: "San Francisco"
+    peer: "12D3KooWJwNf7KGNwGxgkGXuYvfS5ZKrHhXH2qwvVDiGFsGV5xqz"
+    allocations: ["worker1"]
+    ports:
+      - private: 8080
+        public: 8080
+        allocation: "worker1"
+  node2:
+    location:
+      accept:
+        - region: "eu-west"
+          country: "UK"
+          city: "London"
+
+# Edge constraints between nodes (will be transformed to edges with S/T)
 edge_constraints:
-  - edges: ["edge1", "edge2"]
-    rtt: 0
-    bw: 0
-    symetric: false
+  - edges: ["node1", "node2"]
+    rtt: 100
+    bw: 1000
 
-supervisor:
-  strategy: ""
-  alloctions:
-    - allocation1
-    - allocation2
-  children:
-    - strategy: ""
-      alloctions:
-        - allocation2
-        - allocation3
-
-keys:
-  keys1: "/home/dave/.ssh/id_dbr.pub"
-  keys2: "/home/dave/.ssh/id_ed25519"
-
-scripts:
-  script1: "nunet.sh"
-  script2: "main.go"
-
+# Resource templates
 resources:
-  rc1:
+  standard:
+    name: "standard"
     cpu:
-      arch: "x86"
-      freq: 10000
       cores: 2
+      architecture: "x86_64"
+      clock_speed: 2400  # MHz
     ram:
-      speed: 10000
-      size: 10000
+      size: 4096  # MB
+      clock_speed: 3200  # MHz
+    disk:
+      size: 10000  # MB
+      type: "ssd"
     gpus:
       - vendor: "nvidia"
-        memory: 10000
+        model: "rtx3080"
+        vram: 10000  # MB
+  minimal:
+    name: "minimal"
+    cpu:
+      cores: 1
+    ram:
+      size: 1024  # MB
     disk:
-      size: 10000
+      size: 5000  # MB
 
-volumes:
-  volume1:
-    type: output
-    remote:
-      type: ipfs
-      endpoint: "123"
+# Scripts for provisioning (will be transformed to bytes)
+scripts:
+  setup: "scripts/setup.sh"
+  cleanup: "scripts/cleanup.sh"
 
+# Key definitions
+keys:
+  worker1-key: "keys/worker1_key"
+  worker2-key: "keys/worker2_key"
+  vm1-key: "keys/vm1_key"
+
+# Allocation definitions
 allocations:
-  allocation1:
+  worker1:
     executor: "docker"
-    resources: "rc1"
+    dns_name: "worker1.local"
+    resources: "standard"  # Reference to resource template
     execution:
-      type: docker
-      image: "alpine"
+      type: "docker"
+      image: "ubuntu:22.04"
+      entrypoint: ["/bin/bash"]
+      cmd: ["-c", "echo 'Hello from worker1'"]
       environment:
-        - ENV1: "value"
-      command: "echo task 1"
-    volumes:
-      volume1:
-        mountpoint: /
-      volume2:
-        type: input
-        remote:
-          type: s3
-          bucket: "bucket1"
-        mountpoint: "/"
-    dns_name: "node1"
-    keys:
-      - "key1"
-      - "key2"
+        - "DEBUG=1"
+        - "WORKER_ID=1"
+      working_directory: "/app"
+    healthcheck:
+      type: "command"
+      exec: ["echo", "worker1 healthy"]
+      response:
+        type: "string"
+        value: "worker1 healthy"
     provision:
-      - "script1"
-      - "script2"
-    health_check: ""
+      - "setup"     # Reference to script in scripts section
+      - "cleanup"   # Reference to script in scripts section
+    keys:
+      - "worker1-key"
+
+  worker2:
+    executor: "docker"
+    dns_name: "worker2.local"
+    resources: "minimal"  # Reference to resource template
+    execution:
+      type: "docker"
+      image: "python:3.9-slim"
+      cmd: ["python", "-c", "print('Hello from worker2')"]
+      environment:
+        - "WORKER_ID=2"
+    provision:
+      - "setup"  # Reference to script in scripts section
+    keys:
+      - "worker2-key"
+
+  vm1:
+    executor: "firecracker"
+    dns_name: "vm1.local"
+    resources: "standard"  # Reference to resource template
+    execution:
+      type: "firecracker"
+      kernel_image: "vmlinux-5.10"
+      root_file_system: "ubuntu-22.04.ext4"
+      kernel_args: "console=ttyS0 reboot=k panic=1"
+    provision:
+      - "setup"     # Reference to script in scripts section
+      - "cleanup"   # Reference to script in scripts section
+    keys:
+      - "vm1-key"
+
+# Supervisor configuration
+supervisor:
+  strategy: "OneForOne"
+  children:
+    - strategy: "AllForOne"
+      allocations: ["worker1", "worker2"]
+    - strategy: "RestForOne"
+      allocations: ["vm1"]

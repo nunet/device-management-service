@@ -6,32 +6,23 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-//go:build linux
-
-package sys
+package clover
 
 import (
-	"fmt"
+	clover "github.com/ostafen/clover/v2"
 
-	"kernel.org/pub/linux/libs/security/libcap/cap"
+	"gitlab.com/nunet/device-management-service/db/repositories"
+	contract "gitlab.com/nunet/device-management-service/dms/contract"
 )
 
-// RequiredCaps checks if the required capabilities are set
-func RequiredCaps() error {
-	caps := cap.GetProc()
-	adminP, err := caps.GetFlag(cap.Permitted, cap.NET_ADMIN)
-	if err != nil {
-		return fmt.Errorf("error getting NET_ADMIN flag: %w", err)
-	}
+// ContractRepoClover
+type ContractRepoClover struct {
+	repositories.GenericRepository[contract.Contract]
+}
 
-	adminE, err := caps.GetFlag(cap.Effective, cap.NET_ADMIN)
-	if err != nil {
-		return fmt.Errorf("error getting NET_ADMIN flag: %w", err)
+// NewContractRepo creates a contract repo
+func NewContractRepo(db *clover.DB) repositories.Contract {
+	return &ContractRepoClover{
+		NewGenericRepository[contract.Contract](db),
 	}
-
-	if adminP && adminE {
-		return nil
-	}
-
-	return fmt.Errorf("required capability NET_ADMIN not set")
 }

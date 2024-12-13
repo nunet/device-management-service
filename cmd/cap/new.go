@@ -10,6 +10,7 @@ package cap
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/afero"
@@ -17,13 +18,16 @@ import (
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newNewCmd(afs afero.Afero) *cobra.Command {
+func newNewCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+	var force bool
+
 	cmd := &cobra.Command{
 		Use:   "new <name>",
 		Short: "Create a new capability context",
@@ -34,14 +38,14 @@ Example:
   nunet cap new ledger:user  # if using ledger`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			context := dms.UserContextName
+			context := node.UserContextName
 			if len(args) > 0 {
 				context = args[0]
 			}
 
 			var trustCtx did.TrustContext
 			var rootDID did.DID
-			if IsLedgerContext(context) {
+			if node.IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
@@ -49,18 +53,57 @@ Example:
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
 				rootDID = provider.DID()
-				context = LedgerContext(context)
+				context = node.LedgerContext(context)
 			} else {
-				var priv crypto.PrivKey
-				var err error
-				trustCtx, priv, err = CreateTrustContextFromKeyStore(afs, context)
+				keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
+				ks, err := keystore.New(afs.Fs, keyStoreDir)
 				if err != nil {
-					return fmt.Errorf("failed to create trust context: %w", err)
+					return fmt.Errorf("failed to open keystore: %w", err)
 				}
+
+				passphrase := os.Getenv("DMS_PASSPHRASE")
+				if ks.Exists(context) {
+					fmt.Fprintf(cmd.OutOrStdout(), "Using identity at %s/%s.json...\n", keyStoreDir, context)
+					if passphrase == "" {
+						passphrase, err = utils.PromptForPassphrase(false)
+						if err != nil {
+							return fmt.Errorf("failed to get passphrase: %w", err)
+						}
+					}
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "A new identity will be created for '%s' context...\n", context)
+					if passphrase == "" {
+						passphrase, err = utils.PromptForPassphrase(true)
+						if err != nil {
+							return fmt.Errorf("failed to get passphrase: %w", err)
+						}
+					}
+
+					_, err = dms.GenerateAndStorePrivKey(ks, passphrase, context)
+					if err != nil {
+						return fmt.Errorf("failed to create new key: %w", err)
+					}
+				}
+
+				key, err := ks.Get(context, passphrase)
+				if err != nil {
+					return fmt.Errorf("failed to get key from keystore: %w", err)
+				}
+
+				priv, err := key.PrivKey()
+				if err != nil {
+					return fmt.Errorf("unable to convert key from keystore to private key: %w", err)
+				}
+
+				trustCtx, err = did.NewTrustContextWithPrivateKey(priv)
+				if err != nil {
+					return fmt.Errorf("unable to create trust context: %w", err)
+				}
+
 				rootDID = did.FromPublicKey(priv.GetPublic())
 			}
 
-			capStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.CapstoreDir)
+			capStoreDir := filepath.Join(cfg.General.UserDir, node.CapstoreDir)
 			capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", context))
 
 			fileExists, err := afs.Exists(capStoreFile)
@@ -68,7 +111,7 @@ Example:
 				return fmt.Errorf("unable to check if capability context file exists: %w", err)
 			}
 
-			if fileExists {
+			if fileExists && !force {
 				confirmed, err := utils.PromptYesNo(
 					cmd.InOrStdin(),
 					cmd.OutOrStdout(),
@@ -89,18 +132,20 @@ Example:
 				}
 			}
 
-			capCtx, err := ucan.NewCapabilityContext(trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{})
+			capCtx, err := ucan.NewCapabilityContextWithName(context, trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
 			if err != nil {
 				return fmt.Errorf("unable to create capability context: %w", err)
 			}
 
-			if err := SaveCapabilityContext(capCtx, context); err != nil {
+			if err := node.SaveCapabilityContext(capCtx, cfg); err != nil {
 				return fmt.Errorf("save capability context: %w", err)
 			}
 
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVarP(&force, fnForce, "f", false, "force overwrite of existing context")
 
 	return cmd
 }

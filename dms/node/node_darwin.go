@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/dms/jobs"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/executor/null"
@@ -26,16 +26,16 @@ func (n *Node) initSupportedExecutors(ctx context.Context) error {
 		return fmt.Errorf("failed to setup null executor: %w", err)
 	}
 
-	n.executors[string(jobs.ExecutorNull)] = executorMetadata{
+	n.executors[string(jobtypes.ExecutorNull)] = executorMetadata{
 		executor:      executor,
-		executionType: jobs.ExecutorNull,
+		executionType: jobtypes.ExecutorNull,
 	}
 
-	dockerExec, err := docker.NewExecutor(ctx, "root")
+	dockerExec, err := docker.NewExecutor(ctx, n.fs, "root")
 	if err == nil {
-		n.executors[string(jobs.ExecutorDocker)] = executorMetadata{
+		n.executors[string(jobtypes.ExecutorDocker)] = executorMetadata{
 			executor:      dockerExec,
-			executionType: jobs.ExecutorDocker,
+			executionType: jobtypes.ExecutorDocker,
 		}
 	}
 

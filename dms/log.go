@@ -53,9 +53,6 @@ func silenceLibp2pLogging() error {
 	err = logging.SetLogLevel("autonat", "panic")
 	errs = multierr.Append(errs, err)
 
-	err = logging.SetLogLevel("node", "panic")
-	errs = multierr.Append(errs, err)
-
 	err = logging.SetLogLevel("p2p-holepunch", "panic")
 	errs = multierr.Append(errs, err)
 
@@ -66,6 +63,10 @@ func silenceLibp2pLogging() error {
 	errs = multierr.Append(errs, err)
 
 	err = logging.SetLogLevelRegex("net/*", "panic")
+	errs = multierr.Append(errs, err)
+
+	// node.conn logs dms connections things
+	err = logging.SetLogLevel("node.conn", "panic")
 	errs = multierr.Append(errs, err)
 
 	return errs

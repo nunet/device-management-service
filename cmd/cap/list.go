@@ -15,10 +15,12 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 )
 
-func newListCmd(afs afero.Afero) *cobra.Command {
+func newListCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	var context string
 
 	cmd := &cobra.Command{
@@ -26,31 +28,31 @@ func newListCmd(afs afero.Afero) *cobra.Command {
 		Short: "List capability anchors",
 		Long: `List all capability anchors in a capability context
 
-It outputs DIDs and capability tokens set for root, provide and require anchors.`,
+It outputs DIDs and capability tokens set for root, provide, require and revoke anchors.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var trustCtx did.TrustContext
-			if IsLedgerContext(context) {
+			if node.IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
 				}
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = LedgerContext(context)
+				context = node.LedgerContext(context)
 			} else {
 				var err error
-				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
+				trustCtx, _, err = node.CreateTrustContextFromKeyStore(afs, context, cfg)
 				if err != nil {
 					return fmt.Errorf("failed to create trust context: %w", err)
 				}
 			}
 
-			capCtx, err := LoadCapabilityContext(trustCtx, context)
+			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}
 
-			roots, require, provide := capCtx.ListRoots()
+			roots, require, provide, revoke := capCtx.ListRoots()
 
 			fmt.Println("roots:")
 			for _, root := range roots {
@@ -75,6 +77,14 @@ It outputs DIDs and capability tokens set for root, provide and require anchors.
 				fmt.Printf("\t%s\n", string(data))
 			}
 
+			fmt.Println("revoke:")
+			for _, t := range revoke.Tokens {
+				data, err := json.Marshal(t)
+				if err != nil {
+					return fmt.Errorf("failed to marshal capability token: %w", err)
+				}
+				fmt.Printf("\t%s\n", string(data))
+			}
 			return nil
 		},
 	}

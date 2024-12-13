@@ -109,11 +109,19 @@ We currently support Linux and MacOS (Darwin).
 - build-essential (linux only)
 - libsystemd-dev (linux only)
 - go (v1.21.7 or later)
+- [git-lfs](https://git-lfs.com/) (for downloading large files)
 
 Clone the repository:
 
 ```
 git clone https://gitlab.com/nunet/device-management-service.git
+```
+
+Configure git-lfs:
+```
+git lfs install && \
+git lfs fetch && \
+git lfs pull
 ```
 
 Build the CLI:
@@ -259,7 +267,8 @@ If you prefer to use a different operating system or need to install drivers man
 1. Visit the [NVIDIA Official Driver Downloads](https://www.nvidia.com/en-us/drivers/) page.
 2. Select your GPU model and operating system.
 3. Download and install the recommended driver.
-4. Reboot your system after installation.
+4. Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+5. Reboot your system after installation.
 
 #### AMD GPUs:
 
@@ -268,12 +277,22 @@ If you prefer to use a different operating system or need to install drivers man
 3. Download and install the recommended driver.
 4. Reboot your system after installation.
 
+Along with the drivers, you will need to install amdgpu using ROCm for AMD GPUs. You can find the installation instructions [here](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/amdgpu-install.html).
+
+Make sure you select the rocm usecase when installing the amdgpu.
+
+```bash```
+$ sudo amdgpu-install --usecase=rocm
+```
+
 #### Intel Discrete GPUs:
 
 1. Visit the [Intel® software for general purpose GPU capabilities documentation](https://dgpu-docs.intel.com/driver/overview.html) page.
 2. Select your GPU model and operating system.
 3. Download and install the recommended driver.
 4. Reboot your system after installation.
+
+Along with the drivers, you will need to install XPU SMI for Intel GPUs. You can find the installation instructions [here](https://intel.github.io/xpumanager/smi_install_guide.html#).
 
 For detailed instructions specific to your operating system, please refer to the documentation provided by NVIDIA, AMD, or Intel.
 
@@ -303,35 +322,12 @@ You can find a detailed documentation [here](./cmd/README.md).
 
 The first step is to generate identities/keys and capability contexts. It is recommended that two keys are setup: one for the user (default name `user`) and another for the dms (default name `dms`)
 
-A capability context is created with the `nunet cap new <context>` command and it is anchored on a key with the context name.
+A capability context is created with the `nunet cap new <context>` command and it is anchored on a key with the **same** context name.
+The command automatically generates a key for the given context if not present. Keys can also be created manually with `nunet key new <key>` if you prefer.
 
-To set up a new identity/create a new key, run the command:
+> Note: If creating keys manually, make sure to use the same context name, otherwise it won't work.
 
-```shell
-$ nunet key new <identity>
-```
-
-Then, to initialize its capability context:
-
-```shell
-$ nunet cap new <identity>
-```
-
-In this example, we are going to set up two identities:
-
-First for the user
-
-```shell
-$ nunet key new user
-```
-
-then for the dms instance.
-
-```shell
-$ nunet key new dms
-```
-
-We then setup the capability contexts for each identity:
+In this example, we are going to set up two capability contexts:
 
 First the user
 
@@ -345,26 +341,8 @@ then the dms instance.
 $ nunet cap new dms
 ```
 
-If you use a ledger wallet for your personal key, you can create the user context as follows:
-
-Create a new key for the user
-
-```shell
-$ nunet key did ledger
-```
-
-Then create the capability context for the user
-
-```shell
-$ nunet cap new ledger:user
-```
-
 You can create as many identities as you want, specially if you want
 to manage multiple DMS instances.
-
-The `key new` command returns a DID key for the specified identity.
-Remember to secure your keys and capability contexts, as they control access to your NuNet resources.
-They are encrypted and stored under `$HOME/.nunet` by default.
 
 Each time a new identity is generated it will prompt the user
 for a passphrase. The passphrase is associated with the created
@@ -372,13 +350,18 @@ identity, thus a different passphrase can be set up for each identity.
 If you prefer, it's possible to set a `DMS_PASSPHRASE` environment variable
 to avoid the command prompt.
 
-#### Using a Ledger Wallet
+The `key did` command returns a DID key for the specified identity.
+
+Remember to secure your keys and capability contexts, as they control access to your NuNet resources.
+They are encrypted and stored under `$HOME/.nunet` by default.
+
+##### Using a Ledger Wallet
 
 It is also possible to use a Ledger Wallet instead of creating a new
-key; this is recommended for user contexts, but you should not use it
-for the dms context as it needs the key to sign capability tokens.
+key; this is recommended for *user* contexts, but you **should not** use it
+for the *dms* context as it needs the key to sign capability tokens.
 
-To set up a user context with a Ledger Wallet, you need the
+To set up a *user* context with a Ledger Wallet, you need the
 `ledger-cli` script from [NuNet's ledger wallet tool](https://gitlab.com/nunet/ledger-wallet).
 The tool uses the Eth application and specifically the first Eth
 account with signing of personal messages. Everything that needs to be
@@ -386,9 +369,13 @@ signed (namely capability tokens) will be presented on your Nano's
 screen in plaintext so that you can inspect it.
 
 You can get your Ledger wallet's DID with:
-
 ```shell
 $ nunet key did ledger
+```
+
+To create the capability context for the user
+```shell
+$ nunet cap new ledger:user
 ```
 
 #### Setting up Capabilities
@@ -424,7 +411,7 @@ $ nunet key did <user>
 or if you are using a Ledger Wallet
 
 ```shell
-$ nunet key did ledger
+$ nunet key did ledger:<user>
 ```
 
 ##### Setup your DMS for the public testnet

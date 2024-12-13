@@ -147,10 +147,9 @@ nunet actor cmd [command]
 
    * **Description:**  Invokes the `/dms/node/onboarding/offboard` behavior on an actor. This is used to offboard a node from the DMS (Device Management Service).
 
-   * **Usage:** `nunet actor cmd /dms/node/onboarding/offboard [<param> ...] [flags]`
+   * **Usage:** `nunet actor cmd /dms/node/onboarding/offboard [<param> ...]`
 
    * **Flags:**
-     * `-f, --force`: Force the offboarding process overriding any safety checks and invalid states.
      * `-h, --help`: Display help information for the `/dms/node/onboarding/offboard` command.
 
 * **`/dms/node/onboarding/onboard`**
@@ -160,22 +159,11 @@ nunet actor cmd [command]
    * **Usage:** `nunet actor cmd /dms/node/onboarding/onboard [<param> ...] [flags]`
 
    * **Flags:**
-     * `-a, --available`: Set the node as unavailable for job deployment (default: false).
-     * `-z, --cpu int`: Set number of CPU cores.
-     * `-h, --help`: Display help information for the `/dms/node/onboarding/onboard` command.
-     * `-l, --local-enable`: Set server mode (enable for local) (default: true).
-     * `-m, --memory uint`: Set the value for memory usage in GB.
-     * `-x, --ntx-price float`: Set the price in NTX per minute for the onboarded compute resource.
-     * `-w, --wallet string`: Set the wallet address.
-
-* **`/dms/node/onboarding/resource`**
-
-   * **Description:** Invokes the `/dms/node/onboarding/resource` behavior on an actor.  This retrieves or manages resource information related to the onboarding process.
-
-   * **Usage:** `nunet actor cmd /dms/node/onboarding/resource [<param> ...] [flags]`
-
-   * **Flags:**
-     * `-h, --help`: Display help information for the `/dms/node/onboarding/resource` command.
+     * `-C, --cpu float32`: CPU cores to allocate
+     * `-R, --ram uint`: Memory to allocate
+     * `-D, --disk uint`: Disk space to allocate
+     * `-G, --gpus string`: Comma-separated list of GPU Index and VRAM in GB to allocate e.g. "0:4,1:8". The gpu index can be obtained from 'nunet gpu list' command
+     * `--no-gpu`: Do not allocate any GPU
 
 * **`/dms/node/onboarding/status`**
 

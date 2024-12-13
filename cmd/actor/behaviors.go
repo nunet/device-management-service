@@ -9,6 +9,7 @@
 package actor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -16,10 +17,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -47,6 +50,14 @@ type behaviorConfig struct {
 
 type NewDeploymentRequestCmd struct {
 	Config string
+}
+
+type CapAnchorRequestCmd struct {
+	Root    bool
+	Require bool
+	Provide bool
+	Revoke  bool
+	Data    string
 }
 
 var behaviors = map[string]behaviorConfig{
@@ -195,6 +206,8 @@ Examples:
 			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.RAM.Size, "ram", "R", 0, "set the amount of memory in GB to reserve for NuNet")
 			cmd.Flags().Float32VarP(&p.Config.OnboardedResources.CPU.Cores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
 			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.Disk.Size, "disk", "D", 0, "set the amount of disk size in GB to reserve for NuNet")
+			cmd.Flags().StringVarP(&p.GPUs, "gpus", "G", "", "comma-separated list of GPU Index and VRAM in GB (e.g. 0:4,1:8). The gpu index can be obtained from 'nunet gpu list' command")
+			cmd.Flags().BoolVarP(&p.NoGPU, "no-gpu", "N", false, "do not reserve any GPU resources")
 			cmd.MarkFlagsOneRequired("ram", "cpu", "disk")
 			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
@@ -220,13 +233,9 @@ Examples:
 	},
 	// /dms/node/onboarding/offboard
 	node.OffboardBehavior: {
-		Type:    bInvoke,
-		Payload: func() any { return &node.OffboardRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.OffboardRequest)
-
-			cmd.Flags().BoolVarP(&p.Force, "force", "f", false, "force offboard")
-		},
+		Type:     bInvoke,
+		Payload:  func() any { return &node.OffboardRequest{} },
+		SetFlags: func(_ *cobra.Command, _ any) {},
 		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.OffboardRequest)
 			if !ok {
@@ -290,6 +299,34 @@ This behavior retrieves the status of a specific deployment.
 
 Examples:
   nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>`,
+	},
+
+	// /dms/node/deployment/logs
+	node.DeploymentLogsBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentLogsRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentLogsRequest)
+			cmd.Flags().StringVarP(&p.EnsembleID, "id", "i", "", "ensemble ID (required)")
+			cmd.Flags().StringVarP(&p.AllocationName, "allocation", "a", "", "allocation name (required)")
+			_ = cmd.MarkFlagRequired("id")
+			_ = cmd.MarkFlagRequired("allocation")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentLogsRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
+		Short: "Get deployment logs",
+		Long: `Invokes the /dms/node/deployment/logs behavior on an actor
+
+This behavior retrieves the logs of a specific deployment, writing it to a file
+with path returned in the response.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/logs --id <deployment_id> --allocation <allocation_name>`,
 	},
 
 	// /dms/node/deployment/manifest
@@ -381,7 +418,7 @@ Examples:
 		Payload: func() any { return &node.VMStopRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.VMStopRequest)
-			p.ExecutionType = jobs.ExecutorFirecracker
+			p.ExecutionType = job_types.ExecutorFirecracker
 			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
@@ -405,7 +442,7 @@ Examples:
 	node.VMListBehavior: {
 		Payload: func() any {
 			return &node.ListVMResponse{
-				ExecutionType: jobs.ExecutorFirecracker,
+				ExecutionType: job_types.ExecutorFirecracker,
 			}
 		},
 		Type:  bInvoke,
@@ -470,7 +507,7 @@ Examples:
 		},
 	},
 
-	jobs.SubnetCreateBehavior: {
+	jobs.SubnetCreateBehavior.Static: {
 		Payload: func() any { return &jobs.SubnetCreateRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetCreateRequest)
@@ -497,7 +534,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
 	},
 
-	jobs.SubnetDestroyBehavior: {
+	jobs.SubnetDestroyBehavior.Static: {
 		Payload: func() any { return &jobs.SubnetDestroyRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetDestroyRequest)
@@ -646,20 +683,25 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
 	},
 
-	jobs.SubnetDNSAddRecordBehavior: {
-		Payload: func() any { return &jobs.SubnetDNSAddRecordRequest{} },
+	jobs.SubnetDNSAddRecordsBehavior: {
+		Payload: func() any { return &jobs.SubnetDNSAddRecordsRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetDNSAddRecordRequest)
+			p := payload.(*jobs.SubnetDNSAddRecordsRequest)
+
+			var domainName string
+			var ip string
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
-			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "IP address (required)")
+			cmd.Flags().StringVarP(&domainName, "domain-name", "n", "", "A record name (required)")
+			cmd.Flags().StringVarP(&ip, "ip", "i", "", "IP address (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("name")
 			_ = cmd.MarkFlagRequired("ip")
+
+			p.Records = map[string]string{domainName: ip}
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*jobs.SubnetDNSAddRecordRequest)
+			req, ok := payload.(*jobs.SubnetDNSAddRecordsRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
@@ -740,7 +782,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
 
-	node.AllocatedResourcesBehavior: {
+	node.ResourcesAllocatedBehavior: {
 		Type:  bInvoke,
 		Short: "Get allocated resources",
 		Long: `Invokes the /dms/node/resources/allocated behavior on an actor
@@ -752,7 +794,7 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/allocated`,
 	},
 
-	node.FreeResourcesBehavior: {
+	node.ResourcesFreeBehavior: {
 		Type:  bInvoke,
 		Short: "Get free resources",
 		Long: `Invokes the /dms/node/resources/free behavior on an actor
@@ -764,7 +806,7 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/free`,
 	},
 
-	node.OnboardedResourcesBehavior: {
+	node.ResourcesOnboardedBehavior: {
 		Type:  bInvoke,
 		Short: "Get onboarded resources",
 		Long: `Invokes the /dms/node/resources/onboarded behavior on an actor
@@ -784,6 +826,22 @@ Examples:
 			cmd.Flags().StringVarP(&p.Level, "level", "l", "", "logging level (info, warn, debug etc.)")
 			cmd.Flags().IntVarP(&p.Interval, "interval", "i", 0, "flush interval in seconds")
 			cmd.MarkFlagsOneRequired("url", "level", "interval")
+			cmd.Flags().StringVar(&p.APIKey, "api-key", "", "API Key for Elasticsearch and APM")
+			cmd.Flags().StringVar(&p.APMURL, "apm-url", "", "APM Server URL")
+			cmd.Flags().Bool("enable-elastic", false, "Enable Elasticsearch logging")
+
+			// PreRunE function to capture if 'enable-elastic' flag was provided
+			cmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+				flag := cmd.Flags().Lookup("enable-elastic")
+				if flag != nil && flag.Changed {
+					val, err := strconv.ParseBool(flag.Value.String())
+					if err != nil {
+						return fmt.Errorf("invalid value for --enable-elastic: %v", err)
+					}
+					p.ElasticEnabled = &val
+				}
+				return nil
+			}
 		},
 		PayloadEnc: func(payload any) (any, error) {
 			req, ok := payload.(*node.LoggerConfigRequest)
@@ -802,68 +860,110 @@ This behavior allows the user to adjust logger settings, i.e. logging level, flu
 Examples:
 
   nunet actor cmd --context user /dms/node/logger/config --level debug # set debug level
-  nunet actor cmd --context user /dms/node/logger/config --url <elasticsearch-url> 
-  nunet actor cmd --context user /dms/node/logger/config --interval 10 # flush logs each 10 seconds`,
+  nunet actor cmd --context user /dms/node/logger/config --url <elasticsearch-url>
+  nunet actor cmd --context user /dms/node/logger/config --interval 10 # flush logs each 10 seconds
+  nunet actor cmd --context user /dms/node/logger/config --api-key <api-key>
+  nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
+  nunet actor cmd --context user /dms/node/logger/config --enable-elastic`,
 	},
-}
+	node.HardwareSpecBehavior: {
+		Type:  bInvoke,
+		Short: "Get hardware specifications",
+		Long: `Invokes the /dms/node/hardware/spec behavior on an actor
 
-func onboardBehaviorPreRun(_ *Command, payload any) error {
-	p, ok := payload.(*node.OnboardRequest)
-	if !ok {
-		return ErrInvalidArgument
-	}
+This behavior retrieves the hardware specifications of the system.
 
-	// TODO: we need to have single instance of hardware manager
-	// Should we do an api call here?
-	hardwareManager := hardware.NewHardwareManager()
-	machineResources, err := hardwareManager.GetMachineResources()
-	if err != nil {
-		return fmt.Errorf("could not get machine resources: %w", err)
-	}
+Examples:
 
-	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
-	if len(machineResources.GPUs) != 0 {
-		var (
-			gpuMap         = make(map[string]types.GPU)
-			gpuPromptItems []*selectPromptItem
-		)
-		for _, gpu := range machineResources.GPUs {
-			gpuMap[gpu.Model] = gpu
-			gpuPromptItems = append(gpuPromptItems, &selectPromptItem{
-				Label: gpu.Model,
-			})
-		}
+	nunet actor cmd --context user /dms/node/hardware/spec`,
+	},
+	node.HardwareUsageBehavior: {
+		Type:  bInvoke,
+		Short: "Get hardware usage",
+		Long: `Invokes the /dms/node/hardware/usage behavior on an actor
 
-		res, err := selectPrompt("Select GPU", gpuPromptItems)
-		if err != nil {
-			return fmt.Errorf("could not select GPU: %w", err)
-		}
+This behavior retrieves the hardware usage of the system.
 
-		vramValidator := func(input string) error {
-			if _, err := strconv.ParseFloat(input, 64); err != nil {
-				return fmt.Errorf("invalid input: %w", err)
+Examples:
+
+	nunet actor cmd --context user /dms/node/hardware/usage`,
+	},
+	node.CapListBehavior: {
+		Type:    bInvoke,
+		Short:   "List capabilities",
+		Payload: func() any { return &node.CapListRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.CapListRequest)
+			cmd.Flags().StringVarP(&p.Context, "context", "c", "", "context name")
+		},
+		Long: `Invokes the /dms/cap/list behavior on an actor
+
+This behavior retrieves a list of capabilities available on the node.
+
+Examples:
+  nunet actor cmd --context user /dms/cap/list`,
+	},
+	node.CapAnchorBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &CapAnchorRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CapAnchorRequestCmd)
+			cmd.Flags().BoolVarP(&p.Root, "root", "", false, "add root anchor")
+			cmd.Flags().BoolVarP(&p.Require, "require", "", false, "add require anchor")
+			cmd.Flags().BoolVarP(&p.Provide, "provide", "", false, "add provide anchor")
+			cmd.Flags().BoolVarP(&p.Revoke, "revoke", "", false, "add revoke anchor")
+			cmd.Flags().StringVarP(&p.Data, "data", "", "", "capability token or DID to anchor")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*CapAnchorRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
 			}
-			return nil
-		}
-		for _, gpuName := range res {
-			input, err := prompt("Enter VRAM in GB", vramValidator)
-			if err != nil {
-				return fmt.Errorf("could not prompt for VRAM: %w", err)
+
+			result := &node.CapAnchorRequest{}
+			switch {
+			case req.Root:
+				root, err := did.FromString(req.Data)
+				if err != nil {
+					return nil, err
+				}
+				result.Root = append(result.Root, root)
+
+			case req.Require:
+				var token ucan.Token
+				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
+					return nil, err
+				}
+				result.Require.Tokens = append(result.Require.Tokens, &token)
+
+			case req.Provide:
+				var token ucan.Token
+				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
+					return nil, err
+				}
+				result.Provide.Tokens = append(result.Provide.Tokens, &token)
+
+			case req.Revoke:
+				var token ucan.Token
+				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
+					return nil, err
+				}
+				result.Revoke.Tokens = append(result.Revoke.Tokens, &token)
+
 			}
 
-			vram, err := strconv.ParseFloat(input, 64)
-			if err != nil {
-				return fmt.Errorf("could not parse VRAM: %w", err)
-			}
+			return req, nil
+		},
+		Short: "Add capability anchors",
+		Long: `Invokes the /dms/cap/anchor behavior on an actor
 
-			gpu := gpuMap[gpuName]
-			gpu.VRAM = types.ConvertGBToBytes(vram)
-			p.Config.OnboardedResources.GPUs = append(p.Config.OnboardedResources.GPUs, gpu)
-		}
-	} else {
-		fmt.Println("No GPUs found. Skipping GPU selection.")
-	}
+This behavior anchors capabilities on the node.
 
-	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
-	return nil
+Examples:
+
+  nunet actor cmd --context user /dms/cap/anchor --root did
+  nunet actor cmd --context user /dms/cap/anchor --require token
+  nunet actor cmd --context user /dms/cap/anchor --provide token
+  nunet actor cmd --context user /dms/cap/anchor --revoke token`,
+	},
 }

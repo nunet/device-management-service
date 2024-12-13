@@ -9,17 +9,19 @@
 package docker
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/spf13/afero"
+
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -31,6 +33,7 @@ type executionHandler struct {
 	// provided by the executor
 	ID     string
 	client *Client // Docker client for container management.
+	fs     afero.Afero
 
 	// meta data about the task
 	jobID       string
@@ -44,7 +47,12 @@ type executionHandler struct {
 	running  *atomic.Bool // Indicates if the container is currently running.
 
 	// result of the execution
-	result *types.ExecutionResult
+	result              *types.ExecutionResult
+	persistLogsDuration time.Duration
+
+	// log files
+	stdoutFile afero.File
+	stderrFile afero.File
 
 	// TTY setting
 	TTYEnabled bool // Indicates if TTY is enabled for the container.
@@ -60,7 +68,7 @@ func (h *executionHandler) active() bool {
 
 // run starts the container and handles its execution lifecycle.
 func (h *executionHandler) run(ctx context.Context) {
-	endTrace := observability.StartTrace("docker_execution_handler_run_duration")
+	endTrace := observability.StartTrace(ctx, "docker_execution_handler_run_duration")
 	defer endTrace()
 
 	h.running.Store(true)
@@ -70,7 +78,16 @@ func (h *executionHandler) run(ctx context.Context) {
 		}
 		h.running.Store(false)
 		close(h.waitCh)
+
+		h.handleDeletionOfLogFiles(h.persistLogsDuration)
 	}()
+
+	if err := h.prepareLogFiles(); err != nil {
+		err = fmt.Errorf("failed to create execution log files: %v", err)
+		log.Errorw("docker_execution_handler_run_failure", "error", err)
+		h.result = types.NewFailedExecutionResult(err)
+		return
+	}
 
 	if err := h.client.StartContainer(ctx, h.containerID); err != nil {
 		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start container: %v", err))
@@ -84,7 +101,57 @@ func (h *executionHandler) run(ctx context.Context) {
 	var containerError error
 	var containerExitStatusCode int64
 
-	// Wait for the container to finish or for an execution error.
+	// Start streaming logs before waiting for container exit
+	stdoutPipe, stderrPipe, logsErr := h.client.FollowLogs(ctx, h.containerID)
+	if logsErr != nil {
+		followError := fmt.Errorf("failed to follow container logs: %w", logsErr)
+		log.Errorw("docker_execution_handler_follow_logs_failure", "error", logsErr)
+		h.result = &types.ExecutionResult{
+			ExitCode: int(containerExitStatusCode),
+			ErrorMsg: followError.Error(),
+		}
+		return
+	}
+
+	// Create channels to signal when log copying is done
+	stdoutDone := make(chan bool)
+	stderrDone := make(chan bool)
+
+	// Start copying stdout in background
+	go func() {
+		defer close(stdoutDone)
+		defer func() {
+			if h.stdoutFile != nil {
+				err := h.stdoutFile.Close()
+				if err != nil {
+					log.Warnf("Error closing stdout file: %v", err)
+				}
+			}
+		}()
+
+		if _, err := io.Copy(h.stdoutFile, stdoutPipe); err != nil {
+			log.Warnf("Error copying stdout: %v", err)
+		}
+	}()
+
+	// Start copying stderr in background
+	go func() {
+		defer close(stderrDone)
+		defer func() {
+			if h.stderrFile != nil {
+				err := h.stderrFile.Close()
+				if err != nil {
+					log.Warnf("Error closing stderr file: %v", err)
+				}
+			}
+		}()
+
+		if _, err := io.Copy(h.stderrFile, stderrPipe); err != nil {
+			log.Warnf("Error copying stderr: %v", err)
+		}
+	}()
+
+	// Wait for container exit status while logs are being copied
 	statusCh, errCh := h.client.WaitContainer(ctx, h.containerID)
 	select {
 	case status := <-ctx.Done():
@@ -119,44 +186,35 @@ func (h *executionHandler) run(ctx context.Context) {
 		}
 		if exitStatus.Error != nil {
 			containerError = errors.New(exitStatus.Error.Message)
+			h.result = &types.ExecutionResult{
+				ExitCode: int(containerExitStatusCode),
+				ErrorMsg: containerError.Error(),
+			}
+			log.Errorw("docker_execution_handler_container_error", "executionID", h.executionID)
+			return
 		}
 	}
 
-	// Follow container logs to capture stdout and stderr.
-	stdoutPipe, stderrPipe, logsErr := h.client.FollowLogs(ctx, h.containerID)
-	if logsErr != nil {
-		followError := fmt.Errorf("failed to follow container logs: %w", logsErr)
-		if containerError != nil {
-			h.result = &types.ExecutionResult{
-				ExitCode: int(containerExitStatusCode),
-				ErrorMsg: fmt.Sprintf(
-					"container error: '%s'. logs error: '%s'",
-					containerError,
-					followError,
-				),
-			}
-		} else {
-			h.result = &types.ExecutionResult{
-				ExitCode: int(containerExitStatusCode),
-				ErrorMsg: followError.Error(),
-			}
-		}
-		log.Errorw("docker_execution_handler_follow_logs_failure", "error", logsErr)
-		return
-	}
-
-	// Initialize the result with the exit status code.
+	// Initialize the result with the exit status code
 	h.result = types.NewExecutionResult(int(containerExitStatusCode))
 
-	// Capture the logs based on the TTY setting.
-	if h.TTYEnabled {
-		// TTY combines stdout and stderr, read from stdoutPipe only.
-		h.result.STDOUT, _ = bufio.NewReader(stdoutPipe).ReadString('\x00') // EOF delimiter
+	// Wait for log copying to complete
+	<-stdoutDone
+	<-stderrDone
+
+	// Read the complete logs for the result
+	if stdout, err := os.ReadFile(filepath.Join(h.resultsDir, "stdout.log")); err == nil {
+		h.result.STDOUT = string(stdout)
 	} else {
-		// Read from stdout and stderr separately.
-		h.result.STDOUT, _ = bufio.NewReader(stdoutPipe).ReadString('\x00') // EOF delimiter
-		h.result.STDERR, _ = bufio.NewReader(stderrPipe).ReadString('\x00')
+		log.Errorf("failed to read stdout logs file and retrieve logs: %v", err)
 	}
+
+	if stderr, err := os.ReadFile(filepath.Join(h.resultsDir, "stderr.log")); err == nil {
+		h.result.STDERR = string(stderr)
+	} else {
+		log.Errorf("failed to read stderr logs file and retrieve logs: %v", err)
+	}
+
 	log.Infow("docker_execution_handler_run_logs_success", "executionID", h.executionID)
 }
 
@@ -172,7 +230,7 @@ func (h *executionHandler) resume(ctx context.Context) error {
 
 // kill sends a stop signal to the container.
 func (h *executionHandler) kill(ctx context.Context) error {
-	endTrace := observability.StartTrace("docker_execution_handler_kill_duration")
+	endTrace := observability.StartTrace(ctx, "docker_execution_handler_kill_duration")
 	defer endTrace()
 
 	timeout := int(DestroyTimeout)
@@ -190,11 +248,11 @@ func (h *executionHandler) kill(ctx context.Context) error {
 
 // destroy cleans up the container and its associated resources.
 func (h *executionHandler) destroy(timeout time.Duration) error {
-	endTrace := observability.StartTrace("docker_execution_handler_destroy_duration")
-	defer endTrace()
-
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	endTrace := observability.StartTrace(ctx, "docker_execution_handler_destroy_duration")
+	defer endTrace()
 
 	// stop the container
 	if err := h.kill(ctx); err != nil {
@@ -207,6 +265,7 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 		return err
 	}
 
+	// remove init scripts
 	err := os.RemoveAll(initScriptsBaseDir + h.executionID)
 	if err != nil {
 		return err
@@ -231,7 +290,7 @@ func (h *executionHandler) outputStream(
 	ctx context.Context,
 	request types.LogStreamRequest,
 ) (io.ReadCloser, error) {
-	endTrace := observability.StartTrace("docker_execution_handler_output_stream_duration")
+	endTrace := observability.StartTrace(ctx, "docker_execution_handler_output_stream_duration")
 	defer endTrace()
 
 	since := "1" // Default to the start of UNIX time to get all logs.
@@ -285,4 +344,43 @@ func (h *executionHandler) status(ctx context.Context) (types.ExecutionStatus, e
 	default:
 		return types.ExecutionStatusFailed, fmt.Errorf("unknown container status: %s", info.State.Status)
 	}
+}
+
+// prepareLogFiles creates/opens the log files in the results directory
+func (h *executionHandler) prepareLogFiles() error {
+	log.Debug("preparing log files")
+	if err := os.MkdirAll(h.resultsDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create results directory: %w", err)
+	}
+
+	var err error
+	h.stdoutFile, err = h.fs.OpenFile(filepath.Join(h.resultsDir, "stdout.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to open stdout file: %w", err)
+	}
+	log.Debugf("stdout saved to: %s", filepath.Join(h.resultsDir, "stdout.log"))
+
+	if !h.TTYEnabled {
+		h.stderrFile, err = h.fs.OpenFile(filepath.Join(h.resultsDir, "stderr.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			h.stdoutFile.Close()
+			return fmt.Errorf("failed to open stderr file: %w", err)
+		}
+		log.Debugf("stderr saved to: %s", filepath.Join(h.resultsDir, "stderr.log"))
+	}
+
+	return nil
+}
+
+// handleDeletionOfLogFiles closes the log files
+func (h *executionHandler) handleDeletionOfLogFiles(after time.Duration) {
+	go func() {
+		log.Debugf("deleting log files after %s", after)
+		<-time.After(after)
+		log.Debug("closing log files")
+		err := h.fs.RemoveAll(h.resultsDir)
+		if err != nil {
+			log.Errorf("failed to remove log files: %v", err)
+		}
+	}()
 }

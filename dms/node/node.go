@@ -17,16 +17,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/executor"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -70,17 +73,17 @@ type Node struct {
 	allocations map[string]*jobs.Allocation
 	running     int32
 
+	orchestratorRepo  repositories.OrchestratorView
 	geoip             types.GeoIPLocator
 	hostLocation      HostGeolocation
 	portConfig        PortConfig
 	portAllocator     *PortAllocator
 	commitedResources map[string]*bidState
 
-	// TODO: we may handle the following differently.
-	// We may have other kinds of constraints that are not related to edge, resources or locations
-	// What we need is a configuration file for compute providers where they might set their
-	// preferences
-	allowPrivilegedDocker bool
+	dmsConfig config.Config
+	fs        afero.Afero
+
+	contractRepo repositories.Contract
 }
 
 type peerState struct {
@@ -92,7 +95,7 @@ type peerState struct {
 
 type bidState struct {
 	expire  time.Time
-	request jobs.BidRequest
+	request job_types.BidRequest
 	ports   []int
 }
 
@@ -113,14 +116,16 @@ type PortConfig struct {
 }
 
 // New creates a new node, attaches an actor to the node.
-func New(onboarder *onboarding.Onboarding,
+func New(cfg config.Config, fs afero.Afero,
+	onboarder *onboarding.Onboarding,
 	rootCap ucan.CapabilityContext,
 	hostID string, net network.Network,
 	resourceManager types.ResourceManager,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
+	orchestratorRepo repositories.OrchestratorView,
 	geoip types.GeoIPLocator, hostLocation HostGeolocation, portConfig PortConfig,
-	allowPrivilegedDocker bool,
+	contractRepo repositories.Contract,
 ) (*Node, error) {
 	if onboarder == nil {
 		return nil, errors.New("onboarder is nil")
@@ -173,7 +178,7 @@ func New(onboarder *onboarding.Onboarding,
 		return nil, fmt.Errorf("failed to create security context: %w", err)
 	}
 
-	nodeActor, err := createActor(rootSec, actor.NewRateLimiter(actor.DefaultRateLimiterConfig()), hostID, "root", net, scheduler)
+	nodeActor, err := createActor(rootSec, actor.NewRateLimiter(actor.DefaultRateLimiterConfig()), hostID, "root", net, actor.Handle{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node actor: %w", err)
 	}
@@ -181,27 +186,30 @@ func New(onboarder *onboarding.Onboarding,
 	ctx, cancel := context.WithCancel(context.Background())
 
 	n := &Node{
-		hostID:                hostID,
-		network:               net,
-		bids:                  make(map[string]*bidState),
-		deployments:           make(map[string]*jobs.Orchestrator),
-		allocations:           make(map[string]*jobs.Allocation),
-		peers:                 make(map[peer.ID]*peerState),
-		resourceManager:       resourceManager,
-		hardware:              hardware,
-		actor:                 nodeActor,
-		rootCap:               rootCap,
-		scheduler:             scheduler,
-		onboarder:             onboarder,
-		executors:             make(map[string]executorMetadata),
-		ctx:                   ctx,
-		cancel:                cancel,
-		geoip:                 geoip,
-		hostLocation:          hostLocation,
-		portConfig:            portConfig,
-		portAllocator:         NewPortAllocator(portConfig),
-		commitedResources:     make(map[string]*bidState),
-		allowPrivilegedDocker: allowPrivilegedDocker,
+		hostID:            hostID,
+		network:           net,
+		bids:              make(map[string]*bidState),
+		deployments:       make(map[string]*jobs.Orchestrator),
+		allocations:       make(map[string]*jobs.Allocation),
+		peers:             make(map[peer.ID]*peerState),
+		resourceManager:   resourceManager,
+		hardware:          hardware,
+		actor:             nodeActor,
+		rootCap:           rootCap,
+		scheduler:         scheduler,
+		onboarder:         onboarder,
+		executors:         make(map[string]executorMetadata),
+		ctx:               ctx,
+		cancel:            cancel,
+		orchestratorRepo:  orchestratorRepo,
+		geoip:             geoip,
+		hostLocation:      hostLocation,
+		portConfig:        portConfig,
+		portAllocator:     NewPortAllocator(portConfig),
+		commitedResources: make(map[string]*bidState),
+		dmsConfig:         cfg,
+		fs:                fs,
+		contractRepo:      contractRepo,
 	}
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
@@ -276,6 +284,9 @@ func New(onboarder *onboarding.Onboarding,
 		DeploymentListBehavior: {
 			fn: n.handleDeploymentList,
 		},
+		DeploymentLogsBehavior: {
+			fn: n.handleDeploymentLogs,
+		},
 		DeploymentStatusBehavior: {
 			fn: n.handleDeploymentStatus,
 		},
@@ -297,29 +308,38 @@ func New(onboarder *onboarding.Onboarding,
 		jobs.RevertDeploymentBehavior: {
 			fn: n.handleRevertDeployment,
 		},
+		jobs.SubnetCreateBehavior.Static: {
+			fn: n.handleSubnetCreate,
+		},
+		jobs.SubnetDestroyBehavior.Static: {
+			fn: n.handleSubnetDestroy,
+		},
+		ResourcesAllocatedBehavior: {
+			fn: n.handleAllocatedResources,
+		},
+		ResourcesFreeBehavior: {
+			fn: n.handleFreeResources,
+		},
+		ResourcesOnboardedBehavior: {
+			fn: n.handleOnboardedResources,
+		},
+		LoggerConfigBehavior: {
+			fn: n.handleLoggerConfig,
+		},
+		HardwareUsageBehavior: {
+			fn: n.handleHardwareUsage,
+		},
+		CapListBehavior: {
+			fn: n.handleCapList,
+		},
+		CapAnchorBehavior: {
+			fn: n.handleCapAnchor,
+		},
 		jobs.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,
 		},
 		jobs.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
-		},
-		jobs.SubnetCreateBehavior: {
-			fn: n.handleSubnetCreate,
-		},
-		jobs.SubnetDestroyBehavior: {
-			fn: n.handleSubnetDestroy,
-		},
-		AllocatedResourcesBehavior: {
-			fn: n.getAllocatedResources,
-		},
-		FreeResourcesBehavior: {
-			fn: n.getFreeResources,
-		},
-		OnboardedResourcesBehavior: {
-			fn: n.getOnboardedResources,
-		},
-		LoggerConfigBehavior: {
-			fn: n.handleLoggerConfig,
 		},
 	}
 	for behavior, handler := range dmsBehaviors {
@@ -342,6 +362,19 @@ func New(onboarder *onboarding.Onboarding,
 	return n, nil
 }
 
+// GetBidRequests returns the bid requests for the node.
+func (n *Node) GetBidRequests() []jobs.BidRequest {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	reqs := []jobs.BidRequest{}
+	for _, v := range n.bids {
+		reqs = append(reqs, v.request)
+	}
+
+	return reqs
+}
+
 // GetAllocation gets an allocation by id.
 func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
 	n.allocmx.Lock()
@@ -353,6 +386,20 @@ func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
 	}
 
 	return alloc, nil
+}
+
+// GetAllocations returns a list of allocations in the node.
+func (n *Node) GetAllocations() []*jobs.Allocation {
+	n.allocmx.Lock()
+	defer n.allocmx.Unlock()
+
+	allAllocs := []*jobs.Allocation{}
+
+	for _, v := range n.allocations {
+		allAllocs = append(allAllocs, v)
+	}
+
+	return allAllocs
 }
 
 // Start node
@@ -434,7 +481,7 @@ func (n *Node) broadcastScore(p peer.ID) float64 {
 }
 
 func (n *Node) peerConnected(p peer.ID) {
-	log.Debugf("peer connected: %s", p)
+	logConns.Debugf("peer connected: %s", p)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -448,7 +495,7 @@ func (n *Node) peerConnected(p peer.ID) {
 }
 
 func (n *Node) peerPreConnected(p peer.ID, protos []protocol.ID, conns int) {
-	log.Debugf("peer preconnected: %s %s (%d)", p, protos, conns)
+	logConns.Debugf("peer preconnected: %s %s (%d)", p, protos, conns)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -464,7 +511,7 @@ func (n *Node) peerPreConnected(p peer.ID, protos []protocol.ID, conns int) {
 }
 
 func (n *Node) peerIdentified(p peer.ID, protos []protocol.ID) {
-	log.Debugf("peer identified: %s %s", p, protos)
+	logConns.Debugf("peer identified: %s %s", p, protos)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -485,7 +532,7 @@ func (n *Node) peerIdentified(p peer.ID, protos []protocol.ID) {
 }
 
 func (n *Node) peerDisconnected(p peer.ID) {
-	log.Debugf("peer disconnected: %s", p)
+	logConns.Debugf("peer disconnected: %s", p)
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -557,7 +604,7 @@ func (n *Node) sayHello(p peer.ID) {
 		return
 	}
 
-	log.Debugf("saying hello to %s", handle.Address.HostID)
+	logConns.Debugf("saying hello to %s", handle.Address.HostID)
 	replyCh, err := n.actor.Invoke(msg)
 	if err != nil {
 		n.mx.Lock()
@@ -570,7 +617,7 @@ func (n *Node) sayHello(p peer.ID) {
 			}
 		}
 		n.mx.Unlock()
-		log.Debugf("error invoking hello: %s", err)
+		logConns.Debugf("error invoking hello: %s", err)
 		return
 	}
 
@@ -600,25 +647,24 @@ func (n *Node) sayHello(p peer.ID) {
 			}
 		}
 		n.mx.Unlock()
-		log.Debugf("hello timeout for %s", handle.Address.HostID)
+		logConns.Debugf("hello timeout for %s", handle.Address.HostID)
 	}
 }
 
 // Stop node
 func (n *Node) Stop() error {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
 	if !atomic.CompareAndSwapInt32(&n.running, 1, 0) {
 		return nil
 	}
 
+	n.mx.Lock()
 	// stop all allocations
 	for k, alloc := range n.allocations {
 		if err := alloc.Stop(n.ctx); err != nil {
 			log.Warnf("error stopping allocation %s: %err", k, err)
 		}
 	}
+	n.mx.Unlock()
 
 	if err := n.saveDeployments(); err != nil {
 		log.Errorf("error saving active deployments: %s", err)
@@ -666,29 +712,60 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	return e, nil
 }
 
-func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
-	allocHandles := make(map[string]actor.Handle, len(allocations))
-	for allocationID, config := range allocations {
+func (n *Node) registerDynamicBehaviors(ensembleID string) error {
+	dmsBehaviors := map[string]struct {
+		fn   func(actor.Envelope)
+		opts []actor.BehaviorOption
+	}{
+		fmt.Sprintf(jobs.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetCreate,
+		},
+		fmt.Sprintf(jobs.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetDestroy,
+		},
+	}
+	for behavior, handler := range dmsBehaviors {
+		if err := n.actor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
+			return fmt.Errorf("adding %s behavior: %w", behavior, err)
+		}
+	}
+	return nil
+}
+
+func (n *Node) createAllocations(
+	orchestrator did.DID,
+	ensembleID string,
+	allocations map[string]jobs.AllocationDeploymentConfig,
+	supervisor actor.Handle,
+) (map[string]actor.Handle, error) {
+	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
+	allocationIDs := make([]string, 0, len(allocations))
+	for allocationName, config := range allocations {
+		allocationID := ensembleID + "_" + allocationName
 		if _, ok := n.allocations[allocationID]; ok {
+			log.Debugf("allocation %s already exists", allocationID)
 			continue
 		}
 
-		allocation, err := n.createAllocation(jobs.Job{
-			ID:               ensembleID,
-			Resources:        config.Resources,
-			Execution:        config.Execution,
-			ProvisionScripts: config.ProvisionScripts,
-		})
+		allocation, err := n.createAllocation(
+			allocationID,
+			jobs.Job{
+				Resources:        config.Resources,
+				Execution:        config.Execution,
+				ProvisionScripts: config.ProvisionScripts,
+			},
+			supervisor,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create allocation %s: %w", allocationID, err)
 		}
 
-		allocHandles[allocationID] = allocation.Actor.Handle()
+		allocHandlesByName[allocationName] = allocation.Actor.Handle()
+		allocationIDs = append(allocationIDs, allocation.ID)
 
 		// node grants subnet create/destroy caps to the orchestrator
-		if err := n.grantAllocationCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
-			jobs.SubnetCreateBehavior,
-			jobs.SubnetDestroyBehavior,
+		if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+			ucan.Capability(fmt.Sprintf(jobs.EnsembleNamespace, ensembleID)),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant node caps: %w", err)
 		}
@@ -699,14 +776,8 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 			return nil, fmt.Errorf("failed to get did from id: %w", err)
 		}
 
-		if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
-			jobs.SubnetAddPeerBehavior,
-			jobs.SubnetRemovePeerBehavior,
-			jobs.SubnetAcceptPeerBehavior,
-			jobs.SubnetMapPortBehavior,
-			jobs.SubnetUnmapPortBehavior,
-			jobs.SubnetDNSAddRecordBehavior,
-			jobs.SubnetDNSRemoveRecordBehavior,
+		if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
+			ucan.Capability(jobs.AllocationNamespace),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant allocation caps: %w", err)
 		}
@@ -722,22 +793,15 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 					return
 				case <-ticker.C:
 					// node grants subnet create/destroy caps to the orchestrator
-					if err := n.grantAllocationCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
-						jobs.SubnetCreateBehavior,
-						jobs.SubnetDestroyBehavior,
+					if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+						ucan.Capability(fmt.Sprintf(jobs.EnsembleNamespace, ensembleID)),
 					}); err != nil {
 						log.Warnf("failed to grant node caps: %w", err)
 					}
 
 					// allocation grants subnet manage caps to the orchestrator
-					if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
-						jobs.SubnetAddPeerBehavior,
-						jobs.SubnetRemovePeerBehavior,
-						jobs.SubnetAcceptPeerBehavior,
-						jobs.SubnetMapPortBehavior,
-						jobs.SubnetUnmapPortBehavior,
-						jobs.SubnetDNSAddRecordBehavior,
-						jobs.SubnetDNSRemoveRecordBehavior,
+					if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
+						ucan.Capability(jobs.AllocationNamespace),
 					}); err != nil {
 						log.Warnf("failed to grant allocation caps: %w", err)
 					}
@@ -746,53 +810,54 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 		}()
 	}
 
-	return allocHandles, nil
+	// Start monitoring allocations
+	go n.monitorEnsembleAllocations(ensembleID, allocationIDs)
+
+	log.Infof("Finished createAllocations for ensembleID: %s", ensembleID)
+	return allocHandlesByName, nil
 }
 
 // createAllocation creates an allocation
-func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
-	// generate random keypair
-	priv, pub, err := crypto.GenerateKeyPair(crypto.Ed25519)
+func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor actor.Handle) (*jobs.Allocation, error) {
+	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate random keypair for allocation job %s: %w", job.ID, err)
+		return nil, fmt.Errorf("failed to generate keypair for allocation job %s: %w", allocationID, err)
 	}
 
-	security, err := actor.NewBasicSecurityContext(pub, priv, n.rootCap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create security context: %w", err)
-	}
-
-	allocationInbox, err := uuid.NewUUID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
-	}
-
-	allocActor, err := createActor(security, n.actor.Limiter(), n.hostID, allocationInbox.String(), n.network, n.scheduler)
+	allocActor, err := n.createChildActor(priv, allocationID, supervisor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
 
 	n.mx.Lock()
-	_, alreadyCommited := n.commitedResources[job.ID]
+	_, alreadyCommited := n.commitedResources[allocationID]
 
 	if !alreadyCommited {
-		return nil, fmt.Errorf("no committed resources for ensemble id: %s", job.ID)
+		n.mx.Unlock()
+		return nil, fmt.Errorf("no committed resources for ensemble id: %s", allocationID)
 	}
 
-	if err := n.resourceManager.UncommitResources(context.Background(), job.ID); err != nil {
-		log.Errorf("failed to uncommit resources for ensemble id: %s: %w", job.ID, err)
+	if err := n.resourceManager.UncommitResources(context.Background(), allocationID); err != nil {
+		log.Errorf("failed to uncommit resources for allocation: %s: %w", allocationID, err)
 	}
 
-	resourceAllocation := types.ResourceAllocation{JobID: job.ID, Resources: job.Resources}
+	resourceAllocation := types.ResourceAllocation{
+		AllocationID: allocationID,
+		Resources:    job.Resources,
+	}
 	err = n.resourceManager.AllocateResources(n.ctx, resourceAllocation)
 	if err != nil {
+		n.mx.Unlock()
 		return nil, fmt.Errorf("failed to allocate resources: %w", err)
 	}
 
-	delete(n.commitedResources, job.ID)
+	delete(n.commitedResources, allocationID)
 	n.mx.Unlock()
 
 	allocation, err := jobs.NewAllocation(
+		allocationID,
+		n.fs,
+		n.dmsConfig,
 		allocActor,
 		jobs.AllocationDetails{Job: job, NodeID: n.hostID},
 		n.resourceManager,
@@ -812,7 +877,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	return allocation, nil
 }
 
-func (n *Node) grantAllocationCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capability) error {
+func (n *Node) grantCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capability) error {
 	tokens, err := n.rootCap.Grant(
 		ucan.Delegate,
 		orchestrator,
@@ -826,7 +891,7 @@ func (n *Node) grantAllocationCaps(orchestrator did.DID, aud did.DID, caps []uca
 		return fmt.Errorf("failed to create granting token for audience %s caps: %w", aud, err)
 	}
 
-	err = n.rootCap.AddRoots([]did.DID{}, tokens, ucan.TokenList{})
+	err = n.rootCap.AddRoots([]did.DID{}, tokens, ucan.TokenList{}, ucan.TokenList{})
 	if err != nil {
 		return fmt.Errorf("failed to add roots for audience %s: %w", aud, err)
 	}
@@ -840,7 +905,7 @@ func (n *Node) updateAllocations(alloc *jobs.Allocation) {
 	n.allocmx.Unlock()
 }
 
-func (n *Node) commitDeployment(ensembleID string) error {
+func (n *Node) commitDeployment(ensembleID, allocationID string, resources types.Resources) error {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -853,19 +918,19 @@ func (n *Node) commitDeployment(ensembleID string) error {
 		return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
 	}
 
-	_, alreadyCommited := n.commitedResources[ensembleID]
+	_, alreadyCommited := n.commitedResources[allocationID]
 	if alreadyCommited {
 		return nil
 	}
 
 	if err := n.resourceManager.CommitResources(context.TODO(), types.CommittedResources{
-		JobID:     ensembleID,
-		Resources: bidState.request.V1.Resources,
+		AllocationID: allocationID,
+		Resources:    resources,
 	}); err != nil {
-		return fmt.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
+		return fmt.Errorf("failed to preallocate resources for ensemble id: %s: %w", allocationID, err)
 	}
 
-	n.commitedResources[ensembleID] = bidState
+	n.commitedResources[allocationID] = bidState
 
 	return nil
 }
@@ -874,21 +939,42 @@ func (n *Node) clearCommitedResources() {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
-	for ensembleID, v := range n.commitedResources {
+	for allocationID, v := range n.commitedResources {
 		// if allocation not found for this commitment and bid is expired release resources
-		_, allocFound := n.allocations[ensembleID]
+		_, allocFound := n.allocations[allocationID]
 		if !allocFound && time.Now().After(v.expire) {
-			if err := n.resourceManager.UncommitResources(context.Background(), ensembleID); err != nil {
-				log.Errorf("failed to preallocate resources for ensemble id: %s: %w", ensembleID, err)
+			if err := n.resourceManager.UncommitResources(context.Background(), allocationID); err != nil {
+				log.Errorf("failed to preallocate resources for ensemble id: %s: %w", allocationID, err)
 			}
-			delete(n.bids, ensembleID)
-			delete(n.commitedResources, ensembleID)
+			delete(n.bids, allocationID)
+			delete(n.commitedResources, allocationID)
 		}
 	}
 }
 
+// createChildActor creates a child actor using node's limiter, scheduler and network.
+func (n *Node) createChildActor(pvkey crypto.PrivKey, inbox string, supervisor actor.Handle) (*actor.BasicActor, error) {
+	security, err := actor.NewBasicSecurityContext(pvkey.GetPublic(), pvkey, n.rootCap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create security context: %w", err)
+	}
+
+	childActor, err := createActor(security, n.actor.Limiter(), n.hostID, inbox, n.network, supervisor)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create child actor: %w", err)
+	}
+
+	return childActor, nil
+}
+
 // createActor creates an actor.
-func createActor(sctx *actor.BasicSecurityContext, limiter actor.RateLimiter, hostID, inboxAddress string, net network.Network, scheduler *bt.Scheduler) (*actor.BasicActor, error) {
+func createActor(
+	sctx *actor.BasicSecurityContext,
+	limiter actor.RateLimiter,
+	hostID, inboxAddress string,
+	net network.Network,
+	supervisor actor.Handle,
+) (*actor.BasicActor, error) {
 	self := actor.Handle{
 		ID:  sctx.ID(),
 		DID: sctx.DID(),
@@ -897,7 +983,7 @@ func createActor(sctx *actor.BasicSecurityContext, limiter actor.RateLimiter, ho
 			InboxAddress: inboxAddress,
 		},
 	}
-	actor, err := actor.New(scheduler, net, sctx, limiter, actor.BasicActorParams{}, self)
+	actor, err := actor.New(supervisor, net, sctx, limiter, actor.BasicActorParams{}, self)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create actor: %w", err)
 	}

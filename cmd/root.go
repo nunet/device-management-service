@@ -11,13 +11,17 @@ package cmd
 import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/executor/docker"
 
 	"gitlab.com/nunet/device-management-service/cmd/actor"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-func newRootCmd(client *utils.HTTPClient, afs afero.Afero) *cobra.Command {
+// NewRootCMD returns the cmds
+func NewRootCMD(client *utils.HTTPClient, afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "nunet",
 		Short: "NuNet Device Management Service",
@@ -32,14 +36,20 @@ func newRootCmd(client *utils.HTTPClient, afs afero.Afero) *cobra.Command {
 			_ = cmd.Help()
 		},
 	}
-	cmd.AddCommand(newRunCmd())
-	cmd.AddCommand(newKeyCmd(afs))
-	cmd.AddCommand(cap.NewCapCmd(afs))
-	cmd.AddCommand(actor.NewActorCmd(client, afs))
-	cmd.AddCommand(newConfigCmd(afs.Fs))
+	cmd.AddCommand(newRunCmd(cfg))
+	cmd.AddCommand(newKeyCmd(afs, cfg))
+	cmd.AddCommand(cap.NewCapCmd(afs, cfg))
+	cmd.AddCommand(actor.NewActorCmd(client, afs, cfg))
+	cmd.AddCommand(newConfigCmd(afs.Fs, cfg))
 	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
-	cmd.AddCommand(newGPUCommand())
+
+	hardwareManager := hardware.NewHardwareManager()
+	dockerClient, err := docker.NewDockerClient()
+	if err != nil {
+		panic(err)
+	}
+	cmd.AddCommand(newGPUCommand(hardwareManager, dockerClient))
 	return cmd
 }

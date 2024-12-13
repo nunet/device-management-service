@@ -16,6 +16,12 @@ import (
 )
 
 const (
+	EnsembleNamespace   = "/dms/ensemble/%s"
+	AllocationNamespace = "/dms/allocation"
+	NodeNamespace       = "/dms/node"
+)
+
+const (
 	BidRequestTopic    = "/nunet/deployment"
 	BidRequestBehavior = "/dms/deployment/request"
 	BidRequestTimeout  = 5 * time.Second
@@ -29,22 +35,40 @@ const (
 	AllocationDeploymentBehavior = "/dms/deployment/allocate"
 	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
-	AllocationStartBehavior      = "/dms/deployment/start"
-	AllocationStartTimeout       = 5 * time.Second
+
+	AllocationStartBehavior    = "/dms/allocation/start"
+	AllocationRestartBehavior  = "/dms/allocation/restart"
+	AllocationGetLogsBehavior  = "/dms/allocation/logs"
+	AllocationStartTimeout     = 5 * time.Second
+	AllocationStopBehavior     = "/dms/allocation/stop"
+	AllocationStopTimeout      = 3 * time.Second
+	AllocationShutdownBehavior = "/dms/allocation/shutdown"
+	AllocationShutdownTimeout  = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 
 	MaxBidMultiplier = 8
+)
 
-	SubnetCreateBehavior          = "/dms/node/subnet/create"
-	SubnetDestroyBehavior         = "/dms/node/subnet/destroy"
-	SubnetAddPeerBehavior         = "/dms/node/subnet/add-peer"
-	SubnetRemovePeerBehavior      = "/dms/node/subnet/remove-peer"
-	SubnetAcceptPeerBehavior      = "/dms/node/subnet/accept-peer"
-	SubnetMapPortBehavior         = "/dms/node/subnet/map-port"
-	SubnetUnmapPortBehavior       = "/dms/node/subnet/unmap-port"
-	SubnetDNSAddRecordBehavior    = "/dms/node/subnet/dns/add-record"
-	SubnetDNSRemoveRecordBehavior = "/dms/node/subnet/dns/remove-record"
+var (
+	SubnetCreateBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/node/subnet/create",
+		Static:          NodeNamespace + "/subnet/create",
+	}
+	SubnetDestroyBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/node/subnet/destroy",
+		Static:          NodeNamespace + "/subnet/destroy",
+	}
+
+	RegisterHealthcheckBehavior = "/dms/actor/healthcheck/register"
+
+	SubnetAddPeerBehavior         = AllocationNamespace + "/subnet/add-peer"
+	SubnetRemovePeerBehavior      = AllocationNamespace + "/subnet/remove-peer"
+	SubnetAcceptPeerBehavior      = AllocationNamespace + "/subnet/accept-peer"
+	SubnetMapPortBehavior         = AllocationNamespace + "/subnet/map-port"
+	SubnetUnmapPortBehavior       = AllocationNamespace + "/subnet/unmap-port"
+	SubnetDNSAddRecordsBehavior   = AllocationNamespace + "/subnet/dns/add-records"
+	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
 )
 
 type VerifyEdgeConstraintRequest struct {
@@ -60,8 +84,10 @@ type VerifyEdgeConstraintResponse struct {
 }
 
 type CommitDeploymentRequest struct {
-	EnsembleID string
-	NodeID     string
+	EnsembleID     string
+	AllocationName string
+	NodeID         string
+	Resources      types.Resources
 }
 
 type CommitDeploymentResponse struct {
@@ -93,18 +119,33 @@ type RevertDeploymentMessage struct {
 	AllocationsIDs []string
 }
 
-type AllocationStartRequest struct{}
+type AllocationStartRequest struct {
+	SubnetIP    string
+	PortMapping map[int]int
+}
 
 type AllocationStartResponse struct {
 	OK    bool
 	Error string
 }
 
-type RestartAllocationRequest struct {
+type AllocationGetLogsRequest struct{}
+
+type AllocationGetLogsResponse struct {
+	Data  []byte
+	Error string
+}
+
+type AllocationShutdownRequest struct {
 	AllocationID string
 }
 
-type RestartAllocationResponse struct {
+type AllocationShutdownResponse struct {
+	OK    bool
+	Error string
+}
+
+type AllocationRestartResponse struct {
 	OK    bool
 	Error string
 }
@@ -141,6 +182,7 @@ type SubnetAddPeerResponse struct {
 }
 
 type SubnetRemovePeerRequest struct {
+	IP       string
 	SubnetID string
 	PeerID   string
 }
@@ -175,13 +217,13 @@ type SubnetMapPortResponse struct {
 	Error string
 }
 
-type SubnetDNSAddRecordRequest struct {
-	SubnetID   string
-	DomainName string
-	IP         string
+type SubnetDNSAddRecordsRequest struct {
+	SubnetID string
+	// map of domain name:ip
+	Records map[string]string
 }
 
-type SubnetDNSAddRecordResponse struct {
+type SubnetDNSAddRecordsResponse struct {
 	OK    bool
 	Error string
 }
@@ -206,6 +248,25 @@ type SubnetDNSRemoveRecordRequest struct {
 }
 
 type SubnetDNSRemoveRecordResponse struct {
+	OK    bool
+	Error string
+}
+
+type AllocationStopRequest struct {
+	AllocationID string
+}
+
+type AllocationStopResponse struct {
+	OK    bool
+	Error string
+}
+
+type RegisterHealthcheckRequest struct {
+	EnsembleID  string
+	HealthCheck types.HealthCheckManifest
+}
+
+type RegisterHealthcheckResponse struct {
 	OK    bool
 	Error string
 }

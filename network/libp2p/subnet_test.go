@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
 func TestSubnetCreate(t *testing.T) {
@@ -53,17 +54,17 @@ func TestSubnetAddRemovePeer(t *testing.T) {
 	assert.Equal(t, 1, len(peer1.subnets["subnet1"].ifaces))
 	assert.Equal(t, 1, len(peer1.subnets["subnet1"].info.rtable.All()))
 
-	ip, ok := peer1.subnets["subnet1"].info.rtable.Get(peer1.Host.ID())
+	ips, ok := peer1.subnets["subnet1"].info.rtable.Get(peer1.Host.ID())
 	require.True(t, ok)
 
-	assert.Equal(t, "10.0.0.2", ip)
+	assert.Equal(t, "10.0.0.2", ips[0])
 
 	peerID, ok := peer1.subnets["subnet1"].info.rtable.GetByIP("10.0.0.2")
 	require.True(t, ok)
 
 	assert.Equal(t, peer1.Host.ID(), peerID)
 
-	err = peer1.RemoveSubnetPeer("subnet1", peer1.Host.ID().String())
+	err = peer1.RemoveSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(peer1.subnets))
@@ -160,7 +161,7 @@ func TestSubnetAddRemoveDNSRecord(t *testing.T) {
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
-	err = peer1.AddSubnetDNSRecord("subnet1", "example.com.", "10.20.30.40")
+	err = peer1.AddSubnetDNSRecords("subnet1", map[string]string{"example.com.": "10.20.30.40"})
 	require.NoError(t, err)
 
 	<-time.After(3 * time.Second)
@@ -206,7 +207,7 @@ func TestSubnetDestroy(t *testing.T) {
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
 	require.NoError(t, err)
 
-	err = peer1.AddSubnetDNSRecord("subnet1", "example.com.", "10.20.30.40")
+	err = peer1.AddSubnetDNSRecords("subnet1", map[string]string{"example.com.": "10.20.30.40"})
 	require.NoError(t, err)
 
 	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
@@ -243,15 +244,6 @@ func TestSubnetDestroy(t *testing.T) {
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "0.0.0.0/0"))
-
-	<-time.After(15 * time.Second)
-
-	// // Command to list POSTROUTING rules in the nat table and grep for the port
-	// cmd = exec.Command("sh", "-c", "ifconfig | grep dms")
-	// op, err = cmd.CombinedOutput()
-	// require.NoError(t, err)
-	// fmt.Println("PPPPP", string(op))
-	// assert.True(t, 0 == len(strings.TrimSpace(string(op))))
 }
 
 func createPeer(t *testing.T, port int) *Libp2p { //nolint
@@ -259,7 +251,7 @@ func createPeer(t *testing.T, port int) *Libp2p { //nolint
 	peer1, err := New(peerConfig, afero.NewMemMapFs())
 
 	require.NoError(t, err)
-	require.NoError(t, peer1.Init())
+	require.NoError(t, peer1.Init(&config.Config{}))
 
 	return peer1
 }

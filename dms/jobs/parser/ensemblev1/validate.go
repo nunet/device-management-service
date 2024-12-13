@@ -10,19 +10,29 @@ package ensemblev1
 
 import (
 	"fmt"
+	"math"
+	"strings"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/validate"
+	cutils "gitlab.com/nunet/device-management-service/utils/convert"
+	vutils "gitlab.com/nunet/device-management-service/utils/validate"
 )
 
-// NewNuNetValidator creates a new validator for the NuNet configuration.
+// NewEnsembleV1Validator creates a new validator for the NuNet configuration.
 func NewEnsembleV1Validator() validate.Validator {
 	return validate.NewValidator(
 		map[tree.Path]validate.ValidatorFunc{
-			"V1":               ValidateSpec,
-			"V1.allocations.*": ValidateAllocation,
-			"V1.edges.[]":      ValidateEdgeConstraints,
+			"V1":                           ValidateSpec,
+			"V1.allocations.*":             ValidateAllocation,
+			"V1.edges.[]":                  ValidateEdgeConstraints,
+			"V1.nodes.*":                   ValidateNode,
+			"V1.supervisor":                ValidateSupervisor,
+			"V1.supervisor.children.[]":    ValidateSupervisor,
+			"V1.allocations.*.resources":   ValidateResources,
+			"V1.allocations.*.execution":   ValidateExecution,
+			"V1.allocations.*.healthcheck": ValidateHealthCheck,
 		},
 	)
 }
@@ -34,32 +44,576 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 		return fmt.Errorf("invalid spec configuration: %v", data)
 	}
 
-	// TODO: Specify and complete validation - Dawit Abate
-
-	// Check if the allocations map is present and not empty.
-	if spec["allocations"] == nil || len(spec["allocations"].(map[string]any)) == 0 {
-		return fmt.Errorf("allocations list is required")
+	// Check if the allocations map is present and not empty
+	allocs, ok := spec["allocations"].(map[string]any)
+	if !ok || len(allocs) == 0 {
+		return fmt.Errorf("at least one allocation must be defined")
 	}
+
+	// All allocation names must be fully qualified domain names
+	for allocName := range allocs {
+		if !vutils.IsDNSNameValid(allocName) {
+			return fmt.Errorf("invalid allocation name, must be a valid hostname: %s", allocName)
+		}
+	}
+
+	// Check if nodes are defined when edge_constraints are present
+	if edges, ok := spec["edges"].([]any); ok && len(edges) > 0 {
+		if spec["nodes"] == nil {
+			return fmt.Errorf("nodes must be defined when edge_constraints are present")
+		}
+	}
+
 	return nil
 }
 
 // ValidateAllocation checks the allocation configuration.
-func ValidateAllocation(_ *map[string]any, data any, _ tree.Path) error {
+func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
 	allocation, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid allocation configuration: %v", data)
 	}
 
-	// TODO: Specify and complete validation - Dawit Abate
-
-	// Check if the allocation has an execution.
+	// Check if the allocation has an execution
 	if allocation["execution"] == nil {
 		return fmt.Errorf("allocation must have an execution")
 	}
+
+	// Check if the allocation has resources
+	if allocation["resources"] == nil {
+		return fmt.Errorf("allocation must have resources")
+	}
+
+	// Validate executor type matches execution type
+	executor, ok := allocation["executor"].(string)
+	if !ok || executor == "" {
+		return fmt.Errorf("allocation must have an executor")
+	}
+
+	execution, ok := allocation["execution"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid execution configuration")
+	}
+
+	execType, ok := execution["type"].(string)
+	if !ok || execType == "" {
+		return fmt.Errorf("execution must have a type")
+	}
+
+	if executor != execType {
+		return fmt.Errorf("allocation executor type (%s) must match execution type (%s)", executor, execType)
+	}
+
+	// Validate DNS name if present
+	if dnsName, ok := allocation["dns_name"].(string); ok {
+		if dnsName == "" {
+			return fmt.Errorf("dns_name cannot be empty if specified")
+		}
+		// Add basic DNS name format validation
+		if !vutils.IsDNSNameValid(dnsName) {
+			return fmt.Errorf("invalid dns_name format: %s", dnsName)
+		}
+	}
+
+	// Validate keys reference if specified
+	if keys, ok := allocation["keys"].([]any); ok && len(keys) > 0 {
+		rootKeys, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.keys"))
+		if err != nil || rootKeys == nil {
+			return fmt.Errorf("keys must be defined when referenced in allocation")
+		}
+		rootKeysMap, ok := rootKeys.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid keys configuration")
+		}
+		for _, key := range keys {
+			keyStr, ok := key.(string)
+			if !ok {
+				return fmt.Errorf("invalid key reference: %v", key)
+			}
+			if _, exists := rootKeysMap[keyStr]; !exists {
+				return fmt.Errorf("referenced key '%s' not found", keyStr)
+			}
+		}
+	}
+
+	// Validate provision scripts if specified
+	if provision, ok := allocation["provision"].([]any); ok && len(provision) > 0 {
+		rootScripts, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.scripts"))
+		if err != nil || rootScripts == nil {
+			return fmt.Errorf("scripts must be defined when provision is defined")
+		}
+		rootScriptsMap, ok := rootScripts.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid scripts configuration")
+		}
+		for _, script := range provision {
+			scriptStr, ok := script.(string)
+			if !ok {
+				return fmt.Errorf("invalid script reference: %v", script)
+			}
+			if _, exists := rootScriptsMap[scriptStr]; !exists {
+				return fmt.Errorf("referenced script '%s' not found", scriptStr)
+			}
+		}
+	}
+
 	return nil
 }
 
-func ValidateEdgeConstraints(root *map[string]any, data any, p tree.Path) error {
+// ValidateResources validates the resource configuration
+func ValidateResources(_ *map[string]any, data any, _ tree.Path) error {
+	resources, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid resources configuration: %v", data)
+	}
+
+	// Validate CPU (required)
+	cpu, ok := resources["cpu"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("resources must have cpu configuration")
+	}
+
+	// Handle cores as any number type and convert to positive integer
+	cores, ok := cpu["cores"]
+	if !ok {
+		return fmt.Errorf("cpu must have cores value")
+	}
+
+	coresFloat, err := cutils.ToPositiveFloat64(cores, "cpu cores")
+	if err != nil {
+		return err
+	}
+	cpu["cores"] = int(math.Ceil(coresFloat))
+
+	// Optional CPU fields
+	if arch, ok := cpu["architecture"].(string); ok && arch == "" {
+		return fmt.Errorf("cpu architecture cannot be empty if specified")
+	}
+
+	if freq, ok := cpu["clock_speed"]; ok {
+		if _, err := cutils.ToPositiveFloat64(freq, "cpu clock_speed"); err != nil {
+			return err
+		}
+	}
+
+	// Validate RAM (required)
+	ram, ok := resources["ram"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("resources must have ram configuration")
+	}
+
+	// Validate RAM size
+	size, ok := ram["size"]
+	if !ok {
+		return fmt.Errorf("ram must have size value")
+	}
+
+	sizeFloat, err := cutils.ToPositiveFloat64(size, "ram size")
+	if err != nil {
+		return err
+	}
+	ram["size"] = sizeFloat
+
+	// Optional RAM speed
+	if speed, ok := ram["clock_speed"]; ok {
+		speedFloat, err := cutils.ToPositiveFloat64(speed, "ram clock_speed")
+		if err != nil {
+			return err
+		}
+		ram["clock_speed"] = uint64(speedFloat)
+	}
+
+	// Validate disk (required)
+	disk, ok := resources["disk"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("resources must have disk configuration")
+	}
+
+	// Validate disk size
+	diskSize, ok := disk["size"]
+	if !ok {
+		return fmt.Errorf("disk must have size value")
+	}
+
+	diskSizeFloat, err := cutils.ToPositiveFloat64(diskSize, "disk size")
+	if err != nil {
+		return err
+	}
+	disk["size"] = diskSizeFloat
+
+	// Optional disk type
+	if diskType, ok := disk["type"].(string); ok && diskType == "" {
+		return fmt.Errorf("disk type cannot be empty if specified")
+	}
+
+	// Optional GPUs
+	if gpusRaw, ok := resources["gpus"]; ok {
+		gpus, ok := gpusRaw.([]any)
+		if !ok {
+			return fmt.Errorf("gpus must be an array")
+		}
+
+		for i, gpuRaw := range gpus {
+			gpu, ok := gpuRaw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("gpu at index %d is not a valid configuration", i)
+			}
+
+			// Validate GPU memory if specified
+			if memory, ok := gpu["memory"]; ok {
+				memoryFloat, err := cutils.ToPositiveFloat64(memory, fmt.Sprintf("gpu memory at index %d", i))
+				if err != nil {
+					return err
+				}
+				gpu["memory"] = memoryFloat
+			}
+
+			// Validate vendor if specified
+			if vendor, ok := gpu["vendor"].(string); ok && vendor == "" {
+				return fmt.Errorf("gpu vendor cannot be empty if specified at index %d", i)
+			}
+
+			// Validate model if specified
+			if model, ok := gpu["model"].(string); ok && model == "" {
+				return fmt.Errorf("gpu model cannot be empty if specified at index %d", i)
+			}
+		}
+	}
+
+	return nil
+}
+
+// ValidateNode checks the node configuration.
+func ValidateNode(root *map[string]any, data any, _ tree.Path) error {
+	node, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid node configuration: %v", data)
+	}
+
+	// Validate allocation references
+	if allocations, ok := node["allocations"].([]any); ok {
+		rootAllocs, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.allocations"))
+		if err != nil || rootAllocs == nil {
+			return fmt.Errorf("allocations must be defined when node is defined")
+		}
+		rootAllocsMap, ok := rootAllocs.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid allocations configuration")
+		}
+		for _, alloc := range allocations {
+			allocStr, ok := alloc.(string)
+			if !ok {
+				return fmt.Errorf("invalid allocation reference: %v", alloc)
+			}
+			if _, exists := rootAllocsMap[allocStr]; !exists {
+				return fmt.Errorf("referenced allocation '%s' not found", allocStr)
+			}
+		}
+	}
+
+	// Validate ports if specified
+	if ports, ok := node["ports"].([]any); ok {
+		for _, port := range ports {
+			portMap, ok := port.(map[string]any)
+			if !ok {
+				return fmt.Errorf("invalid port configuration: %v", port)
+			}
+
+			// Validate private port
+			if private, ok := portMap["private"].(int); !ok || private <= 0 {
+				return fmt.Errorf("port must have a valid private port number")
+			}
+
+			// Validate public port
+			if public, ok := portMap["public"].(int); ok && (public != 0 && public < 1025 || public > 65535) {
+				return fmt.Errorf("port must have a valid public port number between 1025 and 65535 if specified")
+			}
+
+			// Validate allocation reference
+			if alloc, ok := portMap["allocation"].(string); ok {
+				rootAllocs, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.allocations"))
+				if err != nil || rootAllocs == nil {
+					return fmt.Errorf("allocations must be defined when referenced in port")
+				}
+				rootAllocsMap, ok := rootAllocs.(map[string]any)
+				if !ok {
+					return fmt.Errorf("invalid allocations configuration")
+				}
+				if _, exists := rootAllocsMap[alloc]; !exists {
+					return fmt.Errorf("referenced allocation '%s' not found in port configuration", alloc)
+				}
+			}
+		}
+	}
+
+	// Validate location constraints if specified
+	if location, ok := node["location"].(map[string]any); ok {
+		if err := validateLocationConstraints(location); err != nil {
+			return fmt.Errorf("invalid location constraints: %v", err)
+		}
+	}
+
+	// Validate peer if specified
+	if peer, ok := node["peer"].(string); ok && peer == "" {
+		return fmt.Errorf("peer cannot be empty if specified")
+	}
+
+	return nil
+}
+
+// ValidateExecution checks the execution configuration.
+func ValidateExecution(_ *map[string]any, data any, _ tree.Path) error {
+	execution, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid execution configuration: %v", data)
+	}
+
+	// Check execution type
+	execType, ok := execution["type"].(string)
+	if !ok || execType == "" {
+		return fmt.Errorf("execution must have a type")
+	}
+
+	// Get params
+	params, ok := execution["params"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("execution must have params")
+	}
+
+	// Validate based on execution type
+	switch execType {
+	case "docker":
+		if err := validateDockerExecution(params); err != nil {
+			return err
+		}
+	case "firecracker":
+		if err := validateFirecrackerExecution(params); err != nil {
+			return err
+		}
+	case "null":
+		// No specific validation for null executor
+		return nil
+	default:
+		return fmt.Errorf("unsupported execution type: %s", execType)
+	}
+
+	return nil
+}
+
+// validateDockerExecution validates docker-specific execution configuration
+func validateDockerExecution(execution map[string]any) error {
+	// Validate image (required)
+	image, ok := execution["image"].(string)
+	if !ok || image == "" {
+		return fmt.Errorf("docker execution must have an image")
+	}
+
+	// Validate image format with a single regex
+	if !vutils.IsDockerImageValid(image) {
+		return fmt.Errorf("invalid docker image format: %s", image)
+	}
+
+	// Validate entrypoint if present
+	if entrypoint, ok := execution["entrypoint"].([]any); ok {
+		for i, entry := range entrypoint {
+			if _, ok := entry.(string); !ok {
+				return fmt.Errorf("docker entrypoint at index %d must be a string", i)
+			}
+		}
+	}
+
+	// Validate command if present
+	if cmd, ok := execution["cmd"].([]any); ok {
+		for i, c := range cmd {
+			if _, ok := c.(string); !ok {
+				return fmt.Errorf("docker command at index %d must be a string", i)
+			}
+		}
+	}
+
+	// Validate environment variables if present
+	if env, ok := execution["environment"].([]any); ok {
+		for i, e := range env {
+			envStr, ok := e.(string)
+			if !ok {
+				return fmt.Errorf("docker environment variable at index %d must be a string", i)
+			}
+			if envStr == "" {
+				return fmt.Errorf("docker environment variable at index %d cannot be empty", i)
+			}
+			// Verify format is KEY=VALUE
+			if !strings.Contains(envStr, "=") {
+				return fmt.Errorf("docker environment variable at index %d must be in KEY=VALUE format", i)
+			}
+			parts := strings.SplitN(envStr, "=", 2)
+			if parts[0] == "" {
+				return fmt.Errorf("docker environment variable key at index %d cannot be empty", i)
+			}
+			// Validate environment variable key format
+			if !vutils.IsEnvVarKeyValid(parts[0]) {
+				return fmt.Errorf("invalid environment variable key format at index %d: %s", i, parts[0])
+			}
+		}
+	}
+
+	// Validate working directory if present
+	if workDir, ok := execution["working_directory"].(string); ok && workDir == "" {
+		return fmt.Errorf("docker working directory cannot be empty if specified")
+	}
+
+	return nil
+}
+
+// validateFirecrackerExecution validates firecracker-specific execution configuration
+func validateFirecrackerExecution(execution map[string]any) error {
+	// Validate kernel image (required)
+	kernelImage, ok := execution["kernel_image"].(string)
+	if !ok || kernelImage == "" {
+		return fmt.Errorf("firecracker execution must have a kernel_image")
+	}
+
+	// Validate root file system (required)
+	rootFS, ok := execution["root_file_system"].(string)
+	if !ok || rootFS == "" {
+		return fmt.Errorf("firecracker execution must have a root_file_system")
+	}
+
+	// Validate kernel args if present
+	if kernelArgs, ok := execution["kernel_args"].(string); ok && kernelArgs == "" {
+		return fmt.Errorf("firecracker kernel_args cannot be empty if specified")
+	}
+
+	// Validate initrd if present
+	if initrd, ok := execution["initrd"].(string); ok && initrd == "" {
+		return fmt.Errorf("firecracker initrd cannot be empty if specified")
+	}
+
+	return nil
+}
+
+// ValidateSupervisor checks the supervisor configuration.
+func ValidateSupervisor(root *map[string]any, data any, _ tree.Path) error {
+	supervisor, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid supervisor configuration: %v", data)
+	}
+
+	// Validate strategy if specified
+	if strategy, ok := supervisor["strategy"].(string); ok {
+		if strategy == "" {
+			return fmt.Errorf("supervisor strategy cannot be empty if specified")
+		}
+		// Validate strategy is one of the allowed values
+		switch strategy {
+		case "OneForOne", "AllForOne", "RestForOne":
+			// valid strategies
+		default:
+			return fmt.Errorf("invalid supervisor strategy: %s", strategy)
+		}
+	}
+
+	// Validate allocations if specified
+	if allocations, ok := supervisor["allocations"].([]any); ok {
+		rootAllocs, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.allocations"))
+		if err != nil || rootAllocs == nil {
+			return fmt.Errorf("allocations must be defined when supervisor is defined")
+		}
+		rootAllocsMap, ok := rootAllocs.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid allocations configuration")
+		}
+		for _, alloc := range allocations {
+			allocStr, ok := alloc.(string)
+			if !ok {
+				return fmt.Errorf("invalid allocation reference: %v", alloc)
+			}
+			if _, exists := rootAllocsMap[allocStr]; !exists {
+				return fmt.Errorf("referenced allocation '%s' not found", allocStr)
+			}
+		}
+	}
+
+	// Validate children if specified - only check type since path validation will handle the rest
+	if children, ok := supervisor["children"].([]any); ok {
+		for i, child := range children {
+			if _, ok := child.(map[string]any); !ok {
+				return fmt.Errorf("invalid child supervisor at index %d: must be a map", i)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateLocationConstraints validates the location constraints configuration
+func validateLocationConstraints(location map[string]any) error {
+	// Validate accept locations if present
+	if accept, ok := location["accept"].([]any); ok {
+		for i, loc := range accept {
+			if err := validateLocation(loc, i); err != nil {
+				return fmt.Errorf("invalid accept location at index %d: %v", i, err)
+			}
+		}
+	}
+
+	// Validate reject locations if present
+	if reject, ok := location["reject"].([]any); ok {
+		for i, loc := range reject {
+			if err := validateLocation(loc, i); err != nil {
+				return fmt.Errorf("invalid reject location at index %d: %v", i, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateLocation validates a single location configuration
+func validateLocation(data any, _ int) error {
+	location, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("location must be a map")
+	}
+
+	// Region is required
+	region, ok := location["region"].(string)
+	if !ok || region == "" {
+		return fmt.Errorf("region is required and cannot be empty")
+	}
+
+	// Country is optional
+	if country, ok := location["country"].(string); ok && country == "" {
+		return fmt.Errorf("country cannot be empty if specified")
+	}
+
+	// City is optional but requires country if specified
+	if city, ok := location["city"].(string); ok {
+		if city == "" {
+			return fmt.Errorf("city cannot be empty if specified")
+		}
+		country, hasCountry := location["country"].(string)
+		if !hasCountry || country == "" {
+			return fmt.Errorf("country must be specified when city is provided")
+		}
+	}
+
+	// ASN is optional
+	if asn, ok := location["asn"].(uint); ok {
+		if asn <= 0 {
+			return fmt.Errorf("ASN must be positive if specified")
+		}
+	}
+
+	// ISP is optional
+	if isp, ok := location["isp"].(string); ok && isp == "" {
+		return fmt.Errorf("ISP cannot be empty if specified")
+	}
+
+	return nil
+}
+
+// ValidateEdgeConstraints checks the edge constraints configuration.
+func ValidateEdgeConstraints(root *map[string]any, data any, _ tree.Path) error {
 	edgeConstraints, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid edge constraints configuration: %v", data)
@@ -72,9 +626,14 @@ func ValidateEdgeConstraints(root *map[string]any, data any, p tree.Path) error 
 		return fmt.Errorf("invalid edge constraints configuration: edges should be a pair of named nodes")
 	}
 
+	// Validate that S and T are different nodes
+	if s == t {
+		return fmt.Errorf("edge constraint source and target must be different nodes")
+	}
+
 	// Check if "nodes" key exists
-	nodesConfig, err := utils.GetConfigAtPath(*root, p.Parent().Parent().Next("nodes"))
-	if err != nil {
+	nodesConfig, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.nodes"))
+	if err != nil || nodesConfig == nil {
 		return fmt.Errorf("invalid edge constraints configuration: nodes must be defined")
 	}
 	nodes, nodesOk := nodesConfig.(map[string]any)
@@ -89,6 +648,49 @@ func ValidateEdgeConstraints(root *map[string]any, data any, p tree.Path) error 
 
 	if _, ok := nodes[t]; !ok {
 		return fmt.Errorf("invalid edge constraints configuration: node '%s' not found", t)
+	}
+
+	// Validate RTT and BW if present
+	if rtt, ok := edgeConstraints["RTT"].(uint); ok {
+		edgeConstraints["RTT"] = rtt
+	}
+
+	if bw, ok := edgeConstraints["BW"].(uint); ok {
+		edgeConstraints["BW"] = bw
+	}
+
+	return nil
+}
+
+// ValidateHealthCheck checks the healthcheck configuration.
+func ValidateHealthCheck(_ *map[string]any, data any, _ tree.Path) error {
+	healthcheck, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid healthcheck configuration: %v", data)
+	}
+
+	if len(healthcheck) == 0 {
+		return fmt.Errorf("healthcheck cannot be empty if specified")
+	}
+
+	// Check healthcheck type
+	hcType, ok := healthcheck["type"]
+	if !ok || hcType == "" {
+		return fmt.Errorf("healthcheck must have a type")
+	}
+
+	// Must have exec or endpoint
+	switch hcType {
+	case "http":
+		if _, ok := healthcheck["endpoint"]; !ok {
+			return fmt.Errorf("http type healthcheck must have an endpoint")
+		}
+	case "command":
+		if _, ok := healthcheck["exec"]; !ok {
+			return fmt.Errorf("command type healthcheck must have exec")
+		}
+	default:
+		return fmt.Errorf("unsupported healthcheck type: %s", hcType)
 	}
 
 	return nil

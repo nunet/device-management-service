@@ -12,4 +12,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 )
 
-var log = logging.Logger("node")
+var (
+	log      = logging.Logger("node")
+	logConns = logging.Logger("node.conn")
+)

@@ -14,6 +14,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -29,6 +30,7 @@ func ConnectDatabase(dbPath string) (*gorm.DB, error) {
 	_ = database.AutoMigrate(&types.MachineResources{})
 	_ = database.AutoMigrate(&types.OnboardingConfig{})
 	_ = database.AutoMigrate(&types.ResourceAllocation{})
+	_ = database.AutoMigrate(&job_types.OrchestratorView{})
 	_ = database.AutoMigrate(&types.GPU{})
 
 	return database, nil

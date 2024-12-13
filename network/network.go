@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/spf13/afero"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 
 	"gitlab.com/nunet/device-management-service/network/libp2p"
@@ -51,7 +52,7 @@ type Network interface {
 	Messenger
 
 	// Init initializes the network
-	Init() error
+	Init(*config.Config) error
 	// Start starts the network
 	Start() error
 	// Stat returns the network information
@@ -108,7 +109,7 @@ type Network interface {
 	AddSubnetPeer(subnetID, peerID, ip string) error
 
 	// RemoveSubnetPeer removes a peer from the subnet
-	RemoveSubnetPeer(subnetID, peerID string) error
+	RemoveSubnetPeer(subnetID, peerID, ip string) error
 
 	// AcceptSubnetPeer accepts a peer to the subnet
 	AcceptSubnetPeer(subnetID, peerID, ip string) error
@@ -119,8 +120,8 @@ type Network interface {
 	// UnmapPort removes a previous port map
 	UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
 
-	// AddDNSRecord adds a dns record to our local resolver
-	AddSubnetDNSRecord(subnetID, name, ip string) error
+	// AddSubnetDNSRecords adds dns records to our local resolver
+	AddSubnetDNSRecords(subnetID string, records map[string]string) error
 
 	// RemoveDNSRecord removes a dns record from our local resolver
 	RemoveSubnetDNSRecord(subnetID, name string) error

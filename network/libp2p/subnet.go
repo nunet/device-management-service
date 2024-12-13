@@ -203,6 +203,11 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 		return fmt.Errorf("failed to bring up tun interface: %w", err)
 	}
 
+	// catch all 10.0.0.1
+	if err := iface.AddRouteRule("", "10.0.0.1/32", ""); err != nil {
+		return fmt.Errorf("failed to add route rule: %w", err)
+	}
+
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.mx.Lock()
 	s.ifaces[ipAddr.String()] = struct {
@@ -221,7 +226,7 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	return nil
 }
 
-func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
+func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID, ip string) error {
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -232,11 +237,20 @@ func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
 		return fmt.Errorf("failed to decode peer ID %s: %w", peerID, err)
 	}
 
-	ip, ok := s.info.rtable.Get(peerIDObj)
+	ips, ok := s.info.rtable.Get(peerIDObj)
 	if !ok {
 		return fmt.Errorf("peer with ID %s is not in the subnet", peerID)
 	}
 
+	for _, i := range ips {
+		if i == ip {
+			goto delete_iface
+		}
+	}
+
+	return nil
+
+delete_iface:
 	s.mx.Lock()
 	iface, ok := s.ifaces[ip]
 	if ok {
@@ -247,7 +261,7 @@ func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID string) error {
 	}
 	s.mx.Unlock()
 
-	s.info.rtable.Remove(peerIDObj)
+	s.info.rtable.Remove(peerIDObj, ip)
 	return nil
 }
 
@@ -272,15 +286,16 @@ func (l *Libp2p) AcceptSubnetPeer(subnetID, peerID, ip string) error {
 	return nil
 }
 
-// AddDNSRecord adds a dns record to our local resolver
-func (l *Libp2p) AddSubnetDNSRecord(subnetID, name, ip string) error {
+func (l *Libp2p) AddSubnetDNSRecords(subnetID string, records map[string]string) error {
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
 	}
 
 	s.dnsmx.Lock()
-	s.dnsRecords[name] = ip
+	for name, ip := range records {
+		s.dnsRecords[name] = ip
+	}
 	s.dnsmx.Unlock()
 
 	return nil
@@ -662,8 +677,6 @@ func (s *subnet) writePackets(stream network.Stream) {
 					}
 				}
 				_ = stream.SetWriteDeadline(time.Now().Add(time.Second))
-
-				log.Debug("read packet from stream", "subnet", s.info.id, "src", stream.Conn().RemotePeer().String())
 
 				log.Debug("read packet from stream", "subnet", s.info.id, "src", stream.Conn().RemotePeer().String())
 

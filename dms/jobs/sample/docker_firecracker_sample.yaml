@@ -1,0 +1,114 @@
+version: "V1"
+
+allocations:
+    alloc1:
+        executor: docker
+        resources:
+            cpu:
+                clockspeed: 2400000000
+                cores: 2
+                model: ""
+                vendor: "Intel"
+                threads: 2
+                architecture: "x86_64"
+                cachesize: 0
+            gpus: []
+            ram:
+                size: 1024
+                clockspeed: 3
+                type: ""
+            disk:
+                size: 20000
+                model: ""
+                vendor: ""
+                type: ""
+                interface: ""
+                readspeed: 0
+                writespeed: 0
+        execution:
+            type: docker
+            cmd:
+                - withCMD
+            entrypoint:
+                - WithEntrypoint
+            environment:
+                - env1
+            image: alpine
+            working_directory: /
+        dnsname: mydocker
+        keys: []
+        provision: []
+        healthcheck: ""
+    alloc2:
+        executor: firecracker
+        resources:
+            cpu:
+                clockspeed: 2400000000
+                cores: 2
+                model: ""
+                vendor: "Intel"
+                threads: 2
+                architecture: "x86_64"
+                cachesize: 0
+            gpus: []
+            ram:
+                size: 1024
+                clockspeed: 3
+                type: ""
+            disk:
+                size: 20000
+                model: ""
+                vendor: ""
+                type: ""
+                interface: ""
+                readspeed: 0
+                writespeed: 0
+        execution:
+            type: firecracker
+            initrd: "/path/to/initrd"
+            kernel_image: "/path/to/vmlinuz"
+            root_file_system: /
+        dnsname: myfirecracker
+        keys: []
+        provision: []
+        healthcheck: ""
+nodes:
+    node1:
+        allocations:
+            - alloc1
+        ports:
+            - public: 1
+              private: 1
+              allocation: alloc1
+        location:
+            accept: []
+            reject: []
+        peer: peeridhere
+    node2:
+        allocations:
+            - alloc2
+        ports:
+            - public: 1
+              private: 1
+              allocation: alloc2
+        location:
+            accept: []
+            reject: []
+edge_constraints:
+    - edges: ["node1", "node2"]
+      rtt: 2000
+      bw: 102410
+
+supervisor:
+    strategy: "AllForOne"
+    allocations:
+        - alloc1
+    children:
+        - strategy: ""
+          allocations: []
+          children: []
+keys:
+    keys1: "/path/to/key/file"
+    keys2: "/path/to/key/file"
+
+scripts:

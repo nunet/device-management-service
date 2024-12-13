@@ -10,12 +10,41 @@ package cpu
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+var (
+	cpuCache     *types.CPU
+	cpuCacheOnce sync.Once
+	cpuCacheErr  error
+)
+
+// GetCPU returns the CPU information for the system
+func GetCPU() (types.CPU, error) {
+	cpuCacheOnce.Do(func() {
+		cpuInfo, err := getCPU()
+		if err != nil {
+			cpuCacheErr = fmt.Errorf("get CPU info: %w", err)
+			return
+		}
+		cpuCache = &cpuInfo
+	})
+
+	if cpuCacheErr != nil {
+		return types.CPU{}, cpuCacheErr
+	}
+
+	if cpuCache == nil {
+		return types.CPU{}, fmt.Errorf("cpu info is nil")
+	}
+
+	return *cpuCache, nil
+}
 
 // GetUsage returns the CPU usage for the system
 func GetUsage() (types.CPU, error) {
@@ -26,11 +55,11 @@ func GetUsage() (types.CPU, error) {
 
 	cpuInfo, err := GetCPU()
 	if err != nil {
-		return types.CPU{}, fmt.Errorf("failed to get CPU info: %s", err)
+		return types.CPU{}, fmt.Errorf("get CPU info: %s", err)
 	}
 
+	// Calculate the used cores
 	usedCores := float64(cpuInfo.Cores) * cpuUsage[0] / 100
 	cpuInfo.Cores = float32(usedCores)
-
 	return cpuInfo, nil
 }

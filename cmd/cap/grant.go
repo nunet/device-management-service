@@ -16,11 +16,13 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newGrantCmd(afs afero.Afero) *cobra.Command {
+func newGrantCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	var (
 		context  string
 		caps     []string
@@ -43,7 +45,7 @@ Example:
 
 The above command emits a self-signed token with the specified capabilities delegated from 'user' to the sbjects's DID. `,
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			subject := args[0]
 
 			var expirationTime uint64
@@ -75,22 +77,22 @@ The above command emits a self-signed token with the specified capabilities dele
 			}
 
 			var trustCtx did.TrustContext
-			if IsLedgerContext(context) {
+			if node.IsLedgerContext(context) {
 				provider, err := did.NewLedgerWalletProvider(0)
 				if err != nil {
 					return err
 				}
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = LedgerContext(context)
+				context = node.LedgerContext(context)
 			} else {
-				trustCtx, _, err = CreateTrustContextFromKeyStore(afs, context)
+				trustCtx, _, err = node.CreateTrustContextFromKeyStore(afs, context, cfg)
 				if err != nil {
 					return fmt.Errorf("failed to create trust context: %w", err)
 				}
 			}
 
-			capCtx, err := LoadCapabilityContext(trustCtx, context)
+			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}
@@ -105,7 +107,9 @@ The above command emits a self-signed token with the specified capabilities dele
 				return fmt.Errorf("unable to marshal tokens to json: %w", err)
 			}
 
-			fmt.Println(string(tokensJSON))
+			// fmt.Println(string(tokensJSON))
+			fmt.Fprintln(cmd.OutOrStdout(), string(tokensJSON))
+
 			return nil
 		},
 	}

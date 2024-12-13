@@ -9,7 +9,9 @@
 package node
 
 import (
+	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/multiformats/go-multiaddr"
@@ -19,8 +21,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"gitlab.com/nunet/device-management-service/db/repositories"
+	repo "gitlab.com/nunet/device-management-service/db/repositories/clover"
+
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -43,8 +49,8 @@ func TestNew(t *testing.T) {
 		geoip               types.GeoIPLocator
 		hostLocation        HostGeolocation
 		portConfig          PortConfig
-
-		expErr string
+		contractStore       repositories.Contract
+		expErr              string
 	}{
 		"no onboarer": {
 			expErr: "onboarder is nil",
@@ -90,13 +96,22 @@ func TestNew(t *testing.T) {
 			scheduler: bt.NewScheduler(1),
 			expErr:    "geoip is nil",
 		},
-		"success": {
+		"no contract store": {
 			onboarder: &onboarding.Onboarding{},
 			rootCap:   rootCap,
 			hostID:    "123",
 			net:       createNetwork(t, nil, "14950"),
 			scheduler: bt.NewScheduler(1),
 			geoip:     &geoipMock{},
+		},
+		"success": {
+			onboarder:     &onboarding.Onboarding{},
+			rootCap:       rootCap,
+			hostID:        "123",
+			net:           createNetwork(t, nil, "14950"),
+			scheduler:     bt.NewScheduler(1),
+			geoip:         &geoipMock{},
+			contractStore: repo.ContractRepoClover{},
 		},
 	}
 
@@ -114,7 +129,23 @@ func TestNew(t *testing.T) {
 			}
 
 			hardwareManager := NewMockHardwareManager(ctrl)
-			act, err := New(tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager, tt.scheduler, hardwareManager, tt.geoip, tt.hostLocation, tt.portConfig, false)
+
+			path, err := tempDir()
+			assert.NoError(t, err)
+			defer os.RemoveAll(path)
+
+			collections := []string{"orchestrator_view"}
+
+			db, err := repo.NewDB(path, collections)
+			assert.NoError(t, err)
+			assert.NotNil(t, db)
+
+			act, err := New(
+				*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
+				tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager,
+				tt.scheduler, hardwareManager, repo.NewOrchestratorView(db),
+				tt.geoip, tt.hostLocation, tt.portConfig, tt.contractStore,
+			)
 			if tt.expErr != "" {
 				assert.Nil(t, act)
 				assert.EqualError(t, err, tt.expErr)
@@ -135,7 +166,26 @@ func TestNodeAllocationMessaging(t *testing.T) {
 	resourceManager := NewMockResourceManager(ctrl)
 	hardwareManager := NewMockHardwareManager(ctrl)
 
-	node1, err := New(&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net, resourceManager, bt.NewScheduler(1), hardwareManager, &geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535}, false)
+	path, err := tempDir()
+	assert.NoError(t, err)
+	defer os.RemoveAll(path)
+
+	collections := []string{"orchestrator_view", "contract"}
+
+	db, err := repo.NewDB(path, collections)
+	assert.NoError(t, err)
+	assert.NotNil(t, db)
+
+	contractR := repo.NewContractRepo(db)
+	assert.NoError(t, err)
+
+	node1, err := New(
+		*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
+		&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net,
+		resourceManager, bt.NewScheduler(1), hardwareManager, repo.NewOrchestratorView(db),
+		&geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
+		contractR,
+	)
 	assert.NoError(t, err)
 	assert.NotNil(t, node1)
 	err = node1.Start()
@@ -180,7 +230,7 @@ func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {
 	trustCtx := did.NewTrustContext()
 	trustCtx.AddProvider(provider)
 
-	capCtx, err := ucan.NewCapabilityContext(trustCtx, provider.DID(), nil, ucan.TokenList{}, ucan.TokenList{})
+	capCtx, err := ucan.NewCapabilityContext(trustCtx, provider.DID(), nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
 	require.NoError(t, err, "make capability context")
 
 	return capCtx
@@ -203,7 +253,7 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 		},
 	}, afero.NewMemMapFs())
 	assert.NoError(t, err)
-	err = net.Init()
+	err = net.Init(&config.Config{})
 	assert.NoError(t, err)
 
 	err = net.Start()
@@ -211,6 +261,14 @@ func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *
 
 	libp2pInstance, _ := net.(*libp2p.Libp2p)
 	return libp2pInstance
+}
+
+func tempDir() (string, error) {
+	dir, err := os.MkdirTemp("", "nunet-test-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	return dir, nil
 }
 
 type geoipMock struct {

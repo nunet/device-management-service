@@ -1,25 +1,32 @@
 variables: 
   # https://hub.docker.com/r/alpine/git/tags
   GIT_VERSION: v2.30.1
-  BUILD_DISABLED: "yes"
   DMS_BUILDER_VERSION: "0.5-boot"
   BUILD_IMAGE_ONLY: false
   # CODE_QUALITY_DISABLED: true
   # SKIP_UNIT_TESTS: true
-  # INTEGRATION_TESTS_DISABLED: true
-  # DEFECTDOJO_DISABLED: true
+  INTEGRATION_TESTS_DISABLED: true
+  # E2E_TESTS_DISABLED: true
+  # BUILD_DISABLED: true
+  DEFECTDOJO_DISABLED: true
   # CONTAINER_SCANNIG_DISABLED: true
   # SAST_DISABLED: true
   # SECRET_DETECTION_DISABLED: true
   # SEMVER_DISABLED: true
-  # SONARQUBE_DISABLED: true
+  SONARQUBE_DISABLED: true
   # FEATURE_ENVIRONMENT_DISABLED: true
   # ALLOW_LINT_FAIL: true
   # ALLOW_UNIT_TESTS_FAIL: true
   # ALLOW_INTEGRATION_TESTS_FAIL: true
+  # ALLOW_E2E_TESTS_FAIL: true
+  # ALLOW_BUILD_FAIL: true
+  # ALLOW_LICENSE_CHECK_FAIL: true
 
 include:
-  project: nunet/test-suite
+- project: "nunet/gitlab-ci/templates"
+  ref: main
+  file: "docker/Docker-Build.gitlab-ci.yml"
+- project: nunet/test-suite
   file: cicd/Auto-DevOps.gitlab-ci.yml
   ref: release
   rules:
@@ -35,74 +42,15 @@ include:
 
 image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:$DMS_BUILDER_VERSION
 
-Build:
-  stage: build
-  dependencies: []
-  needs: []
-  script:
-    - echo "Building debian archives..."
-    - bash maint-scripts/build.sh
-  artifacts:
-    untracked: false
-    when: on_success
-    expire_in: "30 days"
-    paths:
-      - dist/
-  rules:
-    - if: $BUILD_IMAGE_ONLY == "true"
-      when: never
-    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
-      when: never
-    - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
-      when: never
-    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
-    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
-      when: manual
-    - when: never
-
-build:osx:
-  stage: build
-  tags:
-    - saas-macos-medium-m1
-  image: macos-14-xcode-15
-  dependencies: []
-  needs: []
-  variables:
-    HOMEBREW_NO_AUTO_UPDATE: 1
-  script:
-    - echo "Building darwin binaries..."
-    - bash maint-scripts/build-bsd.sh
-  artifacts:
-    untracked: false
-    when: on_success
-    expire_in: "30 days"
-    paths:
-      - dist/
-  allow_failure: true
-  rules:
-    - if: $BUILD_IMAGE_ONLY == "true"
-      when: never
-    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
-      when: never
-    - if: $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
-      when: never
-    - if:  $CI_PIPELINE_SOURCE =~ /^(push|web)$/ && $CI_COMMIT_BRANCH =~ /^(release|release\/.+|main)$/
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "main"
-    - if:  $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME !~ /^(release|release\/.+|main)$/
-      when: manual
-    - when: never
-
-
 Build DMS Builder:
   stage: build
-  image:
-     'docker:20.10.12-dind'
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD registry.gitlab.com
-  script:
-    - docker build -f maint-scripts/Dockerfile.builder -t ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION} maint-scripts/
-    - docker push ${CI_REGISTRY_IMAGE}/nunet-dms-builder:${DMS_BUILDER_VERSION}
+  extends:
+    - .docker_build # from repo nunet/gitlab-ci/templates
+  variables:
+    IMAGE_PATH: maint-scripts
+    IMAGE_NAME: nunet-dms-builder
+    DOCKERFILE_NAME: Dockerfile.builder
+    OVERRIDE_TAG: $DMS_BUILDER_VERSION
   rules:
     - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
       when: never

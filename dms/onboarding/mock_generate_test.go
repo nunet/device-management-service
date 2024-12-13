@@ -14,3 +14,4 @@ package onboarding
 // Resource Manager
 //go:generate mockgen -destination=mock_resource_manager_test.go -source=../../types/resources.go -package=onboarding -exclude_interfaces=UsageMonitor,ResourceOps
 //go:generate mockgen -destination=mock_hardware_manager_test.go -source=../../types/hardware.go -package=onboarding
+//go:generate mockgen -source=../../db/repositories/generic_entity_repository.go -destination mock_generic_entity_repository_test.go -package=onboarding

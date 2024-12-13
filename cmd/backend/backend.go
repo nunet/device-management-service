@@ -9,7 +9,7 @@
 package backend
 
 import (
-	gonet "github.com/shirou/gopsutil/net"
+	gonet "github.com/shirou/gopsutil/v4/net"
 )
 
 // NetworkManager abstracts connection on ports

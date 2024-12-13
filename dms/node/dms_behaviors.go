@@ -11,6 +11,8 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"path/filepath"
 	"time"
 
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -19,6 +21,10 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -33,10 +39,9 @@ const (
 	PeerConnectBehavior  = "/dms/node/peers/connect"
 	PeerScoreBehavior    = "/dms/node/peers/score"
 
-	OnboardBehavior         = "/dms/node/onboarding/onboard"
-	OffboardBehavior        = "/dms/node/onboarding/offboard"
-	OnboardStatusBehavior   = "/dms/node/onboarding/status"
-	OnboardResourceBehavior = "/dms/node/onboarding/resource"
+	OnboardBehavior       = "/dms/node/onboarding/onboard"
+	OffboardBehavior      = "/dms/node/onboarding/offboard"
+	OnboardStatusBehavior = "/dms/node/onboarding/status"
 
 	ContainerStartBehavior = "/dms/node/container/start"
 	ContainerStopBehavior  = "/dms/node/container/stop"
@@ -48,14 +53,23 @@ const (
 
 	DeploymentListBehavior     = "/dms/node/deployment/list"
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
+	DeploymentLogsBehavior     = "/dms/node/deployment/logs"
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 
-	AllocatedResourcesBehavior = "/dms/node/resources/allocated"
-	FreeResourcesBehavior      = "/dms/node/resources/free"
-	OnboardedResourcesBehavior = "/dms/node/resources/onboarded"
+	ResourcesAllocatedBehavior = "/dms/node/resources/allocated"
+	ResourcesFreeBehavior      = "/dms/node/resources/free"
+	ResourcesOnboardedBehavior = "/dms/node/resources/onboarded"
 
-	LoggerConfigBehavior = "/dms/node/logger/config"
+	HardwareSpecBehavior  = "/dms/node/hardware/spec"
+	HardwareUsageBehavior = "/dms/node/hardware/usage"
+
+	LoggerConfigBehavior      = "/dms/node/logger/config"
+	RestartAllocationBehavior = "/dms/node/allocation/restart"
+	StopAllocationBehavior    = "/dms/node/allocation/stop"
+
+	CapListBehavior   = "/dms/cap/list"
+	CapAnchorBehavior = "/dms/cap/anchor"
 
 	pingTimeout = 1 * time.Second
 )
@@ -207,12 +221,15 @@ func (n *Node) handlePeerConnect(msg actor.Envelope) {
 }
 
 type OnboardRequest struct {
+	NoGPU  bool
+	GPUs   string
 	Config types.OnboardingConfig
 }
 
 type OnboardResponse struct {
-	Error  string
-	Config types.OnboardingConfig
+	Success bool                   `json:"success"`
+	Error   string                 `json:"error,omitempty"`
+	Config  types.OnboardingConfig `json:"config,omitempty"`
 }
 
 func (n *Node) handleOnboard(msg actor.Envelope) {
@@ -227,45 +244,33 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 		return
 	}
 
-	machineResources, err := n.hardware.GetMachineResources()
+	config, err := n.onboarder.Onboard(context.Background(), request.Config)
 	if err != nil {
 		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-	request.Config.MachineResources = machineResources.Resources
-
-	if err := n.onboarder.Onboard(context.Background(), request.Config); err != nil {
-		resp.Error = err.Error()
+		resp.Success = false
 		n.sendReply(msg, resp)
 		return
 	}
 
-	resp.Config = request.Config
+	resp.Config = config
+	resp.Success = true
 	n.sendReply(msg, resp)
 }
 
-type OffboardRequest struct {
-	Force bool
-}
+type OffboardRequest struct{}
 
 type OffboardResponse struct {
-	Success bool
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
 }
 
 func (n *Node) handleOffboard(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request OffboardRequest
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		// TODO log
-		return
-	}
-
 	resp := OffboardResponse{}
-	if err := n.onboarder.Offboard(context.Background(), request.Force); err != nil {
+	if err := n.onboarder.Offboard(context.Background()); err != nil {
 		resp.Success = false
+		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
 	}
@@ -275,15 +280,15 @@ func (n *Node) handleOffboard(msg actor.Envelope) {
 }
 
 type OnboardStatusResponse struct {
-	Onboarded bool
-	Error     string
+	Onboarded bool   `json:"onboarded"`
+	Error     string `json:"error,omitempty"`
 }
 
 func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := OnboardStatusResponse{}
 
-	onboarded, err := n.onboarder.IsOnboarded(context.Background())
+	onboarded, err := n.onboarder.IsOnboarded()
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -292,15 +297,6 @@ func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 
 	resp.Onboarded = onboarded
 	n.sendReply(msg, resp)
-}
-
-type OnboardResourceRequest struct {
-	Config types.OnboardingConfig
-}
-
-type OnboardResourceResponse struct {
-	Error  string
-	Result types.OnboardingConfig
 }
 
 type DeploymentListResponse struct {
@@ -314,9 +310,72 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 
 	resp.Deployments = make(map[string]string)
 	for ID, dep := range n.deployments {
-		resp.Deployments[ID] = jobs.DeploymentStatusString(dep.Status())
+		resp.Deployments[ID] = job_types.DeploymentStatusString(dep.Status())
 	}
 
+	n.sendReply(msg, resp)
+}
+
+type DeploymentLogsRequest struct {
+	EnsembleID     string
+	AllocationName string
+}
+
+type DeploymentLogsResponse struct {
+	LogsWrittenTo string
+	Error         string
+}
+
+func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request DeploymentLogsRequest
+	var resp DeploymentLogsResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	n.mx.Lock()
+	d, ok := n.deployments[request.EnsembleID]
+	n.mx.Unlock()
+	if !ok {
+		resp.Error = ErrDeploymentNotFound.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	data, err := d.GetAllocationLogs(request.AllocationName)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	ensembleDir := filepath.Join(
+		n.dmsConfig.WorkDir,
+		"deployments",
+		request.EnsembleID,
+	)
+
+	err = n.fs.MkdirAll(ensembleDir, 0o744)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to create ensemble directory %s: %s", ensembleDir, err.Error())
+		n.sendReply(msg, resp)
+		return
+	}
+
+	writeLogsTo := filepath.Join(ensembleDir, fmt.Sprintf("%s.logs", request.AllocationName))
+	err = n.fs.WriteFile(writeLogsTo, data, 0o644)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to write logs to %s: %s", writeLogsTo, err.Error())
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.LogsWrittenTo = writeLogsTo
 	n.sendReply(msg, resp)
 }
 
@@ -351,7 +410,7 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
-	resp.Status = jobs.DeploymentStatusString(d.Status())
+	resp.Status = job_types.DeploymentStatusString(d.Status())
 	n.sendReply(msg, resp)
 }
 
@@ -395,6 +454,7 @@ type DeploymentShutdownRequest struct {
 }
 
 type DeploymentShutdownResponse struct {
+	OK    bool
 	Error string
 }
 
@@ -418,6 +478,7 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	}
 
 	if d.Status() != jobs.DeploymentStatusRunning {
+		log.Debugf("deployment %q is not running(status=%q), cannot shutdown", request.ID, d.Status())
 		// maybe-TODO: if it's still provisioning/committing,
 		// we should stop the deployment process anyway
 		resp.Error = ErrDeploymentNotRunning.Error()
@@ -425,11 +486,8 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 		return
 	}
 
-	err := d.Shutdown()
-	if err != nil {
-		resp.Error = err.Error()
-	}
-
+	d.Shutdown()
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
 
@@ -452,9 +510,9 @@ func (n *Node) handleVMContainerStart(msg actor.Envelope) {
 
 	var executionType jobs.AllocationExecutor
 	if request.Execution.EngineSpec.IsType(types.ExecutorTypeFirecracker.String()) {
-		executionType = jobs.ExecutorFirecracker
+		executionType = job_types.ExecutorFirecracker
 	} else if request.Execution.EngineSpec.IsType(types.ExecutorTypeDocker.String()) {
-		executionType = jobs.ExecutorDocker
+		executionType = job_types.ExecutorDocker
 	}
 
 	resp := CustomVMStartResponse{}
@@ -551,6 +609,46 @@ func (n *Node) handlePeerScore(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
+func (n *Node) handleSubnetCreate(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetCreateRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetCreateResponse{}
+	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetDestroyRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetDestroyResponse{}
+	err := n.network.DestroySubnet(request.SubnetID)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
 func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -560,7 +658,20 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.AllocationDeploymentResponse{}
-	allocations, err := n.createAllocations(msg.From.DID, request.EnsembleID, request.NodeID, request.Allocations)
+	if err := n.registerDynamicBehaviors(request.EnsembleID); err != nil {
+		err = fmt.Errorf("failed to register dynamic behaviors: %w", err)
+		log.Error(err)
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	allocations, err := n.createAllocations(
+		msg.From.DID,
+		request.EnsembleID,
+		request.Allocations,
+		msg.From,
+	)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -581,52 +692,8 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.CommitDeploymentResponse{}
-	err := n.commitDeployment(request.EnsembleID)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	resp.OK = true
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetCreate(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetCreateRequest
-	resp := jobs.SubnetCreateResponse{}
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
-	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	resp.OK = true
-	n.sendReply(msg, resp)
-}
-
-func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request jobs.SubnetDestroyRequest
-	resp := jobs.SubnetDestroyResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
-		return
-	}
-
-	err := n.network.DestroySubnet(request.SubnetID)
+	allocationID := request.EnsembleID + "_" + request.AllocationName
+	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -638,9 +705,12 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 }
 
 type LoggerConfigRequest struct {
-	Interval int
-	URL      string
-	Level    string
+	Interval       int    `json:"interval,omitempty"`
+	URL            string `json:"url,omitempty"`
+	Level          string `json:"level,omitempty"`
+	APIKey         string `json:"api_key,omitempty"`
+	APMURL         string `json:"apm_url,omitempty"`
+	ElasticEnabled *bool  `json:"elastic_enabled,omitempty"`
 }
 
 type LoggerConfigResponse struct {
@@ -683,16 +753,39 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 	}
+	if req.APIKey != "" { // Handle API Key
+		if err := observability.SetAPIKey(req.APIKey); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.APMURL != "" { // Handle APM URL
+		if err := observability.SetAPMURL(req.APMURL); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+	if req.ElasticEnabled != nil { // Handle Elasticsearch Enabled
+		if err := observability.EnableElasticsearchLogging(*req.ElasticEnabled); err != nil {
+			resp.Error = err.Error()
+			n.sendReply(msg, resp)
+			return
+		}
+	}
+
 	resp.OK = true
 	n.sendReply(msg, resp)
 }
 
 type resourcesResponse struct {
+	OK        bool
 	Resources types.Resources
-	Error     string
+	Error     string `json:"error,omitempty"`
 }
 
-func (n *Node) getAllocatedResources(msg actor.Envelope) {
+func (n *Node) handleAllocatedResources(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := resourcesResponse{}
 
@@ -707,7 +800,7 @@ func (n *Node) getAllocatedResources(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) getFreeResources(msg actor.Envelope) {
+func (n *Node) handleFreeResources(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := resourcesResponse{}
 
@@ -722,7 +815,7 @@ func (n *Node) getFreeResources(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) getOnboardedResources(msg actor.Envelope) {
+func (n *Node) handleOnboardedResources(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := resourcesResponse{}
 
@@ -734,5 +827,92 @@ func (n *Node) getOnboardedResources(msg actor.Envelope) {
 	}
 
 	resp.Resources = onboardedResources.Resources
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleHardwareUsage(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := resourcesResponse{}
+
+	hardwareUsage, err := n.hardware.GetUsage()
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.Resources = hardwareUsage
+	n.sendReply(msg, resp)
+}
+
+type CapListRequest struct {
+	Context string
+}
+
+type CapListResponse struct {
+	OK      bool
+	Error   string
+	Roots   []did.DID
+	Require ucan.TokenList
+	Provide ucan.TokenList
+	Revoke  ucan.TokenList
+}
+
+func (n *Node) handleCapList(msg actor.Envelope) {
+	defer msg.Discard()
+	var request CapListRequest
+	resp := CapListResponse{}
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	roots, require, provide, revoke := n.rootCap.ListRoots()
+	resp.OK = true
+	resp.Roots = roots
+	resp.Require = require
+	resp.Provide = provide
+	resp.Revoke = revoke
+	n.sendReply(msg, resp)
+}
+
+type CapAnchorRequest struct {
+	Root    []did.DID
+	Require ucan.TokenList
+	Provide ucan.TokenList
+	Revoke  ucan.TokenList
+}
+
+type CapAnchorResponse struct {
+	OK    bool
+	Error string
+}
+
+func (n *Node) handleCapAnchor(msg actor.Envelope) {
+	defer msg.Discard()
+	var request CapAnchorRequest
+	resp := CapAnchorResponse{}
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	if err := n.rootCap.AddRoots(nil, request.Require, request.Provide, request.Revoke); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	cfg := config.GetConfig()
+	if err := SaveCapabilityContext(n.rootCap, cfg); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
 	n.sendReply(msg, resp)
 }

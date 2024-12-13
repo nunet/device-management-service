@@ -71,6 +71,7 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("observability.flush_interval", 5) // Default flush interval is 5 seconds
 	v.SetDefault("observability.elasticsearch_enabled", false)
 	v.SetDefault("observability.elasticsearch_api_key", "")
+	v.SetDefault("observability.insecure_skip_verify", true) // Default to insecure TLS connections for now
 
 	// default APM settings
 	v.SetDefault("apm.server_url", "http://apm.telemetry.nunet.io")

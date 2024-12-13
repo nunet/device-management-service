@@ -41,7 +41,7 @@ var log = logging.Logger("actor-api")
 //	@Failure		500	{object}	object	"handle id is invalid"
 //	@Router			/actor/handle [get]
 func (rs RESTServer) ActorHandle(c *gin.Context) {
-	endTrace := observability.StartTrace("actor_handle_retrieve_duration")
+	endTrace := observability.StartTrace(c, "actor_handle_retrieve_duration")
 	defer endTrace()
 
 	p2p := rs.config.P2P
@@ -92,7 +92,7 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/send [post]
 func (rs RESTServer) ActorSendMessage(c *gin.Context) {
-	endTrace := observability.StartTrace("actor_send_message_duration")
+	endTrace := observability.StartTrace(c, "actor_send_message_duration")
 	defer endTrace()
 
 	var msg actor.Envelope
@@ -136,7 +136,7 @@ func (rs RESTServer) ActorSendMessage(c *gin.Context) {
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/invoke [post]
 func (rs RESTServer) ActorInvoke(c *gin.Context) {
-	endTrace := observability.StartTrace("actor_invoke_duration")
+	endTrace := observability.StartTrace(c, "actor_invoke_duration")
 	defer endTrace()
 
 	var msg actor.Envelope
@@ -211,7 +211,7 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 //				@Failure		500	{object}	object	"failed to publish message"
 //				@Router			/actor/broadcast [post]
 func (rs RESTServer) ActorBroadcast(c *gin.Context) {
-	endTrace := observability.StartTrace("actor_broadcast_duration")
+	endTrace := observability.StartTrace(c, "actor_broadcast_duration")
 	defer endTrace()
 
 	var msg actor.Envelope

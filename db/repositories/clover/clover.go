@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	clover "github.com/ostafen/clover/v2"
+
 	"gitlab.com/nunet/device-management-service/observability"
 )
 
@@ -27,10 +28,14 @@ func NewDB(path string, collections []string) (*clover.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	for _, collection := range collections {
-		if err := db.CreateCollection(collection); err != nil {
-			logger.Errorw("clover_db_init_failure", "collection", collection, "error", fmt.Errorf("failed to create collection %s: %w", collection, err))
-			return nil, fmt.Errorf("failed to create collection %s: %w", collection, err)
+	for _, c := range collections {
+		if err := db.CreateCollection(c); err != nil {
+			if err == clover.ErrCollectionExist {
+				continue
+			}
+			err = fmt.Errorf("failed to create collection %s: %w", c, err)
+			logger.Errorw("clover_db_init_failure", "collection", c, "error", err)
+			return nil, err
 		}
 	}
 

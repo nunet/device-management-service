@@ -14,13 +14,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -44,6 +47,10 @@ const (
 	statusWaitTimeout  = 10 * time.Second
 
 	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
+
+	dnsResolverIP = "10.0.0.1"
+
+	enableTTY = false
 )
 
 // Executor manages the lifecycle of Docker containers for execution requests.
@@ -52,10 +59,12 @@ type Executor struct {
 
 	handlers utils.SyncMap[string, *executionHandler] // Maps execution IDs to their handlers.
 	client   *Client                                  // Docker client for container management.
+
+	fs afero.Afero
 }
 
 // NewExecutor initializes a new Executor instance with a Docker client.
-func NewExecutor(ctx context.Context, id string) (*Executor, error) {
+func NewExecutor(ctx context.Context, fs afero.Afero, id string) (*Executor, error) {
 	dockerClient, err := NewDockerClient()
 	if err != nil {
 		return nil, err
@@ -67,13 +76,18 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 
 	return &Executor{
 		ID:     id,
+		fs:     fs,
 		client: dockerClient,
 	}, nil
 }
 
+func (e *Executor) GetID() string {
+	return e.ID
+}
+
 // Start begins the execution of a request by starting a Docker container.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
-	endTrace := observability.StartTrace("docker_executor_start_duration")
+	endTrace := observability.StartTrace(ctx, "docker_executor_start_duration")
 	defer endTrace()
 
 	// Log starting execution
@@ -95,7 +109,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		}
 
 		// Create a new handler for the execution.
-		containerID, err = e.newDockerExecutionContainer(ctx, request)
+		containerID, err = e.newDockerExecutionContainer(ctx, request, enableTTY)
 		if err != nil {
 			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", err)
 			return fmt.Errorf("failed to create new container: %w", err)
@@ -103,16 +117,18 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	}
 
 	handler := &executionHandler{
-		client:      e.client,
-		ID:          e.ID,
-		executionID: request.ExecutionID,
-		containerID: containerID,
-		resultsDir:  request.ResultsDir,
-		waitCh:      make(chan bool),
-		activeCh:    make(chan bool),
-		running:     &atomic.Bool{},
-		TTYEnabled:  true,
-		initScripts: request.ProvisionScripts,
+		client:              e.client,
+		ID:                  e.ID,
+		fs:                  e.fs,
+		executionID:         request.ExecutionID,
+		containerID:         containerID,
+		resultsDir:          request.ResultsDir,
+		persistLogsDuration: request.PersistLogsDuration,
+		waitCh:              make(chan bool),
+		activeCh:            make(chan bool),
+		running:             &atomic.Bool{},
+		TTYEnabled:          enableTTY,
+		initScripts:         request.ProvisionScripts,
 	}
 
 	// register the handler for this executionID
@@ -159,7 +175,7 @@ func (e *Executor) Wait(
 	ctx context.Context,
 	executionID string,
 ) (<-chan *types.ExecutionResult, <-chan error) {
-	endTrace := observability.StartTrace("docker_executor_wait_duration")
+	endTrace := observability.StartTrace(ctx, "docker_executor_wait_duration")
 	defer endTrace()
 
 	log.Infow("docker_executor_wait_begin", "executionID", executionID)
@@ -347,7 +363,7 @@ func (e *Executor) Run(
 // This includes removing containers including networks and volumes with the executor's label.
 // It also removes all temporary directories created for init scripts.
 func (e *Executor) Cleanup(ctx context.Context) error {
-	endTrace := observability.StartTrace("docker_executor_cleanup_duration")
+	endTrace := observability.StartTrace(ctx, "docker_executor_cleanup_duration")
 	defer endTrace()
 
 	log.Infow("docker_executor_cleanup_begin", "executorID", e.ID)
@@ -378,6 +394,11 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 	return nil
 }
 
+// Exec executes a command in the container with the given containerID.
+func (e *Executor) Exec(ctx context.Context, containerID string, command []string) (int, string, error) {
+	return e.client.Exec(ctx, containerID, command)
+}
+
 // newDockerExecutionContainer is an internal method called by Start to set up a new Docker container
 // for the job execution. It configures the container based on the provided ExecutionRequest.
 // This includes decoding engine specifications, setting up environment variables, mounts and resource
@@ -386,6 +407,7 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 func (e *Executor) newDockerExecutionContainer(
 	ctx context.Context,
 	params *types.ExecutionRequest,
+	tty bool,
 ) (string, error) {
 	dockerArgs, err := DecodeSpec(params.EngineSpec)
 	if err != nil {
@@ -426,10 +448,8 @@ func (e *Executor) newDockerExecutionContainer(
 		Cmd:        dockerArgs.Cmd,
 		Labels:     e.containerLabels(params.JobID, params.ExecutionID),
 		WorkingDir: dockerArgs.WorkingDirectory,
-		// TODO (Tty): tty currently breaks the logs and consequently the `Run()` methods and `GetLogStream()`.
-		// to enable Tty, besides setting to true, we must handle the logs correctly.
 		// Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
-		// Tty:        true,
+		Tty: tty,
 	}
 
 	mounts, err := makeContainerMounts(params.Inputs, params.Outputs, params.ResultsDir)
@@ -464,7 +484,10 @@ func (e *Executor) newDockerExecutionContainer(
 	}
 
 	log.Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
-	hostConfig := configureHostConfig(chosenGPUVendor, params, dockerArgs, mounts)
+	hostConfig, err := configureHostConfig(chosenGPUVendor, params, dockerArgs, mounts)
+	if err != nil {
+		return "", fmt.Errorf("failed to configure host config: %w", err)
+	}
 
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
@@ -519,7 +542,7 @@ func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
 
 // configureHostConfig sets up the host configuration for the container based on the
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
-func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) container.HostConfig {
+func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) (container.HostConfig, error) {
 	var hostConfig container.HostConfig
 
 	switch vendor {
@@ -600,8 +623,36 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 		}
 	}
 
+	// configure port binding
+	portMaps := make(map[nat.Port][]nat.PortBinding)
+	for _, toBind := range params.PortsToBind {
+		natPort, err := nat.NewPort("tcp", strconv.Itoa(toBind.ExecutorPort))
+		if err != nil {
+			return hostConfig, fmt.Errorf("failed to create port: %w", err)
+		}
+
+		if _, ok := portMaps[natPort]; ok {
+			portMaps[natPort] = append(portMaps[natPort], nat.PortBinding{
+				HostIP:   toBind.IP,
+				HostPort: fmt.Sprintf("%d", toBind.HostPort),
+			})
+			continue
+		}
+
+		portMaps[natPort] = []nat.PortBinding{
+			{
+				HostIP:   toBind.IP,
+				HostPort: fmt.Sprintf("%d", toBind.HostPort),
+			},
+		}
+	}
+
+	hostConfig.PortBindings = portMaps
 	hostConfig.Privileged = dockerArgs.Privileged
-	return hostConfig
+	hostConfig.DNS = []string{"1.1.1.1", dnsResolverIP}
+	hostConfig.DNSSearch = []string{"internal"}
+
+	return hostConfig, nil
 }
 
 // makeContainerMounts creates the mounts for the container based on the input and output
@@ -637,11 +688,6 @@ func makeContainerMounts(
 		if resultsDir == "" {
 			return nil, fmt.Errorf("results directory is empty")
 		}
-
-		if err := os.MkdirAll(resultsDir, os.ModePerm); err != nil {
-			return nil, fmt.Errorf("failed to create results directory: %w", err)
-		}
-
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: output.Source,

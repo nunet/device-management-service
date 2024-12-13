@@ -66,9 +66,9 @@ func (n *NetInterface) SetAddress(address string) error {
 	return fmt.Errorf("set interface address not available on darwin")
 }
 
-// AddRoute adds a route to the network interface
-func (n *NetInterface) AddRoute(route string) error {
-	return fmt.Errorf("add route not available on darwin")
+// AddRouteRule adds a route rule to the network interface
+func (n *NetInterface) AddRouteRule(src, dst, gw string) error { 
+ 	return fmt.Errorf("add route not available on darwin")
 }
 
 // DelRoute deletes a route from the network interface

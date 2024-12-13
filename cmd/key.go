@@ -18,13 +18,14 @@ import (
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
-func newKeyCmd(fs afero.Afero) *cobra.Command {
+func newKeyCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "key",
 		Short: "Manage cryptographic keys",
@@ -33,13 +34,13 @@ func newKeyCmd(fs afero.Afero) *cobra.Command {
 This command provides subcommands for creating new keys and retrieving Decentralized Identifiers (DIDs) associated with existing keys.`,
 	}
 
-	cmd.AddCommand(newKeyNewCmd(fs))
-	cmd.AddCommand(newKeyDIDCmd(fs))
+	cmd.AddCommand(newKeyNewCmd(fs, cfg))
+	cmd.AddCommand(newKeyDIDCmd(fs, cfg))
 
 	return cmd
 }
 
-func newKeyNewCmd(fs afero.Afero) *cobra.Command {
+func newKeyNewCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
 	return &cobra.Command{
 		Use:   "new <name>",
 		Short: "Generate a key pair",
@@ -51,13 +52,13 @@ Example:
   nunet key new user`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
+			keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir)
 			if err != nil {
 				return fmt.Errorf("failed to create keystore: %w", err)
 			}
 
-			keyID := dms.UserContextName
+			keyID := node.UserContextName
 			if len(args) > 0 {
 				keyID = args[0]
 			}
@@ -101,7 +102,7 @@ Example:
 	}
 }
 
-func newKeyDIDCmd(fs afero.Afero) *cobra.Command {
+func newKeyDIDCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
 	return &cobra.Command{
 		Use:   "did <name>",
 		Short: "Get a key's DID",
@@ -128,7 +129,7 @@ Example:
 				return nil
 			}
 
-			keyStoreDir := filepath.Join(config.GetConfig().General.UserDir, dms.KeystoreDir)
+			keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir)
 			if err != nil {
 				return fmt.Errorf("failed to open keystore: %w", err)

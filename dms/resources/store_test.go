@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -29,7 +30,7 @@ func TestStore_WithDemandLocks(t *testing.T) {
 
 	s := newStore()
 	mockDemand := types.ResourceAllocation{
-		JobID: "job1",
+		AllocationID: "alloc1",
 		Resources: types.Resources{
 			CPU: types.CPU{
 				Cores:      4,
@@ -41,7 +42,7 @@ func TestStore_WithDemandLocks(t *testing.T) {
 	}
 
 	s.withAllocationsLock(func() {
-		s.allocations[mockDemand.JobID] = mockDemand
+		s.allocations[mockDemand.AllocationID] = mockDemand
 	})
 
 	var (
@@ -49,7 +50,7 @@ func TestStore_WithDemandLocks(t *testing.T) {
 		ok     bool
 	)
 	s.withAllocationsRLock(func() {
-		demand, ok = s.allocations[mockDemand.JobID]
+		demand, ok = s.allocations[mockDemand.AllocationID]
 	})
 	require.Truef(t, ok, "expected allocations to be present in the store")
 	require.Equalf(t, mockDemand, demand, "expected allocations to be %v, got %v", mockDemand, demand)
@@ -99,12 +100,12 @@ func TestStore_WithCommittedLocks(t *testing.T) {
 	}
 
 	s.withCommittedLock(func() {
-		s.committedResources["job1"] = &mockCommitted
+		s.committedResources["alloc1"] = &mockCommitted
 	})
 
 	var committed types.CommittedResources
 	s.withCommittedLock(func() {
-		committed = *s.committedResources["job1"]
+		committed = *s.committedResources["alloc1"]
 	})
 
 	require.Equal(t, mockCommitted, committed)
@@ -126,7 +127,7 @@ func TestStore_Concurrency(t *testing.T) {
 				defer wg.Done()
 
 				demand := types.ResourceAllocation{
-					JobID: fmt.Sprintf("job%d", index),
+					AllocationID: fmt.Sprintf("allocation%d", index),
 					Resources: types.Resources{
 						CPU: types.CPU{
 							Cores:      4,
@@ -137,7 +138,7 @@ func TestStore_Concurrency(t *testing.T) {
 					},
 				}
 				s.withAllocationsLock(func() {
-					s.allocations[demand.JobID] = demand
+					s.allocations[demand.AllocationID] = demand
 				})
 
 				var (
@@ -145,18 +146,18 @@ func TestStore_Concurrency(t *testing.T) {
 					ok bool
 				)
 				s.withAllocationsRLock(func() {
-					d, ok = s.allocations[demand.JobID]
+					d, ok = s.allocations[demand.AllocationID]
 				})
 				require.Truef(t, ok, "expected allocations to be present in the store")
 				require.Equalf(t, demand, d, "expected allocations to be %v, got %v", demand, d)
 
 				// Remove the allocations from the store
 				s.withAllocationsLock(func() {
-					delete(s.allocations, demand.JobID)
+					delete(s.allocations, demand.AllocationID)
 				})
 
 				s.withAllocationsRLock(func() {
-					_, ok = s.allocations[demand.JobID]
+					_, ok = s.allocations[demand.AllocationID]
 				})
 				require.Falsef(t, ok, "expected allocations to be removed from the store")
 			}()
@@ -223,12 +224,12 @@ func TestStore_Concurrency(t *testing.T) {
 				}
 
 				s.withCommittedLock(func() {
-					s.committedResources["job1"] = &committed
+					s.committedResources["alloc1"] = &committed
 				})
 
 				var c types.CommittedResources
 				s.withCommittedRLock(func() {
-					c = *s.committedResources["job1"]
+					c = *s.committedResources["alloc1"]
 				})
 				require.Equal(t, committed, c)
 			}()

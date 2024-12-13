@@ -124,22 +124,42 @@ func (n *NetInterface) SetAddress(address string) error {
 	return nil
 }
 
-// AddRoute adds a route to the network interface
-func (n *NetInterface) AddRoute(route string) error {
+// AddRouteRule adds an ip route rule to the network interface
+func (n *NetInterface) AddRouteRule(src, dst, gw string) error {
 	link, err := netlink.LinkByName(n.Iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}
 
-	var ip net.IP
-	err = ip.UnmarshalText([]byte(route))
-	if err != nil {
-		return fmt.Errorf("error parsing route: %w", err)
+	var gwIP net.IP
+	if gw != "" {
+		err = gwIP.UnmarshalText([]byte(gw))
+		if err != nil {
+			return fmt.Errorf("error parsing gw: %w", err)
+		}
+	}
+
+	var destNet *net.IPNet
+	if dst != "" {
+		_, destNet, err = net.ParseCIDR(dst)
+		if err != nil {
+			return fmt.Errorf("error parsing dest net: %w", err)
+		}
+	}
+
+	var srcIP net.IP
+	if src != "" {
+		err = srcIP.UnmarshalText([]byte(src))
+		if err != nil {
+			return fmt.Errorf("error parsing src: %w", err)
+		}
 	}
 
 	err = netlink.RouteAdd(&netlink.Route{
 		LinkIndex: link.Attrs().Index,
-		Gw:        ip,
+		Src:       srcIP,
+		Dst:       destNet,
+		Gw:        gwIP,
 		Priority:  3000,
 	})
 	if err != nil {

@@ -10,6 +10,10 @@ maint-scripts/inventory.yaml
 device-management-service
 executor/firecracker/testdata
 
+test/e2e/testbinary
+test/e2e/dms1_root_dir
+test/e2e/dms2_root_dir
+
 # Holds local development files. These files are used to develop
 # features separately then merging into main code before commit.
 # `cmd` was previously used, but now `cmd` is used to build executable
@@ -26,6 +30,10 @@ cover.out
 
 # others
 .aider*
+sync_remote.sh
 
 # emacs
 *~
+
+# builds
+builds/

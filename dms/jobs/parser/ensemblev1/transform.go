@@ -60,6 +60,18 @@ func TransformSpec(_ *map[string]interface{}, data any, _ tree.Path) (any, error
 		return nil, fmt.Errorf("invalid spec configuration: %v", data)
 	}
 
+	// set dns_name of allocations to the allocation name if not set
+	if allocations, ok := spec["allocations"]; ok {
+		for allocName, alloc := range allocations.(map[string]any) {
+			allocation, ok := alloc.(map[string]any)
+			if ok {
+				if allocation["dns_name"] == nil {
+					allocation["dns_name"] = allocName
+				}
+			}
+		}
+	}
+
 	// move edge_constraints to edges
 	if edgeConstraints, ok := spec["edge_constraints"]; ok {
 		spec["edges"] = edgeConstraints

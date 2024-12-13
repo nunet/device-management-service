@@ -16,13 +16,11 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
-	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func newGPUCommand() *cobra.Command {
+func newGPUCommand(hardwareManager types.HardwareManager, dockerClient docker.ClientInterface) *cobra.Command {
 	gpuCmd := &cobra.Command{
 		Use:   "gpu <operation>",
 		Short: "Manage GPU resources",
@@ -33,58 +31,57 @@ func newGPUCommand() *cobra.Command {
 	}
 
 	// Add subcommands
-	gpuCmd.AddCommand(newGPUListCommand())
-	gpuCmd.AddCommand(newGPUTestCommand())
+	gpuCmd.AddCommand(newGPUListCommand(hardwareManager))
+	gpuCmd.AddCommand(newGPUTestCommand(hardwareManager, dockerClient))
 
 	return gpuCmd
 }
 
-func newGPUListCommand() *cobra.Command {
+func newGPUListCommand(hardwareManager types.HardwareManager) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List all available GPUs",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			gpus, err := gpu.GetGPUs()
+			machineResources, err := hardwareManager.GetMachineResources()
 			if err != nil {
-				return fmt.Errorf("error getting GPUs: %w", err)
+				return fmt.Errorf("error getting machine resources: %w", err)
 			}
-
-			usage, err := gpu.GetGPUUsage()
+			machineUsage, err := hardwareManager.GetUsage()
 			if err != nil {
 				return fmt.Errorf("error getting GPU usage: %w", err)
 			}
 
-			if len(gpus) == 0 {
-				return fmt.Errorf("no gpus found")
+			if len(machineResources.GPUs) == 0 {
+				log.Info("No GPUs detected on the host")
+				return nil
 			}
 
-			if len(gpus) != len(usage) {
+			if len(machineResources.GPUs) != len(machineUsage.GPUs) {
 				return fmt.Errorf("GPU and GPU usage counts do not match. This is a bug")
 			}
 
 			fmt.Println("GPU Details:")
-			for i, g := range gpus {
-				fmt.Printf("Model: %s, Total VRAM: %.2f GB, Used VRAM: %.2f GB, Vendor: %s, PCI Address: %s, Index: %d\n",
-					g.Model, types.ConvertBytesToGB(g.VRAM), types.ConvertBytesToGB(usage[i].VRAM), g.Vendor, g.PCIAddress, g.Index)
+			for i, g := range machineResources.GPUs {
+				fmt.Printf("Model: %s, Total VRAM: %.2f GB, Used VRAM: %.2f GB, Vendor: %s, PCI Address: %s, UUID: %s, Index: %d\n",
+					g.Model, g.VRAMInGB(), machineUsage.GPUs[i].VRAMInGB(), g.Vendor, g.PCIAddress, g.UUID, g.Index)
 			}
 			return nil
 		},
 	}
 }
 
-func newGPUTestCommand() *cobra.Command {
+func newGPUTestCommand(hardwareManager types.HardwareManager, dockerClient docker.ClientInterface) *cobra.Command {
 	return &cobra.Command{
 		Use:   "test",
 		Short: "Test GPU deployment by running a Docker container with GPU resources",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			hardwareManager := hardware.NewHardwareManager()
 			machineResources, err := hardwareManager.GetMachineResources()
 			if err != nil {
 				return fmt.Errorf("getting machine resources: %v", err)
 			}
 
 			if len(machineResources.GPUs) == 0 {
-				return fmt.Errorf("no GPUs detected on the host")
+				return fmt.Errorf("no GPUs found")
 			}
 
 			maxFreeVRAMGpu, err := machineResources.GPUs.MaxFreeVRAMGPU()
@@ -105,12 +102,8 @@ func newGPUTestCommand() *cobra.Command {
 				}
 			}
 			imageName := "ubuntu:20.04"
-			client, err := docker.NewDockerClient()
-			if err != nil {
-				return fmt.Errorf("creating Docker executor: %v", err)
-			}
 
-			if !client.IsInstalled(context.Background()) {
+			if !dockerClient.IsInstalled(context.Background()) {
 				return fmt.Errorf("docker is not installed or running. Cannot run GPU deployment test")
 			}
 
@@ -187,7 +180,7 @@ func newGPUTestCommand() *cobra.Command {
 				return fmt.Errorf("unknown GPU vendor: %s", maxFreeVRAMGpu.Vendor)
 			}
 
-			containerID, err := client.CreateContainer(context.Background(),
+			containerID, err := dockerClient.CreateContainer(context.Background(),
 				containerConfig,
 				hostConfig,
 				nil,
@@ -201,13 +194,13 @@ func newGPUTestCommand() *cobra.Command {
 
 			fmt.Println("Container created with ID: ", containerID)
 
-			if err := client.StartContainer(context.Background(), "nunet-gpu-test"); err != nil {
+			if err := dockerClient.StartContainer(context.Background(), "nunet-gpu-test"); err != nil {
 				return fmt.Errorf("starting docker container: %v", err)
 			}
 
 			ctx := context.Background()
 			// Wait for the container to finish execution
-			statusCh, errCh := client.WaitContainer(ctx, containerID)
+			statusCh, errCh := dockerClient.WaitContainer(ctx, containerID)
 			select {
 			case err := <-errCh:
 				if err != nil {
@@ -217,7 +210,7 @@ func newGPUTestCommand() *cobra.Command {
 				fmt.Println("Container execution completed.")
 			}
 
-			reader, err := client.GetOutputStream(ctx, containerID, "", true)
+			reader, err := dockerClient.GetOutputStream(ctx, containerID, "", true)
 			if err != nil {
 				return fmt.Errorf("getting output stream: %v", err)
 			}

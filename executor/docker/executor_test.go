@@ -11,9 +11,12 @@ package docker_test
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
@@ -21,21 +24,31 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+const (
+	persistLogDurationTest = time.Second * 1
+	testDirLogs            = "/tmp/nunet/tests/"
+)
+
 // ExecutorTestSuite is the test suite for the Docker executor.
 type ExecutorTestSuite struct {
 	suite.Suite
 	executor *docker.Executor
+
+	fs afero.Afero
 }
 
 // SetupTest sets up the test suite by initializing a new Docker executor.
 func (s *ExecutorTestSuite) SetupTest() {
 	// Set observability to no-op mode for this test
 	observability.SetNoOpMode(true)
-	e, err := docker.NewExecutor(context.Background(), "test_docker_executor")
+	s.fs = afero.Afero{Fs: afero.NewOsFs()}
+	e, err := docker.NewExecutor(context.Background(), s.fs, "test_docker_executor")
 	s.NoError(err)
 	s.executor = e
 	s.T().Cleanup(func() {
 		_ = s.executor.Cleanup(context.Background())
+		// wait for logs being cleaned up from disk
+		<-time.After(persistLogDurationTest + (time.Second * 1))
 	})
 }
 
@@ -48,25 +61,71 @@ func TestExecutorTestSuite(t *testing.T) {
 // newExecutionRequest creates a new execution request for testing.
 func (s *ExecutorTestSuite) newExecutionRequest(cmd []string) *types.ExecutionRequest {
 	engine := docker.NewDockerEngineBuilder(defaultImage).WithCmd(cmd...).Build()
+	execID := fmt.Sprintf("test_execution-%s", uuid.New())
 	return &types.ExecutionRequest{
 		JobID:       "test_job",
-		ExecutionID: fmt.Sprintf("test_execution-%s", uuid.New()),
+		ExecutionID: execID,
 		EngineSpec:  engine,
 		Resources: &types.Resources{
 			CPU: types.CPU{ClockSpeed: 1024, Cores: 1},
 			RAM: types.RAM{Size: 1024},
 		},
+		ResultsDir:          filepath.Join(testDirLogs, execID),
+		PersistLogsDuration: persistLogDurationTest,
 	}
 }
 
-// Test StartJob tests the Start method of the Docker executor.
+// TestStartJob tests the Start method of the Docker executor.
 func (s *ExecutorTestSuite) TestStartJob() {
 	request := s.newExecutionRequest(transientCmd)
 	err := s.executor.Start(context.Background(), request)
 	s.NoError(err)
 }
 
-// Test RunJob tests the Run method of the Docker executor.
+// TestSavedLogs starts a job and checks if logs are being persisted to disk.
+// Log files are updated while the container is running
+func (s *ExecutorTestSuite) TestSavedLogs() {
+	wordBeforeSleep := "one"
+	wordAfterSleep := "two"
+
+	// Create command that prints first word, sleeps, then prints second word
+	request := s.newExecutionRequest([]string{
+		"sh", "-c",
+		fmt.Sprintf("echo '%s'; sleep 5; echo '%s'", wordBeforeSleep, wordAfterSleep),
+	})
+
+	ctx := context.Background()
+
+	// Start the execution
+	err := s.executor.Start(ctx, request)
+	s.NoError(err)
+
+	// Wait for container to actually be running
+	err = s.executor.WaitForStatus(ctx, request.ExecutionID, types.ExecutionStatusRunning, nil)
+	s.NoError(err)
+	time.Sleep(time.Second * 2)
+
+	// Check intermediate state - should only have first word
+	stdoutPath := filepath.Join(request.ResultsDir, "stdout.log")
+	content, err := s.fs.ReadFile(stdoutPath)
+	s.NoError(err)
+	s.Contains(string(content), wordBeforeSleep, "First word should be written to log file while container is still running")
+	s.NotContains(string(content), wordAfterSleep, "Second word should not be written yet")
+
+	// Wait for completion
+	resultCh, errCh := s.executor.Wait(ctx, request.ExecutionID)
+	select {
+	case result := <-resultCh:
+		s.Equal(0, result.ExitCode)
+
+		s.Contains(result.STDOUT, wordBeforeSleep, "First word should be in final result")
+		s.Contains(result.STDOUT, wordAfterSleep, "Second word should be in final result")
+	case err := <-errCh:
+		s.NoError(err)
+	}
+}
+
+// TestRunJob tests the Run method of the Docker executor.
 func (s *ExecutorTestSuite) TestRunJob() {
 	request := s.newExecutionRequest(transientCmd)
 	result, err := s.executor.Run(context.Background(), request)

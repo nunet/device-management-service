@@ -15,8 +15,13 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/libp2p/go-libp2p/core/crypto"
+
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -26,12 +31,15 @@ const (
 	// Minimum time for deployment
 	MinDeploymentTime = time.Minute - time.Second
 
-	bidStateGCInterval = time.Minute
-	bidStateTimeout    = 5 * time.Minute
+	RestoreDeadlineCommitting   = 1 * time.Minute
+	RestoreDeadlineProvisioning = 1 * time.Minute
+	RestoreDeadlineRunning      = 5 * time.Minute
+	bidStateGCInterval          = time.Minute
+	bidStateTimeout             = 5 * time.Minute
 )
 
 type NewDeploymentRequest struct {
-	Ensemble jobs.EnsembleConfig
+	Ensemble job_types.EnsembleConfig
 }
 
 type NewDeploymentResponse struct {
@@ -63,7 +71,8 @@ func (n *Node) newDeployment(msg actor.Envelope) {
 		return
 	}
 
-	orchestrator, err := n.createOrchestrator(request.Ensemble)
+	childCtx := context.WithoutCancel(n.ctx)
+	orchestrator, err := n.createOrchestrator(childCtx, request.Ensemble)
 	if err != nil {
 		log.Warnf("creating orchestrator: %s", err)
 		n.sendReply(msg, NewDeploymentResponse{
@@ -95,7 +104,7 @@ func (n *Node) newDeployment(msg actor.Envelope) {
 
 	// save the deployment
 	n.mx.Lock()
-	if err := n.saveDeployment(orchestrator.ID()); err != nil {
+	if err := n.saveDeployment(orchestrator); err != nil {
 		log.Errorf("error saving deployment %s: %s", orchestrator.ID(), err)
 	}
 	n.mx.Unlock()
@@ -116,8 +125,18 @@ func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 	// TODO
 }
 
-func (n *Node) createOrchestrator(ensemble jobs.EnsembleConfig) (*jobs.Orchestrator, error) {
-	orch, err := jobs.NewOrchestrator(n.actor, n.network, ensemble)
+func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
+	ensembleID, err := uuid.NewUUID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
+	}
+
+	actor, err := n.actor.CreateChild(n.actor.Handle(), actor.BasicActorParams{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create child actor: %w", err)
+	}
+
+	orch, err := jobs.NewOrchestrator(ctx, ensembleID.String(), actor, n.network, ensemble)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +149,8 @@ func (n *Node) saveDeployments() error {
 	defer n.mx.Unlock()
 
 	var failed []string
-	for oid := range n.deployments {
-		if err := n.saveDeployment(oid); err != nil {
+	for oid, deployment := range n.deployments {
+		if err := n.saveDeployment(deployment); err != nil {
 			log.Errorf("error saving deployment %s: %s", oid, err)
 			failed = append(failed, oid)
 		}
@@ -144,13 +163,116 @@ func (n *Node) saveDeployments() error {
 	return nil
 }
 
-func (n *Node) saveDeployment(_ string) error {
-	// TODO
+func (n *Node) saveDeployment(deployment *jobs.Orchestrator) error {
+	pvkey := deployment.ActorPrivateKey()
+
+	pkRaw, err := crypto.MarshalPrivateKey(pvkey)
+	if err != nil {
+		return fmt.Errorf("failed to convert priv key to raw: %w", err)
+	}
+
+	// TODO (not sensitive now): encrypt the orchestrator's pvkey before storing
+	view := job_types.OrchestratorView{
+		DeploymentID:       deployment.ID(),
+		Cfg:                deployment.Config(),
+		Manifest:           deployment.Manifest(),
+		Status:             deployment.Status(),
+		DeploymentSnapshot: deployment.DeploymentSnapshot(),
+		PrivKey:            pkRaw,
+	}
+
+	_, err = n.orchestratorRepo.Create(n.ctx, view)
+	if err != nil {
+		return fmt.Errorf("couldn't save deployment on database: %w", err)
+	}
+
 	return nil
 }
 
 func (n *Node) restoreDeployments() error {
-	// TODO
+	query := n.orchestratorRepo.GetQuery()
+	query.Conditions = append(
+		query.Conditions,
+		repositories.LTE("Status", job_types.DeploymentStatusRunning),
+	)
+
+	// TODO: delete old orchestrator views
+	orchestratorsViews, err := n.orchestratorRepo.FindAll(n.ctx, query)
+	if err != nil {
+		if err == repositories.ErrNotFound {
+			return nil
+		}
+		return fmt.Errorf("couldn't query the database for hanging deployments: %w", err)
+	}
+
+	var failedToRestore []string
+	for _, d := range orchestratorsViews {
+		if d.Status < job_types.DeploymentStatusCommitting {
+			log.Warnf(
+				"deployment %s will not be restaured because it was not previously committed",
+				d.DeploymentID,
+			)
+			continue
+		}
+
+		// Check restore deadline based on deployment status
+		// TODO: on the compute provider side, if the deployer stops to answer
+		// for more than the restore deadlines, they should free any resources alocated
+		// and consider the deployment as canceled
+		var restoreDeadline time.Duration
+		switch d.Status {
+		case job_types.DeploymentStatusCommitting:
+			restoreDeadline = RestoreDeadlineCommitting
+		case job_types.DeploymentStatusProvisioning:
+			restoreDeadline = RestoreDeadlineProvisioning
+		case job_types.DeploymentStatusRunning:
+			restoreDeadline = RestoreDeadlineRunning
+		default:
+			log.Warnf("Unknown restorable deployment status for %s, skipping restoration", d.DeploymentID)
+			continue
+		}
+
+		if time.Since(d.CreatedAt) > restoreDeadline {
+			log.Warnf("Deployment %s has exceeded its restore deadline, skipping restoration", d.DeploymentID)
+			continue
+		}
+
+		// recreate actor given priv key
+		pvkey, err := crypto.UnmarshalPrivateKey(d.PrivKey)
+		if err != nil {
+			log.Errorf("couldn't unmarshall orchestrator's actor priv key: %v", err)
+			failedToRestore = append(failedToRestore, d.DeploymentID)
+			continue
+		}
+
+		actor, err := n.createChildActor(pvkey, d.DeploymentID, d.Manifest.Orchestrator)
+		if err != nil {
+			log.Errorf("couldn't restore orchestrator actor of ensemble %s: %v", d.DeploymentID, err)
+			failedToRestore = append(failedToRestore, d.DeploymentID)
+			continue
+		}
+
+		err = actor.Start()
+		if err != nil {
+			log.Errorf("failed to start actor: %w", err)
+			continue
+		}
+
+		orchestrator, err := jobs.RestoreDeployment(actor, n.network, d.DeploymentID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
+		if err != nil {
+			log.Errorf("couldn't restore orchestrator of id %s; Error: %w", d.DeploymentID, err)
+			failedToRestore = append(failedToRestore, d.DeploymentID)
+			continue
+		}
+
+		log.Debugf("deployment %s restored!\n", orchestrator.ID())
+		n.deployments[orchestrator.ID()] = orchestrator
+	}
+
+	if len(failedToRestore) > 0 {
+		return fmt.Errorf("failed to restore the following deployment(s): %v", failedToRestore)
+	}
+
 	return nil
 }
 
@@ -159,7 +281,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 
 	log.Debugf("got a bid request from: %+v", &msg.From.Address)
 
-	onboarded, err := n.onboarder.IsOnboarded(n.ctx)
+	onboarded, err := n.onboarder.IsOnboarded()
 	if err != nil {
 		log.Debugf("got some error while checking onboarding: %w", err)
 		return
@@ -169,8 +291,9 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		return
 	}
 
-	var request jobs.EnsembleBidRequest
+	var request job_types.EnsembleBidRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		log.Debugf("error unmarshalling bid request: %s", err)
 		return
 	}
 
@@ -192,7 +315,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 	})
 
 	// find the first bid request that matches
-	var toAnswer jobs.BidRequest
+	var toAnswer job_types.BidRequest
 	var found bool
 loop:
 	for _, v := range request.Request {
@@ -211,12 +334,6 @@ loop:
 			}
 		}
 
-		// TODO allow static ports
-		if len(v.V1.PublicPorts.Static) > 0 {
-			log.Debug("bid request has static public ports")
-			continue loop
-		}
-
 		// if the desired executable is not found stop
 		for _, e := range v.V1.Executors {
 			executor, err := n.getExecutor(e)
@@ -224,9 +341,9 @@ loop:
 				log.Debugf("failed to get executor: %+v", e)
 				continue loop
 			}
-			if executor.executionType == jobs.ExecutorDocker {
+			if executor.executionType == job_types.ExecutorDocker {
 				if v.V1.GeneralRequirements.PrivilegedDocker {
-					if !n.allowPrivilegedDocker {
+					if !n.dmsConfig.AllowPrivilegedDocker {
 						log.Debugf("node does not allow privileged docker")
 						continue loop
 					}
@@ -255,6 +372,8 @@ loop:
 		return
 	}
 
+	// TODO-MR: handle static port allocation via port allocator
+
 	// handle dynamic port allocs
 	// TODO: dynamic port allocs should be on committing phase
 	allocKey := request.ID
@@ -271,16 +390,17 @@ loop:
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
 		cleanup()
+		log.Debugf("bid request: failed to get provider: %w", err)
 		return
 	}
 	log.Debugf("signing bid with provider: %+v", provider)
 
-	bid := jobs.Bid{
-		V1: &jobs.BidV1{
+	bid := job_types.Bid{
+		V1: &job_types.BidV1{
 			EnsembleID: request.ID,
 			NodeID:     toAnswer.V1.NodeID,
 			Peer:       n.hostID,
-			Location: jobs.Location{
+			Location: job_types.Location{
 				Region:  n.hostLocation.HostContinent,
 				Country: n.hostLocation.HostCountry,
 				City:    n.hostLocation.HostCity,
@@ -292,6 +412,7 @@ loop:
 	err = bid.Sign(provider)
 	if err != nil {
 		cleanup()
+		log.Debugf("bid request: failed to sign bid: %w", err)
 		return
 	}
 
@@ -373,7 +494,7 @@ func (n *Node) releaseAllocation(allocID string) error {
 	return nil
 }
 
-func (n *Node) rememberBid(eid string, req jobs.BidRequest, ports []int) {
+func (n *Node) rememberBid(eid string, req job_types.BidRequest, ports []int) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 

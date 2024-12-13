@@ -11,6 +11,8 @@ package cpu
 import (
 	"testing"
 
+	"gitlab.com/nunet/device-management-service/types"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,4 +28,22 @@ func TestGetCPUUsage(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, cpu.Cores, float32(0))
 	require.Greater(t, cpu.ClockSpeed, float64(0))
+}
+
+func TestCPUCache(t *testing.T) {
+	cpuCache = &types.CPU{
+		Cores:      4,
+		ClockSpeed: 2.5,
+	}
+	cpu, err := GetCPU()
+	require.NoError(t, err)
+	require.Equal(t, cpuCache, &cpu)
+
+	// Ensure that the value is returned safely
+	cpu.Cores = 0
+	cpu.ClockSpeed = 0
+
+	actualCPU, err := GetCPU()
+	require.NoError(t, err)
+	require.Equal(t, cpuCache, &actualCPU)
 }

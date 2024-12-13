@@ -9,7 +9,6 @@
 package docker
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -31,10 +30,52 @@ import (
 	"go.uber.org/multierr"
 )
 
+type ClientInterface interface {
+	IsInstalled(ctx context.Context) bool
+	CreateContainer(
+		ctx context.Context,
+		config *container.Config,
+		hostConfig *container.HostConfig,
+		networkingConfig *network.NetworkingConfig,
+		platform *v1.Platform,
+		name string,
+		pullImage bool,
+	) (string, error)
+	InspectContainer(ctx context.Context, id string) (types.ContainerJSON, error)
+	FollowLogs(ctx context.Context, id string) (stdout, stderr io.Reader, err error)
+	StartContainer(ctx context.Context, containerID string) error
+	WaitContainer(
+		ctx context.Context,
+		containerID string,
+	) (<-chan container.WaitResponse, <-chan error)
+	PauseContainer(ctx context.Context, containerID string) error
+	ResumeContainer(ctx context.Context, containerID string) error
+	StopContainer(
+		ctx context.Context,
+		containerID string,
+		options container.StopOptions,
+	) error
+	RemoveContainer(ctx context.Context, containerID string) error
+	RemoveObjectsWithLabel(ctx context.Context, label string, value string) error
+	FindContainer(ctx context.Context, label string, value string) (string, error)
+	GetImage(ctx context.Context, imageName string) (image.Summary, error)
+	PullImage(ctx context.Context, imageName string) (string, error)
+	GetOutputStream(
+		ctx context.Context,
+		containerID string,
+		since string,
+		follow bool,
+	) (io.ReadCloser, error)
+	Exec(ctx context.Context, containerID string, cmd []string) (int, string, error)
+}
+
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
 type Client struct {
 	client *client.Client // Embed the Docker client.
 }
+
+// Ensure that Client implements the ClientInterface.
+var _ ClientInterface = (*Client)(nil)
 
 // NewDockerClient initializes a new Docker client with environment variables and API version negotiation.
 func NewDockerClient() (*Client, error) {
@@ -129,26 +170,28 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 		return nil, nil, errors.Wrap(err, "failed to get container logs")
 	}
 
-	stdoutReader, stdoutWriter := io.Pipe()
-	stderrReader, stderrWriter := io.Pipe()
-	go func() {
-		stdoutBuffer := bufio.NewWriter(stdoutWriter)
-		stderrBuffer := bufio.NewWriter(stderrWriter)
-		defer func() {
-			logsReader.Close()
-			stdoutBuffer.Flush()
-			stdoutWriter.Close()
-			stderrBuffer.Flush()
-			stderrWriter.Close()
-		}()
+	stdoutR, stdoutW := io.Pipe()
+	stderrR, stderrW := io.Pipe()
 
-		_, err = stdcopy.StdCopy(stdoutBuffer, stderrBuffer, logsReader)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Warnf("context closed while getting logs: %v\n", err)
+	go func() {
+		defer logsReader.Close()
+		defer stdoutW.Close()
+		defer stderrW.Close()
+
+		// Copy logs to stdout and stderr
+		if cont.Config.Tty {
+			// If TTY is enabled, everything goes to stdout
+			_, err = io.Copy(stdoutW, logsReader)
+		} else {
+			// If TTY is not enabled, use stdcopy.StdCopy to demultiplex the streams
+			_, err = stdcopy.StdCopy(stdoutW, stderrW, logsReader)
+		}
+		if err != nil {
+			log.Errorf("failed to copy logs: %v", err)
 		}
 	}()
 
-	return stdoutReader, stderrReader, nil
+	return stdoutR, stderrR, nil
 }
 
 // StartContainer starts a specified Docker container.
@@ -404,4 +447,49 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 
 	log.Infow("docker_pull_image_success", "digest", digest)
 	return digest, nil
+}
+
+func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (int, string, error) {
+	log.Infow("docker_container_exec_started", "container ID", containerID)
+
+	idresp, err := c.client.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	hijconn, err := c.client.ContainerExecAttach(ctx, idresp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	defer hijconn.Close()
+
+	var outputStr string
+
+	out, err := io.ReadAll(hijconn.Reader)
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	outputStr = string(out)
+
+	log.Infow("docker_container_exec_success", "output string", outputStr)
+
+	execInspect, err := c.client.ContainerExecInspect(ctx, idresp.ID)
+	if err != nil {
+		log.Errorw("docker_container_exec_failure", "error", err)
+		return 1, "", err
+	}
+
+	return execInspect.ExitCode, outputStr, nil
 }

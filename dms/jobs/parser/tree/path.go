@@ -73,6 +73,22 @@ func (p Path) Matches(pattern Path) bool {
 	return matchParts(pathParts, patternParts)
 }
 
+// FindParentWithKey returns the first parent path that has the specified key
+func (p Path) FindParentWithKey(key string) Path {
+	if p == "" || key == "" {
+		return ""
+	}
+
+	parts := p.Parts()
+	for i := len(parts); i > 0; i-- {
+		// Check if current part matches the key
+		if parts[i-1] == key {
+			return Path(strings.Join(parts[:i], configPathSeparator))
+		}
+	}
+	return ""
+}
+
 // String returns the string representation of the path
 func (p Path) String() string {
 	return string(p)

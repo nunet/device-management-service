@@ -19,6 +19,8 @@ import (
 // Executor serves as an execution manager for running jobs on a specific backend, such as a Docker daemon.
 // It provides a comprehensive set of methods to initiate, monitor, terminate, and retrieve output streams for executions.
 type Executor interface {
+	// GetID returns the unique identifier for the executor.
+	GetID() string
 	// Start initiates an execution for the given ExecutionRequest.
 	// It returns an error if the execution already exists and is in a started or terminal state.
 	// Implementations may also return other errors based on resource limitations or internal faults.
@@ -66,4 +68,7 @@ type Executor interface {
 	// WaitForStatus waits for the execution to reach a specific status.
 	// It returns an error if the execution is not found or the status is unknown.
 	WaitForStatus(ctx context.Context, executionID string, status types.ExecutionStatus, timeout *time.Duration) error
+
+	// Exec executes a command in a container and returns the exit code, output, and an error if the operation fails.
+	Exec(ctx context.Context, containerID string, command []string) (int, string, error)
 }

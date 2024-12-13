@@ -18,14 +18,16 @@ import (
 
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
-func newRunCmd() *cobra.Command {
+func newRunCmd(gcfg *config.Config) *cobra.Command {
 	var context string
-	pprof := config.GetConfig().Profiler.Enabled
-	pprofAddr := config.GetConfig().Profiler.Addr
-	pprofPort := config.GetConfig().Profiler.Port
+	pprof := gcfg.Profiler.Enabled
+	pprofAddr := gcfg.Profiler.Addr
+	pprofPort := gcfg.Profiler.Port
 
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -70,12 +72,31 @@ Or manually create a dms_config.json file and refer to the README for available 
 				}()
 			}
 
-			return dms.Run(passphrase, context)
+			dmsInstance, err := dms.NewDMS(gcfg, passphrase, context)
+			if err != nil {
+				return fmt.Errorf("failed to initialize dms: %w", err)
+			}
+
+			go func() {
+				sig := <-internal.ShutdownChan
+				log.Infof("Shutting down after receiving %v...\n", sig)
+
+				dmsInstance.Stop()
+				os.Exit(1)
+			}()
+
+			err = dmsInstance.Run()
+			if err != nil {
+				return err
+			}
+
+			<-internal.ShutdownChan
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&pprof, "pprof", pprof, "enable profiling")
 	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", pprofAddr, "enable profiling")
 	cmd.Flags().Uint32Var(&pprofPort, "pprof-port", pprofPort, "enable profiling")
-	cmd.Flags().StringVarP(&context, "context", "c", dms.DefaultContextName, "specify a capability context")
+	cmd.Flags().StringVarP(&context, "context", "c", node.DefaultContextName, "specify a capability context")
 	return cmd
 }

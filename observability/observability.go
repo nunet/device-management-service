@@ -1,9 +1,11 @@
+// observability.go
 // Copyright 2024, Nunet
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
 package observability
@@ -22,11 +24,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/natefinch/lumberjack"
 	"github.com/olivere/elastic/v7"
-	"github.com/spf13/afero"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/did"
 )
 
 const timestampKey = "timestamp"
@@ -49,6 +51,9 @@ var (
 
 	// Logger for the observability package
 	log = logging.Logger("observability")
+
+	// Global variable to hold the DID
+	didID did.DID
 )
 
 // CustomEvent represents a custom event structure
@@ -59,13 +64,12 @@ type CustomEvent struct {
 }
 
 // Initialize sets up the logger, tracing, and event bus
-func Initialize(host host.Host) error {
+func Initialize(host host.Host, did did.DID, cfg *config.Config) error {
 	if IsNoOpMode() {
 		return nil
 	}
-
-	// Load the configuration
-	cfg := config.GetConfig()
+	// Store the DID
+	didID = did
 
 	// Initialize the event bus
 	if err := initEventBus(host); err != nil {
@@ -74,11 +78,15 @@ func Initialize(host host.Host) error {
 
 	// Initialize the logger with configurations
 	if err := initLogger(cfg.Observability); err != nil {
-		log.Warnf("Failed to initialize logger: %v", err)
+		log.Warn("Failed to initialize logger", zap.Error(err))
 	}
 
-	// Initialize Elastic APM tracing with the API key
-	initTracing(cfg.APM)
+	// Initialize Elastic APM tracing only if the APM URL is provided
+	if cfg.APM.ServerURL != "" {
+		initTracing(cfg.APM)
+	} else {
+		log.Warn("APM Server URL not provided, tracing will be disabled")
+	}
 
 	return nil
 }
@@ -92,6 +100,9 @@ func OverrideLoggerForTesting() error {
 
 // initLogger configures the global logger with console, file, Elasticsearch logging, and event emission
 func initLogger(observabilityConfig config.Observability) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	// Parse the global log level
 	logLevel, err := parseLogLevel(observabilityConfig.LogLevel)
 	if err != nil {
@@ -101,6 +112,12 @@ func initLogger(observabilityConfig config.Observability) error {
 	// Set the atomic level
 	atomicLevel.SetLevel(logLevel)
 
+	// Before replacing the global logger, flush and close existing cores if necessary
+	if esSyncerInstance != nil {
+		esSyncerInstance.Close()
+		esSyncerInstance = nil
+	}
+
 	// Create cores, passing atomicLevel as LevelEnabler
 	consoleCore := createConsoleCore(atomicLevel)
 	fileCore := createFileCore(observabilityConfig, atomicLevel)
@@ -109,12 +126,21 @@ func initLogger(observabilityConfig config.Observability) error {
 	if observabilityConfig.ElasticsearchEnabled {
 		esCore, err = createElasticsearchCore(observabilityConfig, atomicLevel)
 		if err != nil {
-			log.Warnf("Unable to create Elasticsearch logger: %v", err)
+			log.Warn("Unable to create Elasticsearch logger", zap.Error(err))
 			esCore = nil // Proceed without Elasticsearch core
 		}
 	}
 
 	eventCore := newEventEmitterCore(atomicLevel)
+
+	// Wrap cores with the DID field
+	didField := zap.String("did", didID.String())
+	consoleCore = consoleCore.With([]zapcore.Field{didField})
+	fileCore = fileCore.With([]zapcore.Field{didField})
+	if esCore != nil {
+		esCore = esCore.With([]zapcore.Field{didField})
+	}
+	eventCore = eventCore.With([]zapcore.Field{didField})
 
 	// Combine cores, excluding nil cores
 	var cores []zapcore.Core
@@ -192,6 +218,7 @@ func createElasticsearchCore(observabilityConfig config.Observability, levelEnab
 		observabilityConfig.ElasticsearchIndex,
 		time.Duration(observabilityConfig.FlushInterval)*time.Second,
 		observabilityConfig.ElasticsearchAPIKey,
+		observabilityConfig.InsecureSkipVerify,
 	)
 	if err != nil {
 		return nil, err
@@ -208,10 +235,10 @@ func createElasticsearchCore(observabilityConfig config.Observability, levelEnab
 }
 
 // newElasticsearchWriteSyncer creates a WriteSyncer for Elasticsearch with buffering
-func newElasticsearchWriteSyncer(url string, index string, flushInterval time.Duration, apiKey string) (zapcore.WriteSyncer, error) {
+func newElasticsearchWriteSyncer(url string, index string, flushInterval time.Duration, apiKey string, insecureSkipVerify bool) (zapcore.WriteSyncer, error) {
 	// Create TLS configuration
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, // WARNING: Only for testing purposes
+		InsecureSkipVerify: insecureSkipVerify, // WARNING: defaults to true Only for testing purposes
 	}
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -259,6 +286,8 @@ type bufferedElasticsearchSyncer struct {
 	lastErrorTime time.Time
 	errorCount    int
 	warnLogged    bool
+	maxBufferSize int
+	wg            sync.WaitGroup
 }
 
 // newBufferedElasticsearchSyncer creates a new bufferedElasticsearchSyncer
@@ -271,6 +300,7 @@ func newBufferedElasticsearchSyncer(client *elastic.Client, index string, flushI
 		cancelFunc:    cancel,
 		buffer:        make([]string, 0),
 		flushInterval: flushInterval,
+		maxBufferSize: 1000,
 	}
 
 	// Start the flush goroutine
@@ -283,6 +313,8 @@ func newBufferedElasticsearchSyncer(client *elastic.Client, index string, flushI
 func (b *bufferedElasticsearchSyncer) start() {
 	ticker := time.NewTicker(b.flushInterval)
 	defer ticker.Stop()
+
+	defer b.wg.Done()
 
 	for {
 		select {
@@ -297,8 +329,16 @@ func (b *bufferedElasticsearchSyncer) start() {
 // Write buffers the log entry
 func (b *bufferedElasticsearchSyncer) Write(p []byte) (n int, err error) {
 	b.bufferMutex.Lock()
+	defer b.bufferMutex.Unlock()
+	if len(b.buffer) >= b.maxBufferSize {
+		// Handle buffer full scenario, drop the log entry and log a warning
+		if !b.warnLogged {
+			log.Warn("Elasticsearch log buffer is full, dropping log entries")
+			b.warnLogged = true
+		}
+		return 0, fmt.Errorf("log buffer is full")
+	}
 	b.buffer = append(b.buffer, string(p))
-	b.bufferMutex.Unlock()
 	return len(p), nil
 }
 
@@ -341,7 +381,7 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 		// Implement error suppression
 		now := time.Now()
 		if b.errorCount == 0 || now.Sub(b.lastErrorTime) > 5*time.Minute {
-			log.Warnf("Error flushing logs to Elasticsearch: %v", err)
+			log.Warn("Error flushing logs to Elasticsearch", zap.Error(err))
 			b.lastErrorTime = now
 			b.errorCount = 1
 		} else {
@@ -356,6 +396,7 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 // Close stops the flush goroutine and flushes remaining logs
 func (b *bufferedElasticsearchSyncer) Close() {
 	b.cancelFunc()
+	b.wg.Wait()
 	b.Flush()
 }
 
@@ -363,6 +404,7 @@ func (b *bufferedElasticsearchSyncer) Close() {
 func (b *bufferedElasticsearchSyncer) setFlushInterval(interval time.Duration) {
 	// Cancel the existing context to stop the goroutine
 	b.cancelFunc()
+	b.wg.Wait()
 
 	// Create a new context and start a new goroutine
 	b.ctx, b.cancelFunc = context.WithCancel(context.Background())
@@ -372,54 +414,20 @@ func (b *bufferedElasticsearchSyncer) setFlushInterval(interval time.Duration) {
 	go b.start()
 }
 
-// SetElasticsearchEndpoint updates the Elasticsearch client endpoint
+// SetElasticsearchEndpoint updates the Elasticsearch URL and reinitializes the logger.
 func SetElasticsearchEndpoint(url string) error {
-	if esSyncerInstance == nil {
-		return fmt.Errorf("elasticsearch syncer not initialized")
-	}
+	mutex.Lock()
+	defer mutex.Unlock()
 
-	// Get the configuration
+	// Update the configuration
 	cfg := config.GetConfig()
-	apiKey := cfg.Observability.ElasticsearchAPIKey
+	cfg.Observability.ElasticsearchURL = url
 
-	// Create TLS configuration
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, // WARNING: Only for testing purposes
-	}
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
-	}
-
-	// Create new client with updated endpoint and configurations
-	client, err := elastic.NewClient(
-		elastic.SetURL(url),
-		elastic.SetHttpClient(httpClient),
-		elastic.SetSniff(false),
-		elastic.SetHealthcheck(false),
-		elastic.SetHeaders(http.Header{
-			"Authorization": []string{"ApiKey " + apiKey},
-		}),
-	)
+	// Reinitialize the logger to apply the new URL
+	err := initLogger(cfg.Observability)
 	if err != nil {
-		return fmt.Errorf("failed to create new elasticsearch client: %v", err)
+		return fmt.Errorf("failed to reinitialize logger: %v", err)
 	}
-
-	// Update configuration
-	if err := config.Set(afero.NewOsFs(), "observability.elasticsearch_url", url); err != nil {
-		return fmt.Errorf("failed to set config value: %w", err)
-	}
-
-	// Flush existing logs before switching client
-	esSyncerInstance.Flush()
-
-	// Acquire the mutex to prevent concurrent access
-	esSyncerInstance.bufferMutex.Lock()
-	defer esSyncerInstance.bufferMutex.Unlock()
-
-	// Update the client
-	esSyncerInstance.client = client
 
 	return nil
 }
@@ -497,7 +505,7 @@ func (e *eventEmitterCore) Write(entry zapcore.Entry, fields []zapcore.Field) er
 	// Emit the event using the customEventEmitter
 	if err := customEventEmitter.Emit(customEvent); err != nil {
 		// Log the error at Debug level to avoid cluttering
-		log.Debugf("Error emitting event: %v", err)
+		log.Debug("Error emitting event", zap.Error(err))
 	}
 
 	return nil
@@ -510,15 +518,17 @@ func (e *eventEmitterCore) Sync() error {
 
 // SetLogLevel sets the global log level for all collectors
 func SetLogLevel(level string) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	logLevel, err := parseLogLevel(level)
 	if err != nil {
 		return fmt.Errorf("invalid log level: %w", err)
 	}
 
 	// Update the configuration
-	if err := config.Set(afero.NewOsFs(), "observability.log_level", level); err != nil {
-		return fmt.Errorf("failed to set config value: %w", err)
-	}
+	cfg := config.GetConfig()
+	cfg.Observability.LogLevel = level
 
 	// Set the new log level in atomicLevel
 	atomicLevel.SetLevel(logLevel)
@@ -528,14 +538,12 @@ func SetLogLevel(level string) error {
 
 // SetFlushInterval sets the flush interval for Elasticsearch logging dynamically
 func SetFlushInterval(seconds int) error {
-	if seconds <= 0 {
-		return fmt.Errorf("interval must be greater than 0")
-	}
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	// Update the configuration
-	if err := config.Set(afero.NewOsFs(), "observability.flush_interval", seconds); err != nil {
-		return fmt.Errorf("failed to set config value: %w", err)
-	}
+	cfg := config.GetConfig()
+	cfg.Observability.FlushInterval = seconds
 
 	// Update the flush interval in the elasticsearchWriteSyncer
 	if esSyncerInstance != nil {
@@ -568,19 +576,30 @@ func EmitCustomEvent(eventName string, keyValues ...interface{}) error {
 
 	// Emit the event using the customEventEmitter
 	if err := customEventEmitter.Emit(customEvent); err != nil {
-		log.Debugf("Failed to emit custom event: %v", err)
+		log.Debug("Failed to emit custom event", zap.Error(err))
 	}
 	return nil
 }
 
 // Shutdown cleans up resources
 func Shutdown() {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	if customEventEmitter != nil {
 		customEventEmitter.Close()
 	}
 	if esSyncerInstance != nil {
 		esSyncerInstance.Close()
+		esSyncerInstance = nil
 	}
+	// Shutdown the tracer
+	ShutdownTracer()
+}
+
+// ShutdownTracer wraps the Shutdown function from tracing.go
+func ShutdownTracer() {
+	shutdownTracer()
 }
 
 // SetNoOpMode enables or disables the no-op mode for observability.
@@ -608,4 +627,69 @@ func IsNoOpMode() bool {
 	mutex.RLock()
 	defer mutex.RUnlock()
 	return noOpMode
+}
+
+// SetAPIKey updates the API key for both Elasticsearch and APM.
+func SetAPIKey(apiKey string) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Update the configuration
+	cfg := config.GetConfig()
+	cfg.Observability.ElasticsearchAPIKey = apiKey
+	cfg.APM.APIKey = apiKey
+
+	// Reinitialize the logger to apply the new API key for Elasticsearch
+	err := initLogger(cfg.Observability)
+	if err != nil {
+		return fmt.Errorf("failed to reinitialize logger: %v", err)
+	}
+
+	// Reinitialize tracing to apply the new API key for APM
+	if cfg.APM.ServerURL != "" {
+		initTracing(cfg.APM)
+	}
+
+	return nil
+}
+
+// SetAPMURL updates the APM server URL and reinitializes the APM tracer.
+func SetAPMURL(url string) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if IsNoOpMode() {
+		return nil
+	}
+
+	// Update the configuration
+	cfg := config.GetConfig()
+	cfg.APM.ServerURL = url
+
+	// Reinitialize the tracer with the updated configuration
+	if cfg.APM.ServerURL != "" {
+		initTracing(cfg.APM)
+	} else {
+		ShutdownTracer()
+	}
+
+	return nil
+}
+
+// EnableElasticsearchLogging enables or disables Elasticsearch logging dynamically.
+func EnableElasticsearchLogging(enabled bool) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Update the configuration
+	cfg := config.GetConfig()
+	cfg.Observability.ElasticsearchEnabled = enabled
+
+	// Reinitialize the logger to apply the change
+	err := initLogger(cfg.Observability)
+	if err != nil {
+		return fmt.Errorf("failed to reinitialize logger: %v", err)
+	}
+
+	return nil
 }
