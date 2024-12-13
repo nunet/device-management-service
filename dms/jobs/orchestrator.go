@@ -1008,15 +1008,15 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		mf.Nodes[n] = nmf
 	}
 
-	for id, alloc := range o.cfg.Allocations() {
+	for name, alloc := range o.cfg.Allocations() {
 		amf := AllocationManifest{
-			ID:          id,
-			NodeID:      allocationNodes[id],
-			Handle:      allocations[id],
+			ID:          o.id + "_" + name,
+			NodeID:      allocationNodes[name],
+			Handle:      allocations[name],
 			DNSName:     alloc.DNSName + ".internal",
 			Healthcheck: alloc.HealthCheck,
 		}
-		mf.Allocations[id] = amf
+		mf.Allocations[name] = amf
 	}
 
 	return mf, nil
@@ -1027,23 +1027,23 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(ncfg.Allocations))
-	for _, ID := range ncfg.Allocations {
+	for _, allocName := range ncfg.Allocations {
 		wg.Add(1)
-		go func(ID string) {
+		go func(allocName string) {
 			defer wg.Done()
-			allocation, ok := o.cfg.V1.Allocations[ID]
+			allocation, ok := o.cfg.V1.Allocations[allocName]
 			if !ok {
-				errCh <- fmt.Errorf("allocation %s not found: %w", ID, ErrDeploymentFailed)
+				errCh <- fmt.Errorf("allocation %s not found: %w", allocName, ErrDeploymentFailed)
 			}
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
 				CommitDeploymentBehavior,
 				CommitDeploymentRequest{
-					EnsembleID:   o.id,
-					AllocationID: ID,
-					NodeID:       n,
-					Resources:    allocation.Resources,
+					EnsembleID:     o.id,
+					AllocationName: allocName,
+					NodeID:         n,
+					Resources:      allocation.Resources,
 				},
 				actor.WithMessageTimeout(CommitDeploymentTimeout),
 			)
@@ -1072,7 +1072,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 			if !response.OK {
 				errCh <- fmt.Errorf("error committing for %s: %s: %w", n, response.Error, ErrDeploymentFailed)
 			}
-		}(ID)
+		}(allocName)
 	}
 
 	wg.Wait()

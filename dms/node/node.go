@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -739,24 +738,30 @@ func (n *Node) createAllocations(
 	allocations map[string]jobs.AllocationDeploymentConfig,
 	supervisor actor.Handle,
 ) (map[string]actor.Handle, error) {
-	allocHandles := make(map[string]actor.Handle, len(allocations))
-	for allocationID, config := range allocations {
+	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
+	allocationIDs := make([]string, 0, len(allocations))
+	for allocationName, config := range allocations {
+		allocationID := ensembleID + "_" + allocationName
 		if _, ok := n.allocations[allocationID]; ok {
+			log.Debugf("allocation %s already exists", allocationID)
 			continue
 		}
 
-		allocation, err := n.createAllocation(jobs.Job{
-			ID:               ensembleID,
-			AllocationID:     allocationID,
-			Resources:        config.Resources,
-			Execution:        config.Execution,
-			ProvisionScripts: config.ProvisionScripts,
-		}, supervisor)
+		allocation, err := n.createAllocation(
+			allocationID,
+			jobs.Job{
+				Resources:        config.Resources,
+				Execution:        config.Execution,
+				ProvisionScripts: config.ProvisionScripts,
+			},
+			supervisor,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create allocation %s: %w", allocationID, err)
 		}
 
-		allocHandles[allocationID] = allocation.Actor.Handle()
+		allocHandlesByName[allocationName] = allocation.Actor.Handle()
+		allocationIDs = append(allocationIDs, allocation.ID)
 
 		// node grants subnet create/destroy caps to the orchestrator
 		if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
@@ -805,42 +810,39 @@ func (n *Node) createAllocations(
 		}()
 	}
 
+	// Start monitoring allocations
+	go n.monitorEnsembleAllocations(ensembleID, allocationIDs)
+
 	log.Infof("Finished createAllocations for ensembleID: %s", ensembleID)
-	return allocHandles, nil
+	return allocHandlesByName, nil
 }
 
 // createAllocation creates an allocation
-func (n *Node) createAllocation(job jobs.Job, supervisor actor.Handle) (*jobs.Allocation, error) {
+func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor actor.Handle) (*jobs.Allocation, error) {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate keypair for allocation job %s: %w", job.ID, err)
+		return nil, fmt.Errorf("failed to generate keypair for allocation job %s: %w", allocationID, err)
 	}
 
-	allocationInbox, err := uuid.NewUUID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
-	}
-
-	allocActor, err := n.createChildActor(priv, allocationInbox.String(), supervisor)
+	allocActor, err := n.createChildActor(priv, allocationID, supervisor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
 
 	n.mx.Lock()
-	_, alreadyCommited := n.commitedResources[job.AllocationID]
+	_, alreadyCommited := n.commitedResources[allocationID]
 
 	if !alreadyCommited {
 		n.mx.Unlock()
-		return nil, fmt.Errorf("no committed resources for ensemble id: %s", job.AllocationID)
+		return nil, fmt.Errorf("no committed resources for ensemble id: %s", allocationID)
 	}
 
-	if err := n.resourceManager.UncommitResources(context.Background(), job.AllocationID); err != nil {
-		log.Errorf("failed to uncommit resources for ensemble id: %s: %w", job.ID, err)
+	if err := n.resourceManager.UncommitResources(context.Background(), allocationID); err != nil {
+		log.Errorf("failed to uncommit resources for allocation: %s: %w", allocationID, err)
 	}
 
 	resourceAllocation := types.ResourceAllocation{
-		JobID:        job.ID,
-		AllocationID: job.AllocationID,
+		AllocationID: allocationID,
 		Resources:    job.Resources,
 	}
 	err = n.resourceManager.AllocateResources(n.ctx, resourceAllocation)
@@ -849,10 +851,11 @@ func (n *Node) createAllocation(job jobs.Job, supervisor actor.Handle) (*jobs.Al
 		return nil, fmt.Errorf("failed to allocate resources: %w", err)
 	}
 
-	delete(n.commitedResources, job.AllocationID)
+	delete(n.commitedResources, allocationID)
 	n.mx.Unlock()
 
 	allocation, err := jobs.NewAllocation(
+		allocationID,
 		n.fs,
 		n.dmsConfig,
 		allocActor,

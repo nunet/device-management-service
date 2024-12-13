@@ -22,7 +22,6 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
-
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -167,7 +166,7 @@ func (n *Node) saveDeployments() error {
 func (n *Node) saveDeployment(deployment *jobs.Orchestrator) error {
 	pvkey := deployment.ActorPrivateKey()
 
-	pkRaw, err := pvkey.Raw()
+	pkRaw, err := crypto.MarshalPrivateKey(pvkey)
 	if err != nil {
 		return fmt.Errorf("failed to convert priv key to raw: %w", err)
 	}
@@ -197,6 +196,7 @@ func (n *Node) restoreDeployments() error {
 		repositories.LTE("Status", job_types.DeploymentStatusRunning),
 	)
 
+	// TODO: delete old orchestrator views
 	orchestratorsViews, err := n.orchestratorRepo.FindAll(n.ctx, query)
 	if err != nil {
 		if err == repositories.ErrNotFound {
@@ -240,7 +240,7 @@ func (n *Node) restoreDeployments() error {
 		// recreate actor given priv key
 		pvkey, err := crypto.UnmarshalPrivateKey(d.PrivKey)
 		if err != nil {
-			log.Errorf("couldn't unmarshall orchestrator's actor priv key: %w", err)
+			log.Errorf("couldn't unmarshall orchestrator's actor priv key: %v", err)
 			failedToRestore = append(failedToRestore, d.DeploymentID)
 			continue
 		}
