@@ -11,6 +11,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -100,7 +101,37 @@ func TestProvision(t *testing.T) {
 	require.NoError(t, actr1.Start())
 
 	subnets := make(map[string]subnetObj)
-	_ = actr1.AddBehavior(SubnetCreateBehavior, func(msg actor.Envelope) {
+	nodeID := uuid.New().String()
+	manifest := EnsembleManifest{
+		ID:           uuid.New().String(),
+		Orchestrator: actr.Handle(),
+		Allocations: map[string]AllocationManifest{
+			"allocation1": {
+				ID:       uuid.New().String(),
+				NodeID:   nodeID,
+				Handle:   actr1.Handle(),
+				DNSName:  "actor.com.",
+				PrivAddr: "",
+				Ports: map[int]int{
+					8080: 8888,
+				},
+			},
+		},
+		Nodes: map[string]NodeManifest{
+			nodeID: {
+				ID:        uuid.New().String(),
+				Peer:      peer1.Host.ID().String(),
+				Handle:    actr1.Handle(),
+				PubAddrss: []string{},
+				Location:  Location{},
+				Allocations: []string{
+					"allocation1",
+				},
+			},
+		},
+	}
+
+	_ = actr1.AddBehavior(fmt.Sprintf(SubnetCreateBehavior.DynamicTemplate, manifest.ID), func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		t.Log("got msg for create")
@@ -276,36 +307,6 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	nodeID := uuid.New().String()
-	manifest := EnsembleManifest{
-		ID:           uuid.New().String(),
-		Orchestrator: actr.Handle(),
-		Allocations: map[string]AllocationManifest{
-			"allocation1": {
-				ID:       uuid.New().String(),
-				NodeID:   nodeID,
-				Handle:   actr1.Handle(),
-				DNSName:  "actor.com.",
-				PrivAddr: "",
-				Ports: map[int]int{
-					8080: 8888,
-				},
-			},
-		},
-		Nodes: map[string]NodeManifest{
-			nodeID: {
-				ID:        uuid.New().String(),
-				Peer:      peer1.Host.ID().String(),
-				Handle:    actr1.Handle(),
-				PubAddrss: []string{},
-				Location:  Location{},
-				Allocations: []string{
-					"allocation1",
-				},
-			},
-		},
-	}
-
 	actrdid, err := did.FromID(actr1.Handle().ID)
 	require.NoError(t, err)
 	tokenlist, err := cap1.Grant(
@@ -316,12 +317,8 @@ func TestProvision(t *testing.T) {
 		actor.MakeExpiry(time.Hour),
 		0,
 		[]ucan.Capability{
-			ucan.Capability(AllocationStartBehavior),
-			ucan.Capability(SubnetCreateBehavior),
-			ucan.Capability(SubnetAddPeerBehavior),
-			ucan.Capability(SubnetAcceptPeerBehavior),
-			ucan.Capability(SubnetDNSAddRecordsBehavior),
-			ucan.Capability(SubnetMapPortBehavior),
+			ucan.Capability(fmt.Sprintf(EnsembleNamespace, manifest.ID)),
+			ucan.Capability(AllocationNamespace),
 		},
 	)
 	require.NoError(t, err)

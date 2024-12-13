@@ -314,6 +314,7 @@ func (a *Allocation) Start() error {
 		SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
 		RegisterHealthcheckBehavior:   a.handleRegisterHealthcheck,
 		actor.HealthCheckBehavior:     a.handleHealthcheck,
+		AllocationStopBehavior:        a.handleAllocationStop,
 	}
 
 	// add allocation behaviors
@@ -406,6 +407,33 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 
 	a.state.subnetIP = req.SubnetIP
 	a.state.portMapping = req.PortMapping
+
+	resp.OK = true
+	a.sendReply(msg, resp)
+}
+
+func (a *Allocation) handleAllocationStop(msg actor.Envelope) {
+	log.Infof("behavior allocation start invoked by: %+v", msg.From)
+	defer msg.Discard()
+
+	var req AllocationStopRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		log.Errorf("error unmarshalling allocation start request: %s", err)
+		return
+	}
+
+	var resp AllocationStopResponse
+	if err := a.Stop(context.TODO()); err != nil {
+		err = fmt.Errorf("failed to stop allocation: %w", err)
+		log.Error(err)
+
+		resp.Error = err.Error()
+		resp.OK = false
+		a.sendReply(msg, resp)
+		return
+	}
+
+	log.Info("Stopping allocation: ", req.AllocationID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
