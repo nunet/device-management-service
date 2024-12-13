@@ -53,18 +53,18 @@ func NewResourceManager(repos ManagerRepos, hardware types.HardwareManager) (*De
 
 var _ types.ResourceManager = (*DefaultManager)(nil)
 
-// CommitResources commits the resources for a jobID
+// CommitResources commits the resources for an allocation
 func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.CommittedResources) error {
 	d.committedLock.Lock()
 	defer d.committedLock.Unlock()
 
-	// Check if resources are already allocated for the job
+	// Check if resources are already allocated for the allocation
 	var ok bool
 	d.store.withCommittedRLock(func() {
 		_, ok = d.store.committedResources[allocation.AllocationID]
 	})
 	if ok {
-		return fmt.Errorf("resources already committed for job %s", allocation.AllocationID)
+		return fmt.Errorf("resources already committed for allocation %s", allocation.AllocationID)
 	}
 
 	ok = false
@@ -72,7 +72,7 @@ func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.C
 		_, ok = d.store.allocations[allocation.AllocationID]
 	})
 	if ok {
-		return fmt.Errorf("resources already allocated for job %s", allocation.AllocationID)
+		return fmt.Errorf("resources already allocated for allocation %s", allocation.AllocationID)
 	}
 
 	if err := d.checkCapacity(ctx, allocation.Resources); err != nil {
@@ -89,11 +89,11 @@ func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.C
 	return nil
 }
 
-// UncommitResources releases the committed resources for a jobID
+// UncommitResources releases the committed resources for an allocation
 func (d *DefaultManager) UncommitResources(_ context.Context, allocationID string) error {
 	d.committedLock.Lock()
 	defer d.committedLock.Unlock()
-	// Check if resources are already deallocated for the job
+	// Check if resources are already deallocated for the allocation
 	var (
 		ok bool
 	)
@@ -101,7 +101,7 @@ func (d *DefaultManager) UncommitResources(_ context.Context, allocationID strin
 		_, ok = d.store.committedResources[allocationID]
 	})
 	if !ok {
-		return fmt.Errorf("resources not committed for job %s", allocationID)
+		return fmt.Errorf("resources not committed for allocation %s", allocationID)
 	}
 
 	// Release the committed resources
@@ -112,18 +112,18 @@ func (d *DefaultManager) UncommitResources(_ context.Context, allocationID strin
 	return nil
 }
 
-// AllocateResources allocates resources for a job
+// AllocateResources allocates resources for a allocation
 func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types.ResourceAllocation) error {
 	d.allocationLock.Lock()
 	defer d.allocationLock.Unlock()
 
-	// Check if resources are already allocated for the job
+	// Check if resources are already allocated for the allocation
 	var ok bool
 	d.store.withAllocationsRLock(func() {
 		_, ok = d.store.allocations[allocation.AllocationID]
 	})
 	if ok {
-		return fmt.Errorf("resources already allocated for job %s", allocation.AllocationID)
+		return fmt.Errorf("resources already allocated for allocation %s", allocation.AllocationID)
 	}
 
 	if err := d.checkCapacity(ctx, allocation.Resources); err != nil {
@@ -137,11 +137,11 @@ func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types
 	return nil
 }
 
-// DeallocateResources deallocates resources for a job
+// DeallocateResources deallocates resources for a allocation
 func (d *DefaultManager) DeallocateResources(ctx context.Context, allocationID string) error {
 	d.allocationLock.Lock()
 	defer d.allocationLock.Unlock()
-	// Check if resources are already deallocated for the job
+	// Check if resources are already deallocated for the allocation
 	var (
 		ok bool
 	)
@@ -149,7 +149,7 @@ func (d *DefaultManager) DeallocateResources(ctx context.Context, allocationID s
 		_, ok = d.store.allocations[allocationID]
 	})
 	if !ok {
-		return fmt.Errorf("resources not allocated for job %s", allocationID)
+		return fmt.Errorf("resources not allocated for allocation %s", allocationID)
 	}
 
 	if err := d.deleteAllocation(ctx, allocationID); err != nil {

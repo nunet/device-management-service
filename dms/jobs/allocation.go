@@ -34,10 +34,10 @@ type HealthCheckResponse struct {
 }
 
 const (
-	pending   AllocationStatus = "pending"
-	running   AllocationStatus = "running"
-	stopped   AllocationStatus = "stopped"
-	completed AllocationStatus = "completed"
+	Pending   AllocationStatus = "pending"
+	Running   AllocationStatus = "running"
+	Stopped   AllocationStatus = "stopped"
+	Completed AllocationStatus = "completed"
 
 	deleteLogsAfter = 30 * time.Minute
 )
@@ -59,8 +59,6 @@ type AllocationDetails struct {
 }
 
 type Job struct {
-	ID               string
-	AllocationID     string
 	Resources        types.Resources
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
@@ -100,6 +98,7 @@ type Allocation struct {
 
 // NewAllocation creates a new allocation given the actor.
 func NewAllocation(
+	id string,
 	fs afero.Afero,
 	dmsConfig config.Config,
 	actor actor.Actor,
@@ -111,27 +110,22 @@ func NewAllocation(
 		return nil, errors.New("resource manager is nil")
 	}
 
-	id, err := uuid.NewUUID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate uuid for allocation: %w", err)
-	}
-
-	executorID, err := uuid.NewUUID()
+	uuid, err := uuid.NewUUID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create executor id: %w", err)
 	}
 
 	return &Allocation{
-		ID:              id.String(),
+		ID:              id,
 		fs:              fs,
 		nodeID:          details.NodeID,
 		sourceID:        details.SourceID,
 		Job:             details.Job,
 		Actor:           actor,
-		executionID:     executorID.String(),
+		executionID:     uuid.String(),
 		resourceManager: resourceManager,
 		dmsConfig:       dmsConfig,
-		status:          pending,
+		status:          Pending,
 		network:         network,
 		state: struct {
 			subnetIP    string
@@ -145,7 +139,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
-	if a.status == running {
+	if a.status == Running {
 		log.Warnf("allocation %s is already running", a.ID)
 		return nil
 	}
@@ -160,14 +154,14 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 		}
 	}
 
-	a.resultsDir = filepath.Join(a.dmsConfig.WorkDir, "jobs", a.Job.ID)
+	a.resultsDir = filepath.Join(a.dmsConfig.WorkDir, "jobs", a.ID)
 	err = a.fs.MkdirAll(a.resultsDir, 0o700)
 	if err != nil {
 		return fmt.Errorf("failed to create results directory: %w", err)
 	}
 
 	executionRequest := &types.ExecutionRequest{
-		JobID:            a.Job.ID,
+		JobID:            a.ID,
 		ExecutionID:      a.executionID,
 		EngineSpec:       &a.Job.Execution,
 		Resources:        &a.Job.Resources,
@@ -195,7 +189,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 		return fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	a.status = running
+	a.status = Running
 
 	go a.monitorExecutor(ctx)
 
@@ -217,19 +211,19 @@ func (a *Allocation) monitorExecutor(ctx context.Context) {
 
 	a.mx.Lock()
 	if err != nil {
-		a.status = stopped
+		a.status = Stopped
 		log.Warnf("execution failed: %v", err)
 	}
 
 	if result != nil {
-		a.status = completed
+		a.status = Completed
 	}
 	a.mx.Unlock()
 
 	// deallocate resources after everything is done.
-	err = a.resourceManager.DeallocateResources(ctx, a.Job.AllocationID)
+	err = a.resourceManager.DeallocateResources(ctx, a.ID)
 	if err != nil {
-		log.Errorf("failed to deallocate resources for %s: %v", a.Job.AllocationID, err)
+		log.Errorf("failed to deallocate resources for %s: %v", a.ID, err)
 	}
 }
 
@@ -238,7 +232,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
-	if a.status != running {
+	if a.status != Running {
 		return nil
 	}
 
@@ -247,12 +241,12 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	}
 
 	// deallocate resources after everything is done.
-	err := a.resourceManager.DeallocateResources(ctx, a.Job.AllocationID)
+	err := a.resourceManager.DeallocateResources(ctx, a.ID)
 	if err != nil {
-		log.Errorf("failed to deallocate resources for %s: %v", a.Job.AllocationID, err)
+		log.Errorf("failed to deallocate resources for %s: %v", a.ID, err)
 	}
 
-	a.status = stopped
+	a.status = Stopped
 
 	return nil
 }
@@ -487,9 +481,9 @@ func (a *Allocation) handleAllocationShutdown(msg actor.Envelope) {
 	}
 
 	// deallocate resources incase monitorExecutor didn't.
-	err := a.resourceManager.DeallocateResources(context.TODO(), a.Job.AllocationID)
+	err := a.resourceManager.DeallocateResources(context.TODO(), a.ID)
 	if err != nil {
-		log.Warnf("failed to deallocate resources for %s: %v, probably already deallocated", a.Job.AllocationID, err)
+		log.Warnf("failed to deallocate resources for %s: %v, probably already deallocated", a.ID, err)
 	}
 
 	resp.OK = true
@@ -722,7 +716,7 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 
 	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
 		// TODO: get container name from executor
-		containerName := fmt.Sprintf("%s_%s_%s", a.executor.GetID(), a.Job.ID, a.ExecutionID())
+		containerName := fmt.Sprintf("%s_%s", a.ID, a.ExecutionID())
 		exitCode, outputStr, err := a.executor.Exec(context.TODO(), containerName, mf.Exec)
 		if err != nil {
 			return fmt.Errorf("health check command failed: %w", err)

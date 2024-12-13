@@ -145,7 +145,6 @@ type OnboardedResources struct {
 // ResourceAllocation represents the allocation of resources for a job
 type ResourceAllocation struct {
 	BaseDBModel
-	JobID        string `json:"job_id"`
 	AllocationID string `json:"allocation_id"`
 	Resources
 }

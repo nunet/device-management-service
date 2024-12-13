@@ -84,10 +84,10 @@ type VerifyEdgeConstraintResponse struct {
 }
 
 type CommitDeploymentRequest struct {
-	EnsembleID   string
-	AllocationID string
-	NodeID       string
-	Resources    types.Resources
+	EnsembleID     string
+	AllocationName string
+	NodeID         string
+	Resources      types.Resources
 }
 
 type CommitDeploymentResponse struct {
