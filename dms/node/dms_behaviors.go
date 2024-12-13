@@ -658,7 +658,20 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.AllocationDeploymentResponse{}
-	allocations, err := n.createAllocations(msg.From.DID, request.EnsembleID, request.NodeID, request.Allocations)
+	if err := n.registerDynamicBehaviors(request.EnsembleID); err != nil {
+		err = fmt.Errorf("failed to register dynamic behaviors: %w", err)
+		log.Error(err)
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	allocations, err := n.createAllocations(
+		msg.From.DID,
+		request.EnsembleID,
+		request.Allocations,
+		msg.From,
+	)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)

@@ -309,10 +309,10 @@ func New(cfg config.Config, fs afero.Afero,
 		jobs.RevertDeploymentBehavior: {
 			fn: n.handleRevertDeployment,
 		},
-		jobs.SubnetCreateBehavior: {
+		jobs.SubnetCreateBehavior.Static: {
 			fn: n.handleSubnetCreate,
 		},
-		jobs.SubnetDestroyBehavior: {
+		jobs.SubnetDestroyBehavior.Static: {
 			fn: n.handleSubnetDestroy,
 		},
 		ResourcesAllocatedBehavior: {
@@ -713,7 +713,32 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	return e, nil
 }
 
-func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ string, allocations map[string]jobs.AllocationDeploymentConfig) (map[string]actor.Handle, error) {
+func (n *Node) registerDynamicBehaviors(ensembleID string) error {
+	dmsBehaviors := map[string]struct {
+		fn   func(actor.Envelope)
+		opts []actor.BehaviorOption
+	}{
+		fmt.Sprintf(jobs.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetCreate,
+		},
+		fmt.Sprintf(jobs.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetDestroy,
+		},
+	}
+	for behavior, handler := range dmsBehaviors {
+		if err := n.actor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
+			return fmt.Errorf("adding %s behavior: %w", behavior, err)
+		}
+	}
+	return nil
+}
+
+func (n *Node) createAllocations(
+	orchestrator did.DID,
+	ensembleID string,
+	allocations map[string]jobs.AllocationDeploymentConfig,
+	supervisor actor.Handle,
+) (map[string]actor.Handle, error) {
 	allocHandles := make(map[string]actor.Handle, len(allocations))
 	for allocationID, config := range allocations {
 		if _, ok := n.allocations[allocationID]; ok {
@@ -726,7 +751,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 			Resources:        config.Resources,
 			Execution:        config.Execution,
 			ProvisionScripts: config.ProvisionScripts,
-		})
+		}, supervisor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create allocation %s: %w", allocationID, err)
 		}
@@ -734,9 +759,8 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 		allocHandles[allocationID] = allocation.Actor.Handle()
 
 		// node grants subnet create/destroy caps to the orchestrator
-		if err := n.grantAllocationCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
-			jobs.SubnetCreateBehavior,
-			jobs.SubnetDestroyBehavior,
+		if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+			ucan.Capability(fmt.Sprintf(jobs.EnsembleNamespace, ensembleID)),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant node caps: %w", err)
 		}
@@ -747,19 +771,8 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 			return nil, fmt.Errorf("failed to get did from id: %w", err)
 		}
 
-		if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
-			jobs.AllocationStartBehavior,
-			jobs.AllocationGetLogsBehavior,
-			jobs.AllocationShutdownBehavior,
-			jobs.SubnetAddPeerBehavior,
-			jobs.SubnetRemovePeerBehavior,
-			jobs.SubnetAcceptPeerBehavior,
-			jobs.SubnetMapPortBehavior,
-			jobs.SubnetUnmapPortBehavior,
-			jobs.SubnetDNSAddRecordsBehavior,
-			jobs.SubnetDNSRemoveRecordBehavior,
-			jobs.RegisterHealthcheckBehavior,
-			actor.HealthCheckBehavior,
+		if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
+			ucan.Capability(jobs.AllocationNamespace),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant allocation caps: %w", err)
 		}
@@ -775,27 +788,15 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 					return
 				case <-ticker.C:
 					// node grants subnet create/destroy caps to the orchestrator
-					if err := n.grantAllocationCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
-						jobs.SubnetCreateBehavior,
-						jobs.SubnetDestroyBehavior,
+					if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+						ucan.Capability(fmt.Sprintf(jobs.EnsembleNamespace, ensembleID)),
 					}); err != nil {
 						log.Warnf("failed to grant node caps: %w", err)
 					}
 
 					// allocation grants subnet manage caps to the orchestrator
-					if err := n.grantAllocationCaps(orchestrator, allocDID, []ucan.Capability{
-						jobs.AllocationStartBehavior,
-						jobs.AllocationGetLogsBehavior,
-						jobs.AllocationShutdownBehavior,
-						jobs.SubnetAddPeerBehavior,
-						jobs.SubnetRemovePeerBehavior,
-						jobs.SubnetAcceptPeerBehavior,
-						jobs.SubnetMapPortBehavior,
-						jobs.SubnetUnmapPortBehavior,
-						jobs.SubnetDNSAddRecordsBehavior,
-						jobs.SubnetDNSRemoveRecordBehavior,
-						jobs.RegisterHealthcheckBehavior,
-						actor.HealthCheckBehavior,
+					if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
+						ucan.Capability(jobs.AllocationNamespace),
 					}); err != nil {
 						log.Warnf("failed to grant allocation caps: %w", err)
 					}
@@ -809,7 +810,7 @@ func (n *Node) createAllocations(orchestrator did.DID, ensembleID string, _ stri
 }
 
 // createAllocation creates an allocation
-func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
+func (n *Node) createAllocation(job jobs.Job, supervisor actor.Handle) (*jobs.Allocation, error) {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate keypair for allocation job %s: %w", job.ID, err)
@@ -820,7 +821,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
 	}
 
-	allocActor, err := n.createChildActor(priv, allocationInbox.String())
+	allocActor, err := n.createChildActor(priv, allocationInbox.String(), supervisor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation actor: %w", err)
 	}
@@ -873,7 +874,7 @@ func (n *Node) createAllocation(job jobs.Job) (*jobs.Allocation, error) {
 	return allocation, nil
 }
 
-func (n *Node) grantAllocationCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capability) error {
+func (n *Node) grantCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capability) error {
 	tokens, err := n.rootCap.Grant(
 		ucan.Delegate,
 		orchestrator,
@@ -949,13 +950,13 @@ func (n *Node) clearCommitedResources() {
 }
 
 // createChildActor creates a child actor using node's limiter, scheduler and network.
-func (n *Node) createChildActor(pvkey crypto.PrivKey, inbox string) (*actor.BasicActor, error) {
+func (n *Node) createChildActor(pvkey crypto.PrivKey, inbox string, supervisor actor.Handle) (*actor.BasicActor, error) {
 	security, err := actor.NewBasicSecurityContext(pvkey.GetPublic(), pvkey, n.rootCap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create security context: %w", err)
 	}
 
-	childActor, err := createActor(security, n.actor.Limiter(), n.hostID, inbox, n.network, n.actor.Handle())
+	childActor, err := createActor(security, n.actor.Limiter(), n.hostID, inbox, n.network, supervisor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child actor: %w", err)
 	}

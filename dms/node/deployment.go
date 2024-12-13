@@ -245,7 +245,7 @@ func (n *Node) restoreDeployments() error {
 			continue
 		}
 
-		actor, err := n.createChildActor(pvkey, d.DeploymentID)
+		actor, err := n.createChildActor(pvkey, d.DeploymentID, d.Manifest.Orchestrator)
 		if err != nil {
 			log.Errorf("couldn't restore orchestrator actor of ensemble %s: %v", d.DeploymentID, err)
 			failedToRestore = append(failedToRestore, d.DeploymentID)

@@ -507,7 +507,7 @@ Examples:
 		},
 	},
 
-	jobs.SubnetCreateBehavior: {
+	jobs.SubnetCreateBehavior.Static: {
 		Payload: func() any { return &jobs.SubnetCreateRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetCreateRequest)
@@ -534,7 +534,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
 	},
 
-	jobs.SubnetDestroyBehavior: {
+	jobs.SubnetDestroyBehavior.Static: {
 		Payload: func() any { return &jobs.SubnetDestroyRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetDestroyRequest)

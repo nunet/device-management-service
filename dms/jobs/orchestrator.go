@@ -299,7 +299,7 @@ deploy:
 }
 
 func (o *Orchestrator) Shutdown() {
-	allocations := o.manifest.Allocations
+	nodes := o.manifest.Nodes
 
 	o.mx.Lock()
 	defer o.mx.Unlock()
@@ -309,7 +309,7 @@ func (o *Orchestrator) Shutdown() {
 	}
 
 	wg := sync.WaitGroup{}
-	for _, allocation := range allocations {
+	for _, node := range nodes {
 		wg.Add(1)
 
 		go func(h actor.Handle, id string) {
@@ -317,21 +317,21 @@ func (o *Orchestrator) Shutdown() {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				SubnetDestroyBehavior,
+				fmt.Sprintf(SubnetDestroyBehavior.DynamicTemplate, o.manifest.ID),
 				SubnetDestroyRequest{
 					SubnetID: o.manifest.ID,
 				},
 				actor.WithMessageExpiry(actor.MakeExpiry(5*time.Second)),
 			)
 			if err != nil {
-				log.Errorf("error creating stop message for %s: %s", id, err)
+				log.Errorf("error creating stop message for %s/%s: %s", o.manifest.ID, id, err)
 				return
 			}
 
 			// invoke the stop message
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
-				log.Errorf("error invoking stop message for %s: %s", id, err)
+				log.Errorf("error invoking stop message for %s/%s: %s", o.manifest.ID, id, err)
 				return
 			}
 
@@ -346,20 +346,22 @@ func (o *Orchestrator) Shutdown() {
 					return
 				}
 				if !resp.OK {
-					log.Errorf("failed to destroy subnet %s", id)
+					log.Errorf("failed to destroy subnet %s/%s", o.manifest.ID, id)
 					return
 				}
 
-			case <-time.After(StopAllocationTimeout):
-				log.Errorf("timeout stopping allocation %s", id)
+			case <-time.After(AllocationStopTimeout):
+				log.Errorf("timeout stopping node %s/%s", o.manifest.ID, id)
 				return
 			}
 
 			log.Infof("subnet %s destroyed", o.manifest.ID)
-		}(allocation.Handle, allocation.ID)
+		}(node.Handle, node.ID)
 	}
 
 	wg.Wait()
+
+	allocations := o.manifest.Allocations
 
 	wg = sync.WaitGroup{}
 	for _, allocation := range allocations {
@@ -369,11 +371,11 @@ func (o *Orchestrator) Shutdown() {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				StopAllocationBehavior,
-				StopAllocationRequest{
+				AllocationStopBehavior,
+				AllocationStopRequest{
 					AllocationID: id,
 				},
-				actor.WithMessageExpiry(actor.MakeExpiry(StopAllocationTimeout)),
+				actor.WithMessageExpiry(actor.MakeExpiry(AllocationStopTimeout)),
 			)
 			if err != nil {
 				log.Errorf("error creating stop message for %s: %s", id, err)
@@ -392,7 +394,7 @@ func (o *Orchestrator) Shutdown() {
 			select {
 			case reply = <-replyCh:
 				defer reply.Discard()
-				var resp StopAllocationResponse
+				var resp AllocationStopResponse
 				if err := json.Unmarshal(msg.Message, &resp); err != nil {
 					log.Errorf("error unmarshalling stop allocation response: %s", err)
 					return
@@ -401,7 +403,7 @@ func (o *Orchestrator) Shutdown() {
 					log.Errorf("failed to stop allocation %s", id)
 					return
 				}
-			case <-time.After(StopAllocationTimeout):
+			case <-time.After(AllocationStopTimeout):
 				log.Errorf("timeout stopping allocation %s", allocation.ID)
 				return
 			}
@@ -1228,7 +1230,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				SubnetCreateBehavior,
+				fmt.Sprintf(SubnetCreateBehavior.DynamicTemplate, em.ID),
 				SubnetCreateRequest{
 					SubnetID:     em.ID,
 					RoutingTable: routingTable,

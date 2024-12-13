@@ -16,6 +16,12 @@ import (
 )
 
 const (
+	EnsembleNamespace   = "/dms/ensemble/%s"
+	AllocationNamespace = "/dms/allocation"
+	NodeNamespace       = "/dms/node"
+)
+
+const (
 	BidRequestTopic    = "/nunet/deployment"
 	BidRequestBehavior = "/dms/deployment/request"
 	BidRequestTimeout  = 5 * time.Second
@@ -29,31 +35,40 @@ const (
 	AllocationDeploymentBehavior = "/dms/deployment/allocate"
 	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
-	AllocationStartBehavior      = "/dms/deployment/start"
-	AllocationRestartBehavior    = "/dms/deployment/restart"
-	AllocationGetLogsBehavior    = "/dms/deployment/logs"
-	AllocationShutdownBehavior   = "/dms/deployment/shutdown"
-	AllocationStartTimeout       = 5 * time.Second
-	AllocationShutdownTimeout    = 5 * time.Second
 
-	StopAllocationBehavior = "/dms/node/allocation/stop"
-	StopAllocationTimeout  = 3 * time.Second
+	AllocationStartBehavior    = "/dms/allocation/start"
+	AllocationRestartBehavior  = "/dms/allocation/restart"
+	AllocationGetLogsBehavior  = "/dms/allocation/logs"
+	AllocationStartTimeout     = 5 * time.Second
+	AllocationStopBehavior     = "/dms/allocation/stop"
+	AllocationStopTimeout      = 3 * time.Second
+	AllocationShutdownBehavior = "/dms/allocation/shutdown"
+	AllocationShutdownTimeout  = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 
 	MaxBidMultiplier = 8
+)
 
-	SubnetCreateBehavior          = "/dms/node/subnet/create"
-	SubnetDestroyBehavior         = "/dms/node/subnet/destroy"
-	SubnetAddPeerBehavior         = "/dms/node/subnet/add-peer"
-	SubnetRemovePeerBehavior      = "/dms/node/subnet/remove-peer"
-	SubnetAcceptPeerBehavior      = "/dms/node/subnet/accept-peer"
-	SubnetMapPortBehavior         = "/dms/node/subnet/map-port"
-	SubnetUnmapPortBehavior       = "/dms/node/subnet/unmap-port"
-	SubnetDNSAddRecordsBehavior   = "/dms/node/subnet/dns/add-records"
-	SubnetDNSRemoveRecordBehavior = "/dms/node/subnet/dns/remove-record"
+var (
+	SubnetCreateBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/node/subnet/create",
+		Static:          NodeNamespace + "/subnet/create",
+	}
+	SubnetDestroyBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/node/subnet/destroy",
+		Static:          NodeNamespace + "/subnet/destroy",
+	}
 
 	RegisterHealthcheckBehavior = "/dms/actor/healthcheck/register"
+
+	SubnetAddPeerBehavior         = AllocationNamespace + "/subnet/add-peer"
+	SubnetRemovePeerBehavior      = AllocationNamespace + "/subnet/remove-peer"
+	SubnetAcceptPeerBehavior      = AllocationNamespace + "/subnet/accept-peer"
+	SubnetMapPortBehavior         = AllocationNamespace + "/subnet/map-port"
+	SubnetUnmapPortBehavior       = AllocationNamespace + "/subnet/unmap-port"
+	SubnetDNSAddRecordsBehavior   = AllocationNamespace + "/subnet/dns/add-records"
+	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
 )
 
 type VerifyEdgeConstraintRequest struct {
@@ -237,11 +252,11 @@ type SubnetDNSRemoveRecordResponse struct {
 	Error string
 }
 
-type StopAllocationRequest struct {
+type AllocationStopRequest struct {
 	AllocationID string
 }
 
-type StopAllocationResponse struct {
+type AllocationStopResponse struct {
 	OK    bool
 	Error string
 }
