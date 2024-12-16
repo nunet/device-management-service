@@ -281,7 +281,7 @@ Along with the drivers, you will need to install amdgpu using ROCm for AMD GPUs.
 
 Make sure you select the rocm usecase when installing the amdgpu.
 
-```bash```
+```bash
 $ sudo amdgpu-install --usecase=rocm
 ```
 
