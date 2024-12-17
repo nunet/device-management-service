@@ -395,8 +395,14 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 }
 
 // Exec executes a command in the container with the given containerID.
-func (e *Executor) Exec(ctx context.Context, containerID string, command []string) (int, string, error) {
-	return e.client.Exec(ctx, containerID, command)
+// Returns the exit code, stdout, stderr and an error if the execution fails.
+func (e *Executor) Exec(ctx context.Context, executionID string, command []string) (int, string, string, error) {
+	h, found := e.handlers.Get(executionID)
+	if !found {
+		return 0, "", "", fmt.Errorf("failed to get execution handler for execution=%q", executionID)
+	}
+
+	return e.client.Exec(ctx, h.containerID, command)
 }
 
 // newDockerExecutionContainer is an internal method called by Start to set up a new Docker container

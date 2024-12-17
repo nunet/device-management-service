@@ -59,6 +59,6 @@ func NewHealthCheck(mf HealthCheckManifest, fn func(HealthCheckManifest) error) 
 		return healthcheck, nil
 
 	default:
-		return nil, fmt.Errorf("unknown healthcheck type")
+		return nil, fmt.Errorf("unknown healthcheck type: %q", mf.Type)
 	}
 }

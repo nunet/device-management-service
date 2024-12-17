@@ -70,5 +70,5 @@ type Executor interface {
 	WaitForStatus(ctx context.Context, executionID string, status types.ExecutionStatus, timeout *time.Duration) error
 
 	// Exec executes a command in a container and returns the exit code, output, and an error if the operation fails.
-	Exec(ctx context.Context, containerID string, command []string) (int, string, error)
+	Exec(ctx context.Context, containerID string, command []string) (int, string, string, error)
 }

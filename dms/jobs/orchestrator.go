@@ -288,7 +288,7 @@ deploy:
 		for _, allocation := range manifest.Allocations {
 			allocations[allocation.ID] = allocation.Handle
 		}
-		go o.supervise(allocations, manifest)
+		go o.supervise()
 
 		return nil
 	}
@@ -342,11 +342,11 @@ func (o *Orchestrator) Shutdown() {
 				defer reply.Discard()
 				var resp SubnetDestroyResponse
 				if err := json.Unmarshal(msg.Message, &resp); err != nil {
-					log.Errorf("error unmarshalling subnet destroy response: %s", err)
+					log.Errorf("error unmarshalling subnet destroy response: %v", err)
 					return
 				}
 				if !resp.OK {
-					log.Errorf("failed to destroy subnet %s/%s", o.manifest.ID, id)
+					log.Errorf("failed to destroy subnet %s/%s: %v", o.manifest.ID, id, resp.Error)
 					return
 				}
 
@@ -456,7 +456,8 @@ func RestoreDeployment(
 	for _, allocation := range manifest.Allocations {
 		allocations[allocation.ID] = allocation.Handle
 	}
-	go o.supervise(allocations, manifest)
+	o.manifest = manifest
+	go o.supervise()
 
 	return o, nil
 }
@@ -1749,19 +1750,19 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (job_t
 	return ensembleBidRequest, nil
 }
 
-func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest EnsembleManifest) {
-	log.Debugf("Starting supervision for allocations: %+v", allocations)
+func (o *Orchestrator) supervise() {
+	log.Debugf("Starting supervision for allocations: %+v", o.manifest.Allocations)
 	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 	wg := sync.WaitGroup{}
 
-	for id, allocation := range allocations {
+	for allocName, allocation := range o.manifest.Allocations {
 		msg, err := actor.Message(
 			o.actor.Handle(),
-			allocation,
+			allocation.Handle,
 			RegisterHealthcheckBehavior,
 			RegisterHealthcheckRequest{
 				EnsembleID:  o.id,
-				HealthCheck: manifest.Allocations[id].Healthcheck,
+				HealthCheck: o.manifest.Allocations[allocName].Healthcheck,
 			},
 			actor.WithMessageExpiry(expiry),
 		)
@@ -1800,7 +1801,7 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 				return
 			}
 
-			log.Info("successfully registered healthcheck for allocation", id)
+			log.Info("successfully registered healthcheck for allocation: %s", allocation.ID)
 		}()
 	}
 
@@ -1817,10 +1818,10 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 		case <-ticker.C:
 			expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 			wg := sync.WaitGroup{}
-			for id, allocation := range allocations {
+			for _, allocation := range o.manifest.Allocations {
 				msg, err := actor.Message(
 					o.actor.Handle(),
-					allocation,
+					allocation.Handle,
 					actor.HealthCheckBehavior,
 					struct{}{},
 					actor.WithMessageExpiry(expiry),
@@ -1859,34 +1860,34 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 
 						if !resp.OK {
 							log.Errorf("error in healthcheck: %s", resp.Error)
-							failures[allocation.ID.String()]++
-							v := failures[allocation.ID.String()]
+							failures[allocation.Handle.ID.String()]++
+							v := failures[allocation.Handle.ID.String()]
 							if v >= 3 {
-								if err := o.escalateFailure(allocation); err != nil {
+								if err := o.escalateFailure(allocation.Handle); err != nil {
 									log.Errorf("failed to escalate failure: %s", err)
 								} else {
-									delete(failures, allocation.ID.String())
+									delete(failures, allocation.Handle.ID.String())
 								}
 							}
 							return
 						} else {
-							delete(failures, allocation.ID.String())
+							delete(failures, allocation.Handle.ID.String())
 						}
 
 					case <-ticker.C:
 						log.Warnf("timeout waiting for supervisor reply")
-						failures[allocation.ID.String()]++
-						v := failures[allocation.ID.String()]
+						failures[allocation.Handle.ID.String()]++
+						v := failures[allocation.Handle.ID.String()]
 						if v >= 3 {
-							if err := o.escalateFailure(allocation); err != nil {
+							if err := o.escalateFailure(allocation.Handle); err != nil {
 								log.Errorf("failed to escalate failure: %s", err)
 							} else {
-								delete(failures, allocation.ID.String())
+								delete(failures, allocation.Handle.ID.String())
 							}
 						}
 					}
 
-					log.Infof("successfully healthchecked allocation %s", id)
+					log.Infof("successfully healthchecked allocation %s", allocation.ID)
 				}()
 			}
 

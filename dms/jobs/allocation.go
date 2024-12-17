@@ -715,9 +715,7 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 	}
 
 	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
-		// TODO: get container name from executor
-		containerName := fmt.Sprintf("%s_%s", a.ID, a.ExecutionID())
-		exitCode, outputStr, err := a.executor.Exec(context.TODO(), containerName, mf.Exec)
+		exitCode, stdout, stderr, err := a.executor.Exec(context.TODO(), a.executionID, mf.Exec)
 		if err != nil {
 			return fmt.Errorf("health check command failed: %w", err)
 		}
@@ -726,8 +724,8 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 			return fmt.Errorf("health check command failed with exit code %d", exitCode)
 		}
 
-		if strings.Contains(outputStr, mf.Response.Value) {
-			return fmt.Errorf("unexpected health check command output: %s", outputStr)
+		if strings.Contains(stdout, mf.Response.Value) {
+			return fmt.Errorf("unexpected health check command output: %s\nstderr: %s", stdout, stderr)
 		}
 
 		return nil
@@ -740,7 +738,6 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 
 	a.SetHealthCheck(healthcheck)
 	resp.OK = true
-
 	a.sendReply(msg, resp)
 }
 

@@ -355,7 +355,13 @@ func TestSupervise(t *testing.T) {
 	capa := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
 	actr := actor.CreateActor(t, peer, capa)
 	require.NoError(t, actr.Start())
-	orchestrator, err := NewOrchestrator(context.Background(), "id", actr, peer, job_types.EnsembleConfig{
+
+	orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+	if err != nil {
+		log.Errorf("failed to create child actor: %w", err)
+		return
+	}
+	orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, peer, job_types.EnsembleConfig{
 		V1: &job_types.EnsembleConfigV1{
 			Allocations: map[string]job_types.AllocationConfig{
 				"allocation1": {
@@ -409,17 +415,30 @@ func TestSupervise(t *testing.T) {
 
 	actr1 := actor.CreateActor(t, peer1, cap1)
 	require.NoError(t, actr1.Start())
+	_ = actr1.AddBehavior(RegisterHealthcheckBehavior, func(msg actor.Envelope) {
+		defer msg.Discard()
+		t.Log("got msg to register healthcheck")
+
+		reply, err := actor.ReplyTo(
+			msg,
+			RegisterHealthcheckResponse{
+				OK:    true,
+				Error: "",
+			},
+		)
+		if err != nil {
+			log.Errorf("error creating reply: %s", err)
+			return
+		}
+
+		if err := actr1.Send(reply); err != nil {
+			log.Errorf("error sending  reply: %s", err)
+		}
+	})
 
 	times := 0
 	_ = actr1.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
-
-		t.Log("got msg for create")
-		var request struct{}
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
-
 		t.Log("Responding to healthcheck")
 		if times >= 1 {
 			t.Log("Not going through")
@@ -466,7 +485,7 @@ func TestSupervise(t *testing.T) {
 	require.NoError(t, err)
 	tokenlist, err := cap1.Grant(
 		ucan.Delegate,
-		actr.Handle().DID,
+		orchActor.Handle().DID,
 		actrdid,
 		[]string{"/nunet"},
 		actor.MakeExpiry(time.Hour),
@@ -479,9 +498,14 @@ func TestSupervise(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, cap1.AddRoots([]did.DID{}, tokenlist, ucan.TokenList{}, ucan.TokenList{}))
 
-	allocations := map[string]actor.Handle{}
-	allocations["allocation1"] = actr1.Handle()
-	go orchestrator.supervise(allocations, orchestrator.manifest)
+	allocations := map[string]AllocationManifest{}
+	allocations["allocation1"] = job_types.AllocationManifest{
+		Handle: actr1.Handle(),
+	}
+
+	orchestrator.manifest.Allocations = allocations
+
+	go orchestrator.supervise()
 
 	<-time.After(actor.HealthCheckInterval)
 	require.Equal(t, 0, len(restartedAllocations))
