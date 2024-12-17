@@ -9,6 +9,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -66,7 +67,7 @@ type ClientInterface interface {
 		since string,
 		follow bool,
 	) (io.ReadCloser, error)
-	Exec(ctx context.Context, containerID string, cmd []string) (int, string, error)
+	Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error)
 }
 
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
@@ -449,7 +450,9 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 	return digest, nil
 }
 
-func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (int, string, error) {
+// Exec executes a command inside a running container.
+// Returns (exit code, stdout, stderr, and an error if the operation fails)
+func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error) {
 	log.Infow("docker_container_exec_started", "container ID", containerID)
 
 	idresp, err := c.client.ContainerExecCreate(ctx, containerID, container.ExecOptions{
@@ -459,7 +462,7 @@ func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (in
 	})
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
 	hijconn, err := c.client.ContainerExecAttach(ctx, idresp.ID, container.ExecAttachOptions{
@@ -468,28 +471,26 @@ func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (in
 	})
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
 	defer hijconn.Close()
 
-	var outputStr string
+	var stdout, stderr bytes.Buffer
 
-	out, err := io.ReadAll(hijconn.Reader)
+	n, err := stdcopy.StdCopy(&stdout, &stderr, hijconn.Reader)
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
-	outputStr = string(out)
-
-	log.Infow("docker_container_exec_success", "output string", outputStr)
+	log.Debugf("Exec output: %d bytes", n)
 
 	execInspect, err := c.client.ContainerExecInspect(ctx, idresp.ID)
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
-	return execInspect.ExitCode, outputStr, nil
+	return execInspect.ExitCode, stdout.String(), stderr.String(), nil
 }

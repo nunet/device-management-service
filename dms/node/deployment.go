@@ -51,7 +51,6 @@ type NewDeploymentResponse struct {
 func (n *Node) newDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
-	log.Infof("new deployment: %+v", msg)
 	if time.Until(msg.Expiry()) < MinDeploymentTime {
 		log.Debugf("deployment time too short")
 		n.sendReply(msg, NewDeploymentResponse{

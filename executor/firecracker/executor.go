@@ -351,8 +351,8 @@ func (e *Executor) Exec(
 	_ context.Context,
 	_ string,
 	_ []string,
-) (int, string, error) {
-	return 0, "", fmt.Errorf("not implemented")
+) (int, string, string, error) {
+	return 0, "", "", fmt.Errorf("not implemented")
 }
 
 // newFirecrackerExecutionVM is an internal method called by Start to set up a new Firecracker VM

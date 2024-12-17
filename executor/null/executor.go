@@ -31,8 +31,8 @@ func (e *Executor) GetID() string {
 	return ""
 }
 
-func (e *Executor) Exec(_ context.Context, _ string, _ []string) (int, string, error) {
-	return 0, "", nil
+func (e *Executor) Exec(_ context.Context, _ string, _ []string) (int, string, string, error) {
+	return 0, "", "", nil
 }
 
 // Start does nothing and returns nil.
