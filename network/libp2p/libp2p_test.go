@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/avast/retry-go"
+
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -107,7 +109,6 @@ func TestPingResolveAddress(t *testing.T) {
 
 // TODO: flake tests, skipping for now until it's fixed
 func TestAdvertiseUnadvertiseQuery(t *testing.T) {
-	t.Skip()
 	peer1, peer2, peer3 := createPeers(t, 65515, 65516, 65517)
 	// advertise key
 	err := peer1.Advertise(context.TODO(), "who_am_i", []byte(`{"peer":"peer1"}`))
@@ -452,11 +453,6 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	err = peer2.Start()
 	assert.NoError(t, err)
 
-	// sleep until the inernals of the host get updated
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, 2, peer2.Host.Peerstore().Peers().Len())
-	assert.Equal(t, 2, peer1.Host.Peerstore().Peers().Len())
-
 	// setup a new peer and advertise specs
 	// peer3 will connect to peer2 in a ring setup.
 	peer2p2pAddrs, err := peer2.GetMultiaddr()
@@ -470,6 +466,23 @@ func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp
 	assert.NoError(t, err)
 	err = peer3.Start()
 	assert.NoError(t, err)
+
+	// ensure that the peers are connected
+	err = retry.Do(
+		func() error {
+			if peer1.Host.Network().Connectedness(peer2.Host.ID()) != network.Connected {
+				return fmt.Errorf("peer1 is not connected to peer2")
+			}
+
+			if peer2.Host.Network().Connectedness(peer3.Host.ID()) != network.Connected {
+				return fmt.Errorf("peer2 is not connected to peer3")
+			}
+			return nil
+		},
+		retry.Attempts(5),
+		retry.Delay(200*time.Millisecond),
+	)
+	require.NoErrorf(t, err, "could not connect peers")
 
 	return peer1, peer2, peer3
 }
