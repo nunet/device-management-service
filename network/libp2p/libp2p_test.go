@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
-
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -107,7 +106,6 @@ func TestPingResolveAddress(t *testing.T) {
 	assert.NotEmpty(t, ip)
 }
 
-// TODO: flake tests, skipping for now until it's fixed
 func TestAdvertiseUnadvertiseQuery(t *testing.T) {
 	peer1, peer2, peer3 := createPeers(t, 65515, 65516, 65517)
 	// advertise key

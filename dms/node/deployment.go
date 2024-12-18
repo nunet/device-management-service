@@ -278,6 +278,11 @@ func (n *Node) restoreDeployments() error {
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
+	// ignore bid request from self
+	if n.actor.Handle().Address.HostID == msg.From.Address.HostID {
+		return
+	}
+
 	log.Debugf("got a bid request from: %+v", &msg.From.Address)
 
 	onboarded, err := n.onboarder.IsOnboarded()
