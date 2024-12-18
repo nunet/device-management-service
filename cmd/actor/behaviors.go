@@ -229,7 +229,7 @@ Examples:
 This behavior is used to onboard a node to the DMS, making its resources available for use.
 
 Examples:
-  nunet actor cmd --context user /dms/node/onboarding/onboard --memory 1 --cpu 2`,
+  nunet actor cmd --context user /dms/node/onboarding/onboard --disk 1 --ram 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
 	node.OffboardBehavior: {
