@@ -577,11 +577,13 @@ func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
 
 func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 	defer msg.Discard()
+	log.Debugf("behavior handleSubnetMapPort invoked by: %+v", msg.From)
 
 	var request SubnetMapPortRequest
 	resp := SubnetMapPortResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		log.Debugf("error unmarshalling subnet map port request: %s", err)
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
 		return
@@ -589,6 +591,7 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 
 	err := a.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
 	if err != nil {
+		log.Debugf("error mapping port: %s", err)
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
 		return

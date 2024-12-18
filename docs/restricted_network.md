@@ -1,6 +1,7 @@
 # Creating a Restricted Network
 
-In NuNet's p2p network, all nodes share the same underlying network infrastructure for communication.
+By default, in NuNet's p2p network, all nodes share the same underlying network infrastructure for communication.
+
 However, the capability system acts as an access control layer that determines which peers can invoke
 specific behaviors (e.g.: deploying an allocation) on other peers.
 
@@ -45,7 +46,7 @@ nunet cap new myorg
 Grant each user capabilities to invoke certain behaviors:
 
 ```bash
-nunet cap grant --context myorg --cap /something --cap /broadcast --topic /myorg --expiry 2024-12-31 <did-user>
+nunet cap grant --context myorg --cap /dms/deployment --cap /broadcast --topic /nunet --expiry 2024-12-31 <did-user>
 # Save the returned token as <token-1>
 ```
 
@@ -67,22 +68,68 @@ Grant and set up the necessary require and provide anchors for user's DMS:
 
 ```bash
 # Grant from user to organization (for require anchor)
-nunet cap grant --context user --cap /something --cap /broadcast --topic /myorg --expiry 2024-12-31 <did-myorg>
+nunet cap grant --context user --cap /dms/deployment --cap /broadcast --topic /nunet --expiry 2024-12-31 <did-myorg>
 # Save the returned token as <token-2>
 
 # Add require anchor to DMS
 nunet cap anchor --context dms --require <token-2>
 
 # Delegate from user to DMS (for provide anchor)
-nunet cap delegate --context user --cap /something --cap /broadcast --topic /myorg --expiry 2024-12-31 <did-dms>
+nunet cap delegate --context user --cap /dms/deployment --cap /broadcast --topic /nunet --expiry 2024-12-31 <did-dms>
 # Save the returned token as <token-3>
 
 # Add provide anchor to DMS
 nunet cap anchor --context dms --provide <token-3>
 ```
 
+## Optional: use custom bootstrap nodes
+
+Following the previous guide, you successfully built your own capability pool:
+
+Nodes will only be able to deploy allocations in nodes that have been granted the `/dms/deployment` capability by your organization.
+
+Though, as explained in the introduction, your nodes would still share the same underlying network. When broadcasting bid requests for
+a deployment, all peers in NuNet network would receive the request, even peers outside your capability pool.
+
+To enhance privacy, security and scability of your restricted network, you can use your own bootstrap nodes instead of NuNet's.
+
+For that, you have to customize your `dms_config.json`. This is how your `bootstrap_peers` section
+looks now:
+
+```json
+...
+"p2p": {
+    "bootstrap_peers": [
+      "/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",
+      "/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
+      "/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ"
+    ],
+...
+}
+...
+```
+
+To edit your `dms_config.json`, run:
+
+```bash
+nunet config edit
+```
+
+Modify the bootstrap peers to use your own nodes.
+
+> **Multiaddresses:**
+> If using a domain name: `/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ`
+> If using an IP address: `/ip4/<IP_ADDRESS>/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ`
+
+`Qm...` is the bootstrap's peer ID.
+
+To retrieve a peer ID from a given node, run:
+
+```bash
+nunet actor cmd /dms/node/peers/self -c <your_user_context>
+```
+
 ## Key Differences from NuNet Trusted Network
 
-1. **Topic Namespace**: Use your own topic namespace (e.g., `/myorg`) instead of `/nunet`
-2. **Root of Trust**: Your organization key becomes the root of trust instead of NuNet
-3. **Token Distribution**: You control token distribution and can add/revoke access as needed
+1. **Root of Trust**: Your organization key becomes the root of trust instead of NuNet
+2. **Token Distribution**: You control token distribution and can add/revoke access as needed

@@ -32,7 +32,7 @@ func resolveDNS(query *dns.Msg, records map[string]string) *dns.Msg {
 		ip, ok := records[strings.TrimSuffix(question.Name, ".")]
 		if !ok {
 			// Not found in our map, set answer to NXDOMAIN
-			m.SetRcode(query, dns.RcodeNameError)
+			m.SetRcode(query, int(dns.ExtendedErrorCodeStaleNXDOMAINAnswer))
 			continue
 		}
 

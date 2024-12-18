@@ -19,7 +19,7 @@ var log = logging.Logger("dms")
 // imported libraries as they're enabled by default.
 //
 // TODO: move this to observability?
-func silenceLibp2pLogging() error {
+func silenceConnLogs() error {
 	log.Debug("silecing libp2p logging")
 	var errs error
 
@@ -30,6 +30,9 @@ func silenceLibp2pLogging() error {
 	errs = multierr.Append(errs, err)
 
 	err = logging.SetLogLevel("basichost", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("reuseport-transport", "panic")
 	errs = multierr.Append(errs, err)
 
 	err = logging.SetLogLevel("pubsub", "panic")
@@ -65,7 +68,7 @@ func silenceLibp2pLogging() error {
 	err = logging.SetLogLevelRegex("net/*", "panic")
 	errs = multierr.Append(errs, err)
 
-	// node.conn logs dms connections things
+	// dms-specific connections logs
 	err = logging.SetLogLevel("node.conn", "panic")
 	errs = multierr.Append(errs, err)
 
