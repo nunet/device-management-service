@@ -1460,15 +1460,18 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 					Cores:      50,
 					ClockSpeed: 10000,
 				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
+				RAM:  types.RAM{Size: 1000000},
+				Disk: types.Disk{Size: 1000000},
 			},
 		}
 		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil).Times(1)
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		var wg sync.WaitGroup
+		var (
+			wg    sync.WaitGroup
+			mutex sync.Mutex
+		)
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			index := i
@@ -1481,14 +1484,17 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 							Cores:      0.1,
 							ClockSpeed: 10000,
 						},
-						RAM:  types.RAM{Size: 10},
-						Disk: types.Disk{Size: 10},
+						RAM:  types.RAM{Size: 1},
+						Disk: types.Disk{Size: 1},
 					},
 				}
 
+				mutex.Lock()
 				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
 					return onboardedResources.Resources, nil
 				})
+				mutex.Unlock()
+
 				err := rm.CommitResources(context.Background(), demand)
 				require.NoError(t, err)
 
