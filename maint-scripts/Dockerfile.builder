@@ -5,6 +5,7 @@ RUN apt update \
   && apt install -y \
     sudo \
     iptables \
+    dnsutils \
     git \
     curl \
     wget \
