@@ -46,6 +46,7 @@ Build DMS Builder:
   stage: build
   extends:
     - .docker_build # from repo nunet/gitlab-ci/templates
+  needs: []
   variables:
     IMAGE_PATH: maint-scripts
     IMAGE_NAME: nunet-dms-builder
