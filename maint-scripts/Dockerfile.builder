@@ -4,6 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update \
   && apt install -y \
     sudo \
+    iptables \
     git \
     curl \
     wget \
