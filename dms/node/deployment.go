@@ -371,12 +371,18 @@ loop:
 		return
 	}
 
-	// TODO-MR: handle static port allocation via port allocator
+	allocKey := request.ID
+
+	// TODO: ports allocation should be on committing phase
+	// handle static ports
+	err = n.portAllocator.AllocatePorts(allocKey, toAnswer.V1.PublicPorts.Static)
+	if err != nil {
+		log.Debugf("failed to allocate static ports: %v", err)
+		return
+	}
 
 	// handle dynamic port allocs
-	// TODO: dynamic port allocs should be on committing phase
-	allocKey := request.ID
-	ports, err := n.portAllocator.Allocate(allocKey, toAnswer.V1.PublicPorts.Dynamic)
+	ports, err := n.portAllocator.AllocateRandom(allocKey, toAnswer.V1.PublicPorts.Dynamic)
 	if err != nil {
 		log.Debugf("failed to allocate ports")
 		return
@@ -392,7 +398,7 @@ loop:
 		log.Debugf("bid request: failed to get provider: %w", err)
 		return
 	}
-	log.Debugf("signing bid with provider: %+v", provider)
+	log.Debugf("signing bid with provider: %v", provider.DID())
 
 	bid := job_types.Bid{
 		V1: &job_types.BidV1{

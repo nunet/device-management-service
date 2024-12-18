@@ -74,9 +74,9 @@ func initialize(gcfg *config.Config) {
 		}
 	}
 
-	libp2pLogging := os.Getenv("LIBP2P_LOGGING")
+	libp2pLogging := os.Getenv("DMS_CONN_LOGS")
 	if libp2pLogging == "false" || libp2pLogging == "" {
-		err := silenceLibp2pLogging()
+		err := silenceConnLogs()
 		if err != nil {
 			log.Warnf("unable to set libp2p logging: %v", err)
 		}

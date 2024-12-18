@@ -155,6 +155,18 @@ func (n *NetInterface) AddRouteRule(src, dst, gw string) error {
 		}
 	}
 
+	routes, err := netlink.RouteGet(destNet.IP)
+	if err != nil {
+		return fmt.Errorf("error getting routes: %w", err)
+	}
+
+	for _, r := range routes {
+		if r.Dst.IP.Equal(destNet.IP) && r.LinkIndex == link.Attrs().Index {
+			// route rule already exists for interface
+			return nil
+		}
+	}
+
 	err = netlink.RouteAdd(&netlink.Route{
 		LinkIndex: link.Attrs().Index,
 		Src:       srcIP,
@@ -212,7 +224,10 @@ func AddDNATRule(protocol, sourceIP, sourcePort, destIP, destPort string) error 
 	if !iptRuleExist(args...) {
 		err := iptAppendRule(args...)
 		if err != nil {
-			return fmt.Errorf("error adding DNAT rule: %w", err)
+			return fmt.Errorf(
+				"error adding DNAT rule (you might have to upgrade your iptables. See DMS readme): %w",
+				err,
+			)
 		}
 	}
 	return nil

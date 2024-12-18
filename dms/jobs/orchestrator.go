@@ -994,6 +994,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	}
 
 	allocationNodes := make(map[string]string)
+	portsByAllocation := make(map[string][]job_types.PortConfig)
 	for n, bid := range candidate {
 		ncfg, _ := o.cfg.Node(n)
 		nmf := NodeManifest{
@@ -1005,17 +1006,25 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		}
 		for _, a := range nmf.Allocations {
 			allocationNodes[a] = n
+			portsByAllocation[a] = ncfg.Ports
 		}
 		mf.Nodes[n] = nmf
 	}
 
 	for name, alloc := range o.cfg.Allocations() {
+		allocPorts := make(map[int]int)
+		if ports, ok := portsByAllocation[name]; ok {
+			for _, pc := range ports {
+				allocPorts[pc.Public] = pc.Private
+			}
+		}
 		amf := AllocationManifest{
 			ID:          o.id + "_" + name,
 			NodeID:      allocationNodes[name],
 			Handle:      allocations[name],
 			DNSName:     alloc.DNSName + ".internal",
 			Healthcheck: alloc.HealthCheck,
+			Ports:       allocPorts,
 		}
 		mf.Allocations[name] = amf
 	}
@@ -1389,13 +1398,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
 			if err != nil {
-				errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
+				errCh <- fmt.Errorf("error creating subnet add-dns-records message: %w", err)
 				return
 			}
 
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
-				errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
+				errCh <- fmt.Errorf("error invoking subnet add-dns-records message: %w", err)
 				return
 			}
 
@@ -1415,12 +1424,12 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				}
 
 				if !response.OK {
-					errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+					errCh <- fmt.Errorf("error sending dns records to peer: %s: %w", response.Error, ErrDeploymentFailed)
 					return
 				}
 
 			case <-time.After(2 * time.Minute):
-				errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
+				errCh <- fmt.Errorf("timeout sending dns records to subnet: %w", ErrDeploymentFailed)
 				return
 			}
 
@@ -1456,6 +1465,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					manifest.Handle,
 					SubnetMapPortBehavior,
 					SubnetMapPortRequest{
+						SubnetID:   em.ID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
 						SourcePort: strconv.Itoa(srcPort),
@@ -1465,13 +1475,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 				)
 				if err != nil {
-					errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
+					errCh <- fmt.Errorf("error creating subnet MapPort message: %w", err)
 					return
 				}
 
 				replyCh, err := o.actor.Invoke(msg)
 				if err != nil {
-					errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
+					errCh <- fmt.Errorf("error invoking subnet MapPort message: %w", err)
 					return
 				}
 
@@ -1495,7 +1505,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 						return
 					}
 				case <-time.After(2 * time.Minute):
-					errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
+					errCh <- fmt.Errorf("timeout mapping port for subnet: %w", ErrDeploymentFailed)
 					return
 				}
 

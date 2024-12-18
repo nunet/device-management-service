@@ -254,6 +254,7 @@ delete_iface:
 	s.mx.Lock()
 	iface, ok := s.ifaces[ip]
 	if ok {
+		_ = iface.tun.DelRoute("10.0.0.1/32")
 		iface.cancel()
 		_ = iface.tun.Down()
 		_ = iface.tun.Delete()

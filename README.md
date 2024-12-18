@@ -21,9 +21,10 @@
       - [Dependencies](#dependencies)
     - [Installation on VMs](#installation-on-vms)
     - [Installation on WSL](#installation-on-wsl)
-    - [Permissions and features (for compute providers)](#permissions-and-features)
-      - [Net-admin permission and IP over libp2p](#net-admin-permission-and-ip-over-libp2p)
-      - [Firecracker (for compute providers)](#optional-firecracker)
+    - [Permissions and features (for compute providers using Linux)](#permissions-and-features)
+      - [Required: Net-admin permission and IP over libp2p](#net-admin-permission-and-ip-over-libp2p)
+      - [May be required: iptables upgrade](#iptables-upgrade)
+      - [Optional: Firecracker (for compute providers)](#optional-firecracker)
     - [System Requirements](#system-requirements)
       - [CPU-only machines](#cpu-only-machines)
         - [Minimum System Requirements](#minimum-system-requirements)
@@ -118,6 +119,7 @@ git clone https://gitlab.com/nunet/device-management-service.git
 ```
 
 Configure git-lfs:
+
 ```
 git lfs install && \
 git lfs fetch && \
@@ -145,19 +147,21 @@ apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 
 You can add the compiled binary to a directory in your `$PATH`. See the [Usage](#usage) section for more information.
 
-### Permissions and features (for compute providers)
+### Permissions and features (for compute providers using Linux)
 
-The following applies _only_ for **compute providers**. If you're running a client/orchestrator, you do _not_ need to set any permissions.
-
-If you built DMS from source or installed the binary from one of our releases, you may need to set some permissions
-to the binary to enable some features.
+The following applies _only_ for **compute providers using Linux**. If you're running a client/orchestrator, you do _not_ need to set
+any additional permissions.
 
 > **Darwin users**: unfortunately, the DMS can't work with granular permissions on Mac.
 > So, for now, if running a compute provider, you will have to run the nunet daemon (`nunet run`) as root.
 
 For Linux users, granular permissions will have to be set to the binary (optionally, but _NOT_ recommended, you can run the binary as root).
 
-#### Net-admin permission and IP over libp2p
+#### Required: Net-admin permission and IP over libp2p
+
+> **Note**: step **not** needed if you're using our **debian package**.
+>
+> It's needed for those building from source or downloading the binary releases.
 
 **Note**: `cap_net_admin` is a **required** capability for **compute providers**.
 
@@ -178,9 +182,27 @@ sudo setcap cap_net_admin+ep /usr/bin/nunet
 
 The above command depends on: `libcap2-bin` (Debian/Ubuntu) or `libcap` (CentOS/RHEL/Arch...)
 
-#### Firecracker (for compute providers)
+#### May be required: iptables upgrade
 
-**Note**: Linux only.
+Some legacy versions of Linux `iptables` do not work with our IP over libp2p feature.
+
+Check the version of yours by running:
+
+```bash
+iptables
+```
+
+If it's using the `nf_tables` version, you're fine. You can skip this step.
+
+If it's using a legacy version, upgrade with:
+
+```bash
+sudo update-alternatives --config iptables
+```
+
+Then, select the number which corresponds to the `iptables-nft` option and press enter.
+
+#### Optional: Firecracker (for compute providers)
 
 To act as a compute provider capable of receiving and running jobs with Firecracker,
 ensure your user is part of the `kvm` group. You can do this by running:
@@ -358,10 +380,10 @@ They are encrypted and stored under `$HOME/.nunet` by default.
 ##### Using a Ledger Wallet
 
 It is also possible to use a Ledger Wallet instead of creating a new
-key; this is recommended for *user* contexts, but you **should not** use it
-for the *dms* context as it needs the key to sign capability tokens.
+key; this is recommended for _user_ contexts, but you **should not** use it
+for the _dms_ context as it needs the key to sign capability tokens.
 
-To set up a *user* context with a Ledger Wallet, you need the
+To set up a _user_ context with a Ledger Wallet, you need the
 `ledger-cli` script from [NuNet's ledger wallet tool](https://gitlab.com/nunet/ledger-wallet).
 The tool uses the Eth application and specifically the first Eth
 account with signing of personal messages. Everything that needs to be
@@ -369,11 +391,13 @@ signed (namely capability tokens) will be presented on your Nano's
 screen in plaintext so that you can inspect it.
 
 You can get your Ledger wallet's DID with:
+
 ```shell
 $ nunet key did ledger
 ```
 
 To create the capability context for the user
+
 ```shell
 $ nunet cap new ledger:user
 ```

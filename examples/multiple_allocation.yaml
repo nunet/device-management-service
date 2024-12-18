@@ -1,0 +1,45 @@
+version: "V1"
+
+allocations:
+    alloc1:
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 2048 
+            disk:
+                size: 1
+        execution:
+            type: docker
+            image: kennethreitz/httpbin 
+    alloc2:
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 2048
+            disk:
+                size: 1
+        execution:
+            type: docker
+            image: buildpack-deps
+            cmd: [tail, -f, /dev/null]
+nodes:
+    node1:
+        allocations:
+            - alloc1
+        ports:
+            - public: 8080
+              private: 80
+              allocation: alloc1
+    node2:
+        allocations:
+            - alloc2
+        ports:
+            - public: 8080
+              private: 80
+              allocation: alloc2

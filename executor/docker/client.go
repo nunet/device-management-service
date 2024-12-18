@@ -388,6 +388,25 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 	return "", err
 }
 
+// HasImage checks if an image exists locally
+func (c *Client) HasImage(ctx context.Context, imageName string) bool {
+	// If imageName does not contain a tag, we need to append ":latest" to the image name
+	if !strings.Contains(imageName, ":") {
+		imageName = fmt.Sprintf("%s:latest", imageName)
+	}
+
+	_, _, err := c.client.ImageInspectWithRaw(ctx, imageName)
+	if err != nil {
+		if client.IsErrNotFound(err) {
+			return false
+		}
+		log.Warnf("Failed to inspect image: %v", err)
+		return false
+	}
+
+	return true
+}
+
 // GetImage returns detailed information about a Docker image.
 func (c *Client) GetImage(ctx context.Context, imageName string) (image.Summary, error) {
 	images, err := c.client.ImageList(ctx, image.ListOptions{All: true})

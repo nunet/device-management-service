@@ -495,6 +495,8 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to configure host config: %w", err)
 	}
 
+	hasImage := e.client.HasImage(ctx, dockerArgs.Image)
+
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
 		&containerConfig,
@@ -502,7 +504,7 @@ func (e *Executor) newDockerExecutionContainer(
 		nil,
 		nil,
 		labelExecutionValue(e.ID, params.JobID, params.ExecutionID),
-		true,
+		!hasImage, // only pull if we don't have the image
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
@@ -655,8 +657,15 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 
 	hostConfig.PortBindings = portMaps
 	hostConfig.Privileged = dockerArgs.Privileged
-	hostConfig.DNS = []string{"1.1.1.1", dnsResolverIP}
+
+	// Configure DNS settings
+	hostConfig.DNS = []string{dnsResolverIP, "1.1.1.1"}
 	hostConfig.DNSSearch = []string{"internal"}
+	hostConfig.DNSOptions = []string{
+		"ndots:1", // reduce DNS lookups by setting ndots lower
+		"timeout:2",
+		"attempts:1",
+	}
 
 	return hostConfig, nil
 }
