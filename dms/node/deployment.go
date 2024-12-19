@@ -489,14 +489,20 @@ func (n *Node) releaseAllocation(allocID string) error {
 	n.mx.Lock()
 	alloc, ok := n.allocations[allocID]
 	n.mx.Unlock()
+
 	if !ok {
 		log.Debugf("allocation %s not found (it may be already released)", allocID)
 		return nil
 	}
 
-	err := alloc.Stop(context.TODO())
+	err := n.resourceManager.DeallocateResources(n.ctx, allocID)
 	if err != nil {
-		return fmt.Errorf("failed to stop allocation %s: %w", allocID, err)
+		return fmt.Errorf("failed to deallocate resources for allocation id: %s: %w", allocID, err)
+	}
+
+	err = alloc.Stop(n.ctx)
+	if err != nil {
+		log.Warnf("allocation not stopped or partially stopped: %v", err)
 	}
 
 	n.mx.Lock()

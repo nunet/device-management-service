@@ -132,16 +132,24 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 
 		if allDone {
 			// All allocations are done; do the necessary ensemble allocs cleanups
-			log.Infof("All allocations for ensemble %s are completed or stopped. Cleaning up ensemble.", ensembleID)
-			n.cleanupFinishedEnsemble(ensembleID)
+			log.Infof("All allocations for ensemble %s are completed or stopped", ensembleID)
+			n.cleanupFinishedEnsemble(ensembleID, allocationIDs)
 			break
 		}
 	}
 }
 
-func (n *Node) cleanupFinishedEnsemble(ensembleID string) {
+func (n *Node) cleanupFinishedEnsemble(ensembleID string, allocationIDs []string) {
+	log.Debugf("cleaning up finished ensemble %s", ensembleID)
+
 	if err := n.network.DestroySubnet(ensembleID); err != nil {
 		log.Errorf("failed to destroy subnet %s: %v", ensembleID, err)
+	}
+
+	for _, allocID := range allocationIDs {
+		if err := n.releaseAllocation(allocID); err != nil {
+			log.Errorf("failed to release allocation %s: %v", allocID, err)
+		}
 	}
 }
 
