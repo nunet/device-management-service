@@ -28,8 +28,9 @@ import (
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/network"
-	"gitlab.com/nunet/device-management-service/network/utils"
+	net_utils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const MaxPermutations = 1_000_000
@@ -1199,7 +1200,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1. create subnet
 	// 1.a generate routing table
-	cidr, err := utils.GetRandomCIDRInRange(
+	cidr, err := net_utils.GetRandomCIDRInRange(
 		24,
 		net.ParseIP("10.0.0.0"),
 		net.ParseIP("10.255.255.255"),
@@ -1220,7 +1221,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	routingTable := make(map[string]string)
 	indexRoutingTable := make(map[string]string)
 	for allocationID, manifest := range em.Allocations {
-		ip, err := utils.GetNextIP(cidr, usedIPs)
+		ip, err := net_utils.GetNextIP(cidr, usedIPs)
 		log.Debug("Generated IP", ip, "for alllocation", allocationID)
 		if err != nil {
 			return fmt.Errorf("error getting next IP: %w", err)
@@ -1947,46 +1948,60 @@ func (o *Orchestrator) Stop() {
 	}
 }
 
-func (o *Orchestrator) GetAllocationLogs(name string) ([]byte, error) {
-	allocation, ok := o.manifest.Allocations[name]
-	if !ok {
-		return nil, fmt.Errorf("allocation %s not found", name)
+func (o *Orchestrator) GetAllocationLogs(name string) (AllocationLogsResponse, error) {
+	var allocNodeHandle actor.Handle
+	var logsResp AllocationLogsResponse
+	for _, n := range o.manifest.Nodes {
+		if ok := utils.SliceContains(n.Allocations, name); ok {
+			allocNodeHandle = n.Handle
+			break
+		}
 	}
+
+	if allocNodeHandle.Empty() {
+		return logsResp,
+			fmt.Errorf(
+				"node not found for allocation %s of ensemble %s",
+				name, o.id,
+			)
+	}
+
 	msg, err := actor.Message(
 		o.actor.Handle(),
-		allocation.Handle,
-		AllocationGetLogsBehavior,
-		AllocationGetLogsRequest{},
+		allocNodeHandle,
+		fmt.Sprintf(AllocationLogsBehavior, o.manifest.ID),
+		AllocationLogsRequest{
+			AllocName: name,
+		},
 		actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating get logs message: %w", err)
+		return logsResp, fmt.Errorf("creating get logs message: %w", err)
 	}
 
 	replyCh, err := o.actor.Invoke(msg)
 	if err != nil {
-		return nil, fmt.Errorf("invoking get logs message: %w", err)
+		return logsResp, fmt.Errorf("invoking get logs message: %w", err)
 	}
 
 	var reply actor.Envelope
 	select {
 	case reply = <-replyCh:
 	case <-time.After(2 * time.Minute):
-		return nil, fmt.Errorf("timeout getting logs for %s: %w", name, ErrDeploymentFailed)
+		return logsResp, fmt.Errorf("timeout getting logs for %s: %w", name, ErrDeploymentFailed)
 	}
 
 	defer reply.Discard()
 
-	var resp AllocationGetLogsResponse
-	if err := json.Unmarshal(reply.Message, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshalling get logs response: %w", err)
+	if err := json.Unmarshal(reply.Message, &logsResp); err != nil {
+		return logsResp, fmt.Errorf("unmarshalling get logs response: %w", err)
 	}
 
-	if resp.Error != "" {
-		return nil, fmt.Errorf("replied with error getting logs for %s: %s", name, resp.Error)
+	if logsResp.Error != "" {
+		return logsResp, fmt.Errorf("replied with error getting logs for %s: %s", name, logsResp.Error)
 	}
 
-	return resp.Data, nil
+	return logsResp, nil
 }
 
 func containsExecutor(executors []AllocationExecutor, executor AllocationExecutor) bool {

@@ -297,7 +297,6 @@ func (a *Allocation) Start() error {
 		AllocationStartBehavior:    a.handleAllocationStart,
 		AllocationRestartBehavior:  a.handleAllocationRestart,
 		AllocationShutdownBehavior: a.handleAllocationShutdown,
-		AllocationGetLogsBehavior:  a.handleAllocationGetLogs,
 
 		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
 		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
@@ -487,23 +486,6 @@ func (a *Allocation) handleAllocationShutdown(msg actor.Envelope) {
 	}
 
 	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleAllocationGetLogs(msg actor.Envelope) {
-	log.Infof("behavior get logs invoked by: %+v", msg.From)
-	defer msg.Discard()
-
-	var resp AllocationGetLogsResponse
-
-	data, err := a.fs.ReadFile(filepath.Join(a.resultsDir, "stdout.log"))
-	if err != nil {
-		resp.Error = fmt.Sprintf("failed to read results file: %s", err.Error())
-		a.sendReply(msg, resp)
-		return
-	}
-
-	resp.Data = data
 	a.sendReply(msg, resp)
 }
 

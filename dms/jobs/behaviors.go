@@ -9,6 +9,8 @@
 package jobs
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -38,7 +40,6 @@ const (
 
 	AllocationStartBehavior    = "/dms/allocation/start"
 	AllocationRestartBehavior  = "/dms/allocation/restart"
-	AllocationGetLogsBehavior  = "/dms/allocation/logs"
 	AllocationStartTimeout     = 5 * time.Second
 	AllocationStopBehavior     = "/dms/allocation/stop"
 	AllocationStopTimeout      = 3 * time.Second
@@ -69,6 +70,8 @@ var (
 	SubnetUnmapPortBehavior       = AllocationNamespace + "/subnet/unmap-port"
 	SubnetDNSAddRecordsBehavior   = AllocationNamespace + "/subnet/dns/add-records"
 	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
+
+	AllocationLogsBehavior = EnsembleNamespace + "/allocation/logs"
 )
 
 type VerifyEdgeConstraintRequest struct {
@@ -129,11 +132,14 @@ type AllocationStartResponse struct {
 	Error string
 }
 
-type AllocationGetLogsRequest struct{}
+type AllocationLogsRequest struct {
+	AllocName string
+}
 
-type AllocationGetLogsResponse struct {
-	Data  []byte
-	Error string
+type AllocationLogsResponse struct {
+	Stdout []byte
+	Stderr []byte
+	Error  string
 }
 
 type AllocationShutdownRequest struct {
@@ -269,4 +275,12 @@ type RegisterHealthcheckRequest struct {
 type RegisterHealthcheckResponse struct {
 	OK    bool
 	Error string
+}
+
+func EnsembleIDFromBehavior(b string) (string, error) {
+	parts := strings.Split(b, "/")
+	if len(parts) > 3 {
+		return parts[3], nil
+	}
+	return "", fmt.Errorf("invalid ensemble behavior: %s", b)
 }
