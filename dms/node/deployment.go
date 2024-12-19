@@ -278,8 +278,10 @@ func (n *Node) restoreDeployments() error {
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
-	// ignore bid request from self
-	if n.actor.Handle().Address.HostID == msg.From.Address.HostID {
+	// ignore bid request from self if broadcasted
+	// only accept self bid if own peer specified on ensemble
+	if msg.IsBroadcast() &&
+		n.actor.Handle().Address.HostID == msg.From.Address.HostID {
 		return
 	}
 
