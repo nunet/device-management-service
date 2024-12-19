@@ -863,7 +863,6 @@ func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor ac
 		n.dmsConfig,
 		allocActor,
 		jobs.AllocationDetails{Job: job, NodeID: n.hostID},
-		n.resourceManager,
 		n.network,
 	)
 	if err != nil {

@@ -10,7 +10,6 @@ package jobs
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -76,10 +75,9 @@ type Allocation struct {
 	sourceID    string
 	executionID string
 
-	Actor           actor.Actor
-	executor        executor.Executor
-	resourceManager types.ResourceManager
-	dmsConfig       config.Config
+	Actor     actor.Actor
+	executor  executor.Executor
+	dmsConfig config.Config
 
 	network network.Network
 
@@ -103,30 +101,24 @@ func NewAllocation(
 	dmsConfig config.Config,
 	actor actor.Actor,
 	details AllocationDetails,
-	resourceManager types.ResourceManager,
 	network network.Network,
 ) (*Allocation, error) {
-	if resourceManager == nil {
-		return nil, errors.New("resource manager is nil")
-	}
-
 	uuid, err := uuid.NewUUID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create executor id: %w", err)
 	}
 
 	return &Allocation{
-		ID:              id,
-		fs:              fs,
-		nodeID:          details.NodeID,
-		sourceID:        details.SourceID,
-		Job:             details.Job,
-		Actor:           actor,
-		executionID:     uuid.String(),
-		resourceManager: resourceManager,
-		dmsConfig:       dmsConfig,
-		status:          Pending,
-		network:         network,
+		ID:          id,
+		fs:          fs,
+		nodeID:      details.NodeID,
+		sourceID:    details.SourceID,
+		Job:         details.Job,
+		Actor:       actor,
+		executionID: uuid.String(),
+		dmsConfig:   dmsConfig,
+		status:      Pending,
+		network:     network,
 		state: struct {
 			subnetIP    string
 			portMapping map[int]int
@@ -219,12 +211,6 @@ func (a *Allocation) monitorExecutor(ctx context.Context) {
 		a.status = Completed
 	}
 	a.mx.Unlock()
-
-	// deallocate resources after everything is done.
-	err = a.resourceManager.DeallocateResources(ctx, a.ID)
-	if err != nil {
-		log.Errorf("failed to deallocate resources for %s: %v", a.ID, err)
-	}
 }
 
 // Cancel stops the running executor
@@ -239,12 +225,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
 		return fmt.Errorf("failed to stop execution: %w", err)
 	}
-
-	// deallocate resources after everything is done.
-	err := a.resourceManager.DeallocateResources(ctx, a.ID)
-	if err != nil {
-		log.Errorf("failed to deallocate resources for %s: %v", a.ID, err)
-	}
+	log.Debugf("stopped execution: %s", a.executionID)
 
 	a.status = Stopped
 
@@ -260,6 +241,7 @@ func (a *Allocation) stopActor() error {
 		if err := a.Actor.Stop(); err != nil {
 			log.Warnf("error stopping allocation actor: %s", err)
 		}
+		log.Debugf("stopped allocation actor: %s", a.ID)
 		a.actorRunning = false
 	}
 	return nil
@@ -267,14 +249,14 @@ func (a *Allocation) stopActor() error {
 
 // Stop stops the running executor and the allocation actor
 func (a *Allocation) Stop(ctx context.Context) error {
-	err := a.stopExecution(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to stop execution: %w", err)
-	}
-
-	err = a.stopActor()
+	err := a.stopActor()
 	if err != nil {
 		return fmt.Errorf("failed to stop actor: %w", err)
+	}
+
+	err = a.stopExecution(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to stop execution: %w", err)
 	}
 
 	return nil
@@ -477,12 +459,6 @@ func (a *Allocation) handleAllocationShutdown(msg actor.Envelope) {
 		resp.OK = false
 		a.sendReply(msg, resp)
 		return
-	}
-
-	// deallocate resources incase monitorExecutor didn't.
-	err := a.resourceManager.DeallocateResources(context.TODO(), a.ID)
-	if err != nil {
-		log.Warnf("failed to deallocate resources for %s: %v, probably already deallocated", a.ID, err)
 	}
 
 	resp.OK = true
