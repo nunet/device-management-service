@@ -712,7 +712,7 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	return e, nil
 }
 
-func (n *Node) registerDynamicBehaviors(ensembleID string) error {
+func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 	dmsBehaviors := map[string]struct {
 		fn   func(actor.Envelope)
 		opts []actor.BehaviorOption
@@ -722,6 +722,9 @@ func (n *Node) registerDynamicBehaviors(ensembleID string) error {
 		},
 		fmt.Sprintf(jobs.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
 			fn: n.handleSubnetDestroy,
+		},
+		fmt.Sprintf(jobs.AllocationLogsBehavior, ensembleID): {
+			fn: n.handleAllocationLogs,
 		},
 	}
 	for behavior, handler := range dmsBehaviors {
@@ -741,7 +744,7 @@ func (n *Node) createAllocations(
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
 	allocationIDs := make([]string, 0, len(allocations))
 	for allocationName, config := range allocations {
-		allocationID := ensembleID + "_" + allocationName
+		allocationID := n.constructAllocationID(ensembleID, allocationName)
 		if _, ok := n.allocations[allocationID]; ok {
 			log.Debugf("allocation %s already exists", allocationID)
 			continue
