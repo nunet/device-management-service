@@ -16,8 +16,8 @@ const (
 	NetP2P = "p2p"
 )
 
-// NetworkSpec is a stub. Please expand based on requirements.
-type NetworkSpec struct{}
+// NetworkSpec defines the network specification
+type NetworkSpec interface{}
 
 // NetConfig is a stub. Please expand it or completely change it based on requirements.
 type NetConfig struct {

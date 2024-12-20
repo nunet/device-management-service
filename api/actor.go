@@ -16,13 +16,14 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/network"
+
 	"github.com/gin-gonic/gin"
 	logging "github.com/ipfs/go-log/v2"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -40,7 +41,7 @@ var log = logging.Logger("actor-api")
 //	@Failure		500	{object}	object	"host node hasn't yet been initialized"
 //	@Failure		500	{object}	object	"handle id is invalid"
 //	@Router			/actor/handle [get]
-func (rs RESTServer) ActorHandle(c *gin.Context) {
+func (rs *Server) ActorHandle(c *gin.Context) {
 	endTrace := observability.StartTrace(c, "actor_handle_retrieve_duration")
 	defer endTrace()
 
@@ -52,8 +53,7 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 	}
 
 	// get handle here
-
-	pubk := p2p.Host.Peerstore().PubKey(p2p.Host.ID())
+	pubk := p2p.GetPeerPubKey(p2p.GetHostID())
 	id, err := crypto.IDFromPublicKey(pubk)
 	if err != nil {
 		log.Errorw("actor_handle_retrieve_failure", "error", "handle id is invalid")
@@ -61,18 +61,17 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 		return
 	}
 
-	did := did.FromPublicKey(pubk)
-
+	actorDID := did.FromPublicKey(pubk)
 	handle := actor.Handle{
 		ID:  id,
-		DID: did,
+		DID: actorDID,
 		Address: actor.Address{
-			HostID:       p2p.Host.ID().String(),
+			HostID:       p2p.GetHostID().String(),
 			InboxAddress: "root",
 		},
 	}
 
-	log.Infow("actor_handle_retrieve_success", "id", id, "DID", did)
+	log.Infow("actor_handle_retrieve_success", "id", id, "DID", actorDID)
 	c.JSON(http.StatusOK, handle)
 }
 
@@ -91,7 +90,7 @@ func (rs RESTServer) ActorHandle(c *gin.Context) {
 //		@Failure		500	{object}	object	"destination address can't be resolved"
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/send [post]
-func (rs RESTServer) ActorSendMessage(c *gin.Context) {
+func (rs *Server) ActorSendMessage(c *gin.Context) {
 	endTrace := observability.StartTrace(c, "actor_send_message_duration")
 	defer endTrace()
 
@@ -109,7 +108,7 @@ func (rs RESTServer) ActorSendMessage(c *gin.Context) {
 		return
 	}
 
-	err := SendMessage(c.Request.Context(), p2p, msg)
+	err := sendMessage(c.Request.Context(), p2p, msg)
 	if err != nil {
 		log.Errorw("actor_send_message_failure", "error", err.Error(), "destination", msg.To.Address.HostID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -135,7 +134,7 @@ func (rs RESTServer) ActorSendMessage(c *gin.Context) {
 //		@Failure		500	{object}	object	"destination address can't be resolved"
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/invoke [post]
-func (rs RESTServer) ActorInvoke(c *gin.Context) {
+func (rs *Server) ActorInvoke(c *gin.Context) {
 	endTrace := observability.StartTrace(c, "actor_invoke_duration")
 	defer endTrace()
 
@@ -173,7 +172,7 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 	// Unregister the message handler before returning
 	defer p2p.UnregisterMessageHandler(protocol)
 
-	err = SendMessage(c.Request.Context(), p2p, msg)
+	err = sendMessage(c.Request.Context(), p2p, msg)
 	if err != nil {
 		log.Errorw("actor_invoke_failure", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -210,7 +209,7 @@ func (rs RESTServer) ActorInvoke(c *gin.Context) {
 //				@Failure		500	{object}	object	"failed to marshal message"
 //				@Failure		500	{object}	object	"failed to publish message"
 //				@Router			/actor/broadcast [post]
-func (rs RESTServer) ActorBroadcast(c *gin.Context) {
+func (rs *Server) ActorBroadcast(c *gin.Context) {
 	endTrace := observability.StartTrace(c, "actor_broadcast_duration")
 	defer endTrace()
 
@@ -282,7 +281,7 @@ func (rs RESTServer) ActorBroadcast(c *gin.Context) {
 	c.JSON(http.StatusOK, messages)
 }
 
-func SendMessage(ctx context.Context, net *libp2p.Libp2p, msg actor.Envelope) (err error) {
+func sendMessage(ctx context.Context, net network.Network, msg actor.Envelope) (err error) {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)

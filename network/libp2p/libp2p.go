@@ -21,6 +21,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/network"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+
 	cid "github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
@@ -28,7 +32,6 @@ import (
 	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -118,6 +121,10 @@ type Libp2p struct {
 	subnets                         map[string]*subnet
 	isSubnetWriteProtocolRegistered int32
 }
+
+// This results in a cyclic dependency error
+// var _ dmsNetwork.Network = (*Libp2p)(nil)
+// TODO: remove this once we move the network types and interfaces to the types package
 
 // New creates a libp2p instance.
 //
@@ -559,6 +566,16 @@ func (l *Libp2p) GetPeerIP(p PeerID) string {
 	}
 
 	return ""
+}
+
+// GetHostID returns the host ID.
+func (l *Libp2p) GetHostID() PeerID {
+	return l.Host.ID()
+}
+
+// GetPeerPubKey returns the public key for the given peerID.
+func (l *Libp2p) GetPeerPubKey(peerID PeerID) crypto.PubKey {
+	return l.Host.Peerstore().PubKey(peerID)
 }
 
 // Ping the remote address. The remote address is the encoded peer id which will be decoded and used here.
