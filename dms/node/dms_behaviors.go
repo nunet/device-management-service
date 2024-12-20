@@ -647,11 +647,13 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 	defer msg.Discard()
 
 	var request jobs.SubnetDestroyRequest
+	resp := jobs.SubnetDestroyResponse{}
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
 		return
 	}
 
-	resp := jobs.SubnetDestroyResponse{}
 	err := n.network.DestroySubnet(request.SubnetID)
 	if err != nil {
 		resp.Error = err.Error()
@@ -708,6 +710,30 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	resp := jobs.CommitDeploymentResponse{}
 	allocationID := n.constructAllocationID(request.EnsembleID, request.AllocationName)
 	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleAllocationShutdown(msg actor.Envelope) {
+	log.Debugf("handling allocation shutdown request from %s", msg.From.DID)
+	defer msg.Discard()
+
+	var request jobs.AllocationShutdownRequest
+	resp := jobs.AllocationShutdownResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err := n.releaseAllocation(request.AllocationID)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)

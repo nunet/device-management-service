@@ -30,10 +30,3 @@ nodes:
     node1:
         allocations:
             - alloc1
-        ports:
-            - static: 8080
-              private: 1
-              allocation: alloc1
-        location:
-            accept: []
-            reject: []

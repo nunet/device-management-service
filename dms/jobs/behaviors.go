@@ -38,17 +38,17 @@ const (
 	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
 
-	AllocationStartBehavior    = "/dms/allocation/start"
-	AllocationRestartBehavior  = "/dms/allocation/restart"
-	AllocationStartTimeout     = 5 * time.Second
-	AllocationStopBehavior     = "/dms/allocation/stop"
-	AllocationStopTimeout      = 3 * time.Second
-	AllocationShutdownBehavior = "/dms/allocation/shutdown"
-	AllocationShutdownTimeout  = 5 * time.Second
+	AllocationStartBehavior   = "/dms/allocation/start"
+	AllocationRestartBehavior = "/dms/allocation/restart"
+	AllocationStartTimeout    = 5 * time.Second
+	AllocationShutdownTimeout = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 
 	MaxBidMultiplier = 8
+
+	SubnetCreateTimeout  = 2 * time.Minute
+	SubnetDestroyTimeout = 30 * time.Second
 )
 
 var (
@@ -71,7 +71,8 @@ var (
 	SubnetDNSAddRecordsBehavior   = AllocationNamespace + "/subnet/dns/add-records"
 	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
 
-	AllocationLogsBehavior = EnsembleNamespace + "/allocation/logs"
+	AllocationLogsBehavior     = EnsembleNamespace + "/allocation/logs"
+	AllocationShutdownBehavior = EnsembleNamespace + "/allocation/shutdown"
 )
 
 type VerifyEdgeConstraintRequest struct {

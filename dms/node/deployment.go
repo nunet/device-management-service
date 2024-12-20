@@ -486,12 +486,12 @@ func (n *Node) releaseCommit(eid string) error {
 }
 
 func (n *Node) releaseAllocation(allocID string) error {
-	n.mx.Lock()
-	alloc, ok := n.allocations[allocID]
-	n.mx.Unlock()
+	n.allocmx.Lock()
+	defer n.allocmx.Unlock()
 
+	alloc, ok := n.allocations[allocID]
 	if !ok {
-		log.Debugf("allocation %s not found (it may be already released)", allocID)
+		log.Errorf("allocation %s not found", allocID)
 		return nil
 	}
 
@@ -505,9 +505,7 @@ func (n *Node) releaseAllocation(allocID string) error {
 		log.Warnf("allocation not stopped or partially stopped: %v", err)
 	}
 
-	n.mx.Lock()
 	delete(n.allocations, allocID)
-	n.mx.Unlock()
 
 	return nil
 }
