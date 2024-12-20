@@ -10,6 +10,8 @@ package node
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -125,9 +127,9 @@ func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 }
 
 func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
-	ensembleID, err := uuid.NewUUID()
+	ensembleID, err := createEnsembleID(n.actor.Handle().Address.HostID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
+		return nil, fmt.Errorf("failed to create ensemble id: %w", err)
 	}
 
 	actor, err := n.actor.CreateChild(n.actor.Handle(), actor.BasicActorParams{})
@@ -135,12 +137,26 @@ func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.Ensemb
 		return nil, fmt.Errorf("failed to create child actor: %w", err)
 	}
 
-	orch, err := jobs.NewOrchestrator(ctx, ensembleID.String(), actor, n.network, ensemble)
+	orch, err := jobs.NewOrchestrator(ctx, ensembleID, actor, n.network, ensemble)
 	if err != nil {
 		return nil, err
 	}
 
 	return orch, nil
+}
+
+func createEnsembleID(peerID string) (string, error) {
+	var id string
+
+	suffixID, err := uuid.NewUUID()
+	if err != nil {
+		return id, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
+	}
+
+	h := sha256.New()
+	h.Write([]byte(peerID + suffixID.String()))
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func (n *Node) saveDeployments() error {
