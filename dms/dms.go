@@ -44,7 +44,7 @@ var geoLite2Country []byte
 type DMS struct {
 	P2P        *libp2p.Libp2p
 	Node       *node.Node
-	RestServer *api.RESTServer
+	RestServer *api.Server
 }
 
 func initialize(gcfg *config.Config) {
@@ -245,16 +245,16 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	}
 
 	// initialize rest api server
-	restConfig := api.RESTServerConfig{
-		P2P:        p2pNet,
-		Onboarding: onboardingManager,
-		Resource:   resourceManager,
-		MidW:       nil,
-		Port:       gcfg.Rest.Port,
-		Addr:       gcfg.Rest.Addr,
+	restConfig := api.ServerConfig{
+		P2P:         p2pNet,
+		Onboarding:  onboardingManager,
+		Resource:    resourceManager,
+		Middlewares: nil,
+		Port:        gcfg.Rest.Port,
+		Addr:        gcfg.Rest.Addr,
 	}
-	rServer := api.NewRESTServer(&restConfig)
-	rServer.InitializeRoutes()
+	rServer := api.NewServer(&restConfig)
+	rServer.SetupRoutes()
 
 	return &DMS{
 		P2P:        p2pNet,
