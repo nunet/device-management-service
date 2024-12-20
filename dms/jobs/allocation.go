@@ -276,9 +276,8 @@ func (a *Allocation) Start() error {
 	defer a.mx.Unlock()
 
 	behaviors := map[string]func(actor.Envelope){
-		AllocationStartBehavior:    a.handleAllocationStart,
-		AllocationRestartBehavior:  a.handleAllocationRestart,
-		AllocationShutdownBehavior: a.handleAllocationShutdown,
+		AllocationStartBehavior:   a.handleAllocationStart,
+		AllocationRestartBehavior: a.handleAllocationRestart,
 
 		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
 		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
@@ -289,7 +288,6 @@ func (a *Allocation) Start() error {
 		SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
 		RegisterHealthcheckBehavior:   a.handleRegisterHealthcheck,
 		actor.HealthCheckBehavior:     a.handleHealthcheck,
-		AllocationStopBehavior:        a.handleAllocationStop,
 	}
 
 	// add allocation behaviors
@@ -368,6 +366,7 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	}
 
 	var resp AllocationStartResponse
+	// TODO: context should cancel when the actor is stopped to stop monitor
 	if err := a.Run(context.TODO(), req.SubnetIP, req.PortMapping); err != nil {
 		err = fmt.Errorf("failed to run allocation: %w", err)
 		log.Error(err)
@@ -387,33 +386,6 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-func (a *Allocation) handleAllocationStop(msg actor.Envelope) {
-	log.Infof("behavior allocation start invoked by: %+v", msg.From)
-	defer msg.Discard()
-
-	var req AllocationStopRequest
-	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		log.Errorf("error unmarshalling allocation start request: %s", err)
-		return
-	}
-
-	var resp AllocationStopResponse
-	if err := a.Stop(context.TODO()); err != nil {
-		err = fmt.Errorf("failed to stop allocation: %w", err)
-		log.Error(err)
-
-		resp.Error = err.Error()
-		resp.OK = false
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Info("Stopping allocation: ", req.AllocationID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
 func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -422,39 +394,6 @@ func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 		err = fmt.Errorf("failed to restart allocation: %w", err)
 		log.Error(err)
 
-		resp.Error = err.Error()
-		resp.OK = false
-		a.sendReply(msg, resp)
-		return
-	}
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-// handleAllocationShutdown handles the shutdown of the allocation.
-func (a *Allocation) handleAllocationShutdown(msg actor.Envelope) {
-	log.Infof("behavior allocation shutdown invoked by: %+v", msg.From)
-	defer func() {
-		// Wait until the message expires to ensure reply is sent
-		<-time.After(time.Until(msg.Expiry()))
-		err := a.stopActor()
-		if err != nil {
-			log.Errorf("error stopping allocation actor when shutting down: %s", err)
-		}
-	}()
-	defer msg.Discard()
-
-	var req AllocationShutdownRequest
-	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		log.Errorf("error unmarshalling allocation shutdown request: %s", err)
-		return
-	}
-
-	var resp AllocationShutdownResponse
-	if err := a.stopExecution(context.TODO()); err != nil {
-		err = fmt.Errorf("error stopping allocation: %s", err)
-		log.Error(err)
 		resp.Error = err.Error()
 		resp.OK = false
 		a.sendReply(msg, resp)

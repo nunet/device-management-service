@@ -66,12 +66,13 @@ type Node struct {
 	cancel func()
 
 	mx          sync.Mutex
-	allocmx     sync.Mutex
 	peers       map[peer.ID]*peerState
 	bids        map[string]*bidState
 	deployments map[string]*jobs.Orchestrator
-	allocations map[string]*jobs.Allocation
 	running     int32
+
+	allocmx     sync.Mutex
+	allocations map[string]*jobs.Allocation
 
 	orchestratorRepo  repositories.OrchestratorView
 	geoip             types.GeoIPLocator
@@ -657,14 +658,14 @@ func (n *Node) Stop() error {
 		return nil
 	}
 
-	n.mx.Lock()
+	n.allocmx.Lock()
 	// stop all allocations
 	for k, alloc := range n.allocations {
 		if err := alloc.Stop(n.ctx); err != nil {
 			log.Warnf("error stopping allocation %s: %err", k, err)
 		}
 	}
-	n.mx.Unlock()
+	n.allocmx.Unlock()
 
 	if err := n.saveDeployments(); err != nil {
 		log.Errorf("error saving active deployments: %s", err)
@@ -725,6 +726,9 @@ func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 		},
 		fmt.Sprintf(jobs.AllocationLogsBehavior, ensembleID): {
 			fn: n.handleAllocationLogs,
+		},
+		fmt.Sprintf(jobs.AllocationShutdownBehavior, ensembleID): {
+			fn: n.handleAllocationShutdown,
 		},
 	}
 	for behavior, handler := range dmsBehaviors {
@@ -903,8 +907,8 @@ func (n *Node) grantCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capabili
 
 func (n *Node) updateAllocations(alloc *jobs.Allocation) {
 	n.allocmx.Lock()
+	defer n.allocmx.Unlock()
 	n.allocations[alloc.ID] = alloc
-	n.allocmx.Unlock()
 }
 
 func (n *Node) commitDeployment(ensembleID, allocationID string, resources types.Resources) error {
