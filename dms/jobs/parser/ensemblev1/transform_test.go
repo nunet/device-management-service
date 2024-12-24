@@ -274,65 +274,17 @@ func TestTransformResources(t *testing.T) {
 		expected    map[string]any
 	}{
 		{
-			name: "string reference",
+			name: "string reference inherits values",
 			root: &map[string]any{
 				"resources": []any{
 					map[string]any{
 						"name": "rc1",
 						"cpu": map[string]any{
-							"cores": float64(1),
-						},
-						"ram": map[string]any{
-							"size": float64(1024),
-						},
-					},
-				},
-			},
-			input:       "rc1",
-			path:        tree.NewPath("allocations", "alloc1", "resources"),
-			expectError: false,
-			expected: map[string]any{
-				"name": "rc1",
-				"cpu": map[string]any{
-					"cores": float64(1),
-				},
-				"ram": map[string]any{
-					"size": float64(1024),
-				},
-			},
-		},
-		{
-			name: "map format",
-			input: map[string]any{
-				"cpu": map[string]any{
-					"cores": float64(2),
-				},
-				"ram": map[string]any{
-					"size": float64(2048),
-				},
-			},
-			expectError: false,
-			expected: map[string]any{
-				"cpu": map[string]any{
-					"cores": float64(2),
-				},
-				"ram": map[string]any{
-					"size": float64(2048),
-				},
-			},
-		},
-		{
-			name: "inherit and override",
-			root: &map[string]any{
-				"resources": []any{
-					map[string]any{
-						"name": "rc1",
-						"cpu": map[string]any{
-							"cores": float64(1),
+							"cores": 4,
 							"arch":  "x86_64",
 						},
 						"ram": map[string]any{
-							"size": float64(1024),
+							"size": 8,
 						},
 					},
 				},
@@ -343,13 +295,109 @@ func TestTransformResources(t *testing.T) {
 			expected: map[string]any{
 				"name": "rc1",
 				"cpu": map[string]any{
-					"cores": float64(1),
+					"cores": 4,
 					"arch":  "x86_64",
 				},
 				"ram": map[string]any{
-					"size": float64(1024),
+					"size": uint64(8589934592), // 8 GiB in bytes
 				},
 			},
+		},
+		{
+			name: "map format with default units",
+			input: map[string]any{
+				"cpu": map[string]any{
+					"cores":       4,
+					"clock_speed": 2.4, // defaults to GHz
+				},
+				"ram": map[string]any{
+					"size":        16,  // defaults to GiB
+					"clock_speed": 3.2, // defaults to GHz
+				},
+				"disk": map[string]any{
+					"size": 500, // defaults to GiB
+				},
+				"gpu": []any{
+					map[string]any{
+						"vram": 8, // defaults to GiB
+					},
+				},
+			},
+			expectError: false,
+			expected: map[string]any{
+				"cpu": map[string]any{
+					"cores":       4,
+					"clock_speed": float64(2.4e9),
+				},
+				"ram": map[string]any{
+					"size":        uint64(17179869184), // 16 GiB in bytes
+					"clock_speed": float64(3.2e9),
+				},
+				"disk": map[string]any{
+					"size": uint64(536870912000), // 500 GiB in bytes
+				},
+				"gpu": []any{
+					map[string]any{
+						"vram": uint64(8589934592), // 8 GiB in bytes
+					},
+				},
+			},
+		},
+		{
+			name: "explicit units",
+			input: map[string]any{
+				"cpu": map[string]any{
+					"clock_speed": "3.6GHz",
+				},
+				"ram": map[string]any{
+					"size":        "32GiB",
+					"clock_speed": "3600MHz",
+				},
+				"disk": map[string]any{
+					"size": "1TB",
+				},
+				"gpu": []any{
+					map[string]any{
+						"vram": "16GB",
+					},
+				},
+			},
+			expectError: false,
+			expected: map[string]any{
+				"cpu": map[string]any{
+					"clock_speed": float64(3.6e9),
+				},
+				"ram": map[string]any{
+					"size":        uint64(34359738368), // 32 GiB in bytes
+					"clock_speed": float64(3.6e9),
+				},
+				"disk": map[string]any{
+					"size": uint64(1000000000000), // 1 TB in bytes
+				},
+				"gpu": []any{
+					map[string]any{
+						"vram": uint64(16000000000), // 16 GB in bytes
+					},
+				},
+			},
+		},
+		{
+			name: "invalid cpu clock_speed unit",
+			input: map[string]any{
+				"cpu": map[string]any{
+					"clock_speed": "3.5 invalid",
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid ram size unit",
+			input: map[string]any{
+				"ram": map[string]any{
+					"size": "16 invalid",
+				},
+			},
+			expectError: true,
 		},
 		{
 			name:        "invalid type",
@@ -387,11 +435,11 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 		"resources": map[string]any{
 			"rc1": map[string]any{
 				"cpu": map[string]any{
-					"cores": float64(2),
+					"cores": 2,
 					"arch":  "x86_64",
 				},
 				"ram": map[string]any{
-					"size": float64(2048),
+					"size": 2,
 				},
 			},
 		},
@@ -441,11 +489,11 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 				map[string]any{
 					"name": "rc1",
 					"cpu": map[string]any{
-						"cores": float64(2),
+						"cores": 2,
 						"arch":  "x86_64",
 					},
 					"ram": map[string]any{
-						"size": float64(2048),
+						"size": uint64(2305843009213693952),
 					},
 				},
 			},
@@ -462,11 +510,11 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 					"resources": map[string]any{
 						"name": "rc1",
 						"cpu": map[string]any{
-							"cores": float64(2),
+							"cores": 2,
 							"arch":  "x86_64",
 						},
 						"ram": map[string]any{
-							"size": float64(2048),
+							"size": uint64(2305843009213693952),
 						},
 					},
 					"volumes": []any{
@@ -490,11 +538,11 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 					"resources": map[string]any{
 						"name": "rc1",
 						"cpu": map[string]any{
-							"cores": float64(2),
+							"cores": 2,
 							"arch":  "x86_64",
 						},
 						"ram": map[string]any{
-							"size": float64(2048),
+							"size": uint64(2305843009213693952),
 						},
 					},
 					"executor": "docker",

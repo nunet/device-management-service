@@ -15,8 +15,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
+	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
 func TestEnsemble(t *testing.T) {
@@ -50,8 +52,12 @@ func TestEnsemble(t *testing.T) {
 	// Verify resource transformation
 	worker1, ok := config.V1.Allocations["worker1"]
 	require.True(t, ok, "Worker1 allocation should exist")
+
+	expectedRAM, err := convert.ParseBytesWithDefaultUnit(2, "GiB")
+	assert.NoError(t, err)
+
 	assert.Equal(t, float32(2), worker1.Resources.CPU.Cores, "Worker1 should have correct CPU cores")
-	assert.Equal(t, float64(4096), worker1.Resources.RAM.Size, "Worker1 should have correct RAM")
+	assert.Equal(t, float64(expectedRAM), worker1.Resources.RAM.Size, "Worker1 should have correct RAM")
 	assert.Equal(t, "docker", string(worker1.Executor), "Worker1 should have correct executor")
 	assert.Equal(t, "docker", worker1.Execution.Type, "Worker1 should have correct execution type")
 	assert.Equal(t, "ubuntu:22.04", worker1.Execution.Params["image"], "Worker1 should have correct image")

@@ -28,31 +28,48 @@ edge_constraints:
     bw: 1000
 
 # Resource templates
+# NOTE: referencing yaml fields won't correctly work with our parser
 resources:
   standard:
     name: "standard"
     cpu:
       cores: 2
       architecture: "x86_64"
-      clock_speed: 2400  # MHz
+      clock_speed: 2.4  # GHz
     ram:
-      size: 4096  # MB
+      size: 2  # GiB
       clock_speed: 3200  # MHz
     disk:
-      size: 10000  # MB
+      size: 2  # GiB
       type: "ssd"
     gpus:
       - vendor: "nvidia"
         model: "rtx3080"
-        vram: 10000  # MB
+        vram: 2  # GiB
+  standard2:
+    name: "standard2"
+    cpu:
+      cores: 2
+      architecture: "x86_64"
+      clock_speed: 2.4  # GHz
+    ram:
+      size: 2  # GiB
+      clock_speed: 3200  # MHz
+    disk:
+      size: 2  # GiB
+      type: "ssd"
+    gpus:
+      - vendor: "nvidia"
+        model: "rtx3080"
+        vram: 2  # GiB
   minimal:
     name: "minimal"
     cpu:
       cores: 1
     ram:
-      size: 1024  # MB
+      size: 2  # GiB
     disk:
-      size: 5000  # MB
+      size: 2  # GiB
 
 # Scripts for provisioning (will be transformed to bytes)
 scripts:
@@ -110,7 +127,7 @@ allocations:
   vm1:
     executor: "firecracker"
     dns_name: "vm1.local"
-    resources: "standard"  # Reference to resource template
+    resources: "standard2"  # Reference to resource template
     execution:
       type: "firecracker"
       kernel_image: "vmlinux-5.10"

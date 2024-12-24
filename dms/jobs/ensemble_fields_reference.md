@@ -31,23 +31,23 @@ allocations:
       gpus:
         - vendor: "Nvidia" # (Optional) Vendor of the GPU (e.g., Nvidia)
           model: ""        # (Optional) Model of the GPU
-          vram: 12234      # (Optional) VRAM amount
-  
+          vram: 2      # (Optional) VRAM amount
+
       # RAM resource requirements for the allocation
       ram:
-        size: 1024     # RAM size in MB
+        size: 2     # RAM size in MB
         clockspeed: 3  # (Optional) RAM clock speed in Hz
         type: ""       # (Optional) Type of RAM
 
       # Disk resource requirements for the allocation
       disk:
-        size: 20000    # Disk size in MB
+        size: 2    # Disk size in MB
         model: ""      # (Optional) Model of the disk
         vendor: ""     # (Optional) Vendor of the disk
         type: ""       # (Optional) Disk type (e.g., SSD, HDD)
         interface: ""  # (Optional) Disk interface (e.g., SATA, NVMe)
-        readspeed: 0   # (Optional) Read speed  
-        writespeed: 0  # (Optional) Write speed  
+        readspeed: 0   # (Optional) Read speed
+        writespeed: 0  # (Optional) Write speed
 
     # Execution configuration for the allocation
     execution:
@@ -84,7 +84,7 @@ nodes:
 
     # (Optional)
     location:
-      # List of acceptable locations for this 
+      # List of acceptable locations for this
       accept:
         # regions: Africa, Antarctica, Asia, Europe, North America, Oceania, South America
         - region: Europe
@@ -134,3 +134,4 @@ scripts:
   script2: "main.go"
 
 ```
+
