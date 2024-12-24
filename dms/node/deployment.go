@@ -516,9 +516,10 @@ func (n *Node) releaseAllocation(allocID string) error {
 		return fmt.Errorf("failed to deallocate resources for allocation id: %s: %w", allocID, err)
 	}
 
-	err = alloc.Stop(n.ctx)
+	// stop and cleanup
+	err = alloc.Terminate(n.ctx)
 	if err != nil {
-		log.Warnf("allocation not stopped or partially stopped: %v", err)
+		return fmt.Errorf("failed to shutdown allocation: %w", err)
 	}
 
 	delete(n.allocations, allocID)

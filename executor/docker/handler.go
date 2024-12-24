@@ -72,15 +72,6 @@ func (h *executionHandler) run(ctx context.Context) {
 	defer endTrace()
 
 	h.running.Store(true)
-	defer func() {
-		if err := h.destroy(DestroyTimeout); err != nil {
-			log.Warnf("failed to destroy container: %v\n", err)
-		}
-		h.running.Store(false)
-		close(h.waitCh)
-
-		h.handleDeletionOfLogFiles(h.persistLogsDuration)
-	}()
 
 	if err := h.prepareLogFiles(); err != nil {
 		err = fmt.Errorf("failed to create execution log files: %v", err)
@@ -216,6 +207,9 @@ func (h *executionHandler) run(ctx context.Context) {
 	}
 
 	log.Infow("docker_execution_handler_run_logs_success", "executionID", h.executionID)
+
+	h.running.Store(false)
+	close(h.waitCh)
 }
 
 // pause pauses the main process of the container without terminating it.
@@ -281,6 +275,8 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 		log.Errorw("docker_execution_handler_destroy_failure", "error", err, "executionID", h.executionID)
 		return err
 	}
+
+	h.handleDeletionOfLogFiles(h.persistLogsDuration)
 
 	log.Infow("docker_execution_handler_destroy_success", "executionID", h.executionID)
 	return nil

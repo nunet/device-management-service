@@ -26,6 +26,7 @@ import (
 
 const (
 	persistLogDurationTest = time.Second * 1
+	removeContainerTimeout = time.Second * 5
 	testDirLogs            = "/tmp/nunet/tests/"
 )
 
@@ -82,6 +83,31 @@ func (s *ExecutorTestSuite) TestStartJob() {
 	s.NoError(err)
 }
 
+func (s *ExecutorTestSuite) TestRemoveContainer() {
+	request := s.newExecutionRequest(transientCmd)
+	err := s.executor.Start(context.Background(), request)
+	s.NoError(err)
+
+	ctx := context.Background()
+	_, err = s.executor.GetStatus(ctx, request.ExecutionID)
+	s.NoError(err)
+
+	err = s.executor.WaitForStatus(ctx, request.ExecutionID, types.ExecutionStatusRunning, nil)
+	s.NoError(err)
+
+	cont, err := s.executor.FindRunningContainer(ctx, request.JobID, request.ExecutionID)
+	s.NoError(err)
+	s.NotEmpty(cont)
+
+	err = s.executor.Remove(request.ExecutionID, removeContainerTimeout)
+	s.NoError(err)
+
+	cont, err = s.executor.FindRunningContainer(ctx, request.JobID, request.ExecutionID)
+	s.Error(err)
+	s.Contains(err.Error(), "unable to find container")
+	s.Empty(cont)
+}
+
 // TestSavedLogs starts a job and checks if logs are being persisted to disk.
 // Log files are updated while the container is running
 func (s *ExecutorTestSuite) TestSavedLogs() {
@@ -114,6 +140,7 @@ func (s *ExecutorTestSuite) TestSavedLogs() {
 
 	// Wait for completion
 	resultCh, errCh := s.executor.Wait(ctx, request.ExecutionID)
+
 	select {
 	case result := <-resultCh:
 		s.Equal(0, result.ExitCode)

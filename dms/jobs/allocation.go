@@ -33,10 +33,11 @@ type HealthCheckResponse struct {
 }
 
 const (
-	Pending   AllocationStatus = "pending"
-	Running   AllocationStatus = "running"
-	Stopped   AllocationStatus = "stopped"
-	Completed AllocationStatus = "completed"
+	Pending    AllocationStatus = "pending"
+	Running    AllocationStatus = "running"
+	Stopped    AllocationStatus = "stopped"
+	Completed  AllocationStatus = "completed"
+	Terminated AllocationStatus = "terminated"
 
 	deleteLogsAfter = 30 * time.Minute
 )
@@ -183,34 +184,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 
 	a.status = Running
 
-	go a.monitorExecutor(ctx)
-
 	return nil
-}
-
-func (a *Allocation) monitorExecutor(ctx context.Context) {
-	resChan, errChan := a.executor.Wait(ctx, a.executionID)
-
-	var result *types.ExecutionResult
-	var err error
-
-	select {
-	case result = <-resChan:
-	case err = <-errChan:
-	case <-ctx.Done():
-		err = ctx.Err()
-	}
-
-	a.mx.Lock()
-	if err != nil {
-		a.status = Stopped
-		log.Warnf("execution failed: %v", err)
-	}
-
-	if result != nil {
-		a.status = Completed
-	}
-	a.mx.Unlock()
 }
 
 // Cancel stops the running executor
@@ -228,6 +202,39 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	log.Debugf("stopped execution: %s", a.executionID)
 
 	a.status = Stopped
+
+	return nil
+}
+
+func (a *Allocation) Cleanup() error {
+	if err := a.executor.Remove(a.executionID, AllocationShutdownTimeout); err != nil {
+		return fmt.Errorf("failed to remove execution: %w", err)
+	}
+	log.Debugf("removed execution: %s", a.executionID)
+	return nil
+}
+
+// Terminate stops the allocation and cleans up after
+func (a *Allocation) Terminate(ctx context.Context) error {
+	if a.status != Stopped && a.status != Completed {
+		err := a.Stop(ctx)
+		if err != nil {
+			log.Warnf("failed to stop allocation: %s", err)
+			return fmt.Errorf("failed to stop allocation: %w", err)
+		}
+	}
+
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	if err := a.Cleanup(); err != nil {
+		// TODO: exec.Remove should return a defined custom error
+		//       container already removed is not an error
+		log.Warnf("failed to cleanup allocation: %s", err)
+		return fmt.Errorf("failed to cleanup allocation: %w", err)
+	}
+
+	a.status = Terminated
 
 	return nil
 }
@@ -616,18 +623,24 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 
 	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
 		exitCode, stdout, stderr, err := a.executor.Exec(context.TODO(), a.executionID, mf.Exec)
+
+		log.Debugf("health check command: %s\nstdout: %s\nstderr: %s", mf.Exec, stdout, stderr)
 		if err != nil {
+			log.Warnf("health check command failed: %s", err)
 			return fmt.Errorf("health check command failed: %w", err)
 		}
 
 		if exitCode != 0 {
+			log.Warnf("health check command failed with exit code: %d", exitCode)
 			return fmt.Errorf("health check command failed with exit code %d", exitCode)
 		}
 
-		if strings.Contains(stdout, mf.Response.Value) {
+		if !strings.Contains(stdout+stderr, mf.Response.Value) {
+			log.Warnf("health check command err: %s", stderr)
 			return fmt.Errorf("unexpected health check command output: %s\nstderr: %s", stdout, stderr)
 		}
 
+		log.Debugf("health check command succeeded")
 		return nil
 	})
 	if err != nil {
@@ -651,7 +664,6 @@ func (a *Allocation) handleHealthcheck(msg actor.Envelope) {
 	var resp HealthCheckResponse
 	if healthcheck != nil {
 		if err := healthcheck(); err != nil {
-			log.Warnf("healthcheck failure: %s", err)
 			resp.Error = err.Error()
 		} else {
 			resp.OK = true

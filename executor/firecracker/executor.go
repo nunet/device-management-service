@@ -240,6 +240,17 @@ func (e *Executor) Cancel(ctx context.Context, executionID string) error {
 	return handler.kill(ctx)
 }
 
+// Remove removes an execution identified by its executionID.
+// It returns an error if the execution does not exist.
+func (e *Executor) Remove(executionID string, timeout time.Duration) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		log.Errorw("firecracker_remove_execution_not_found", "executionID", executionID)
+		return fmt.Errorf("failed to remove execution (%s). execution not found", executionID)
+	}
+	return handler.destroy(timeout)
+}
+
 // Run initiates and waits for the completion of an execution in one call.
 // This method serves as a higher-level convenience function that
 // internally calls Start and Wait methods.
@@ -320,7 +331,7 @@ func (e *Executor) WaitForStatus(
 
 // Cleanup removes all resources associated with the executor.
 // This includes stopping and removing all running VMs and deleting their socket paths.
-func (e *Executor) Cleanup() error {
+func (e *Executor) Cleanup(_ context.Context) error {
 	log.Infow("firecracker_cleanup_started", "executorID", e.ID)
 
 	wg := sync.WaitGroup{}

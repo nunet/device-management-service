@@ -59,6 +59,11 @@ func (e *Executor) Cancel(_ context.Context, _ string) error {
 	return nil
 }
 
+// Remove does nothing and returns nil.
+func (e *Executor) Remove(_ string, _ time.Duration) error {
+	return nil
+}
+
 // GetLogStream returns a closed io.ReadCloser and nil error.
 func (e *Executor) GetLogStream(_ context.Context, _ types.LogStreamRequest) (io.ReadCloser, error) {
 	return io.NopCloser(nil), nil
