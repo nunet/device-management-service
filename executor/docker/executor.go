@@ -235,6 +235,16 @@ func (e *Executor) Cancel(ctx context.Context, executionID string) error {
 	return handler.kill(ctx)
 }
 
+// Remove removes a container identified by its executionID.
+// It returns an error if the execution is not found.
+func (e *Executor) Remove(executionID string, timeout time.Duration) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.destroy(timeout)
+}
+
 // GetLogStream provides a stream of output logs for a specific execution.
 // Parameters 'withHistory' and 'follow' control whether to include past logs
 // and whether to keep the stream open for new logs, respectively.

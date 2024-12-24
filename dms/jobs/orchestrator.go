@@ -1878,12 +1878,15 @@ func (o *Orchestrator) supervise() {
 								if err := o.escalateFailure(allocation.Handle); err != nil {
 									log.Errorf("failed to escalate failure: %s", err)
 								} else {
+									log.Debug("escalated failure, resetting healthcheck failures counter")
 									delete(failures, allocation.Handle.ID.String())
 								}
 							}
 							return
 						} else {
+							log.Infof("successfully healthchecked allocation %s", allocation.ID)
 							delete(failures, allocation.Handle.ID.String())
+							return
 						}
 
 					case <-ticker.C:
@@ -1894,12 +1897,12 @@ func (o *Orchestrator) supervise() {
 							if err := o.escalateFailure(allocation.Handle); err != nil {
 								log.Errorf("failed to escalate failure: %s", err)
 							} else {
+								log.Debug("escalated failure, resetting healthcheck failures counter")
 								delete(failures, allocation.Handle.ID.String())
 							}
+							return
 						}
 					}
-
-					log.Infof("successfully healthchecked allocation %s", allocation.ID)
 				}()
 			}
 
@@ -1914,6 +1917,7 @@ func (o *Orchestrator) escalateFailure(allocHandle actor.Handle) error {
 	//      Also, we should not restart at first failure, but wait for a number of
 	//      consecutive failures.
 	//      See https://gitlab.com/nunet/device-management-service/-/issues/794
+	log.Debugf("escalating failure for allocation %s", allocHandle.String())
 	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 	msg, err := actor.Message(
 		o.actor.Handle(),
