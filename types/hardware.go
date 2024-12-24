@@ -68,6 +68,7 @@ type GPU struct {
 	// Model represents the GPU model name, e.g., "Tesla T4", "A100"
 	Model string `json:"model" description:"GPU model, e.g., Tesla T4, A100"`
 	// VRAM is the total amount of VRAM on the device
+	// TODO: uint64!!
 	VRAM float64 `json:"vram" description:"Total amount of VRAM on the device"`
 	// UUID is the unique identifier of the device
 	UUID string `json:"uuid" description:"Unique identifier of the device"`
@@ -361,6 +362,7 @@ func (c *CPU) ClockSpeedInGHz() float64 {
 // RAM represents the RAM information
 type RAM struct {
 	// Size in bytes
+	// TODO: uint64!!!
 	Size float64 `json:"size" description:"Size of the RAM in bytes"`
 
 	// TODO: capture the below fields if required
@@ -412,6 +414,7 @@ func (r *RAM) SizeInGB() float64 {
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
+	// TODO: uint64!!!
 	Size float64 `json:"size" description:"Size of the disk in bytes"`
 
 	// TODO: capture the below fields if required

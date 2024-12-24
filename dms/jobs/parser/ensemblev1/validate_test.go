@@ -12,9 +12,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 )
 
+// TODO: avoid asserting error string messages.
+// Only assert error msgs if using sentinel errors
 func TestValidateSpec(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -803,7 +806,7 @@ func TestValidateResources(t *testing.T) {
 				},
 			},
 			wantErr:  true,
-			errorMsg: "disk size must be positive",
+			errorMsg: "disk size must be a valid number",
 		},
 		{
 			// Multiple GPUs can be specified with different valid configurations

@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/cmd"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/internal/config"

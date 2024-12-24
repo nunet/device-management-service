@@ -15,6 +15,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/transform"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
+	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
 func NewEnsemblev1Transformer() transform.Transformer {
@@ -187,5 +188,61 @@ func TransformResources(root *map[string]interface{}, data any, path tree.Path) 
 			}
 		}
 	}
+
+	// Convert resource values to their respective units:
+	// - CPU and RAM clock_speed: defaults to GHz, accepts SI units (Hz, MHz, GHz)
+	// - RAM and disk size: defaults to GiB, accepts binary (KiB, MiB, GiB) and decimal (KB, MB, GB) units
+	// - GPU VRAM: defaults to GiB, accepts binary and decimal units
+	if cpu, ok := config["cpu"].(map[string]any); ok {
+		if speed, ok := cpu["clock_speed"]; ok {
+			val, err := convert.ParseSIWithDefaultUnit(speed, "GHz")
+			if err != nil {
+				return nil, fmt.Errorf("invalid cpu clock_speed: %v", err)
+			}
+			cpu["clock_speed"] = val
+		}
+	}
+
+	if ram, ok := config["ram"].(map[string]any); ok {
+		if speed, ok := ram["clock_speed"]; ok {
+			val, err := convert.ParseSIWithDefaultUnit(speed, "GHz")
+			if err != nil {
+				return nil, fmt.Errorf("invalid ram clock_speed: %v", err)
+			}
+			ram["clock_speed"] = val
+		}
+		if size, ok := ram["size"]; ok {
+			val, err := convert.ParseBytesWithDefaultUnit(size, "GiB")
+			if err != nil {
+				return nil, fmt.Errorf("invalid ram size: %v", err)
+			}
+			ram["size"] = val
+		}
+	}
+
+	if disk, ok := config["disk"].(map[string]any); ok {
+		if size, ok := disk["size"]; ok {
+			val, err := convert.ParseBytesWithDefaultUnit(size, "GiB")
+			if err != nil {
+				return nil, fmt.Errorf("invalid disk size: %v", err)
+			}
+			disk["size"] = val
+		}
+	}
+
+	if gpus, ok := config["gpu"].([]any); ok {
+		for i, g := range gpus {
+			if gpu, ok := g.(map[string]any); ok {
+				if vram, ok := gpu["vram"]; ok {
+					val, err := convert.ParseBytesWithDefaultUnit(vram, "GiB")
+					if err != nil {
+						return nil, fmt.Errorf("invalid gpu[%d] vram: %v", i, err)
+					}
+					gpu["vram"] = val
+				}
+			}
+		}
+	}
+
 	return config, nil
 }
