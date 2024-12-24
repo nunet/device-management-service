@@ -97,7 +97,6 @@ type peerState struct {
 type bidState struct {
 	expire  time.Time
 	request job_types.BidRequest
-	ports   []int
 }
 
 type executorMetadata struct {
@@ -938,6 +937,19 @@ func (n *Node) commitDeployment(ensembleID, allocationID string, resources types
 
 	n.commitedResources[allocationID] = bidState
 
+	err := n.portAllocator.AllocatePorts(allocationID, bidState.request.V1.PublicPorts.Static)
+	if err != nil {
+		log.Debugf("failed to allocate static ports: %v", err)
+		return err
+	}
+
+	// handle dynamic port allocs
+	_, err = n.portAllocator.AllocateRandom(allocationID, bidState.request.V1.PublicPorts.Dynamic)
+	if err != nil {
+		log.Debugf("failed to allocate ports")
+		return err
+	}
+
 	return nil
 }
 
@@ -954,6 +966,7 @@ func (n *Node) clearCommitedResources() {
 			}
 			delete(n.bids, allocationID)
 			delete(n.commitedResources, allocationID)
+			n.portAllocator.Release(allocationID)
 		}
 	}
 }
