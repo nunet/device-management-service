@@ -133,3 +133,31 @@ func (pa *PortAllocator) GetAllocation(allocationID string) ([]int, error) {
 	}
 	return ports, nil
 }
+
+// Allocated checks if the given ports are already allocated.
+func (pa *PortAllocator) Allocated(ports []int) bool {
+	for _, port := range ports {
+		if _, reserved := pa.reserved[port]; reserved {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (pa *PortAllocator) PortsAvailable(numPorts int) bool {
+	pa.mx.Lock()
+	defer pa.mx.Unlock()
+
+	portNum := pa.config.AvailableRangeFrom
+	for range numPorts {
+		for ; portNum <= pa.config.AvailableRangeTo; portNum++ {
+			if _, reserved := pa.reserved[portNum]; !reserved {
+				portNum++
+				break
+			}
+		}
+	}
+
+	return portNum <= pa.config.AvailableRangeTo
+}

@@ -160,3 +160,31 @@ func TestAllocateExactPortRange(t *testing.T) {
 	_, err = allocator.AllocateRandom("alloc2", 1)
 	assert.Error(t, err, "Expected an error due to no available ports")
 }
+
+func TestAllocated(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 9000}
+	allocator := NewPortAllocator(config)
+
+	err := allocator.AllocatePorts("alloc1", []int{8000, 8001, 8002, 8003, 8004})
+	assert.NoError(t, err)
+
+	allocated := allocator.Allocated([]int{8000, 8001, 8002, 8003, 8004})
+	assert.True(t, allocated)
+
+	allocated = allocator.Allocated([]int{8080, 8081, 8082, 8083, 8084})
+	assert.False(t, allocated)
+}
+
+func TestPortsAvailable(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8005}
+	allocator := NewPortAllocator(config)
+
+	available := allocator.PortsAvailable(5)
+	assert.True(t, available)
+
+	_, err := allocator.AllocateRandom("alloc1", 5)
+	assert.NoError(t, err)
+
+	available = allocator.PortsAvailable(5)
+	assert.False(t, available)
+}

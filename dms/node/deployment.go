@@ -394,30 +394,21 @@ loop:
 		return
 	}
 
-	allocKey := request.ID
+	// allocKey := request.ID
 
-	// TODO: ports allocation should be on committing phase
-	// handle static ports
-	err = n.portAllocator.AllocatePorts(allocKey, toAnswer.V1.PublicPorts.Static)
-	if err != nil {
-		log.Debugf("failed to allocate static ports: %v", err)
+	if ok := n.portAllocator.Allocated(toAnswer.V1.PublicPorts.Static); ok {
+		log.Debugf("static ports already allocated")
 		return
 	}
 
-	// handle dynamic port allocs
-	ports, err := n.portAllocator.AllocateRandom(allocKey, toAnswer.V1.PublicPorts.Dynamic)
-	if err != nil {
-		log.Debugf("failed to allocate ports")
+	if ok := n.portAllocator.PortsAvailable(toAnswer.V1.PublicPorts.Dynamic); !ok {
+		log.Debugf("dynamic ports not available")
 		return
-	}
-	cleanup := func() {
-		n.portAllocator.Release(allocKey)
 	}
 
 	log.Debugf("signing bid with did: %+v", n.actor.Security().DID())
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
-		cleanup()
 		log.Debugf("bid request: failed to get provider: %w", err)
 		return
 	}
@@ -439,13 +430,12 @@ loop:
 
 	err = bid.Sign(provider)
 	if err != nil {
-		cleanup()
 		log.Debugf("bid request: failed to sign bid: %w", err)
 		return
 	}
 
 	n.sendReply(msg, bid)
-	n.rememberBid(request.ID, toAnswer, ports)
+	n.rememberBid(request.ID, toAnswer)
 }
 
 func (n *Node) handleRevertDeployment(msg actor.Envelope) {
@@ -527,20 +517,13 @@ func (n *Node) releaseAllocation(allocID string) error {
 	return nil
 }
 
-func (n *Node) rememberBid(eid string, req job_types.BidRequest, ports []int) {
+func (n *Node) rememberBid(eid string, req job_types.BidRequest) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
-
-	_, exists := n.bids[eid]
-	if exists {
-		// we have an older bid
-		n.portAllocator.Release(eid)
-	}
 
 	n.bids[eid] = &bidState{
 		expire:  time.Now().Add(bidStateTimeout),
 		request: req,
-		ports:   ports,
 	}
 }
 
