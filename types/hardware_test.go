@@ -14,145 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHardware_GPU(t *testing.T) {
-	t.Parallel()
-
-	t.Run("parseGPUVendor", func(t *testing.T) {
-		t.Parallel()
-		tests := []struct {
-			name   string
-			vendor string
-			want   GPUVendor
-		}{
-			{
-				name:   "Parse NVIDIA GPU vendor",
-				vendor: "some NVIDIA Corporation gpu",
-				want:   GPUVendorNvidia,
-			},
-			{
-				name:   "Parse AMD GPU vendor",
-				vendor: "a amd gpu with some other stuff",
-				want:   GPUVendorAMDATI,
-			},
-			{
-				name:   "Parse Intel GPU vendor",
-				vendor: "intel gpu",
-				want:   GPUVendorIntel,
-			},
-			{
-				name:   "Parse AMD GPU vendor",
-				vendor: "a gpu with ati in the name",
-				want:   GPUVendorAMDATI,
-			},
-			{
-				name:   "Parse unknown GPU vendor",
-				vendor: "some other gpu",
-				want:   GPUVendorUnknown,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				t.Parallel()
-				got := ParseGPUVendor(tt.vendor)
-				require.Equal(t, tt.want, got)
-			})
-		}
-	})
-
-	t.Run("MaxFreeVRAMGPU", func(t *testing.T) {
-		t.Parallel()
-		tests := []struct {
-			name string
-			gpus GPUs
-			want GPU
-		}{
-			{
-				name: "MaxFreeVRAMGPU",
-				gpus: []GPU{
-					{
-						Index:      0,
-						Vendor:     GPUVendorNvidia,
-						PCIAddress: "AAAA:BB:CC.C",
-						Model:      "Tesla T4A100",
-						VRAM:       16384,
-					},
-					{
-						Index:      1,
-						Vendor:     GPUVendorNvidia,
-						PCIAddress: "AAAA:BB:CC.D",
-						Model:      "Tesla T4A100",
-						VRAM:       8192,
-					},
-				},
-				want: GPU{
-					Index:      0,
-					Vendor:     GPUVendorNvidia,
-					PCIAddress: "AAAA:BB:CC.C",
-					Model:      "Tesla T4A100",
-					VRAM:       16384,
-				},
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				t.Parallel()
-				got, err := tt.gpus.MaxFreeVRAMGPU()
-				require.NoError(t, err)
-				require.True(t, tt.want.Equal(got))
-			})
-		}
-	})
-
-	t.Run("GetWithIndex", func(t *testing.T) {
-		t.Parallel()
-		tests := []struct {
-			name string
-			gpus GPUs
-			idx  int
-			want GPU
-		}{
-			{
-				name: "Get GPU with index 0",
-				gpus: []GPU{
-					{
-						Index:      0,
-						Vendor:     GPUVendorNvidia,
-						PCIAddress: "AAAA:BB:CC.C",
-						Model:      "Tesla T4A100",
-						VRAM:       16384,
-					},
-					{
-						Index:      1,
-						Vendor:     GPUVendorNvidia,
-						PCIAddress: "AAAA:BB:CC.D",
-						Model:      "Tesla T4A100",
-						VRAM:       8192,
-					},
-				},
-				idx: 0,
-				want: GPU{
-					Index:      0,
-					Vendor:     GPUVendorNvidia,
-					PCIAddress: "AAAA:BB:CC.C",
-					Model:      "Tesla T4A100",
-					VRAM:       16384,
-				},
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				t.Parallel()
-				got, err := tt.gpus.GetWithIndex(tt.idx)
-				require.NoError(t, err)
-				require.True(t, tt.want.Equal(got))
-			})
-		}
-	})
-}
-
 func TestHardware_Comparable_Compare(t *testing.T) {
 	t.Parallel()
 
@@ -1354,5 +1215,174 @@ func TestHardware_Disk(t *testing.T) {
 				require.Equal(t, tt.want, got)
 			})
 		}
+	})
+}
+
+func TestHardware_GPU(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parseGPUVendor", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name   string
+			vendor string
+			want   GPUVendor
+		}{
+			{
+				name:   "Parse NVIDIA GPU vendor",
+				vendor: "some NVIDIA Corporation gpu",
+				want:   GPUVendorNvidia,
+			},
+			{
+				name:   "Parse AMD GPU vendor",
+				vendor: "a amd gpu with some other stuff",
+				want:   GPUVendorAMDATI,
+			},
+			{
+				name:   "Parse Intel GPU vendor",
+				vendor: "intel gpu",
+				want:   GPUVendorIntel,
+			},
+			{
+				name:   "Parse AMD GPU vendor",
+				vendor: "a gpu with ati in the name",
+				want:   GPUVendorAMDATI,
+			},
+			{
+				name:   "Parse unknown GPU vendor",
+				vendor: "some other gpu",
+				want:   GPUVendorUnknown,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := ParseGPUVendor(tt.vendor)
+				require.Equal(t, tt.want, got)
+			})
+		}
+	})
+
+	t.Run("MaxFreeVRAMGPU", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			gpus GPUs
+			want GPU
+		}{
+			{
+				name: "MaxFreeVRAMGPU",
+				gpus: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				want: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla T4A100",
+					VRAM:       16384,
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got, err := tt.gpus.MaxFreeVRAMGPU()
+				require.NoError(t, err)
+				require.True(t, tt.want.Equal(got))
+			})
+		}
+	})
+
+	t.Run("GetWithIndex", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name string
+			gpus GPUs
+			idx  int
+			want GPU
+		}{
+			{
+				name: "Get GPU with index 0",
+				gpus: []GPU{
+					{
+						Index:      0,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.C",
+						Model:      "Tesla T4A100",
+						VRAM:       16384,
+					},
+					{
+						Index:      1,
+						Vendor:     GPUVendorNvidia,
+						PCIAddress: "AAAA:BB:CC.D",
+						Model:      "Tesla T4A100",
+						VRAM:       8192,
+					},
+				},
+				idx: 0,
+				want: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla T4A100",
+					VRAM:       16384,
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				got, err := tt.gpus.GetWithIndex(tt.idx)
+				require.NoError(t, err)
+				require.True(t, tt.want.Equal(got))
+			})
+		}
+	})
+
+	t.Run("Copy", func(t *testing.T) {
+		t.Parallel()
+
+		gpus := GPUs{
+			{
+				Index:      0,
+				Vendor:     GPUVendorNvidia,
+				PCIAddress: "AAAA:BB:CC.C",
+				Model:      "Tesla T4A100",
+				VRAM:       16384,
+			},
+			{
+				Index:      1,
+				Vendor:     GPUVendorNvidia,
+				PCIAddress: "AAAA:BB:CC.D",
+				Model:      "Tesla T4A100",
+				VRAM:       8192,
+			},
+		}
+
+		// Ensure that the copy is a deep copy
+		copiedGPUs := gpus.Copy()
+		require.Equal(t, gpus, copiedGPUs)
+
+		// Ensure that the copy is returned safely
+		copiedGPUs[0].VRAM = 0
+		copiedGPUs[1].VRAM = 0
+		require.NotEqual(t, gpus, copiedGPUs)
 	})
 }

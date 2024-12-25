@@ -21,6 +21,20 @@ type HardwareManager interface {
 	GetFreeResources() (Resources, error)
 }
 
+// GPUManager defines the interface for managing GPU resources.
+type GPUManager interface {
+	GetGPUs() (GPUs, error)
+	GetGPUUsage(uuid ...string) (GPUs, error)
+	Shutdown() error
+}
+
+// GPUConnector vendor-specific adapter that interacts with actual GPU hardware by using vendor-specific libraries
+type GPUConnector interface {
+	GetGPUs() (GPUs, error)
+	GetGPUUsage(uuid string) (float64, error)
+	Shutdown() error
+}
+
 type GPUVendor string
 
 const (
@@ -143,6 +157,13 @@ var (
 	_ Calculable[GPUs] = (*GPUs)(nil)
 	_ Comparable[GPUs] = (*GPUs)(nil)
 )
+
+// Copy returns a safe copy of the GPUs
+func (gpus GPUs) Copy() GPUs {
+	gpusCopy := make(GPUs, len(gpus))
+	copy(gpusCopy, gpus)
+	return gpusCopy
+}
 
 func (gpus GPUs) Compare(other GPUs) (Comparison, error) {
 	interimComparison1 := make([][]Comparison, 0)

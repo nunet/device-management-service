@@ -9,92 +9,25 @@
 package gpu
 
 import (
+	"sync"
 	"testing"
+
+	"go.uber.org/mock/gomock"
 
 	"gitlab.com/nunet/device-management-service/types"
 
 	"github.com/stretchr/testify/require"
 )
 
-// We cannot run the tests in parallel as we are using a global cache for the GPUs
+func newMockGPUManager(t *testing.T, connectors gpuConnectors) gpuManager {
+	t.Helper()
 
-func TestGPU(t *testing.T) {
-	t.Run("must return the GPU information if the GPU is available", func(t *testing.T) {
-		gpus, err := GetGPUs()
-		require.NoError(t, err)
-
-		if len(gpus) == 0 {
-			t.Skip("No GPUs available")
-		}
-
-		for i, gpu := range gpus {
-			usage, err := GetGPUUsage(gpu.UUID)
-			require.NoError(t, err)
-
-			require.Equal(t, gpu.UUID, usage[i].UUID)
-			require.Equal(t, gpu.Model, usage[i].Model)
-			require.Equal(t, gpu.Vendor, usage[i].Vendor)
-			require.Equal(t, gpu.Index, usage[i].Index)
-			require.Equal(t, gpu.PCIAddress, usage[i].PCIAddress)
-
-			// The usage should be less than the total VRAM
-			require.Greater(t, gpu.VRAM, usage[i].VRAM)
-		}
-	})
-}
-
-func TestGPUCache(t *testing.T) {
-	// Initialize the cache
-	// If the cache is set, the function must return the cached GPUs
-	gpuCache = []types.GPU{
-		{
-			UUID:       "123",
-			Model:      "model",
-			Vendor:     types.GPUVendorNvidia,
-			Index:      1,
-			PCIAddress: "pci",
-			VRAM:       1024,
-		},
-		{
-			UUID:       "456",
-			Model:      "model",
-			Vendor:     types.GPUVendorAMDATI,
-			Index:      2,
-			PCIAddress: "pci",
-			VRAM:       1024,
-		},
+	return gpuManager{
+		gpuCache:      []types.GPU{},
+		gpuIndexCache: make(map[string]int),
+		connectors:    connectors,
+		initialised:   true,
 	}
-	gpuIndexCache = map[string]int{
-		"123": 0,
-		"456": 1,
-	}
-
-	gpus, err := GetGPUs()
-	require.NoError(t, err)
-	// Ensure the gpus are the same as the cached gpus
-	requireGPUsEqual(t, gpuCache, gpus)
-
-	// Copy the cache
-	cacheCopy := make([]types.GPU, len(gpuCache))
-	copy(cacheCopy, gpuCache)
-
-	// Ensure gpus are returned safely
-	//
-	// We change every field of the gpus to ensure that the function returns a copy of the gpus
-	for i := range gpus {
-		gpus[i].UUID = "uuid"
-		gpus[i].Model = "model"
-		gpus[i].Vendor = types.GPUVendorIntel
-		gpus[i].Index = 3
-		gpus[i].PCIAddress = "pci"
-		gpus[i].VRAM = 2048
-	}
-
-	// get the gpus again
-	newGpus, err := GetGPUs()
-	require.NoError(t, err)
-	// ensure the gpuCache is not changed and the gpus are the same as before
-	requireGPUsEqual(t, cacheCopy, newGpus)
 }
 
 func requireGPUsEqual(t *testing.T, expected, actual []types.GPU) {
@@ -125,4 +58,331 @@ func requireGPUsEqual(t *testing.T, expected, actual []types.GPU) {
 
 	// Ensure we've traversed all the expected GPUs
 	require.Equal(t, counter, len(expected))
+}
+
+func TestGPU(t *testing.T) {
+	t.Parallel()
+
+	t.Run("must be able to return gpus", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockIntelGPUConnector := NewMockGPUConnector(ctrl)
+		mockNVIDIAGPUConnector := NewMockGPUConnector(ctrl)
+		mockAMDGPUConnector := NewMockGPUConnector(ctrl)
+		mockGPUManager := newMockGPUManager(t, gpuConnectors{
+			nvidia: mockNVIDIAGPUConnector,
+			amd:    mockAMDGPUConnector,
+			intel:  mockIntelGPUConnector,
+		})
+
+		nvidiaGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		amdGPUs := types.GPUs{
+			{
+				Index:  1,
+				UUID:   "GPU-1",
+				Model:  "Radeon VII",
+				Vendor: types.GPUVendorAMDATI,
+				VRAM:   100000,
+			},
+		}
+		intelGPUs := types.GPUs{
+			{
+				Index:  2,
+				UUID:   "GPU-2",
+				Model:  "UHD Graphics 630",
+				Vendor: types.GPUVendorIntel,
+				VRAM:   100000,
+			},
+		}
+
+		mockNVIDIAGPUConnector.EXPECT().GetGPUs().Return(nvidiaGPUs, nil).Times(1)
+		mockAMDGPUConnector.EXPECT().GetGPUs().Return(amdGPUs, nil).Times(1)
+		mockIntelGPUConnector.EXPECT().GetGPUs().Return(intelGPUs, nil).Times(1)
+		gpus, err := mockGPUManager.GetGPUs()
+		require.NoError(t, err)
+		require.Len(t, gpus, 3)
+
+		expectedGPUs := append(append(nvidiaGPUs, amdGPUs...), intelGPUs...)
+		requireGPUsEqual(t, expectedGPUs, gpus)
+	})
+
+	t.Run("must be able to return gpu usage", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockIntelGPUConnector := NewMockGPUConnector(ctrl)
+		mockNVIDIAGPUConnector := NewMockGPUConnector(ctrl)
+		mockAMDGPUConnector := NewMockGPUConnector(ctrl)
+		mockGPUManager := newMockGPUManager(t, gpuConnectors{
+			nvidia: mockNVIDIAGPUConnector,
+			amd:    mockAMDGPUConnector,
+			intel:  mockIntelGPUConnector,
+		})
+
+		nvidiaGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		amdGPUs := types.GPUs{
+			{
+				Index:  1,
+				UUID:   "GPU-1",
+				Model:  "Radeon VII",
+				Vendor: types.GPUVendorAMDATI,
+				VRAM:   100000,
+			},
+		}
+		intelGPUs := types.GPUs{
+			{
+				Index:  2,
+				UUID:   "GPU-2",
+				Model:  "UHD Graphics 630",
+				Vendor: types.GPUVendorIntel,
+				VRAM:   100000,
+			},
+		}
+
+		mockNVIDIAGPUConnector.EXPECT().GetGPUs().Return(nvidiaGPUs, nil).Times(1)
+		mockAMDGPUConnector.EXPECT().GetGPUs().Return(amdGPUs, nil).Times(1)
+		mockIntelGPUConnector.EXPECT().GetGPUs().Return(intelGPUs, nil).Times(1)
+		gpus, err := mockGPUManager.GetGPUs()
+		require.NoError(t, err)
+		require.Len(t, gpus, 3)
+
+		expectedGPUs := append(append(nvidiaGPUs, amdGPUs...), intelGPUs...)
+		requireGPUsEqual(t, expectedGPUs, gpus)
+
+		mockNVIDIAGPUConnector.EXPECT().GetGPUUsage("GPU-0").Return(float64(5000), nil).Times(1)
+		mockAMDGPUConnector.EXPECT().GetGPUUsage("GPU-1").Return(float64(5000), nil).Times(1)
+		mockIntelGPUConnector.EXPECT().GetGPUUsage("GPU-2").Return(float64(5000), nil).Times(1)
+		usage, err := mockGPUManager.GetGPUUsage("GPU-0", "GPU-1", "GPU-2")
+		require.NoError(t, err)
+		require.Len(t, usage, 3)
+
+		require.Equal(t, 5000.0, usage[0].VRAM)
+		require.Equal(t, 5000.0, usage[1].VRAM)
+		require.Equal(t, 5000.0, usage[2].VRAM)
+	})
+
+	t.Run("must be able to shutdown the gpu manager", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockIntelGPUConnector := NewMockGPUConnector(ctrl)
+		mockNVIDIAGPUConnector := NewMockGPUConnector(ctrl)
+		mockAMDGPUConnector := NewMockGPUConnector(ctrl)
+		mockGPUManager := newMockGPUManager(t, gpuConnectors{
+			nvidia: mockNVIDIAGPUConnector,
+			amd:    mockAMDGPUConnector,
+			intel:  mockIntelGPUConnector,
+		})
+
+		// Populate the cache
+		nvidiaGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		amdGPUs := types.GPUs{
+			{
+				Index:  1,
+				UUID:   "GPU-1",
+				Model:  "Radeon VII",
+				Vendor: types.GPUVendorAMDATI,
+				VRAM:   100000,
+			},
+		}
+		intelGPUs := types.GPUs{
+			{
+				Index:  2,
+				UUID:   "GPU-2",
+				Model:  "UHD Graphics 630",
+				Vendor: types.GPUVendorIntel,
+				VRAM:   100000,
+			},
+		}
+
+		mockNVIDIAGPUConnector.EXPECT().GetGPUs().Return(nvidiaGPUs, nil).Times(1)
+		mockAMDGPUConnector.EXPECT().GetGPUs().Return(amdGPUs, nil).Times(1)
+		mockIntelGPUConnector.EXPECT().GetGPUs().Return(intelGPUs, nil).Times(1)
+		gpus, err := mockGPUManager.GetGPUs()
+		require.NoError(t, err)
+		require.Len(t, gpus, 3)
+
+		// Shutdown the GPU manager
+		mockNVIDIAGPUConnector.EXPECT().Shutdown().Return(nil).Times(1)
+		mockAMDGPUConnector.EXPECT().Shutdown().Return(nil).Times(1)
+		mockIntelGPUConnector.EXPECT().Shutdown().Return(nil).Times(1)
+		err = mockGPUManager.Shutdown()
+		require.NoError(t, err)
+
+		// Ensure the cache is cleared
+		require.Len(t, mockGPUManager.gpuCache, 0)
+		require.Len(t, mockGPUManager.gpuIndexCache, 0)
+
+		// Ensure the shutdown
+		require.False(t, mockGPUManager.initialised)
+
+		_, err = mockGPUManager.GetGPUs()
+		require.ErrorContains(t, err, ErrNotInitialised.Error())
+
+		_, err = mockGPUManager.GetGPUUsage()
+		require.ErrorContains(t, err, ErrNotInitialised.Error())
+
+		err = mockGPUManager.Shutdown()
+		require.ErrorContains(t, err, ErrNotInitialised.Error())
+	})
+
+	t.Run("must return the gpu slice safely", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockIntelGPUConnector := NewMockGPUConnector(ctrl)
+		mockNVIDIAGPUConnector := NewMockGPUConnector(ctrl)
+		mockAMDGPUConnector := NewMockGPUConnector(ctrl)
+		mockGPUManager := newMockGPUManager(t, gpuConnectors{
+			nvidia: mockNVIDIAGPUConnector,
+			amd:    mockAMDGPUConnector,
+			intel:  mockIntelGPUConnector,
+		})
+
+		nvidiaGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		amdGPUs := types.GPUs{
+			{
+				Index:  1,
+				UUID:   "GPU-1",
+				Model:  "Radeon VII",
+				Vendor: types.GPUVendorAMDATI,
+				VRAM:   100000,
+			},
+		}
+		intelGPUs := types.GPUs{
+			{
+				Index:  2,
+				UUID:   "GPU-2",
+				Model:  "UHD Graphics 630",
+				Vendor: types.GPUVendorIntel,
+				VRAM:   100000,
+			},
+		}
+
+		mockNVIDIAGPUConnector.EXPECT().GetGPUs().Return(nvidiaGPUs, nil).Times(1)
+		mockAMDGPUConnector.EXPECT().GetGPUs().Return(amdGPUs, nil).Times(1)
+		mockIntelGPUConnector.EXPECT().GetGPUs().Return(intelGPUs, nil).Times(1)
+		gpus, err := mockGPUManager.GetGPUs()
+		require.NoError(t, err)
+		require.Len(t, gpus, 3)
+
+		expectedGPUs := append(append(nvidiaGPUs, amdGPUs...), intelGPUs...)
+		requireGPUsEqual(t, expectedGPUs, gpus)
+
+		// Modify the return value
+		for i := range gpus {
+			gpus[i].VRAM = 0
+		}
+
+		// The next call will use the cache and not call the GetGPUs method of the device managers
+		gpus, err = mockGPUManager.GetGPUs()
+		require.NoError(t, err)
+
+		// Ensure it matches the original cache value
+		requireGPUsEqual(t, expectedGPUs, gpus)
+	})
+
+	t.Run("must not fail on concurrent access", func(t *testing.T) {
+		t.Parallel()
+
+		const numGoRoutine = 100
+
+		ctrl := gomock.NewController(t)
+		mockIntelGPUConnector := NewMockGPUConnector(ctrl)
+		mockNVIDIAGPUConnector := NewMockGPUConnector(ctrl)
+		mockAMDGPUConnector := NewMockGPUConnector(ctrl)
+		mockGPUManager := newMockGPUManager(t, gpuConnectors{
+			nvidia: mockNVIDIAGPUConnector,
+			amd:    mockAMDGPUConnector,
+			intel:  mockIntelGPUConnector,
+		})
+
+		nvidiaGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		amdGPUs := types.GPUs{
+			{
+				Index:  1,
+				UUID:   "GPU-1",
+				Model:  "Radeon VII",
+				Vendor: types.GPUVendorAMDATI,
+				VRAM:   100000,
+			},
+		}
+		intelGPUs := types.GPUs{
+			{
+				Index:  2,
+				UUID:   "GPU-2",
+				Model:  "UHD Graphics 630",
+				Vendor: types.GPUVendorIntel,
+				VRAM:   100000,
+			},
+		}
+
+		mockNVIDIAGPUConnector.EXPECT().GetGPUs().Return(nvidiaGPUs, nil).Times(1)
+		mockAMDGPUConnector.EXPECT().GetGPUs().Return(amdGPUs, nil).Times(1)
+		mockIntelGPUConnector.EXPECT().GetGPUs().Return(intelGPUs, nil).Times(1)
+
+		mockNVIDIAGPUConnector.EXPECT().GetGPUUsage("GPU-0").Return(float64(5000), nil).Times(numGoRoutine)
+		mockAMDGPUConnector.EXPECT().GetGPUUsage("GPU-1").Return(float64(5000), nil).Times(numGoRoutine)
+		mockIntelGPUConnector.EXPECT().GetGPUUsage("GPU-2").Return(float64(5000), nil).Times(numGoRoutine)
+
+		var wg sync.WaitGroup
+		wg.Add(numGoRoutine * 2)
+		for i := 0; i < numGoRoutine; i++ {
+			go func() {
+				gpus, err := mockGPUManager.GetGPUs()
+				require.NoError(t, err)
+				require.Len(t, gpus, 3)
+				wg.Done()
+			}()
+
+			go func() {
+				usage, err := mockGPUManager.GetGPUUsage("GPU-0", "GPU-1", "GPU-2")
+				require.NoError(t, err)
+				require.Len(t, usage, 3)
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+	})
 }

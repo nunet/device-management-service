@@ -6,54 +6,72 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-//go:build linux && (amd64 || amd)
+//go:build linux && (amd64 || 386)
 
 package gpu
 
 import (
 	"fmt"
 	"strconv"
-	"sync"
 
 	"gitlab.com/nunet/device-management-service/lib/gpu/xpum"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-var (
-	xpumInitOnce sync.Once
-	isXPUMInit   bool
-
-	intelDeviceIDMap = make(map[string]int32) // UUID to DeviceID map
-)
-
-// initializeXPUM ensures that xpum.InitIntel() is called only once.
-func initializeXPUM() error {
-	if isXPUMInit {
-		return nil
-	}
-
-	var xpumInitErr error
-	xpumInitOnce.Do(func() {
-		ret, err := xpum.Init()
-		if err != nil {
-			xpumInitErr = fmt.Errorf("initialize Intel XPUM: %w", err)
-			return
-		}
-		if ret.Code != xpum.ResultOk {
-			xpumInitErr = fmt.Errorf("intel XPUM initialization was unsuccessful: %w", ret.Error())
-			return
-		}
-		isXPUMInit = true
-	})
-	return xpumInitErr
+// intelGPUConnector implements the types.GPUConnector interface for Intel GPUs.
+type intelGPUConnector struct {
+	deviceCache    []xpum.DeviceBasicInfo
+	deviceIndexMap map[string]int32 // UUID to index of deviceCache map
 }
 
-// getIntelTotalVRAM returns the total VRAM for the device with the given deviceID.
-func getIntelTotalVRAM(deviceID int32) (float64, error) {
-	if !isXPUMInit {
-		return 0, fmt.Errorf("intel XPUM not initialized")
+var _ types.GPUConnector = (*intelGPUConnector)(nil)
+
+// newIntelGPUConnector creates a new Intel GPU Connector.
+func newIntelGPUConnector() (types.GPUConnector, error) {
+	connector := &intelGPUConnector{
+		deviceIndexMap: make(map[string]int32),
 	}
 
+	if err := connector.initialize(); err != nil {
+		return nil, fmt.Errorf("initialize Intel GPU connector: %w", err)
+	}
+
+	if err := connector.loadDevices(); err != nil {
+		return nil, fmt.Errorf("load Intel GPU devices: %w", err)
+	}
+
+	return connector, nil
+}
+
+// initialize loads the Intel XPUM library and initializes the connector by loading the devices.
+func (i *intelGPUConnector) initialize() error {
+	ret, err := xpum.Init()
+	if err != nil {
+		return fmt.Errorf("initialize Intel XPUM: %w", err)
+	}
+	if ret.Code != xpum.ResultOk {
+		return fmt.Errorf("intel XPUM initialization was unsuccessful: %w", ret.Error())
+	}
+
+	return nil
+}
+
+// loadDevices loads the Intel GPU devices.
+func (i *intelGPUConnector) loadDevices() error {
+	deviceList, ret := xpum.GetDeviceList()
+	if ret.Code != xpum.ResultOk {
+		return fmt.Errorf("get Intel GPU device list: %w", ret.Error())
+	}
+
+	for _, device := range deviceList {
+		i.deviceCache = append(i.deviceCache, device)
+		i.deviceIndexMap[device.UUID] = device.DeviceID
+	}
+	return nil
+}
+
+// getTotalVRAM returns the total VRAM for the device with the given deviceID.
+func (i *intelGPUConnector) getTotalVRAM(deviceID int32) (float64, error) {
 	deviceProps, ret := xpum.GetDeviceProperties(deviceID)
 	if ret.Code != xpum.ResultOk {
 		return 0, fmt.Errorf("get properties for device %d: %w", deviceID, ret.Error())
@@ -71,22 +89,13 @@ func getIntelTotalVRAM(deviceID int32) (float64, error) {
 	return 0, fmt.Errorf("total memory property not found for device %d", deviceID)
 }
 
-// GetIntelGPUs returns the GPU information for Intel GPUs.
-func GetIntelGPUs() ([]types.GPU, error) {
-	if err := initializeXPUM(); err != nil {
-		return nil, err
-	}
-
-	deviceList, ret := xpum.GetDeviceList()
-	if ret.Code != xpum.ResultOk {
-		return nil, fmt.Errorf("retrieve Intel GPU device list: %w", ret.Error())
-	}
-
-	gpus := make([]types.GPU, 0, len(deviceList))
-	for _, device := range deviceList {
-		vram, err := getIntelTotalVRAM(device.DeviceID)
+// GetGPUs returns the Intel GPUs.
+func (i *intelGPUConnector) GetGPUs() (types.GPUs, error) {
+	gpus := make(types.GPUs, 0, len(i.deviceCache))
+	for _, device := range i.deviceCache {
+		vram, err := i.getTotalVRAM(device.DeviceID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get total VRAM for intel device %d: %w", device.DeviceID, err)
 		}
 
 		gpu := types.GPU{
@@ -97,27 +106,22 @@ func GetIntelGPUs() ([]types.GPU, error) {
 			PCIAddress: device.PCIBDFAddress,
 		}
 		gpus = append(gpus, gpu)
-
-		// Add the device to the device map
-		intelDeviceIDMap[device.UUID] = device.DeviceID
 	}
+
 	return gpus, nil
 }
 
-// GetIntelDeviceUsage returns the GPU usage for the device with the given UUID.
-func GetIntelDeviceUsage(uuid string) (float64, error) {
-	if !isXPUMInit {
-		return 0, fmt.Errorf("intel XPUM not initialized")
-	}
-
-	deviceID, ok := intelDeviceIDMap[uuid]
+// GetGPUUsage returns the GPU usage for the device with the given UUID.
+func (i *intelGPUConnector) GetGPUUsage(uuid string) (float64, error) {
+	deviceIndex, ok := i.deviceIndexMap[uuid]
 	if !ok {
 		return 0, fmt.Errorf("intel device with UUID %s not found", uuid)
 	}
+	device := i.deviceCache[deviceIndex]
 
-	stats, err := xpum.GetDeviceStats(deviceID, 0)
+	stats, err := xpum.GetDeviceStats(device.DeviceID, 0)
 	if err != nil {
-		return 0, fmt.Errorf("getting device stats for %d: %w", deviceID, err)
+		return 0, fmt.Errorf("getting device stats for %d: %w", device.DeviceID, err)
 	}
 
 	for _, stat := range stats {
@@ -128,5 +132,18 @@ func GetIntelDeviceUsage(uuid string) (float64, error) {
 			}
 		}
 	}
-	return 0, fmt.Errorf("used memory not found for device %d", deviceID)
+	return 0, fmt.Errorf("used memory not found for device %d", device.DeviceID)
+}
+
+// Shutdown shuts down the Intel GPU connector.
+func (i *intelGPUConnector) Shutdown() error {
+	ret := xpum.Shutdown()
+	if ret.Code != xpum.ResultOk {
+		return fmt.Errorf("shutdown Intel XPUM: %w", ret.Error())
+	}
+
+	// Clear the cache
+	i.deviceCache = nil
+	i.deviceIndexMap = nil
+	return nil
 }
