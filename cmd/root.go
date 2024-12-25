@@ -33,6 +33,7 @@ func NewRootCMD(client *utils.HTTPClient, afs afero.Afero, cfg *config.Config) *
 			_ = cmd.Help()
 		},
 	}
+
 	cmd.AddCommand(newRunCmd(cfg))
 	cmd.AddCommand(newKeyCmd(afs, cfg))
 	cmd.AddCommand(cap.NewCapCmd(afs, cfg))
