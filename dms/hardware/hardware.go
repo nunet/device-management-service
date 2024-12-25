@@ -11,17 +11,22 @@ package hardware
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware/cpu"
 	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
+
+	"gitlab.com/nunet/device-management-service/dms/hardware/cpu"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 // defaultHardwareManager manages the machine's hardware resources.
-type defaultHardwareManager struct{}
+type defaultHardwareManager struct {
+	gpuManager types.GPUManager
+}
 
 // NewHardwareManager creates a new instance of defaultHardwareManager.
 func NewHardwareManager() types.HardwareManager {
-	return &defaultHardwareManager{}
+	return &defaultHardwareManager{
+		gpuManager: gpu.NewGPUManager(),
+	}
 }
 
 var _ types.HardwareManager = (*defaultHardwareManager)(nil)
@@ -35,19 +40,19 @@ func (m *defaultHardwareManager) GetMachineResources() (types.MachineResources, 
 	var diskDetails types.Disk
 
 	if cpuDetails, err = cpu.GetCPU(); err != nil {
-		return types.MachineResources{}, fmt.Errorf("failed to get CPU: %w", err)
+		return types.MachineResources{}, fmt.Errorf("get CPU: %w", err)
 	}
 
 	if ram, err = GetRAM(); err != nil {
-		return types.MachineResources{}, fmt.Errorf("failed to get RAM: %w", err)
+		return types.MachineResources{}, fmt.Errorf("get RAM: %w", err)
 	}
 
-	if gpus, err = gpu.GetGPUs(); err != nil {
-		return types.MachineResources{}, fmt.Errorf("failed to get GPUs: %w", err)
+	if gpus, err = m.gpuManager.GetGPUs(); err != nil {
+		return types.MachineResources{}, fmt.Errorf("get GPUs: %w", err)
 	}
 
 	if diskDetails, err = GetDisk(); err != nil {
-		return types.MachineResources{}, fmt.Errorf("failed to get Disk: %w", err)
+		return types.MachineResources{}, fmt.Errorf("get Disk: %w", err)
 	}
 
 	return types.MachineResources{
@@ -64,22 +69,22 @@ func (m *defaultHardwareManager) GetMachineResources() (types.MachineResources, 
 func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	cpuDetails, err := cpu.GetUsage()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get CPU usage: %w", err)
+		return types.Resources{}, fmt.Errorf("get CPU usage: %w", err)
 	}
 
 	ram, err := GetRAMUsage()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get RAM usage: %w", err)
+		return types.Resources{}, fmt.Errorf("get RAM usage: %w", err)
 	}
 
 	diskDetails, err := GetDiskUsage()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get Disk usage: %w", err)
+		return types.Resources{}, fmt.Errorf("get Disk usage: %w", err)
 	}
 
-	gpus, err := gpu.GetGPUUsage()
+	gpus, err := m.gpuManager.GetGPUUsage()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get GPU usage: %w", err)
+		return types.Resources{}, fmt.Errorf("get GPU usage: %w", err)
 	}
 
 	return types.Resources{
@@ -94,12 +99,12 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 func (m *defaultHardwareManager) GetFreeResources() (types.Resources, error) {
 	usage, err := m.GetUsage()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get usage: %w", err)
+		return types.Resources{}, fmt.Errorf("get usage: %w", err)
 	}
 
 	availableResources, err := m.GetMachineResources()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to get machine resources: %w", err)
+		return types.Resources{}, fmt.Errorf("get machine resources: %w", err)
 	}
 
 	log.Debugf("system resource usage: %+v\nsystem resource available: %+v", usage, availableResources)
@@ -109,4 +114,14 @@ func (m *defaultHardwareManager) GetFreeResources() (types.Resources, error) {
 	}
 
 	return availableResources.Resources, nil
+}
+
+// Shutdown shuts down the hardware manager.
+func (m *defaultHardwareManager) Shutdown() error {
+	// shutdown gpu manager
+	if err := m.gpuManager.Shutdown(); err != nil {
+		return fmt.Errorf("shutdown gpu manager: %w", err)
+	}
+
+	return nil
 }

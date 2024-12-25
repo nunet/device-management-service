@@ -13,14 +13,26 @@ package gpu
 
 import "gitlab.com/nunet/device-management-service/types"
 
+type gpuManager struct{}
+
+// NewGPUManager creates a new instance of gpuManager.
+func NewGPUManager() types.GPUManager {
+	return &gpuManager{}
+}
+
 // GetGPUs returns the GPUs in the system
-func GetGPUs() ([]types.GPU, error) {
-	// GPUs are not supported on Darwin yet
-	return []types.GPU{}, nil
+func (g *gpuManager) GetGPUs() (types.GPUs, error) {
+	// TODO: Implement this function
+	return nil, nil
 }
 
 // GetGPUUsage returns the GPU usage for the GPUs with the specified UUIDs. If no UUIDs are provided, it returns the usage of all the GPUs
-func GetGPUUsage(uuid ...string) ([]types.GPU, error) {
-	// GPUs are not supported on Darwin yet
-	return []types.GPU{}, nil
+func (g *gpuManager) GetGPUUsage(uuid ...string) (types.GPUs, error) {
+	// TODO: Implement this function
+	return nil, nil
+}
+
+// Shutdown shuts down the GPU manager
+func (g *gpuManager) Shutdown() error {
+	return nil
 }
