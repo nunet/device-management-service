@@ -15,27 +15,103 @@ import (
 	"os"
 	"reflect"
 
+	logging "github.com/ipfs/go-log/v2"
 	"github.com/spf13/afero"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfg        Config
-	homeDir, _ = os.UserHomeDir()
+	cfg            Config
+	homeDir, _     = os.UserHomeDir()
+	defaultcfgName = "dms_config"
+	defaultCfgExt  = "json"
+	defaultCfgPath = "."
 )
 
-func getViper() *viper.Viper {
-	v := viper.New()
-	v.SetConfigName("dms_config")
-	v.SetConfigType("json")
-	v.AddConfigPath(".")                               // config file reading order starts with current working directory
-	v.AddConfigPath(fmt.Sprintf("%s/.nunet", homeDir)) // then home directory
-	v.AddConfigPath("/etc/nunet/")                     // finally /etc/nunet
-	return v
+var log = logging.Logger("config")
+
+func SetupConfig() {
+	v := viper.GetViper()
+	fs := pflag.NewFlagSet("", pflag.ContinueOnError)
+	var cfgFile string
+
+	fs.StringVar(&cfgFile, "config", "", "config file")
+	setupFlags(fs)
+
+	pflag.CommandLine.AddFlagSet(fs)
+	fs.Usage = func() {}
+
+	err := fs.Parse(os.Args)
+	if err != nil && err != pflag.ErrHelp {
+		// we can ignore flags intended for other commands
+		log.Warnf("error parsing command line flags: %s", err)
+	}
+
+	if cfgFile != "" {
+		v.SetConfigFile(cfgFile)
+	}
 }
 
-func setDefaultConfig() *viper.Viper {
-	v := getViper()
+func init() {
+	v := viper.GetViper()
+	v.SetConfigName(defaultcfgName)
+	v.SetConfigType(defaultCfgExt)
+	v.AddConfigPath(defaultCfgPath)                    // config file reading order starts with current working directory
+	v.AddConfigPath(fmt.Sprintf("%s/.nunet", homeDir)) // then home directory
+	v.AddConfigPath("/etc/nunet/")                     // finally system directory
+
+	setDefaultConfig()
+
+	v.AutomaticEnv()
+}
+
+// setupFlags sets up the command line flags and binds them to viper
+func setupFlags(flagSet *pflag.FlagSet) {
+	v := viper.GetViper()
+
+	flags := []struct {
+		name      string
+		viperKey  string
+		shorthand string
+		usage     string
+		valueType string
+		hidden    bool
+	}{
+		{"rest-addr", "rest.addr", "", "REST API host", "string", false},
+		{"rest-port", "rest.port", "", "REST API port", "int", false},
+		{"user-dir", "general.user_dir", "", "user directory", "string", false},
+		{"work-dir", "general.work_dir", "", "work directory", "string", false},
+		{"data-dir", "general.data_dir", "", "data directory", "string", false},
+		{"debug", "general.debug", "", "debug mode", "bool", false},
+		{"profiler-port", "profiler.port", "", "profiler port", "int", false},
+	}
+
+	for _, flag := range flags {
+		switch flag.valueType {
+		case "string":
+			flagSet.StringP(flag.name, flag.shorthand, v.GetString(flag.viperKey), flag.usage)
+		case "int":
+			flagSet.IntP(flag.name, flag.shorthand, v.GetInt(flag.viperKey), flag.usage)
+		case "bool":
+			flagSet.BoolP(flag.name, flag.shorthand, v.GetBool(flag.viperKey), flag.usage)
+		}
+		if flag.hidden {
+			if err := flagSet.MarkHidden(flag.name); err != nil {
+				log.Debugf("failed to mark flag %s as hidden: %s", flag.name, err)
+			}
+		}
+
+		// bind flags to viper
+		if err := v.BindPFlag(flag.viperKey, flagSet.Lookup(flag.name)); err != nil {
+			log.Errorf("failed to bind flag %s to viper: %v", flag.name, err)
+		}
+	}
+}
+
+// setDefaultConfig sets default values for configuration
+func setDefaultConfig() {
+	v := viper.GetViper()
 	v.SetDefault("general.user_dir", fmt.Sprintf("%s/.nunet", homeDir))
 	v.SetDefault("general.work_dir", fmt.Sprintf("%s/nunet", homeDir))
 	v.SetDefault("general.data_dir", fmt.Sprintf("%s/nunet/data", homeDir))
@@ -44,7 +120,7 @@ func setDefaultConfig() *viper.Viper {
 	v.SetDefault("general.port_available_range_to", 32768)
 
 	v.SetDefault("rest.addr", "127.0.0.1")
-	v.SetDefault("rest.port", 9999)
+	// v.SetDefault("rest.port", 9999)
 	v.SetDefault("profiler.enabled", true)
 	v.SetDefault("profiler.addr", "127.0.0.1")
 	v.SetDefault("profiler.port", 6060)
@@ -81,14 +157,12 @@ func setDefaultConfig() *viper.Viper {
 
 	// jobs
 	v.SetDefault("job.allow_privileged_docker", false)
-
-	return v
 }
 
 func LoadConfig() error {
-	v := setDefaultConfig()
+	v := viper.GetViper()
 	if err := v.ReadInConfig(); err != nil {
-		if err := setDefaultConfig().UnmarshalExact(&cfg); err != nil {
+		if err := v.UnmarshalExact(&cfg); err != nil {
 			return fmt.Errorf("failed to unmarshal default config: %w", err)
 		}
 		return nil
@@ -109,7 +183,7 @@ func GetConfig() *Config {
 }
 
 func Get(key string) (interface{}, error) {
-	v := getViper()
+	v := viper.GetViper()
 	loadedConfig, err := json.Marshal(GetConfig())
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal config: %w", err)
@@ -124,22 +198,28 @@ func Get(key string) (interface{}, error) {
 }
 
 func Set(fs afero.Fs, key string, value interface{}) error {
-	v := getViper()
+	v := viper.GetViper()
 	v.SetFs(fs)
 
-	v.Set(key, value)
-	if err := v.UnmarshalExact(&cfg); err != nil {
-		return fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	loadedConfig, err := json.Marshal(GetConfig())
+	// get the current config for backup
+	currentConfig, err := json.Marshal(GetConfig())
 	if err != nil {
-		return fmt.Errorf("could not marshal config: %w", err)
-	}
-	if err := v.MergeConfig(bytes.NewReader(loadedConfig)); err != nil {
-		return fmt.Errorf("failed to merge config: %w", err)
+		return fmt.Errorf("could not read the current config: %w", err)
 	}
 
+	// update the config
+	err = v.MergeConfigMap(map[string]any{key: value})
+	if err != nil {
+		return fmt.Errorf("failed to set %s: %w", key, err)
+	}
+
+	// update config struct
+	if err := v.UnmarshalExact(&cfg); err != nil {
+		_ = v.ReadConfig(bytes.NewReader(currentConfig))
+		return fmt.Errorf("invalid config key: %s", key)
+	}
+
+	// Write updated config to file
 	if err := v.WriteConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file does not exist, create it.
@@ -152,8 +232,13 @@ func Set(fs afero.Fs, key string, value interface{}) error {
 }
 
 func FileExists(fs afero.Fs) (bool, error) {
-	v := getViper()
+	v := viper.GetViper()
+
 	v.SetFs(fs)
+
+	if cfgFile := v.ConfigFileUsed(); cfgFile != "" {
+		return afero.Exists(fs, cfgFile)
+	}
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			return false, nil
@@ -164,9 +249,9 @@ func FileExists(fs afero.Fs) (bool, error) {
 }
 
 func GetPath() string {
-	v := getViper()
+	v := viper.GetViper()
 	if err := v.ReadInConfig(); err != nil {
-		return setDefaultConfig().ConfigFileUsed()
+		return v.ConfigFileUsed()
 	}
 	return v.ConfigFileUsed()
 }
@@ -177,7 +262,7 @@ func CreateConfigFileIfNotExists(fs afero.Fs) error {
 		return fmt.Errorf("failed to check if config file exists: %w", err)
 	}
 	if !exists {
-		v := setDefaultConfig()
+		v := viper.GetViper()
 		v.SetFs(fs)
 		if err := v.SafeWriteConfig(); err != nil {
 			return fmt.Errorf("failed to create config file: %w", err)
