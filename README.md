@@ -52,15 +52,9 @@
   - [Specification](#specification)
     - [Description](#description)
     - [Design and Architecture](#design-and-architecture)
-      - [Conceptual Basis](#conceptual-basis)
-      - [Ontology](#ontology)
-      - [Architecture](#architecture)
-      - [Research](#research)
     - [Functionality](#functionality)
     - [Data Types](#data-types)
     - [References](#references)
-    - [Class Diagram](#class-diagram)
-      - [Source File](#source-file)
 
 ## About
 
@@ -68,7 +62,7 @@
 
 ### Payment
 
-All transactions on the Nunet network are expected to be conducted using the platform's utility token [NTX](https://docs.nunet.io/docs/v/getting-ntx). However, DMS is currently in development, and payment isn't part of `v0.5.0-boot` release. NTX payments are expected to be implemented in the [Public Alpha Mainnet](https://gitlab.com/groups/nunet/-/milestones/46#tab-issues) milestone within later release cycles.
+All transactions on the Nunet network are expected to be conducted using the platform's utility token [NTX](https://docs.nunet.io/docs/v/getting-ntx). However, DMS is currently in development, and payment is not part of `v0.5.0` release. NTX payments are expected to be implemented in the Public Alpha Mainnet milestone within later release cycles.
 
 **Note**: If you are a developer, please check out the [DMS specifications](#specification) and [Building from Source](#building-from-source) sections of this document.
 
@@ -606,71 +600,57 @@ NuNet is a computing platform that provides globally distributed and optimized c
 Detailed information about the NuNet platform, concepts, architecture, models, stakeholders can be found in these two papers:
 
 - [White Paper](https://docs.nunet.io/nunet-whitepaper)
-- [Yellow Paper](https://docs.nunet.io/docs/v/nunet-yellow-paper/readme/main)
+- [Yellow Paper](https://docs.nunet.io/docs/nunet-yellow-paper)
 
 DMS (Device Management Service) acts as the foundation of the NuNet platform, orchestrating the complex interactions between various computing resources and users. DMS implementation is structured into packages, creating a more maintainable, scalable, and robust codebase that is easier to understand, test, and collaborate on. Here are the existing packages in DMS and their purposes:
 
+- **`actor`**: Contains the NuActor framework for secure actor oriented programming in decentralized systems.
 - **`dms`**: Responsible for starting the whole application and core DMS functionality such as onboarding, job orchestration, job and resource management, etc.
 - **`internal`**: Code that will not be imported by any other packages and is used only on the running instance of DMS. This includes all configuration-related code, background tasks, etc.
 - **`db`**: Database used by the DMS.
 - **`storage`**: Disk storage management on each DMS for data related to DMS and jobs deployed by DMS. It also acts as an adapter to external storage services.
-- **`api`**: All API functionality (including REST API, etc.) to interact with the DMS.
+- **`api`**: All API functionality to interact with the DMS.
 - **`cmd`**: Command line functionality and tools.
 - **`network`**: All network-related code such as p2p communication, IP over Libp2p, and other networks that might be needed in the future.
 - **`executor`**: Responsible for executing the jobs received by the DMS. Interface to various executors such as Docker, Firecracker, etc.
-- **`telemetry`**: Logs, traces, and everything related to telemetry.
+- **`observability`**: Logs, traces, and everything related to observability.
 - **`plugins`**: Defined entry points and specs for third-party plugins, registration, and execution of plugin code.
-- **`types`**: Contains data models imported by various packages.
-- **`utils`**: Utility tools and functionalities.
-- **`tokenomics`**: Interaction with blockchain for the crypto-micropayments layer of the platform.
+- **`types`**: Defines data structures and interfaces that are used across the whole DMS component by different packages.
+- **`utils`**: Utility tools and functionalities used by other packages.
+- **`lib`**: External libs being used in DMS.
+- **`tokenomics`**: Interaction with blockchain for the crypto-micropayments layer of the platform (not yet implemented).
+- **`test`**: Contains some automated tests, not including unit tests.
+- **`maint-scripts`**: Utility scripts for building / development assistance and runtime.
+- **`examples`**: Examples of ensembles to be used to deploy jobs on NuNet platform.
+- **`docs`**: Documentation about main functionalities in DMS as onboarding, deployments, how to create a restricted network.
+- **`specs`**: Platform components specifications.
 
 ### Design and Architecture
 
-#### Conceptual Basis
-
 Main concepts of the architecture of DMS, the main component of the NuNet platform, can be found in the [Yellow Paper](https://gitlab.com/nunet/publisher/platform-yellow-paper/-/tree/main).
-
-#### Ontology
-
-The Nunet Ontology, which forms the basis of the design, is explained in the articles below:
-
-- [NuNet Job Orchestration I: Ontology and Nomenclature](https://nunet.gitlab.io/research/blog/posts/ontology-and-nomenclature/)
-- [NuNet Job Orchestration II: Scheduling](https://nunet.gitlab.io/research/blog/posts/scheduling-and-orchestration/)
-- [NuNet Job Orchestration III: Mapping Ontology to Scheduling](https://nunet.gitlab.io/research/blog/posts/taxonomy-of-job-scheduling/)
-
-#### Architecture
-
-Refer to the following items to understand **DMS architecture** at a high level.
-
-- [DMS Architecture -- Understanding I](https://nunet.gitlab.io/research/blog/posts/dms-architecture/)
-- [Entity Diagram - DMS High Level](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/entityDiagrams/New_DMS_Structure_Highlevel.drawio.svg)
-
-#### Research
-
-Relevant research work that has informed the design of DMS can be found below:
-
-- [Detailed Job Orchestration Sequences I](https://nunet.gitlab.io/research/blog/posts/job-orchestration-details/)
-- [Detailed Job Orchestration Sequences II](https://nunet.gitlab.io/research/blog/posts/orchestration-discussion/)
-- [Gossipsub, DHT, and Push/Pull Mechanisms](https://nunet.gitlab.io/research/blog/posts/gossipsub/)
-- [Parent-Child Hierarchy, Allocations, and Failure Tolerance](https://nunet.gitlab.io/research/blog/posts/parent-child-relations/)
-- [Kubernetes Integration Specs](https://nunet.gitlab.io/research/blog/posts/kubernetes-integration/)
 
 ### Functionality
 
-DMS is currently being refactored and new functionality will be added.
+Current key functional areas of DMS:
+* Actor-based system: NuNet's network communication is powered by the [NuActor System](https://gitlab.com/nunet/device-management-service/-/blob/main/actor/README.md), a zero-trust system that utilizes fine-grained capabilities, anchored on [DIDs](https://www.w3.org/TR/did-core/), following the [UCAN model](https://github.com/ucan-wg/).
+* Node management: Supports [onboarding/offboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding.md) of nodes and manages peer connections.
+* Compute ensembles: Defines ensembles as collections of logical nodes and allocations that represent compute workloads (as explained [here](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/dms/jobs/README.md)). Each allocation is a compute job assigned to a node.
+* Orchestration: [Deploys an ensemble](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/deployments.md) across nodes by fulfilling the specified constraints. This is done using a constraint satisfaction process where bids are requested from nodes and evaluated based on the required resources and locations.
+* Supervision: Once deployed, ensembles are continuously monitored.
+* VM/container lifecycle management: Allows creation, customization, and management of containers and virtual machines on the network.
+* Resource management: Controls different types of compute resources (VMs, CPUs, GPUs).
+* API and CLI support: Offers both an [API](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/api/README.md) and [CLI](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/cmd/actor/README.md) for programmatic and manual interaction with the system.
+* Observability: Collects information of events happening in the network allowing to perform real-time or post-mortem analysis and visualizations.
 
 ### Data Types
 
-Refer to the DMS global class diagram in [this](#class-diagram) section and various packages for data models.
+The global class diagram for the DMS is shown below.
+[Global Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/class_diagram.puml)
+
+Find additional data models within specific packages.
 
 ### References
 
 In addition to the relevant links added in the sections above, you can also find useful links here: [NuNet Links](https://www.nunet.io/links).
 
-### Class Diagram
 
-The global class diagram for the DMS is shown below.
-
-#### Source File
-
-[Global Class Diagram](https://gitlab.com/nunet/device-management-service/-/blob/main/specs/class_diagram.puml)
