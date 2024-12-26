@@ -39,7 +39,6 @@ func NewRootCMD(client *utils.HTTPClient, afs afero.Afero, cfg *config.Config) *
 	cmd.AddCommand(cap.NewCapCmd(afs, cfg))
 	cmd.AddCommand(actor.NewActorCmd(client, afs, cfg))
 	cmd.AddCommand(newConfigCmd(afs.Fs, cfg))
-	cmd.AddCommand(newAutoCompleteCmd())
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
 
