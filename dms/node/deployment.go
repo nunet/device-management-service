@@ -497,7 +497,9 @@ func (n *Node) releaseAllocation(allocID string) error {
 
 	alloc, ok := n.allocations[allocID]
 	if !ok {
-		log.Errorf("allocation %s not found", allocID)
+		// only warn because it is possible that the allocation was already released
+		// but would be good to have custom erro types defined for this
+		log.Warnf("allocation %s not found", allocID)
 		return nil
 	}
 
