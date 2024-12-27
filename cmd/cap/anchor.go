@@ -116,12 +116,12 @@ Note: The --context flag is required to specify the capability context.`,
 					return fmt.Errorf("failed to add provide anchors: %w", err)
 				}
 			case revoke != "":
-				var tokens ucan.TokenList
+				var tokens ucan.Token
 				if err := json.Unmarshal([]byte(revoke), &tokens); err != nil {
 					return fmt.Errorf("unmarshal tokens: %w", err)
 				}
 
-				if err := capCtx.AddRoots(nil, ucan.TokenList{}, ucan.TokenList{}, tokens); err != nil {
+				if err := capCtx.AddRoots(nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{Tokens: []*ucan.Token{&tokens}}); err != nil {
 					return fmt.Errorf("failed to add revoke anchors: %w", err)
 				}
 

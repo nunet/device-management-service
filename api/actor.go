@@ -45,15 +45,15 @@ func (rs *Server) ActorHandle(c *gin.Context) {
 	endTrace := observability.StartTrace(c, "actor_handle_retrieve_duration")
 	defer endTrace()
 
-	p2p := rs.config.P2P
-	if p2p == nil {
+	if rs.config.P2P == nil {
 		log.Errorw("actor_handle_retrieve_failure", "error", "host node hasn't yet been initialized")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
 		return
 	}
 
 	// get handle here
-	pubk := p2p.GetPeerPubKey(p2p.GetHostID())
+	pubk := rs.config.P2P.GetPeerPubKey(rs.config.P2P.GetHostID())
+
 	id, err := crypto.IDFromPublicKey(pubk)
 	if err != nil {
 		log.Errorw("actor_handle_retrieve_failure", "error", "handle id is invalid")
@@ -66,7 +66,7 @@ func (rs *Server) ActorHandle(c *gin.Context) {
 		ID:  id,
 		DID: actorDID,
 		Address: actor.Address{
-			HostID:       p2p.GetHostID().String(),
+			HostID:       rs.config.P2P.GetHostID().String(),
 			InboxAddress: "root",
 		},
 	}

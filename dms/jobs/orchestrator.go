@@ -1768,6 +1768,11 @@ func (o *Orchestrator) supervise() {
 	wg := sync.WaitGroup{}
 
 	for allocName, allocation := range o.manifest.Allocations {
+		// skip empty healthchecks
+		if o.manifest.Allocations[allocName].Healthcheck.Type == "" {
+			continue
+		}
+
 		msg, err := actor.Message(
 			o.actor.Handle(),
 			allocation.Handle,

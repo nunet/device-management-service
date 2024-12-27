@@ -22,7 +22,6 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
@@ -946,8 +945,7 @@ func (n *Node) handleCapAnchor(msg actor.Envelope) {
 		return
 	}
 
-	cfg := config.GetConfig()
-	if err := SaveCapabilityContext(n.rootCap, cfg); err != nil {
+	if err := SaveCapabilityContext(n.rootCap, &n.dmsConfig); err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return

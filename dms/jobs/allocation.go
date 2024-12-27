@@ -36,6 +36,7 @@ const (
 	Pending    AllocationStatus = "pending"
 	Running    AllocationStatus = "running"
 	Stopped    AllocationStatus = "stopped"
+	Failed     AllocationStatus = "failed"
 	Completed  AllocationStatus = "completed"
 	Terminated AllocationStatus = "terminated"
 
@@ -127,6 +128,19 @@ func NewAllocation(
 	}, nil
 }
 
+// GetPortMapping returns allocation's port mapping
+func (a *Allocation) GetPortMapping() map[int]int {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	ports := make(map[int]int)
+	for i, v := range a.state.portMapping {
+		ports[i] = v
+	}
+
+	return ports
+}
+
 // Run creates the executor based on th e execution engine configuration.
 func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[int]int) error {
 	a.mx.Lock()
@@ -154,14 +168,11 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 	}
 
 	executionRequest := &types.ExecutionRequest{
-		JobID:            a.ID,
-		ExecutionID:      a.executionID,
-		EngineSpec:       &a.Job.Execution,
-		Resources:        &a.Job.Resources,
-		ProvisionScripts: a.Job.ProvisionScripts,
-		// TODO add the following
-		Inputs:              []*types.StorageVolumeExecutor{}, // Question: what are those?
-		Outputs:             []*types.StorageVolumeExecutor{},
+		JobID:               a.ID,
+		ExecutionID:         a.executionID,
+		EngineSpec:          &a.Job.Execution,
+		Resources:           &a.Job.Resources,
+		ProvisionScripts:    a.Job.ProvisionScripts,
 		ResultsDir:          a.resultsDir,
 		PersistLogsDuration: deleteLogsAfter,
 	}
@@ -196,12 +207,12 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 		return nil
 	}
 
+	a.status = Stopped
+
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
+		a.status = Failed
 		return fmt.Errorf("failed to stop execution: %w", err)
 	}
-	log.Debugf("stopped execution: %s", a.executionID)
-
-	a.status = Stopped
 
 	return nil
 }

@@ -388,6 +388,10 @@ func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
 	return alloc, nil
 }
 
+func (n *Node) ResourceManager() types.ResourceManager {
+	return n.resourceManager
+}
+
 // GetAllocations returns a list of allocations in the node.
 func (n *Node) GetAllocations() []*jobs.Allocation {
 	n.allocmx.Lock()
