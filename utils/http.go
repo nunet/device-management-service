@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"time"
 )
 
 type HTTPClient struct {
@@ -48,6 +49,8 @@ func (c *HTTPClient) MakeRequest(method, relativePath string, body []byte) ([]by
 
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Accept", "application/json")
+
+	c.Client.Timeout = 80 * time.Second
 
 	resp, err := c.Client.Do(req)
 	if err != nil {

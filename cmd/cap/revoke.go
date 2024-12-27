@@ -30,7 +30,7 @@ func newRevokeCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 		Long: `Revoke a granted or deleated token
 
 Example:
-  nunet cap revoke --context user --token '{"some": "json", "token": "here"}'
+  nunet cap revoke --context user '{"some": "json", "token": "here"}'
 
 The above command revokes a token`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -65,7 +65,7 @@ The above command revokes a token`,
 			for _, token := range tokens.Tokens {
 				revocationTokens, err := capCtx.Revoke(token)
 				if err != nil {
-					return fmt.Errorf("failed to grant capabilities: %w", err)
+					return fmt.Errorf("failed to revoke: %w", err)
 				}
 				tokensJSON, err := json.Marshal(revocationTokens)
 				if err != nil {
