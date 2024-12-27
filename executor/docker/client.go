@@ -384,7 +384,7 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 	}
 
 	err = fmt.Errorf("unable to find container for %s=%s", label, value)
-	log.Errorw("docker_find_container_failure", "error", err)
+	log.Warnw("docker_find_container_failure", "error", err)
 	return "", err
 }
 
