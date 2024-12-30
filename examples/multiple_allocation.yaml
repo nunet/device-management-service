@@ -8,9 +8,9 @@ allocations:
                 cores: 1
             gpus: []
             ram:
-                size: 2048 
+                size: 1 # GiB
             disk:
-                size: 1
+                size: 1 # GiB
         execution:
             type: docker
             image: kennethreitz/httpbin 
@@ -21,9 +21,9 @@ allocations:
                 cores: 1
             gpus: []
             ram:
-                size: 2048
+                size: 1 # GiB
             disk:
-                size: 1
+                size: 1 # GiB
         execution:
             type: docker
             image: buildpack-deps

@@ -119,8 +119,8 @@ type AllocationDeploymentResponse struct {
 }
 
 type RevertDeploymentMessage struct {
-	EnsembleID     string
-	AllocationsIDs []string
+	EnsembleID   string
+	AllocsByName []string
 }
 
 type AllocationStartRequest struct {

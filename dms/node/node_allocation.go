@@ -144,12 +144,12 @@ func (n *Node) cleanupFinishedEnsemble(ensembleID string, allocationIDs []string
 	log.Debugf("cleaning up finished ensemble %s", ensembleID)
 
 	if err := n.network.DestroySubnet(ensembleID); err != nil {
-		log.Errorf("failed to destroy subnet %s: %v", ensembleID, err)
+		log.Warnf("Monitor Ensemble: failed to destroy subnet (it may already be destroyed) %s: %v", ensembleID, err)
 	}
 
 	for _, allocID := range allocationIDs {
 		if err := n.releaseAllocation(allocID); err != nil {
-			log.Errorf("failed to release allocation %s: %v", allocID, err)
+			log.Warnf("Monitor Ensemble: failed to release allocation (it may already be released) %s: %v", allocID, err)
 		}
 	}
 }

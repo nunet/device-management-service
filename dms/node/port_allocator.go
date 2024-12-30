@@ -11,6 +11,8 @@ package node
 import (
 	"fmt"
 	"sync"
+
+	"gitlab.com/nunet/device-management-service/network/utils"
 )
 
 // PortAllocator keeps track of port allocations and manages state.
@@ -37,6 +39,10 @@ func (pa *PortAllocator) AllocatePorts(allocationID string, ports []int) error {
 	pa.mx.Lock()
 	defer pa.mx.Unlock()
 
+	if len(ports) == 0 {
+		return fmt.Errorf("cannot allocate 0 ports")
+	}
+
 	for _, port := range ports {
 		if err := pa.allocate(port); err != nil {
 			pa.releasePorts(ports)
@@ -53,19 +59,11 @@ func (pa *PortAllocator) AllocateRandom(allocationID string, numPorts int) ([]in
 	pa.mx.Lock()
 	defer pa.mx.Unlock()
 
-	var portsToAllocate []int
-	portNum := pa.config.AvailableRangeFrom
-
-	// select random ports
-	for range numPorts {
-		for ; portNum <= pa.config.AvailableRangeTo; portNum++ {
-			if _, reserved := pa.reserved[portNum]; !reserved {
-				portsToAllocate = append(portsToAllocate, portNum)
-				portNum++
-				break
-			}
-		}
+	if numPorts == 0 {
+		return nil, fmt.Errorf("cannot allocate 0 ports")
 	}
+
+	portsToAllocate := pa.getAvailablePorts(numPorts)
 
 	if len(portsToAllocate) != numPorts {
 		pa.releasePorts(portsToAllocate)
@@ -84,6 +82,24 @@ func (pa *PortAllocator) AllocateRandom(allocationID string, numPorts int) ([]in
 	return portsToAllocate, nil
 }
 
+func (pa *PortAllocator) getAvailablePorts(numPorts int) []int {
+	ports := make([]int, 0, numPorts)
+
+	for port := pa.config.AvailableRangeFrom; port <= pa.config.AvailableRangeTo && len(ports) < numPorts; port++ {
+		// Skip if port is reserved
+		if _, reserved := pa.reserved[port]; reserved {
+			continue
+		}
+
+		// Check if port is actually free on the system
+		if utils.IsFreePort(port) {
+			ports = append(ports, port)
+		}
+	}
+
+	return ports
+}
+
 func (pa *PortAllocator) allocate(port int) error {
 	if port < pa.config.AvailableRangeFrom || port > pa.config.AvailableRangeTo {
 		return fmt.Errorf("port %d is outside allowed range [%d-%d]",
@@ -94,13 +110,15 @@ func (pa *PortAllocator) allocate(port int) error {
 		return fmt.Errorf("port %d is already reserved", port)
 	}
 
-	// TODO: Add system port availability check here
-	// Example: Check if port is in use on the machine
+	if !utils.IsFreePort(port) {
+		return fmt.Errorf("port %d is not free", port)
+	}
 
 	pa.reserved[port] = struct{}{}
 	return nil
 }
 
+// Release releases the ports associated with the allocation ID.
 func (pa *PortAllocator) Release(allocationID string) {
 	pa.mx.Lock()
 	defer pa.mx.Unlock()
@@ -110,9 +128,7 @@ func (pa *PortAllocator) Release(allocationID string) {
 		return
 	}
 
-	for _, p := range allocated {
-		delete(pa.reserved, p)
-	}
+	pa.releasePorts(allocated)
 	delete(pa.allocs, allocationID)
 }
 
@@ -149,15 +165,7 @@ func (pa *PortAllocator) PortsAvailable(numPorts int) bool {
 	pa.mx.Lock()
 	defer pa.mx.Unlock()
 
-	portNum := pa.config.AvailableRangeFrom
-	for range numPorts {
-		for ; portNum <= pa.config.AvailableRangeTo; portNum++ {
-			if _, reserved := pa.reserved[portNum]; !reserved {
-				portNum++
-				break
-			}
-		}
-	}
+	ports := pa.getAvailablePorts(numPorts)
 
-	return portNum <= pa.config.AvailableRangeTo
+	return len(ports) == numPorts
 }
