@@ -1,0 +1,107 @@
+@startuml
+
+' Actors in the Ensemble Deployment
+actor User as U
+participant "Service Node\n<math>N</math>" as S
+participant "Orchestrator Actor\n<math>O_S</math>" as OS
+participant "Compute Provider Node\n<math>P_1</math>"  as P_1
+participant "Allocation Actor\n<math>A_1</math>" as A_1
+participant "Compute Provider Node\n<math>P_2</math>"  as P_2
+participant "Allocation Actor\n<math>A_2</math>" as A_2
+participant "Compute Provider Node\n<math>P_3</math>"  as P_3
+
+title Ensemble Deployment Sequence Diagram
+
+autonumber
+
+U o-> S : /dms/node/deployment/new
+activate S
+note right 
+   Given a well formed
+   ensemble configuration
+   with, e.g. two jobs
+end note
+S o-> OS ** : create new
+OS --> OS : initiates deployment orchestration
+OS o-> U : returns ensemble ID
+U --> U : stores ensemble ID for\nensemble control
+
+group Bidding / Search And Matching
+  OS o-> P_1 : /dms/deployment/request
+  activate P_1
+  OS o-> P_2 : /dms/deployment/request
+  activate P_2
+  OS o-> P_3 : /dms/deployment/request
+  activate P_3
+
+  P_1 --> P_1 : <font color=red>decide to bid</font>
+  P_1 o-> OS : /dms/deployment/bid
+  deactivate P_1
+  OS --> OS : collect bid
+  
+  P_2 --> P_2 : <font color=red>decide do bid</font>
+  P_2 o-> OS : /dms/deployment/bid
+  deactivate P_2
+  OS --> OS : collect bid
+
+  P_3 --> P_3 : <font color=red>decide</font>\n<font color=red>not to</font>\n<font color=red>bid</font>
+  deactivate P_3
+
+  break timeout or enough collected bids
+    OS --> OS : check timeout
+    OS --> OS : check collected bids
+  end
+
+
+end
+
+loop selecing best ensemble configuration
+
+  OS --> OS : assignment permutations
+  OS --> OS : constraint evaluation
+
+  break viable assignment found
+
+    OS --> OS : candidate assignment prepared
+
+  end
+
+end
+
+OS o-> P_1 : /dms/deployment/commit
+P_1 --> P_1 : lock resources
+P_1 o-> OS : <font color=red>/dms/deployment/commit: response OK</font>
+OS o-> P_2 : /dms/deployment/commit
+P_2 --> P_2 : lock resources
+P_2 o-> OS : <font color=red>/dms/deployment/commit: response OK</font>
+
+alt All nodes successfully commited
+
+group Provision
+   OS o-> P_1: /dms/deployment/allocate
+   activate P_1
+   P_1 o-> A_1 ** : create
+   OS o-> P_2: /dms/deployment/allocate
+   activate P_2
+   P_2 o-> A_2 ** : create
+
+   group Virtual Private Network creation
+      OS o-> A_1: assign private IP within subnet address space
+      OS o-> A_2: assign private IP within subnet address space
+
+end 
+
+else some nodes did not commit
+
+   OS o-> P_1 : /dms/deployment/revert
+   OS o-> P_2 : /dms/deployment/revert
+   OS --> OS : restart bidding loop
+
+end
+
+group Supervision [TBD]
+  OS <-> A_1 : <font color=red>supervision strategy defined loop</font>
+  OS <-> A_2 : <font color=red>supervision strategy defined loop</font>
+end
+
+@enduml

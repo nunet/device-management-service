@@ -1,0 +1,51 @@
+@startuml
+
+title Ensemble Deployment Component Diagram
+ 
+skinparam shadowing false
+skinparam component {
+	BorderColor black
+	BackgroundColor #goldenrod
+}
+skinparam interface {
+	BorderColor black
+	BackgroundColor #5e94de
+}
+skinparam ArrowColor black
+skinparam noteBorderColor black
+
+
+node "Service Node <math>N</math>" {
+    
+    component "Orchestrator Actor <math>O_S</math>" {
+
+    }
+
+}
+
+node "Compute Provider Node <math>P_1</math>" {
+   component "Allocation Actor <math>A_1</math>" {
+     component Executor_1
+   }
+
+}
+
+node "Compute Provider Node <math>P_2</math>" {
+   component "Allocation Actor <math>A_2</math>" {
+       component Executor_2
+   }
+}
+
+"Orchestrator Actor <math>O_S</math>" --> "Allocation Actor <math>A_1</math>"
+"Orchestrator Actor <math>O_S</math>" --> "Allocation Actor <math>A_2</math>"
+
+actor "Service Provider User" as spu
+spu -- "Service Node <math>N</math>"
+
+actor "Compute Provider User 1" as cpu1
+cpu1 -- "Compute Provider Node <math>P_1</math>"
+
+actor "Compute Provider User 2" as cpu2
+cpu2 -- "Compute Provider Node <math>P_2</math>"
+
+@enduml
