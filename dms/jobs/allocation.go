@@ -92,6 +92,7 @@ type Allocation struct {
 
 	state struct {
 		subnetIP    string
+		gatewayIP   string
 		portMapping map[int]int
 	}
 }
@@ -123,6 +124,7 @@ func NewAllocation(
 		network:     network,
 		state: struct {
 			subnetIP    string
+			gatewayIP   string
 			portMapping map[int]int
 		}{},
 	}, nil
@@ -142,7 +144,7 @@ func (a *Allocation) GetPortMapping() map[int]int {
 }
 
 // Run creates the executor based on th e execution engine configuration.
-func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[int]int) error {
+func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string, portMapping map[int]int) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
@@ -175,6 +177,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 		ProvisionScripts:    a.Job.ProvisionScripts,
 		ResultsDir:          a.resultsDir,
 		PersistLogsDuration: deleteLogsAfter,
+		GatewayIP:           gatewayIP,
 	}
 
 	for hostPort, executorPort := range portMapping {
@@ -203,21 +206,33 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
+	log.Debugf("stopping execution for alloc: %s", a.ID)
+
 	if a.status != Running {
 		return nil
 	}
 
 	a.status = Stopped
 
+	if a.executor == nil {
+		return nil
+	}
+
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
 		a.status = Failed
 		return fmt.Errorf("failed to stop execution: %w", err)
 	}
 
+	log.Debugf("stopped execution for alloc: %s", a.ID)
+
 	return nil
 }
 
 func (a *Allocation) Cleanup() error {
+	if a.executor == nil {
+		return nil
+	}
+
 	if err := a.executor.Remove(a.executionID, AllocationShutdownTimeout); err != nil {
 		return fmt.Errorf("failed to remove execution: %w", err)
 	}
@@ -349,7 +364,7 @@ func (a *Allocation) Restart(ctx context.Context) error {
 		return err
 	}
 
-	if err := a.Run(ctx, a.state.subnetIP, a.state.portMapping); err != nil {
+	if err := a.Run(ctx, a.state.subnetIP, a.state.gatewayIP, a.state.portMapping); err != nil {
 		_ = a.Stop(ctx)
 		return err
 	}
@@ -385,7 +400,7 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 
 	var resp AllocationStartResponse
 	// TODO: context should cancel when the actor is stopped to stop monitor
-	if err := a.Run(context.TODO(), req.SubnetIP, req.PortMapping); err != nil {
+	if err := a.Run(context.TODO(), req.SubnetIP, req.GatewayIP, req.PortMapping); err != nil {
 		err = fmt.Errorf("failed to run allocation: %w", err)
 		log.Error(err)
 
@@ -398,6 +413,7 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	log.Info("Running allocation's job: ", a.ID)
 
 	a.state.subnetIP = req.SubnetIP
+	a.state.gatewayIP = req.GatewayIP
 	a.state.portMapping = req.PortMapping
 
 	resp.OK = true

@@ -1008,7 +1008,13 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		}
 		for _, a := range nmf.Allocations {
 			allocationNodes[a] = n
-			portsByAllocation[a] = ncfg.Ports
+			// TODO: optimize the manifest format and how node/alloc data is
+			//       being passed around. A bit messy at the moment. see #825
+			for _, portMap := range ncfg.Ports {
+				if portMap.Allocation == a {
+					portsByAllocation[a] = append(portsByAllocation[a], portMap)
+				}
+			}
 		}
 		mf.Nodes[n] = nmf
 	}
@@ -1037,6 +1043,17 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 	ncfg, _ := o.cfg.Node(n)
 
+	getAllocPortMapping := func(allocName string) map[int]int {
+		ports := make(map[int]int)
+		for _, pc := range ncfg.Ports {
+			if pc.Allocation == allocName {
+				ports[pc.Public] = pc.Private
+				break
+			}
+		}
+		return ports
+	}
+
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(ncfg.Allocations))
 	for _, allocName := range ncfg.Allocations {
@@ -1047,6 +1064,8 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 			if !ok {
 				errCh <- fmt.Errorf("allocation %s not found: %w", allocName, ErrDeploymentFailed)
 			}
+
+			allocPorts := getAllocPortMapping(allocName)
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
@@ -1056,6 +1075,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 					AllocationName: allocName,
 					NodeID:         n,
 					Resources:      allocation.Resources,
+					PortMapping:    allocPorts,
 				},
 				actor.WithMessageTimeout(CommitDeploymentTimeout),
 			)
@@ -1545,6 +1565,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				AllocationStartBehavior,
 				AllocationStartRequest{
 					SubnetIP:    indexRoutingTable[allocName],
+					GatewayIP:   gatewayIP,
 					PortMapping: manifest.Ports,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),

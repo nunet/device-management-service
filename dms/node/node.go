@@ -914,7 +914,10 @@ func (n *Node) updateAllocations(alloc *jobs.Allocation) {
 	n.allocations[alloc.ID] = alloc
 }
 
-func (n *Node) commitDeployment(ensembleID, allocationID string, resources types.Resources) error {
+func (n *Node) commitDeployment(
+	ensembleID, allocationID string,
+	resources types.Resources, ports map[int]int,
+) error {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -941,19 +944,19 @@ func (n *Node) commitDeployment(ensembleID, allocationID string, resources types
 
 	n.commitedResources[allocationID] = bidState
 
-	if len(bidState.request.V1.PublicPorts.Static) > 0 {
-		err := n.portAllocator.AllocatePorts(allocationID, bidState.request.V1.PublicPorts.Static)
-		if err != nil {
-			log.Debugf("failed to allocate static ports: %v", err)
-			return err
+	if len(ports) > 0 {
+		for port := range ports {
+			err := n.portAllocator.AllocatePorts(allocationID, []int{port})
+			if err != nil {
+				return fmt.Errorf("failed to allocate static ports: %w", err)
+			}
 		}
 	}
 
 	if bidState.request.V1.PublicPorts.Dynamic > 0 {
 		_, err := n.portAllocator.AllocateRandom(allocationID, bidState.request.V1.PublicPorts.Dynamic)
 		if err != nil {
-			log.Debugf("failed to allocate ports: %v", err)
-			return err
+			return fmt.Errorf("failed to allocate ports: %w", err)
 		}
 	}
 

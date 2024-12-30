@@ -515,6 +515,7 @@ func (n *Node) releaseAllocation(allocID string) error {
 
 	delete(n.allocations, allocID)
 
+	log.Infof("allocation %s released", allocID)
 	return nil
 }
 

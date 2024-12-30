@@ -208,11 +208,6 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 		return fmt.Errorf("failed to bring up tun interface: %w", err)
 	}
 
-	// catch all 10.0.0.1
-	if err := iface.AddRouteRule("", "10.0.0.1/32", ""); err != nil {
-		return fmt.Errorf("failed to add route rule: %w", err)
-	}
-
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.mx.Lock()
 	s.ifaces[ipAddr.String()] = struct {
@@ -259,7 +254,6 @@ delete_iface:
 	s.mx.Lock()
 	iface, ok := s.ifaces[ip]
 	if ok {
-		_ = iface.tun.DelRoute("10.0.0.1/32")
 		iface.cancel()
 		_ = iface.tun.Down()
 		_ = iface.tun.Delete()

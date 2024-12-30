@@ -175,6 +175,12 @@ func (n *NetInterface) AddRouteRule(src, dst, gw string) error {
 		Priority:  3000,
 	})
 	if err != nil {
+		if os.IsExist(err) || err.Error() == "file exists" {
+			// route already exists
+			// we could instead use RouteReplace if we want
+			// to force deletion and adding of route
+			return nil
+		}
 		return fmt.Errorf("error adding route: %w", err)
 	}
 

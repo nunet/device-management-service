@@ -35,6 +35,7 @@ type ExecutionRequest struct {
 	PersistLogsDuration time.Duration            // Duration to persist logs on disk
 	ProvisionScripts    map[string][]byte        // (named) Scripts to run when initiating the execution
 	PortsToBind         []PortsToBind            // List of ports to bind
+	GatewayIP           string                   // Gateway IP to use as dns resolver
 }
 
 type PortsToBind struct {
