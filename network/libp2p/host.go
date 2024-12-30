@@ -193,6 +193,8 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		),
 		pubsub.WithPeerExchange(true),
 		pubsub.WithPeerScoreInspect(scoreInspect, time.Second),
+		pubsub.WithMessageSigning(true),
+		pubsub.WithStrictSignatureVerification(true),
 	}
 	if config.GossipMaxMessageSize > 0 {
 		optsPS = append(optsPS, pubsub.WithMaxMessageSize(config.GossipMaxMessageSize))

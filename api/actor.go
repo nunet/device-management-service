@@ -20,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -155,7 +156,7 @@ func (rs *Server) ActorInvoke(c *gin.Context) {
 	// Register a message handler for the responseCh
 	protocol := fmt.Sprintf("actor/%s/messages/0.0.1", msg.From.Address.InboxAddress)
 	responseCh := make(chan actor.Envelope, 1)
-	err := p2p.HandleMessage(protocol, func(data []byte) {
+	err := p2p.HandleMessage(protocol, func(data []byte, _ peer.ID) {
 		var envelope actor.Envelope
 		if err := json.Unmarshal(data, &envelope); err != nil {
 			log.Errorw("actor_invoke_response_failure", "error", err.Error())
@@ -244,7 +245,7 @@ func (rs *Server) ActorBroadcast(c *gin.Context) {
 	protocol := fmt.Sprintf("actor/%s/messages/0.0.1", msg.From.Address.InboxAddress)
 	var messages []actor.Envelope
 	var mu sync.Mutex
-	err = p2p.HandleMessage(protocol, func(data []byte) {
+	err = p2p.HandleMessage(protocol, func(data []byte, _ peer.ID) {
 		var envelope actor.Envelope
 		if err = json.Unmarshal(data, &envelope); err != nil {
 			log.Errorw("actor_broadcast_failure", "error", "failed to unmarshal response message")

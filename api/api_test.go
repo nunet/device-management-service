@@ -60,9 +60,9 @@ func TestServer_Actor(t *testing.T) {
 
 	t.Run("must be able to call /api/v1/actor/invoke", func(t *testing.T) {
 		var msg actor.Envelope
-		p2pHandler.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).DoAndReturn(func(_ string, handler func(data []byte)) error {
+		p2pHandler.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).DoAndReturn(func(_ string, handler func(data []byte, peerID network.PeerID)) error {
 			// call the handler
-			handler(getMockEnvelope(t, msg).Bytes())
+			handler(getMockEnvelope(t, msg).Bytes(), "peerID")
 			return nil
 		}).Times(1)
 		p2pHandler.EXPECT().SendMessageSync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -25,7 +26,7 @@ type StreamHandler func(stream network.Stream)
 type HandlerRegistry struct {
 	host          host.Host
 	handlers      map[protocol.ID]StreamHandler
-	bytesHandlers map[protocol.ID]func(data []byte)
+	bytesHandlers map[protocol.ID]func(data []byte, peerId peer.ID)
 	mu            sync.RWMutex
 }
 
@@ -34,7 +35,7 @@ func NewHandlerRegistry(host host.Host) *HandlerRegistry {
 	return &HandlerRegistry{
 		host:          host,
 		handlers:      make(map[protocol.ID]StreamHandler),
-		bytesHandlers: make(map[protocol.ID]func(data []byte)),
+		bytesHandlers: make(map[protocol.ID]func(data []byte, peerId peer.ID)),
 	}
 }
 
@@ -55,7 +56,10 @@ func (r *HandlerRegistry) RegisterHandlerWithStreamCallback(messageType types.Me
 }
 
 // RegisterHandlerWithBytesCallback registers a stream handler for a specific protocol and sends the bytes back to callback.
-func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType types.MessageType, s StreamHandler, handler func(data []byte)) error {
+func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(
+	messageType types.MessageType,
+	s StreamHandler, handler func(data []byte, peerId peer.ID),
+) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -71,7 +75,7 @@ func (r *HandlerRegistry) RegisterHandlerWithBytesCallback(messageType types.Mes
 }
 
 // SendMessageToLocalHandler given the message type it sends data to the local handler found.
-func (r *HandlerRegistry) SendMessageToLocalHandler(messageType types.MessageType, data []byte) {
+func (r *HandlerRegistry) SendMessageToLocalHandler(messageType types.MessageType, data []byte, peerID peer.ID) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -82,7 +86,7 @@ func (r *HandlerRegistry) SendMessageToLocalHandler(messageType types.MessageTyp
 	}
 
 	// we need this goroutine to avoid blocking the caller goroutine
-	go h(data)
+	go h(data, peerID)
 }
 
 // UnregisterHandler unregisters a stream handler for a specific protocol.
