@@ -120,7 +120,7 @@ func setDefaultConfig() {
 	v.SetDefault("general.port_available_range_to", 32768)
 
 	v.SetDefault("rest.addr", "127.0.0.1")
-	// v.SetDefault("rest.port", 9999)
+	v.SetDefault("rest.port", 9999)
 	v.SetDefault("profiler.enabled", true)
 	v.SetDefault("profiler.addr", "127.0.0.1")
 	v.SetDefault("profiler.port", 6060)
