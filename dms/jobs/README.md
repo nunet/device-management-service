@@ -107,7 +107,7 @@ of deploying an ensemble is called _orchestration_.  In the following
 we summarize how deployment orchestration is performed.
 
 <p align="center">
-  <img src="specs/diagrams/ensemble_deployment.png" width="100%" alt="Ensemble Deployment Sequence Diagram">
+  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/dms/jobs/specs/diagrams/ensemble_deployment.png?ref_type=heads&inline=true" width="100%" alt="Ensemble Deployment Sequence Diagram">
 </p>
 
 Ensemble deployment is initiated with a user invoking the
@@ -193,7 +193,7 @@ running ensembles, and the ability to modify running ensembles in order
 to support mechanisms like auto scaling.
 
 <p align="center">
-  <img src="specs/diagrams/ensemble_components.png" width="50%" alt="Ensemble deployment component diagram: shows ensemble configuration on actual network after deployment is successfully finished.">
+  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/dms/jobs/specs/diagrams/ensemble_components.png?ref_type=heads&inline=true" width="50%" alt="Ensemble deployment component diagram: shows ensemble configuration on actual network after deployment is successfully finished.">
 </p>
 
 ### Ensemble Supervision
