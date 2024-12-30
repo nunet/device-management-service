@@ -26,6 +26,7 @@ import (
 type MockClientInterface struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientInterfaceMockRecorder
+	isgomock struct{}
 }
 
 // MockClientInterfaceMockRecorder is the mock recorder for MockClientInterface.
@@ -45,16 +46,6 @@ func (m *MockClientInterface) EXPECT() *MockClientInterfaceMockRecorder {
 	return m.recorder
 }
 
-// Exec mocks base method.
-func (m *MockClientInterface) Exec(ctx context.Context, containerID string, cmd []string) (int, string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Exec", ctx, containerID, cmd)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(string)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
 // CreateContainer mocks base method.
 func (m *MockClientInterface) CreateContainer(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, platform *v1.Platform, name string, pullImage bool) (string, error) {
 	m.ctrl.T.Helper()
@@ -68,6 +59,23 @@ func (m *MockClientInterface) CreateContainer(ctx context.Context, config *conta
 func (mr *MockClientInterfaceMockRecorder) CreateContainer(ctx, config, hostConfig, networkingConfig, platform, name, pullImage any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateContainer", reflect.TypeOf((*MockClientInterface)(nil).CreateContainer), ctx, config, hostConfig, networkingConfig, platform, name, pullImage)
+}
+
+// Exec mocks base method.
+func (m *MockClientInterface) Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Exec", ctx, containerID, cmd)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(string)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
+}
+
+// Exec indicates an expected call of Exec.
+func (mr *MockClientInterfaceMockRecorder) Exec(ctx, containerID, cmd any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Exec", reflect.TypeOf((*MockClientInterface)(nil).Exec), ctx, containerID, cmd)
 }
 
 // FindContainer mocks base method.

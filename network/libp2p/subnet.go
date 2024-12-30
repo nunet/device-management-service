@@ -142,7 +142,12 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 		_ = l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
 	}
 
-	l.UnregisterMessageHandler(PacketExchangeProtocolID)
+	if len(l.subnets) == 1 {
+		if atomic.CompareAndSwapInt32(&l.isSubnetWriteProtocolRegistered, 1, 0) {
+			l.UnregisterMessageHandler(PacketExchangeProtocolID)
+		}
+	}
+
 	delete(l.subnets, subnetID)
 	return nil
 }
@@ -201,11 +206,6 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 
 	if err := iface.Up(); err != nil {
 		return fmt.Errorf("failed to bring up tun interface: %w", err)
-	}
-
-	// catch all 10.0.0.1
-	if err := iface.AddRouteRule("", "10.0.0.1/32", ""); err != nil {
-		return fmt.Errorf("failed to add route rule: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(s.ctx)

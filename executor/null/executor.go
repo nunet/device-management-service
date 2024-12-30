@@ -31,8 +31,8 @@ func (e *Executor) GetID() string {
 	return ""
 }
 
-func (e *Executor) Exec(_ context.Context, _ string, _ []string) (int, string, error) {
-	return 0, "", nil
+func (e *Executor) Exec(_ context.Context, _ string, _ []string) (int, string, string, error) {
+	return 0, "", "", nil
 }
 
 // Start does nothing and returns nil.
@@ -56,6 +56,11 @@ func (e *Executor) Wait(_ context.Context, _ string) (<-chan *types.ExecutionRes
 
 // Cancel does nothing and returns nil.
 func (e *Executor) Cancel(_ context.Context, _ string) error {
+	return nil
+}
+
+// Remove does nothing and returns nil.
+func (e *Executor) Remove(_ string, _ time.Duration) error {
 	return nil
 }
 

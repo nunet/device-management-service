@@ -8,24 +8,19 @@ allocations:
                 cores: 1
             gpus: []
             ram:
-                size: 102
+                size: 1 # in GiB
             disk:
-                size: 20
+                size: 1 # in GiB
         execution:
             type: docker
             image: nginxdemos/hello
             working_directory: /
-        dnsname: mydocker
-        keys: []
-        provision: []
-        healthcheck: ""
+        dnsname: nginx-demo
 nodes:
     node1:
         allocations:
             - alloc1
         ports:
-            - private: 1
+            - public: 8080
+              private: 80
               allocation: alloc1
-        location:
-            accept: []
-            reject: []

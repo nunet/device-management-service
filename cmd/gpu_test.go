@@ -25,17 +25,24 @@ import (
 func TestGPUCommand(t *testing.T) {
 	t.Parallel()
 
+	t.Run("must be able to initialise the gpu command", func(t *testing.T) {
+		t.Parallel()
+
+		gpuCmd := newGPUCommand()
+		require.NotNil(t, gpuCmd)
+	})
+
 	t.Run("must be able to list gpus", func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		hardwareManager := NewMockHardwareManager(ctrl)
-		gpuListCmd := newGPUListCommand(hardwareManager)
+		gpuManager := NewMockGPUManager(ctrl)
+		gpuListCmd := newGPUListCommand(gpuManager)
 		require.NotNil(t, gpuListCmd)
 
-		machineResources, machineUsage := getMockResourcesAndUsage()
-		hardwareManager.EXPECT().GetMachineResources().Return(machineResources, nil).Times(1)
-		hardwareManager.EXPECT().GetUsage().Return(machineUsage, nil).Times(1)
+		gpus, gpuUsage := getMockGPUsAndUsage()
+		gpuManager.EXPECT().GetGPUs().Return(gpus, nil).Times(1)
+		gpuManager.EXPECT().GetGPUUsage().Return(gpuUsage, nil).Times(1)
 		err := gpuListCmd.RunE(nil, nil)
 		require.NoError(t, err)
 	})
@@ -44,14 +51,14 @@ func TestGPUCommand(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		hardwareManager := NewMockHardwareManager(ctrl)
+		gpuManager := NewMockGPUManager(ctrl)
 		dockerClient := NewMockClientInterface(ctrl)
 
-		gpuTestCmd := newGPUTestCommand(hardwareManager, dockerClient)
+		gpuTestCmd := newGPUTestCommand(gpuManager, dockerClient)
 		require.NotNil(t, gpuTestCmd)
 
-		machineResources, _ := getMockResourcesAndUsage()
-		hardwareManager.EXPECT().GetMachineResources().Return(machineResources, nil).Times(1)
+		gpus, _ := getMockGPUsAndUsage()
+		gpuManager.EXPECT().GetGPUs().Return(gpus, nil).Times(1)
 		dockerClient.EXPECT().IsInstalled(gomock.Any()).Return(true).Times(1)
 		dockerClient.EXPECT().CreateContainer(gomock.Any(),
 			gomock.Any(),
@@ -84,76 +91,68 @@ func TestGPUCommand(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		hardwareManager := NewMockHardwareManager(ctrl)
+		gpuManager := NewMockGPUManager(ctrl)
 		dockerClient := NewMockClientInterface(ctrl)
 
-		gpuTestCmd := newGPUTestCommand(hardwareManager, dockerClient)
+		gpuTestCmd := newGPUTestCommand(gpuManager, dockerClient)
 		require.NotNil(t, gpuTestCmd)
 
-		machineResources := types.MachineResources{}
-		hardwareManager.EXPECT().GetMachineResources().Return(machineResources, nil).Times(1)
-
+		gpuManager.EXPECT().GetGPUs().Return([]types.GPU{}, nil).Times(1)
 		err := gpuTestCmd.RunE(nil, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no GPUs found")
 	})
 }
 
-func getMockResourcesAndUsage() (types.MachineResources, types.Resources) {
-	machineResources := types.MachineResources{
-		Resources: types.Resources{
-			GPUs: []types.GPU{
-				{
-					Index:      0,
-					Model:      "Tesla V100",
-					Vendor:     types.GPUVendorAMDATI,
-					VRAM:       16000000000,
-					PCIAddress: "0000:00:00.0",
-				},
-				{
-					Index:      1,
-					Model:      "An AMD GPU",
-					Vendor:     types.GPUVendorAMDATI,
-					VRAM:       8000000000,
-					PCIAddress: "0000:00:00.1",
-				},
-				{
-					Index:      2,
-					Model:      "An Intel GPU",
-					Vendor:     types.GPUVendorIntel,
-					VRAM:       4000000000,
-					PCIAddress: "0000:00:00.2",
-				},
-			},
+func getMockGPUsAndUsage() (types.GPUs, types.GPUs) {
+	gpus := []types.GPU{
+		{
+			Index:      0,
+			Model:      "Tesla V100",
+			Vendor:     types.GPUVendorAMDATI,
+			VRAM:       16000000000,
+			PCIAddress: "0000:00:00.0",
+		},
+		{
+			Index:      1,
+			Model:      "An AMD GPU",
+			Vendor:     types.GPUVendorAMDATI,
+			VRAM:       8000000000,
+			PCIAddress: "0000:00:00.1",
+		},
+		{
+			Index:      2,
+			Model:      "An Intel GPU",
+			Vendor:     types.GPUVendorIntel,
+			VRAM:       4000000000,
+			PCIAddress: "0000:00:00.2",
 		},
 	}
-	machineUsage := types.Resources{
-		GPUs: []types.GPU{
-			{
-				Index:      0,
-				Model:      "Tesla V100",
-				Vendor:     types.GPUVendorAMDATI,
-				VRAM:       8000000000,
-				PCIAddress: "0000:00:00.0",
-			},
-			{
-				Index:      1,
-				Model:      "An AMD GPU",
-				Vendor:     types.GPUVendorAMDATI,
-				VRAM:       4000000000,
-				PCIAddress: "0000:00:00.1",
-			},
-			{
-				Index:      2,
-				Model:      "An Intel GPU",
-				Vendor:     types.GPUVendorIntel,
-				VRAM:       2000000000,
-				PCIAddress: "0000:00:00.2",
-			},
+	gpuUsage := []types.GPU{
+		{
+			Index:      0,
+			Model:      "Tesla V100",
+			Vendor:     types.GPUVendorAMDATI,
+			VRAM:       8000000000,
+			PCIAddress: "0000:00:00.0",
+		},
+		{
+			Index:      1,
+			Model:      "An AMD GPU",
+			Vendor:     types.GPUVendorAMDATI,
+			VRAM:       4000000000,
+			PCIAddress: "0000:00:00.1",
+		},
+		{
+			Index:      2,
+			Model:      "An Intel GPU",
+			Vendor:     types.GPUVendorIntel,
+			VRAM:       2000000000,
+			PCIAddress: "0000:00:00.2",
 		},
 	}
 
-	return machineResources, machineUsage
+	return gpus, gpuUsage
 }
 
 // dataToReadCloser converts a string into an io.ReadCloser

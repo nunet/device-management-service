@@ -13,14 +13,17 @@ import (
 	"fmt"
 	"os"
 
+	"gitlab.com/nunet/device-management-service/executor/docker"
+
+	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func newGPUCommand(hardwareManager types.HardwareManager, dockerClient docker.ClientInterface) *cobra.Command {
+func newGPUCommand() *cobra.Command {
 	gpuCmd := &cobra.Command{
 		Use:   "gpu <operation>",
 		Short: "Manage GPU resources",
@@ -31,64 +34,69 @@ func newGPUCommand(hardwareManager types.HardwareManager, dockerClient docker.Cl
 	}
 
 	// Add subcommands
-	gpuCmd.AddCommand(newGPUListCommand(hardwareManager))
-	gpuCmd.AddCommand(newGPUTestCommand(hardwareManager, dockerClient))
+	gpuManager := gpu.NewGPUManager()
+	dockerClient, err := docker.NewDockerClient()
+	if err != nil {
+		panic(fmt.Sprintf("error creating docker client: %v", err))
+	}
+	gpuCmd.AddCommand(newGPUListCommand(gpuManager))
+	gpuCmd.AddCommand(newGPUTestCommand(gpuManager, dockerClient))
 
 	return gpuCmd
 }
 
-func newGPUListCommand(hardwareManager types.HardwareManager) *cobra.Command {
+func newGPUListCommand(gpuManager types.GPUManager) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List all available GPUs",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			machineResources, err := hardwareManager.GetMachineResources()
+			gpus, err := gpuManager.GetGPUs()
 			if err != nil {
-				return fmt.Errorf("error getting machine resources: %w", err)
+				return fmt.Errorf("get gpus: %w", err)
 			}
-			machineUsage, err := hardwareManager.GetUsage()
+			gpuUsage, err := gpuManager.GetGPUUsage()
 			if err != nil {
-				return fmt.Errorf("error getting GPU usage: %w", err)
+				return fmt.Errorf("get GPU usage: %w", err)
 			}
 
-			if len(machineResources.GPUs) == 0 {
+			if len(gpus) == 0 {
 				log.Info("No GPUs detected on the host")
 				return nil
 			}
 
-			if len(machineResources.GPUs) != len(machineUsage.GPUs) {
-				return fmt.Errorf("GPU and GPU usage counts do not match. This is a bug")
+			if len(gpus) != len(gpuUsage) {
+				return fmt.Errorf("internal error: GPU count mismatch")
 			}
 
 			fmt.Println("GPU Details:")
-			for i, g := range machineResources.GPUs {
+			for i, g := range gpus {
 				fmt.Printf("Model: %s, Total VRAM: %.2f GB, Used VRAM: %.2f GB, Vendor: %s, PCI Address: %s, UUID: %s, Index: %d\n",
-					g.Model, g.VRAMInGB(), machineUsage.GPUs[i].VRAMInGB(), g.Vendor, g.PCIAddress, g.UUID, g.Index)
+					g.Model, g.VRAMInGB(), gpuUsage[i].VRAMInGB(), g.Vendor, g.PCIAddress, g.UUID, g.Index)
 			}
 			return nil
 		},
 	}
 }
 
-func newGPUTestCommand(hardwareManager types.HardwareManager, dockerClient docker.ClientInterface) *cobra.Command {
+func newGPUTestCommand(gpuManager types.GPUManager, dockerClient docker.ClientInterface) *cobra.Command {
 	return &cobra.Command{
 		Use:   "test",
 		Short: "Test GPU deployment by running a Docker container with GPU resources",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			machineResources, err := hardwareManager.GetMachineResources()
+			gpus, err := gpuManager.GetGPUs()
 			if err != nil {
-				return fmt.Errorf("getting machine resources: %v", err)
+				return fmt.Errorf("get gpus: %w", err)
 			}
 
-			if len(machineResources.GPUs) == 0 {
+			if len(gpus) == 0 {
 				return fmt.Errorf("no GPUs found")
 			}
 
-			maxFreeVRAMGpu, err := machineResources.GPUs.MaxFreeVRAMGPU()
+			maxFreeVRAMGpu, err := gpus.MaxFreeVRAMGPU()
 			if err != nil {
-				return fmt.Errorf("getting GPU with highest free VRAM: %v", err)
+				return fmt.Errorf("get GPU with max free VRAM: %v", err)
 			}
-			fmt.Printf("Selected Vendor: %s, Device: %+v\n", maxFreeVRAMGpu.Vendor, maxFreeVRAMGpu)
+			fmt.Printf("Selected Vendor: %s, Device: %s", maxFreeVRAMGpu.Vendor, maxFreeVRAMGpu.Model)
 
 			if maxFreeVRAMGpu.Vendor == types.GPUVendorNvidia {
 				// Check if NVIDIA container toolkit is installed
@@ -104,7 +112,7 @@ func newGPUTestCommand(hardwareManager types.HardwareManager, dockerClient docke
 			imageName := "ubuntu:20.04"
 
 			if !dockerClient.IsInstalled(context.Background()) {
-				return fmt.Errorf("docker is not installed or running. Cannot run GPU deployment test")
+				return fmt.Errorf("docker is not installed or running")
 			}
 
 			fmt.Printf("Creating the docker conainer for the image: %s\n", imageName)

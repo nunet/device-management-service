@@ -9,6 +9,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -66,7 +67,7 @@ type ClientInterface interface {
 		since string,
 		follow bool,
 	) (io.ReadCloser, error)
-	Exec(ctx context.Context, containerID string, cmd []string) (int, string, error)
+	Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error)
 }
 
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
@@ -383,8 +384,27 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 	}
 
 	err = fmt.Errorf("unable to find container for %s=%s", label, value)
-	log.Errorw("docker_find_container_failure", "error", err)
+	log.Warnw("docker_find_container_failure", "error", err)
 	return "", err
+}
+
+// HasImage checks if an image exists locally
+func (c *Client) HasImage(ctx context.Context, imageName string) bool {
+	// If imageName does not contain a tag, we need to append ":latest" to the image name
+	if !strings.Contains(imageName, ":") {
+		imageName = fmt.Sprintf("%s:latest", imageName)
+	}
+
+	_, _, err := c.client.ImageInspectWithRaw(ctx, imageName)
+	if err != nil {
+		if client.IsErrNotFound(err) {
+			return false
+		}
+		log.Warnf("Failed to inspect image: %v", err)
+		return false
+	}
+
+	return true
 }
 
 // GetImage returns detailed information about a Docker image.
@@ -449,7 +469,9 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 	return digest, nil
 }
 
-func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (int, string, error) {
+// Exec executes a command inside a running container.
+// Returns (exit code, stdout, stderr, and an error if the operation fails)
+func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error) {
 	log.Infow("docker_container_exec_started", "container ID", containerID)
 
 	idresp, err := c.client.ContainerExecCreate(ctx, containerID, container.ExecOptions{
@@ -459,7 +481,7 @@ func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (in
 	})
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
 	hijconn, err := c.client.ContainerExecAttach(ctx, idresp.ID, container.ExecAttachOptions{
@@ -468,28 +490,26 @@ func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (in
 	})
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
 	defer hijconn.Close()
 
-	var outputStr string
+	var stdout, stderr bytes.Buffer
 
-	out, err := io.ReadAll(hijconn.Reader)
+	n, err := stdcopy.StdCopy(&stdout, &stderr, hijconn.Reader)
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
-	outputStr = string(out)
-
-	log.Infow("docker_container_exec_success", "output string", outputStr)
+	log.Debugf("Exec output: %d bytes", n)
 
 	execInspect, err := c.client.ContainerExecInspect(ctx, idresp.ID)
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
-		return 1, "", err
+		return 1, "", "", err
 	}
 
-	return execInspect.ExitCode, outputStr, nil
+	return execInspect.ExitCode, stdout.String(), stderr.String(), nil
 }

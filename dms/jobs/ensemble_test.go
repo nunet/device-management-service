@@ -39,8 +39,8 @@ func TestGenerateEnsemble(t *testing.T) {
 		Executor: job_types.ExecutorDocker,
 		Resources: types.Resources{
 			CPU:  types.CPU{ClockSpeed: 2, Cores: 2, Threads: 2, Architecture: ""},
-			RAM:  types.RAM{Size: 1024, ClockSpeed: 3, Type: ""},
-			Disk: types.Disk{Size: 20000},
+			RAM:  types.RAM{Size: 4, ClockSpeed: 3, Type: ""},
+			Disk: types.Disk{Size: 20},
 			GPUs: types.GPUs{
 				{
 					Vendor: "",
@@ -58,8 +58,8 @@ func TestGenerateEnsemble(t *testing.T) {
 		Executor: job_types.ExecutorFirecracker,
 		Resources: types.Resources{
 			CPU:  types.CPU{ClockSpeed: 2, Cores: 2, Threads: 2, Architecture: ""},
-			RAM:  types.RAM{Size: 1024, ClockSpeed: 3, Type: ""},
-			Disk: types.Disk{Size: 20000},
+			RAM:  types.RAM{Size: 4, ClockSpeed: 3, Type: ""},
+			Disk: types.Disk{Size: 20},
 			GPUs: make(types.GPUs, 0),
 		},
 		Execution: *firecrackerspec,

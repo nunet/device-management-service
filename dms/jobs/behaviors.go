@@ -9,6 +9,8 @@
 package jobs
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -36,18 +38,17 @@ const (
 	AllocationDeploymentTimeout  = 5 * time.Second
 	RevertDeploymentBehavior     = "/dms/deployment/revert"
 
-	AllocationStartBehavior    = "/dms/allocation/start"
-	AllocationRestartBehavior  = "/dms/allocation/restart"
-	AllocationGetLogsBehavior  = "/dms/allocation/logs"
-	AllocationStartTimeout     = 5 * time.Second
-	AllocationStopBehavior     = "/dms/allocation/stop"
-	AllocationStopTimeout      = 3 * time.Second
-	AllocationShutdownBehavior = "/dms/allocation/shutdown"
-	AllocationShutdownTimeout  = 5 * time.Second
+	AllocationStartBehavior   = "/dms/allocation/start"
+	AllocationRestartBehavior = "/dms/allocation/restart"
+	AllocationStartTimeout    = 5 * time.Second
+	AllocationShutdownTimeout = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 
 	MaxBidMultiplier = 8
+
+	SubnetCreateTimeout  = 2 * time.Minute
+	SubnetDestroyTimeout = 30 * time.Second
 )
 
 var (
@@ -69,6 +70,9 @@ var (
 	SubnetUnmapPortBehavior       = AllocationNamespace + "/subnet/unmap-port"
 	SubnetDNSAddRecordsBehavior   = AllocationNamespace + "/subnet/dns/add-records"
 	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
+
+	AllocationLogsBehavior     = EnsembleNamespace + "/allocation/logs"
+	AllocationShutdownBehavior = EnsembleNamespace + "/allocation/shutdown"
 )
 
 type VerifyEdgeConstraintRequest struct {
@@ -88,6 +92,7 @@ type CommitDeploymentRequest struct {
 	AllocationName string
 	NodeID         string
 	Resources      types.Resources
+	PortMapping    map[int]int
 }
 
 type CommitDeploymentResponse struct {
@@ -115,12 +120,13 @@ type AllocationDeploymentResponse struct {
 }
 
 type RevertDeploymentMessage struct {
-	EnsembleID     string
-	AllocationsIDs []string
+	EnsembleID   string
+	AllocsByName []string
 }
 
 type AllocationStartRequest struct {
 	SubnetIP    string
+	GatewayIP   string
 	PortMapping map[int]int
 }
 
@@ -129,11 +135,14 @@ type AllocationStartResponse struct {
 	Error string
 }
 
-type AllocationGetLogsRequest struct{}
+type AllocationLogsRequest struct {
+	AllocName string
+}
 
-type AllocationGetLogsResponse struct {
-	Data  []byte
-	Error string
+type AllocationLogsResponse struct {
+	Stdout []byte
+	Stderr []byte
+	Error  string
 }
 
 type AllocationShutdownRequest struct {
@@ -269,4 +278,12 @@ type RegisterHealthcheckRequest struct {
 type RegisterHealthcheckResponse struct {
 	OK    bool
 	Error string
+}
+
+func EnsembleIDFromBehavior(b string) (string, error) {
+	parts := strings.Split(b, "/")
+	if len(parts) > 3 {
+		return parts[3], nil
+	}
+	return "", fmt.Errorf("invalid ensemble behavior: %s", b)
 }

@@ -10,6 +10,8 @@ package node
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -51,7 +53,6 @@ type NewDeploymentResponse struct {
 func (n *Node) newDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
-	log.Infof("new deployment: %+v", msg)
 	if time.Until(msg.Expiry()) < MinDeploymentTime {
 		log.Debugf("deployment time too short")
 		n.sendReply(msg, NewDeploymentResponse{
@@ -126,9 +127,9 @@ func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 }
 
 func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
-	ensembleID, err := uuid.NewUUID()
+	ensembleID, err := createEnsembleID(n.actor.Handle().Address.HostID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
+		return nil, fmt.Errorf("failed to create ensemble id: %w", err)
 	}
 
 	actor, err := n.actor.CreateChild(n.actor.Handle(), actor.BasicActorParams{})
@@ -136,12 +137,26 @@ func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.Ensemb
 		return nil, fmt.Errorf("failed to create child actor: %w", err)
 	}
 
-	orch, err := jobs.NewOrchestrator(ctx, ensembleID.String(), actor, n.network, ensemble)
+	orch, err := jobs.NewOrchestrator(ctx, ensembleID, actor, n.network, ensemble)
 	if err != nil {
 		return nil, err
 	}
 
 	return orch, nil
+}
+
+func createEnsembleID(peerID string) (string, error) {
+	var id string
+
+	suffixID, err := uuid.NewUUID()
+	if err != nil {
+		return id, fmt.Errorf("failed to generate uuid for allocation inbox: %w", err)
+	}
+
+	h := sha256.New()
+	h.Write([]byte(peerID + suffixID.String()))
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func (n *Node) saveDeployments() error {
@@ -279,6 +294,13 @@ func (n *Node) restoreDeployments() error {
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
+	// ignore bid request from self if broadcasted
+	// only accept self bid if own peer specified on ensemble
+	if msg.IsBroadcast() &&
+		n.actor.Handle().Address.HostID == msg.From.Address.HostID {
+		return
+	}
+
 	log.Debugf("got a bid request from: %+v", &msg.From.Address)
 
 	onboarded, err := n.onboarder.IsOnboarded()
@@ -372,28 +394,23 @@ loop:
 		return
 	}
 
-	// TODO-MR: handle static port allocation via port allocator
-
-	// handle dynamic port allocs
-	// TODO: dynamic port allocs should be on committing phase
-	allocKey := request.ID
-	ports, err := n.portAllocator.Allocate(allocKey, toAnswer.V1.PublicPorts.Dynamic)
-	if err != nil {
-		log.Debugf("failed to allocate ports")
+	if ok := n.portAllocator.Allocated(toAnswer.V1.PublicPorts.Static); ok {
+		log.Debugf("static ports already allocated")
 		return
 	}
-	cleanup := func() {
-		n.portAllocator.Release(allocKey)
+
+	if ok := n.portAllocator.PortsAvailable(toAnswer.V1.PublicPorts.Dynamic); !ok {
+		log.Debugf("dynamic ports not available")
+		return
 	}
 
 	log.Debugf("signing bid with did: %+v", n.actor.Security().DID())
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
-		cleanup()
 		log.Debugf("bid request: failed to get provider: %w", err)
 		return
 	}
-	log.Debugf("signing bid with provider: %+v", provider)
+	log.Debugf("signing bid with provider: %v", provider.DID())
 
 	bid := job_types.Bid{
 		V1: &job_types.BidV1{
@@ -411,13 +428,12 @@ loop:
 
 	err = bid.Sign(provider)
 	if err != nil {
-		cleanup()
 		log.Debugf("bid request: failed to sign bid: %w", err)
 		return
 	}
 
 	n.sendReply(msg, bid)
-	n.rememberBid(request.ID, toAnswer, ports)
+	n.rememberBid(request.ID, toAnswer)
 }
 
 func (n *Node) handleRevertDeployment(msg actor.Envelope) {
@@ -429,85 +445,87 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	}
 	ensembleID := request.EnsembleID
 
-	// try revert bid if exists
-	// TODO: remove this part if port allocation be moved to committing phase
-	n.mx.Lock()
-	_, ok := n.bids[ensembleID]
-	n.mx.Unlock()
-	if ok {
-		n.portAllocator.Release(ensembleID)
-	}
+	for _, allocName := range request.AllocsByName {
+		allocID := n.constructAllocationID(ensembleID, allocName)
 
-	// try revert commit phase
-	n.mx.Lock()
-	_, ok = n.commitedResources[ensembleID]
-	n.mx.Unlock()
-	if ok {
-		err := n.releaseCommit(ensembleID)
-		if err != nil {
-			log.Errorf("failed to revert commit for ensemble id: %s: %s", ensembleID, err)
-			// we have to try to revert allocation too, so do not return
+		// try revert commit phase
+		n.mx.Lock()
+		_, ok := n.commitedResources[allocID]
+		n.mx.Unlock()
+		if ok {
+			err := n.releaseCommit(allocID)
+			if err != nil {
+				log.Errorf("failed to revert commit for ensemble id: %s: %s", ensembleID, err)
+				// we have to try to revert other allocations too, so do not return
+			}
 		}
-	}
 
-	// try revert allocations if exist
-	for _, allocID := range request.AllocationsIDs {
-		err := n.releaseAllocation(allocID)
-		if err != nil {
-			log.Errorf("failed to revert allocation %s: %s", allocID, err)
+		// try revert allocations if exist
+		_, err := n.GetAllocation(allocID)
+		if err == nil {
+			// allocation exists
+			err := n.releaseAllocation(allocID)
+			if err != nil {
+				log.Errorf("failed to revert allocation %s: %s", allocID, err)
+			}
 		}
 	}
 	log.Infof("deployment reverted: %+v", ensembleID)
 }
 
-func (n *Node) releaseCommit(eid string) error {
-	err := n.resourceManager.UncommitResources(context.TODO(), eid)
+func (n *Node) releaseCommit(allocID string) error {
+	err := n.resourceManager.UncommitResources(context.TODO(), allocID)
 	if err != nil {
-		return fmt.Errorf("failed to release resources for ensemble id: %s: %w", eid, err)
+		return fmt.Errorf("failed to release resources for ensemble allocID: %s: %w", allocID, err)
 	}
 
+	n.portAllocator.Release(allocID)
+
 	n.mx.Lock()
-	delete(n.commitedResources, eid)
+	delete(n.commitedResources, allocID)
 	n.mx.Unlock()
 
 	return nil
 }
 
 func (n *Node) releaseAllocation(allocID string) error {
-	n.mx.Lock()
+	n.allocmx.Lock()
+	defer n.allocmx.Unlock()
+
 	alloc, ok := n.allocations[allocID]
-	n.mx.Unlock()
 	if !ok {
-		log.Debugf("allocation %s not found (it may be already released)", allocID)
+		// only warn because it is possible that the allocation was already released
+		// but would be good to have custom erro types defined for this
+		log.Warnf("allocation %s not found", allocID)
 		return nil
 	}
 
-	err := alloc.Stop(context.TODO())
+	n.portAllocator.Release(allocID)
+
+	err := n.resourceManager.DeallocateResources(n.ctx, allocID)
 	if err != nil {
-		return fmt.Errorf("failed to stop allocation %s: %w", allocID, err)
+		return fmt.Errorf("failed to deallocate resources for allocation id: %s: %w", allocID, err)
 	}
 
-	n.mx.Lock()
-	delete(n.allocations, allocID)
-	n.mx.Unlock()
+	// stop and cleanup
+	err = alloc.Terminate(n.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to shutdown allocation: %w", err)
+	}
 
+	delete(n.allocations, allocID)
+
+	log.Infof("allocation %s released", allocID)
 	return nil
 }
 
-func (n *Node) rememberBid(eid string, req job_types.BidRequest, ports []int) {
+func (n *Node) rememberBid(eid string, req job_types.BidRequest) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
-
-	_, exists := n.bids[eid]
-	if exists {
-		// we have an older bid
-		n.portAllocator.Release(eid)
-	}
 
 	n.bids[eid] = &bidState{
 		expire:  time.Now().Add(bidStateTimeout),
 		request: req,
-		ports:   ports,
 	}
 }
 
@@ -543,7 +561,6 @@ func (n *Node) doGCBidState() {
 
 	for k, bs := range n.bids {
 		if bs.expire.Before(now) {
-			n.portAllocator.Release(k)
 			delete(n.bids, k)
 		}
 	}

@@ -12,37 +12,55 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/network"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type RESTServerConfig struct {
-	P2P        *libp2p.Libp2p
-	Onboarding *onboarding.Onboarding
-	Resource   types.ResourceManager
-	MidW       []gin.HandlerFunc
-	Port       uint32
-	Addr       string
+type ServerConfig struct {
+	P2P         network.Network
+	Onboarding  *onboarding.Onboarding
+	Resource    types.ResourceManager
+	Middlewares []gin.HandlerFunc
+	Port        uint32
+	Addr        string
 }
 
-// RESTServer represents a HTTP server
-type RESTServer struct {
+// getCorsConfig returns the default CORS configuration
+func getCorsConfig() cors.Config {
+	return cors.Config{
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
+		AllowHeaders:     []string{"Access-Control-Allow-Origin", "Origin", "Content-Length", "Content-Type"},
+		AllowOrigins:     []string{"http://localhost:9991", "http://localhost:9992"}, // TODO: this is a security risk
+		AllowCredentials: false,
+		MaxAge:           12 * time.Hour,
+	}
+}
+
+func setupRouter(middlewares []gin.HandlerFunc) *gin.Engine {
+	middlewares = append(middlewares, cors.New(getCorsConfig()))
+	router := gin.Default()
+	router.Use(middlewares...)
+	return router
+}
+
+// Server represents a REST server
+type Server struct {
 	router *gin.Engine
-	config *RESTServerConfig
+	config *ServerConfig
 }
 
-// NewRESTServer is a constructor function for RESTServer
-// It returns a pointer to RESTServer
-func NewRESTServer(config *RESTServerConfig) *RESTServer {
+// NewServer creates a new REST server
+func NewServer(config *ServerConfig) *Server {
 	endTrace := observability.StartTrace("rest_server_init_duration")
 	defer endTrace()
 
-	rs := &RESTServer{
-		router: setupRouter(config.MidW),
+	rs := &Server{
+		router: setupRouter(config.Middlewares),
 		config: config,
 	}
 
@@ -50,20 +68,20 @@ func NewRESTServer(config *RESTServerConfig) *RESTServer {
 	return rs
 }
 
-func setupRouter(mid []gin.HandlerFunc) *gin.Engine {
-	mid = append(mid, cors.New(getCustomCorsConfig()))
-	router := gin.Default()
-	router.Use(mid...)
-	return router
+// HealthCheck is a health check endpoint
+func (rs *Server) HealthCheck(c *gin.Context) {
+	c.JSON(200, gin.H{"status": "ok"})
 }
 
-// InitializeRoutes sets up all the endpoint routes
-func (rs *RESTServer) InitializeRoutes() {
+// SetupRoutes sets up all the endpoint routes
+func (rs *Server) SetupRoutes() {
 	endTrace := observability.StartTrace("rest_server_route_init_duration")
 	defer endTrace()
 
-	v1 := rs.router.Group("/api/v1")
+	// /health route
+	rs.router.GET("/health", rs.HealthCheck)
 
+	v1 := rs.router.Group("/api/v1")
 	// /actor routes
 	actor := v1.Group("/actor")
 	{
@@ -77,7 +95,7 @@ func (rs *RESTServer) InitializeRoutes() {
 }
 
 // Run starts the server on the specified port
-func (rs *RESTServer) Run() error {
+func (rs *Server) Run() error {
 	endTrace := observability.StartTrace("rest_server_run_duration")
 	defer endTrace()
 
@@ -89,21 +107,4 @@ func (rs *RESTServer) Run() error {
 
 	log.Infow("rest_server_run_success", "addr", addr)
 	return nil
-}
-
-func getCustomCorsConfig() cors.Config {
-	config := defaultConfig()
-	// FIXME: This is a security concern.
-	config.AllowOrigins = []string{"http://localhost:9991", "http://localhost:9992"}
-	return config
-}
-
-// defaultConfig returns a generic default configuration mapped to localhost.
-func defaultConfig() cors.Config {
-	return cors.Config{
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
-		AllowHeaders:     []string{"Access-Control-Allow-Origin", "Origin", "Content-Length", "Content-Type"},
-		AllowCredentials: false,
-		MaxAge:           12 * time.Hour,
-	}
 }

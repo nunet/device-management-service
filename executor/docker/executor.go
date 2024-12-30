@@ -48,8 +48,6 @@ const (
 
 	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
 
-	dnsResolverIP = "10.0.0.1"
-
 	enableTTY = false
 )
 
@@ -235,6 +233,16 @@ func (e *Executor) Cancel(ctx context.Context, executionID string) error {
 	return handler.kill(ctx)
 }
 
+// Remove removes a container identified by its executionID.
+// It returns an error if the execution is not found.
+func (e *Executor) Remove(executionID string, timeout time.Duration) error {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return fmt.Errorf("execution (%s) not found", executionID)
+	}
+	return handler.destroy(timeout)
+}
+
 // GetLogStream provides a stream of output logs for a specific execution.
 // Parameters 'withHistory' and 'follow' control whether to include past logs
 // and whether to keep the stream open for new logs, respectively.
@@ -395,8 +403,14 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 }
 
 // Exec executes a command in the container with the given containerID.
-func (e *Executor) Exec(ctx context.Context, containerID string, command []string) (int, string, error) {
-	return e.client.Exec(ctx, containerID, command)
+// Returns the exit code, stdout, stderr and an error if the execution fails.
+func (e *Executor) Exec(ctx context.Context, executionID string, command []string) (int, string, string, error) {
+	h, found := e.handlers.Get(executionID)
+	if !found {
+		return 0, "", "", fmt.Errorf("failed to get execution handler for execution=%q", executionID)
+	}
+
+	return e.client.Exec(ctx, h.containerID, command)
 }
 
 // newDockerExecutionContainer is an internal method called by Start to set up a new Docker container
@@ -489,6 +503,8 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to configure host config: %w", err)
 	}
 
+	hasImage := e.client.HasImage(ctx, dockerArgs.Image)
+
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
 		&containerConfig,
@@ -496,7 +512,7 @@ func (e *Executor) newDockerExecutionContainer(
 		nil,
 		nil,
 		labelExecutionValue(e.ID, params.JobID, params.ExecutionID),
-		true,
+		!hasImage, // only pull if we don't have the image
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
@@ -649,8 +665,15 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 
 	hostConfig.PortBindings = portMaps
 	hostConfig.Privileged = dockerArgs.Privileged
-	hostConfig.DNS = []string{"1.1.1.1", dnsResolverIP}
+
+	// Configure DNS settings
+	hostConfig.DNS = []string{params.GatewayIP, "1.1.1.1"}
 	hostConfig.DNSSearch = []string{"internal"}
+	hostConfig.DNSOptions = []string{
+		"ndots:1", // reduce DNS lookups by setting ndots lower
+		"timeout:2",
+		"attempts:1",
+	}
 
 	return hostConfig, nil
 }

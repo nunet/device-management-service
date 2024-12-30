@@ -229,7 +229,7 @@ Examples:
 This behavior is used to onboard a node to the DMS, making its resources available for use.
 
 Examples:
-  nunet actor cmd --context user /dms/node/onboarding/onboard --memory 1 --cpu 2`,
+  nunet actor cmd --context user /dms/node/onboarding/onboard --disk 1 --ram 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
 	node.OffboardBehavior: {
@@ -920,39 +920,50 @@ Examples:
 				return nil, fmt.Errorf("failed to encode payload")
 			}
 
-			result := &node.CapAnchorRequest{}
+			request := &node.CapAnchorRequest{
+				Require: ucan.TokenList{
+					Tokens: []*ucan.Token{},
+				},
+				Provide: ucan.TokenList{
+					Tokens: []*ucan.Token{},
+				},
+				Revoke: ucan.TokenList{
+					Tokens: []*ucan.Token{},
+				},
+				Root: []did.DID{},
+			}
 			switch {
 			case req.Root:
 				root, err := did.FromString(req.Data)
 				if err != nil {
 					return nil, err
 				}
-				result.Root = append(result.Root, root)
+				request.Root = append(request.Root, root)
 
 			case req.Require:
 				var token ucan.Token
 				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
 					return nil, err
 				}
-				result.Require.Tokens = append(result.Require.Tokens, &token)
+				request.Require.Tokens = append(request.Require.Tokens, &token)
 
 			case req.Provide:
 				var token ucan.Token
 				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
 					return nil, err
 				}
-				result.Provide.Tokens = append(result.Provide.Tokens, &token)
+				request.Provide.Tokens = append(request.Provide.Tokens, &token)
 
 			case req.Revoke:
 				var token ucan.Token
 				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
 					return nil, err
 				}
-				result.Revoke.Tokens = append(result.Revoke.Tokens, &token)
 
+				request.Revoke.Tokens = append(request.Revoke.Tokens, &token)
 			}
 
-			return req, nil
+			return request, nil
 		},
 		Short: "Add capability anchors",
 		Long: `Invokes the /dms/cap/anchor behavior on an actor

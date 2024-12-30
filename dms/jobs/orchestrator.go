@@ -28,8 +28,9 @@ import (
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/network"
-	"gitlab.com/nunet/device-management-service/network/utils"
+	net_utils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const MaxPermutations = 1_000_000
@@ -288,7 +289,7 @@ deploy:
 		for _, allocation := range manifest.Allocations {
 			allocations[allocation.ID] = allocation.Handle
 		}
-		go o.supervise(allocations, manifest)
+		go o.supervise()
 
 		return nil
 	}
@@ -300,13 +301,16 @@ deploy:
 
 func (o *Orchestrator) Shutdown() {
 	nodes := o.manifest.Nodes
-
+	o.setStatus(DeploymentStatusShuttingDown)
 	o.mx.Lock()
-	defer o.mx.Unlock()
 
-	if o.cancel != nil {
-		o.cancel()
-	}
+	defer func() {
+		o.mx.Unlock()
+		o.setStatus(DeploymentStatusCompleted)
+		if o.cancel != nil {
+			o.cancel()
+		}
+	}()
 
 	wg := sync.WaitGroup{}
 	for _, node := range nodes {
@@ -328,7 +332,7 @@ func (o *Orchestrator) Shutdown() {
 				return
 			}
 
-			// invoke the stop message
+			// invoke the subnet destroy message
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
 				log.Errorf("error invoking stop message for %s/%s: %s", o.manifest.ID, id, err)
@@ -341,17 +345,17 @@ func (o *Orchestrator) Shutdown() {
 			case reply = <-replyCh:
 				defer reply.Discard()
 				var resp SubnetDestroyResponse
-				if err := json.Unmarshal(msg.Message, &resp); err != nil {
-					log.Errorf("error unmarshalling subnet destroy response: %s", err)
+				if err := json.Unmarshal(reply.Message, &resp); err != nil {
+					log.Errorf("error unmarshalling subnet destroy response: %v", err)
 					return
 				}
 				if !resp.OK {
-					log.Errorf("failed to destroy subnet %s/%s", o.manifest.ID, id)
+					log.Errorf("failed to destroy subnet %s/%s: %v", o.manifest.ID, id, resp.Error)
 					return
 				}
 
-			case <-time.After(AllocationStopTimeout):
-				log.Errorf("timeout stopping node %s/%s", o.manifest.ID, id)
+			case <-time.After(SubnetDestroyTimeout):
+				log.Errorf("timeout destroying subnet %s", o.manifest.ID)
 				return
 			}
 
@@ -361,31 +365,29 @@ func (o *Orchestrator) Shutdown() {
 
 	wg.Wait()
 
-	allocations := o.manifest.Allocations
-
 	wg = sync.WaitGroup{}
-	for _, allocation := range allocations {
+	for _, alloc := range o.manifest.Allocations {
 		wg.Add(1)
-		go func(h actor.Handle, id string) {
+		go func(h actor.Handle, allocID string) {
 			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				AllocationStopBehavior,
+				fmt.Sprintf(AllocationShutdownBehavior, o.manifest.ID),
 				AllocationStopRequest{
-					AllocationID: id,
+					AllocationID: allocID,
 				},
-				actor.WithMessageExpiry(actor.MakeExpiry(AllocationStopTimeout)),
+				actor.WithMessageExpiry(actor.MakeExpiry(AllocationShutdownTimeout)),
 			)
 			if err != nil {
-				log.Errorf("error creating stop message for %s: %s", id, err)
+				log.Errorf("error creating stop message for alloc: %s: %v", allocID, err)
 				return
 			}
 
 			// invoke the stop message
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
-				log.Errorf("error invoking stop message for %s: %s", id, err)
+				log.Errorf("error invoking stop message for %s: %v", allocID, err)
 				return
 			}
 
@@ -395,20 +397,20 @@ func (o *Orchestrator) Shutdown() {
 			case reply = <-replyCh:
 				defer reply.Discard()
 				var resp AllocationStopResponse
-				if err := json.Unmarshal(msg.Message, &resp); err != nil {
+				if err := json.Unmarshal(reply.Message, &resp); err != nil {
 					log.Errorf("error unmarshalling stop allocation response: %s", err)
 					return
 				}
 				if !resp.OK {
-					log.Errorf("failed to stop allocation %s", id)
+					log.Errorf("failed to stop allocation %s", allocID)
 					return
 				}
-			case <-time.After(AllocationStopTimeout):
-				log.Errorf("timeout stopping allocation %s", allocation.ID)
+			case <-time.After(AllocationShutdownTimeout):
+				log.Errorf("timeout stopping allocation %s", allocID)
 				return
 			}
-			log.Infof("allocation %s stopped", id)
-		}(allocation.Handle, allocation.ID)
+			log.Infof("allocation %s stopped", allocID)
+		}(o.manifest.Nodes[alloc.NodeID].Handle, alloc.ID)
 	}
 
 	wg.Wait()
@@ -456,7 +458,8 @@ func RestoreDeployment(
 	for _, allocation := range manifest.Allocations {
 		allocations[allocation.ID] = allocation.Handle
 	}
-	go o.supervise(allocations, manifest)
+	o.manifest = manifest
+	go o.supervise()
 
 	return o, nil
 }
@@ -993,6 +996,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	}
 
 	allocationNodes := make(map[string]string)
+	portsByAllocation := make(map[string][]job_types.PortConfig)
 	for n, bid := range candidate {
 		ncfg, _ := o.cfg.Node(n)
 		nmf := NodeManifest{
@@ -1004,17 +1008,31 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		}
 		for _, a := range nmf.Allocations {
 			allocationNodes[a] = n
+			// TODO: optimize the manifest format and how node/alloc data is
+			//       being passed around. A bit messy at the moment. see #825
+			for _, portMap := range ncfg.Ports {
+				if portMap.Allocation == a {
+					portsByAllocation[a] = append(portsByAllocation[a], portMap)
+				}
+			}
 		}
 		mf.Nodes[n] = nmf
 	}
 
 	for name, alloc := range o.cfg.Allocations() {
+		allocPorts := make(map[int]int)
+		if ports, ok := portsByAllocation[name]; ok {
+			for _, pc := range ports {
+				allocPorts[pc.Public] = pc.Private
+			}
+		}
 		amf := AllocationManifest{
 			ID:          o.id + "_" + name,
 			NodeID:      allocationNodes[name],
 			Handle:      allocations[name],
 			DNSName:     alloc.DNSName + ".internal",
 			Healthcheck: alloc.HealthCheck,
+			Ports:       allocPorts,
 		}
 		mf.Allocations[name] = amf
 	}
@@ -1024,6 +1042,17 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 
 func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 	ncfg, _ := o.cfg.Node(n)
+
+	getAllocPortMapping := func(allocName string) map[int]int {
+		ports := make(map[int]int)
+		for _, pc := range ncfg.Ports {
+			if pc.Allocation == allocName {
+				ports[pc.Public] = pc.Private
+				break
+			}
+		}
+		return ports
+	}
 
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(ncfg.Allocations))
@@ -1035,6 +1064,8 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 			if !ok {
 				errCh <- fmt.Errorf("allocation %s not found: %w", allocName, ErrDeploymentFailed)
 			}
+
+			allocPorts := getAllocPortMapping(allocName)
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
@@ -1044,6 +1075,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 					AllocationName: allocName,
 					NodeID:         n,
 					Resources:      allocation.Resources,
+					PortMapping:    allocPorts,
 				},
 				actor.WithMessageTimeout(CommitDeploymentTimeout),
 			)
@@ -1102,8 +1134,8 @@ func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
 		h,
 		RevertDeploymentBehavior,
 		RevertDeploymentMessage{
-			EnsembleID:     o.id,
-			AllocationsIDs: ncfg.Allocations,
+			EnsembleID:   o.id,
+			AllocsByName: ncfg.Allocations,
 		},
 	)
 	if err != nil {
@@ -1189,7 +1221,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1. create subnet
 	// 1.a generate routing table
-	cidr, err := utils.GetRandomCIDRInRange(
+	cidr, err := net_utils.GetRandomCIDRInRange(
 		24,
 		net.ParseIP("10.0.0.0"),
 		net.ParseIP("10.255.255.255"),
@@ -1210,7 +1242,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	routingTable := make(map[string]string)
 	indexRoutingTable := make(map[string]string)
 	for allocationID, manifest := range em.Allocations {
-		ip, err := utils.GetNextIP(cidr, usedIPs)
+		ip, err := net_utils.GetNextIP(cidr, usedIPs)
 		log.Debug("Generated IP", ip, "for alllocation", allocationID)
 		if err != nil {
 			return fmt.Errorf("error getting next IP: %w", err)
@@ -1267,7 +1299,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
 					return
 				}
-			case <-time.After(2 * time.Minute):
+			case <-time.After(SubnetCreateTimeout):
 				errCh <- fmt.Errorf("timeout creating subnet: %w", ErrDeploymentFailed)
 				return
 			}
@@ -1388,13 +1420,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
 			if err != nil {
-				errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
+				errCh <- fmt.Errorf("error creating subnet add-dns-records message: %w", err)
 				return
 			}
 
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
-				errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
+				errCh <- fmt.Errorf("error invoking subnet add-dns-records message: %w", err)
 				return
 			}
 
@@ -1414,12 +1446,12 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				}
 
 				if !response.OK {
-					errCh <- fmt.Errorf("error adding peer to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+					errCh <- fmt.Errorf("error sending dns records to peer: %s: %w", response.Error, ErrDeploymentFailed)
 					return
 				}
 
 			case <-time.After(2 * time.Minute):
-				errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
+				errCh <- fmt.Errorf("timeout sending dns records to subnet: %w", ErrDeploymentFailed)
 				return
 			}
 
@@ -1455,6 +1487,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					manifest.Handle,
 					SubnetMapPortBehavior,
 					SubnetMapPortRequest{
+						SubnetID:   em.ID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
 						SourcePort: strconv.Itoa(srcPort),
@@ -1464,13 +1497,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 				)
 				if err != nil {
-					errCh <- fmt.Errorf("error creating subnet add-peer message: %w", err)
+					errCh <- fmt.Errorf("error creating subnet MapPort message: %w", err)
 					return
 				}
 
 				replyCh, err := o.actor.Invoke(msg)
 				if err != nil {
-					errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
+					errCh <- fmt.Errorf("error invoking subnet MapPort message: %w", err)
 					return
 				}
 
@@ -1494,7 +1527,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 						return
 					}
 				case <-time.After(2 * time.Minute):
-					errCh <- fmt.Errorf("timeout adding peer to subnet: %w", ErrDeploymentFailed)
+					errCh <- fmt.Errorf("timeout mapping port for subnet: %w", ErrDeploymentFailed)
 					return
 				}
 
@@ -1532,6 +1565,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				AllocationStartBehavior,
 				AllocationStartRequest{
 					SubnetIP:    indexRoutingTable[allocName],
+					GatewayIP:   gatewayIP,
 					PortMapping: manifest.Ports,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -1749,19 +1783,24 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (job_t
 	return ensembleBidRequest, nil
 }
 
-func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest EnsembleManifest) {
-	log.Debugf("Starting supervision for allocations: %+v", allocations)
+func (o *Orchestrator) supervise() {
+	log.Debugf("Starting supervision for allocations: %+v", o.manifest.Allocations)
 	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 	wg := sync.WaitGroup{}
 
-	for id, allocation := range allocations {
+	for allocName, allocation := range o.manifest.Allocations {
+		// skip empty healthchecks
+		if o.manifest.Allocations[allocName].Healthcheck.Type == "" {
+			continue
+		}
+
 		msg, err := actor.Message(
 			o.actor.Handle(),
-			allocation,
+			allocation.Handle,
 			RegisterHealthcheckBehavior,
 			RegisterHealthcheckRequest{
 				EnsembleID:  o.id,
-				HealthCheck: manifest.Allocations[id].Healthcheck,
+				HealthCheck: o.manifest.Allocations[allocName].Healthcheck,
 			},
 			actor.WithMessageExpiry(expiry),
 		)
@@ -1800,7 +1839,7 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 				return
 			}
 
-			log.Info("successfully registered healthcheck for allocation", id)
+			log.Info("successfully registered healthcheck for allocation: %s", allocation.ID)
 		}()
 	}
 
@@ -1817,10 +1856,10 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 		case <-ticker.C:
 			expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 			wg := sync.WaitGroup{}
-			for id, allocation := range allocations {
+			for _, allocation := range o.manifest.Allocations {
 				msg, err := actor.Message(
 					o.actor.Handle(),
-					allocation,
+					allocation.Handle,
 					actor.HealthCheckBehavior,
 					struct{}{},
 					actor.WithMessageExpiry(expiry),
@@ -1859,34 +1898,37 @@ func (o *Orchestrator) supervise(allocations map[string]actor.Handle, manifest E
 
 						if !resp.OK {
 							log.Errorf("error in healthcheck: %s", resp.Error)
-							failures[allocation.ID.String()]++
-							v := failures[allocation.ID.String()]
+							failures[allocation.Handle.ID.String()]++
+							v := failures[allocation.Handle.ID.String()]
 							if v >= 3 {
-								if err := o.escalateFailure(allocation); err != nil {
+								if err := o.escalateFailure(allocation.Handle); err != nil {
 									log.Errorf("failed to escalate failure: %s", err)
 								} else {
-									delete(failures, allocation.ID.String())
+									log.Debug("escalated failure, resetting healthcheck failures counter")
+									delete(failures, allocation.Handle.ID.String())
 								}
 							}
 							return
 						} else {
-							delete(failures, allocation.ID.String())
+							log.Infof("successfully healthchecked allocation %s", allocation.ID)
+							delete(failures, allocation.Handle.ID.String())
+							return
 						}
 
 					case <-ticker.C:
 						log.Warnf("timeout waiting for supervisor reply")
-						failures[allocation.ID.String()]++
-						v := failures[allocation.ID.String()]
+						failures[allocation.Handle.ID.String()]++
+						v := failures[allocation.Handle.ID.String()]
 						if v >= 3 {
-							if err := o.escalateFailure(allocation); err != nil {
+							if err := o.escalateFailure(allocation.Handle); err != nil {
 								log.Errorf("failed to escalate failure: %s", err)
 							} else {
-								delete(failures, allocation.ID.String())
+								log.Debug("escalated failure, resetting healthcheck failures counter")
+								delete(failures, allocation.Handle.ID.String())
 							}
+							return
 						}
 					}
-
-					log.Infof("successfully healthchecked allocation %s", id)
 				}()
 			}
 
@@ -1901,6 +1943,7 @@ func (o *Orchestrator) escalateFailure(allocHandle actor.Handle) error {
 	//      Also, we should not restart at first failure, but wait for a number of
 	//      consecutive failures.
 	//      See https://gitlab.com/nunet/device-management-service/-/issues/794
+	log.Debugf("escalating failure for allocation %s", allocHandle.String())
 	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 	msg, err := actor.Message(
 		o.actor.Handle(),
@@ -1936,46 +1979,60 @@ func (o *Orchestrator) Stop() {
 	}
 }
 
-func (o *Orchestrator) GetAllocationLogs(name string) ([]byte, error) {
-	allocation, ok := o.manifest.Allocations[name]
-	if !ok {
-		return nil, fmt.Errorf("allocation %s not found", name)
+func (o *Orchestrator) GetAllocationLogs(name string) (AllocationLogsResponse, error) {
+	var allocNodeHandle actor.Handle
+	var logsResp AllocationLogsResponse
+	for _, n := range o.manifest.Nodes {
+		if ok := utils.SliceContains(n.Allocations, name); ok {
+			allocNodeHandle = n.Handle
+			break
+		}
 	}
+
+	if allocNodeHandle.Empty() {
+		return logsResp,
+			fmt.Errorf(
+				"node not found for allocation %s of ensemble %s",
+				name, o.id,
+			)
+	}
+
 	msg, err := actor.Message(
 		o.actor.Handle(),
-		allocation.Handle,
-		AllocationGetLogsBehavior,
-		AllocationGetLogsRequest{},
+		allocNodeHandle,
+		fmt.Sprintf(AllocationLogsBehavior, o.manifest.ID),
+		AllocationLogsRequest{
+			AllocName: name,
+		},
 		actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating get logs message: %w", err)
+		return logsResp, fmt.Errorf("creating get logs message: %w", err)
 	}
 
 	replyCh, err := o.actor.Invoke(msg)
 	if err != nil {
-		return nil, fmt.Errorf("invoking get logs message: %w", err)
+		return logsResp, fmt.Errorf("invoking get logs message: %w", err)
 	}
 
 	var reply actor.Envelope
 	select {
 	case reply = <-replyCh:
 	case <-time.After(2 * time.Minute):
-		return nil, fmt.Errorf("timeout getting logs for %s: %w", name, ErrDeploymentFailed)
+		return logsResp, fmt.Errorf("timeout getting logs for %s: %w", name, ErrDeploymentFailed)
 	}
 
 	defer reply.Discard()
 
-	var resp AllocationGetLogsResponse
-	if err := json.Unmarshal(reply.Message, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshalling get logs response: %w", err)
+	if err := json.Unmarshal(reply.Message, &logsResp); err != nil {
+		return logsResp, fmt.Errorf("unmarshalling get logs response: %w", err)
 	}
 
-	if resp.Error != "" {
-		return nil, fmt.Errorf("replied with error getting logs for %s: %s", name, resp.Error)
+	if logsResp.Error != "" {
+		return logsResp, fmt.Errorf("replied with error getting logs for %s: %s", name, logsResp.Error)
 	}
 
-	return resp.Data, nil
+	return logsResp, nil
 }
 
 func containsExecutor(executors []AllocationExecutor, executor AllocationExecutor) bool {

@@ -50,6 +50,14 @@ type Executor interface {
 	// Returns an error if the execution does not exist or is already in a terminal state.
 	Cancel(ctx context.Context, executionID string) error
 
+	// Remove removes an execution identified by its executionID.
+	// Returns an error if the execution does not exist
+	Remove(executionID string, timeout time.Duration) error
+
+	// Cleanup removes all resources associated with the executor.
+	// This includes stopping and removing all running containers or VMs and deleting their resources.
+	Cleanup(ctx context.Context) error
+
 	// GetLogStream provides a stream of output for an ongoing or completed execution identified by its executionID.
 	// The 'Tail' flag indicates whether to exclude hstorical data or not.
 	// The 'follow' flag indicates whether the stream should continue to send data as it is produced.
@@ -70,5 +78,5 @@ type Executor interface {
 	WaitForStatus(ctx context.Context, executionID string, status types.ExecutionStatus, timeout *time.Duration) error
 
 	// Exec executes a command in a container and returns the exit code, output, and an error if the operation fails.
-	Exec(ctx context.Context, containerID string, command []string) (int, string, error)
+	Exec(ctx context.Context, containerID string, command []string) (int, string, string, error)
 }

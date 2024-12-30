@@ -22,7 +22,6 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
@@ -359,24 +358,38 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 		"deployments",
 		request.EnsembleID,
 	)
+	allocDir := filepath.Join(ensembleDir, request.AllocationName)
 
-	err = n.fs.MkdirAll(ensembleDir, 0o744)
+	err = n.writeAllocationLogsTo(allocDir, data.Stdout, data.Stderr)
 	if err != nil {
-		resp.Error = fmt.Sprintf("failed to create ensemble directory %s: %s", ensembleDir, err.Error())
+		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
 	}
 
-	writeLogsTo := filepath.Join(ensembleDir, fmt.Sprintf("%s.logs", request.AllocationName))
-	err = n.fs.WriteFile(writeLogsTo, data, 0o644)
-	if err != nil {
-		resp.Error = fmt.Sprintf("failed to write logs to %s: %s", writeLogsTo, err.Error())
-		n.sendReply(msg, resp)
-		return
-	}
-
-	resp.LogsWrittenTo = writeLogsTo
+	resp.LogsWrittenTo = allocDir
 	n.sendReply(msg, resp)
+}
+
+func (n *Node) writeAllocationLogsTo(path string, stdout, stderr []byte) error {
+	err := n.fs.MkdirAll(path, 0o744)
+	if err != nil {
+		return fmt.Errorf("failed to create allocation directory %s: %w", path, err)
+	}
+
+	stdoutPath := filepath.Join(path, "stdout.logs")
+	err = n.fs.WriteFile(stdoutPath, stdout, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write stdout logs to %s: %w", stdoutPath, err)
+	}
+
+	stderrPath := filepath.Join(path, "stderr.logs")
+	err = n.fs.WriteFile(stderrPath, stderr, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write stderr logs to %s: %w", stderrPath, err)
+	}
+
+	return nil
 }
 
 type DeploymentStatusRequest struct {
@@ -633,11 +646,13 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 	defer msg.Discard()
 
 	var request jobs.SubnetDestroyRequest
+	resp := jobs.SubnetDestroyResponse{}
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
 		return
 	}
 
-	resp := jobs.SubnetDestroyResponse{}
 	err := n.network.DestroySubnet(request.SubnetID)
 	if err != nil {
 		resp.Error = err.Error()
@@ -658,7 +673,7 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.AllocationDeploymentResponse{}
-	if err := n.registerDynamicBehaviors(request.EnsembleID); err != nil {
+	if err := n.addEnsembleBehaviors(request.EnsembleID); err != nil {
 		err = fmt.Errorf("failed to register dynamic behaviors: %w", err)
 		log.Error(err)
 		resp.Error = err.Error()
@@ -692,8 +707,32 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.CommitDeploymentResponse{}
-	allocationID := request.EnsembleID + "_" + request.AllocationName
-	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources)
+	allocationID := n.constructAllocationID(request.EnsembleID, request.AllocationName)
+	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources, request.PortMapping)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleAllocationShutdown(msg actor.Envelope) {
+	log.Debugf("handling allocation shutdown request from %s", msg.From.DID)
+	defer msg.Discard()
+
+	var request jobs.AllocationShutdownRequest
+	resp := jobs.AllocationShutdownResponse{}
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err := n.releaseAllocation(request.AllocationID)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -906,8 +945,7 @@ func (n *Node) handleCapAnchor(msg actor.Envelope) {
 		return
 	}
 
-	cfg := config.GetConfig()
-	if err := SaveCapabilityContext(n.rootCap, cfg); err != nil {
+	if err := SaveCapabilityContext(n.rootCap, &n.dmsConfig); err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return

@@ -23,13 +23,13 @@ fi
 
 # Generate and install bash completion script
 if [ -d /etc/bash_completion.d ]; then
-    /usr/bin/nunet autocomplete bash > /etc/bash_completion.d/nunet.sh
+    /usr/bin/nunet completion bash > /etc/bash_completion.d/nunet.sh
     echo "Bash completion installed. Restart your shell or source /etc/bash_completion.d/nunet.sh"
 fi
 
 # Generate and install zsh completion script
 if [ -d /usr/share/zsh/vendor-completions ]; then
-    /usr/bin/nunet autocomplete zsh > /usr/share/zsh/vendor-completions/_nunet
+    /usr/bin/nunet completion zsh > /usr/share/zsh/vendor-completions/_nunet
     echo "Zsh completion installed. Restart your shell or re-init completion with 'compinit'"
 fi
 

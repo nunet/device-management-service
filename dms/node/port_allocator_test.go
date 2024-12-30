@@ -14,33 +14,56 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestAllocatePortsSuccess tests successful allocation of ports.
-func TestAllocatePortsSuccess(t *testing.T) {
+// TestAllocateRandomSuccess tests successful random allocation of ports.
+func TestAllocateRandomSuccess(t *testing.T) {
 	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8100}
 	allocator := NewPortAllocator(config)
 
-	allocatedPorts, err := allocator.Allocate("alloc1", 5)
+	allocatedPorts, err := allocator.AllocateRandom("alloc1", 5)
 	expectedPorts := []int{8000, 8001, 8002, 8003, 8004}
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPorts, allocatedPorts, "Allocated ports do not match expected")
 
-	allocatedPorts, err = allocator.Allocate("alloc2", 3)
+	allocatedPorts, err = allocator.AllocateRandom("alloc2", 3)
 	expectedPorts = []int{8005, 8006, 8007}
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPorts, allocatedPorts, "Allocated ports do not match expected")
 }
 
-// TestAllocatePortsInsufficientPorts tests allocation when there are not enough ports available.
-func TestAllocatePortsInsufficientPorts(t *testing.T) {
+// TestAllocateSpecificPorts tests allocation of specific ports
+func TestAllocateSpecificPorts(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8100}
+	allocator := NewPortAllocator(config)
+
+	// Test successful allocation
+	err := allocator.AllocatePorts("alloc1", []int{8005, 8006, 8007})
+	assert.NoError(t, err)
+
+	// Verify allocation
+	ports, err := allocator.GetAllocation("alloc1")
+	assert.NoError(t, err)
+	assert.Equal(t, []int{8005, 8006, 8007}, ports)
+
+	// Test allocation of already reserved ports
+	err = allocator.AllocatePorts("alloc2", []int{8004, 8006})
+	assert.Error(t, err)
+
+	// Test allocation outside range
+	err = allocator.AllocatePorts("alloc3", []int{7999, 8000})
+	assert.Error(t, err)
+}
+
+// TestAllocateRandomInsufficientPorts tests allocation when there are not enough ports available.
+func TestAllocateRandomInsufficientPorts(t *testing.T) {
 	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8005}
 	allocator := NewPortAllocator(config)
 
-	_, err := allocator.Allocate("alloc1", 4)
+	_, err := allocator.AllocateRandom("alloc1", 4)
 	assert.NoError(t, err)
 
-	_, err = allocator.Allocate("alloc2", 3)
+	_, err = allocator.AllocateRandom("alloc2", 3)
 	assert.Error(t, err, "Expected an error due to insufficient ports")
 }
 
@@ -49,7 +72,7 @@ func TestGetAllocationsSuccess(t *testing.T) {
 	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8100}
 	allocator := NewPortAllocator(config)
 
-	_, _ = allocator.Allocate("alloc1", 5)
+	_, _ = allocator.AllocateRandom("alloc1", 5)
 
 	allocatedPorts, err := allocator.GetAllocation("alloc1")
 	expectedPorts := []int{8000, 8001, 8002, 8003, 8004}
@@ -67,17 +90,135 @@ func TestGetAllocationsNotFound(t *testing.T) {
 	assert.Error(t, err, "Expected an error for a non-existent allocation ID")
 }
 
-// TestAllocateExactPortRange tests allocation when the requested ports exactly match the available range.
+// TestNestedAllocation tests the interaction between random and specific allocations
+// It basically test a real scenario workflow of allocation and releases
+func TestNestedAllocation(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8010}
+	allocator := NewPortAllocator(config)
+
+	// First random allocation
+	randomPorts1, err := allocator.AllocateRandom("random1", 3)
+	assert.NoError(t, err)
+	assert.Equal(t, []int{8000, 8001, 8002}, randomPorts1)
+
+	// Specific allocation should work with available ports
+	err = allocator.AllocatePorts("specific1", []int{8005, 8006})
+	assert.NoError(t, err)
+
+	// Second random allocation should skip used ports
+	randomPorts2, err := allocator.AllocateRandom("random2", 2)
+	assert.NoError(t, err)
+	assert.Equal(t, []int{8003, 8004}, randomPorts2)
+
+	// Release first random allocation
+	allocator.Release("random1")
+
+	// Should be able to specifically allocate now-free ports
+	err = allocator.AllocatePorts("specific2", []int{8000, 8001})
+	assert.NoError(t, err)
+
+	// Verify all allocations
+	ports, err := allocator.GetAllocation("specific1")
+	assert.NoError(t, err)
+	assert.Equal(t, []int{8005, 8006}, ports)
+
+	ports, err = allocator.GetAllocation("random2")
+	assert.NoError(t, err)
+	assert.Equal(t, []int{8003, 8004}, ports)
+
+	ports, err = allocator.GetAllocation("specific2")
+	assert.NoError(t, err)
+	assert.Equal(t, []int{8000, 8001}, ports)
+
+	// Try to allocate already reserved ports should fail
+	err = allocator.AllocatePorts("specific3", []int{8000, 8007})
+	assert.Error(t, err)
+
+	// Test Allocated
+	allocated := allocator.Allocated([]int{8000, 8001, 8003, 8004, 8005, 8006})
+	assert.True(t, allocated)
+
+	allocated = allocator.Allocated([]int{8009, 8010})
+	assert.False(t, allocated)
+
+	// Release everything
+	allocator.Release("specific1")
+	allocator.Release("random2")
+	allocator.Release("specific2")
+
+	// Should be able to allocate the entire range again
+	randomPorts3, err := allocator.AllocateRandom("random3", 11)
+	assert.NoError(t, err)
+	assert.Equal(t, []int{8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010}, randomPorts3)
+}
+
+// TestAllocateExactPortRange tests allocation when the requested ports
+// exactly match the available range.
 func TestAllocateExactPortRange(t *testing.T) {
 	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8004}
 	allocator := NewPortAllocator(config)
 
-	allocatedPorts, err := allocator.Allocate("alloc1", 5)
+	allocatedPorts, err := allocator.AllocateRandom("alloc1", 5)
 	expectedPorts := []int{8000, 8001, 8002, 8003, 8004}
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPorts, allocatedPorts, "Allocated ports do not match expected")
 
-	_, err = allocator.Allocate("alloc2", 1)
+	_, err = allocator.AllocateRandom("alloc2", 1)
 	assert.Error(t, err, "Expected an error due to no available ports")
+}
+
+func TestAllocated(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 9000}
+	allocator := NewPortAllocator(config)
+
+	err := allocator.AllocatePorts("alloc1", []int{8000, 8001, 8002, 8003, 8004})
+	assert.NoError(t, err)
+
+	allocated := allocator.Allocated([]int{8000, 8001, 8002, 8003, 8004})
+	assert.True(t, allocated)
+
+	allocated = allocator.Allocated([]int{8080, 8081, 8082, 8083, 8084})
+	assert.False(t, allocated)
+}
+
+func TestPortsAvailable(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8001, AvailableRangeTo: 8005}
+	allocator := NewPortAllocator(config)
+
+	available := allocator.PortsAvailable(5)
+	assert.True(t, available)
+
+	_, err := allocator.AllocateRandom("alloc1", 3)
+	assert.NoError(t, err)
+
+	available = allocator.PortsAvailable(3)
+	assert.False(t, available)
+
+	available = allocator.PortsAvailable(2)
+	assert.True(t, available)
+}
+
+func TestPortAllocationWorkflow(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 9000}
+	allocator := NewPortAllocator(config)
+
+	// 1. Allocate port 8081
+	err := allocator.AllocatePorts("test-alloc", []int{8081})
+	assert.NoError(t, err)
+
+	// 2. Check if 8081 is allocated
+	allocated := allocator.Allocated([]int{8081})
+	assert.True(t, allocated)
+
+	// 3. Release allocation
+	allocator.Release("test-alloc")
+
+	// 4. Check if port is no longer allocated
+	allocated = allocator.Allocated([]int{8081})
+	assert.False(t, allocated)
+
+	// 5. Try to allocate 8081 again
+	err = allocator.AllocatePorts("test-alloc-2", []int{8081})
+	assert.NoError(t, err)
 }

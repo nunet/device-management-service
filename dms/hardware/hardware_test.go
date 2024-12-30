@@ -11,41 +11,99 @@ package hardware
 import (
 	"testing"
 
+	"go.uber.org/mock/gomock"
+
+	"gitlab.com/nunet/device-management-service/types"
+
 	"github.com/stretchr/testify/require"
 )
 
-func TestDefaultHardwareManager_GetMachineResources(t *testing.T) {
-	t.Parallel()
-
-	hm := NewHardwareManager()
-	machineResources, err := hm.GetMachineResources()
-	require.NoError(t, err)
-	require.NotZero(t, machineResources.CPU.Cores)
-	require.NotZero(t, machineResources.CPU.ClockSpeed)
-	require.NotZero(t, machineResources.RAM.Size)
-	require.NotZero(t, machineResources.Disk.Size)
+func newMockHardwareManager(gpuManager types.GPUManager) *defaultHardwareManager {
+	return &defaultHardwareManager{
+		gpuManager: gpuManager,
+	}
 }
 
-func TestDefaultHardwareManager_GetFreeResources(t *testing.T) {
+func TestDefaultHardwareManager(t *testing.T) {
 	t.Parallel()
 
-	hm := NewHardwareManager()
-	freeResources, err := hm.GetFreeResources()
-	require.NoError(t, err)
-	require.NotZero(t, freeResources.CPU.Cores)
-	require.NotZero(t, freeResources.CPU.ClockSpeed)
-	require.NotZero(t, freeResources.RAM.Size)
-	require.NotZero(t, freeResources.Disk.Size)
-}
+	t.Run("must be able to get machine resources", func(t *testing.T) {
+		t.Parallel()
 
-func TestDefaultHardwareManager_GetUsage(t *testing.T) {
-	t.Parallel()
+		ctrl := gomock.NewController(t)
+		mockGPUManager := NewMockGPUManager(ctrl)
+		hm := newMockHardwareManager(mockGPUManager)
 
-	hm := NewHardwareManager()
-	usage, err := hm.GetUsage()
-	require.NoError(t, err)
-	require.NotZero(t, usage.CPU.Cores)
-	require.NotZero(t, usage.CPU.ClockSpeed)
-	require.NotZero(t, usage.RAM.Size)
-	require.NotZero(t, usage.Disk.Size)
+		mockGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		mockGPUManager.EXPECT().GetGPUs().Return(mockGPUs, nil).Times(1)
+		machineResources, err := hm.GetMachineResources()
+		require.NoError(t, err)
+		require.NotZero(t, machineResources.CPU.Cores)
+		require.NotZero(t, machineResources.CPU.ClockSpeed)
+		require.NotZero(t, machineResources.RAM.Size)
+		require.NotZero(t, machineResources.Disk.Size)
+		require.Equal(t, mockGPUs, machineResources.GPUs)
+	})
+
+	t.Run("must be able to get free resources", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockGPUManager := NewMockGPUManager(ctrl)
+		hm := newMockHardwareManager(mockGPUManager)
+
+		mockGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		mockGPUManager.EXPECT().GetGPUs().Return(mockGPUs, nil).Times(1)
+		mockGPUManager.EXPECT().GetGPUUsage().Return(mockGPUs, nil).Times(1)
+		freeResources, err := hm.GetFreeResources()
+		require.NoError(t, err)
+		require.NotZero(t, freeResources.CPU.Cores)
+		require.NotZero(t, freeResources.CPU.ClockSpeed)
+		require.NotZero(t, freeResources.RAM.Size)
+		require.NotZero(t, freeResources.Disk.Size)
+		require.Equal(t, mockGPUs, freeResources.GPUs)
+		require.Zero(t, freeResources.GPUs[0].VRAM)
+	})
+
+	t.Run("must be able to get usage", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockGPUManager := NewMockGPUManager(ctrl)
+		hm := newMockHardwareManager(mockGPUManager)
+
+		mockGPUs := types.GPUs{
+			{
+				Index:  0,
+				UUID:   "GPU-0",
+				Model:  "Tesla V100",
+				Vendor: types.GPUVendorNvidia,
+				VRAM:   100000,
+			},
+		}
+		mockGPUManager.EXPECT().GetGPUUsage().Return(mockGPUs, nil).Times(1)
+		usage, err := hm.GetUsage()
+		require.NoError(t, err)
+		require.NotZero(t, usage.CPU.Cores)
+		require.NotZero(t, usage.CPU.ClockSpeed)
+		require.NotZero(t, usage.RAM.Size)
+		require.NotZero(t, usage.Disk.Size)
+		require.Equal(t, mockGPUs, usage.GPUs)
+	})
 }

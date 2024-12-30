@@ -38,11 +38,11 @@ import (
 )
 
 const (
-	helloMinDelay                   = 10 * time.Second
-	helloMaxDelay                   = 20 * time.Second
-	helloTimeout                    = 3 * time.Second
-	helloAttempts                   = 3
-	clearCommitedResourcesFrequency = 60 * time.Second
+	helloMinDelay         = 10 * time.Second
+	helloMaxDelay         = 20 * time.Second
+	helloTimeout          = 3 * time.Second
+	helloAttempts         = 3
+	clearCommitsFrequency = 60 * time.Second
 
 	grantAllocationCapsFreq = 1 * time.Hour
 
@@ -66,12 +66,13 @@ type Node struct {
 	cancel func()
 
 	mx          sync.Mutex
-	allocmx     sync.Mutex
 	peers       map[peer.ID]*peerState
 	bids        map[string]*bidState
 	deployments map[string]*jobs.Orchestrator
-	allocations map[string]*jobs.Allocation
 	running     int32
+
+	allocmx     sync.Mutex
+	allocations map[string]*jobs.Allocation
 
 	orchestratorRepo  repositories.OrchestratorView
 	geoip             types.GeoIPLocator
@@ -96,7 +97,6 @@ type peerState struct {
 type bidState struct {
 	expire  time.Time
 	request job_types.BidRequest
-	ports   []int
 }
 
 type executorMetadata struct {
@@ -352,10 +352,10 @@ func New(cfg config.Config, fs afero.Afero,
 		log.Errorf("restoring deployments: %s", err)
 	}
 
-	ticker := time.NewTicker(clearCommitedResourcesFrequency)
+	ticker := time.NewTicker(clearCommitsFrequency)
 	go func() {
 		for range ticker.C {
-			n.clearCommitedResources()
+			n.clearCommits()
 		}
 	}()
 
@@ -386,6 +386,10 @@ func (n *Node) GetAllocation(id string) (*jobs.Allocation, error) {
 	}
 
 	return alloc, nil
+}
+
+func (n *Node) ResourceManager() types.ResourceManager {
+	return n.resourceManager
 }
 
 // GetAllocations returns a list of allocations in the node.
@@ -657,14 +661,14 @@ func (n *Node) Stop() error {
 		return nil
 	}
 
-	n.mx.Lock()
+	n.allocmx.Lock()
 	// stop all allocations
 	for k, alloc := range n.allocations {
 		if err := alloc.Stop(n.ctx); err != nil {
 			log.Warnf("error stopping allocation %s: %err", k, err)
 		}
 	}
-	n.mx.Unlock()
+	n.allocmx.Unlock()
 
 	if err := n.saveDeployments(); err != nil {
 		log.Errorf("error saving active deployments: %s", err)
@@ -712,7 +716,7 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	return e, nil
 }
 
-func (n *Node) registerDynamicBehaviors(ensembleID string) error {
+func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 	dmsBehaviors := map[string]struct {
 		fn   func(actor.Envelope)
 		opts []actor.BehaviorOption
@@ -722,6 +726,12 @@ func (n *Node) registerDynamicBehaviors(ensembleID string) error {
 		},
 		fmt.Sprintf(jobs.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
 			fn: n.handleSubnetDestroy,
+		},
+		fmt.Sprintf(jobs.AllocationLogsBehavior, ensembleID): {
+			fn: n.handleAllocationLogs,
+		},
+		fmt.Sprintf(jobs.AllocationShutdownBehavior, ensembleID): {
+			fn: n.handleAllocationShutdown,
 		},
 	}
 	for behavior, handler := range dmsBehaviors {
@@ -741,7 +751,7 @@ func (n *Node) createAllocations(
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
 	allocationIDs := make([]string, 0, len(allocations))
 	for allocationName, config := range allocations {
-		allocationID := ensembleID + "_" + allocationName
+		allocationID := n.constructAllocationID(ensembleID, allocationName)
 		if _, ok := n.allocations[allocationID]; ok {
 			log.Debugf("allocation %s already exists", allocationID)
 			continue
@@ -860,7 +870,6 @@ func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor ac
 		n.dmsConfig,
 		allocActor,
 		jobs.AllocationDetails{Job: job, NodeID: n.hostID},
-		n.resourceManager,
 		n.network,
 	)
 	if err != nil {
@@ -901,11 +910,14 @@ func (n *Node) grantCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capabili
 
 func (n *Node) updateAllocations(alloc *jobs.Allocation) {
 	n.allocmx.Lock()
+	defer n.allocmx.Unlock()
 	n.allocations[alloc.ID] = alloc
-	n.allocmx.Unlock()
 }
 
-func (n *Node) commitDeployment(ensembleID, allocationID string, resources types.Resources) error {
+func (n *Node) commitDeployment(
+	ensembleID, allocationID string,
+	resources types.Resources, ports map[int]int,
+) error {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -932,10 +944,26 @@ func (n *Node) commitDeployment(ensembleID, allocationID string, resources types
 
 	n.commitedResources[allocationID] = bidState
 
+	if len(ports) > 0 {
+		for port := range ports {
+			err := n.portAllocator.AllocatePorts(allocationID, []int{port})
+			if err != nil {
+				return fmt.Errorf("failed to allocate static ports: %w", err)
+			}
+		}
+	}
+
+	if bidState.request.V1.PublicPorts.Dynamic > 0 {
+		_, err := n.portAllocator.AllocateRandom(allocationID, bidState.request.V1.PublicPorts.Dynamic)
+		if err != nil {
+			return fmt.Errorf("failed to allocate ports: %w", err)
+		}
+	}
+
 	return nil
 }
 
-func (n *Node) clearCommitedResources() {
+func (n *Node) clearCommits() {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -948,6 +976,7 @@ func (n *Node) clearCommitedResources() {
 			}
 			delete(n.bids, allocationID)
 			delete(n.commitedResources, allocationID)
+			n.portAllocator.Release(allocationID)
 		}
 	}
 }

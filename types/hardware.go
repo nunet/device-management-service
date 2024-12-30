@@ -21,6 +21,20 @@ type HardwareManager interface {
 	GetFreeResources() (Resources, error)
 }
 
+// GPUManager defines the interface for managing GPU resources.
+type GPUManager interface {
+	GetGPUs() (GPUs, error)
+	GetGPUUsage(uuid ...string) (GPUs, error)
+	Shutdown() error
+}
+
+// GPUConnector vendor-specific adapter that interacts with actual GPU hardware by using vendor-specific libraries
+type GPUConnector interface {
+	GetGPUs() (GPUs, error)
+	GetGPUUsage(uuid string) (float64, error)
+	Shutdown() error
+}
+
 type GPUVendor string
 
 const (
@@ -68,6 +82,7 @@ type GPU struct {
 	// Model represents the GPU model name, e.g., "Tesla T4", "A100"
 	Model string `json:"model" description:"GPU model, e.g., Tesla T4, A100"`
 	// VRAM is the total amount of VRAM on the device
+	// TODO: uint64!!
 	VRAM float64 `json:"vram" description:"Total amount of VRAM on the device"`
 	// UUID is the unique identifier of the device
 	UUID string `json:"uuid" description:"Unique identifier of the device"`
@@ -143,6 +158,13 @@ var (
 	_ Calculable[GPUs] = (*GPUs)(nil)
 	_ Comparable[GPUs] = (*GPUs)(nil)
 )
+
+// Copy returns a safe copy of the GPUs
+func (gpus GPUs) Copy() GPUs {
+	gpusCopy := make(GPUs, len(gpus))
+	copy(gpusCopy, gpus)
+	return gpusCopy
+}
 
 func (gpus GPUs) Compare(other GPUs) (Comparison, error) {
 	interimComparison1 := make([][]Comparison, 0)
@@ -361,6 +383,7 @@ func (c *CPU) ClockSpeedInGHz() float64 {
 // RAM represents the RAM information
 type RAM struct {
 	// Size in bytes
+	// TODO: uint64!!!
 	Size float64 `json:"size" description:"Size of the RAM in bytes"`
 
 	// TODO: capture the below fields if required
@@ -412,6 +435,7 @@ func (r *RAM) SizeInGB() float64 {
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
+	// TODO: uint64!!!
 	Size float64 `json:"size" description:"Size of the disk in bytes"`
 
 	// TODO: capture the below fields if required

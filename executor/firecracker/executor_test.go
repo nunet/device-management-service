@@ -40,7 +40,7 @@ func (s *ExecutorTestSuite) SetupTest() {
 
 	s.executor = e
 	s.T().Cleanup(func() {
-		_ = s.executor.Cleanup()
+		_ = s.executor.Cleanup(context.TODO())
 	})
 }
 

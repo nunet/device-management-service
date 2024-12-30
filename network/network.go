@@ -14,6 +14,9 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
@@ -59,8 +62,12 @@ type Network interface {
 	Stat() types.NetworkStats
 	// Ping pings the given address and returns the PingResult
 	Ping(ctx context.Context, address string, timeout time.Duration) (types.PingResult, error)
+	// GetHostID returns the host ID
+	GetHostID() PeerID
+	// GetPeerPubKey returns the public key for the given peerID
+	GetPeerPubKey(peerID PeerID) crypto.PubKey
 	// HandleMessage is responsible for registering a message type and its handler.
-	HandleMessage(messageType string, handler func(data []byte)) error
+	HandleMessage(messageType string, handler func(data []byte, peerId peer.ID)) error
 	// UnregisterMessageHandler unregisters a stream handler for a specific protocol.
 	UnregisterMessageHandler(messageType string)
 	// ResolveAddress given an id it retruns the address of the peer.

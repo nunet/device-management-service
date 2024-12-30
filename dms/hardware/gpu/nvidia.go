@@ -6,113 +6,84 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-//go:build linux && (amd64 || amd)
+//go:build linux && (amd64 || 386)
 
 package gpu
 
 import (
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-var (
-	nvidiaInitOnce sync.Once
-	isNvidiaInit   bool
-
-	nvidiaDeviceMap = make(map[string]nvml.Device) // UUID to Device map
-)
-
-// initNVML initializes the NVIDIA Management Library.
-func initNVML() error {
-	if isNvidiaInit {
-		return nil
-	}
-
-	var err error
-	nvidiaInitOnce.Do(func() {
-		ret := nvml.Init()
-		if !errors.Is(ret, nvml.SUCCESS) {
-			err = fmt.Errorf("NVIDIA Management Library not installed, initialized, or configured (reboot recommended for newly installed NVIDIA GPU drivers): %s", nvml.ErrorString(ret))
-			return
-		}
-		isNvidiaInit = true
-	})
-	return err
+// nvidiaGPUConnector implements the types.GPUConnector interface for NVIDIA GPUs.
+type nvidiaGPUConnector struct {
+	deviceCache         []nvml.Device
+	deviceCacheIndexMap map[string]int // UUID to deviceCache index map
 }
 
-// shutdownNVML shuts down the NVIDIA Management Library.
-func shutdownNVML() { //nolint // #790
-	if !isNvidiaInit {
-		return
+var _ types.GPUConnector = (*nvidiaGPUConnector)(nil)
+
+// newNVIDIAGPUConnector creates a new NVIDIA GPU Connector.
+func newNVIDIAGPUConnector() (types.GPUConnector, error) {
+	connector := &nvidiaGPUConnector{
+		deviceCacheIndexMap: make(map[string]int),
 	}
-	_ = nvml.Shutdown()
+
+	if err := connector.initialise(); err != nil {
+		return nil, fmt.Errorf("initialize NVIDIA GPU connector: %w", err)
+	}
+
+	if err := connector.loadDevices(); err != nil {
+		return nil, fmt.Errorf("load NVIDIA GPU devices: %w", err)
+	}
+
+	return connector, nil
 }
 
 // getNVIDIADeviceCount returns the number of NVIDIA devices (GPUs).
 func getNVIDIADeviceCount() (int, error) {
-	if !isNvidiaInit {
-		return 0, errors.New("NVIDIA Management Library not initialized")
-	}
-
 	deviceCount, ret := nvml.DeviceGetCount()
 	if !errors.Is(ret, nvml.SUCCESS) {
-		return 0, fmt.Errorf("failed to get device count: %s", nvml.ErrorString(ret))
+		return 0, fmt.Errorf("get device count: %s", nvml.ErrorString(ret))
 	}
 	return deviceCount, nil
 }
 
 // getNVIDIADeviceHandle returns the handle for the NVIDIA device by its index.
 func getNVIDIADeviceHandle(index int) (nvml.Device, error) {
-	if !isNvidiaInit {
-		return nil, errors.New("NVIDIA Management Library not initialized")
-	}
-
 	device, ret := nvml.DeviceGetHandleByIndex(index)
 	if !errors.Is(ret, nvml.SUCCESS) {
-		return nil, fmt.Errorf("failed to get device handle for device %d: %s", index, nvml.ErrorString(ret))
+		return nil, fmt.Errorf("get device handle for device %d: %s", index, nvml.ErrorString(ret))
 	}
 	return device, nil
 }
 
 // getNVIDIADeviceName returns the name of the NVIDIA device.
 func getNVIDIADeviceName(device nvml.Device) (string, error) {
-	if !isNvidiaInit {
-		return "", errors.New("NVIDIA Management Library not initialized")
-	}
-
 	name, ret := device.GetName()
 	if !errors.Is(ret, nvml.SUCCESS) {
-		return "", fmt.Errorf("failed to get name for device: %s", nvml.ErrorString(ret))
+		return "", fmt.Errorf("get name for device: %s", nvml.ErrorString(ret))
 	}
 	return name, nil
 }
 
 // getNVIDIADeviceMemory returns the memory information for the NVIDIA device.
 func getNVIDIADeviceMemory(device nvml.Device) (nvml.Memory, error) {
-	if !isNvidiaInit {
-		return nvml.Memory{}, errors.New("NVIDIA Management Library not initialized")
-	}
-
 	memory, ret := device.GetMemoryInfo()
 	if !errors.Is(ret, nvml.SUCCESS) {
-		return nvml.Memory{}, fmt.Errorf("failed to get NVIDIA GPU memory info: %s", nvml.ErrorString(ret))
+		return nvml.Memory{}, fmt.Errorf("get NVIDIA GPU memory info: %s", nvml.ErrorString(ret))
 	}
 	return memory, nil
 }
 
 // getNVIDIADeviceUUID returns the UUID of the NVIDIA device.
 func getNVIDIADeviceUUID(device nvml.Device) (string, error) {
-	if !isNvidiaInit {
-		return "", errors.New("NVIDIA Management Library not initialized")
-	}
-
 	uuid, ret := device.GetUUID()
 	if !errors.Is(ret, nvml.SUCCESS) {
-		return "", fmt.Errorf("failed to get UUID for device: %s", nvml.ErrorString(ret))
+		return "", fmt.Errorf("get UUID for device: %s", nvml.ErrorString(ret))
 	}
 	return uuid, nil
 }
@@ -121,30 +92,55 @@ func getNVIDIADeviceUUID(device nvml.Device) (string, error) {
 func getNVIDIAPCIAddress(device nvml.Device) (string, error) {
 	pciInfo, ret := device.GetPciInfo()
 	if !errors.Is(ret, nvml.SUCCESS) {
-		return "", fmt.Errorf("failed to get PCI info for device: %s", nvml.ErrorString(ret))
+		return "", fmt.Errorf("get PCI info for device: %s", nvml.ErrorString(ret))
 	}
 	return convertBusID(pciInfo.BusId), nil
 }
 
-// GetNVIDIAGPUs returns the GPU information for NVIDIA GPUs.
-func GetNVIDIAGPUs() ([]types.GPU, error) {
-	if err := initNVML(); err != nil {
-		return nil, err
+// initialise initialises the nvidia gpu connector
+func (n *nvidiaGPUConnector) initialise() error {
+	ret := nvml.Init()
+	if !errors.Is(ret, nvml.SUCCESS) {
+		return fmt.Errorf("initialize nvml: %s", nvml.ErrorString(ret))
 	}
 
+	return nil
+}
+
+// loadDevices loads the NVIDIA GPU devices.
+func (n *nvidiaGPUConnector) loadDevices() error {
 	deviceCount, err := getNVIDIADeviceCount()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var gpus []types.GPU
 	// Iterate over each device
 	for i := 0; i < deviceCount; i++ {
 		device, err := getNVIDIADeviceHandle(i)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
+		uuid, err := getNVIDIADeviceUUID(device)
+		if err != nil {
+			return err
+		}
+
+		n.deviceCache = append(n.deviceCache, device)
+		n.deviceCacheIndexMap[uuid] = i
+	}
+
+	return nil
+}
+
+// GetGPUs returns the GPU information for NVIDIA GPUs.
+func (n *nvidiaGPUConnector) GetGPUs() (types.GPUs, error) {
+	if len(n.deviceCache) == 0 {
+		return nil, nil
+	}
+
+	gpus := make(types.GPUs, 0, len(n.deviceCache))
+	for _, device := range n.deviceCache {
 		name, err := getNVIDIADeviceName(device)
 		if err != nil {
 			return nil, err
@@ -173,24 +169,18 @@ func GetNVIDIAGPUs() ([]types.GPU, error) {
 			Vendor:     types.GPUVendorNvidia,
 		}
 		gpus = append(gpus, gpu)
-
-		// Add the device to the device map
-		nvidiaDeviceMap[uuid] = device
 	}
 
 	return gpus, nil
 }
 
-// GetNVIDIADeviceUsage returns the GPU usage for the device with the given UUID.
-func GetNVIDIADeviceUsage(uuid string) (float64, error) {
-	if err := initNVML(); err != nil {
-		return 0, err
-	}
-
-	device, ok := nvidiaDeviceMap[uuid]
+// GetGPUUsage returns the GPU usage for the device with the given UUID.
+func (n *nvidiaGPUConnector) GetGPUUsage(uuid string) (float64, error) {
+	deviceIndex, ok := n.deviceCacheIndexMap[uuid]
 	if !ok {
 		return 0, fmt.Errorf("nvidia device with UUID %s not found", uuid)
 	}
+	device := n.deviceCache[deviceIndex]
 
 	memory, err := getNVIDIADeviceMemory(device)
 	if err != nil {
@@ -198,4 +188,17 @@ func GetNVIDIADeviceUsage(uuid string) (float64, error) {
 	}
 
 	return float64(memory.Used), nil
+}
+
+// Shutdown shuts down the NVIDIA Management Library.
+func (n *nvidiaGPUConnector) Shutdown() error {
+	ret := nvml.Shutdown()
+	if !errors.Is(ret, nvml.SUCCESS) {
+		return fmt.Errorf("shutdown nvml: %s", nvml.ErrorString(ret))
+	}
+
+	// clear the cache
+	n.deviceCache = nil
+	n.deviceCacheIndexMap = nil
+	return nil
 }

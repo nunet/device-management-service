@@ -10,7 +10,6 @@ package jobs
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -34,10 +33,12 @@ type HealthCheckResponse struct {
 }
 
 const (
-	Pending   AllocationStatus = "pending"
-	Running   AllocationStatus = "running"
-	Stopped   AllocationStatus = "stopped"
-	Completed AllocationStatus = "completed"
+	Pending    AllocationStatus = "pending"
+	Running    AllocationStatus = "running"
+	Stopped    AllocationStatus = "stopped"
+	Failed     AllocationStatus = "failed"
+	Completed  AllocationStatus = "completed"
+	Terminated AllocationStatus = "terminated"
 
 	deleteLogsAfter = 30 * time.Minute
 )
@@ -76,10 +77,9 @@ type Allocation struct {
 	sourceID    string
 	executionID string
 
-	Actor           actor.Actor
-	executor        executor.Executor
-	resourceManager types.ResourceManager
-	dmsConfig       config.Config
+	Actor     actor.Actor
+	executor  executor.Executor
+	dmsConfig config.Config
 
 	network network.Network
 
@@ -92,6 +92,7 @@ type Allocation struct {
 
 	state struct {
 		subnetIP    string
+		gatewayIP   string
 		portMapping map[int]int
 	}
 }
@@ -103,39 +104,47 @@ func NewAllocation(
 	dmsConfig config.Config,
 	actor actor.Actor,
 	details AllocationDetails,
-	resourceManager types.ResourceManager,
 	network network.Network,
 ) (*Allocation, error) {
-	if resourceManager == nil {
-		return nil, errors.New("resource manager is nil")
-	}
-
 	uuid, err := uuid.NewUUID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create executor id: %w", err)
 	}
 
 	return &Allocation{
-		ID:              id,
-		fs:              fs,
-		nodeID:          details.NodeID,
-		sourceID:        details.SourceID,
-		Job:             details.Job,
-		Actor:           actor,
-		executionID:     uuid.String(),
-		resourceManager: resourceManager,
-		dmsConfig:       dmsConfig,
-		status:          Pending,
-		network:         network,
+		ID:          id,
+		fs:          fs,
+		nodeID:      details.NodeID,
+		sourceID:    details.SourceID,
+		Job:         details.Job,
+		Actor:       actor,
+		executionID: uuid.String(),
+		dmsConfig:   dmsConfig,
+		status:      Pending,
+		network:     network,
 		state: struct {
 			subnetIP    string
+			gatewayIP   string
 			portMapping map[int]int
 		}{},
 	}, nil
 }
 
+// GetPortMapping returns allocation's port mapping
+func (a *Allocation) GetPortMapping() map[int]int {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	ports := make(map[int]int)
+	for i, v := range a.state.portMapping {
+		ports[i] = v
+	}
+
+	return ports
+}
+
 // Run creates the executor based on th e execution engine configuration.
-func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[int]int) error {
+func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string, portMapping map[int]int) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
@@ -161,16 +170,14 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 	}
 
 	executionRequest := &types.ExecutionRequest{
-		JobID:            a.ID,
-		ExecutionID:      a.executionID,
-		EngineSpec:       &a.Job.Execution,
-		Resources:        &a.Job.Resources,
-		ProvisionScripts: a.Job.ProvisionScripts,
-		// TODO add the following
-		Inputs:              []*types.StorageVolumeExecutor{}, // Question: what are those?
-		Outputs:             []*types.StorageVolumeExecutor{},
+		JobID:               a.ID,
+		ExecutionID:         a.executionID,
+		EngineSpec:          &a.Job.Execution,
+		Resources:           &a.Job.Resources,
+		ProvisionScripts:    a.Job.ProvisionScripts,
 		ResultsDir:          a.resultsDir,
 		PersistLogsDuration: deleteLogsAfter,
+		GatewayIP:           gatewayIP,
 	}
 
 	for hostPort, executorPort := range portMapping {
@@ -191,40 +198,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, portMapping map[i
 
 	a.status = Running
 
-	go a.monitorExecutor(ctx)
-
 	return nil
-}
-
-func (a *Allocation) monitorExecutor(ctx context.Context) {
-	resChan, errChan := a.executor.Wait(ctx, a.executionID)
-
-	var result *types.ExecutionResult
-	var err error
-
-	select {
-	case result = <-resChan:
-	case err = <-errChan:
-	case <-ctx.Done():
-		err = ctx.Err()
-	}
-
-	a.mx.Lock()
-	if err != nil {
-		a.status = Stopped
-		log.Warnf("execution failed: %v", err)
-	}
-
-	if result != nil {
-		a.status = Completed
-	}
-	a.mx.Unlock()
-
-	// deallocate resources after everything is done.
-	err = a.resourceManager.DeallocateResources(ctx, a.ID)
-	if err != nil {
-		log.Errorf("failed to deallocate resources for %s: %v", a.ID, err)
-	}
 }
 
 // Cancel stops the running executor
@@ -232,21 +206,61 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
+	log.Debugf("stopping execution for alloc: %s", a.ID)
+
 	if a.status != Running {
 		return nil
 	}
 
+	a.status = Stopped
+
+	if a.executor == nil {
+		return nil
+	}
+
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
+		a.status = Failed
 		return fmt.Errorf("failed to stop execution: %w", err)
 	}
 
-	// deallocate resources after everything is done.
-	err := a.resourceManager.DeallocateResources(ctx, a.ID)
-	if err != nil {
-		log.Errorf("failed to deallocate resources for %s: %v", a.ID, err)
+	log.Debugf("stopped execution for alloc: %s", a.ID)
+
+	return nil
+}
+
+func (a *Allocation) Cleanup() error {
+	if a.executor == nil {
+		return nil
 	}
 
-	a.status = Stopped
+	if err := a.executor.Remove(a.executionID, AllocationShutdownTimeout); err != nil {
+		return fmt.Errorf("failed to remove execution: %w", err)
+	}
+	log.Debugf("removed execution: %s", a.executionID)
+	return nil
+}
+
+// Terminate stops the allocation and cleans up after
+func (a *Allocation) Terminate(ctx context.Context) error {
+	if a.status != Stopped && a.status != Completed {
+		err := a.Stop(ctx)
+		if err != nil {
+			log.Warnf("failed to stop allocation: %s", err)
+			return fmt.Errorf("failed to stop allocation: %w", err)
+		}
+	}
+
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	if err := a.Cleanup(); err != nil {
+		// TODO: exec.Remove should return a defined custom error
+		//       container already removed is not an error
+		log.Warnf("failed to cleanup allocation: %s", err)
+		return fmt.Errorf("failed to cleanup allocation: %w", err)
+	}
+
+	a.status = Terminated
 
 	return nil
 }
@@ -260,6 +274,7 @@ func (a *Allocation) stopActor() error {
 		if err := a.Actor.Stop(); err != nil {
 			log.Warnf("error stopping allocation actor: %s", err)
 		}
+		log.Debugf("stopped allocation actor: %s", a.ID)
 		a.actorRunning = false
 	}
 	return nil
@@ -267,14 +282,14 @@ func (a *Allocation) stopActor() error {
 
 // Stop stops the running executor and the allocation actor
 func (a *Allocation) Stop(ctx context.Context) error {
-	err := a.stopExecution(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to stop execution: %w", err)
-	}
-
-	err = a.stopActor()
+	err := a.stopActor()
 	if err != nil {
 		return fmt.Errorf("failed to stop actor: %w", err)
+	}
+
+	err = a.stopExecution(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to stop execution: %w", err)
 	}
 
 	return nil
@@ -294,10 +309,8 @@ func (a *Allocation) Start() error {
 	defer a.mx.Unlock()
 
 	behaviors := map[string]func(actor.Envelope){
-		AllocationStartBehavior:    a.handleAllocationStart,
-		AllocationRestartBehavior:  a.handleAllocationRestart,
-		AllocationShutdownBehavior: a.handleAllocationShutdown,
-		AllocationGetLogsBehavior:  a.handleAllocationGetLogs,
+		AllocationStartBehavior:   a.handleAllocationStart,
+		AllocationRestartBehavior: a.handleAllocationRestart,
 
 		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
 		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
@@ -308,7 +321,6 @@ func (a *Allocation) Start() error {
 		SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
 		RegisterHealthcheckBehavior:   a.handleRegisterHealthcheck,
 		actor.HealthCheckBehavior:     a.handleHealthcheck,
-		AllocationStopBehavior:        a.handleAllocationStop,
 	}
 
 	// add allocation behaviors
@@ -352,7 +364,7 @@ func (a *Allocation) Restart(ctx context.Context) error {
 		return err
 	}
 
-	if err := a.Run(ctx, a.state.subnetIP, a.state.portMapping); err != nil {
+	if err := a.Run(ctx, a.state.subnetIP, a.state.gatewayIP, a.state.portMapping); err != nil {
 		_ = a.Stop(ctx)
 		return err
 	}
@@ -387,7 +399,8 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	}
 
 	var resp AllocationStartResponse
-	if err := a.Run(context.TODO(), req.SubnetIP, req.PortMapping); err != nil {
+	// TODO: context should cancel when the actor is stopped to stop monitor
+	if err := a.Run(context.TODO(), req.SubnetIP, req.GatewayIP, req.PortMapping); err != nil {
 		err = fmt.Errorf("failed to run allocation: %w", err)
 		log.Error(err)
 
@@ -400,34 +413,8 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	log.Info("Running allocation's job: ", a.ID)
 
 	a.state.subnetIP = req.SubnetIP
+	a.state.gatewayIP = req.GatewayIP
 	a.state.portMapping = req.PortMapping
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleAllocationStop(msg actor.Envelope) {
-	log.Infof("behavior allocation start invoked by: %+v", msg.From)
-	defer msg.Discard()
-
-	var req AllocationStopRequest
-	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		log.Errorf("error unmarshalling allocation start request: %s", err)
-		return
-	}
-
-	var resp AllocationStopResponse
-	if err := a.Stop(context.TODO()); err != nil {
-		err = fmt.Errorf("failed to stop allocation: %w", err)
-		log.Error(err)
-
-		resp.Error = err.Error()
-		resp.OK = false
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Info("Stopping allocation: ", req.AllocationID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -448,62 +435,6 @@ func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 	}
 
 	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-// handleAllocationShutdown handles the shutdown of the allocation.
-func (a *Allocation) handleAllocationShutdown(msg actor.Envelope) {
-	log.Infof("behavior allocation shutdown invoked by: %+v", msg.From)
-	defer func() {
-		// Wait until the message expires to ensure reply is sent
-		<-time.After(time.Until(msg.Expiry()))
-		err := a.stopActor()
-		if err != nil {
-			log.Errorf("error stopping allocation actor when shutting down: %s", err)
-		}
-	}()
-	defer msg.Discard()
-
-	var req AllocationShutdownRequest
-	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		log.Errorf("error unmarshalling allocation shutdown request: %s", err)
-		return
-	}
-
-	var resp AllocationShutdownResponse
-	if err := a.stopExecution(context.TODO()); err != nil {
-		err = fmt.Errorf("error stopping allocation: %s", err)
-		log.Error(err)
-		resp.Error = err.Error()
-		resp.OK = false
-		a.sendReply(msg, resp)
-		return
-	}
-
-	// deallocate resources incase monitorExecutor didn't.
-	err := a.resourceManager.DeallocateResources(context.TODO(), a.ID)
-	if err != nil {
-		log.Warnf("failed to deallocate resources for %s: %v, probably already deallocated", a.ID, err)
-	}
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleAllocationGetLogs(msg actor.Envelope) {
-	log.Infof("behavior get logs invoked by: %+v", msg.From)
-	defer msg.Discard()
-
-	var resp AllocationGetLogsResponse
-
-	data, err := a.fs.ReadFile(filepath.Join(a.resultsDir, "stdout.log"))
-	if err != nil {
-		resp.Error = fmt.Sprintf("failed to read results file: %s", err.Error())
-		a.sendReply(msg, resp)
-		return
-	}
-
-	resp.Data = data
 	a.sendReply(msg, resp)
 }
 
@@ -577,11 +508,13 @@ func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
 
 func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 	defer msg.Discard()
+	log.Debugf("behavior handleSubnetMapPort invoked by: %+v", msg.From)
 
 	var request SubnetMapPortRequest
 	resp := SubnetMapPortResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		log.Debugf("error unmarshalling subnet map port request: %s", err)
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
 		return
@@ -589,6 +522,7 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 
 	err := a.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
 	if err != nil {
+		log.Debugf("error mapping port: %s", err)
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
 		return
@@ -715,21 +649,25 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 	}
 
 	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
-		// TODO: get container name from executor
-		containerName := fmt.Sprintf("%s_%s", a.ID, a.ExecutionID())
-		exitCode, outputStr, err := a.executor.Exec(context.TODO(), containerName, mf.Exec)
+		exitCode, stdout, stderr, err := a.executor.Exec(context.TODO(), a.executionID, mf.Exec)
+
+		log.Debugf("health check command: %s\nstdout: %s\nstderr: %s", mf.Exec, stdout, stderr)
 		if err != nil {
+			log.Warnf("health check command failed: %s", err)
 			return fmt.Errorf("health check command failed: %w", err)
 		}
 
 		if exitCode != 0 {
+			log.Warnf("health check command failed with exit code: %d", exitCode)
 			return fmt.Errorf("health check command failed with exit code %d", exitCode)
 		}
 
-		if strings.Contains(outputStr, mf.Response.Value) {
-			return fmt.Errorf("unexpected health check command output: %s", outputStr)
+		if !strings.Contains(stdout+stderr, mf.Response.Value) {
+			log.Warnf("health check command err: %s", stderr)
+			return fmt.Errorf("unexpected health check command output: %s\nstderr: %s", stdout, stderr)
 		}
 
+		log.Debugf("health check command succeeded")
 		return nil
 	})
 	if err != nil {
@@ -740,7 +678,6 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 
 	a.SetHealthCheck(healthcheck)
 	resp.OK = true
-
 	a.sendReply(msg, resp)
 }
 
@@ -754,7 +691,6 @@ func (a *Allocation) handleHealthcheck(msg actor.Envelope) {
 	var resp HealthCheckResponse
 	if healthcheck != nil {
 		if err := healthcheck(); err != nil {
-			log.Warnf("healthcheck failure: %s", err)
 			resp.Error = err.Error()
 		} else {
 			resp.OK = true

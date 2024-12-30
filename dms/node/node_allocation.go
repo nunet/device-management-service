@@ -10,10 +10,79 @@ package node
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 )
+
+// TODO: instead of having a behavior to get logs from a FINISHED allocation,
+// we may allow only getting logs from ONGOING allocations.
+// For finite allocations, it could send the logs back to the orchestrator
+// if specified on the ensemble.
+func (n *Node) handleAllocationLogs(msg actor.Envelope) {
+	defer msg.Discard()
+	log.Infof("behavior get logs invoked by: %+v", msg.From)
+
+	handleErr := func(err error) {
+		log.Errorf("error getting allocation logs: %s", err)
+		n.sendReply(msg, jobs.AllocationLogsResponse{Error: err.Error()})
+	}
+
+	var resp jobs.AllocationLogsResponse
+	ensembleID, err := jobs.EnsembleIDFromBehavior(msg.Behavior)
+	if err != nil {
+		handleErr(fmt.Errorf("error getting ensemble ID from behavior %s: %s", msg.Behavior, err))
+		return
+	}
+
+	var req jobs.AllocationLogsRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling allocation logs request: %s", err))
+		return
+	}
+
+	allocID := n.constructAllocationID(ensembleID, req.AllocName)
+	resultsDir := filepath.Join(n.dmsConfig.WorkDir, "jobs", allocID)
+
+	stdout, err := n.fs.ReadFile(filepath.Join(resultsDir, "stdout.log"))
+	if err != nil {
+		if err == os.ErrNotExist {
+			log.Warnf("stdout file for allocation %s does not exist (ensemble: %s)", req.AllocName, ensembleID)
+		} else {
+			handleErr(fmt.Errorf("failed to read results file: %s", err))
+			return
+		}
+	}
+
+	stderr, err := n.fs.ReadFile(filepath.Join(resultsDir, "stderr.log"))
+	if err != nil {
+		if err == os.ErrNotExist {
+			log.Debugf("stderr file for allocation %s does not exist (ensemble: %s)", req.AllocName, ensembleID)
+		} else {
+			handleErr(fmt.Errorf("failed to read results file: %s", err))
+			return
+		}
+	}
+
+	if len(stdout) == 0 && len(stderr) == 0 {
+		handleErr(
+			fmt.Errorf("stdout and stderr files for allocation %s are empty (ensemble: %s)",
+				req.AllocName, ensembleID),
+		)
+		return
+	}
+
+	log.Info("sending logs for allocation: ", allocID)
+
+	resp.Stdout = stdout
+	resp.Stderr = stderr
+	n.sendReply(msg, resp)
+}
 
 // monitorEnsembleAllocations monitors the provided allocations. It handles allocations termination.
 //
@@ -52,7 +121,8 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 			}
 
 			status := alloc.Status(context.TODO()).Status
-			if status == jobs.Completed || status == jobs.Stopped {
+			if status == jobs.Completed {
+				log.Warnf("Allocation %s is done with status %s", allocID, status)
 				allocationsDone[allocID] = true
 				continue
 			}
@@ -63,15 +133,27 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 
 		if allDone {
 			// All allocations are done; do the necessary ensemble allocs cleanups
-			log.Infof("All allocations for ensemble %s are completed or stopped. Cleaning up ensemble.", ensembleID)
-			n.cleanupFinishedEnsemble(ensembleID)
+			log.Infof("All allocations for ensemble %s are completed or stopped", ensembleID)
+			n.cleanupFinishedEnsemble(ensembleID, allocationIDs)
 			break
 		}
 	}
 }
 
-func (n *Node) cleanupFinishedEnsemble(ensembleID string) {
+func (n *Node) cleanupFinishedEnsemble(ensembleID string, allocationIDs []string) {
+	log.Debugf("cleaning up finished ensemble %s", ensembleID)
+
 	if err := n.network.DestroySubnet(ensembleID); err != nil {
-		log.Errorf("failed to destroy subnet %s: %v", ensembleID, err)
+		log.Warnf("Monitor Ensemble: failed to destroy subnet (it may already be destroyed) %s: %v", ensembleID, err)
 	}
+
+	for _, allocID := range allocationIDs {
+		if err := n.releaseAllocation(allocID); err != nil {
+			log.Warnf("Monitor Ensemble: failed to release allocation (it may already be released) %s: %v", allocID, err)
+		}
+	}
+}
+
+func (n *Node) constructAllocationID(ensembleID, allocName string) string {
+	return ensembleID + "_" + allocName
 }

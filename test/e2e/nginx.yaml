@@ -8,9 +8,9 @@ allocations:
                 cores: 1
             gpus: []
             ram:
-                size: 102
+                size: 1 # in GB
             disk:
-                size: 20
+                size: 1 # in GB
         execution:
             type: docker
             image: nginxdemos/hello
@@ -30,10 +30,3 @@ nodes:
     node1:
         allocations:
             - alloc1
-        ports:
-            - static: 8080
-              private: 1
-              allocation: alloc1
-        location:
-            accept: []
-            reject: []
