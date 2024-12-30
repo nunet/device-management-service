@@ -1,11 +1,3 @@
-// Copyright 2024, Nunet
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
-
 // tracing.go
 package observability
 
@@ -28,13 +20,12 @@ import (
 )
 
 var (
-	// tracingNoOpMode indicates whether tracing is in no-op mode
 	tracingNoOpMode bool
 	tracerMutex     sync.Mutex
 	currentTracer   *apm.Tracer
 )
 
-// initTracing initializes or reinitializes the Elastic APM tracer
+// initTracing initializes or reinitializes the Elastic APM tracer.
 func initTracing(apmConfig config.APM) {
 	tracerMutex.Lock()
 	defer tracerMutex.Unlock()
@@ -50,7 +41,7 @@ func initTracing(apmConfig config.APM) {
 		currentTracer = nil
 	}
 
-	// Check if the necessary configurations are present
+	// Check required APM configs
 	if apmConfig.ServerURL == "" || apmConfig.ServiceName == "" || apmConfig.Environment == "" {
 		log.Warn("APM configurations are incomplete, tracing will be disabled")
 		tracingNoOpMode = true
@@ -91,10 +82,7 @@ func initTracing(apmConfig config.APM) {
 		return
 	}
 
-	// Set the metrics collection interval
-	tracer.SetMetricsInterval(10 * time.Second) // Adjust the interval as needed
-
-	// Set the default tracer
+	tracer.SetMetricsInterval(10 * time.Second)
 	apm.DefaultTracer = tracer
 	currentTracer = tracer
 	tracingNoOpMode = false
@@ -106,18 +94,18 @@ func initTracing(apmConfig config.APM) {
 func collectSystemMetrics() map[string]interface{} {
 	metrics := make(map[string]interface{})
 
-	// Get CPU usage
+	// CPU usage
 	if cpuUsage, err := cpu.Percent(0, false); err == nil && len(cpuUsage) > 0 {
 		metrics["cpuUsage"] = cpuUsage[0]
 	}
 
-	// Get RAM usage
+	// RAM usage
 	if v, err := mem.VirtualMemory(); err == nil {
 		metrics["ramUsed"] = v.Used
 		metrics["ramTotal"] = v.Total
 	}
 
-	// Get Disk usage
+	// Disk usage
 	if partitions, err := disk.Partitions(false); err == nil {
 		var used, total uint64
 		for _, part := range partitions {
@@ -130,17 +118,17 @@ func collectSystemMetrics() map[string]interface{} {
 		metrics["diskTotal"] = total
 	}
 
-	// Get uptime
+	// Uptime
 	if uptime, err := host.Uptime(); err == nil {
 		metrics["uptime"] = float64(uptime)
 	}
 
-	// Get load average
+	// Load average
 	if avg, err := load.Avg(); err == nil {
 		metrics["load15"] = avg.Load15
 	}
 
-	// Get network RX/TX
+	// Network RX/TX
 	if ioStats, err := net.IOCounters(false); err == nil && len(ioStats) > 0 {
 		metrics["rxBytes"] = ioStats[0].BytesRecv
 		metrics["txBytes"] = ioStats[0].BytesSent
@@ -157,12 +145,12 @@ func registerCustomMetrics(tracer *apm.Tracer) {
 		didAsHostname := didID.String()
 		didLabel := []apm.MetricLabel{{Name: "hostdid", Value: didAsHostname}}
 
-		// Add CPU usage
+		// CPU usage
 		if cpuUsage, ok := metrics["cpuUsage"].(float64); ok {
 			m.Add("system.cpu.total.norm.pct", didLabel, cpuUsage/100.0)
 		}
 
-		// Add RAM metrics
+		// RAM usage
 		if ramUsed, ok := metrics["ramUsed"].(uint64); ok {
 			m.Add("system.memory.actual.used.bytes", didLabel, float64(ramUsed))
 		}
@@ -170,7 +158,7 @@ func registerCustomMetrics(tracer *apm.Tracer) {
 			m.Add("system.memory.total", didLabel, float64(ramTotal))
 		}
 
-		// Add Disk metrics
+		// Disk usage
 		if diskUsed, ok := metrics["diskUsed"].(uint64); ok {
 			m.Add("system.filesystem.used.bytes", didLabel, float64(diskUsed))
 		}
@@ -178,17 +166,17 @@ func registerCustomMetrics(tracer *apm.Tracer) {
 			m.Add("system.filesystem.total", didLabel, float64(diskTotal))
 		}
 
-		// Add uptime
+		// Uptime
 		if uptime, ok := metrics["uptime"].(float64); ok {
 			m.Add("system.uptime", didLabel, uptime)
 		}
 
-		// Add load average
+		// Load average
 		if load15, ok := metrics["load15"].(float64); ok {
 			m.Add("system.load.15", didLabel, load15)
 		}
 
-		// Add network RX/TX
+		// Network RX/TX
 		if rxBytes, ok := metrics["rxBytes"].(uint64); ok {
 			m.Add("system.network.in.bytes", didLabel, float64(rxBytes))
 		}
@@ -198,22 +186,25 @@ func registerCustomMetrics(tracer *apm.Tracer) {
 
 		return nil
 	})
-
 	tracer.RegisterMetricsGatherer(gatherer)
 }
 
-// StartTrace starts a trace for the given operation.
-// It can be called in one of the following ways:
-// - StartTrace(operationName string, keyValues ...interface{}) func()
-// - StartTrace(ctx context.Context, operationName string, keyValues ...interface{}) func()
-// - StartTrace(c *gin.Context, operationName string, keyValues ...interface{}) func()
+// StartTrace is a unified entry point to start instrumentation.
+//
+// Usage patterns:
+//   - StartTrace(operationName string, keyValues ...interface{})
+//   - StartTrace(ctx context.Context, operationName string, keyValues ...interface{})
+//   - StartTrace(c *gin.Context, operationName string, keyValues ...interface{})
+//
+// Logic:
+//  1. If we find an existing transaction in ctx (e.g., from apmgin), start a span.
+//  2. If no existing transaction is found, start a new "request"-type transaction.
 func StartTrace(args ...interface{}) func() {
 	var ctx context.Context
 	var operationName string
 	var keyValues []interface{}
 
 	if len(args) == 0 {
-		// Invalid usage, return a no-op function
 		log.Error("StartTrace called without arguments")
 		return func() {}
 	}
@@ -235,24 +226,24 @@ func StartTrace(args ...interface{}) func() {
 			operationName = opName
 			keyValues = args[2:]
 		} else {
-			log.Error("StartTrace operation name must be a string when called with *gin.Context")
+			log.Error("Operation name must be a string when called with *gin.Context")
 			return func() {}
 		}
 	case context.Context:
 		ctx = v
 		if len(args) < 2 {
-			log.Error("StartTrace called with context.Context but without operation name")
+			log.Error("StartTrace called with context but without operation name")
 			return func() {}
 		}
 		if opName, ok := args[1].(string); ok {
 			operationName = opName
 			keyValues = args[2:]
 		} else {
-			log.Error("StartTrace operation name must be a string when called with context.Context")
+			log.Error("Operation name must be a string when called with context.Context")
 			return func() {}
 		}
 	default:
-		log.Error("StartTrace unsupported first argument type")
+		log.Error("Unsupported first argument type for StartTrace")
 		return func() {}
 	}
 
@@ -265,95 +256,83 @@ func startTrace(ctx context.Context, operationName string, keyValues ...interfac
 	tracer := currentTracer
 	tracerMutex.Unlock()
 
-	if IsNoOpMode() || noOp {
+	if IsNoOpMode() || noOp || tracer == nil {
 		return func() {}
 	}
 
-	if tracer == nil {
-		return func() {}
-	}
+	existingTx := apm.TransactionFromContext(ctx)
+	if existingTx != nil {
+		// create a span inside existing request transaction
+		span, _ := apm.StartSpan(ctx, operationName, "custom")
+		if span.Dropped() {
+			return func() {}
+		}
 
-	// Start an Elastic APM transaction
-	tx := tracer.StartTransaction(operationName, "custom")
-	// Create a context with the transaction for propagation
-	ctx = apm.ContextWithTransaction(ctx, tx)
-
-	// Add the DID label to the transaction
-	tx.Context.SetLabel("did", didID.String())
-
-	// Start a span within the transaction
-	span, _ := apm.StartSpan(ctx, operationName+"_span", "custom")
-	if span.Dropped() {
-		// If the span was dropped due to sampling, proceed without it
-		span = nil
-	} else {
-		// Add the DID label to the span
 		span.Context.SetLabel("did", didID.String())
-	}
-
-	// Record the start time
-	startTime := time.Now()
-
-	// Log the start of the operation
-	logger := log.With("operation", operationName).
-		With("startTime", startTime).
-		With("trace.id", tx.TraceContext().Trace.String()).
-		With("transaction.id", tx.TraceContext().Span.String()).
-		With("did", didID.String()) // Include DID in the log entry
-
-	if span != nil {
-		logger = logger.With("span.id", span.TraceContext().Span.String())
-	}
-
-	// Include additional key-values
-	for i := 0; i < len(keyValues); i += 2 {
-		if i+1 < len(keyValues) {
-			key, ok := keyValues[i].(string)
-			if ok {
-				logger = logger.With(key, keyValues[i+1])
-			}
-		}
-	}
-
-	// disabled because a bit too verbose
-	// logger.Info("Operation started")
-
-	// Return the end function
-	return func() {
-		// Calculate duration
-		endTime := time.Now()
-		duration := endTime.Sub(startTime)
-
-		// Log the end of the operation
-		logger := log.With("operation", operationName).
-			With("endTime", endTime).
-			With("duration", duration).
-			With("trace.id", tx.TraceContext().Trace.String()).
-			With("transaction.id", tx.TraceContext().Span.String()).
-			With("did", didID.String()) // Include DID in the log entry
-
-		if span != nil {
-			logger = logger.With("span.id", span.TraceContext().Span.String())
-			span.End()
-		}
-
-		// Include additional key-values
 		for i := 0; i < len(keyValues); i += 2 {
 			if i+1 < len(keyValues) {
-				key, ok := keyValues[i].(string)
-				if ok {
-					logger = logger.With(key, keyValues[i+1])
+				if key, ok := keyValues[i].(string); ok {
+					span.Context.SetLabel(key, keyValues[i+1])
 				}
 			}
 		}
 
-		// logger.Info("Operation ended")
+		startTime := time.Now()
+		log.Info("Operation started inside existing request transaction",
+			"operation", operationName,
+			"trace.id", existingTx.TraceContext().Trace.String(),
+			"transaction.id", existingTx.TraceContext().Span.String())
 
-		tx.End()
+		return func() {
+			duration := time.Since(startTime)
+			log.Info("Operation ended",
+				"operation", operationName,
+				"duration", duration,
+				"trace.id", existingTx.TraceContext().Trace.String(),
+				"transaction.id", existingTx.TraceContext().Span.String())
+			span.End()
+		}
+	}
+
+	// else: start a new "request"-type transaction
+	newTx := tracer.StartTransaction(operationName, "request")
+	ctx = apm.ContextWithTransaction(ctx, newTx)
+	newTx.Context.SetLabel("did", didID.String())
+
+	span, _ := apm.StartSpan(ctx, operationName+"_span", "custom")
+	if span.Dropped() {
+		newTx.End()
+		return func() {}
+	}
+
+	span.Context.SetLabel("did", didID.String())
+	for i := 0; i < len(keyValues); i += 2 {
+		if i+1 < len(keyValues) {
+			if key, ok := keyValues[i].(string); ok {
+				span.Context.SetLabel(key, keyValues[i+1])
+			}
+		}
+	}
+
+	startTime := time.Now()
+	log.Info("Operation started with new request-like transaction",
+		"operation", operationName,
+		"trace.id", newTx.TraceContext().Trace.String(),
+		"transaction.id", newTx.TraceContext().Span.String())
+
+	return func() {
+		duration := time.Since(startTime)
+		log.Info("Operation ended",
+			"operation", operationName,
+			"duration", duration,
+			"trace.id", newTx.TraceContext().Trace.String(),
+			"transaction.id", newTx.TraceContext().Span.String())
+		span.End()
+		newTx.End()
 	}
 }
 
-// shutdownTracer cleans up resources used by the tracer
+// shutdownTracer closes the current tracer
 func shutdownTracer() {
 	tracerMutex.Lock()
 	defer tracerMutex.Unlock()
