@@ -279,7 +279,7 @@ func (l *Libp2p) RegisterStreamMessageHandler(messageType types.MessageType, han
 }
 
 // RegisterBytesMessageHandler registers a stream handler for a specific protocol and sends bytes to handler func.
-func (l *Libp2p) RegisterBytesMessageHandler(messageType types.MessageType, handler func(data []byte)) error {
+func (l *Libp2p) RegisterBytesMessageHandler(messageType types.MessageType, handler func(data []byte, peerId peer.ID)) error {
 	if messageType == "" {
 		return errors.New("message type is empty")
 	}
@@ -292,7 +292,7 @@ func (l *Libp2p) RegisterBytesMessageHandler(messageType types.MessageType, hand
 }
 
 // HandleMessage registers a stream handler for a specific protocol and sends bytes to handler func.
-func (l *Libp2p) HandleMessage(messageType string, handler func(data []byte)) error {
+func (l *Libp2p) HandleMessage(messageType string, handler func(data []byte, peerId peer.ID)) error {
 	return l.RegisterBytesMessageHandler(types.MessageType(messageType), handler)
 }
 
@@ -344,7 +344,7 @@ func (l *Libp2p) handleReadBytesFromStream(s network.Stream) {
 	}
 
 	_ = s.Close()
-	callback(buf)
+	callback(buf, s.Conn().RemotePeer())
 }
 
 // UnregisterMessageHandler unregisters a stream handler for a specific protocol.
@@ -362,7 +362,7 @@ func (l *Libp2p) SendMessage(ctx context.Context, hostID string, msg types.Messa
 	// we are delivering a message to ourself
 	// we should use the handler to send the message to the handler directly which has been previously registered.
 	if pid == l.Host.ID() {
-		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data)
+		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data, pid)
 		return nil
 	}
 
@@ -389,7 +389,7 @@ func (l *Libp2p) SendMessageSync(ctx context.Context, hostID string, msg types.M
 	}
 
 	if pid == l.Host.ID() {
-		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data)
+		l.handlerRegistry.SendMessageToLocalHandler(msg.Type, msg.Data, pid)
 		return nil
 	}
 

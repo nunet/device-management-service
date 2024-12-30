@@ -14,6 +14,8 @@ import (
 	reflect "reflect"
 	time "time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
+
 	config "gitlab.com/nunet/device-management-service/internal/config"
 	crypto "gitlab.com/nunet/device-management-service/lib/crypto"
 	network "gitlab.com/nunet/device-management-service/network"
@@ -187,7 +189,7 @@ func (mr *MockNetworkMockRecorder) GetPeerPubKey(peerID any) *gomock.Call {
 }
 
 // HandleMessage mocks base method.
-func (m *MockNetwork) HandleMessage(messageType string, handler func([]byte)) error {
+func (m *MockNetwork) HandleMessage(messageType string, handler func(msg []byte, peerID peer.ID)) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleMessage", messageType, handler)
 	ret0, _ := ret[0].(error)

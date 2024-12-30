@@ -189,7 +189,7 @@ func TestSelfDial(t *testing.T) {
 	messageType := types.MessageType("/custom_bytes_callback/1.1.4")
 	messageChannel := make(chan string)
 
-	err := peer1.RegisterBytesMessageHandler(messageType, func(dt []byte) {
+	err := peer1.RegisterBytesMessageHandler(messageType, func(dt []byte, _ peer.ID) {
 		messageChannel <- string(dt)
 	})
 	assert.NoError(t, err)
@@ -264,7 +264,7 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	// 6. register message with bytes handler function
 	secondPayloadReceived := make(chan string)
 	err = peer1.RegisterBytesMessageHandler(
-		types.MessageType("/custom_bytes_callback/1.1.4"), func(dt []byte) {
+		types.MessageType("/custom_bytes_callback/1.1.4"), func(dt []byte, _ peer.ID) {
 			secondPayloadReceived <- string(dt)
 		})
 	assert.NoError(t, err)
