@@ -142,7 +142,12 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 		_ = l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
 	}
 
-	l.UnregisterMessageHandler(PacketExchangeProtocolID)
+	if len(l.subnets) == 1 {
+		if atomic.CompareAndSwapInt32(&l.isSubnetWriteProtocolRegistered, 1, 0) {
+			l.UnregisterMessageHandler(PacketExchangeProtocolID)
+		}
+	}
+
 	delete(l.subnets, subnetID)
 	return nil
 }

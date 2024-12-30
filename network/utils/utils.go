@@ -174,3 +174,16 @@ func GetRandomCIDRInRange(mask int, start, end net.IP, blacklist []string) (stri
 func randRange(min, max int) int {
 	return rand.Intn(max-min+1) + min
 }
+
+// IsFreePort checks if a given port is free to use by trying to listen on it.
+func IsFreePort(port int) bool {
+	addr := net.JoinHostPort("", strconv.Itoa(port))
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		// error listening, probably in use
+		return false
+	}
+
+	_ = ln.Close()
+	return true
+}

@@ -38,11 +38,11 @@ import (
 )
 
 const (
-	helloMinDelay                   = 10 * time.Second
-	helloMaxDelay                   = 20 * time.Second
-	helloTimeout                    = 3 * time.Second
-	helloAttempts                   = 3
-	clearCommitedResourcesFrequency = 60 * time.Second
+	helloMinDelay         = 10 * time.Second
+	helloMaxDelay         = 20 * time.Second
+	helloTimeout          = 3 * time.Second
+	helloAttempts         = 3
+	clearCommitsFrequency = 60 * time.Second
 
 	grantAllocationCapsFreq = 1 * time.Hour
 
@@ -352,10 +352,10 @@ func New(cfg config.Config, fs afero.Afero,
 		log.Errorf("restoring deployments: %s", err)
 	}
 
-	ticker := time.NewTicker(clearCommitedResourcesFrequency)
+	ticker := time.NewTicker(clearCommitsFrequency)
 	go func() {
 		for range ticker.C {
-			n.clearCommitedResources()
+			n.clearCommits()
 		}
 	}()
 
@@ -937,23 +937,26 @@ func (n *Node) commitDeployment(ensembleID, allocationID string, resources types
 
 	n.commitedResources[allocationID] = bidState
 
-	err := n.portAllocator.AllocatePorts(allocationID, bidState.request.V1.PublicPorts.Static)
-	if err != nil {
-		log.Debugf("failed to allocate static ports: %v", err)
-		return err
+	if len(bidState.request.V1.PublicPorts.Static) > 0 {
+		err := n.portAllocator.AllocatePorts(allocationID, bidState.request.V1.PublicPorts.Static)
+		if err != nil {
+			log.Debugf("failed to allocate static ports: %v", err)
+			return err
+		}
 	}
 
-	// handle dynamic port allocs
-	_, err = n.portAllocator.AllocateRandom(allocationID, bidState.request.V1.PublicPorts.Dynamic)
-	if err != nil {
-		log.Debugf("failed to allocate ports")
-		return err
+	if bidState.request.V1.PublicPorts.Dynamic > 0 {
+		_, err := n.portAllocator.AllocateRandom(allocationID, bidState.request.V1.PublicPorts.Dynamic)
+		if err != nil {
+			log.Debugf("failed to allocate ports: %v", err)
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (n *Node) clearCommitedResources() {
+func (n *Node) clearCommits() {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 

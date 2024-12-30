@@ -8,9 +8,9 @@ allocations:
                 cores: 1
             gpus: []
             ram:
-                size: 1 # in GB
+                size: 1 # in GiB
             disk:
-                size: 1 # in GB
+                size: 1 # in GiB
         execution:
             type: docker
             image: nginxdemos/hello

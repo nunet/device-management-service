@@ -134,6 +134,13 @@ func TestNestedAllocation(t *testing.T) {
 	err = allocator.AllocatePorts("specific3", []int{8000, 8007})
 	assert.Error(t, err)
 
+	// Test Allocated
+	allocated := allocator.Allocated([]int{8000, 8001, 8003, 8004, 8005, 8006})
+	assert.True(t, allocated)
+
+	allocated = allocator.Allocated([]int{8009, 8010})
+	assert.False(t, allocated)
+
 	// Release everything
 	allocator.Release("specific1")
 	allocator.Release("random2")
@@ -176,15 +183,42 @@ func TestAllocated(t *testing.T) {
 }
 
 func TestPortsAvailable(t *testing.T) {
-	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 8005}
+	config := PortConfig{AvailableRangeFrom: 8001, AvailableRangeTo: 8005}
 	allocator := NewPortAllocator(config)
 
 	available := allocator.PortsAvailable(5)
 	assert.True(t, available)
 
-	_, err := allocator.AllocateRandom("alloc1", 5)
+	_, err := allocator.AllocateRandom("alloc1", 3)
 	assert.NoError(t, err)
 
-	available = allocator.PortsAvailable(5)
+	available = allocator.PortsAvailable(3)
 	assert.False(t, available)
+
+	available = allocator.PortsAvailable(2)
+	assert.True(t, available)
+}
+
+func TestPortAllocationWorkflow(t *testing.T) {
+	config := PortConfig{AvailableRangeFrom: 8000, AvailableRangeTo: 9000}
+	allocator := NewPortAllocator(config)
+
+	// 1. Allocate port 8081
+	err := allocator.AllocatePorts("test-alloc", []int{8081})
+	assert.NoError(t, err)
+
+	// 2. Check if 8081 is allocated
+	allocated := allocator.Allocated([]int{8081})
+	assert.True(t, allocated)
+
+	// 3. Release allocation
+	allocator.Release("test-alloc")
+
+	// 4. Check if port is no longer allocated
+	allocated = allocator.Allocated([]int{8081})
+	assert.False(t, allocated)
+
+	// 5. Try to allocate 8081 again
+	err = allocator.AllocatePorts("test-alloc-2", []int{8081})
+	assert.NoError(t, err)
 }

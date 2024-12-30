@@ -1114,8 +1114,8 @@ func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
 		h,
 		RevertDeploymentBehavior,
 		RevertDeploymentMessage{
-			EnsembleID:     o.id,
-			AllocationsIDs: ncfg.Allocations,
+			EnsembleID:   o.id,
+			AllocsByName: ncfg.Allocations,
 		},
 	)
 	if err != nil {

@@ -394,8 +394,6 @@ loop:
 		return
 	}
 
-	// allocKey := request.ID
-
 	if ok := n.portAllocator.Allocated(toAnswer.V1.PublicPorts.Static); ok {
 		log.Debugf("static ports already allocated")
 		return
@@ -447,45 +445,44 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	}
 	ensembleID := request.EnsembleID
 
-	// try revert bid if exists
-	// TODO: remove this part if port allocation be moved to committing phase
-	n.mx.Lock()
-	_, ok := n.bids[ensembleID]
-	n.mx.Unlock()
-	if ok {
-		n.portAllocator.Release(ensembleID)
-	}
+	for _, allocName := range request.AllocsByName {
+		allocID := n.constructAllocationID(ensembleID, allocName)
 
-	// try revert commit phase
-	n.mx.Lock()
-	_, ok = n.commitedResources[ensembleID]
-	n.mx.Unlock()
-	if ok {
-		err := n.releaseCommit(ensembleID)
-		if err != nil {
-			log.Errorf("failed to revert commit for ensemble id: %s: %s", ensembleID, err)
-			// we have to try to revert allocation too, so do not return
+		// try revert commit phase
+		n.mx.Lock()
+		_, ok := n.commitedResources[allocID]
+		n.mx.Unlock()
+		if ok {
+			err := n.releaseCommit(allocID)
+			if err != nil {
+				log.Errorf("failed to revert commit for ensemble id: %s: %s", ensembleID, err)
+				// we have to try to revert other allocations too, so do not return
+			}
 		}
-	}
 
-	// try revert allocations if exist
-	for _, allocID := range request.AllocationsIDs {
-		err := n.releaseAllocation(allocID)
-		if err != nil {
-			log.Errorf("failed to revert allocation %s: %s", allocID, err)
+		// try revert allocations if exist
+		_, err := n.GetAllocation(allocID)
+		if err == nil {
+			// allocation exists
+			err := n.releaseAllocation(allocID)
+			if err != nil {
+				log.Errorf("failed to revert allocation %s: %s", allocID, err)
+			}
 		}
 	}
 	log.Infof("deployment reverted: %+v", ensembleID)
 }
 
-func (n *Node) releaseCommit(eid string) error {
-	err := n.resourceManager.UncommitResources(context.TODO(), eid)
+func (n *Node) releaseCommit(allocID string) error {
+	err := n.resourceManager.UncommitResources(context.TODO(), allocID)
 	if err != nil {
-		return fmt.Errorf("failed to release resources for ensemble id: %s: %w", eid, err)
+		return fmt.Errorf("failed to release resources for ensemble allocID: %s: %w", allocID, err)
 	}
 
+	n.portAllocator.Release(allocID)
+
 	n.mx.Lock()
-	delete(n.commitedResources, eid)
+	delete(n.commitedResources, allocID)
 	n.mx.Unlock()
 
 	return nil
@@ -500,6 +497,8 @@ func (n *Node) releaseAllocation(allocID string) error {
 		log.Errorf("allocation %s not found", allocID)
 		return nil
 	}
+
+	n.portAllocator.Release(allocID)
 
 	err := n.resourceManager.DeallocateResources(n.ctx, allocID)
 	if err != nil {
@@ -559,7 +558,6 @@ func (n *Node) doGCBidState() {
 
 	for k, bs := range n.bids {
 		if bs.expire.Before(now) {
-			n.portAllocator.Release(k)
 			delete(n.bids, k)
 		}
 	}
