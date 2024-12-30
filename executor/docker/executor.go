@@ -48,8 +48,6 @@ const (
 
 	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
 
-	dnsResolverIP = "10.0.0.1"
-
 	enableTTY = false
 )
 
@@ -669,7 +667,7 @@ func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest,
 	hostConfig.Privileged = dockerArgs.Privileged
 
 	// Configure DNS settings
-	hostConfig.DNS = []string{dnsResolverIP, "1.1.1.1"}
+	hostConfig.DNS = []string{params.GatewayIP, "1.1.1.1"}
 	hostConfig.DNSSearch = []string{"internal"}
 	hostConfig.DNSOptions = []string{
 		"ndots:1", // reduce DNS lookups by setting ndots lower

@@ -92,6 +92,7 @@ type CommitDeploymentRequest struct {
 	AllocationName string
 	NodeID         string
 	Resources      types.Resources
+	PortMapping    map[int]int
 }
 
 type CommitDeploymentResponse struct {
@@ -125,6 +126,7 @@ type RevertDeploymentMessage struct {
 
 type AllocationStartRequest struct {
 	SubnetIP    string
+	GatewayIP   string
 	PortMapping map[int]int
 }
 
