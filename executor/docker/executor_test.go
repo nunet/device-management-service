@@ -73,6 +73,7 @@ func (s *ExecutorTestSuite) newExecutionRequest(cmd []string) *types.ExecutionRe
 		},
 		ResultsDir:          filepath.Join(testDirLogs, execID),
 		PersistLogsDuration: persistLogDurationTest,
+		GatewayIP:           "10.0.0.1",
 	}
 }
 
