@@ -18,7 +18,7 @@ type OnboardingConfig struct {
 	// OnboardedResources - resources that are onboarded
 	// this is a transient field and not stored in the database directly
 	// it is populated using the ResourceManager
-	OnboardedResources Resources `json:"onboarded_resources,omitempty" gorm:"-" clover:"-"`
+	OnboardedResources Resources `json:"onboarded_resources,omitempty" clover:"-"`
 }
 
 // OnboardingManager - interface for onboarding

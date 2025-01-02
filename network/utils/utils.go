@@ -171,8 +171,8 @@ func GetRandomCIDRInRange(mask int, start, end net.IP, blacklist []string) (stri
 	return ip.String(), nil
 }
 
-func randRange(min, max int) int {
-	return rand.Intn(max-min+1) + min
+func randRange(minimum, maximum int) int {
+	return rand.Intn(maximum-minimum+1) + minimum
 }
 
 // IsFreePort checks if a given port is free to use by trying to listen on it.

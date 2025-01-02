@@ -136,9 +136,10 @@ func TestNew(t *testing.T) {
 
 			collections := []string{"orchestrator_view"}
 
-			db, err := repo.NewDB(path, collections)
+			db, err := repo.NewMemDB(collections)
 			assert.NoError(t, err)
 			assert.NotNil(t, db)
+			defer db.Close()
 
 			act, err := New(
 				*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
@@ -172,9 +173,10 @@ func TestNodeAllocationMessaging(t *testing.T) {
 
 	collections := []string{"orchestrator_view", "contract"}
 
-	db, err := repo.NewDB(path, collections)
+	db, err := repo.NewMemDB(collections)
 	assert.NoError(t, err)
 	assert.NotNil(t, db)
+	defer db.Close()
 
 	contractR := repo.NewContractRepo(db)
 	assert.NoError(t, err)

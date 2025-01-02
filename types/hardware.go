@@ -86,10 +86,6 @@ type GPU struct {
 	VRAM float64 `json:"vram" description:"Total amount of VRAM on the device"`
 	// UUID is the unique identifier of the device
 	UUID string `json:"uuid" description:"Unique identifier of the device"`
-
-	// Gorm fields
-	// Team, is this the right way to do this? What is the best practice we're following?
-	ResourceID string `json:"-" gorm:"foreignKey:ID"`
 }
 
 // implementing Comparable and Calculable interfaces
