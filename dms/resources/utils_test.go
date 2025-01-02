@@ -12,27 +12,20 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ostafen/clover/v2"
 	"github.com/stretchr/testify/require"
 
-	"gorm.io/gorm"
-
 	"gitlab.com/nunet/device-management-service/db/repositories"
-	gormRepo "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	cloverRepo "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 // setupManagerRepos prepares a full structure of ManagerRepos to be
 // used by tests.
-func setupManagerRepos(t *testing.T, db *gorm.DB) ManagerRepos {
-	err := db.AutoMigrate(
-		&types.OnboardedResources{},
-		&types.ResourceAllocation{},
-	)
-	require.NoError(t, err)
-
+func setupManagerRepos(db *clover.DB) ManagerRepos {
 	return ManagerRepos{
-		OnboardedResources: gormRepo.NewOnboardedResources(db),
-		ResourceAllocation: gormRepo.NewResourceAllocation(db),
+		OnboardedResources: cloverRepo.NewOnboardedResources(db),
+		ResourceAllocation: cloverRepo.NewResourceAllocation(db),
 	}
 }
 

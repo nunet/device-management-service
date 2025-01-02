@@ -15,10 +15,10 @@ import (
 
 // Resources represents the resources of the machine
 type Resources struct {
-	CPU  CPU  `json:"cpu" gorm:"embedded;embeddedPrefix:cpu_"`
-	GPUs GPUs `json:"gpus,omitempty" gorm:"foreignKey:ResourceID"`
-	RAM  RAM  `json:"ram" gorm:"embedded;embeddedPrefix:ram_"`
-	Disk Disk `json:"disk" gorm:"embedded;embeddedPrefix:disk_"`
+	CPU  CPU  `json:"cpu"`
+	GPUs GPUs `json:"gpus,omitempty"`
+	RAM  RAM  `json:"ram"`
+	Disk Disk `json:"disk"`
 }
 
 // implements the Calculable and Comparable interfaces

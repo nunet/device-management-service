@@ -30,8 +30,8 @@ var (
 )
 
 // validateRange validates the actual value is within the min and max range
-func validateRange(actual, min, max float64) error {
-	if actual < min || actual > max {
+func validateRange(actual, minimum, maximum float64) error {
+	if actual < minimum || actual > maximum {
 		return ErrOutOfRange
 	}
 	return nil

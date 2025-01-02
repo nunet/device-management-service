@@ -16,10 +16,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	cloverRepo "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -27,10 +26,16 @@ import (
 func TestNewResourceManager(t *testing.T) {
 	t.Parallel()
 
-	mockDB, err := gorm.Open(sqlite.Open("file:test_newResourceManager?mode=memory&cache=shared"), &gorm.Config{})
+	mockDB, err := cloverRepo.NewMemDB(
+		[]string{
+			"onboarded_resources",
+			"resource_allocation",
+		},
+	)
 	require.NoError(t, err)
+	defer mockDB.Close()
 
-	repos := setupManagerRepos(t, mockDB)
+	repos := setupManagerRepos(mockDB)
 
 	hm := hardware.NewHardwareManager()
 	rm, err := NewResourceManager(repos, hm)
@@ -48,10 +53,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -97,10 +107,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -133,10 +148,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -226,10 +246,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources4?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -281,10 +306,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources5?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -334,10 +364,15 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_ReleaseResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -391,10 +426,15 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_ReleaseCommittedResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -415,10 +455,15 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -464,10 +509,13 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{}, // no database used in allocation only in-mem store
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -497,10 +545,15 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -590,10 +643,16 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources4?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -645,10 +704,15 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources6?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -698,10 +762,16 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_DeallocateResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -753,10 +823,13 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_DeallocateResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{}, // no database used in deallocation only in-mem store
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -777,10 +850,15 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 	t.Run("Must be able to get onboarded resources", func(t *testing.T) {
 		t.Parallel()
-		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -804,10 +882,15 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 	t.Run("Must be able to update onboarded resources both in store and db", func(t *testing.T) {
 		t.Parallel()
-		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -847,10 +930,15 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 	t.Run("Must be able to get onboarded resources from DB if not in store", func(t *testing.T) {
 		t.Parallel()
-		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -888,10 +976,15 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_FreeResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -930,10 +1023,16 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_FreeResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -990,10 +1089,16 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_GetTotalDemand1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -1057,10 +1162,16 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_GetTotalDemand2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
