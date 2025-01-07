@@ -46,7 +46,7 @@ nunet cap new myorg
 Grant each user capabilities to invoke certain behaviors:
 
 ```bash
-nunet cap grant --context myorg --cap /dms/deployment --cap /broadcast --topic /nunet --expiry 2024-12-31 <did-user>
+nunet cap grant --context myorg --cap /dms/deployment --cap /broadcast --cap /public --topic /nunet --expiry 2024-12-31 <did-user>
 # Save the returned token as <token-1>
 ```
 
@@ -68,14 +68,14 @@ Grant and set up the necessary require and provide anchors for user's DMS:
 
 ```bash
 # Grant from user to organization (for require anchor)
-nunet cap grant --context user --cap /dms/deployment --cap /broadcast --topic /nunet --expiry 2024-12-31 <did-myorg>
+nunet cap grant --context user --cap /dms/deployment --cap /broadcast --cap /public --topic /nunet --expiry 2024-12-31 <did-myorg>
 # Save the returned token as <token-2>
 
 # Add require anchor to DMS
 nunet cap anchor --context dms --require <token-2>
 
 # Delegate from user to DMS (for provide anchor)
-nunet cap delegate --context user --cap /dms/deployment --cap /broadcast --topic /nunet --expiry 2024-12-31 <did-dms>
+nunet cap delegate --context user --cap /dms/deployment --cap /broadcast --cap /public --topic /nunet --expiry 2024-12-31 <did-dms>
 # Save the returned token as <token-3>
 
 # Add provide anchor to DMS
