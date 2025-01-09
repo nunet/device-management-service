@@ -47,7 +47,7 @@ do
     # create man page
     gzip $archDir/usr/share/man/man1/nunet.1
 
-    DMS_INST_SIZE=$(du -sB1 $archDir | awk '{ print $1 }')
+    DMS_INST_SIZE=$(du -sB1024 $archDir | awk '{ print $1 }')
     sed -i "s/Installed-Size:.*/Installed-Size: $DMS_INST_SIZE/g" $archDir/DEBIAN/control
 
     find $archDir -name .gitkeep | xargs rm
