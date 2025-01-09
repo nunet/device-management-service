@@ -15,13 +15,6 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-const (
-	PublicHelloBehavior    = "/public/hello"
-	PublicStatusBehavior   = "/public/status"
-	BroadcastHelloBehavior = "/broadcast/hello"
-	BroadcastHelloTopic    = "/nunet/hello"
-)
-
 type HelloResponse struct {
 	DID did.DID
 }

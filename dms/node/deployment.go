@@ -28,88 +28,14 @@ import (
 )
 
 const (
-	NewDeploymentBehavior = "/dms/node/deployment/new"
-
 	// Minimum time for deployment
-	MinDeploymentTime = time.Minute - time.Second
-
+	MinDeploymentTime           = time.Minute - time.Second
 	RestoreDeadlineCommitting   = 1 * time.Minute
 	RestoreDeadlineProvisioning = 1 * time.Minute
 	RestoreDeadlineRunning      = 5 * time.Minute
 	bidStateGCInterval          = time.Minute
 	bidStateTimeout             = 5 * time.Minute
 )
-
-type NewDeploymentRequest struct {
-	Ensemble job_types.EnsembleConfig
-}
-
-type NewDeploymentResponse struct {
-	Status     string
-	EnsembleID string `json:",omitempty"`
-	Error      string `json:",omitempty"`
-}
-
-func (n *Node) newDeployment(msg actor.Envelope) {
-	defer msg.Discard()
-
-	if time.Until(msg.Expiry()) < MinDeploymentTime {
-		log.Debugf("deployment time too short")
-		n.sendReply(msg, NewDeploymentResponse{
-			Status: "ERROR",
-			Error:  "requested deployment time too short",
-		})
-		return
-	}
-
-	var request NewDeploymentRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		log.Debugf("unmarshalling deployment request: %s", err)
-		n.sendReply(msg, NewDeploymentResponse{
-			Status: "ERROR",
-			Error:  err.Error(),
-		})
-		return
-	}
-
-	childCtx := context.WithoutCancel(n.ctx)
-	orchestrator, err := n.createOrchestrator(childCtx, request.Ensemble)
-	if err != nil {
-		log.Warnf("creating orchestrator: %s", err)
-		n.sendReply(msg, NewDeploymentResponse{
-			Status: "ERROR",
-			Error:  err.Error(),
-		})
-		return
-	}
-
-	n.mx.Lock()
-	n.deployments[orchestrator.ID()] = orchestrator
-	n.mx.Unlock()
-
-	log.Infof("deploying ensemble: %s", orchestrator.ID())
-	n.sendReply(msg, NewDeploymentResponse{
-		Status:     "OK",
-		EnsembleID: orchestrator.ID(),
-	})
-
-	if err := orchestrator.Deploy(msg.Expiry().Add(-jobs.MinEnsembleDeploymentTime)); err != nil {
-		orchestrator.Stop()
-		log.Errorf("error creating ensemble: %s", err)
-		n.mx.Lock()
-		delete(n.deployments, orchestrator.ID())
-		n.mx.Unlock()
-
-		return
-	}
-
-	// save the deployment
-	n.mx.Lock()
-	if err := n.saveDeployment(orchestrator); err != nil {
-		log.Errorf("error saving deployment %s: %s", orchestrator.ID(), err)
-	}
-	n.mx.Unlock()
-}
 
 func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 	defer msg.Discard()
