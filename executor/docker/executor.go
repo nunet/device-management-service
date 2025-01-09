@@ -25,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -428,33 +427,6 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to decode docker engine spec: %w", err)
 	}
 
-	// TODO: Move this code block ( L263-272) to the allocator in future
-	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
-	// TODO: use the hardware manager instantiated in the dms package
-	hardwareManager := hardware.NewHardwareManager()
-	machineResources, err := hardwareManager.GetMachineResources()
-	if err != nil {
-		return "", fmt.Errorf("failed to get machine resources: %w", err)
-	}
-
-	var chosenGPUVendor types.GPUVendor
-	if len(machineResources.GPUs) == 0 {
-		log.Infow("no GPUs available on the machine")
-		chosenGPUVendor = types.GPUVendorNone
-	} else {
-		// Essential for multi-vendor GPU nodes. For example,
-		// if a machine has an 8 GB NVIDIA and a 16 GB Intel GPU, the latter should be used first.
-		// Even for machines with a single GPU, this is important as integrated GPUs would also be commonly detected.
-		maxFreeVRAMGpu, err := machineResources.GPUs.MaxFreeVRAMGPU()
-		if err != nil {
-			// TODO: log a warning here
-
-			chosenGPUVendor = types.GPUVendorNone
-		} else {
-			chosenGPUVendor = maxFreeVRAMGpu.Vendor
-		}
-	}
-
 	containerConfig := container.Config{
 		Image:      dockerArgs.Image,
 		Env:        dockerArgs.Environment,
@@ -498,7 +470,7 @@ func (e *Executor) newDockerExecutionContainer(
 	}
 
 	log.Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
-	hostConfig, err := configureHostConfig(chosenGPUVendor, params, dockerArgs, mounts)
+	hostConfig, err := configureHostConfig(params, dockerArgs, mounts)
 	if err != nil {
 		return "", fmt.Errorf("failed to configure host config: %w", err)
 	}
@@ -558,86 +530,80 @@ func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
 
 // configureHostConfig sets up the host configuration for the container based on the
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
-func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) (container.HostConfig, error) {
+func configureHostConfig(params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) (container.HostConfig, error) {
 	var hostConfig container.HostConfig
 
-	switch vendor {
-	case types.GPUVendorNvidia:
-		deviceIDs := make([]string, len(params.Resources.GPUs))
-		for i, gpu := range params.Resources.GPUs {
-			deviceIDs[i] = fmt.Sprint(gpu.Index)
-		}
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-				DeviceRequests: []container.DeviceRequest{
-					{
-						DeviceIDs:    deviceIDs,
-						Capabilities: [][]string{{"gpu"}},
+	// set the config for the first selected gpu
+	// TODO: support multiple GPUs
+	if len(params.Resources.GPUs) >= 1 {
+		switch params.Resources.GPUs[0].Vendor {
+		case types.GPUVendorNvidia:
+			deviceIDs := make([]string, len(params.Resources.GPUs))
+			for i, gpu := range params.Resources.GPUs {
+				deviceIDs[i] = fmt.Sprint(gpu.Index)
+			}
+			hostConfig = container.HostConfig{
+				Resources: container.Resources{
+					DeviceRequests: []container.DeviceRequest{
+						{
+							DeviceIDs:    deviceIDs,
+							Capabilities: [][]string{{"gpu"}},
+						},
 					},
 				},
-			},
-		}
-	case types.GPUVendorAMDATI:
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Binds: []string{
-				"/dev/kfd:/dev/kfd",
-				"/dev/dri:/dev/dri",
-			},
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-				Devices: []container.DeviceMapping{
-					{
-						PathOnHost:        "/dev/kfd",
-						PathInContainer:   "/dev/kfd",
-						CgroupPermissions: "rwm",
-					},
-					{
-						PathOnHost:        "/dev/dri",
-						PathInContainer:   "/dev/dri",
-						CgroupPermissions: "rwm",
+			}
+		case types.GPUVendorAMDATI:
+			hostConfig = container.HostConfig{
+				Binds: []string{
+					"/dev/kfd:/dev/kfd",
+					"/dev/dri:/dev/dri",
+				},
+				Resources: container.Resources{
+					Devices: []container.DeviceMapping{
+						{
+							PathOnHost:        "/dev/kfd",
+							PathInContainer:   "/dev/kfd",
+							CgroupPermissions: "rwm",
+						},
+						{
+							PathOnHost:        "/dev/dri",
+							PathInContainer:   "/dev/dri",
+							CgroupPermissions: "rwm",
+						},
 					},
 				},
-			},
-			GroupAdd: []string{"video"},
-		}
-	// Updated the device handling for Intel GPUs.
-	// Previously, specific device paths were determined using PCI addresses and symlinks.
-	// Now, the approach has been simplified by directly binding the entire /dev/dri directory.
-	// This change exposes all Intel GPUs to the container, which may be preferable for
-	// environments with multiple Intel GPUs. It reduces complexity as granular control
-	// is not required if all GPUs need to be accessible.
-	case types.GPUVendorIntel:
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Binds: []string{
-				"/dev/dri:/dev/dri",
-			},
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-				Devices: []container.DeviceMapping{
-					{
-						PathOnHost:        "/dev/dri",
-						PathInContainer:   "/dev/dri",
-						CgroupPermissions: "rwm",
+				GroupAdd: []string{"video"},
+			}
+		// Updated the device handling for Intel GPUs.
+		// Previously, specific device paths were determined using PCI addresses and symlinks.
+		// Now, the approach has been simplified by directly binding the entire /dev/dri directory.
+		// This change exposes all Intel GPUs to the container, which may be preferable for
+		// environments with multiple Intel GPUs. It reduces complexity as granular control
+		// is not required if all GPUs need to be accessible.
+		case types.GPUVendorIntel:
+			hostConfig = container.HostConfig{
+				Binds: []string{
+					"/dev/dri:/dev/dri",
+				},
+				Resources: container.Resources{
+					Devices: []container.DeviceMapping{
+						{
+							PathOnHost:        "/dev/dri",
+							PathInContainer:   "/dev/dri",
+							CgroupPermissions: "rwm",
+						},
 					},
 				},
-			},
-		}
-	default:
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-			},
+			}
 		}
 	}
+
+	// Set the cpu config
+	hostConfig.Resources.NanoCPUs = int64(params.Resources.CPU.Cores * nanoCPUsPerCore)
+	hostConfig.Resources.CPUCount = int64(params.Resources.CPU.Cores)
+
+	// setup mounts
+	hostConfig.Mounts = mounts
 
 	// configure port binding
 	portMaps := make(map[nat.Port][]nat.PortBinding)
