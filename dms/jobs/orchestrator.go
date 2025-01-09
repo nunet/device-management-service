@@ -272,7 +272,7 @@ deploy:
 
 		log.Info("provisioning network")
 		if err := o.provision(o.manifest); err != nil {
-			log.Errorf("failed to privision network: %s", err)
+			log.Errorf("failed to provision network: %s", err)
 			o.revert(manifest)
 			continue deploy
 		}

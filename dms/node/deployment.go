@@ -445,6 +445,11 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	}
 	ensembleID := request.EnsembleID
 
+	// forget bid
+	n.mx.Lock()
+	delete(n.bids, ensembleID)
+	n.mx.Unlock()
+
 	for _, allocName := range request.AllocsByName {
 		allocID := n.constructAllocationID(ensembleID, allocName)
 
