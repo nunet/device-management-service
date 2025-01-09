@@ -9,6 +9,7 @@
 package actor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -51,7 +52,7 @@ func (r cmdResponse) MarshalJSON() ([]byte, error) {
 func getDMSHandle(client *utils.HTTPClient) (actor.Handle, error) {
 	var handle actor.Handle
 
-	body, code, err := client.MakeRequest("GET", "/actor/handle", nil)
+	body, code, err := client.MakeRequest(context.Background(), "GET", "/actor/handle", nil)
 	if err != nil {
 		return handle, fmt.Errorf("unable to get source handle: %w", err)
 	}

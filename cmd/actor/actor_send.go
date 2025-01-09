@@ -38,7 +38,7 @@ The message is encoded into an actor envelope, which then is sent across the net
 				return fmt.Errorf("could not unmarshal message: %w", err)
 			}
 
-			resBody, resCode, err := client.MakeRequest("POST", "/actor/send", []byte(args[0]))
+			resBody, resCode, err := client.MakeRequest(cmd.Context(), "POST", "/actor/send", []byte(args[0]))
 			fmt.Fprintln(cmd.OutOrStdout(), string(resBody))
 			if err != nil {
 				return fmt.Errorf("unable to make internal request: %w", err)

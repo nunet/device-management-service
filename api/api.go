@@ -17,7 +17,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -56,9 +55,6 @@ type Server struct {
 
 // NewServer creates a new REST server
 func NewServer(config *ServerConfig) *Server {
-	endTrace := observability.StartTrace("rest_server_init_duration")
-	defer endTrace()
-
 	rs := &Server{
 		router: setupRouter(config.Middlewares),
 		config: config,
@@ -75,9 +71,6 @@ func (rs *Server) HealthCheck(c *gin.Context) {
 
 // SetupRoutes sets up all the endpoint routes
 func (rs *Server) SetupRoutes() {
-	endTrace := observability.StartTrace("rest_server_route_init_duration")
-	defer endTrace()
-
 	// /health route
 	rs.router.GET("/health", rs.HealthCheck)
 
@@ -96,9 +89,6 @@ func (rs *Server) SetupRoutes() {
 
 // Run starts the server on the specified port
 func (rs *Server) Run() error {
-	endTrace := observability.StartTrace("rest_server_run_duration")
-	defer endTrace()
-
 	addr := fmt.Sprintf("%s:%d", rs.config.Addr, rs.config.Port)
 	if err := rs.router.Run(addr); err != nil {
 		log.Errorw("rest_server_run_failure", "addr", addr, "error", err)

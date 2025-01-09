@@ -3,8 +3,11 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package dms
 
@@ -17,6 +20,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
@@ -36,6 +40,8 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
+
+	"go.elastic.co/apm/module/apmgin/v2"
 )
 
 //go:embed data/GeoLite2-Country.mmdb
@@ -253,6 +259,10 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		Port:        gcfg.Rest.Port,
 		Addr:        gcfg.Rest.Addr,
 	}
+
+	// Add APM middleware by appending to restConfig.MidW
+	restConfig.Middlewares = append(restConfig.Middlewares, apmgin.Middleware(gin.Default()))
+
 	rServer := api.NewServer(&restConfig)
 	rServer.SetupRoutes()
 
