@@ -131,7 +131,7 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 			}
 
 			endpoint := fmt.Sprintf("/actor/%s", behaviorCfg.Type)
-			resBody, resCode, err := client.MakeRequest("POST", endpoint, msgData)
+			resBody, resCode, err := client.MakeRequest(cmd.Context(), "POST", endpoint, msgData)
 			if err != nil {
 				return fmt.Errorf("unable to make internal request: %w", err)
 			}

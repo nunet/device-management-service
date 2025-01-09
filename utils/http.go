@@ -3,19 +3,24 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
 package utils
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
 	"time"
+
+	"go.elastic.co/apm/module/apmhttp"
 )
 
 type HTTPClient struct {
@@ -24,17 +29,18 @@ type HTTPClient struct {
 	Client     *http.Client
 }
 
+// NewHTTPClient creates a new HTTPClient with APM instrumentation.
 func NewHTTPClient(baseURL, version string) *HTTPClient {
 	return &HTTPClient{
 		BaseURL:    baseURL,
 		APIVersion: version,
-		Client:     http.DefaultClient,
+		Client:     apmhttp.WrapClient(http.DefaultClient),
 	}
 }
 
-// MakeRequest performs an HTTP request with the given method, path, and body
-// It returns the response body, status code, and an error if any
-func (c *HTTPClient) MakeRequest(method, relativePath string, body []byte) ([]byte, int, error) {
+// MakeRequest performs an HTTP request with the given method, path, and body.
+// It returns the response body, status code, and an error if any.
+func (c *HTTPClient) MakeRequest(ctx context.Context, method, relativePath string, body []byte) ([]byte, int, error) {
 	url, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to parse base URL: %v", err)
@@ -42,7 +48,7 @@ func (c *HTTPClient) MakeRequest(method, relativePath string, body []byte) ([]by
 
 	url.Path = path.Join(c.APIVersion, relativePath)
 
-	req, err := http.NewRequest(method, url.String(), bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, method, url.String(), bytes.NewBuffer(body))
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create request: %v", err)
 	}

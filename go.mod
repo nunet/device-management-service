@@ -217,7 +217,7 @@ require (
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/elastic/go-licenser v0.3.1 // indirect
-	github.com/elastic/go-sysinfo v1.1.1 // indirect
+	github.com/elastic/go-sysinfo v1.7.1 // indirect
 	github.com/elastic/go-windows v1.0.0 // indirect
 	github.com/go-openapi/analysis v0.21.2 // indirect
 	github.com/go-openapi/errors v0.20.2 // indirect
@@ -273,6 +273,8 @@ require github.com/avast/retry-go v3.0.0+incompatible
 require (
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/olivere/elastic/v7 v7.0.32
+	go.elastic.co/apm/module/apmgin/v2 v2.6.2
+	go.elastic.co/apm/module/apmhttp v1.15.0
 	go.uber.org/mock v0.5.0
 )
 
@@ -280,6 +282,8 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
 	github.com/pion/transport/v3 v3.0.7 // indirect
+	go.elastic.co/apm/module/apmhttp/v2 v2.6.2 // indirect
+	go.elastic.co/apm/v2 v2.6.2 // indirect
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
 )
 
