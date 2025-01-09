@@ -35,7 +35,7 @@ func newActorInvokeCmd(client *utils.HTTPClient) *cobra.Command {
 				return fmt.Errorf("missing replyTo field in message")
 			}
 
-			resBody, resCode, err := client.MakeRequest("POST", "/actor/invoke", []byte(args[0]))
+			resBody, resCode, err := client.MakeRequest(cmd.Context(), "POST", "/actor/invoke", []byte(args[0]))
 			fmt.Fprintln(cmd.OutOrStdout(), string(resBody))
 			if err != nil {
 				return fmt.Errorf("unable to make internal request: %w", err)
