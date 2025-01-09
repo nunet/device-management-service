@@ -10,79 +10,13 @@ package node
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 )
-
-// TODO: instead of having a behavior to get logs from a FINISHED allocation,
-// we may allow only getting logs from ONGOING allocations.
-// For finite allocations, it could send the logs back to the orchestrator
-// if specified on the ensemble.
-func (n *Node) handleAllocationLogs(msg actor.Envelope) {
-	defer msg.Discard()
-	log.Infof("behavior get logs invoked by: %+v", msg.From)
-
-	handleErr := func(err error) {
-		log.Errorf("error getting allocation logs: %s", err)
-		n.sendReply(msg, jobs.AllocationLogsResponse{Error: err.Error()})
-	}
-
-	var resp jobs.AllocationLogsResponse
-	ensembleID, err := jobs.EnsembleIDFromBehavior(msg.Behavior)
-	if err != nil {
-		handleErr(fmt.Errorf("error getting ensemble ID from behavior %s: %s", msg.Behavior, err))
-		return
-	}
-
-	var req jobs.AllocationLogsRequest
-	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		handleErr(fmt.Errorf("error unmarshalling allocation logs request: %s", err))
-		return
-	}
-
-	allocID := n.constructAllocationID(ensembleID, req.AllocName)
-	resultsDir := filepath.Join(n.dmsConfig.WorkDir, "jobs", allocID)
-
-	stdout, err := n.fs.ReadFile(filepath.Join(resultsDir, "stdout.log"))
-	if err != nil {
-		if err == os.ErrNotExist {
-			log.Warnf("stdout file for allocation %s does not exist (ensemble: %s)", req.AllocName, ensembleID)
-		} else {
-			handleErr(fmt.Errorf("failed to read results file: %s", err))
-			return
-		}
-	}
-
-	stderr, err := n.fs.ReadFile(filepath.Join(resultsDir, "stderr.log"))
-	if err != nil {
-		if err == os.ErrNotExist {
-			log.Debugf("stderr file for allocation %s does not exist (ensemble: %s)", req.AllocName, ensembleID)
-		} else {
-			handleErr(fmt.Errorf("failed to read results file: %s", err))
-			return
-		}
-	}
-
-	if len(stdout) == 0 && len(stderr) == 0 {
-		handleErr(
-			fmt.Errorf("stdout and stderr files for allocation %s are empty (ensemble: %s)",
-				req.AllocName, ensembleID),
-		)
-		return
-	}
-
-	log.Info("sending logs for allocation: ", allocID)
-
-	resp.Stdout = stdout
-	resp.Stderr = stderr
-	n.sendReply(msg, resp)
-}
 
 // monitorEnsembleAllocations monitors the provided allocations. It handles allocations termination.
 //
@@ -152,6 +86,35 @@ func (n *Node) cleanupFinishedEnsemble(ensembleID string, allocationIDs []string
 			log.Warnf("Monitor Ensemble: failed to release allocation (it may already be released) %s: %v", allocID, err)
 		}
 	}
+}
+
+func (n *Node) writeAllocationLogsTo(path string, stdout, stderr []byte) error {
+	err := n.fs.MkdirAll(path, 0o744)
+	if err != nil {
+		return fmt.Errorf("failed to create allocation directory %s: %w", path, err)
+	}
+
+	stdoutPath := filepath.Join(path, "stdout.logs")
+	err = n.fs.WriteFile(stdoutPath, stdout, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write stdout logs to %s: %w", stdoutPath, err)
+	}
+
+	stderrPath := filepath.Join(path, "stderr.logs")
+	err = n.fs.WriteFile(stderrPath, stderr, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write stderr logs to %s: %w", stderrPath, err)
+	}
+
+	return nil
+}
+
+func ensembleIDFromBehavior(b string) (string, error) {
+	parts := strings.Split(b, "/")
+	if len(parts) > 3 {
+		return parts[3], nil
+	}
+	return "", fmt.Errorf("invalid ensemble behavior: %s", b)
 }
 
 func (n *Node) constructAllocationID(ensembleID, allocName string) string {

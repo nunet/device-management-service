@@ -9,10 +9,8 @@ package jobs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,17 +18,13 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
-
-type HealthCheckResponse struct {
-	OK    bool
-	Error string
-}
 
 const (
 	Pending    AllocationStatus = "pending"
@@ -309,18 +303,18 @@ func (a *Allocation) Start() error {
 	defer a.mx.Unlock()
 
 	behaviors := map[string]func(actor.Envelope){
-		AllocationStartBehavior:   a.handleAllocationStart,
-		AllocationRestartBehavior: a.handleAllocationRestart,
+		behaviors.AllocationStartBehavior:   a.handleAllocationStart,
+		behaviors.AllocationRestartBehavior: a.handleAllocationRestart,
 
-		SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
-		SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
-		SubnetAcceptPeerBehavior:      a.handleSubnetAcceptPeer,
-		SubnetMapPortBehavior:         a.handleSubnetMapPort,
-		SubnetUnmapPortBehavior:       a.handleSubnetUnmapPort,
-		SubnetDNSAddRecordsBehavior:   a.handleSubnetDNSAddRecords,
-		SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
-		RegisterHealthcheckBehavior:   a.handleRegisterHealthcheck,
-		actor.HealthCheckBehavior:     a.handleHealthcheck,
+		behaviors.SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
+		behaviors.SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
+		behaviors.SubnetAcceptPeerBehavior:      a.handleSubnetAcceptPeer,
+		behaviors.SubnetMapPortBehavior:         a.handleSubnetMapPort,
+		behaviors.SubnetUnmapPortBehavior:       a.handleSubnetUnmapPort,
+		behaviors.SubnetDNSAddRecordsBehavior:   a.handleSubnetDNSAddRecords,
+		behaviors.SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
+		behaviors.RegisterHealthcheckBehavior:   a.handleRegisterHealthcheck,
+		actor.HealthCheckBehavior:               a.handleHealthcheck,
 	}
 
 	// add allocation behaviors
@@ -388,56 +382,6 @@ func (a *Allocation) createExecutor(ctx context.Context, execution types.SpecCon
 	return nil
 }
 
-func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
-	log.Infof("behavior allocation start invoked by: %+v", msg.From)
-	defer msg.Discard()
-
-	var req AllocationStartRequest
-	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		log.Errorf("error unmarshalling allocation start request: %s", err)
-		return
-	}
-
-	var resp AllocationStartResponse
-	// TODO: context should cancel when the actor is stopped to stop monitor
-	if err := a.Run(context.TODO(), req.SubnetIP, req.GatewayIP, req.PortMapping); err != nil {
-		err = fmt.Errorf("failed to run allocation: %w", err)
-		log.Error(err)
-
-		resp.Error = err.Error()
-		resp.OK = false
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Info("Running allocation's job: ", a.ID)
-
-	a.state.subnetIP = req.SubnetIP
-	a.state.gatewayIP = req.GatewayIP
-	a.state.portMapping = req.PortMapping
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
-	defer msg.Discard()
-
-	resp := AllocationRestartResponse{}
-	if err := a.Restart(context.TODO()); err != nil { // TODO: fix context.TODO()
-		err = fmt.Errorf("failed to restart allocation: %w", err)
-		log.Error(err)
-
-		resp.Error = err.Error()
-		resp.OK = false
-		a.sendReply(msg, resp)
-		return
-	}
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
 // TODO: make send reply a helper func from actor pkg
 func (a *Allocation) sendReply(msg actor.Envelope, payload interface{}) {
 	var opt []actor.MessageOption
@@ -453,259 +397,6 @@ func (a *Allocation) sendReply(msg actor.Envelope, payload interface{}) {
 
 	if err := a.Actor.Send(reply); err != nil {
 		log.Debugf("error sending  reply: %s", err)
-	}
-}
-
-func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request SubnetAddPeerRequest
-	resp := SubnetAddPeerResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	err := a.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
-	if err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Debugf("added peer: %q to subnet: %q", request.PeerID, request.SubnetID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request SubnetAcceptPeerRequest
-	resp := SubnetAcceptPeerResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	err := a.network.AcceptSubnetPeer(request.SubnetID, request.PeerID, request.IP)
-	if err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Debugf("accepted peer: %q to subnet: %q", request.PeerID, request.SubnetID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
-	defer msg.Discard()
-	log.Debugf("behavior handleSubnetMapPort invoked by: %+v", msg.From)
-
-	var request SubnetMapPortRequest
-	resp := SubnetMapPortResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		log.Debugf("error unmarshalling subnet map port request: %s", err)
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	err := a.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
-	if err != nil {
-		log.Debugf("error mapping port: %s", err)
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Debugf("mapped port: %d to subnet: %q", request.SourcePort, request.SubnetID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleSubnetDNSAddRecords(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request SubnetDNSAddRecordsRequest
-	resp := SubnetDNSAddRecordsResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	err := a.network.AddSubnetDNSRecords(request.SubnetID, request.Records)
-	if err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Debugf("added dns record(s): %q to subnet: %q", request.Records, request.SubnetID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleSubnetUnmapPort(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request SubnetUnmapPortRequest
-	resp := SubnetUnmapPortResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	err := a.network.UnmapPort(
-		request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort,
-	)
-	if err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Debugf("unmapped port: %d from subnet: %q", request.SourcePort, request.SubnetID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request SubnetDNSRemoveRecordRequest
-	resp := SubnetDNSRemoveRecordResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	err := a.network.RemoveSubnetDNSRecord(request.SubnetID, request.DomainName)
-	if err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Debugf("removed dns record: %q from subnet: %q", request.DomainName, request.SubnetID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request SubnetRemovePeerRequest
-	resp := SubnetRemovePeerResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	err := a.network.RemoveSubnetPeer(request.SubnetID, request.PeerID, request.IP)
-	if err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	log.Debugf("removed peer: %q from subnet: %q", request.PeerID, request.SubnetID)
-
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
-	defer msg.Discard()
-
-	var request RegisterHealthcheckRequest
-	resp := RegisterHealthcheckResponse{}
-
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
-		exitCode, stdout, stderr, err := a.executor.Exec(context.TODO(), a.executionID, mf.Exec)
-
-		log.Debugf("health check command: %s\nstdout: %s\nstderr: %s", mf.Exec, stdout, stderr)
-		if err != nil {
-			log.Warnf("health check command failed: %s", err)
-			return fmt.Errorf("health check command failed: %w", err)
-		}
-
-		if exitCode != 0 {
-			log.Warnf("health check command failed with exit code: %d", exitCode)
-			return fmt.Errorf("health check command failed with exit code %d", exitCode)
-		}
-
-		if !strings.Contains(stdout+stderr, mf.Response.Value) {
-			log.Warnf("health check command err: %s", stderr)
-			return fmt.Errorf("unexpected health check command output: %s\nstderr: %s", stdout, stderr)
-		}
-
-		log.Debugf("health check command succeeded")
-		return nil
-	})
-	if err != nil {
-		resp.Error = err.Error()
-		a.sendReply(msg, resp)
-		return
-	}
-
-	a.SetHealthCheck(healthcheck)
-	resp.OK = true
-	a.sendReply(msg, resp)
-}
-
-func (a *Allocation) handleHealthcheck(msg actor.Envelope) {
-	defer msg.Discard()
-
-	a.mx.Lock()
-	healthcheck := a.healthcheck
-	a.mx.Unlock()
-
-	var resp HealthCheckResponse
-	if healthcheck != nil {
-		if err := healthcheck(); err != nil {
-			resp.Error = err.Error()
-		} else {
-			resp.OK = true
-		}
-	} else {
-		resp.OK = true
-	}
-
-	reply, err := actor.ReplyTo(msg, resp)
-	if err != nil {
-		log.Warnf("failed to create healthcheck reply: %s", err)
-		return
-	}
-	if err := a.Actor.Send(reply); err != nil {
-		log.Warnf("failed to send healthcheck reply: %s", err)
 	}
 }
 

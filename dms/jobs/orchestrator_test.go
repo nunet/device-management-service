@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -131,7 +132,7 @@ func TestProvision(t *testing.T) {
 		},
 	}
 
-	_ = actr1.AddBehavior(fmt.Sprintf(SubnetCreateBehavior.DynamicTemplate, manifest.ID), func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, manifest.ID), func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		t.Log("got msg for create")
@@ -161,7 +162,7 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	_ = actr1.AddBehavior(AllocationStartBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(behaviors.AllocationStartBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		response := AllocationStartResponse{
@@ -179,7 +180,7 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	_ = actr1.AddBehavior(SubnetAddPeerBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(behaviors.SubnetAddPeerBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		var request SubnetAddPeerRequest
@@ -210,7 +211,7 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	_ = actr1.AddBehavior(SubnetAcceptPeerBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(behaviors.SubnetAcceptPeerBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		var request SubnetAcceptPeerRequest
@@ -241,7 +242,7 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	_ = actr1.AddBehavior(SubnetDNSAddRecordsBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(behaviors.SubnetDNSAddRecordsBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		var request SubnetDNSAddRecordsRequest
@@ -274,7 +275,7 @@ func TestProvision(t *testing.T) {
 		}
 	})
 
-	_ = actr1.AddBehavior(SubnetMapPortBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(behaviors.SubnetMapPortBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		var request SubnetMapPortRequest
@@ -317,8 +318,8 @@ func TestProvision(t *testing.T) {
 		actor.MakeExpiry(time.Hour),
 		0,
 		[]ucan.Capability{
-			ucan.Capability(fmt.Sprintf(EnsembleNamespace, manifest.ID)),
-			ucan.Capability(AllocationNamespace),
+			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, manifest.ID)),
+			ucan.Capability(behaviors.AllocationNamespace),
 		},
 	)
 	require.NoError(t, err)
@@ -415,7 +416,7 @@ func TestSupervise(t *testing.T) {
 
 	actr1 := actor.CreateActor(t, peer1, cap1)
 	require.NoError(t, actr1.Start())
-	_ = actr1.AddBehavior(RegisterHealthcheckBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(behaviors.RegisterHealthcheckBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 		t.Log("got msg to register healthcheck")
 
@@ -460,7 +461,7 @@ func TestSupervise(t *testing.T) {
 
 	restartedAllocations := make(map[string]bool)
 	ch := make(chan struct{})
-	_ = actr1.AddBehavior(AllocationRestartBehavior, func(msg actor.Envelope) {
+	_ = actr1.AddBehavior(behaviors.AllocationRestartBehavior, func(msg actor.Envelope) {
 		defer msg.Discard()
 
 		restartedAllocations[msg.To.ID.String()] = true
@@ -492,7 +493,7 @@ func TestSupervise(t *testing.T) {
 		0,
 		[]ucan.Capability{
 			ucan.Capability(actor.HealthCheckBehavior),
-			ucan.Capability(AllocationRestartBehavior),
+			ucan.Capability(behaviors.AllocationRestartBehavior),
 		},
 	)
 	require.NoError(t, err)

@@ -25,6 +25,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/network"
@@ -33,7 +34,25 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-const MaxPermutations = 1_000_000
+// TODO: move behavior structs to somewhere else
+
+const (
+	BidRequestTimeout           = 5 * time.Second
+	VerifyEdgeConstraintTimeout = 5 * time.Second
+	CommitDeploymentTimeout     = 3 * time.Second
+	AllocationDeploymentTimeout = 5 * time.Second
+
+	AllocationStartTimeout    = 5 * time.Second
+	AllocationShutdownTimeout = 5 * time.Second
+
+	MinEnsembleDeploymentTime = 15 * time.Second
+
+	SubnetCreateTimeout  = 2 * time.Minute
+	SubnetDestroyTimeout = 30 * time.Second
+
+	MaxBidMultiplier = 8
+	MaxPermutations  = 1_000_000
+)
 
 type Orchestrator struct {
 	actor actor.Actor
@@ -299,6 +318,24 @@ deploy:
 	return ErrDeploymentFailed
 }
 
+type AllocationStopRequest struct {
+	AllocationID string
+}
+
+type AllocationStopResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetDestroyRequest struct {
+	SubnetID string
+}
+
+type SubnetDestroyResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *Orchestrator) Shutdown() {
 	nodes := o.manifest.Nodes
 	o.setStatus(DeploymentStatusShuttingDown)
@@ -321,7 +358,7 @@ func (o *Orchestrator) Shutdown() {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				fmt.Sprintf(SubnetDestroyBehavior.DynamicTemplate, o.manifest.ID),
+				fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, o.manifest.ID),
 				SubnetDestroyRequest{
 					SubnetID: o.manifest.ID,
 				},
@@ -373,7 +410,7 @@ func (o *Orchestrator) Shutdown() {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				fmt.Sprintf(AllocationShutdownBehavior, o.manifest.ID),
+				fmt.Sprintf(behaviors.AllocationShutdownBehavior, o.manifest.ID),
 				AllocationStopRequest{
 					AllocationID: allocID,
 				},
@@ -516,7 +553,7 @@ func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry ti
 	bidCh := make(chan Bid)
 	bidDoneCh := make(chan struct{})
 	if err := o.actor.AddBehavior(
-		BidReplyBehavior,
+		behaviors.BidReplyBehavior,
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
@@ -561,10 +598,10 @@ func (o *Orchestrator) broadcastBid(bidrq EnsembleBidRequest, bidExpiry uint64) 
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		actor.Handle{},
-		BidRequestBehavior,
+		behaviors.BidRequestBehavior,
 		bidrq,
-		actor.WithMessageTopic(BidRequestTopic),
-		actor.WithMessageReplyTo(BidReplyBehavior),
+		actor.WithMessageTopic(behaviors.BidRequestTopic),
+		actor.WithMessageReplyTo(behaviors.BidReplyBehavior),
 		actor.WithMessageExpiry(bidExpiry),
 	)
 	if err != nil {
@@ -587,9 +624,9 @@ func (o *Orchestrator) requestBidPeer(targetedReq EnsembleBidRequest, nodeConfig
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		destHandle,
-		BidRequestBehavior,
+		behaviors.BidRequestBehavior,
 		targetedReq,
-		actor.WithMessageReplyTo(BidReplyBehavior),
+		actor.WithMessageReplyTo(behaviors.BidReplyBehavior),
 		actor.WithMessageExpiry(bidExpiry),
 	)
 	if err != nil {
@@ -864,6 +901,18 @@ func (o *Orchestrator) verifyEdgeConstraints(candidate map[string]Bid, cache map
 	return accept
 }
 
+type VerifyEdgeConstraintRequest struct {
+	EnsembleID string // the ensemble identifier
+	S, T       string // the peer IDs of the edge S->T
+	RTT        uint   //  maximum RTT in ms (if > 0)
+	BW         uint   // minim BW in Kbps
+}
+
+type VerifyEdgeConstraintResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *Orchestrator) verifyEdgeConstraint(candidate map[string]Bid, cst EdgeConstraint) bool {
 	bidS := candidate[cst.S]
 	bidT := candidate[cst.T]
@@ -874,7 +923,7 @@ func (o *Orchestrator) verifyEdgeConstraint(candidate map[string]Bid, cst EdgeCo
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		handle,
-		VerifyEdgeConstraintBehavior,
+		behaviors.VerifyEdgeConstraintBehavior,
 		VerifyEdgeConstraintRequest{
 			EnsembleID: o.id,
 			S:          bidS.Peer(),
@@ -1040,6 +1089,19 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	return mf, nil
 }
 
+type CommitDeploymentRequest struct {
+	EnsembleID     string
+	AllocationName string
+	NodeID         string
+	Resources      types.Resources
+	PortMapping    map[int]int
+}
+
+type CommitDeploymentResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 	ncfg, _ := o.cfg.Node(n)
 
@@ -1069,7 +1131,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				CommitDeploymentBehavior,
+				behaviors.CommitDeploymentBehavior,
 				CommitDeploymentRequest{
 					EnsembleID:     o.id,
 					AllocationName: allocName,
@@ -1126,13 +1188,18 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 	return nil
 }
 
+type RevertDeploymentMessage struct {
+	EnsembleID   string
+	AllocsByName []string
+}
+
 func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
 	ncfg, _ := o.cfg.Node(n)
 
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
-		RevertDeploymentBehavior,
+		behaviors.RevertDeploymentBehavior,
 		RevertDeploymentMessage{
 			EnsembleID:   o.id,
 			AllocsByName: ncfg.Allocations,
@@ -1146,6 +1213,25 @@ func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
 	if err := o.actor.Send(msg); err != nil {
 		log.Debugf("failed to send revert message for %s: %s", n, err)
 	}
+}
+
+type AllocationDeploymentRequest struct {
+	EnsembleID  string
+	NodeID      string
+	Allocations map[string]AllocationDeploymentConfig
+}
+
+type AllocationDeploymentConfig struct {
+	Executor         AllocationExecutor
+	Resources        types.Resources
+	Execution        types.SpecConfig
+	ProvisionScripts map[string][]byte
+}
+
+type AllocationDeploymentResponse struct {
+	OK          bool
+	Error       string
+	Allocations map[string]actor.Handle
 }
 
 func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Handle, error) {
@@ -1170,7 +1256,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
-		AllocationDeploymentBehavior,
+		behaviors.AllocationDeploymentBehavior,
 		AllocationDeploymentRequest{
 			EnsembleID:  o.id,
 			NodeID:      n,
@@ -1214,6 +1300,17 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 
 	log.Debugf("Allocation successful for node: %s", n)
 	return response.Allocations, nil
+}
+
+type SubnetCreateRequest struct {
+	SubnetID     string
+	IP           string
+	RoutingTable map[string]string
+}
+
+type SubnetCreateResponse struct {
+	OK    bool
+	Error string
 }
 
 func (o *Orchestrator) provision(em EnsembleManifest) error {
@@ -1262,7 +1359,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				fmt.Sprintf(SubnetCreateBehavior.DynamicTemplate, em.ID),
+				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, em.ID),
 				SubnetCreateRequest{
 					SubnetID:     em.ID,
 					RoutingTable: routingTable,
@@ -1335,7 +1432,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				SubnetAddPeerBehavior,
+				behaviors.SubnetAddPeerBehavior,
 				SubnetAddPeerRequest{
 					SubnetID: em.ID,
 					IP:       indexRoutingTable[allocationID],
@@ -1412,7 +1509,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				SubnetDNSAddRecordsBehavior,
+				behaviors.SubnetDNSAddRecordsBehavior,
 				SubnetDNSAddRecordsRequest{
 					SubnetID: em.ID,
 					Records:  dnsRecords,
@@ -1485,7 +1582,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				msg, err := actor.Message(
 					o.actor.Handle(),
 					manifest.Handle,
-					SubnetMapPortBehavior,
+					behaviors.SubnetMapPortBehavior,
 					SubnetMapPortRequest{
 						SubnetID:   em.ID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
@@ -1562,7 +1659,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				AllocationStartBehavior,
+				behaviors.AllocationStartBehavior,
 				AllocationStartRequest{
 					SubnetIP:    indexRoutingTable[allocName],
 					GatewayIP:   gatewayIP,
@@ -1797,7 +1894,7 @@ func (o *Orchestrator) supervise() {
 		msg, err := actor.Message(
 			o.actor.Handle(),
 			allocation.Handle,
-			RegisterHealthcheckBehavior,
+			behaviors.RegisterHealthcheckBehavior,
 			RegisterHealthcheckRequest{
 				EnsembleID:  o.id,
 				HealthCheck: o.manifest.Allocations[allocName].Healthcheck,
@@ -1948,7 +2045,7 @@ func (o *Orchestrator) escalateFailure(allocHandle actor.Handle) error {
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		allocHandle,
-		AllocationRestartBehavior,
+		behaviors.AllocationRestartBehavior,
 		struct{}{},
 		actor.WithMessageExpiry(expiry),
 	)
@@ -1979,6 +2076,16 @@ func (o *Orchestrator) Stop() {
 	}
 }
 
+type AllocationLogsRequest struct {
+	AllocName string
+}
+
+type AllocationLogsResponse struct {
+	Stdout []byte
+	Stderr []byte
+	Error  string
+}
+
 func (o *Orchestrator) GetAllocationLogs(name string) (AllocationLogsResponse, error) {
 	var allocNodeHandle actor.Handle
 	var logsResp AllocationLogsResponse
@@ -2000,7 +2107,7 @@ func (o *Orchestrator) GetAllocationLogs(name string) (AllocationLogsResponse, e
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		allocNodeHandle,
-		fmt.Sprintf(AllocationLogsBehavior, o.manifest.ID),
+		fmt.Sprintf(behaviors.AllocationLogsBehavior, o.manifest.ID),
 		AllocationLogsRequest{
 			AllocName: name,
 		},

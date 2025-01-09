@@ -17,9 +17,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
-	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -60,9 +60,9 @@ type CapAnchorRequestCmd struct {
 	Data    string
 }
 
-var behaviors = map[string]behaviorConfig{
+var registeredBehaviors = map[string]behaviorConfig{
 	// /public/hello
-	node.PublicHelloBehavior: {
+	behaviors.PublicHelloBehavior: {
 		Type:  bInvoke,
 		Short: "Broadcast a 'hello' message",
 		Long: `Invoke the /public/hello behavior on an actor
@@ -75,10 +75,10 @@ Examples:
   nunet actor cmd --context user /public/hello --dest <did/peer_id/actor_handle>`,
 	},
 	// /broadcast/hello
-	node.BroadcastHelloBehavior: {
+	behaviors.BroadcastHelloBehavior: {
 		Type: bBroadcast,
 
-		Topic: node.BroadcastHelloTopic,
+		Topic: behaviors.BroadcastHelloTopic,
 		Short: "Broadcast a 'hello' message to a topic",
 		Long: `Invokes the /broadcast/hello behavior on an actor
 
@@ -89,7 +89,7 @@ Examples:
   nunet actor cmd --context user /broadcast/hello`,
 	},
 	// /public/status
-	node.PublicStatusBehavior: {
+	behaviors.PublicStatusBehavior: {
 		Type:  bInvoke,
 		Short: "Retrieve actor status",
 		Long: `Invokes the /public/status behavior on an actor
@@ -101,7 +101,7 @@ Examples:
   nunet actor cmd --context user /public/status --dest <did/peer_id/actor_handle> # status of specified destination`,
 	},
 	// /dms/node/peers/list
-	node.PeersListBehavior: {
+	behaviors.PeersListBehavior: {
 		Type:  bInvoke,
 		Short: "List connected peers",
 		Long: `Invokes the /dms/node/peers/list behavior on an actor
@@ -113,7 +113,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/list --dest <did/peer_id/actor_handle> # specified node actor peer list`,
 	},
 	// /dms/node/peers/self
-	node.PeerAddrInfoBehavior: {
+	behaviors.PeerAddrInfoBehavior: {
 		Type:  bInvoke,
 		Short: "Get peer's ID and addresses",
 		Long: `Invokes the /dms/node/peers/self behavior on an actor
@@ -125,7 +125,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/self --dest <did/peer_id/actor_handle> # specified node actor peer ID`,
 	},
 	// /dms/node/peers/ping
-	node.PeerPingBehavior: {
+	behaviors.PeerPingBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.PingRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -150,7 +150,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/ping --host <peer_id>`,
 	},
 	// /dms/node/peers/dht
-	node.PeerDHTBehavior: {
+	behaviors.PeerDHTBehavior: {
 		Type:  bInvoke,
 		Short: "List peers connected to DHT",
 		Long: `Invokes the /dms/node/peers/dht behavior on an actor
@@ -161,7 +161,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/dht`,
 	},
 	// /dms/node/peers/connect
-	node.PeerConnectBehavior: {
+	behaviors.PeerConnectBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.PeerConnectRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -186,7 +186,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/connect --address /p2p/<peer_id>`,
 	},
 	// /dms/node/peers/score
-	node.PeerScoreBehavior: {
+	behaviors.PeerScoreBehavior: {
 		Type:  bInvoke,
 		Short: "Retrieves gossipsub broadcast score",
 		Long: `Invokes the /dms/node/peers/score behavior on an actor
@@ -197,7 +197,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/score`,
 	},
 	// /dms/node/onboarding/onboard
-	node.OnboardBehavior: {
+	behaviors.OnboardBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.OnboardRequest{} },
 		SetFlags: func(cmd *Command, payload any) {
@@ -232,7 +232,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/onboard --disk 1 --ram 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
-	node.OffboardBehavior: {
+	behaviors.OffboardBehavior: {
 		Type:     bInvoke,
 		Payload:  func() any { return &node.OffboardRequest{} },
 		SetFlags: func(_ *cobra.Command, _ any) {},
@@ -253,7 +253,7 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/offboard --force`,
 	},
 	// /dms/node/onboarding/status
-	node.OnboardStatusBehavior: {
+	behaviors.OnboardStatusBehavior: {
 		Type:  bInvoke,
 		Short: "Retrieve onboarding status of a node",
 		Long: `Invokes the /dms/node/onboarding/status behavior on an actor
@@ -265,7 +265,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/list
-	node.DeploymentListBehavior: {
+	behaviors.DeploymentListBehavior: {
 		Type:  bInvoke,
 		Short: "List deployments",
 		Long: `Invokes the /dms/node/deployment/list behavior on an actor
@@ -277,7 +277,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/status
-	node.DeploymentStatusBehavior: {
+	behaviors.DeploymentStatusBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentStatusRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -302,7 +302,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/logs
-	node.DeploymentLogsBehavior: {
+	behaviors.DeploymentLogsBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentLogsRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -330,7 +330,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/manifest
-	node.DeploymentManifestBehavior: {
+	behaviors.DeploymentManifestBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentManifestRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -355,7 +355,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/shutdown
-	node.DeploymentShutdownBehavior: {
+	behaviors.DeploymentShutdownBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentShutdownRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -379,82 +379,7 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/shutdown --id <deployment_id>`,
 	},
 
-	// /dms/node/vm/start/custom
-	node.VMStartBehavior: {
-		Type:    bInvoke,
-		Payload: func() any { return &vmStartOpts{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*vmStartOpts)
-			cmd.Flags().StringVarP(&p.Engine.KernelImage, "kernel", "k", "", "path to kernel image file (required)")
-			cmd.Flags().StringVarP(&p.Engine.RootFileSystem, "rootfs", "r", "", "path to root fs image file (required)")
-			cmd.Flags().StringVarP(&p.Engine.Initrd, "initrd", "i", "", "path to initial ram disk")
-			cmd.Flags().StringVarP(&p.Engine.KernelArgs, "args", "a", "", "arguments to pas to the kernel")
-			cmd.Flags().Float32Var(&p.Resources.CPU.Cores, "cpu", 1, "CPU cores to allocate")
-			cmd.Flags().Float64VarP(&p.Resources.RAM.Size, "ram", "m", 1, "Memory to allocate in GB")
-			cmd.Flags().Float64Var(&p.Resources.Disk.Size, "disk", 0.5, "path to disk image file")
-			_ = cmd.MarkFlagRequired("kernel")
-			_ = cmd.MarkFlagFilename("kernel")
-			_ = cmd.MarkFlagRequired("rootfs")
-			_ = cmd.MarkFlagFilename("rootfs")
-		},
-		PayloadEnc: func(payload any) (any, error) {
-			opts, ok := payload.(*vmStartOpts)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-
-			return newCustomVMStartRequest(opts)
-		},
-		Short: "Starts a custom VM",
-		Long: `Invokes the /dms/node/vm/start/custom behavior on an actor
-
-This behavior starts a new VM with custom configurations.
-
-Examples:
-  nunet actor cmd --context user /dms/node/vm/start/custom --kernel /path/to/kernel --rootfs /path/to/rootfs --cpu 2 --memory 2048`,
-	},
-	// /dms/node/vm/stop
-	node.VMStopBehavior: {
-		Payload: func() any { return &node.VMStopRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.VMStopRequest)
-			p.ExecutionType = job_types.ExecutorFirecracker
-			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
-			_ = cmd.MarkFlagRequired("id")
-		},
-		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.VMStopRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-			return req, nil
-		},
-		Type:  bInvoke,
-		Short: "Stops a running VM",
-		Long: `Invokes the /dms/node/vm/stop behavior on an actor
-
-This behavior stops a running VM.
-
-Examples:
-  nunet actor cmd --context user /dms/node/vm/stop --id <execution_id>`,
-	},
-	// /dms/node/vm/list
-	node.VMListBehavior: {
-		Payload: func() any {
-			return &node.ListVMResponse{
-				ExecutionType: job_types.ExecutorFirecracker,
-			}
-		},
-		Type:  bInvoke,
-		Short: "List running VMs",
-		Long: `Invokes the /dms/node/vm/list behavior on an actor
-
-This behavior retrieves a list of virtual machines (VMs) running on the node.
-
-Examples:
-  nunet actor cmd --context user /dms/node/vm/list`,
-	},
-	node.NewDeploymentBehavior: {
+	behaviors.NewDeploymentBehavior: {
 		Type:  bInvoke,
 		Short: "Create a new deployment",
 		Long: `Invokes the /dms/node/deployment/new behavior on an actor
@@ -507,7 +432,7 @@ Examples:
 		},
 	},
 
-	jobs.SubnetCreateBehavior.Static: {
+	behaviors.SubnetCreateBehavior.Static: {
 		Payload: func() any { return &jobs.SubnetCreateRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetCreateRequest)
@@ -534,7 +459,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
 	},
 
-	jobs.SubnetDestroyBehavior.Static: {
+	behaviors.SubnetDestroyBehavior.Static: {
 		Payload: func() any { return &jobs.SubnetDestroyRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetDestroyRequest)
@@ -560,7 +485,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/destroy --subnet-id <subnet_id>`,
 	},
 
-	jobs.SubnetAddPeerBehavior: {
+	behaviors.SubnetAddPeerBehavior: {
 		Payload: func() any { return &jobs.SubnetAddPeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetAddPeerRequest)
@@ -590,7 +515,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/add-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
 	},
 
-	jobs.SubnetRemovePeerBehavior: {
+	behaviors.SubnetRemovePeerBehavior: {
 		Payload: func() any { return &jobs.SubnetRemovePeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetRemovePeerRequest)
@@ -618,7 +543,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/remove-peer --subnet-id <subnet_id> --peer-id <peer_id>`,
 	},
 
-	jobs.SubnetAcceptPeerBehavior: {
+	behaviors.SubnetAcceptPeerBehavior: {
 		Payload: func() any { return &jobs.SubnetAcceptPeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetAcceptPeerRequest)
@@ -648,7 +573,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/accept-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
 	},
 
-	jobs.SubnetMapPortBehavior: {
+	behaviors.SubnetMapPortBehavior: {
 		Payload: func() any { return &jobs.SubnetMapPortRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetMapPortRequest)
@@ -683,7 +608,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
 	},
 
-	jobs.SubnetDNSAddRecordsBehavior: {
+	behaviors.SubnetDNSAddRecordsBehavior: {
 		Payload: func() any { return &jobs.SubnetDNSAddRecordsRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetDNSAddRecordsRequest)
@@ -717,7 +642,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/dns/add-record --subnet-id <subnet_id> --name <record_name> --ip <ip>`,
 	},
 
-	jobs.SubnetUnmapPortBehavior: {
+	behaviors.SubnetUnmapPortBehavior: {
 		Payload: func() any { return &jobs.SubnetUnmapPortRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetUnmapPortRequest)
@@ -753,7 +678,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/unmap-port --subnet-id <subnet_id> --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
 	},
 
-	jobs.SubnetDNSRemoveRecordBehavior: {
+	behaviors.SubnetDNSRemoveRecordBehavior: {
 		Payload: func() any { return &jobs.SubnetDNSRemoveRecordRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetDNSRemoveRecordRequest)
@@ -782,7 +707,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
 
-	node.ResourcesAllocatedBehavior: {
+	behaviors.ResourcesAllocatedBehavior: {
 		Type:  bInvoke,
 		Short: "Get allocated resources",
 		Long: `Invokes the /dms/node/resources/allocated behavior on an actor
@@ -794,7 +719,7 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/allocated`,
 	},
 
-	node.ResourcesFreeBehavior: {
+	behaviors.ResourcesFreeBehavior: {
 		Type:  bInvoke,
 		Short: "Get free resources",
 		Long: `Invokes the /dms/node/resources/free behavior on an actor
@@ -806,7 +731,7 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/free`,
 	},
 
-	node.ResourcesOnboardedBehavior: {
+	behaviors.ResourcesOnboardedBehavior: {
 		Type:  bInvoke,
 		Short: "Get onboarded resources",
 		Long: `Invokes the /dms/node/resources/onboarded behavior on an actor
@@ -817,7 +742,7 @@ The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk s
 Examples:
 	  nunet actor cmd --context user /dms/node/resources/onboarded`,
 	},
-	node.LoggerConfigBehavior: {
+	behaviors.LoggerConfigBehavior: {
 		Payload: func() any { return &node.LoggerConfigRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.LoggerConfigRequest)
@@ -866,7 +791,7 @@ Examples:
   nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
   nunet actor cmd --context user /dms/node/logger/config --enable-elastic`,
 	},
-	node.HardwareSpecBehavior: {
+	behaviors.HardwareSpecBehavior: {
 		Type:  bInvoke,
 		Short: "Get hardware specifications",
 		Long: `Invokes the /dms/node/hardware/spec behavior on an actor
@@ -877,7 +802,7 @@ Examples:
 
 	nunet actor cmd --context user /dms/node/hardware/spec`,
 	},
-	node.HardwareUsageBehavior: {
+	behaviors.HardwareUsageBehavior: {
 		Type:  bInvoke,
 		Short: "Get hardware usage",
 		Long: `Invokes the /dms/node/hardware/usage behavior on an actor
@@ -888,7 +813,7 @@ Examples:
 
 	nunet actor cmd --context user /dms/node/hardware/usage`,
 	},
-	node.CapListBehavior: {
+	behaviors.CapListBehavior: {
 		Type:    bInvoke,
 		Short:   "List capabilities",
 		Payload: func() any { return &node.CapListRequest{} },
@@ -903,7 +828,7 @@ This behavior retrieves a list of capabilities available on the node.
 Examples:
   nunet actor cmd --context user /dms/cap/list`,
 	},
-	node.CapAnchorBehavior: {
+	behaviors.CapAnchorBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &CapAnchorRequestCmd{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
