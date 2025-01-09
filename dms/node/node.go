@@ -24,6 +24,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
@@ -221,124 +222,106 @@ func New(cfg config.Config, fs afero.Afero,
 		fn   func(actor.Envelope)
 		opts []actor.BehaviorOption
 	}{
-		PublicHelloBehavior: {
+		behaviors.PublicHelloBehavior: {
 			fn: n.publicHelloBehavior,
 		},
-		PublicStatusBehavior: {
+		behaviors.PublicStatusBehavior: {
 			fn: n.publicStatusBehavior,
 		},
-		BroadcastHelloBehavior: {
+		behaviors.BroadcastHelloBehavior: {
 			fn: n.broadcastHelloBehavior,
 			opts: []actor.BehaviorOption{
-				actor.WithBehaviorTopic(BroadcastHelloTopic),
+				actor.WithBehaviorTopic(behaviors.BroadcastHelloTopic),
 			},
 		},
-		PeersListBehavior: {
+		behaviors.PeersListBehavior: {
 			fn: n.handlePeersList,
 		},
-		PeerAddrInfoBehavior: {
+		behaviors.PeerAddrInfoBehavior: {
 			fn: n.handlePeerAddrInfo,
 		},
-		PeerPingBehavior: {
+		behaviors.PeerPingBehavior: {
 			fn: n.handlePeerPing,
 		},
-		PeerDHTBehavior: {
+		behaviors.PeerDHTBehavior: {
 			fn: n.handlePeerDHT,
 		},
-		PeerConnectBehavior: {
+		behaviors.PeerConnectBehavior: {
 			fn: n.handlePeerConnect,
 		},
-		PeerScoreBehavior: {
+		behaviors.PeerScoreBehavior: {
 			fn: n.handlePeerScore,
 		},
-		OnboardBehavior: {
+		behaviors.OnboardBehavior: {
 			fn: n.handleOnboard,
 		},
-		OffboardBehavior: {
+		behaviors.OffboardBehavior: {
 			fn: n.handleOffboard,
 		},
-		OnboardStatusBehavior: {
+		behaviors.OnboardStatusBehavior: {
 			fn: n.handleOnboardStatus,
 		},
-		VMStartBehavior: {
-			fn: n.handleVMContainerStart,
-		},
-		VMStopBehavior: {
-			fn: n.handleVMContainerStop,
-		},
-		VMListBehavior: {
-			fn: n.handleVMContainerList,
-		},
-		ContainerStartBehavior: {
-			fn: n.handleVMContainerStart,
-		},
-		ContainerStopBehavior: {
-			fn: n.handleVMContainerStop,
-		},
-		ContainerListBehavior: {
-			fn: n.handleVMContainerList,
-		},
-		NewDeploymentBehavior: {
+		behaviors.NewDeploymentBehavior: {
 			fn: n.newDeployment,
 		},
-		DeploymentListBehavior: {
+		behaviors.DeploymentListBehavior: {
 			fn: n.handleDeploymentList,
 		},
-		DeploymentLogsBehavior: {
+		behaviors.DeploymentLogsBehavior: {
 			fn: n.handleDeploymentLogs,
 		},
-		DeploymentStatusBehavior: {
+		behaviors.DeploymentStatusBehavior: {
 			fn: n.handleDeploymentStatus,
 		},
-		DeploymentManifestBehavior: {
+		behaviors.DeploymentManifestBehavior: {
 			fn: n.handleDeploymentManifest,
 		},
-		DeploymentShutdownBehavior: {
+		behaviors.DeploymentShutdownBehavior: {
 			fn: n.handleDeploymentShutdown,
 		},
-		jobs.VerifyEdgeConstraintBehavior: {
+		behaviors.VerifyEdgeConstraintBehavior: {
 			fn: n.deploymentVerifyEdgeConstraint,
 		},
-		jobs.BidRequestBehavior: {
+		behaviors.BidRequestBehavior: {
 			fn: n.handleBidRequest,
 			opts: []actor.BehaviorOption{
-				actor.WithBehaviorTopic(jobs.BidRequestTopic),
+				actor.WithBehaviorTopic(behaviors.BidRequestTopic),
 			},
 		},
-		jobs.RevertDeploymentBehavior: {
+		behaviors.RevertDeploymentBehavior: {
 			fn: n.handleRevertDeployment,
 		},
-		jobs.SubnetCreateBehavior.Static: {
+		behaviors.SubnetCreateBehavior.Static: {
 			fn: n.handleSubnetCreate,
 		},
-		jobs.SubnetDestroyBehavior.Static: {
+		behaviors.SubnetDestroyBehavior.Static: {
 			fn: n.handleSubnetDestroy,
 		},
-		ResourcesAllocatedBehavior: {
+		behaviors.ResourcesAllocatedBehavior: {
 			fn: n.handleAllocatedResources,
 		},
-		ResourcesFreeBehavior: {
+		behaviors.ResourcesFreeBehavior: {
 			fn: n.handleFreeResources,
 		},
-		ResourcesOnboardedBehavior: {
+		behaviors.ResourcesOnboardedBehavior: {
 			fn: n.handleOnboardedResources,
 		},
-		LoggerConfigBehavior: {
+		behaviors.LoggerConfigBehavior: {
 			fn: n.handleLoggerConfig,
 		},
-		HardwareUsageBehavior: {
+		behaviors.HardwareUsageBehavior: {
 			fn: n.handleHardwareUsage,
 		},
-		CapListBehavior: {
+		behaviors.CapListBehavior: {
 			fn: n.handleCapList,
 		},
-		CapAnchorBehavior: {
+		behaviors.CapAnchorBehavior: {
 			fn: n.handleCapAnchor,
 		},
-		jobs.AllocationDeploymentBehavior: {
+		behaviors.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,
 		},
-		jobs.CommitDeploymentBehavior: {
+		behaviors.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
 		},
 	}
@@ -416,7 +399,7 @@ func (n *Node) Start() error {
 		return fmt.Errorf("failed to start node actor: %w", err)
 	}
 
-	if err := n.subscribe(BroadcastHelloTopic, jobs.BidRequestTopic); err != nil {
+	if err := n.subscribe(behaviors.BroadcastHelloTopic, behaviors.BidRequestTopic); err != nil {
 		_ = n.actor.Stop()
 		return err
 	}
@@ -599,7 +582,7 @@ func (n *Node) sayHello(p peer.ID) {
 	msg, err := actor.Message(
 		n.actor.Handle(),
 		handle,
-		PublicHelloBehavior,
+		behaviors.PublicHelloBehavior,
 		nil,
 		actor.WithMessageTimeout(helloTimeout),
 	)
@@ -721,16 +704,16 @@ func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 		fn   func(actor.Envelope)
 		opts []actor.BehaviorOption
 	}{
-		fmt.Sprintf(jobs.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
+		fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
 			fn: n.handleSubnetCreate,
 		},
-		fmt.Sprintf(jobs.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
+		fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
 			fn: n.handleSubnetDestroy,
 		},
-		fmt.Sprintf(jobs.AllocationLogsBehavior, ensembleID): {
+		fmt.Sprintf(behaviors.AllocationLogsBehavior, ensembleID): {
 			fn: n.handleAllocationLogs,
 		},
-		fmt.Sprintf(jobs.AllocationShutdownBehavior, ensembleID): {
+		fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID): {
 			fn: n.handleAllocationShutdown,
 		},
 	}
@@ -775,7 +758,7 @@ func (n *Node) createAllocations(
 
 		// node grants subnet create/destroy caps to the orchestrator
 		if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
-			ucan.Capability(fmt.Sprintf(jobs.EnsembleNamespace, ensembleID)),
+			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant node caps: %w", err)
 		}
@@ -787,7 +770,7 @@ func (n *Node) createAllocations(
 		}
 
 		if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
-			ucan.Capability(jobs.AllocationNamespace),
+			ucan.Capability(behaviors.AllocationNamespace),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to grant allocation caps: %w", err)
 		}
@@ -804,14 +787,14 @@ func (n *Node) createAllocations(
 				case <-ticker.C:
 					// node grants subnet create/destroy caps to the orchestrator
 					if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
-						ucan.Capability(fmt.Sprintf(jobs.EnsembleNamespace, ensembleID)),
+						ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
 					}); err != nil {
 						log.Warnf("failed to grant node caps: %w", err)
 					}
 
 					// allocation grants subnet manage caps to the orchestrator
 					if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
-						ucan.Capability(jobs.AllocationNamespace),
+						ucan.Capability(behaviors.AllocationNamespace),
 					}); err != nil {
 						log.Warnf("failed to grant allocation caps: %w", err)
 					}

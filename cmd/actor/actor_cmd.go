@@ -50,7 +50,7 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 				return nil, cobra.ShellCompDirectiveDefault
 			}
 			var completions []string
-			for k := range behaviors {
+			for k := range registeredBehaviors {
 				completions = append(completions, strings.Split(k, "/")[2])
 			}
 			return completions, cobra.ShellCompDirectiveNoFileComp
@@ -63,8 +63,8 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 		},
 	}
 
-	for behavior := range behaviors {
-		if behaviorCfg, ok := behaviors[behavior]; ok {
+	for behavior := range registeredBehaviors {
+		if behaviorCfg, ok := registeredBehaviors[behavior]; ok {
 			cmd.AddCommand(newActorCmdCmd(client, afs, behavior, behaviorCfg, cfg))
 		}
 	}
