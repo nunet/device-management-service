@@ -616,7 +616,7 @@ DMS (Device Management Service) acts as the foundation of the NuNet platform, or
 - **`test`**: Contains some automated tests, not including unit tests.
 - **`maint-scripts`**: Utility scripts for building / development assistance and runtime.
 - **`examples`**: Examples of ensembles to be used to deploy jobs on NuNet platform.
-- **`docs`**: Documentation about main functionalities in DMS as onboarding, deployments, how to create a restricted network.
+- **`docs`**: Documentation about main functionalities in DMS as onboarding, deployments, how to create a private network.
 - **`specs`**: Platform components specifications.
 
 ### Design and Architecture
