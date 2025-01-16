@@ -5,6 +5,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
+
 package jobs
 
 import (
@@ -19,12 +20,12 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
-	"gitlab.com/nunet/device-management-service/executor"
-	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+// AllocationStatus is a representation of the execution status
+type AllocationStatus string
 
 const (
 	Pending    AllocationStatus = "pending"
@@ -36,9 +37,6 @@ const (
 
 	deleteLogsAfter = 30 * time.Minute
 )
-
-// AllocationStatus is a representation of the execution status
-type AllocationStatus string
 
 // Status holds the status of an allocation.
 type Status struct {
@@ -61,73 +59,74 @@ type Job struct {
 
 // Allocation represents an allocation
 type Allocation struct {
-	ID string
-
-	mx sync.Mutex
-	fs afero.Afero
-
-	status      AllocationStatus
-	nodeID      string
-	sourceID    string
-	executionID string
-
-	Actor     actor.Actor
-	executor  executor.Executor
-	dmsConfig config.Config
-
-	network network.Network
-
+	ID           string
+	Actor        actor.Actor
 	actorRunning bool
-
-	Job        Job
-	resultsDir string
-
-	healthcheck func() error
-
-	state struct {
+	status       AllocationStatus
+	nodeID       string
+	sourceID     string
+	executor     types.Executor
+	executionID  string
+	Job          Job
+	network      network.Network
+	state        struct {
 		subnetIP    string
 		gatewayIP   string
 		portMapping map[int]int
 	}
+	resultsDir string
+
+	workDir string
+	lock    sync.Mutex
+	fs      afero.Afero
+
+	healthcheck func() error
 }
 
 // NewAllocation creates a new allocation given the actor.
 func NewAllocation(
 	id string,
 	fs afero.Afero,
-	dmsConfig config.Config,
+	workDir string,
 	actor actor.Actor,
 	details AllocationDetails,
 	network network.Network,
+	executor types.Executor,
 ) (*Allocation, error) {
-	uuid, err := uuid.NewUUID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create executor id: %w", err)
+	if network == nil {
+		return nil, fmt.Errorf("network is nil")
 	}
 
-	return &Allocation{
+	executionID, err := uuid.NewUUID()
+	if err != nil {
+		return nil, fmt.Errorf("create executor id: %w", err)
+	}
+
+	allocation := &Allocation{
 		ID:          id,
 		fs:          fs,
 		nodeID:      details.NodeID,
 		sourceID:    details.SourceID,
 		Job:         details.Job,
 		Actor:       actor,
-		executionID: uuid.String(),
-		dmsConfig:   dmsConfig,
+		executionID: executionID.String(),
+		workDir:     workDir,
 		status:      Pending,
 		network:     network,
+		executor:    executor,
 		state: struct {
 			subnetIP    string
 			gatewayIP   string
 			portMapping map[int]int
 		}{},
-	}, nil
+	}
+	return allocation, nil
 }
 
 // GetPortMapping returns allocation's port mapping
 func (a *Allocation) GetPortMapping() map[int]int {
-	a.mx.Lock()
-	defer a.mx.Unlock()
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
 	ports := make(map[int]int)
 	for i, v := range a.state.portMapping {
@@ -139,8 +138,8 @@ func (a *Allocation) GetPortMapping() map[int]int {
 
 // Run creates the executor based on th e execution engine configuration.
 func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string, portMapping map[int]int) error {
-	a.mx.Lock()
-	defer a.mx.Unlock()
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
 	if a.status == Running {
 		log.Warnf("allocation %s is already running", a.ID)
@@ -148,19 +147,10 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string,
 	}
 
 	var err error
-
-	// if executor is nil create it
-	if a.executor == nil {
-		err = a.createExecutor(ctx, a.Job.Execution)
-		if err != nil {
-			return fmt.Errorf("failed to create executor: %w", err)
-		}
-	}
-
-	a.resultsDir = filepath.Join(a.dmsConfig.WorkDir, "jobs", a.ID)
+	a.resultsDir = filepath.Join(a.workDir, "jobs", a.ID)
 	err = a.fs.MkdirAll(a.resultsDir, 0o700)
 	if err != nil {
-		return fmt.Errorf("failed to create results directory: %w", err)
+		return fmt.Errorf("create results directory: %w", err)
 	}
 
 	executionRequest := &types.ExecutionRequest{
@@ -187,7 +177,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string,
 
 	err = a.executor.Start(ctx, executionRequest)
 	if err != nil {
-		return fmt.Errorf("failed to start executor: %w", err)
+		return fmt.Errorf("start executor: %w", err)
 	}
 
 	a.status = Running
@@ -197,8 +187,8 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string,
 
 // Cancel stops the running executor
 func (a *Allocation) stopExecution(ctx context.Context) error {
-	a.mx.Lock()
-	defer a.mx.Unlock()
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
 	log.Debugf("stopping execution for alloc: %s", a.ID)
 
@@ -214,7 +204,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
 		a.status = Failed
-		return fmt.Errorf("failed to stop execution: %w", err)
+		return fmt.Errorf("stop execution: %w", err)
 	}
 
 	log.Debugf("stopped execution for alloc: %s", a.ID)
@@ -244,8 +234,8 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 		}
 	}
 
-	a.mx.Lock()
-	defer a.mx.Unlock()
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
 	if err := a.Cleanup(); err != nil {
 		// TODO: exec.Remove should return a defined custom error
@@ -261,12 +251,12 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 
 // StopActor stops the allocation actor
 func (a *Allocation) stopActor() error {
-	a.mx.Lock()
-	defer a.mx.Unlock()
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
 	if a.actorRunning {
 		if err := a.Actor.Stop(); err != nil {
-			log.Warnf("error stopping allocation actor: %s", err)
+			log.Warnf("stopping allocation actor: %s", err)
 		}
 		log.Debugf("stopped allocation actor: %s", a.ID)
 		a.actorRunning = false
@@ -278,12 +268,12 @@ func (a *Allocation) stopActor() error {
 func (a *Allocation) Stop(ctx context.Context) error {
 	err := a.stopActor()
 	if err != nil {
-		return fmt.Errorf("failed to stop actor: %w", err)
+		return fmt.Errorf("stop actor: %w", err)
 	}
 
 	err = a.stopExecution(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to stop execution: %w", err)
+		return fmt.Errorf("stop execution: %w", err)
 	}
 
 	return nil
@@ -299,13 +289,12 @@ func (a *Allocation) Status(_ context.Context) Status {
 
 // Start the actor of the allocation.
 func (a *Allocation) Start() error {
-	a.mx.Lock()
-	defer a.mx.Unlock()
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
-	behaviors := map[string]func(actor.Envelope){
-		behaviors.AllocationStartBehavior:   a.handleAllocationStart,
-		behaviors.AllocationRestartBehavior: a.handleAllocationRestart,
-
+	allocationBehaviors := map[string]func(actor.Envelope){
+		behaviors.AllocationStartBehavior:       a.handleAllocationStart,
+		behaviors.AllocationRestartBehavior:     a.handleAllocationRestart,
 		behaviors.SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
 		behaviors.SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
 		behaviors.SubnetAcceptPeerBehavior:      a.handleSubnetAcceptPeer,
@@ -317,11 +306,11 @@ func (a *Allocation) Start() error {
 		actor.HealthCheckBehavior:               a.handleHealthcheck,
 	}
 
-	// add allocation behaviors
-	for behavior, handler := range behaviors {
+	// add allocation behaviours to actor
+	for behavior, handler := range allocationBehaviors {
 		err := a.Actor.AddBehavior(behavior, handler)
 		if err != nil {
-			return fmt.Errorf("failed to add allocation start behavior to allocation actor: %w", err)
+			return fmt.Errorf("add allocation start behavior to allocation actor: %w", err)
 		}
 	}
 
@@ -332,16 +321,11 @@ func (a *Allocation) Start() error {
 
 	err := a.Actor.Start()
 	if err != nil {
-		return fmt.Errorf("failed to start allocation actor: %w", err)
+		return fmt.Errorf("start allocation actor: %w", err)
 	}
 
 	a.actorRunning = true
-
 	return nil
-}
-
-func (a *Allocation) ExecutionID() string {
-	return a.executionID
 }
 
 func (a *Allocation) Restart(ctx context.Context) error {
@@ -360,23 +344,7 @@ func (a *Allocation) Restart(ctx context.Context) error {
 
 	if err := a.Run(ctx, a.state.subnetIP, a.state.gatewayIP, a.state.portMapping); err != nil {
 		_ = a.Stop(ctx)
-		return err
-	}
-
-	return nil
-}
-
-func (a *Allocation) createExecutor(ctx context.Context, execution types.SpecConfig) error {
-	switch execution.Type {
-	case types.ExecutorTypeDocker.String():
-		id := uuid.New().String()
-		exec, err := docker.NewExecutor(ctx, a.fs, id)
-		if err != nil {
-			return fmt.Errorf("failed to create executor: %w", err)
-		}
-		a.executor = exec
-	default:
-		return fmt.Errorf("unsupported executor type: %s", execution.Type)
+		return fmt.Errorf("run allocation: %w", err)
 	}
 
 	return nil
@@ -391,18 +359,18 @@ func (a *Allocation) sendReply(msg actor.Envelope, payload interface{}) {
 
 	reply, err := actor.ReplyTo(msg, payload, opt...)
 	if err != nil {
-		log.Debugf("error creating reply: %s", err)
+		log.Debugf("creating reply: %s", err)
 		return
 	}
 
 	if err := a.Actor.Send(reply); err != nil {
-		log.Debugf("error sending  reply: %s", err)
+		log.Debugf("sending reply: %s", err)
 	}
 }
 
 func (a *Allocation) SetHealthCheck(f func() error) {
-	a.mx.Lock()
-	defer a.mx.Unlock()
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
 	a.healthcheck = f
 }

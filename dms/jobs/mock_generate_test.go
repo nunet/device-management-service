@@ -13,3 +13,9 @@ package jobs
 
 // Resource Manager
 //go:generate mockgen -destination=mock_resource_manager_test.go -source=../../types/resources.go -package=jobs -exclude_interfaces=UsageMonitor,ResourceOps
+// Network
+//go:generate mockgen -destination=mock_network_test.go -source=../../network/network.go -package=jobs -exclude_interfaces=Messenger
+// Executor
+//go:generate mockgen -destination=mock_executor_test.go -source=../../types/executor.go -package=jobs
+// Actor
+//go:generate mockgen -destination=mock_actor_test.go -source=../../actor/interface.go -package=jobs

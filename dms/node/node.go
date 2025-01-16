@@ -17,6 +17,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
+	"gitlab.com/nunet/device-management-service/executor/docker"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -28,7 +32,6 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
-	"gitlab.com/nunet/device-management-service/executor"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -101,7 +104,7 @@ type bidState struct {
 }
 
 type executorMetadata struct {
-	executor      executor.Executor
+	executor      types.Executor
 	executionType jobs.AllocationExecutor
 }
 
@@ -810,6 +813,20 @@ func (n *Node) createAllocations(
 	return allocHandlesByName, nil
 }
 
+func (n *Node) createExecutor(ctx context.Context, fs afero.Afero, executionType string) (types.Executor, error) {
+	switch executionType {
+	case types.ExecutorTypeDocker.String():
+		id := uuid.New().String()
+		exec, err := docker.NewExecutor(ctx, fs, id)
+		if err != nil {
+			return nil, fmt.Errorf("create executor: %w", err)
+		}
+		return exec, nil
+	default:
+		return nil, fmt.Errorf("unsupported executor type: %s", executionType)
+	}
+}
+
 // createAllocation creates an allocation
 func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor actor.Handle) (*jobs.Allocation, error) {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
@@ -847,13 +864,20 @@ func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor ac
 	delete(n.commitedResources, allocationID)
 	n.mx.Unlock()
 
+	// Create an executor for the allocation
+	exec, err := n.createExecutor(n.ctx, n.fs, job.Execution.Type)
+	if err != nil {
+		return nil, fmt.Errorf("create executor: %w", err)
+	}
+
 	allocation, err := jobs.NewAllocation(
 		allocationID,
 		n.fs,
-		n.dmsConfig,
+		n.dmsConfig.WorkDir,
 		allocActor,
 		jobs.AllocationDetails{Job: job, NodeID: n.hostID},
 		n.network,
+		exec,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation: %w", err)

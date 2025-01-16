@@ -9,8 +9,76 @@
 package types
 
 import (
+	"context"
+	"io"
 	"reflect"
+	"time"
 )
+
+// Executor serves as an interface for running jobs on a specific backend, such as a Docker daemon, firecracker, etc.
+// It provides a comprehensive set of methods to initiate, monitor, terminate, and retrieve output streams for executions.
+type Executor interface {
+	// GetID returns the unique identifier for the executor.
+	GetID() string
+	// Start initiates an execution for the given ExecutionRequest.
+	// It returns an error if the execution already exists and is in a started or terminal state.
+	// Implementations may also return other errors based on resource limitations or internal faults.
+	Start(ctx context.Context, request *ExecutionRequest) error
+
+	// Run initiates and waits for the completion of an execution for the given ExecutionRequest.
+	// It returns a ExecutionResult and an error if any part of the operation fails.
+	// Specifically, it will return an error if the execution already exists and is in a started or terminal state.
+	Run(ctx context.Context, request *ExecutionRequest) (*ExecutionResult, error)
+
+	// Pause attempts to pause an ongoing execution identified by its executionID.
+	// Returns an error if the execution does not exist or is already in a terminal state.
+	Pause(ctx context.Context, executionID string) error
+
+	// Resume attempts to resume a paused execution identified by its executionID.
+	// Returns an error if the execution does not exist, is not paused, or is already in a terminal state.
+	Resume(ctx context.Context, executionID string) error
+
+	// Wait monitors the completion of an execution identified by its executionID.
+	// It returns two channels:
+	// 1. A channel that emits the execution result once the task is complete.
+	// 2. An error channel that relays any issues encountered, such as when the
+	//    execution is non-existent or has already concluded.
+	Wait(ctx context.Context, executionID string) (<-chan *ExecutionResult, <-chan error)
+
+	// Cancel attempts to cancel an ongoing execution identified by its executionID.
+	// Returns an error if the execution does not exist or is already in a terminal state.
+	Cancel(ctx context.Context, executionID string) error
+
+	// Remove removes an execution identified by its executionID.
+	// Returns an error if the execution does not exist
+	Remove(executionID string, timeout time.Duration) error
+
+	// Cleanup removes all resources associated with the executor.
+	// This includes stopping and removing all running containers or VMs and deleting their resources.
+	Cleanup(ctx context.Context) error
+
+	// GetLogStream provides a stream of output for an ongoing or completed execution identified by its executionID.
+	// The 'Tail' flag indicates whether to exclude hstorical data or not.
+	// The 'follow' flag indicates whether the stream should continue to send data as it is produced.
+	// Returns an io.ReadCloser to read the output stream and an error if the operation fails.
+	// Specifically, it will return an error if the execution does not exist.
+	GetLogStream(ctx context.Context, request LogStreamRequest) (io.ReadCloser, error)
+
+	// List returns a slice of ExecutionListItem containing information about current executions.
+	// This includes the execution ID and whether it's currently running.
+	List() []ExecutionListItem
+
+	// GetStatus returns the status of the execution identified by its executionID.
+	// It returns the status of the execution and an error if the execution is not found or status is unknown.
+	GetStatus(ctx context.Context, executionID string) (ExecutionStatus, error)
+
+	// WaitForStatus waits for the execution to reach a specific status.
+	// It returns an error if the execution is not found or the status is unknown.
+	WaitForStatus(ctx context.Context, executionID string, status ExecutionStatus, timeout *time.Duration) error
+
+	// Exec executes a command in a container and returns the exit code, output, and an error if the operation fails.
+	Exec(ctx context.Context, containerID string, command []string) (int, string, string, error)
+}
 
 // ExecutorType is the type of the executor
 type ExecutorType string
@@ -36,33 +104,8 @@ func (e ExecutorType) String() string {
 	return string(e)
 }
 
-// Executor is the executor type
-type Executor struct {
-	ExecutorType ExecutorType `json:"executor_type"`
-}
-
-// implementing Comparable interface
-var _ Comparable[Executor] = (*Executor)(nil)
-
-// Compare compares two Executor objects
-func (e *Executor) Compare(other Executor) (Comparison, error) {
-	// comparator for  Executor types
-	// it is needed because executor type is defined as enum of ExecutorType's in types.execution.go
-	// left represent machine capabilities
-	// right represent required capabilities
-	// it is not so complex as the type has only one field
-	// therefore this method just passes it through...
-
-	return e.ExecutorType.Compare(other.ExecutorType)
-}
-
-// Equal checks if two Executor objects are equal
-func (e *Executor) Equal(executor Executor) bool {
-	return e.ExecutorType == executor.ExecutorType
-}
-
 // Executors is a list of Executor objects
-type Executors []Executor
+type Executors []ExecutorType
 
 // implementing Comparable and Calculable interface
 var (
@@ -85,12 +128,12 @@ func (e *Executors) Subtract(other Executors) error {
 
 	toRemove := make(map[ExecutorType]struct{})
 	for _, ex := range other {
-		toRemove[ex.ExecutorType] = struct{}{}
+		toRemove[ex] = struct{}{}
 	}
 
 	result := (*e)[:0]
 	for _, ex := range *e {
-		if _, found := toRemove[ex.ExecutorType]; !found {
+		if _, found := toRemove[ex]; !found {
 			result = append(result, ex)
 		}
 	}
@@ -100,10 +143,10 @@ func (e *Executors) Subtract(other Executors) error {
 }
 
 // Contains checks if an Executor object is in the list of Executors
-func (e *Executors) Contains(executor Executor) bool {
+func (e *Executors) Contains(executorType ExecutorType) bool {
 	executors := *e
 	for _, ex := range executors {
-		if ex.Equal(executor) {
+		if ex == executorType {
 			return true
 		}
 	}
