@@ -240,6 +240,158 @@ Timeout duration.
 Capability context name (default: "dms").
 .RE
 
+.SH BEHAVIORS AND CAPABILITIES
+The following are the implemented behaviors and their associated capabilities:
+
+.TP
+.B /dms/node/peers/ping
+\fRPeerPingBehavior: Ping a peer to check if it is alive.
+.TP
+.B /dms/node/peers/list
+\fRPeersListBehavior: List peers visible to the node.
+.TP
+.B /dms/node/peers/self
+\fRPeerSelfBehavior: Get the peer id and listening address of the node.
+.TP
+.B /dms/node/peers/dht
+\fRPeerDHTBehavior: Get the peers in DHT of the node along with their DHT parameters.
+.TP
+.B /dms/node/peers/connect
+\fRPeerConnectBehavior: Connect to a peer.
+.TP
+.B /dms/node/peers/score
+\fRPeerScoreBehavior: Get the libp2p pubsub peer score of peers.
+
+.TP
+.B /dms/node/onboarding/onboard
+\fROnboardBehavior: Onboard the node as a compute provider.
+.TP
+.B /dms/node/onboarding/offboard
+\fROffboardBehavior: Offboard the node as a compute provider.
+.TP
+.B /dms/node/onboarding/status
+\fROnboardStatusBehavior: Get the onboarding status.
+
+.TP
+.B /dms/node/deployment/new
+\fRNewDeploymentBehavior: Start a new deployment on the node.
+.TP
+.B /dms/node/deployment/list
+\fRDeploymentListBehavior: List all the deployments orchestrated by the node.
+.TP
+.B /dms/node/deployment/logs
+\fRDeploymentLogsBehavior: Get the logs of a particular deployment.
+.TP
+.B /dms/node/deployment/status
+\fRDeploymentStatusBehavior: Get the status of a deployment.
+.TP
+.B /dms/node/deployment/manifest
+\fRDeploymentManifestBehavior: Get the manifest of a deployment.
+.TP
+.B /dms/node/deployment/shutdown
+\fRDeploymentShutdownBehavior: Shutdown a deployment.
+
+.TP
+.B /dms/node/resources/allocated
+\fRResourcesAllocatedBehavior: Get the amount of resources allocated to Allocations running on the node.
+.TP
+.B /dms/node/resources/free
+\fRResourcesFreeBehavior: Get the amount of resources that are free to be allocated on the node.
+.TP
+.B /dms/node/resources/onboarded
+\fRResourcesOnboardedBehavior: Get the amount of resources the node is onboarded with.
+.TP
+.B /dms/node/hardware/spec
+\fRHardwareSpecBehavior: Get the hardware resource specification of the machine.
+.TP
+.B /dms/node/hardware/usage
+\fRHardwareUsageBehavior: Get the full resource usage on the machine.
+
+.TP
+.B /dms/node/logger/config
+\fRLoggerConfigBehavior: Configure the logger/observability config of the node.
+
+.TP
+.B /dms/deployment/request
+\fRBidRequestBehavior: Request a bid from the compute provider for a specific ensemble.
+.TP
+.B /dms/deployment/bid
+\fRBidReplyBehavior: Reply to a bid request from an orchestrator.
+.TP
+.B /dms/deployment/commit
+\fRCommitDeploymentBehavior: Temporarily commit the resources the provider bid on.
+.TP
+.B /dms/deployment/allocate
+\fRAllocationDeploymentBehavior: Allocate the resources the provider bid on.
+.TP
+.B /dms/deployment/revert
+\fRRevertDeploymentBehavior: Revert any commit or allocation done during a deployment.
+
+.TP
+.B /dms/cap/list
+\fRCapListBehavior: Get a list of all the capabilities another node had.
+.TP
+.B /dms/cap/anchor
+\fRCapAnchorBehavior: Anchor capability tokens on another node.
+
+.TP
+.B /public/hello
+\fRPublicHelloBehavior: Get a hello message from a node.
+.TP
+.B /public/status
+\fRPublicStatusBehavior: Get the total resource amount on the machine.
+.TP
+.B /broadcast/hello
+\fRBroadcastHelloBehavior: Broadcast a hello message and get replies from nodes.
+
+.TP
+.B /dms/allocation/start
+\fRAllocationStartBehavior: Start an allocation after a deployment.
+.TP
+.B /dms/allocation/restart
+\fRAllocationRestartBehavior: Restart an allocation after a deployment has been started.
+.TP
+.B /dms/actor/healthcheck/register
+\fRRegisterHealthcheckBehavior: Register a new healthcheck mechanism for an allocation.
+
+.TP
+.B /dms/allocation/subnet/add-peer
+\fRSubnetAddPeerBehavior: Add a peer to a subnet.
+.TP
+.B /dms/allocation/subnet/remove-peer
+\fRSubnetRemovePeerBehavior: Remove a peer from a subnet.
+.TP
+.B /dms/allocation/subnet/accept-peer
+\fRSubnetAcceptPeerBehavior: Accept a peer in a subnet.
+.TP
+.B /dms/allocation/subnet/map-port
+\fRSubnetMapPortBehavior: Map a port in a subnet.
+.TP
+.B /dms/allocation/subnet/unmap-port
+\fRSubnetUnmapPortBehavior: Unmap a port in a subnet.
+.TP
+.B /dms/allocation/subnet/dns/add-records
+\fRSubnetDNSAddRecordsBehavior: Add DNS records to a subnet.
+.TP
+.B /dms/allocation/subnet/dns/remove-record
+\fRSubnetDNSRemoveRecordBehavior: Remove a DNS record from a subnet.
+
+.TP
+.B /dms/ensemble/<ENSEMBLE_ID>
+\fREnsembleNamespace: Interact with ensembles on the node.
+.TP
+.B /dms/ensemble/<ENSEMBLE_ID>/allocation/logs
+\fRAllocationLogsBehavior: Get the logs of an allocation in an ensemble.
+.TP
+.B /dms/ensemble/<ENSEMBLE_ID>/allocation/shutdown
+\fRAllocationShutdownBehavior: Shutdown an allocation in an ensemble.
+.TP
+.B /dms/ensemble/<ENSEMBLE_ID>/node/subnet/create
+\fRSubnetCreateBehavior: Create a new subnet for an ensemble.
+.TP
+.B /dms/ensemble/<ENSEMBLE_ID>/node/subnet/destroy
+\fRSubnetDestroyBehavior: Destroy a subnet for an ensemble.
+
 .SH EXAMPLES
 .TP
 Generate a new keypair:
