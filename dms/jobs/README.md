@@ -14,7 +14,6 @@
   - [Deploying in the NuNet Network](#deploying-in-the-nunet-network)
     - [Behaviors and Capabilities](#behaviors-and-capabilities)
     - [Deploying in a Private Network](#deploying-in-a-private-network)
-    - [Deploying in a Restricted Network](#deploying-in-a-restricted-network)
     - [Authorizing a Third Party to Vet Users](#authorizing-a-third-party-to-vet-users)
     - [Distributing and Revoking Capability Tokens](#distributing-and-revoking-capability-tokens)
     - [Public Deployment](#public-deployment)
@@ -250,10 +249,6 @@ In the following we examine common functional scenarios on how to set
 up the system so that deployments are properly authorized.
 
 ### Deploying in a Private Network
-
-TODO
-
-### Deploying in a Restricted Network
 
 TODO
 

@@ -1,4 +1,4 @@
-# Creating a Restricted Network
+# Creating a Private Network
 
 By default, in NuNet's p2p network, all nodes share the same underlying network infrastructure for communication.
 
@@ -8,17 +8,17 @@ specific behaviors (e.g.: deploying an allocation) on other peers.
 When following the main README usage guide, you're connecting to NuNet's official network where the capability pool is built upon KYC-verified peers.
 NuNet acts as the root of trust, issuing capability tokens to verified participants.
 
-This guide demonstrates how any organization or entity can create their own restricted network which is independent
+This guide demonstrates how any organization or entity can create their own private network which is independent
 from NuNet Foundation's trust pool.
 
-> If you want to be able to participate on both NuNet and any other restricted networks at once, as an user, you just have
+> If you want to be able to participate on both NuNet and any other private networks at once, as an user, you just have
 > to set up the capabilities for each root entity controlling the capability pool.
 >
 > In practice, you just have to follow the user guide side of this documentation and also the guide on DMS readme.
 
 ## Overview
 
-Creating a restricted network involves:
+Creating a private network involves:
 
 1. Setting up an organization key/context that acts as the root of trust
 2. With the organization key/context, grant capabilities and send the generated token to each user
@@ -91,7 +91,7 @@ Nodes will only be able to deploy allocations in nodes that have been granted th
 Though, as explained in the introduction, your nodes would still share the same underlying network. When broadcasting bid requests for
 a deployment, all peers in NuNet network would receive the request, even peers outside your capability pool.
 
-To enhance privacy, security and scability of your restricted network, you can use your own bootstrap nodes instead of NuNet's.
+To enhance privacy, security and scability of your private network, you can use your own bootstrap nodes instead of NuNet's.
 
 For that, you have to customize your `dms_config.json`. This is how your `bootstrap_peers` section
 looks now:

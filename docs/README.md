@@ -10,5 +10,3 @@
 
 This serves as a placeholder for the general documentation of the Device Management Service (DMS).
 
-
-
