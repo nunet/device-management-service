@@ -368,7 +368,7 @@ key; this is recommended for _user_ contexts, but you **should not** use it
 for the _dms_ context as it needs the key to sign capability tokens.
 
 To set up a _user_ context with a Ledger Wallet, you need the
-`ledger-cli` script from [NuNet's ledger wallet tool](https://gitlab.com/nunet/ledger-wallet).
+`ledger-cli` script from [NuNet's ledger wallet tool](https://gitlab.com/nunet/dev-tools/ledger-wallet).
 The tool uses the Eth application and specifically the first Eth
 account with signing of personal messages. Everything that needs to be
 signed (namely capability tokens) will be presented on your Nano's
@@ -512,11 +512,11 @@ By default, DMS runs on port 9999.
 
 If you want to contribute your computer's resources (CPU, RAM, GPU, storage) to the network, you have to onboard your machine.
 
-Follow our [Compute Provider Guide](docs/onboarding.md) to get started.
+Follow our [Compute Provider Guide](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding/README.md) to get started.
 
 ### Deploy Jobs on the Network
 
-Every node on the network can deploy workloads across available compute resources, given the necessary capabilities. Learn how deployments work by following our [Deployments Guide](docs/deployments.md).
+Every node on the network can deploy workloads across available compute resources, given the necessary capabilities. Learn how deployments work by following our [Deployments Guide](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/deployments/README.md).
 
 ### REST Endpoints
 
@@ -628,13 +628,13 @@ Main concepts of the architecture of DMS, the main component of the NuNet platfo
 Current key functional areas of DMS:
 
 - Actor-based system: NuNet's network communication is powered by the [NuActor System](https://gitlab.com/nunet/device-management-service/-/blob/main/actor/README.md), a zero-trust system that utilizes fine-grained capabilities, anchored on [DIDs](https://www.w3.org/TR/did-core/), following the [UCAN model](https://github.com/ucan-wg/).
-- Node management: Supports [onboarding/offboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding.md) of nodes and manages peer connections.
-- Compute ensembles: Defines ensembles as collections of logical nodes and allocations that represent compute workloads (as explained [here](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/dms/jobs/README.md)). Each allocation is a compute job assigned to a node.
-- Orchestration: [Deploys an ensemble](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/deployments.md) across nodes by fulfilling the specified constraints. This is done using a constraint satisfaction process where bids are requested from nodes and evaluated based on the required resources and locations.
+- Node management: Supports [onboarding/offboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding/README.md) of nodes and manages peer connections.
+- Compute ensembles: Defines ensembles as collections of logical nodes and allocations that represent compute workloads (as explained [here](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/jobs/README.md)). Each allocation is a compute job assigned to a node.
+- Orchestration: [Deploys an ensemble](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/deployments/README.md) across nodes by fulfilling the specified constraints. This is done using a constraint satisfaction process where bids are requested from nodes and evaluated based on the required resources and locations.
 - Supervision: Once deployed, ensembles are continuously monitored.
 - VM/container lifecycle management: Allows creation, customization, and management of containers and virtual machines on the network.
 - Resource management: Controls different types of compute resources (VMs, CPUs, GPUs).
-- API and CLI support: Offers both an [API](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/api/README.md) and [CLI](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/cmd/actor/README.md) for programmatic and manual interaction with the system.
+- API and CLI support: Offers both an [API](https://gitlab.com/nunet/device-management-service/-/blob/main/api/README.md) and [CLI](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/actor/README.md) for programmatic and manual interaction with the system.
 - Observability: Collects information of events happening in the network allowing to perform real-time or post-mortem analysis and visualizations.
 
 ### Data Types
