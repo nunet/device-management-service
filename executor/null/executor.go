@@ -13,7 +13,6 @@ import (
 	"io"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/executor"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -21,11 +20,11 @@ import (
 type Executor struct{}
 
 // NewExecutor creates a new Executor.
-func NewExecutor(_ context.Context, _ string) (executor.Executor, error) {
+func NewExecutor(_ context.Context, _ string) (types.Executor, error) {
 	return &Executor{}, nil
 }
 
-var _ executor.Executor = (*Executor)(nil)
+var _ types.Executor = (*Executor)(nil)
 
 func (e *Executor) GetID() string {
 	return ""

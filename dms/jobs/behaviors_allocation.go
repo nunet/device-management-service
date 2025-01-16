@@ -139,9 +139,9 @@ type HealthCheckResponse struct {
 func (a *Allocation) handleHealthcheck(msg actor.Envelope) {
 	defer msg.Discard()
 
-	a.mx.Lock()
+	a.lock.Lock()
 	healthcheck := a.healthcheck
-	a.mx.Unlock()
+	a.lock.Unlock()
 
 	var resp HealthCheckResponse
 	if healthcheck != nil {

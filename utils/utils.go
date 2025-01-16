@@ -333,11 +333,6 @@ func IsJobTypes(v interface{}) bool {
 	return ok
 }
 
-func IsExecutor(v interface{}) bool {
-	_, ok := v.(types.Executor)
-	return ok
-}
-
 // IsStrictlyContained checks if all elements of rightSlice are contained in leftSlice
 func IsStrictlyContained(leftSlice, rightSlice []interface{}) bool {
 	result := false // the default result is false

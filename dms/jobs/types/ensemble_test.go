@@ -1,0 +1,249 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
+package jobtypes
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestEnsemble(t *testing.T) {
+	t.Parallel()
+
+	t.Run("must be able to validate ensemble", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			ensemble *EnsembleConfig
+			wantErr  bool
+		}{
+			{
+				name: "valid ensemble",
+				ensemble: &EnsembleConfig{
+					V1: &EnsembleConfigV1{
+						Allocations: map[string]AllocationConfig{
+							"alloc1": {},
+						},
+						Nodes: map[string]NodeConfig{
+							"node1": {},
+						},
+						Edges: []EdgeConstraint{},
+					},
+				},
+			},
+			{
+				name:     "invalid ensemble",
+				ensemble: &EnsembleConfig{},
+				wantErr:  true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				if err := tt.ensemble.Validate(); (err != nil) != tt.wantErr {
+					t.Errorf("EnsembleConfig.Validate() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			})
+		}
+	})
+
+	t.Run("must be able to get allocations", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Allocations: map[string]AllocationConfig{
+					"alloc1": {
+						DNSName: "dns1",
+					},
+				},
+			},
+		}
+
+		a, ok := ensemble.Allocation("alloc1")
+		require.True(t, ok)
+		require.Equal(t, ensemble.V1.Allocations["alloc1"].DNSName, a.DNSName)
+
+		_, ok = ensemble.Allocation("alloc2")
+		require.False(t, ok)
+
+		allocations := ensemble.Allocations()
+		require.Len(t, allocations, 1)
+		require.Equal(t, ensemble.V1.Allocations, allocations)
+	})
+
+	t.Run("must be able to get nodes", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Nodes: map[string]NodeConfig{
+					"node1": {
+						Peer: "peer1",
+					},
+				},
+			},
+		}
+
+		n, ok := ensemble.Node("node1")
+		require.True(t, ok)
+		require.Equal(t, ensemble.V1.Nodes["node1"].Peer, n.Peer)
+
+		_, ok = ensemble.Node("node2")
+		require.False(t, ok)
+
+		nodes := ensemble.Nodes()
+		require.Len(t, nodes, 1)
+		require.Equal(t, ensemble.V1.Nodes, nodes)
+	})
+
+	t.Run("must be able to get edge constraints", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Edges: []EdgeConstraint{
+					{
+						T: "t1",
+					},
+				},
+			},
+		}
+
+		edges := ensemble.EdgeConstraints()
+		require.Len(t, edges, 1)
+		require.Equal(t, ensemble.V1.Edges, edges)
+	})
+
+	t.Run("must be able to clone ensemble", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Allocations: map[string]AllocationConfig{
+					"alloc1": {
+						DNSName: "dns1",
+					},
+				},
+				Nodes: map[string]NodeConfig{
+					"node1": {
+						Peer: "peer1",
+					},
+				},
+				Edges: []EdgeConstraint{
+					{
+						T: "t1",
+					},
+				},
+			},
+		}
+
+		clone := ensemble.Clone()
+		require.Equal(t, ensemble, &clone)
+
+		// Modify the clone and ensure the original is not modified
+		clone.V1.Allocations = make(map[string]AllocationConfig)
+		clone.V1.Nodes = make(map[string]NodeConfig)
+		clone.V1.Edges = []EdgeConstraint{}
+
+		require.NotEqual(t, ensemble, &clone)
+	})
+}
+
+func TestLocation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("must be able to check the equality", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			l        Location
+			other    Location
+			expected bool
+		}{
+			{
+				name: "same location",
+				l: Location{
+					Region:  "region1",
+					Country: "country1",
+					City:    "city1",
+					ASN:     1,
+				},
+				other: Location{
+					Region:  "region1",
+					Country: "country1",
+					City:    "city1",
+					ASN:     1,
+				},
+				expected: true,
+			},
+			{
+				name: "different region",
+				l: Location{
+					Region:  "region1",
+					Country: "country1",
+					City:    "city1",
+					ASN:     1,
+				},
+				other: Location{
+					Region:  "region2",
+					Country: "country1",
+					City:    "city1",
+					ASN:     1,
+				},
+				expected: false,
+			},
+			{
+				name: "different country",
+				l: Location{
+					Region:  "region1",
+					Country: "country1",
+					City:    "city1",
+					ASN:     1,
+				},
+				other: Location{
+					Region:  "region1",
+					Country: "country2",
+					City:    "city1",
+					ASN:     1,
+				},
+				expected: false,
+			},
+			{
+				name: "different city",
+				l: Location{
+					Region:  "region1",
+					Country: "country1",
+					City:    "city1",
+					ASN:     1,
+				},
+				other: Location{
+					Region:  "region1",
+					Country: "country1",
+					City:    "city2",
+					ASN:     1,
+				},
+				expected: false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				require.Equal(t, tt.expected, tt.l.Equal(tt.other))
+			})
+		}
+	})
+}
