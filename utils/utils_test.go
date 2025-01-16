@@ -49,13 +49,9 @@ func TestRandomString(t *testing.T) {
 }
 
 func TestIsExecutorStrictlyContained(t *testing.T) {
-	docker := types.Executor{ExecutorType: types.ExecutorTypeDocker}
-	firecracker := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}
-	wasm := types.Executor{ExecutorType: types.ExecutorTypeWasm}
-
-	executors1 := []interface{}{docker, firecracker, wasm}
-	executors2 := []interface{}{docker, firecracker}
-	executors3 := []interface{}{docker}
+	executors1 := []interface{}{types.ExecutorTypeDocker, types.ExecutorTypeFirecracker, types.ExecutorTypeWasm}
+	executors2 := []interface{}{types.ExecutorTypeDocker, types.ExecutorTypeFirecracker}
+	executors3 := []interface{}{types.ExecutorTypeDocker}
 
 	// possitive assertions
 	assert.True(t, IsStrictlyContained(executors1, executors2), fmt.Sprintf("Executors %s strictly contains executors %s", executors1, executors2))
@@ -66,17 +62,13 @@ func TestIsExecutorStrictlyContained(t *testing.T) {
 }
 
 func TestIntersectionStringSlices(t *testing.T) {
-	docker := types.Executor{ExecutorType: types.ExecutorTypeDocker}
-	firecracker := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}
-	wasm := types.Executor{ExecutorType: types.ExecutorTypeWasm}
-
-	executors1 := []interface{}{docker, firecracker, wasm}
-	executors2 := []interface{}{docker, firecracker}
-	executors3 := []interface{}{docker}
-	executors4 := []interface{}{wasm}
-	executors5 := []interface{}{firecracker, wasm}
-	executors6 := []interface{}{docker, wasm}
-	executors7 := []interface{}{firecracker}
+	executors1 := []interface{}{types.ExecutorTypeDocker, types.ExecutorTypeFirecracker, types.ExecutorTypeWasm}
+	executors2 := []interface{}{types.ExecutorTypeDocker, types.ExecutorTypeFirecracker}
+	executors3 := []interface{}{types.ExecutorTypeDocker}
+	executors4 := []interface{}{types.ExecutorTypeWasm}
+	executors5 := []interface{}{types.ExecutorTypeFirecracker, types.ExecutorTypeWasm}
+	executors6 := []interface{}{types.ExecutorTypeDocker, types.ExecutorTypeWasm}
+	executors7 := []interface{}{types.ExecutorTypeFirecracker}
 
 	// positive assertions
 	assert.Equal(t, IntersectionSlices(executors1, executors2), executors2)
@@ -120,21 +112,6 @@ func TestIsSameShallowType(t *testing.T) {
 
 	assert.False(t, IsSameShallowType(v1, v2))
 	assert.False(t, IsSameShallowType(v2, v3))
-}
-
-func TestIsExecutor(t *testing.T) {
-	executor1 := types.Executor{ExecutorType: types.ExecutorTypeDocker}
-	executor2 := types.Executor{ExecutorType: types.ExecutorTypeFirecracker}
-	executor3 := types.Executor{ExecutorType: types.ExecutorTypeWasm}
-
-	// positive assertions
-	assert.True(t, IsExecutor(executor1))
-	assert.True(t, IsExecutor(executor2))
-	assert.True(t, IsExecutor(executor3))
-
-	// negative assertions
-	assert.False(t, IsExecutor("string"))
-	assert.False(t, IsExecutor(1))
 }
 
 func TestIsExecutorType(t *testing.T) {

@@ -60,6 +60,8 @@ type Executor struct {
 	fs afero.Afero
 }
 
+var _ types.Executor = (*Executor)(nil)
+
 // NewExecutor initializes a new Executor instance with a Docker client.
 func NewExecutor(ctx context.Context, fs afero.Afero, id string) (*Executor, error) {
 	dockerClient, err := NewDockerClient()

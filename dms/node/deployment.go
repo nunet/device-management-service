@@ -63,7 +63,7 @@ func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.Ensemb
 		return nil, fmt.Errorf("failed to create child actor: %w", err)
 	}
 
-	orch, err := jobs.NewOrchestrator(ctx, ensembleID, actor, n.network, ensemble)
+	orch, err := jobs.NewOrchestrator(ctx, ensembleID, actor, ensemble)
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +199,9 @@ func (n *Node) restoreDeployments() error {
 			continue
 		}
 
-		orchestrator, err := jobs.RestoreDeployment(actor, n.network, d.DeploymentID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
+		orchestrator, err := jobs.RestoreDeployment(actor, d.DeploymentID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
 		if err != nil {
-			log.Errorf("couldn't restore orchestrator of id %s; Error: %w", d.DeploymentID, err)
+			log.Errorf("couldn't restore orchestrator of id %s; Error: %v", d.DeploymentID, err)
 			failedToRestore = append(failedToRestore, d.DeploymentID)
 			continue
 		}

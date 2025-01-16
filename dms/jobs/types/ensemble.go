@@ -97,7 +97,7 @@ type SupervisorConfig struct {
 	Children    []SupervisorConfig `json:"children,omitempty"`    // list of child supervisors
 }
 
-// SupervisoryStrategy is the name of a supervision strategy
+// SupervisorStrategy is the name of a supervision strategy
 type SupervisorStrategy string
 
 const (
@@ -106,7 +106,7 @@ const (
 	StrategyRestForOne SupervisorStrategy = "RestForOne"
 )
 
-// config validation
+// Validate validates the ensemble configuration
 func (e *EnsembleConfig) Validate() error {
 	if e == nil || e.V1 == nil {
 		return errors.New("invalid ensemble config")
@@ -137,7 +137,23 @@ func (e *EnsembleConfig) EdgeConstraints() []EdgeConstraint {
 	return e.V1.Edges
 }
 
-func (l *Location) Includes(other Location) bool {
+func (e *EnsembleConfig) Clone() EnsembleConfig {
+	var clone EnsembleConfig
+
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		log.Errorf("error marshaling ensemble config: %s", err)
+		return clone
+	}
+
+	if err := json.Unmarshal(bytes, &clone); err != nil {
+		log.Errorf("unmarshaling ensemble config: %s", err)
+	}
+
+	return clone
+}
+
+func (l *Location) Equal(other Location) bool {
 	if l.Region != other.Region {
 		return false
 	}
@@ -159,20 +175,4 @@ func (l *Location) Includes(other Location) bool {
 	}
 
 	return true
-}
-
-func (e *EnsembleConfig) Clone() EnsembleConfig {
-	var clone EnsembleConfig
-
-	bytes, err := json.Marshal(e)
-	if err != nil {
-		log.Errorf("error marshaling ensemble config: %s", err)
-		return clone
-	}
-
-	if err := json.Unmarshal(bytes, &clone); err != nil {
-		log.Errorf("error unmarshaling ensemble config: %s", err)
-	}
-
-	return clone
 }

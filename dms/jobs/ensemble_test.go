@@ -7,7 +7,6 @@
 // See the License for the specific language governing permissions and limitations under the License.
 
 //go:build linux
-// +build linux
 
 package jobs
 
@@ -17,26 +16,26 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/executor/firecracker"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestGenerateEnsemble(t *testing.T) {
-	ens := job_types.EnsembleConfigV1{
-		Allocations: make(map[string]job_types.AllocationConfig),
+	ens := jobtypes.EnsembleConfigV1{
+		Allocations: make(map[string]jobtypes.AllocationConfig),
 		Nodes:       make(map[string]NodeConfig),
 		Edges:       []EdgeConstraint{},
-		Supervisor:  job_types.SupervisorConfig{},
+		Supervisor:  jobtypes.SupervisorConfig{},
 		Keys:        make(map[string]string),
 		Scripts:     make(map[string][]byte),
 	}
 
 	specdock := docker.NewDockerEngineBuilder("image1").WithWorkingDirectory("/").WithCmd("withCMD").WithEntrypoint("WithEntrypoint").WithEnvironment("env1").Build()
 
-	ens.Allocations["alloc1"] = job_types.AllocationConfig{
-		Executor: job_types.ExecutorDocker,
+	ens.Allocations["alloc1"] = jobtypes.AllocationConfig{
+		Executor: jobtypes.ExecutorDocker,
 		Resources: types.Resources{
 			CPU:  types.CPU{ClockSpeed: 2, Cores: 2, Threads: 2, Architecture: ""},
 			RAM:  types.RAM{Size: 4, ClockSpeed: 3, Type: ""},
@@ -54,8 +53,8 @@ func TestGenerateEnsemble(t *testing.T) {
 	}
 
 	firecrackerspec := firecracker.NewFirecrackerEngineBuilder("/").WithInitrd("WithInitrd").WithKernelImage("WithInitrd").WithRootFileSystem("/").Build()
-	ens.Allocations["alloc2"] = job_types.AllocationConfig{
-		Executor: job_types.ExecutorFirecracker,
+	ens.Allocations["alloc2"] = jobtypes.AllocationConfig{
+		Executor: jobtypes.ExecutorFirecracker,
 		Resources: types.Resources{
 			CPU:  types.CPU{ClockSpeed: 2, Cores: 2, Threads: 2, Architecture: ""},
 			RAM:  types.RAM{Size: 4, ClockSpeed: 3, Type: ""},
@@ -71,7 +70,7 @@ func TestGenerateEnsemble(t *testing.T) {
 
 	ens.Nodes["node1"] = NodeConfig{
 		Allocations: []string{"alloc1"},
-		Ports: []job_types.PortConfig{{
+		Ports: []jobtypes.PortConfig{{
 			Public:     1,
 			Private:    1,
 			Allocation: "alloc1",
@@ -89,7 +88,7 @@ func TestGenerateEnsemble(t *testing.T) {
 
 	ens.Nodes["node2"] = NodeConfig{
 		Allocations: []string{"alloc2"},
-		Ports: []job_types.PortConfig{{
+		Ports: []jobtypes.PortConfig{{
 			Public:     1,
 			Private:    1,
 			Allocation: "alloc2",
@@ -100,10 +99,10 @@ func TestGenerateEnsemble(t *testing.T) {
 
 	ens.Edges = []EdgeConstraint{{S: "node1", T: "node2", RTT: 2000, BW: 102410}}
 
-	ens.Supervisor = job_types.SupervisorConfig{
-		Strategy:    job_types.StrategyAllForOne,
+	ens.Supervisor = jobtypes.SupervisorConfig{
+		Strategy:    jobtypes.StrategyAllForOne,
 		Allocations: []string{"alloc1"},
-		Children:    []job_types.SupervisorConfig{{}},
+		Children:    []jobtypes.SupervisorConfig{{}},
 	}
 
 	yamlData, err := yaml.Marshal(&ens)

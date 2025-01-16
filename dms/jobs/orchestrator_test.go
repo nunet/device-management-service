@@ -10,42 +10,37 @@ package jobs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/multiformats/go-multiaddr"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"gitlab.com/nunet/device-management-service/lib/did"
+
+	"gitlab.com/nunet/device-management-service/network/libp2p"
+
+	"go.uber.org/mock/gomock"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
-	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/lib/ucan"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type subnetObj struct {
-	id           string
-	routingTable map[string]string
-	peer         map[string]string
-	dns          map[string]string
-	ports        map[int]int
-}
+func getMockEnsembleConfig(t *testing.T) jobtypes.EnsembleConfig {
+	t.Helper()
 
-func TestProvision(t *testing.T) {
-	addrs, privKey, peer := actor.NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
-	rootDID, root := actor.MakeRootTrustContext(t)
-	actorDID, trust := actor.MakeTrustContext(t, privKey)
-	capa := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
-	actr := actor.CreateActor(t, peer, capa)
-	require.NoError(t, actr.Start())
-	orchestrator, err := NewOrchestrator(context.Background(), "id", actr, peer, job_types.EnsembleConfig{
-		V1: &job_types.EnsembleConfigV1{
-			Allocations: map[string]job_types.AllocationConfig{
+	return jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{
 				"allocation1": {
 					Executor: "docker",
 					Resources: types.Resources{
@@ -78,326 +73,12 @@ func TestProvision(t *testing.T) {
 							WriteSpeed: 2500,
 						},
 					},
-					Execution: types.SpecConfig{},
-				},
-			},
-			Nodes: map[string]job_types.NodeConfig{
-				"node1": {
-					Allocations: []string{"allocation1"},
-				},
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	_, privKey1, peer1 := actor.NewLibp2pNetwork(t, addrs)
-	rootDID1, root1 := actor.MakeRootTrustContext(t)
-	actorDID1, trust1 := actor.MakeTrustContext(t, privKey1)
-	cap1 := actor.MakeCapabilityContext(t, actorDID1, rootDID1, trust1, root1)
-
-	// actor.AllowReciprocal(t, cap, root, rootDID, rootDID1, "/dms")
-	// actor.AllowReciprocal(t, cap1, root1, rootDID1, rootDID, "/dms")
-
-	actr1 := actor.CreateActor(t, peer1, cap1)
-	require.NoError(t, actr1.Start())
-
-	subnets := make(map[string]subnetObj)
-	nodeID := uuid.New().String()
-	manifest := EnsembleManifest{
-		ID:           uuid.New().String(),
-		Orchestrator: actr.Handle(),
-		Allocations: map[string]AllocationManifest{
-			"allocation1": {
-				ID:       uuid.New().String(),
-				NodeID:   nodeID,
-				Handle:   actr1.Handle(),
-				DNSName:  "actor.com.",
-				PrivAddr: "",
-				Ports: map[int]int{
-					8080: 8888,
-				},
-			},
-		},
-		Nodes: map[string]NodeManifest{
-			nodeID: {
-				ID:        uuid.New().String(),
-				Peer:      peer1.Host.ID().String(),
-				Handle:    actr1.Handle(),
-				PubAddrss: []string{},
-				Location:  Location{},
-				Allocations: []string{
-					"allocation1",
-				},
-			},
-		},
-	}
-
-	_ = actr1.AddBehavior(fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, manifest.ID), func(msg actor.Envelope) {
-		defer msg.Discard()
-
-		t.Log("got msg for create")
-		var request SubnetCreateRequest
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
-
-		subnets[actr1.Handle().DID.String()] = subnetObj{
-			id:           request.SubnetID,
-			routingTable: request.RoutingTable,
-			peer:         map[string]string{},
-			dns:          map[string]string{},
-			ports:        map[int]int{},
-		}
-
-		reply, err := actor.ReplyTo(msg, SubnetCreateResponse{
-			OK: true,
-		})
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
-
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
-	})
-
-	_ = actr1.AddBehavior(behaviors.AllocationStartBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
-
-		response := AllocationStartResponse{
-			OK: true,
-		}
-
-		reply, err := actor.ReplyTo(msg, response)
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
-
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
-	})
-
-	_ = actr1.AddBehavior(behaviors.SubnetAddPeerBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
-
-		var request SubnetAddPeerRequest
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
-
-		response := SubnetAddPeerResponse{
-			OK: true,
-		}
-
-		subnet, ok := subnets[actr1.Handle().DID.String()]
-		if !ok {
-			response.OK = false
-			response.Error = "subnet not found" //nolint
-		} else {
-			subnet.peer[request.IP] = request.PeerID
-		}
-
-		reply, err := actor.ReplyTo(msg, response)
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
-
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
-	})
-
-	_ = actr1.AddBehavior(behaviors.SubnetAcceptPeerBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
-
-		var request SubnetAcceptPeerRequest
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
-
-		response := SubnetAcceptPeerResponse{
-			OK: true,
-		}
-
-		subnet, ok := subnets[actr1.Handle().DID.String()]
-		if !ok {
-			response.OK = false
-			response.Error = "subnet not found"
-		} else {
-			subnet.routingTable[request.IP] = request.PeerID
-		}
-
-		reply, err := actor.ReplyTo(msg, response)
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
-
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
-	})
-
-	_ = actr1.AddBehavior(behaviors.SubnetDNSAddRecordsBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
-
-		var request SubnetDNSAddRecordsRequest
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
-
-		response := SubnetDNSAddRecordsResponse{
-			OK: true,
-		}
-
-		subnet, ok := subnets[actr1.Handle().DID.String()]
-		if !ok {
-			response.OK = false
-			response.Error = "subnet not found"
-		} else {
-			for name, ip := range request.Records {
-				subnet.dns[name] = ip
-			}
-		}
-
-		reply, err := actor.ReplyTo(msg, response)
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
-
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
-	})
-
-	_ = actr1.AddBehavior(behaviors.SubnetMapPortBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
-
-		var request SubnetMapPortRequest
-		if err := json.Unmarshal(msg.Message, &request); err != nil {
-			return
-		}
-
-		response := SubnetMapPortResponse{
-			OK: true,
-		}
-
-		subnet, ok := subnets[actr1.Handle().DID.String()]
-		if !ok {
-			response.OK = false
-			response.Error = "subnet not found"
-		} else {
-			srcPort, _ := strconv.Atoi(request.SourcePort)
-			destPort, _ := strconv.Atoi(request.DestPort)
-			subnet.ports[srcPort] = destPort
-		}
-
-		reply, err := actor.ReplyTo(msg, response)
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
-
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
-	})
-
-	actrdid, err := did.FromID(actr1.Handle().ID)
-	require.NoError(t, err)
-	tokenlist, err := cap1.Grant(
-		ucan.Delegate,
-		actr.Handle().DID,
-		actrdid,
-		[]string{"/nunet"},
-		actor.MakeExpiry(time.Hour),
-		0,
-		[]ucan.Capability{
-			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, manifest.ID)),
-			ucan.Capability(behaviors.AllocationNamespace),
-		},
-	)
-	require.NoError(t, err)
-	require.NoError(t, cap1.AddRoots([]did.DID{}, tokenlist, ucan.TokenList{}, ucan.TokenList{}))
-
-	err = orchestrator.provision(manifest)
-	require.NoError(t, err)
-
-	// TODO 741 - re-enable after provision is fixed
-	//
-	// ownIP := ""
-	// subnet, ok := subnets[actr1.Handle().DID.String()]
-
-	// require.True(t, ok)
-
-	// assert.Equal(t, subnet.id, manifest.ID)
-	// for ip, peerID := range subnet.routingTable {
-	// 	if peerID == peer1.Host.ID().String() {
-	// 		assert.Equal(t, subnet.routingTable[ip], peerID)
-	// 		ownIP = ip
-	// 	}
-	// }
-
-	// assert.Equal(t, subnet.peer[ownIP], peer1.Host.ID().String())
-	// assert.Equal(t, subnet.dns["actor.com."], ownIP)
-
-	// assert.Equal(t, subnet.ports[8080], 8888)
-}
-
-func TestSupervise(t *testing.T) {
-	addrs, privKey, peer := actor.NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
-	rootDID, root := actor.MakeRootTrustContext(t)
-	actorDID, trust := actor.MakeTrustContext(t, privKey)
-	capa := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
-	actr := actor.CreateActor(t, peer, capa)
-	require.NoError(t, actr.Start())
-
-	orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
-	if err != nil {
-		log.Errorf("failed to create child actor: %w", err)
-		return
-	}
-	orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, peer, job_types.EnsembleConfig{
-		V1: &job_types.EnsembleConfigV1{
-			Allocations: map[string]job_types.AllocationConfig{
-				"allocation1": {
-					Executor: "docker",
-					Resources: types.Resources{
-						CPU: types.CPU{
-							ClockSpeed: 2.4,
-							Cores:      2,
-							Model:      "Intel Core i7",
-							Vendor:     "Intel",
-						},
-						GPUs: []types.GPU{
-							{
-								Model:      "NVIDIA GeForce GTX 1080",
-								Vendor:     "NVIDIA",
-								VRAM:       8,
-								Index:      0,
-								PCIAddress: "0000:01:00.0",
-							},
-						},
-						RAM: types.RAM{
-							Size:       16,
-							ClockSpeed: 2400,
-						},
-						Disk: types.Disk{
-							Size:       256,
-							Model:      "Samsung 970 EVO",
-							Vendor:     "Samsung",
-							Type:       "SSD",
-							Interface:  "NVMe",
-							ReadSpeed:  3500,
-							WriteSpeed: 2500,
+					Execution: types.SpecConfig{
+						Type: "docker",
+						Params: map[string]interface{}{
+							"image": "nginx",
 						},
 					},
-					Execution: types.SpecConfig{},
 				},
 			},
 			Nodes: map[string]NodeConfig{
@@ -406,112 +87,939 @@ func TestSupervise(t *testing.T) {
 				},
 			},
 		},
+	}
+}
+
+func withTimeout(t *testing.T, name string, duration time.Duration, testFunc func(ctx context.Context, t *testing.T)) {
+	t.Run(name, func(t *testing.T) {
+		t.Helper()
+
+		ctx, cancel := context.WithTimeout(context.Background(), duration)
+		defer cancel()
+
+		done := make(chan struct{})
+		go func() {
+			testFunc(ctx, t)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			t.Fatalf("test %q timed out after %s", name, duration)
+		}
 	})
-	require.NoError(t, err)
+}
 
-	_, privKey1, peer1 := actor.NewLibp2pNetwork(t, addrs)
-	rootDID1, root1 := actor.MakeRootTrustContext(t)
-	actorDID1, trust1 := actor.MakeTrustContext(t, privKey1)
-	cap1 := actor.MakeCapabilityContext(t, actorDID1, rootDID1, trust1, root1)
+func TestOrchestrator(t *testing.T) {
+	t.Parallel()
 
-	actr1 := actor.CreateActor(t, peer1, cap1)
-	require.NoError(t, actr1.Start())
-	_ = actr1.AddBehavior(behaviors.RegisterHealthcheckBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
-		t.Log("got msg to register healthcheck")
+	ensembleID := "ensembleID"
+	t.Run("must be able to create an orchestrator", func(t *testing.T) {
+		t.Parallel()
+		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		assert.NoError(t, err)
+		rootDID, root := actor.MakeRootTrustContext(t)
+		actorDID, trust := actor.MakeTrustContext(t, privKey)
+		capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
 
-		reply, err := actor.ReplyTo(
-			msg,
-			RegisterHealthcheckResponse{
-				OK:    true,
-				Error: "",
-			},
+		ctrl := gomock.NewController(t)
+		mockPeer := NewMockNetwork(ctrl)
+		mockPeer.EXPECT().GetHostID().Return(libp2p.PeerID("hostID")).Times(1)
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		actr := actor.CreateActor(t, mockPeer, capContext)
+		require.NoError(t, actr.Start())
+
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		require.NoError(t, err)
+
+		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator)
+	})
+
+	t.Run("must be able to set and get status", func(t *testing.T) {
+		t.Parallel()
+
+		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		assert.NoError(t, err)
+		rootDID, root := actor.MakeRootTrustContext(t)
+		actorDID, trust := actor.MakeTrustContext(t, privKey)
+		capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+
+		ctrl := gomock.NewController(t)
+		mockPeer := NewMockNetwork(ctrl)
+		mockPeer.EXPECT().GetHostID().Return(libp2p.PeerID("hostID")).Times(1)
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		actr := actor.CreateActor(t, mockPeer, capContext)
+		require.NoError(t, actr.Start())
+
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		require.NoError(t, err)
+
+		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+
+		orchestrator.setStatus(DeploymentStatusPreparing)
+		assert.Equal(t, DeploymentStatusPreparing, orchestrator.Status())
+	})
+
+	t.Run("must be able to get ensemble config", func(t *testing.T) {
+		t.Parallel()
+
+		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		assert.NoError(t, err)
+		rootDID, root := actor.MakeRootTrustContext(t)
+		actorDID, trust := actor.MakeTrustContext(t, privKey)
+		capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+
+		ctrl := gomock.NewController(t)
+		mockPeer := NewMockNetwork(ctrl)
+		mockPeer.EXPECT().GetHostID().Return(libp2p.PeerID("hostID")).Times(1)
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		actr := actor.CreateActor(t, mockPeer, capContext)
+		require.NoError(t, actr.Start())
+
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		require.NoError(t, err)
+
+		ensembleConfig := getMockEnsembleConfig(t)
+		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, ensembleConfig)
+		require.NoError(t, err)
+
+		actualConfig := orchestrator.Config()
+		require.Equal(t, ensembleConfig, actualConfig)
+
+		// Ensure that the config is returned safely
+		actualConfig.V1.Allocations = nil
+		newConfig := orchestrator.Config()
+		require.Equal(t, ensembleConfig, newConfig)
+	})
+
+	t.Run("must be able to get id", func(t *testing.T) {
+		t.Parallel()
+
+		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		assert.NoError(t, err)
+		rootDID, root := actor.MakeRootTrustContext(t)
+		actorDID, trust := actor.MakeTrustContext(t, privKey)
+		capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+
+		ctrl := gomock.NewController(t)
+		mockPeer := NewMockNetwork(ctrl)
+		mockPeer.EXPECT().GetHostID().Return(libp2p.PeerID("hostID")).Times(1)
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		actr := actor.CreateActor(t, mockPeer, capContext)
+		require.NoError(t, actr.Start())
+
+		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		require.NoError(t, err)
+
+		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+
+		assert.Equal(t, "id", orchestrator.ID())
+	})
+
+	t.Run("must be able to deploy an ensemble", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
+
+		var (
+			bidReplyHandler actor.Behavior
+			didReply        atomic.Bool
+			wg              sync.WaitGroup
 		)
-		if err != nil {
-			log.Errorf("error creating reply: %s", err)
-			return
-		}
 
-		if err := actr1.Send(reply); err != nil {
-			log.Errorf("error sending  reply: %s", err)
-		}
+		privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		require.NoError(t, err)
+
+		id, err := pubK.Raw()
+		require.NoError(t, err)
+
+		peerID, err := peer.IDFromPublicKey(pubK)
+		require.NoError(t, err)
+		testDID := did.FromPublicKey(pubK)
+		provider := did.NewProvider(testDID, privK)
+
+		orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+
+		wg.Add(1)
+		mockActor.EXPECT().AddBehavior(behaviors.BidReplyBehavior, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ string, continuation actor.Behavior, _ ...actor.BehaviorOption) error {
+				if !didReply.Load() {
+					bidReplyHandler = continuation
+				}
+				return nil
+			}).AnyTimes()
+
+		mockActor.EXPECT().Handle().Return(actor.Handle{
+			ID:  actor.ID{PublicKey: id},
+			DID: testDID,
+			Address: actor.Address{
+				HostID:       "hostID",
+				InboxAddress: "inboxAddress",
+			},
+		}).AnyTimes()
+		mockActor.EXPECT().Publish(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
+			// bid only once
+			if !didReply.Load() {
+				didReply.Store(true)
+				go func() {
+					defer wg.Done()
+
+					bid := jobtypes.Bid{
+						V1: &jobtypes.BidV1{
+							EnsembleID: ensembleID,
+							NodeID:     "node1",
+							Peer:       peerID.String(),
+							Handle: actor.Handle{
+								ID:  actor.ID{PublicKey: id},
+								DID: testDID,
+								Address: actor.Address{
+									HostID:       "hostID",
+									InboxAddress: "inboxAddress",
+								},
+							},
+							Location: Location{},
+						},
+					}
+					err = bid.Sign(provider)
+					require.NoError(t, err)
+
+					env, err := actor.ReplyTo(msg, bid)
+					require.NoError(t, err)
+
+					bidReplyHandler(env)
+				}()
+			}
+			return nil
+		}).AnyTimes()
+		mockActor.EXPECT().Invoke(gomock.Any()).DoAndReturn(func(msg actor.Envelope) (<-chan actor.Envelope, error) {
+			respChan := make(chan actor.Envelope, 1)
+			go func() {
+				switch msg.Behavior {
+				case behaviors.CommitDeploymentBehavior:
+					reply := CommitDeploymentResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.CommitDeploymentBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.AllocationDeploymentBehavior:
+					reply := AllocationDeploymentResponse{
+						OK: true,
+						Allocations: map[string]actor.Handle{
+							"allocation1": {},
+						},
+					}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationDeploymentBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"):
+					reply := SubnetDestroyResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"), reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.SubnetAddPeerBehavior:
+					reply := SubnetAddPeerResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.SubnetDNSAddRecordsBehavior:
+					reply := SubnetDNSAddRecordsResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.AllocationStartBehavior:
+					reply := AllocationStartResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.AllocationLogsBehavior, ensembleID):
+					reply := AllocationLogsResponse{
+						Stdout: []byte{1, 2, 3, 4, 5},
+						Stderr: []byte{1, 2, 3, 4, 5},
+						Error:  "",
+					}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationLogsBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+
+				default:
+					t.Errorf("unexpected behavior: %s", msg.Behavior)
+				}
+			}()
+
+			return respChan, nil
+		}).AnyTimes()
+		err = orchestrator.Deploy(time.Now().Add(10 * time.Second))
+		require.NoError(t, err)
+
+		wg.Wait()
+
+		// assert the manifest
+		manifest := orchestrator.Manifest()
+		require.NotNil(t, manifest)
+		require.Len(t, manifest.Allocations, 1)
+		require.Len(t, manifest.Nodes, 1)
+
+		// get the allocation logs
+		logs, err := orchestrator.GetAllocationLogs("allocation1")
+		require.NoError(t, err)
+		require.Equal(t, []byte{1, 2, 3, 4, 5}, logs.Stdout)
+		require.Equal(t, []byte{1, 2, 3, 4, 5}, logs.Stderr)
 	})
 
-	times := 0
-	_ = actr1.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
-		t.Log("Responding to healthcheck")
-		if times >= 1 {
-			t.Log("Not going through")
-			return
-		}
+	t.Run("must be able to revert a deployment", func(t *testing.T) {
+		t.Parallel()
 
-		reply, err := actor.ReplyTo(msg, nil)
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
 
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
+		var (
+			bidReplyHandler actor.Behavior
+			didReply        atomic.Bool
+			wg              sync.WaitGroup
+		)
 
-		times++
+		privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		require.NoError(t, err)
+
+		id, err := pubK.Raw()
+		require.NoError(t, err)
+
+		peerID, err := peer.IDFromPublicKey(pubK)
+		require.NoError(t, err)
+		testDID := did.FromPublicKey(pubK)
+		provider := did.NewProvider(testDID, privK)
+
+		orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+
+		wg.Add(2) // publish and send
+		mockActor.EXPECT().AddBehavior(behaviors.BidReplyBehavior, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ string, continuation actor.Behavior, _ ...actor.BehaviorOption) error {
+				if !didReply.Load() {
+					bidReplyHandler = continuation
+				}
+				return nil
+			}).AnyTimes()
+		mockActor.EXPECT().Handle().Return(actor.Handle{
+			ID:  actor.ID{PublicKey: id},
+			DID: testDID,
+			Address: actor.Address{
+				HostID:       "hostID",
+				InboxAddress: "inboxAddress",
+			},
+		}).AnyTimes()
+		mockActor.EXPECT().Publish(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
+			// bid only once
+			if !didReply.Load() {
+				didReply.Store(true)
+				go func() {
+					defer wg.Done()
+
+					bid := jobtypes.Bid{
+						V1: &jobtypes.BidV1{
+							EnsembleID: ensembleID,
+							NodeID:     "node1",
+							Peer:       peerID.String(),
+							Handle: actor.Handle{
+								ID:  actor.ID{PublicKey: id},
+								DID: testDID,
+								Address: actor.Address{
+									HostID:       "hostID",
+									InboxAddress: "inboxAddress",
+								},
+							},
+							Location: Location{},
+						},
+					}
+					err = bid.Sign(provider)
+					require.NoError(t, err)
+
+					env, err := actor.ReplyTo(msg, bid)
+					require.NoError(t, err)
+
+					bidReplyHandler(env)
+				}()
+			}
+			return nil
+		}).AnyTimes()
+		mockActor.EXPECT().Invoke(gomock.Any()).DoAndReturn(func(msg actor.Envelope) (<-chan actor.Envelope, error) {
+			respChan := make(chan actor.Envelope, 1)
+			go func() {
+				switch msg.Behavior {
+				case behaviors.CommitDeploymentBehavior:
+					reply := CommitDeploymentResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.CommitDeploymentBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.AllocationDeploymentBehavior:
+					reply := AllocationDeploymentResponse{
+						OK: true,
+						Allocations: map[string]actor.Handle{
+							"allocation1": {},
+						},
+					}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationDeploymentBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID):
+					reply := SubnetCreateResponse{OK: false, Error: "subnet create failed"}
+					env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"), reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.AllocationStartBehavior:
+					reply := AllocationStartResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID):
+					reply := AllocationStopResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID), reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID):
+					reply := SubnetDestroyResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID), reply)
+					require.NoError(t, err)
+					respChan <- env
+
+				default:
+					t.Errorf("unexpected behavior: %s", msg.Behavior)
+				}
+			}()
+
+			return respChan, nil
+		}).AnyTimes()
+		mockActor.EXPECT().Send(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
+			if msg.Behavior == behaviors.RevertDeploymentBehavior {
+				wg.Done()
+			}
+			return nil
+		}).Times(1)
+		err = orchestrator.Deploy(time.Now().Add(10 * time.Second))
+		require.Error(t, err)
+
+		orchestrator.Shutdown()
+		wg.Wait()
 	})
 
-	restartedAllocations := make(map[string]bool)
-	ch := make(chan struct{})
-	_ = actr1.AddBehavior(behaviors.AllocationRestartBehavior, func(msg actor.Envelope) {
-		defer msg.Discard()
+	t.Run("must be able to request bid from a specific peer", func(t *testing.T) {
+		t.Parallel()
 
-		restartedAllocations[msg.To.ID.String()] = true
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
 
-		response := AllocationRestartResponse{
-			OK: true,
+		var (
+			bidReplyHandler actor.Behavior
+			didReply        atomic.Bool
+			wg              sync.WaitGroup
+		)
+
+		privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		require.NoError(t, err)
+
+		id, err := pubK.Raw()
+		require.NoError(t, err)
+
+		peerID, err := peer.IDFromPublicKey(pubK)
+		require.NoError(t, err)
+		testDID := did.FromPublicKey(pubK)
+		provider := did.NewProvider(testDID, privK)
+
+		ensemble := getMockEnsembleConfig(t)
+		ensemble.V1.Nodes = map[string]jobtypes.NodeConfig{
+			"node1": {
+				Peer:        peerID.String(),
+				Allocations: []string{"allocation1"},
+			},
 		}
+		orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, ensemble)
+		require.NoError(t, err)
 
-		reply, err := actor.ReplyTo(msg, response)
-		if err != nil {
-			log.Debugf("error creating reply: %s", err)
-			return
-		}
+		wg.Add(1) // bid event
+		mockActor.EXPECT().AddBehavior(behaviors.BidReplyBehavior, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ string, continuation actor.Behavior, _ ...actor.BehaviorOption) error {
+				if !didReply.Load() {
+					bidReplyHandler = continuation
+				}
+				return nil
+			}).AnyTimes()
 
-		if err := actr1.Send(reply); err != nil {
-			log.Debugf("error sending  reply: %s", err)
-		}
-		ch <- struct{}{}
+		mockActor.EXPECT().Handle().Return(actor.Handle{
+			ID:  actor.ID{PublicKey: id},
+			DID: testDID,
+			Address: actor.Address{
+				HostID:       "hostID",
+				InboxAddress: "inboxAddress",
+			},
+		}).AnyTimes()
+		mockActor.EXPECT().Publish(gomock.Any()).DoAndReturn(func(_ actor.Envelope) error {
+			// we do not bid on broadcast
+			return nil
+		}).AnyTimes()
+		mockActor.EXPECT().Invoke(gomock.Any()).DoAndReturn(func(msg actor.Envelope) (<-chan actor.Envelope, error) {
+			respChan := make(chan actor.Envelope, 1)
+			go func() {
+				switch msg.Behavior {
+				case behaviors.CommitDeploymentBehavior:
+					reply := CommitDeploymentResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.CommitDeploymentBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.AllocationDeploymentBehavior:
+					reply := AllocationDeploymentResponse{
+						OK: true,
+						Allocations: map[string]actor.Handle{
+							"allocation1": {},
+						},
+					}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationDeploymentBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"):
+					reply := SubnetCreateResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"), reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.SubnetAddPeerBehavior:
+					reply := SubnetAddPeerResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.SubnetDNSAddRecordsBehavior:
+					reply := SubnetDNSAddRecordsResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case behaviors.AllocationStartBehavior:
+					reply := AllocationStartResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID):
+					reply := SubnetDestroyResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID), reply)
+					require.NoError(t, err)
+					respChan <- env
+				case fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID):
+					reply := AllocationStopResponse{OK: true}
+					env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID), reply)
+					require.NoError(t, err)
+					respChan <- env
+				default:
+					t.Errorf("unexpected behavior: %s", msg.Behavior)
+				}
+			}()
+
+			return respChan, nil
+		}).Times(8)
+		mockActor.EXPECT().Send(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
+			if msg.Behavior == behaviors.BidRequestBehavior {
+				go func() {
+					defer wg.Done()
+
+					bid := jobtypes.Bid{
+						V1: &jobtypes.BidV1{
+							EnsembleID: ensembleID,
+							NodeID:     "node1",
+							Peer:       peerID.String(),
+							Handle: actor.Handle{
+								ID:  actor.ID{PublicKey: id},
+								DID: testDID,
+								Address: actor.Address{
+									HostID:       "hostID",
+									InboxAddress: "inboxAddress",
+								},
+							},
+							Location: Location{},
+						},
+					}
+					err = bid.Sign(provider)
+					require.NoError(t, err)
+
+					env, err := actor.ReplyTo(msg, bid)
+					require.NoError(t, err)
+
+					bidReplyHandler(env)
+				}()
+			}
+			return nil
+		})
+		err = orchestrator.Deploy(time.Now().Add(10 * time.Second))
+		require.NoError(t, err)
+		wg.Wait()
+
+		orchestrator.Shutdown()
 	})
+}
 
-	actrdid, err := did.FromID(actr1.Handle().ID)
-	require.NoError(t, err)
-	tokenlist, err := cap1.Grant(
-		ucan.Delegate,
-		orchActor.Handle().DID,
-		actrdid,
-		[]string{"/nunet"},
-		actor.MakeExpiry(time.Hour),
-		0,
-		[]ucan.Capability{
-			ucan.Capability(actor.HealthCheckBehavior),
-			ucan.Capability(behaviors.AllocationRestartBehavior),
+func TestOrchestrator_Supervisor(t *testing.T) {
+	ensembleID := "ensembleID"
+	withTimeout(t,
+		"must be able to escalate failure if healthcheck fails",
+		5*time.Minute,
+		func(_ context.Context, t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mockActor := NewMockActor(ctrl)
+
+			var (
+				bidReplyHandler actor.Behavior
+				didReply        atomic.Bool
+				wg              sync.WaitGroup
+			)
+
+			privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
+			require.NoError(t, err)
+
+			id, err := pubK.Raw()
+			require.NoError(t, err)
+
+			peerID, err := peer.IDFromPublicKey(pubK)
+			require.NoError(t, err)
+			testDID := did.FromPublicKey(pubK)
+			provider := did.NewProvider(testDID, privK)
+
+			orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
+			require.NoError(t, err)
+
+			wg.Add(1)
+			mockActor.EXPECT().AddBehavior(behaviors.BidReplyBehavior, gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ string, continuation actor.Behavior, _ ...actor.BehaviorOption) error {
+					if !didReply.Load() {
+						bidReplyHandler = continuation
+					}
+					return nil
+				}).AnyTimes()
+			mockActor.EXPECT().Handle().Return(actor.Handle{
+				ID:  actor.ID{PublicKey: id},
+				DID: testDID,
+				Address: actor.Address{
+					HostID:       "hostID",
+					InboxAddress: "inboxAddress",
+				},
+			}).AnyTimes()
+			mockActor.EXPECT().Publish(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
+				// bid only once
+				if !didReply.Load() {
+					didReply.Store(true)
+					go func() {
+						defer wg.Done()
+
+						bid := jobtypes.Bid{
+							V1: &jobtypes.BidV1{
+								EnsembleID: ensembleID,
+								NodeID:     "node1",
+								Peer:       peerID.String(),
+								Handle: actor.Handle{
+									ID:  actor.ID{PublicKey: id},
+									DID: testDID,
+									Address: actor.Address{
+										HostID:       "hostID",
+										InboxAddress: "inboxAddress",
+									},
+								},
+								Location: Location{},
+							},
+						}
+						err = bid.Sign(provider)
+						require.NoError(t, err)
+
+						env, err := actor.ReplyTo(msg, bid)
+						require.NoError(t, err)
+
+						bidReplyHandler(env)
+					}()
+				}
+				return nil
+			}).AnyTimes()
+			mockActor.EXPECT().Invoke(gomock.Any()).DoAndReturn(func(msg actor.Envelope) (<-chan actor.Envelope, error) {
+				respChan := make(chan actor.Envelope, 1)
+				go func() {
+					switch msg.Behavior {
+					case behaviors.CommitDeploymentBehavior:
+						reply := CommitDeploymentResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.CommitDeploymentBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.AllocationDeploymentBehavior:
+						reply := AllocationDeploymentResponse{
+							OK: true,
+							Allocations: map[string]actor.Handle{
+								"allocation1": {},
+							},
+						}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationDeploymentBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID):
+						reply := SubnetCreateResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"), reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.AllocationStartBehavior:
+						reply := AllocationStartResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID):
+						reply := AllocationStopResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID), reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID):
+						reply := SubnetDestroyResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID), reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.SubnetAddPeerBehavior:
+						reply := SubnetAddPeerResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.SubnetDNSAddRecordsBehavior:
+						reply := SubnetDNSAddRecordsResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+
+					default:
+						t.Errorf("unexpected behavior: %s", msg.Behavior)
+					}
+				}()
+
+				return respChan, nil
+			}).Times(6)
+
+			err = orchestrator.Deploy(time.Now().Add(60 * time.Second))
+			require.NoError(t, err)
+			wg.Wait() // wait until escalation happens
+
+			// supervisor checks
+			wg.Add(4) // we need 3 healthchecks to fail and a restart to happen
+			mockActor.EXPECT().Invoke(gomock.Any()).DoAndReturn(func(msg actor.Envelope) (<-chan actor.Envelope, error) {
+				respChan := make(chan actor.Envelope, 1)
+				go func() {
+					switch msg.Behavior {
+					case behaviors.RegisterHealthcheckBehavior: // supervisor
+						reply := RegisterHealthcheckResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.RegisterHealthcheckBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case actor.HealthCheckBehavior:
+						defer wg.Done()
+						reply := HealthCheckResponse{OK: false}
+						env, err := actor.Message(actor.Handle{}, msg.From, actor.HealthCheckBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.AllocationRestartBehavior:
+						defer wg.Done()
+						reply := AllocationRestartResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationRestartBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID):
+						reply := SubnetDestroyResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID), reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID):
+						reply := AllocationStopResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID), reply)
+						require.NoError(t, err)
+						respChan <- env
+					default:
+						t.Errorf("unexpected behavior: %s", msg.Behavior)
+					}
+				}()
+
+				return respChan, nil
+			}).Times(6)
+			wg.Wait() // wait until escalation happens
+
+			orchestrator.Shutdown()
 		},
 	)
-	require.NoError(t, err)
-	require.NoError(t, cap1.AddRoots([]did.DID{}, tokenlist, ucan.TokenList{}, ucan.TokenList{}))
+	withTimeout(t,
+		"must be able to escalate failure if supervisor fails",
+		5*time.Minute,
+		func(_ context.Context, t *testing.T) {
+			t.Parallel()
 
-	allocations := map[string]AllocationManifest{}
-	allocations["allocation1"] = job_types.AllocationManifest{
-		Handle: actr1.Handle(),
-	}
+			ctrl := gomock.NewController(t)
+			mockActor := NewMockActor(ctrl)
 
-	orchestrator.manifest.Allocations = allocations
+			var (
+				bidReplyHandler actor.Behavior
+				didReply        atomic.Bool
+				wg              sync.WaitGroup
+			)
 
-	go orchestrator.supervise()
+			privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
+			require.NoError(t, err)
 
-	<-time.After(actor.HealthCheckInterval)
-	require.Equal(t, 0, len(restartedAllocations))
+			id, err := pubK.Raw()
+			require.NoError(t, err)
 
-	<-ch
-	require.Equal(t, 1, len(restartedAllocations))
-	require.Equal(t, true, restartedAllocations[actr1.Handle().ID.String()])
+			peerID, err := peer.IDFromPublicKey(pubK)
+			require.NoError(t, err)
+			testDID := did.FromPublicKey(pubK)
+			provider := did.NewProvider(testDID, privK)
+
+			orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
+			require.NoError(t, err)
+
+			wg.Add(1)
+			mockActor.EXPECT().AddBehavior(behaviors.BidReplyBehavior, gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ string, continuation actor.Behavior, _ ...actor.BehaviorOption) error {
+					if !didReply.Load() {
+						bidReplyHandler = continuation
+					}
+					return nil
+				}).AnyTimes()
+			mockActor.EXPECT().Handle().Return(actor.Handle{
+				ID:  actor.ID{PublicKey: id},
+				DID: testDID,
+				Address: actor.Address{
+					HostID:       "hostID",
+					InboxAddress: "inboxAddress",
+				},
+			}).AnyTimes()
+			mockActor.EXPECT().Publish(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
+				// bid only once
+				if !didReply.Load() {
+					didReply.Store(true)
+					go func() {
+						defer wg.Done()
+
+						bid := jobtypes.Bid{
+							V1: &jobtypes.BidV1{
+								EnsembleID: ensembleID,
+								NodeID:     "node1",
+								Peer:       peerID.String(),
+								Handle: actor.Handle{
+									ID:  actor.ID{PublicKey: id},
+									DID: testDID,
+									Address: actor.Address{
+										HostID:       "hostID",
+										InboxAddress: "inboxAddress",
+									},
+								},
+								Location: Location{},
+							},
+						}
+						err = bid.Sign(provider)
+						require.NoError(t, err)
+
+						env, err := actor.ReplyTo(msg, bid)
+						require.NoError(t, err)
+
+						bidReplyHandler(env)
+					}()
+				}
+				return nil
+			}).AnyTimes()
+			mockActor.EXPECT().Invoke(gomock.Any()).DoAndReturn(func(msg actor.Envelope) (<-chan actor.Envelope, error) {
+				respChan := make(chan actor.Envelope, 1)
+				go func() {
+					switch msg.Behavior {
+					case behaviors.CommitDeploymentBehavior:
+						reply := CommitDeploymentResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.CommitDeploymentBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.AllocationDeploymentBehavior:
+						reply := AllocationDeploymentResponse{
+							OK: true,
+							Allocations: map[string]actor.Handle{
+								"allocation1": {},
+							},
+						}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationDeploymentBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"):
+						reply := SubnetCreateResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "ensembleID"), reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.SubnetAddPeerBehavior:
+						reply := SubnetAddPeerResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.SubnetDNSAddRecordsBehavior:
+						reply := SubnetDNSAddRecordsResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case behaviors.AllocationStartBehavior:
+						reply := AllocationStartResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					default:
+						t.Errorf("unexpected behavior: %s", msg.Behavior)
+					}
+				}()
+
+				return respChan, nil
+			}).Times(6)
+			err = orchestrator.Deploy(time.Now().Add(60 * time.Second))
+			require.NoError(t, err)
+			wg.Wait()
+
+			// supervisor checks
+			// we do not respond to healthcheck to simulate a failure
+			wg.Add(4) // we need 3 healthchecks to fail and a restart to happen
+			mockActor.EXPECT().Invoke(gomock.Any()).DoAndReturn(func(msg actor.Envelope) (<-chan actor.Envelope, error) {
+				respChan := make(chan actor.Envelope, 1)
+				go func() {
+					switch msg.Behavior {
+					case behaviors.RegisterHealthcheckBehavior: // supervisor
+						reply := RegisterHealthcheckResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.RegisterHealthcheckBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case actor.HealthCheckBehavior:
+						defer wg.Done()
+						// do nothing to simulate a failure
+					case behaviors.AllocationRestartBehavior:
+						defer wg.Done()
+						reply := AllocationRestartResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationRestartBehavior, reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID):
+						reply := SubnetDestroyResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID), reply)
+						require.NoError(t, err)
+						respChan <- env
+					case fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID):
+						reply := AllocationStopResponse{OK: true}
+						env, err := actor.Message(actor.Handle{}, msg.From, fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID), reply)
+						require.NoError(t, err)
+						respChan <- env
+					default:
+						t.Errorf("unexpected behavior: %s", msg.Behavior)
+					}
+				}()
+
+				return respChan, nil
+			}).Times(6)
+			wg.Wait() // wait until escalation happens
+
+			orchestrator.Shutdown()
+		},
+	)
 }

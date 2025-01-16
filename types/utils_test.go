@@ -51,13 +51,9 @@ func TestIsSameShallowType(t *testing.T) {
 }
 
 func TestIsExecutorStrictlyContained(t *testing.T) {
-	docker := Executor{ExecutorType: ExecutorTypeDocker}
-	firecracker := Executor{ExecutorType: ExecutorTypeFirecracker}
-	wasm := Executor{ExecutorType: ExecutorTypeWasm}
-
-	executors1 := []interface{}{docker, firecracker, wasm}
-	executors2 := []interface{}{docker, firecracker}
-	executors3 := []interface{}{docker}
+	executors1 := []interface{}{ExecutorTypeDocker, ExecutorTypeFirecracker, ExecutorTypeWasm}
+	executors2 := []interface{}{ExecutorTypeDocker, ExecutorTypeFirecracker}
+	executors3 := []interface{}{ExecutorTypeDocker}
 
 	// possitive assertions
 	assert.True(t,

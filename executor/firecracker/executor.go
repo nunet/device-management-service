@@ -54,6 +54,8 @@ type Executor struct {
 	client   *Client                                  // Firecracker client for VM management.
 }
 
+var _ types.Executor = (*Executor)(nil)
+
 // NewExecutor initializes a new executor for Firecracker VMs.
 func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	log.Infow("firecracker_executor_init_started", "executorID", id)
