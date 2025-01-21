@@ -49,7 +49,8 @@ func (n *Node) deploymentVerifyEdgeConstraint(msg actor.Envelope) {
 		})
 	}
 
-	// TODO
+	// TODO: implement
+	// also add to docs (dms/behaviors/README.md, help-caps command and man page)
 }
 
 func (n *Node) createOrchestrator(ctx context.Context, ensemble job_types.EnsembleConfig) (*jobs.Orchestrator, error) {
