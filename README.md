@@ -361,6 +361,8 @@ The `key did` command returns a DID key for the specified identity.
 Remember to secure your keys and capability contexts, as they control access to your NuNet resources.
 They are encrypted and stored under `$HOME/.nunet` by default.
 
+For a quick start, please take a look at the script [maint-scripts/quickstart.sh](./maint-scripts/quickstart.sh).
+
 ##### Using a Ledger Wallet
 
 It is also possible to use a Ledger Wallet instead of creating a new

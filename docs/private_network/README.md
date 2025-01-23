@@ -133,3 +133,8 @@ nunet actor cmd /dms/node/peers/self -c <your_user_context>
 
 1. **Root of Trust**: Your organization key becomes the root of trust instead of NuNet
 2. **Token Distribution**: You control token distribution and can add/revoke access as needed
+
+
+---
+
+For an interactive script to assist with this setup, check the script [/maint-scripts/setup_restricted_network.sh](../../maint-scripts/setup_restricted_network.sh).
