@@ -13,6 +13,6 @@ import (
 )
 
 var (
-	log      = logging.Logger("node")
-	logConns = logging.Logger("node.conn")
+	log     = logging.Logger("node")
+	logConn = logging.Logger("node.conn")
 )

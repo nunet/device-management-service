@@ -19,17 +19,17 @@ import (
 type PortAllocator struct {
 	config PortConfig
 
-	mx       sync.Mutex
-	allocs   map[string][]int
-	reserved map[int]struct{}
+	mx          sync.Mutex
+	allocations map[string][]int
+	reserved    map[int]struct{}
 }
 
 // NewPortAllocator initializes a new PortAllocator with a PortConfig.
 func NewPortAllocator(config PortConfig) *PortAllocator {
 	return &PortAllocator{
-		config:   config,
-		allocs:   make(map[string][]int),
-		reserved: make(map[int]struct{}),
+		config:      config,
+		allocations: make(map[string][]int),
+		reserved:    make(map[int]struct{}),
 	}
 }
 
@@ -50,7 +50,7 @@ func (pa *PortAllocator) AllocatePorts(allocationID string, ports []int) error {
 		}
 	}
 
-	pa.allocs[allocationID] = ports
+	pa.allocations[allocationID] = ports
 	return nil
 }
 
@@ -78,7 +78,7 @@ func (pa *PortAllocator) AllocateRandom(allocationID string, numPorts int) ([]in
 		}
 	}
 
-	pa.allocs[allocationID] = portsToAllocate
+	pa.allocations[allocationID] = portsToAllocate
 	return portsToAllocate, nil
 }
 
@@ -123,13 +123,13 @@ func (pa *PortAllocator) Release(allocationID string) {
 	pa.mx.Lock()
 	defer pa.mx.Unlock()
 
-	allocated, ok := pa.allocs[allocationID]
+	allocated, ok := pa.allocations[allocationID]
 	if !ok {
 		return
 	}
 
 	pa.releasePorts(allocated)
-	delete(pa.allocs, allocationID)
+	delete(pa.allocations, allocationID)
 }
 
 func (pa *PortAllocator) releasePorts(ports []int) {
@@ -141,9 +141,9 @@ func (pa *PortAllocator) releasePorts(ports []int) {
 	}
 }
 
-// GetAllocations returns the allocated ports for a specific allocation ID.
+// GetAllocation returns the allocated ports for a specific allocation ID.
 func (pa *PortAllocator) GetAllocation(allocationID string) ([]int, error) {
-	ports, exists := pa.allocs[allocationID]
+	ports, exists := pa.allocations[allocationID]
 	if !exists {
 		return nil, fmt.Errorf("port allocation ID not found: %s", allocationID)
 	}

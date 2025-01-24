@@ -40,7 +40,7 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 		return
 	}
 
-	config, err := n.onboarder.Onboard(context.Background(), request.Config)
+	config, err := n.onboarding.Onboard(context.Background(), request.Config)
 	if err != nil {
 		resp.Error = err.Error()
 		resp.Success = false
@@ -64,7 +64,7 @@ func (n *Node) handleOffboard(msg actor.Envelope) {
 	defer msg.Discard()
 
 	resp := OffboardResponse{}
-	if err := n.onboarder.Offboard(context.Background()); err != nil {
+	if err := n.onboarding.Offboard(context.Background()); err != nil {
 		resp.Success = false
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -84,7 +84,7 @@ func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 	defer msg.Discard()
 	resp := OnboardStatusResponse{}
 
-	onboarded, err := n.onboarder.IsOnboarded()
+	onboarded, err := n.onboarding.IsOnboarded()
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)

@@ -54,14 +54,14 @@ func getDMSHandle(client *utils.HTTPClient) (actor.Handle, error) {
 
 	body, code, err := client.MakeRequest(context.Background(), "GET", "/actor/handle", nil)
 	if err != nil {
-		return handle, fmt.Errorf("unable to get source handle: %w", err)
+		return handle, fmt.Errorf("get source handle: %w", err)
 	}
 	if code != 200 {
 		return handle, fmt.Errorf("request failed with status code: %d", code)
 	}
 
 	if err = json.Unmarshal(body, &handle); err != nil {
-		return handle, fmt.Errorf("could not unmarshal response body: %w", err)
+		return handle, fmt.Errorf("unmarshal response body: %w", err)
 	}
 	return handle, err
 }
@@ -85,31 +85,19 @@ func newSecurityContext(fs afero.Afero, context string, cfg *config.Config) (act
 	// Generate ephemeral key pair
 	privk, pubk, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ephemeral key pair: %w", err)
+		return nil, fmt.Errorf("generate ephemeral key pair: %w", err)
 	}
 
 	// Create trust context
-	var trustCtx did.TrustContext
-	if node.IsLedgerContext(context) {
-		provider, err := did.NewLedgerWalletProvider(0)
-		if err != nil {
-			return nil, err
-		}
-
-		trustCtx = did.NewTrustContextWithProvider(provider)
-		context = node.LedgerContext(context)
-	} else {
-		var err error
-		trustCtx, _, err = node.CreateTrustContextFromKeyStore(fs, context, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create trust context: %w", err)
-		}
+	trustCtx, err := node.GetTrustContext(fs, context, cfg.UserDir)
+	if err != nil {
+		return nil, fmt.Errorf("create trust context: %w", err)
 	}
 
 	// Load capability context
-	capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
+	capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg.UserDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load capability context: %w", err)
+		return nil, fmt.Errorf("load capability context: %w", err)
 	}
 
 	return actor.NewBasicSecurityContext(pubk, privk, capCtx)
@@ -122,7 +110,7 @@ func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, top
 
 	sctx, err := newSecurityContext(fs, context, cfg)
 	if err != nil {
-		return msg, fmt.Errorf("failed to create security context: %w", err)
+		return msg, fmt.Errorf("create security context: %w", err)
 	}
 
 	nonce := sctx.Nonce()
@@ -146,7 +134,7 @@ func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, top
 		}
 
 		if err != nil {
-			return msg, fmt.Errorf("could not create destination handle: %w", err)
+			return msg, fmt.Errorf("create destination handle: %w", err)
 		}
 	default:
 		dest = dmsHandle
@@ -176,7 +164,7 @@ func newActorMessage(fs afero.Afero, dmsHandle actor.Handle, destStr string, top
 
 	msg, err = actor.Message(src, dest, behavior, payload, opts...)
 	if err != nil {
-		return msg, fmt.Errorf("could not construct message: %w", err)
+		return msg, fmt.Errorf("construct message: %w", err)
 	}
 
 	return msg, nil

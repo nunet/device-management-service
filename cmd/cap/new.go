@@ -53,7 +53,7 @@ Example:
 
 				trustCtx = did.NewTrustContextWithProvider(provider)
 				rootDID = provider.DID()
-				context = node.LedgerContext(context)
+				context = node.GetContextKey(context)
 			} else {
 				keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
 				ks, err := keystore.New(afs.Fs, keyStoreDir)
@@ -137,7 +137,7 @@ Example:
 				return fmt.Errorf("unable to create capability context: %w", err)
 			}
 
-			if err := node.SaveCapabilityContext(capCtx, cfg); err != nil {
+			if err := node.SaveCapabilityContext(capCtx, cfg.UserDir); err != nil {
 				return fmt.Errorf("save capability context: %w", err)
 			}
 

@@ -76,7 +76,7 @@ func (n *Node) handleCapAnchor(msg actor.Envelope) {
 		return
 	}
 
-	if err := SaveCapabilityContext(n.rootCap, &n.dmsConfig); err != nil {
+	if err := SaveCapabilityContext(n.rootCap, n.dmsConfig.WorkDir); err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
 		return
