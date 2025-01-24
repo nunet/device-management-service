@@ -10,13 +10,57 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 )
+
+// getAllocation gets an allocation by id.
+func (n *Node) getAllocation(id string) (*jobs.Allocation, error) {
+	n.allocationsLock.RLock()
+	defer n.allocationsLock.RUnlock()
+
+	allocation, ok := n.allocations[id]
+	if !ok {
+		return nil, errors.New("allocation not found")
+	}
+
+	return allocation, nil
+}
+
+func (n *Node) releaseAllocation(allocID string) error {
+	n.allocationsLock.Lock()
+	defer n.allocationsLock.Unlock()
+
+	alloc, ok := n.allocations[allocID]
+	if !ok {
+		// only warn because it is possible that the allocation was already released
+		// but would be good to have custom erro types defined for this
+		log.Warnf("allocation %s not found", allocID)
+		return nil
+	}
+
+	n.portAllocator.Release(allocID)
+
+	err := n.resourceManager.DeallocateResources(n.ctx, allocID)
+	if err != nil {
+		return fmt.Errorf("deallocate resources for allocation id: %s: %w", allocID, err)
+	}
+
+	// stop and cleanup
+	err = alloc.Terminate(n.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to shutdown allocation: %w", err)
+	}
+
+	delete(n.allocations, allocID)
+
+	log.Infof("allocation %s released", allocID)
+	return nil
+}
 
 // monitorEnsembleAllocations monitors the provided allocations. It handles allocations termination.
 //
@@ -47,7 +91,7 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 			}
 
 			// Retrieve the allocation
-			alloc, err := n.GetAllocation(allocID)
+			alloc, err := n.getAllocation(allocID)
 			if err != nil {
 				log.Warnf("Monitor Ensemble: Allocation %s not found: %v", allocID, err)
 				allocationsDone[allocID] = true // Consider it done to avoid infinite loop
@@ -66,7 +110,7 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 		}
 
 		if allDone {
-			// All allocations are done; do the necessary ensemble allocs cleanups
+			// All allocations are done; do the necessary ensemble allocations cleanups
 			log.Infof("All allocations for ensemble %s are completed or stopped", ensembleID)
 			n.cleanupFinishedEnsemble(ensembleID, allocationIDs)
 			break
@@ -107,14 +151,6 @@ func (n *Node) writeAllocationLogsTo(path string, stdout, stderr []byte) error {
 	}
 
 	return nil
-}
-
-func ensembleIDFromBehavior(b string) (string, error) {
-	parts := strings.Split(b, "/")
-	if len(parts) > 3 {
-		return parts[3], nil
-	}
-	return "", fmt.Errorf("invalid ensemble behavior: %s", b)
 }
 
 func (n *Node) constructAllocationID(ensembleID, allocName string) string {

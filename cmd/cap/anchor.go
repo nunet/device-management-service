@@ -63,24 +63,12 @@ Usage examples:
 
 Note: The --context flag is required to specify the capability context.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			var trustCtx did.TrustContext
-			if node.IsLedgerContext(context) {
-				provider, err := did.NewLedgerWalletProvider(0)
-				if err != nil {
-					return err
-				}
-
-				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = node.LedgerContext(context)
-			} else {
-				var err error
-				trustCtx, _, err = node.CreateTrustContextFromKeyStore(afs, context, cfg)
-				if err != nil {
-					return fmt.Errorf("failed to create trust context: %w", err)
-				}
+			trustCtx, err := node.GetTrustContext(afs, context, cfg.UserDir)
+			if err != nil {
+				return fmt.Errorf("get trust context: %w", err)
 			}
 
-			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
+			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg.UserDir)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}
@@ -129,7 +117,7 @@ Note: The --context flag is required to specify the capability context.`,
 				return fmt.Errorf("one of --provide, --root, or --require or --revoke must be specified")
 			}
 
-			if err := node.SaveCapabilityContext(capCtx, cfg); err != nil {
+			if err := node.SaveCapabilityContext(capCtx, cfg.UserDir); err != nil {
 				return fmt.Errorf("save capability context: %w", err)
 			}
 

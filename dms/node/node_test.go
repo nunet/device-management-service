@@ -9,221 +9,39 @@
 package node
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
-	"net"
-	"os"
+	"sync"
 	"testing"
+	"time"
 
-	"github.com/multiformats/go-multiaddr"
-	"github.com/oschwald/geoip2-golang"
+	"github.com/libp2p/go-libp2p/core/crypto"
+
+	"github.com/avast/retry-go"
+
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+
+	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"gitlab.com/nunet/device-management-service/db/repositories"
 	repo "gitlab.com/nunet/device-management-service/db/repositories/clover"
 
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
-	"gitlab.com/nunet/device-management-service/network"
-	"gitlab.com/nunet/device-management-service/network/libp2p"
-	"gitlab.com/nunet/device-management-service/types"
 )
 
-func TestNew(t *testing.T) {
-	t.Parallel()
-
-	rootCap := createRootCapabilityContext(t)
-	cases := map[string]struct {
-		rootCap             ucan.CapabilityContext
-		hostID              string
-		net                 network.Network
-		mockResourceManager func(ctrl *gomock.Controller) types.ResourceManager
-		scheduler           *bt.Scheduler
-		onboarder           *onboarding.Onboarding
-		geoip               types.GeoIPLocator
-		hostLocation        HostGeolocation
-		portConfig          PortConfig
-		contractStore       repositories.Contract
-		expErr              string
-	}{
-		"no onboarer": {
-			expErr: "onboarder is nil",
-		},
-		"no root capability": {
-			onboarder: &onboarding.Onboarding{},
-			expErr:    "root capability context is nil",
-		},
-		"no id": {
-			onboarder: &onboarding.Onboarding{},
-			rootCap:   rootCap,
-			expErr:    "host id is nil",
-		},
-		"no key": {
-			onboarder: &onboarding.Onboarding{},
-			rootCap:   rootCap,
-			hostID:    "123",
-			expErr:    "network is nil",
-		},
-
-		"no resource manager": {
-			onboarder: &onboarding.Onboarding{},
-			rootCap:   rootCap,
-			hostID:    "123",
-			net:       createNetwork(t, nil, "14950"),
-			expErr:    "resource manager is nil",
-			mockResourceManager: func(_ *gomock.Controller) types.ResourceManager {
-				return nil
-			},
-		},
-		"no scheduler": {
-			onboarder: &onboarding.Onboarding{},
-			rootCap:   rootCap,
-			hostID:    "123",
-			net:       createNetwork(t, nil, "14950"),
-			expErr:    "scheduler is nil",
-		},
-		"no geoip": {
-			onboarder: &onboarding.Onboarding{},
-			rootCap:   rootCap,
-			hostID:    "123",
-			net:       createNetwork(t, nil, "14950"),
-			scheduler: bt.NewScheduler(1),
-			expErr:    "geoip is nil",
-		},
-		"no contract store": {
-			onboarder: &onboarding.Onboarding{},
-			rootCap:   rootCap,
-			hostID:    "123",
-			net:       createNetwork(t, nil, "14950"),
-			scheduler: bt.NewScheduler(1),
-			geoip:     &geoipMock{},
-		},
-		"success": {
-			onboarder:     &onboarding.Onboarding{},
-			rootCap:       rootCap,
-			hostID:        "123",
-			net:           createNetwork(t, nil, "14950"),
-			scheduler:     bt.NewScheduler(1),
-			geoip:         &geoipMock{},
-			contractStore: repo.ContractRepoClover{},
-		},
-	}
-
-	for name, tt := range cases {
-		tt := tt
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			ctrl := gomock.NewController(t)
-			var resourceManager types.ResourceManager
-			if tt.mockResourceManager == nil {
-				resourceManager = NewMockResourceManager(ctrl)
-			} else {
-				resourceManager = tt.mockResourceManager(ctrl)
-			}
-
-			hardwareManager := NewMockHardwareManager(ctrl)
-
-			path, err := tempDir()
-			assert.NoError(t, err)
-			defer os.RemoveAll(path)
-
-			collections := []string{"orchestrator_view"}
-
-			db, err := repo.NewMemDB(collections)
-			assert.NoError(t, err)
-			assert.NotNil(t, db)
-			defer db.Close()
-
-			act, err := New(
-				*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
-				tt.onboarder, tt.rootCap, tt.hostID, tt.net, resourceManager,
-				tt.scheduler, hardwareManager, repo.NewOrchestratorView(db),
-				tt.geoip, tt.hostLocation, tt.portConfig, tt.contractStore,
-			)
-			if tt.expErr != "" {
-				assert.Nil(t, act)
-				assert.EqualError(t, err, tt.expErr)
-			} else {
-				assert.NotNil(t, act)
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestNodeAllocationMessaging(t *testing.T) {
-	rootCap := createRootCapabilityContext(t)
-	net := createNetwork(t, []multiaddr.Multiaddr{}, "14951")
-
-	ctrl := gomock.NewController(t)
-	t.Cleanup(ctrl.Finish)
-	resourceManager := NewMockResourceManager(ctrl)
-	hardwareManager := NewMockHardwareManager(ctrl)
-
-	path, err := tempDir()
-	assert.NoError(t, err)
-	defer os.RemoveAll(path)
-
-	collections := []string{"orchestrator_view", "contract"}
-
-	db, err := repo.NewMemDB(collections)
-	assert.NoError(t, err)
-	assert.NotNil(t, db)
-	defer db.Close()
-
-	contractR := repo.NewContractRepo(db)
-	assert.NoError(t, err)
-
-	node1, err := New(
-		*config.GetConfig(), afero.Afero{Fs: afero.NewMemMapFs()},
-		&onboarding.Onboarding{}, rootCap, net.Host.ID().String(), net,
-		resourceManager, bt.NewScheduler(1), hardwareManager, repo.NewOrchestratorView(db),
-		&geoip2.Reader{}, HostGeolocation{}, PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
-		contractR,
-	)
-	assert.NoError(t, err)
-	assert.NotNil(t, node1)
-	err = node1.Start()
-	assert.NoError(t, err)
-	require.Greater(t, len(node1.executors), 0)
-	// 	alloc, err := node1.CreateAllocation(jobs.Job{ID: "123"})
-	// 	assert.NoError(t, err)
-	// 	assert.NotNil(t, alloc)
-	// 	err = alloc.Start()
-	// 	assert.NoError(t, err)
-
-	// 	envChan := make(chan actor.Envelope)
-	// 	err = node1.actor.AddBehavior("/test/ping", func(msg actor.Envelope) {
-	// 		defer msg.Discard()
-	// 		envChan <- msg
-	// 	})
-	// 	type payload struct{ Name, Type string }
-
-	// 	assert.NoError(t, err)
-	// 	msg, err := actor.Message(
-	// 		alloc.Actor.Handle(),
-	// 		node1.actor.Handle(),
-	// 		"/test/ping",
-	// 		payload{Name: "random name", Type: "x"},
-	// 	)
-	// 	assert.NoError(t, err)
-
-	// 	err = alloc.Actor.Send(msg)
-	// 	assert.NoError(t, err)
-
-	// received := <-envChan
-	// assert.Equal(t, string(received.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
-}
-
 func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {
-	privk, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
+	privk, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
 	require.NoError(t, err, "generate key")
 
 	provider, err := did.ProviderFromPrivateKey(privk)
@@ -238,51 +56,297 @@ func createRootCapabilityContext(t *testing.T) ucan.CapabilityContext {
 	return capCtx
 }
 
-func createNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr, port string) *libp2p.Libp2p {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
-	assert.NoError(t, err)
-	net, err := network.NewNetwork(&types.NetworkConfig{
-		Type: types.Libp2pNetwork,
-		Libp2pConfig: types.Libp2pConfig{
-			PrivateKey:              priv,
-			BootstrapPeers:          bootstrap,
-			Rendezvous:              "nunet-randevouz",
-			Server:                  false,
-			Scheduler:               bt.NewScheduler(1),
-			CustomNamespace:         "/nunet-dht-1/",
-			ListenAddress:           []string{"/ip4/127.0.0.1/tcp/" + port},
-			PeerCountDiscoveryLimit: 40,
-		},
-	}, afero.NewMemMapFs())
-	assert.NoError(t, err)
-	err = net.Init(&config.Config{})
-	assert.NoError(t, err)
+func getMockNode(t *testing.T, ctrl *gomock.Controller) *Node {
+	t.Helper()
 
-	err = net.Start()
+	mockResourceManager := NewMockResourceManager(ctrl)
+	mockHardwareManager := NewMockHardwareManager(ctrl)
+	mockNetwork := NewMockNetwork(ctrl)
+	mockGeoIPLocator := NewMockGeoIPLocator(ctrl)
+	mockActor := NewMockActor(ctrl)
+	mockOrchestratorFactory := NewMockOrchestratorProvider(ctrl)
+
+	rootCap := createRootCapabilityContext(t)
+
+	collections := []string{"orchestrator_view", "contract"}
+	db, err := repo.NewMemDB(collections)
 	assert.NoError(t, err)
+	assert.NotNil(t, db)
+	t.Cleanup(func() {
+		db.Close()
+	})
 
-	libp2pInstance, _ := net.(*libp2p.Libp2p)
-	return libp2pInstance
-}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
-func tempDir() (string, error) {
-	dir, err := os.MkdirTemp("", "nunet-test-*")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+	portConfig := PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535}
+	node := Node{
+		rootCap:              rootCap,
+		actor:                mockActor,
+		scheduler:            bt.NewScheduler(1),
+		network:              mockNetwork,
+		resourceManager:      mockResourceManager,
+		hardware:             mockHardwareManager,
+		onboarding:           nil,
+		executors:            make(map[string]executorMetadata),
+		portConfig:           portConfig,
+		portAllocator:        NewPortAllocator(portConfig),
+		hostID:               "hostID",
+		geoIP:                mockGeoIPLocator,
+		hostLocation:         Geolocation{},
+		orchestratorRepo:     repo.NewOrchestratorView(db),
+		fs:                   afero.Afero{Fs: afero.NewMemMapFs()},
+		ctx:                  ctx,
+		cancel:               cancel,
+		orchestratorProvider: mockOrchestratorFactory,
+		bids:                 make(map[string]*bidState),
 	}
-	return dir, nil
+
+	return &node
 }
 
-type geoipMock struct {
-	country *geoip2.Country
-	city    *geoip2.City
-	err     error
+func TestNode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("must be able to create a new node", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+		mockResourceManager := NewMockResourceManager(ctrl)
+		mockHardwareManager := NewMockHardwareManager(ctrl)
+		mockNetwork := NewMockNetwork(ctrl)
+		mockGeoIPLocator := NewMockGeoIPLocator(ctrl)
+
+		rootCap := createRootCapabilityContext(t)
+
+		collections := []string{"orchestrator_view", "contract"}
+		db, err := repo.NewMemDB(collections)
+		assert.NoError(t, err)
+		assert.NotNil(t, db)
+		t.Cleanup(func() {
+			db.Close()
+		})
+
+		node, err := New(
+			*config.GetConfig(),
+			afero.Afero{Fs: afero.NewMemMapFs()},
+			&onboarding.Onboarding{},
+			rootCap,
+			"hostID",
+			mockNetwork,
+			mockResourceManager,
+			bt.NewScheduler(1),
+			mockHardwareManager,
+			repo.NewOrchestratorView(db),
+			mockGeoIPLocator,
+			Geolocation{},
+			PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
+		)
+		require.NoError(t, err)
+		require.NotNil(t, node)
+	})
+
+	t.Run("must be able to start and stop a node", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+		node := getMockNode(t, ctrl)
+		subscriptionID := uint64(1984)
+
+		node.network.(*MockNetwork).EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().Subscribe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(subscriptionID, nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().SetupBroadcastTopic(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().SetBroadcastAppScore(gomock.Any()).Return().AnyTimes()
+		node.network.(*MockNetwork).EXPECT().Notify(gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.actor.(*MockActor).EXPECT().Start().Return(nil).Times(1)
+		node.actor.(*MockActor).EXPECT().Subscribe(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.actor.(*MockActor).EXPECT().Context().Return(context.Background()).AnyTimes()
+		err := node.Start()
+		require.NoError(t, err)
+		require.True(t, node.running.Load())
+
+		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().Orchestrators().Return(nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().Unsubscribe(gomock.Any(), subscriptionID).Return(nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().UnregisterMessageHandler(gomock.Any()).Return().AnyTimes()
+		node.actor.(*MockActor).EXPECT().Stop().Return(nil).Times(1)
+		err = node.Stop()
+		require.NoError(t, err)
+		require.False(t, node.running.Load())
+	})
+
+	t.Run("must delete expired bid requests", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		node := getMockNode(t, ctrl)
+		subscriptionID := uint64(1984)
+		node.bids["test"] = &bidState{
+			expire: time.Now().Add(-1),
+		}
+
+		node.network.(*MockNetwork).EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().Subscribe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(subscriptionID, nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().SetupBroadcastTopic(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().SetBroadcastAppScore(gomock.Any()).Return().AnyTimes()
+		node.network.(*MockNetwork).EXPECT().Notify(gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.actor.(*MockActor).EXPECT().Start().Return(nil).Times(1)
+		node.actor.(*MockActor).EXPECT().Subscribe(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.actor.(*MockActor).EXPECT().Context().Return(context.Background()).AnyTimes()
+		err := node.Start()
+		require.NoError(t, err)
+
+		err = retry.Do(func() error {
+			if len(node.GetBidRequests()) > 0 {
+				return fmt.Errorf("bids not deleted")
+			}
+			return nil
+		},
+			retry.Attempts(3),
+			retry.Delay(bidStateGCInterval),
+		)
+		require.NoError(t, err)
+	})
+
+	t.Run("must be able to get allocations", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		node := getMockNode(t, ctrl)
+
+		allocations := make(map[string]*jobs.Allocation)
+		allocations["test"] = &jobs.Allocation{
+			ID: "test",
+		}
+		node.allocations = allocations
+
+		actual := node.GetAllocations()
+		require.Equal(t, 1, len(actual))
+		require.Equal(t, "test", actual[0].ID)
+	})
 }
 
-func (g *geoipMock) Country(_ net.IP) (*geoip2.Country, error) {
-	return g.country, g.err
-}
+func TestDeployment(t *testing.T) {
+	t.Parallel()
 
-func (g *geoipMock) City(_ net.IP) (*geoip2.City, error) {
-	return g.city, g.err
+	t.Run("must be able to create an ensemble ID", func(t *testing.T) {
+		t.Parallel()
+
+		ensembleID, err := createEnsembleID("test")
+		require.NoError(t, err)
+		require.NotEmpty(t, ensembleID)
+	})
+
+	t.Run("must be able to create and store a new deployment", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		node := getMockNode(t, ctrl)
+		msg := getMockDeploymentRequest(t)
+		var wg sync.WaitGroup
+
+		mockOrchestrator := NewMockOrchestratorAPI(ctrl)
+		wg.Add(1)
+		node.actor.(*MockActor).EXPECT().Send(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
+			var response NewDeploymentResponse
+			err := json.Unmarshal(msg.Message, &response)
+			require.NoError(t, err)
+			require.Equal(t, "OK", response.Status)
+			require.NotEmpty(t, response.EnsembleID)
+
+			wg.Done()
+			return nil
+		}).AnyTimes()
+		node.actor.(*MockActor).EXPECT().Handle().DoAndReturn(func() actor.Handle {
+			return getMockActorHandle(t)
+		}).AnyTimes()
+		node.actor.(*MockActor).EXPECT().CreateChild(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ actor.Handle, _ actor.BasicActorParams) (actor.Actor, error) {
+				return NewMockActor(gomock.NewController(t)), nil
+			},
+		).AnyTimes()
+		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().NewOrchestrator(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, _ string, _ actor.Actor, _ jobs.EnsembleConfig) (jobs.OrchestratorAPI, error) {
+				return mockOrchestrator, nil
+			}).Times(1)
+		mockOrchestrator.EXPECT().ID().Return("test").Times(3)
+		mockOrchestrator.EXPECT().Deploy(gomock.Any()).Return(nil).Times(1)
+		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
+		require.NoError(t, err)
+		mockOrchestrator.EXPECT().ActorPrivateKey().Return(privKey).Times(1)
+		mockOrchestrator.EXPECT().Config().Return(jobs.EnsembleConfig{}).Times(1)
+		mockOrchestrator.EXPECT().Manifest().Return(jobs.EnsembleManifest{}).Times(1)
+		mockOrchestrator.EXPECT().Status().Return(jobs.DeploymentStatusRunning).Times(1)
+		mockOrchestrator.EXPECT().DeploymentSnapshot().Return(jobs.DeploymentSnapshot{}).Times(1)
+		node.handleNewDeployment(msg)
+		wg.Wait()
+
+		// Ensure that the orchestrator is stored in the db
+		query := node.orchestratorRepo.GetQuery()
+		query.Conditions = append(
+			query.Conditions,
+			repositories.LTE("Status", jobtypes.DeploymentStatusRunning),
+		)
+		dbOrchestrators, err := node.orchestratorRepo.FindAll(context.Background(), query)
+		require.NoError(t, err)
+		require.Len(t, dbOrchestrators, 1)
+		require.Equal(t, "test", dbOrchestrators[0].OrchestratorID)
+	})
+
+	t.Run("must be able to restore a deployment", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		node := getMockNode(t, ctrl)
+
+		// store the deployment in db
+		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
+		require.NoError(t, err)
+		marshalledPrivKey, err := crypto.MarshalPrivateKey(privKey)
+		require.NoError(t, err)
+		_, err = node.orchestratorRepo.Create(context.Background(), jobtypes.OrchestratorView{
+			OrchestratorID: "test",
+			Status:         jobtypes.DeploymentStatusCommitting,
+			PrivKey:        marshalledPrivKey,
+		})
+		require.NoError(t, err)
+
+		// restore the deployment
+		mockOrchestrator := NewMockOrchestratorAPI(ctrl)
+		node.actor.(*MockActor).EXPECT().Limiter().Return(actor.NewRateLimiter(actor.DefaultRateLimiterConfig())).AnyTimes()
+		node.network.(*MockNetwork).EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().RestoreDeployment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(mockOrchestrator, nil).Times(1)
+		mockOrchestrator.EXPECT().ID().Return("test").AnyTimes()
+		err = node.restoreDeployments()
+		require.NoError(t, err)
+	})
+
+	t.Run("must restore only committed deployments", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		node := getMockNode(t, ctrl)
+
+		// store the deployment in db
+		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
+		require.NoError(t, err)
+		marshalledPrivKey, err := crypto.MarshalPrivateKey(privKey)
+		require.NoError(t, err)
+		_, err = node.orchestratorRepo.Create(context.Background(), jobtypes.OrchestratorView{
+			OrchestratorID: "test",
+			Status:         jobtypes.DeploymentStatusPreparing,
+			PrivKey:        marshalledPrivKey,
+		})
+		require.NoError(t, err)
+
+		// No expected calls since the deployment is not committed
+		err = node.restoreDeployments()
+		require.NoError(t, err)
+	})
 }

@@ -13,4 +13,13 @@ package node
 
 // Resource Manager
 //go:generate mockgen -destination=mock_resource_manager_test.go -source=../../types/resources.go -package=node -exclude_interfaces=UsageMonitor,ResourceOps
+// Hardware Manager
 //go:generate mockgen -destination=mock_hardware_manager_test.go -source=../../types/hardware.go -package=node
+// Network
+//go:generate mockgen -destination=mock_network_test.go -source=../../network/network.go -package=node -exclude_interfaces=Messenger
+// GeoIPLocator
+//go:generate mockgen -destination=mock_geoip_locator_test.go -source=../../types/types.go -package=node
+// Actor
+//go:generate mockgen -destination=mock_actor_test.go -source=../../actor/interface.go -package=node
+// Orchestrator
+//go:generate mockgen -destination=mock_orchestrator_test.go -source=../jobs/orchestrator.go -package=node
