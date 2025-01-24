@@ -37,7 +37,7 @@ func (n *Node) publicHelloBehavior(msg actor.Envelope) {
 		return
 	}
 
-	n.mx.Lock()
+	n.lock.Lock()
 	if st, ok := n.peers[p]; ok {
 		st.helloIn = true
 	} else if n.network.PeerConnected(p) {
@@ -45,7 +45,7 @@ func (n *Node) publicHelloBehavior(msg actor.Envelope) {
 		st = &peerState{helloIn: true}
 		n.peers[p] = st
 	}
-	n.mx.Unlock()
+	n.lock.Unlock()
 
 	n.handleHello(msg)
 }

@@ -111,6 +111,109 @@ func withTimeout(t *testing.T, name string, duration time.Duration, testFunc fun
 	})
 }
 
+func TestOrchestratorProvider(t *testing.T) {
+	t.Parallel()
+
+	t.Run("must be able to create a new orchestrator from the provider", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
+
+		oProvider := NewOrchestratorProvider()
+		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator)
+	})
+
+	t.Run("must be able to restore an orchestrator", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
+
+		oProvider := NewOrchestratorProvider()
+		orchestrator, err := oProvider.RestoreDeployment(mockActor, "id", getMockEnsembleConfig(t),
+			EnsembleManifest{}, DeploymentStatusPreparing, DeploymentSnapshot{})
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator)
+	})
+
+	t.Run("must not be able to create duplicate orchestrators", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
+
+		oProvider := NewOrchestratorProvider()
+		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator)
+
+		_, err = oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrOrchestratorExists)
+	})
+
+	t.Run("must be able to get orchestrator by id", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
+
+		oProvider := NewOrchestratorProvider()
+		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator)
+
+		orchestrator, err = oProvider.GetOrchestrator("id")
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator)
+	})
+
+	t.Run("must be able to delete orchestrator by id", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
+
+		oProvider := NewOrchestratorProvider()
+		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator)
+
+		oProvider.DeleteOrchestrator("id")
+
+		_, err = oProvider.GetOrchestrator("id")
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrOrchestratorNotFound)
+	})
+
+	t.Run("must be able to list orchestrators", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mockActor := NewMockActor(ctrl)
+
+		oProvider := NewOrchestratorProvider()
+		orchestrator1, err := oProvider.NewOrchestrator(context.Background(), "id1", mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator1)
+
+		orchestrator2, err := oProvider.NewOrchestrator(context.Background(), "id2", mockActor, getMockEnsembleConfig(t))
+		require.NoError(t, err)
+		require.NotNil(t, orchestrator2)
+
+		orchestrators := oProvider.Orchestrators()
+		require.Len(t, orchestrators, 2)
+
+		_, ok := orchestrators["id1"]
+		require.True(t, ok)
+		_, ok = orchestrators["id2"]
+		require.True(t, ok)
+	})
+}
+
 func TestOrchestrator(t *testing.T) {
 	t.Parallel()
 

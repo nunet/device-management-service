@@ -35,8 +35,6 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-// TODO: move behavior structs to somewhere else
-
 const (
 	BidRequestTimeout           = 5 * time.Second
 	VerifyEdgeConstraintTimeout = 5 * time.Second
@@ -56,9 +54,185 @@ const (
 )
 
 var (
-	ErrProvisioningFailed = errors.New("failed to provision the ensemble")
-	ErrDeploymentFailed   = errors.New("failed to create deployment")
+	ErrProvisioningFailed   = errors.New("failed to provision the ensemble")
+	ErrDeploymentFailed     = errors.New("failed to create deployment")
+	ErrOrchestratorExists   = errors.New("orchestrator with ID already exists")
+	ErrOrchestratorNotFound = errors.New("orchestrator with ID not found")
 )
+
+// OrchestratorProvider is an interface which acts as a source for orchestrators
+type OrchestratorProvider interface {
+	// NewOrchestrator creates a new orchestrator
+	NewOrchestrator(ctx context.Context, id string, actor actor.Actor, cfg EnsembleConfig) (OrchestratorAPI, error)
+	// RestoreDeployment restores deployments where the status is either provisioning, committing or running
+	RestoreDeployment(
+		actr actor.Actor, id string, cfg EnsembleConfig, manifest EnsembleManifest, status DeploymentStatus, restoreInfo DeploymentSnapshot,
+	) (OrchestratorAPI, error)
+	// Orchestrators returns a map of all orchestrators
+	Orchestrators() map[string]OrchestratorAPI
+	// GetOrchestrator returns an orchestrator by ID
+	GetOrchestrator(id string) (OrchestratorAPI, error)
+	// DeleteOrchestrator deletes an orchestrator by ID
+	DeleteOrchestrator(id string)
+}
+
+// orchestratorProvider the default implementation of OrchestratorProvider
+type orchestratorProvider struct {
+	lock          sync.RWMutex
+	orchestrators map[string]OrchestratorAPI // map of orchestrators
+}
+
+var _ OrchestratorProvider = (*orchestratorProvider)(nil)
+
+// NewOrchestratorProvider creates a new orchestrator provider
+func NewOrchestratorProvider() OrchestratorProvider {
+	return &orchestratorProvider{
+		orchestrators: make(map[string]OrchestratorAPI),
+	}
+}
+
+// NewOrchestrator creates a new orchestrator
+func (f *orchestratorProvider) NewOrchestrator(
+	ctx context.Context, id string, actor actor.Actor, cfg EnsembleConfig,
+) (OrchestratorAPI, error) {
+	// check if orchestrator already exists
+	f.lock.RLock()
+	if _, ok := f.orchestrators[id]; ok {
+		f.lock.RUnlock()
+		return nil, ErrOrchestratorExists
+	}
+	f.lock.RUnlock()
+
+	o, err := NewOrchestrator(ctx, id, actor, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
+	}
+
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.orchestrators[id] = o
+
+	return o, nil
+}
+
+// restoreDeployment restores deployments where the status is either provisioning, committing or running
+func restoreDeployment(
+	actr actor.Actor, id string,
+	cfg EnsembleConfig, manifest EnsembleManifest,
+	status DeploymentStatus, restoreInfo DeploymentSnapshot,
+) (*Orchestrator, error) {
+	o := &Orchestrator{
+		id:                 id,
+		actor:              actr,
+		cfg:                cfg,
+		manifest:           manifest,
+		status:             status,
+		deploymentSnapshot: restoreInfo,
+	}
+
+	if o.status == DeploymentStatusCommitting {
+		log.Debug("reverting deployment of old candidates and restarting deployment from the beginning")
+		for nodeID, bid := range restoreInfo.Candidates {
+			o.revertDeployment(nodeID, bid.Handle())
+		}
+
+		return o, o.deploy(restoreInfo.Expiry)
+	}
+
+	if o.status == DeploymentStatusProvisioning {
+		log.Debug("restoring deployment from manifest")
+		if err := o.provision(o.manifest); err != nil {
+			log.Errorf("failed to provision network: %s", err)
+			o.revert(manifest)
+			return o, o.deploy(restoreInfo.Expiry)
+		}
+
+		o.setStatus(DeploymentStatusRunning)
+	}
+
+	o.ctx, o.cancel = context.WithCancel(context.Background())
+
+	allocations := make(map[string]actor.Handle, len(manifest.Allocations))
+	for _, allocation := range manifest.Allocations {
+		allocations[allocation.ID] = allocation.Handle
+	}
+	o.manifest = manifest
+	go o.supervise()
+
+	return o, nil
+}
+
+// RestoreDeployment creates an orchestrator and attempts to restore its deployment
+func (f *orchestratorProvider) RestoreDeployment(
+	actr actor.Actor, id string, cfg EnsembleConfig, manifest EnsembleManifest, status DeploymentStatus, restoreInfo DeploymentSnapshot,
+) (OrchestratorAPI, error) {
+	// check if orchestrator already exists
+	f.lock.RLock()
+	if _, ok := f.orchestrators[id]; ok {
+		f.lock.RUnlock()
+		return nil, ErrOrchestratorExists
+	}
+	f.lock.RUnlock()
+
+	o, err := restoreDeployment(actr, id, cfg, manifest, status, restoreInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore deployment: %w", err)
+	}
+
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.orchestrators[id] = o
+
+	return o, nil
+}
+
+// Orchestrators returns a map of all orchestrators
+func (f *orchestratorProvider) Orchestrators() map[string]OrchestratorAPI {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	orchestrators := make(map[string]OrchestratorAPI, len(f.orchestrators))
+	for id, o := range f.orchestrators {
+		orchestrators[id] = o
+	}
+
+	return orchestrators
+}
+
+// GetOrchestrator returns an orchestrator by ID
+func (f *orchestratorProvider) GetOrchestrator(id string) (OrchestratorAPI, error) {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	o, ok := f.orchestrators[id]
+	if !ok {
+		return nil, ErrOrchestratorNotFound
+	}
+
+	return o, nil
+}
+
+// DeleteOrchestrator deletes an orchestrator by ID
+func (f *orchestratorProvider) DeleteOrchestrator(id string) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	delete(f.orchestrators, id)
+}
+
+// OrchestratorAPI is the interface for orchestrators
+type OrchestratorAPI interface {
+	Deploy(expiry time.Time) error
+	Shutdown()
+	Stop()
+	Status() DeploymentStatus
+	Manifest() EnsembleManifest
+	Config() EnsembleConfig
+	ID() string
+	ActorPrivateKey() crypto.PrivKey
+	DeploymentSnapshot() DeploymentSnapshot
+	GetAllocationLogs(name string) (AllocationLogsResponse, error)
+}
 
 type Orchestrator struct {
 	lock   sync.Mutex
@@ -75,6 +249,8 @@ type Orchestrator struct {
 
 	deploymentSnapshot DeploymentSnapshot
 }
+
+var _ OrchestratorAPI = (*Orchestrator)(nil)
 
 func NewOrchestrator(
 	ctx context.Context,
@@ -448,53 +624,6 @@ func (o *Orchestrator) Shutdown() {
 	}
 
 	wg.Wait()
-}
-
-// RestoreDeployment restores deployments where the status is either provisioning, committing or running
-func RestoreDeployment(
-	actr actor.Actor, id string,
-	cfg EnsembleConfig, manifest EnsembleManifest,
-	status DeploymentStatus, restoreInfo DeploymentSnapshot,
-) (*Orchestrator, error) {
-	o := &Orchestrator{
-		id:                 id,
-		actor:              actr,
-		cfg:                cfg,
-		manifest:           manifest,
-		status:             status,
-		deploymentSnapshot: restoreInfo,
-	}
-
-	if o.status == DeploymentStatusCommitting {
-		log.Debug("reverting deployment of old candidates and restarting deployment from the beginning")
-		for nodeID, bid := range restoreInfo.Candidates {
-			o.revertDeployment(nodeID, bid.Handle())
-		}
-
-		return o, o.deploy(restoreInfo.Expiry)
-	}
-
-	if o.status == DeploymentStatusProvisioning {
-		log.Debug("restoring deployment from manifest")
-		if err := o.provision(o.manifest); err != nil {
-			log.Errorf("failed to provision network: %s", err)
-			o.revert(manifest)
-			return o, o.deploy(restoreInfo.Expiry)
-		}
-
-		o.setStatus(DeploymentStatusRunning)
-	}
-
-	o.ctx, o.cancel = context.WithCancel(context.Background())
-
-	allocations := make(map[string]actor.Handle, len(manifest.Allocations))
-	for _, allocation := range manifest.Allocations {
-		allocations[allocation.ID] = allocation.Handle
-	}
-	o.manifest = manifest
-	go o.supervise()
-
-	return o, nil
 }
 
 func (o *Orchestrator) requestBids(bidRequest jobtypes.EnsembleBidRequest, expiry time.Time) (chan Bid, chan struct{}, time.Time, error) {
