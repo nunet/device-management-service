@@ -18,7 +18,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/howeyc/gopass"
+	"golang.org/x/term"
 )
 
 // PromptReonboard is a wrapper of utils.PromptYesNo with custom prompt that return error if user declines reonboard
@@ -53,7 +53,7 @@ func PromptForPassphrase(confirm bool) (string, error) {
 		var bytePassphrase, byteConfirmation []byte
 		for i := 0; i < maxTries; i++ {
 			fmt.Print("Passphrase: ")
-			bytePassphrase, err = gopass.GetPasswdMasked()
+			bytePassphrase, err = term.ReadPassword(int(os.Stdin.Fd()))
 			if err != nil {
 				err = fmt.Errorf("failed to read passphrase: %w", err)
 				return
@@ -61,7 +61,7 @@ func PromptForPassphrase(confirm bool) (string, error) {
 
 			if confirm {
 				fmt.Print("Please confirm your passphrase: ")
-				byteConfirmation, err = gopass.GetPasswdMasked()
+				byteConfirmation, err = term.ReadPassword(int(os.Stdin.Fd()))
 				if err != nil {
 					err = fmt.Errorf("failed to read passphrase confirmation: %w", err)
 					return
