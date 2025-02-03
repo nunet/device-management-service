@@ -1,0 +1,66 @@
+@startuml
+
+title External Contract Deployment Component Diagram (proposed)
+ 
+skinparam shadowing false
+skinparam component {
+	BorderColor black
+}
+skinparam interface {
+	BorderColor black
+	BackgroundColor #5e94de
+}
+skinparam ArrowColor black
+skinparam noteBorderColor black
+
+
+node "Solutions Enabler Machine" as chm {
+    
+    component "DMS [DID31]" as dms1 {
+    }
+    database "Contract Host" as cd {
+        component "Contract Object" as co {
+        }
+        node "Contract Executor" as ex {
+        }
+    }
+}
+
+node "Hardware Provider\nMachine #1" as m1 {
+    component "DMS 1 [DID21]" as m1dms {
+    }
+}
+
+node "Hardware Provider\nMachine #2" as m2 {
+    component "DMS 2 [DID22]" as m2dms {
+    }
+}
+
+node "Hardware Provider\nMachine #3" as m3 {
+    component "DMS 3 [DID23]" as m3dms {
+    }
+}
+
+actor "<font color=green>Business Consumer [DID1]</font>" as spu
+entity "<font color=green>Hardware Provider [DID2]" as hp
+entity "<font color=green>Solutions Enabler [DID3]" as se
+
+spu ..> dms1 : interacts
+
+hp --> m1 : owns
+m1dms ..> hp : anchored
+hp --> m2 : owns
+m2dms ..> hp : anchored
+hp --> m3 : owns
+m3dms ..> hp : anchored
+
+dms1 ..>se : anchored
+
+se --> chm : owns
+
+spu -[#green,bold,dotted]-> co : <font color=green>signed</font> 
+hp -[#green,bold,dotted]-> co : <font color=green>signed</font>
+se -[#green,bold,dotted]-> co : <font color=green>signed</font>
+
+
+@enduml
