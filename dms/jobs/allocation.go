@@ -24,17 +24,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// AllocationStatus is a representation of the execution status
-type AllocationStatus string
-
 const (
-	Pending    AllocationStatus = "pending"
-	Running    AllocationStatus = "running"
-	Stopped    AllocationStatus = "stopped"
-	Failed     AllocationStatus = "failed"
-	Completed  AllocationStatus = "completed"
-	Terminated AllocationStatus = "terminated"
-
 	deleteLogsAfter = 30 * time.Minute
 )
 
@@ -111,7 +101,7 @@ func NewAllocation(
 		Actor:       actor,
 		executionID: executionID.String(),
 		workDir:     workDir,
-		status:      Pending,
+		status:      AllocationPending,
 		network:     network,
 		executor:    executor,
 		state: struct {
@@ -141,7 +131,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string,
 	a.lock.Lock()
 	defer a.lock.Unlock()
 
-	if a.status == Running {
+	if a.status == AllocationRunning {
 		log.Warnf("allocation %s is already running", a.ID)
 		return nil
 	}
@@ -180,7 +170,7 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string,
 		return fmt.Errorf("start executor: %w", err)
 	}
 
-	a.status = Running
+	a.status = AllocationRunning
 
 	return nil
 }
@@ -192,18 +182,18 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 
 	log.Debugf("stopping execution for alloc: %s", a.ID)
 
-	if a.status != Running {
+	if a.status != AllocationRunning {
 		return nil
 	}
 
-	a.status = Stopped
+	a.status = AllocationStopped
 
 	if a.executor == nil {
 		return nil
 	}
 
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
-		a.status = Failed
+		a.status = AllocationFailed
 		return fmt.Errorf("stop execution: %w", err)
 	}
 
@@ -226,7 +216,7 @@ func (a *Allocation) Cleanup() error {
 
 // Terminate stops the allocation and cleans up after
 func (a *Allocation) Terminate(ctx context.Context) error {
-	if a.status != Stopped && a.status != Completed {
+	if a.status != AllocationStopped && a.status != AllocationCompleted {
 		err := a.Stop(ctx)
 		if err != nil {
 			log.Warnf("failed to stop allocation: %s", err)
@@ -244,7 +234,7 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 		return fmt.Errorf("failed to cleanup allocation: %w", err)
 	}
 
-	a.status = Terminated
+	a.status = AllocationTerminated
 
 	return nil
 }
@@ -373,4 +363,8 @@ func (a *Allocation) SetHealthCheck(f func() error) {
 	defer a.lock.Unlock()
 
 	a.healthcheck = f
+}
+
+func ConstructAllocationID(ensembleID, allocName string) string {
+	return ensembleID + "_" + allocName
 }

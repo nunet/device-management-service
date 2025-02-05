@@ -18,19 +18,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/spf13/afero"
-	"gitlab.com/nunet/device-management-service/executor/docker"
-
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-	"gitlab.com/nunet/device-management-service/types"
-
-	"gitlab.com/nunet/device-management-service/dms/behaviors"
-	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func (n *Node) handleSubnetCreate(msg actor.Envelope) {
@@ -217,7 +214,7 @@ func (n *Node) createAllocations(
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
 	allocationIDs := make([]string, 0, len(allocations))
 	for allocationName, allocationConfig := range allocations {
-		allocationID := n.constructAllocationID(ensembleID, allocationName)
+		allocationID := jobs.ConstructAllocationID(ensembleID, allocationName)
 		if _, ok := n.allocations[allocationID]; ok {
 			log.Debugf("allocation %s already exists", allocationID)
 			continue
@@ -263,7 +260,7 @@ func (n *Node) createAllocations(
 			ticker := time.NewTicker(grantAllocationCapsFreq)
 			defer ticker.Stop()
 
-			for allocation.Status(context.TODO()).Status != jobs.Stopped {
+			for allocation.Status(context.TODO()).Status != jobs.AllocationStopped {
 				select {
 				case <-n.ctx.Done():
 					return
@@ -394,7 +391,7 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 		return
 	}
 
-	allocID := n.constructAllocationID(ensembleID, req.AllocName)
+	allocID := jobs.ConstructAllocationID(ensembleID, req.AllocName)
 	resultsDir := filepath.Join(n.dmsConfig.WorkDir, "jobs", allocID)
 
 	stdout, err := n.fs.ReadFile(filepath.Join(resultsDir, "stdout.log"))

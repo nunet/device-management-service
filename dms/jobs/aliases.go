@@ -12,6 +12,10 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
+// TODO: remove all aliases and to make it the import shorter, use `jt`
+// or `jtypes`
+// Why? Because it removes the possibility of seeing type defs through IDEs hovering
+
 type (
 	NodeManifest        = jobtypes.NodeManifest
 	NodeConfig          = jobtypes.NodeConfig
@@ -20,6 +24,7 @@ type (
 	DeploymentStatus    = jobtypes.DeploymentStatus
 	DeploymentSnapshot  = jobtypes.DeploymentSnapshot
 	AllocationManifest  = jobtypes.AllocationManifest
+	AllocationStatus    = jobtypes.AllocationStatus
 	AllocationExecutor  = jobtypes.AllocationExecutor
 	Bid                 = jobtypes.Bid
 	BidRequest          = jobtypes.BidRequest
@@ -39,4 +44,11 @@ const (
 	DeploymentStatusFailed       = jobtypes.DeploymentStatusFailed
 	DeploymentStatusShuttingDown = jobtypes.DeploymentStatusShuttingDown
 	DeploymentStatusCompleted    = jobtypes.DeploymentStatusCompleted
+
+	AllocationPending    = jobtypes.AllocationPending
+	AllocationRunning    = jobtypes.AllocationRunning
+	AllocationStopped    = jobtypes.AllocationStopped
+	AllocationFailed     = jobtypes.AllocationFailed
+	AllocationCompleted  = jobtypes.AllocationCompleted
+	AllocationTerminated = jobtypes.AllocationTerminated
 )

@@ -16,13 +16,12 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/multiformats/go-multiaddr"
-
-	"gitlab.com/nunet/device-management-service/network/libp2p"
-
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/nunet/device-management-service/actor"
 	"go.uber.org/mock/gomock"
+
+	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
 func TestAllocation(t *testing.T) {
@@ -86,7 +85,7 @@ func TestAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		err = retry.Do(func() error {
-			if allocation.status != Running {
+			if allocation.status != AllocationRunning {
 				return fmt.Errorf("allocation not running")
 			}
 			return nil
@@ -135,7 +134,7 @@ func TestAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		err = retry.Do(func() error {
-			if allocation.status != Running {
+			if allocation.status != AllocationRunning {
 				return fmt.Errorf("allocation not running")
 			}
 			return nil
@@ -146,7 +145,7 @@ func TestAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		status := allocation.Status(context.Background())
-		require.Equal(t, Running, status.Status)
+		require.Equal(t, AllocationRunning, status.Status)
 	})
 
 	t.Run("must be able to stop the allocation", func(t *testing.T) {
@@ -178,7 +177,7 @@ func TestAllocation(t *testing.T) {
 
 		// ensure that the allocation is running
 		err = retry.Do(func() error {
-			if allocation.status != Running {
+			if allocation.status != AllocationRunning {
 				return fmt.Errorf("allocation not completed")
 			}
 			return nil
@@ -194,7 +193,7 @@ func TestAllocation(t *testing.T) {
 
 		// ensure that the allocation is stopped
 		err = retry.Do(func() error {
-			if allocation.status != Stopped {
+			if allocation.status != AllocationStopped {
 				return fmt.Errorf("allocation not completed")
 			}
 			return nil
@@ -233,7 +232,7 @@ func TestAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		err = retry.Do(func() error {
-			if allocation.status != Running {
+			if allocation.status != AllocationRunning {
 				return fmt.Errorf("allocation not running")
 			}
 			return nil
@@ -251,7 +250,7 @@ func TestAllocation(t *testing.T) {
 		require.NoError(t, err)
 
 		err = retry.Do(func() error {
-			if allocation.status != Running {
+			if allocation.status != AllocationRunning {
 				return fmt.Errorf("allocation not running")
 			}
 			return nil

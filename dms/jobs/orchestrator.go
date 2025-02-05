@@ -23,11 +23,10 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/dms/behaviors"
-
 	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
@@ -297,6 +296,36 @@ func (o *Orchestrator) Deploy(expiry time.Time) error {
 	return o.deploy(expiry)
 }
 
+func (o *Orchestrator) initializeManifest() {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	o.manifest = EnsembleManifest{
+		ID:           o.id,
+		Orchestrator: o.actor.Handle(),
+		Allocations:  make(map[string]AllocationManifest),
+		Nodes:        make(map[string]NodeManifest),
+	}
+
+	for name, alloc := range o.cfg.Allocations() {
+		amf := AllocationManifest{
+			ID:          ConstructAllocationID(o.id, name),
+			DNSName:     alloc.DNSName + ".internal",
+			Healthcheck: alloc.HealthCheck,
+			Status:      AllocationPending,
+			Ports:       make(map[int]int),
+		}
+		o.manifest.Allocations[name] = amf
+	}
+	for name, node := range o.cfg.Nodes() {
+		nmf := NodeManifest{
+			Allocations: node.Allocations,
+			Peer:        node.Peer,
+		}
+		o.manifest.Nodes[name] = nmf
+	}
+}
+
 func (o *Orchestrator) deploy(expiry time.Time) error {
 	o.deploymentSnapshot.Expiry = expiry
 	edgeConstraintCache := make(map[string]bool)
@@ -304,6 +333,9 @@ func (o *Orchestrator) deploy(expiry time.Time) error {
 deploy:
 	for time.Now().Before(expiry) {
 		o.setStatus(DeploymentStatusPreparing)
+
+		log.Debugf("manifest being initialized...")
+		o.initializeManifest()
 
 		// delete old state of candidates if any
 		for c := range o.deploymentSnapshot.Candidates {
@@ -455,23 +487,21 @@ deploy:
 			continue deploy
 		}
 
-		o.lock.Lock()
-		o.manifest = manifest
-		o.lock.Unlock()
-
 		// 6. provision the network and start the allocations
 		o.setStatus(DeploymentStatusProvisioning)
 
 		log.Info("provisioning network")
 		if err := o.provision(o.manifest); err != nil {
 			log.Errorf("failed to provision network: %s", err)
-			o.revert(manifest)
+
+			o.lock.Lock()
+			o.revert(o.manifest)
+			o.lock.Unlock()
 			continue deploy
 		}
 
 		// We are done! start the supervisor return the manifest.
 		o.lock.Lock()
-		o.manifest = manifest
 		o.ctx, o.cancel = context.WithCancel(context.Background())
 		o.lock.Unlock()
 
@@ -1094,6 +1124,8 @@ func (o *Orchestrator) verifyEdgeConstraint(candidate map[string]Bid, cst EdgeCo
 	return response.OK
 }
 
+// TODO: do we have to return the manifest at all? since we're updating the orchestrator
+// state from here anyway
 func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error) {
 	// This is a two phase commit:
 	// - first commit the resources in all the nodes to ensure the deployment is (still)
@@ -1102,6 +1134,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	// - if there are any failures, we need to revert this deployment and start anew
 
 	var mx sync.Mutex
+	mf := o.manifest
 
 	// Phase 1: commit
 	var wg1 sync.WaitGroup
@@ -1130,7 +1163,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 			bid := candidate[n]
 			o.revertDeployment(n, bid.Handle())
 		}
-		return EnsembleManifest{}, fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
+		return mf, fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
 	}
 
 	// Phase 2: allocate
@@ -1160,59 +1193,61 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		for n, bid := range candidate {
 			o.revertDeployment(n, bid.Handle())
 		}
-		return EnsembleManifest{}, fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
+		return mf, fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
 	}
 
-	// We are done, create the (partial) manifest
 	// There are certain details that are filled during provisioning, e.g. allocation
 	// VPN addresses and public port mappings
-	mf := EnsembleManifest{
-		ID:           o.id,
-		Orchestrator: o.actor.Handle(),
-		Allocations:  make(map[string]AllocationManifest),
-		Nodes:        make(map[string]NodeManifest),
-	}
-
 	allocationNodes := make(map[string]string)
 	portsByAllocation := make(map[string][]jobtypes.PortConfig)
 	for n, bid := range candidate {
-		ncfg, _ := o.cfg.Node(n)
-		nmf := NodeManifest{
-			ID:          n,
-			Peer:        bid.Peer(),
-			Handle:      bid.Handle(),
-			Location:    bid.Location(),
-			Allocations: ncfg.Allocations,
+		// update manifest only if node already exists
+		o.lock.Lock()
+		if nmf, ok := o.manifest.Nodes[n]; ok {
+			nmf.Peer = bid.Peer()
+			nmf.Handle = bid.Handle()
+			nmf.Location = bid.Location()
+			o.manifest.Nodes[n] = nmf
+		} else {
+			nmf := NodeManifest{
+				ID:       n,
+				Peer:     bid.Peer(),
+				Handle:   bid.Handle(),
+				Location: bid.Location(),
+			}
+			o.manifest.Nodes[n] = nmf
 		}
-		for _, a := range nmf.Allocations {
-			allocationNodes[a] = n
-			// TODO: optimize the manifest format and how node/alloc data is
-			//       being passed around. A bit messy at the moment. see #825
-			for _, portMap := range ncfg.Ports {
-				if portMap.Allocation == a {
-					portsByAllocation[a] = append(portsByAllocation[a], portMap)
+		o.lock.Unlock()
+
+		if ncfg, ok := o.cfg.Node(n); ok {
+			for _, a := range ncfg.Allocations {
+				allocationNodes[a] = n
+				// TODO: optimize the manifest format and how node/alloc data is
+				//       being passed around. A bit messy at the moment. see #825
+				for _, portMap := range ncfg.Ports {
+					if portMap.Allocation == a {
+						portsByAllocation[a] = append(portsByAllocation[a], portMap)
+					}
 				}
 			}
 		}
-		mf.Nodes[n] = nmf
 	}
 
-	for name, alloc := range o.cfg.Allocations() {
+	for name := range o.cfg.Allocations() {
 		allocPorts := make(map[int]int)
 		if ports, ok := portsByAllocation[name]; ok {
 			for _, pc := range ports {
 				allocPorts[pc.Public] = pc.Private
 			}
 		}
-		amf := AllocationManifest{
-			ID:          o.id + "_" + name,
-			NodeID:      allocationNodes[name],
-			Handle:      allocations[name],
-			DNSName:     alloc.DNSName + ".internal",
-			Healthcheck: alloc.HealthCheck,
-			Ports:       allocPorts,
+		o.lock.Lock()
+		if alloc, ok := o.manifest.Allocations[name]; ok {
+			alloc.NodeID = allocationNodes[name]
+			alloc.Handle = allocations[name]
+			alloc.Ports = allocPorts
+			o.manifest.Allocations[name] = alloc
 		}
-		mf.Allocations[name] = amf
+		o.lock.Unlock()
 	}
 
 	return mf, nil
@@ -1476,6 +1511,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 		routingTable[ip.String()] = em.Nodes[manifest.NodeID].Peer
 		indexRoutingTable[allocationID] = ip.String()
 		usedIPs[ip.String()] = true
+
+		o.lock.Lock()
+		if alloc, ok := o.manifest.Allocations[allocationID]; ok {
+			alloc.PrivAddr = ip.String()
+			o.manifest.Allocations[allocationID] = alloc
+		}
+		o.lock.Unlock()
 	}
 
 	errCh := make(chan error, len(em.Allocations))
@@ -1764,6 +1806,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	// 2. start the allocations
 	errCh = make(chan error, len(em.Allocations))
 	wg = sync.WaitGroup{}
+
 	for allocName, manifest := range em.Allocations {
 		wg.Add(1)
 		go func(manifest AllocationManifest) {
@@ -1803,6 +1846,12 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				}
 
 				if !response.OK {
+					o.lock.Lock()
+					if alloc, ok := o.manifest.Allocations[allocName]; ok {
+						alloc.Status = AllocationFailed
+						o.manifest.Allocations[allocName] = alloc
+					}
+					o.lock.Unlock()
 					errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
 					return
 				}
@@ -1812,6 +1861,12 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			}
 
 			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
+			o.lock.Lock()
+			if alloc, ok := o.manifest.Allocations[allocName]; ok {
+				alloc.Status = AllocationRunning
+				o.manifest.Allocations[allocName] = alloc
+			}
+			o.lock.Unlock()
 		}(manifest)
 	}
 

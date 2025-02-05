@@ -16,13 +16,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/types"
-
 	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // MinDeploymentTime minimum time for deployment
@@ -107,7 +106,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.CommitDeploymentResponse{}
-	allocationID := n.constructAllocationID(request.EnsembleID, request.AllocationName)
+	allocationID := jobs.ConstructAllocationID(request.EnsembleID, request.AllocationName)
 	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources, request.PortMapping)
 	if err != nil {
 		resp.Error = err.Error()
@@ -317,8 +316,8 @@ type DeploymentManifestRequest struct {
 }
 
 type DeploymentManifestResponse struct {
-	Manifest jobs.EnsembleManifest
-	Error    string
+	Manifest jobs.EnsembleManifest `json:"manifest"`
+	Error    string                `json:"error,omitempty"`
 }
 
 func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
@@ -417,7 +416,7 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	n.lock.Unlock()
 
 	for _, allocName := range request.AllocsByName {
-		allocID := n.constructAllocationID(ensembleID, allocName)
+		allocID := jobs.ConstructAllocationID(ensembleID, allocName)
 
 		// try revert commit phase
 		n.lock.Lock()
