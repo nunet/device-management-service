@@ -99,7 +99,7 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 			}
 
 			status := alloc.Status(context.TODO()).Status
-			if status == jobs.Completed {
+			if status == jobs.AllocationCompleted {
 				log.Warnf("Allocation %s is done with status %s", allocID, status)
 				allocationsDone[allocID] = true
 				continue
@@ -151,8 +151,4 @@ func (n *Node) writeAllocationLogsTo(path string, stdout, stderr []byte) error {
 	}
 
 	return nil
-}
-
-func (n *Node) constructAllocationID(ensembleID, allocName string) string {
-	return ensembleID + "_" + allocName
 }
