@@ -151,17 +151,21 @@ type ResourceAllocation struct {
 
 // ResourceManager is an interface that defines the methods to manage the resources of the machine
 type ResourceManager interface {
-	// CommitResources preallocates the resources required by the jobs
+	// CommitResources commits the resources required by the allocation
 	CommitResources(context.Context, CommittedResources) error
-	// UncommitResources releases the resources that were preallocated for the jobs
+	// UncommitResources releases the resources that were committed for the allocation
 	UncommitResources(context.Context, string) error
-	// AllocateResources allocates the resources required by a job
-	AllocateResources(context.Context, ResourceAllocation) error
-	// DeallocateResources deallocates the resources required by a job
+	// IsCommitted returns true if the resources are committed for the allocation
+	IsCommitted(string) (bool, error)
+	// AllocateResources allocates the resources required by an allocation
+	AllocateResources(context.Context, string) error
+	// DeallocateResources deallocates the resources required by an allocation
 	DeallocateResources(context.Context, string) error
-	// GetTotalAllocation returns the total allocations for the jobs
+	// IsAllocated returns true if the resources are allocated for the allocation
+	IsAllocated(allocationID string) (bool, error)
+	// GetTotalAllocation returns the total allocations for the allocation
 	GetTotalAllocation() (Resources, error)
-	// GetFreeResources returns the free resources in the allocation pool
+	// GetFreeResources returns the free resources in the pool
 	GetFreeResources(ctx context.Context) (FreeResources, error)
 	// GetOnboardedResources returns the onboarded resources of the machine
 	GetOnboardedResources(context.Context) (OnboardedResources, error)

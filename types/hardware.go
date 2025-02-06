@@ -19,6 +19,7 @@ type HardwareManager interface {
 	GetMachineResources() (MachineResources, error)
 	GetUsage() (Resources, error)
 	GetFreeResources() (Resources, error)
+	CheckCapacity(resources Resources) (bool, error)
 }
 
 // GPUManager defines the interface for managing GPU resources.

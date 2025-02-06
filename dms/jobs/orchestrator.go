@@ -309,7 +309,7 @@ func (o *Orchestrator) initializeManifest() {
 
 	for name, alloc := range o.cfg.Allocations() {
 		amf := AllocationManifest{
-			ID:          ConstructAllocationID(o.id, name),
+			ID:          types.ConstructAllocationID(o.id, name),
 			DNSName:     alloc.DNSName + ".internal",
 			Healthcheck: alloc.HealthCheck,
 			Status:      AllocationPending,
@@ -1257,7 +1257,7 @@ type CommitDeploymentRequest struct {
 	EnsembleID     string
 	AllocationName string
 	NodeID         string
-	Resources      types.Resources
+	Resources      types.CommittedResources
 	PortMapping    map[int]int
 }
 
@@ -1300,7 +1300,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 					EnsembleID:     o.id,
 					AllocationName: allocName,
 					NodeID:         n,
-					Resources:      allocation.Resources,
+					Resources:      types.CommittedResources{Resources: allocation.Resources},
 					PortMapping:    allocPorts,
 				},
 				actor.WithMessageTimeout(CommitDeploymentTimeout),

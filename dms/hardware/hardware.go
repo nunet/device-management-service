@@ -116,6 +116,21 @@ func (m *defaultHardwareManager) GetFreeResources() (types.Resources, error) {
 	return availableResources.Resources, nil
 }
 
+// CheckCapacity checks if the machine has enough resources to commit/allocate.
+func (m *defaultHardwareManager) CheckCapacity(resources types.Resources) (bool, error) {
+	// Check if there are enough free resources on the machine to allocate
+	freeResources, err := m.GetFreeResources()
+	if err != nil {
+		return false, fmt.Errorf("get free resources: %w", err)
+	}
+
+	if err := freeResources.Subtract(resources); err != nil {
+		return false, fmt.Errorf("no free resources on the machine: %w", err)
+	}
+
+	return true, nil
+}
+
 // Shutdown shuts down the hardware manager.
 func (m *defaultHardwareManager) Shutdown() error {
 	// shutdown gpu manager

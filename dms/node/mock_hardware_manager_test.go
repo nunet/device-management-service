@@ -39,6 +39,21 @@ func (m *MockHardwareManager) EXPECT() *MockHardwareManagerMockRecorder {
 	return m.recorder
 }
 
+// CheckCapacity mocks base method.
+func (m *MockHardwareManager) CheckCapacity(resources types.Resources) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckCapacity", resources)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckCapacity indicates an expected call of CheckCapacity.
+func (mr *MockHardwareManagerMockRecorder) CheckCapacity(resources any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckCapacity", reflect.TypeOf((*MockHardwareManager)(nil).CheckCapacity), resources)
+}
+
 // GetFreeResources mocks base method.
 func (m *MockHardwareManager) GetFreeResources() (types.Resources, error) {
 	m.ctrl.T.Helper()

@@ -90,6 +90,7 @@ type Node struct {
 	rootCap ucan.CapabilityContext
 
 	// dms modules
+	allocator       Allocator
 	actor           actor.Actor
 	scheduler       *bt.Scheduler
 	network         network.Network
@@ -98,20 +99,13 @@ type Node struct {
 	onboarding      *onboarding.Onboarding
 	executors       map[string]executorMetadata
 
-	// port management
-	portConfig    PortConfig
-	portAllocator *PortAllocator
-
 	// in-memory state
-	hostID            string
-	geoIP             types.GeoIPLocator
-	hostLocation      Geolocation
-	peers             map[peer.ID]*peerState
-	bids              map[string]*bidState
-	running           atomic.Bool
-	commitedResources map[string]*bidState
-	allocations       map[string]*jobs.Allocation
-	allocationsLock   sync.RWMutex
+	hostID       string
+	geoIP        types.GeoIPLocator
+	hostLocation Geolocation
+	peers        map[peer.ID]*peerState
+	bids         map[string]*bidState
+	running      atomic.Bool
 
 	// db state
 	orchestratorRepo repositories.OrchestratorView
@@ -210,10 +204,10 @@ func New(cfg config.Config, fs afero.Afero,
 
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
+		allocator:            newAllocator(newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID),
 		hostID:               hostID,
 		network:              net,
 		bids:                 make(map[string]*bidState),
-		allocations:          make(map[string]*jobs.Allocation),
 		peers:                make(map[peer.ID]*peerState),
 		resourceManager:      resourceManager,
 		hardware:             hardware,
@@ -228,9 +222,6 @@ func New(cfg config.Config, fs afero.Afero,
 		orchestratorProvider: jobs.NewOrchestratorProvider(),
 		geoIP:                geoIP,
 		hostLocation:         hostLocation,
-		portConfig:           portConfig,
-		portAllocator:        NewPortAllocator(portConfig),
-		commitedResources:    make(map[string]*bidState),
 		dmsConfig:            cfg,
 		fs:                   fs,
 	}
@@ -250,13 +241,6 @@ func New(cfg config.Config, fs afero.Afero,
 	if err := n.restoreDeployments(); err != nil {
 		log.Errorf("restoring deployments: %s", err)
 	}
-
-	ticker := time.NewTicker(clearCommitsFrequency)
-	go func() {
-		for range ticker.C {
-			n.clearCommits()
-		}
-	}()
 
 	return n, nil
 }
@@ -511,6 +495,10 @@ func (n *Node) doGCBidState() {
 
 // Start node
 func (n *Node) Start() error {
+	if err := n.allocator.Run(); err != nil {
+		return fmt.Errorf("start node allocator: %w", err)
+	}
+
 	if err := n.actor.Start(); err != nil {
 		return fmt.Errorf("start node actor: %w", err)
 	}
@@ -527,14 +515,9 @@ func (n *Node) Start() error {
 
 // Stop node
 func (n *Node) Stop() error {
-	n.allocationsLock.Lock()
-	// stop all allocations
-	for k, alloc := range n.allocations {
-		if err := alloc.Stop(n.ctx); err != nil {
-			log.Warnf("stopping allocation %s: %err", k, err)
-		}
+	if err := n.allocator.Stop(context.Background()); err != nil {
+		log.Errorf("stop node allocator: %s", err)
 	}
-	n.allocationsLock.Unlock()
 
 	if err := n.saveDeployments(); err != nil {
 		log.Errorf("saving active deployments: %s", err)
@@ -607,24 +590,6 @@ func (n *Node) sendReply(msg actor.Envelope, payload interface{}) {
 	}
 }
 
-func (n *Node) clearCommits() {
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
-	for allocationID, bid := range n.commitedResources {
-		// if allocation not found for this commitment and bid is expired release resources
-		_, allocFound := n.allocations[allocationID]
-		if !allocFound && time.Now().After(bid.expire) {
-			if err := n.resourceManager.UncommitResources(context.Background(), allocationID); err != nil {
-				log.Errorf("preallocate resources for ensemble id: %s: %w", allocationID, err)
-			}
-			delete(n.bids, allocationID)
-			delete(n.commitedResources, allocationID)
-			n.portAllocator.Release(allocationID)
-		}
-	}
-}
-
 // createChildActor creates a child actor using node's limiter, scheduler and network.
 func (n *Node) createChildActor(priv crypto.PrivKey, inbox string, supervisor actor.Handle) (*actor.BasicActor, error) {
 	security, err := actor.NewBasicSecurityContext(priv.GetPublic(), priv, n.rootCap)
@@ -648,17 +613,8 @@ func (n *Node) ResourceManager() types.ResourceManager {
 	return n.resourceManager
 }
 
-// GetAllocations returns a list of allocations in the node.
-func (n *Node) GetAllocations() []*jobs.Allocation {
-	n.allocationsLock.Lock()
-	defer n.allocationsLock.Unlock()
-
-	allocations := make([]*jobs.Allocation, 0, len(n.allocations))
-	for _, v := range n.allocations {
-		allocations = append(allocations, v)
-	}
-
-	return allocations
+func (n *Node) Allocator() Allocator {
+	return n.allocator
 }
 
 // GetBidRequests returns the bid requests for the node.

@@ -11,20 +11,23 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/afero"
+
+	"github.com/google/uuid"
+	"gitlab.com/nunet/device-management-service/executor/docker"
+
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
-	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
@@ -120,26 +123,6 @@ func (n *Node) grantCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capabili
 	return nil
 }
 
-func (n *Node) createExecutor(ctx context.Context, fs afero.Afero, executionType string) (types.Executor, error) {
-	switch executionType {
-	case types.ExecutorTypeDocker.String():
-		id := uuid.New().String()
-		exec, err := docker.NewExecutor(ctx, fs, id)
-		if err != nil {
-			return nil, fmt.Errorf("create executor: %w", err)
-		}
-		return exec, nil
-	default:
-		return nil, fmt.Errorf("unsupported executor type: %s", executionType)
-	}
-}
-
-func (n *Node) updateAllocations(alloc *jobs.Allocation) {
-	n.allocationsLock.Lock()
-	defer n.allocationsLock.Unlock()
-	n.allocations[alloc.ID] = alloc
-}
-
 // createAllocation creates an allocation
 func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor actor.Handle) (*jobs.Allocation, error) {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
@@ -152,56 +135,16 @@ func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor ac
 		return nil, fmt.Errorf("create allocation actor: %w", err)
 	}
 
-	n.lock.Lock()
-	_, alreadyCommited := n.commitedResources[allocationID]
-
-	if !alreadyCommited {
-		n.lock.Unlock()
-		return nil, fmt.Errorf("no committed resources for ensemble id: %s", allocationID)
-	}
-
-	if err := n.resourceManager.UncommitResources(context.Background(), allocationID); err != nil {
-		log.Errorf("uncommit resources for allocation: %s: %w", allocationID, err)
-	}
-
-	resourceAllocation := types.ResourceAllocation{
-		AllocationID: allocationID,
-		Resources:    job.Resources,
-	}
-	err = n.resourceManager.AllocateResources(n.ctx, resourceAllocation)
-	if err != nil {
-		n.lock.Unlock()
-		return nil, fmt.Errorf("allocate resources: %w", err)
-	}
-
-	delete(n.commitedResources, allocationID)
-	n.lock.Unlock()
-
-	// Create an executor for the allocation
-	exec, err := n.createExecutor(n.ctx, n.fs, job.Execution.Type)
+	executor, err := createExecutor(context.Background(), n.fs, job.Execution.Type)
 	if err != nil {
 		return nil, fmt.Errorf("create executor: %w", err)
 	}
 
-	allocation, err := jobs.NewAllocation(
-		allocationID,
-		n.fs,
-		n.dmsConfig.WorkDir,
-		allocActor,
-		jobs.AllocationDetails{Job: job, NodeID: n.hostID},
-		n.network,
-		exec,
-	)
+	allocation, err := n.allocator.Allocate(context.Background(), allocationID, allocActor, job, executor)
 	if err != nil {
-		return nil, fmt.Errorf("create allocation: %w", err)
+		return nil, fmt.Errorf("allocate resources: %w", err)
 	}
 
-	err = allocation.Start()
-	if err != nil {
-		return nil, fmt.Errorf("start the allocation: %w", err)
-	}
-
-	n.updateAllocations(allocation)
 	return allocation, nil
 }
 
@@ -214,11 +157,8 @@ func (n *Node) createAllocations(
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
 	allocationIDs := make([]string, 0, len(allocations))
 	for allocationName, allocationConfig := range allocations {
-		allocationID := jobs.ConstructAllocationID(ensembleID, allocationName)
-		if _, ok := n.allocations[allocationID]; ok {
-			log.Debugf("allocation %s already exists", allocationID)
-			continue
-		}
+		allocationID := types.ConstructAllocationID(ensembleID, allocationName)
+		// TODO: check if the allocation ID exists
 
 		allocation, err := n.createAllocation(
 			allocationID,
@@ -346,7 +286,7 @@ func (n *Node) handleAllocationShutdown(msg actor.Envelope) {
 		return
 	}
 
-	err := n.releaseAllocation(request.AllocationID)
+	err := n.allocator.Release(context.Background(), request.AllocationID)
 	if err != nil {
 		resp.Error = err.Error()
 		n.sendReply(msg, resp)
@@ -391,12 +331,12 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 		return
 	}
 
-	allocID := jobs.ConstructAllocationID(ensembleID, req.AllocName)
+	allocID := types.ConstructAllocationID(ensembleID, req.AllocName)
 	resultsDir := filepath.Join(n.dmsConfig.WorkDir, "jobs", allocID)
 
 	stdout, err := n.fs.ReadFile(filepath.Join(resultsDir, "stdout.log"))
 	if err != nil {
-		if err == os.ErrNotExist {
+		if errors.Is(err, os.ErrNotExist) {
 			log.Warnf("stdout file for allocation %s does not exist (ensemble: %s)", req.AllocName, ensembleID)
 		} else {
 			handleErr(fmt.Errorf("failed to read results file: %s", err))
@@ -427,4 +367,18 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 	resp.Stdout = stdout
 	resp.Stderr = stderr
 	n.sendReply(msg, resp)
+}
+
+func createExecutor(ctx context.Context, fs afero.Afero, executionType string) (types.Executor, error) {
+	switch executionType {
+	case types.ExecutorTypeDocker.String():
+		id := uuid.New().String()
+		exec, err := docker.NewExecutor(ctx, fs, id)
+		if err != nil {
+			return nil, fmt.Errorf("create executor: %w", err)
+		}
+		return exec, nil
+	default:
+		return nil, fmt.Errorf("unsupported executor type: %s", executionType)
+	}
 }
