@@ -10,57 +10,12 @@ package node
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 )
-
-// getAllocation gets an allocation by id.
-func (n *Node) getAllocation(id string) (*jobs.Allocation, error) {
-	n.allocationsLock.RLock()
-	defer n.allocationsLock.RUnlock()
-
-	allocation, ok := n.allocations[id]
-	if !ok {
-		return nil, errors.New("allocation not found")
-	}
-
-	return allocation, nil
-}
-
-func (n *Node) releaseAllocation(allocID string) error {
-	n.allocationsLock.Lock()
-	defer n.allocationsLock.Unlock()
-
-	alloc, ok := n.allocations[allocID]
-	if !ok {
-		// only warn because it is possible that the allocation was already released
-		// but would be good to have custom erro types defined for this
-		log.Warnf("allocation %s not found", allocID)
-		return nil
-	}
-
-	n.portAllocator.Release(allocID)
-
-	err := n.resourceManager.DeallocateResources(n.ctx, allocID)
-	if err != nil {
-		return fmt.Errorf("deallocate resources for allocation id: %s: %w", allocID, err)
-	}
-
-	// stop and cleanup
-	err = alloc.Terminate(n.ctx)
-	if err != nil {
-		return fmt.Errorf("failed to shutdown allocation: %w", err)
-	}
-
-	delete(n.allocations, allocID)
-
-	log.Infof("allocation %s released", allocID)
-	return nil
-}
 
 // monitorEnsembleAllocations monitors the provided allocations. It handles allocations termination.
 //
@@ -91,7 +46,7 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 			}
 
 			// Retrieve the allocation
-			alloc, err := n.getAllocation(allocID)
+			alloc, err := n.allocator.GetAllocation(allocID)
 			if err != nil {
 				log.Warnf("Monitor Ensemble: Allocation %s not found: %v", allocID, err)
 				allocationsDone[allocID] = true // Consider it done to avoid infinite loop
@@ -126,8 +81,8 @@ func (n *Node) cleanupFinishedEnsemble(ensembleID string, allocationIDs []string
 	}
 
 	for _, allocID := range allocationIDs {
-		if err := n.releaseAllocation(allocID); err != nil {
-			log.Warnf("Monitor Ensemble: failed to release allocation (it may already be released) %s: %v", allocID, err)
+		if err := n.allocator.Release(context.Background(), allocID); err != nil {
+			log.Errorf("Monitor Ensemble: failed to release allocation %s: %v", allocID, err)
 		}
 	}
 }

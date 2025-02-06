@@ -65,6 +65,7 @@ func getMockNode(t *testing.T, ctrl *gomock.Controller) *Node {
 	mockGeoIPLocator := NewMockGeoIPLocator(ctrl)
 	mockActor := NewMockActor(ctrl)
 	mockOrchestratorFactory := NewMockOrchestratorProvider(ctrl)
+	mockAllocator := NewMockAllocator(ctrl)
 
 	rootCap := createRootCapabilityContext(t)
 
@@ -79,7 +80,6 @@ func getMockNode(t *testing.T, ctrl *gomock.Controller) *Node {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	portConfig := PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535}
 	node := Node{
 		rootCap:              rootCap,
 		actor:                mockActor,
@@ -89,8 +89,6 @@ func getMockNode(t *testing.T, ctrl *gomock.Controller) *Node {
 		hardware:             mockHardwareManager,
 		onboarding:           nil,
 		executors:            make(map[string]executorMetadata),
-		portConfig:           portConfig,
-		portAllocator:        NewPortAllocator(portConfig),
 		hostID:               "hostID",
 		geoIP:                mockGeoIPLocator,
 		hostLocation:         Geolocation{},
@@ -100,6 +98,7 @@ func getMockNode(t *testing.T, ctrl *gomock.Controller) *Node {
 		cancel:               cancel,
 		orchestratorProvider: mockOrchestratorFactory,
 		bids:                 make(map[string]*bidState),
+		allocator:            mockAllocator,
 	}
 
 	return &node
@@ -165,6 +164,7 @@ func TestNode(t *testing.T) {
 		node.actor.(*MockActor).EXPECT().Start().Return(nil).Times(1)
 		node.actor.(*MockActor).EXPECT().Subscribe(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		node.actor.(*MockActor).EXPECT().Context().Return(context.Background()).AnyTimes()
+		node.allocator.(*MockAllocator).EXPECT().Run().Return(nil).Times(1)
 		err := node.Start()
 		require.NoError(t, err)
 		require.True(t, node.running.Load())
@@ -173,6 +173,7 @@ func TestNode(t *testing.T) {
 		node.network.(*MockNetwork).EXPECT().Unsubscribe(gomock.Any(), subscriptionID).Return(nil).AnyTimes()
 		node.network.(*MockNetwork).EXPECT().UnregisterMessageHandler(gomock.Any()).Return().AnyTimes()
 		node.actor.(*MockActor).EXPECT().Stop().Return(nil).Times(1)
+		node.allocator.(*MockAllocator).EXPECT().Stop(gomock.Any()).Return(nil).Times(1)
 		err = node.Stop()
 		require.NoError(t, err)
 		require.False(t, node.running.Load())
@@ -198,6 +199,7 @@ func TestNode(t *testing.T) {
 		node.actor.(*MockActor).EXPECT().Start().Return(nil).Times(1)
 		node.actor.(*MockActor).EXPECT().Subscribe(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		node.actor.(*MockActor).EXPECT().Context().Return(context.Background()).AnyTimes()
+		node.allocator.(*MockAllocator).EXPECT().Run().Return(nil).Times(1)
 		err := node.Start()
 		require.NoError(t, err)
 
@@ -211,23 +213,6 @@ func TestNode(t *testing.T) {
 			retry.Delay(bidStateGCInterval),
 		)
 		require.NoError(t, err)
-	})
-
-	t.Run("must be able to get allocations", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		node := getMockNode(t, ctrl)
-
-		allocations := make(map[string]*jobs.Allocation)
-		allocations["test"] = &jobs.Allocation{
-			ID: "test",
-		}
-		node.allocations = allocations
-
-		actual := node.GetAllocations()
-		require.Equal(t, 1, len(actual))
-		require.Equal(t, "test", actual[0].ID)
 	})
 }
 

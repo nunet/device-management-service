@@ -231,7 +231,6 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 		// TODO: exec.Remove should return a defined custom error
 		//       container already removed is not an error
 		log.Warnf("failed to cleanup allocation: %s", err)
-		return fmt.Errorf("failed to cleanup allocation: %w", err)
 	}
 
 	a.status = AllocationTerminated
@@ -263,8 +262,15 @@ func (a *Allocation) Stop(ctx context.Context) error {
 
 	err = a.stopExecution(ctx)
 	if err != nil {
+		a.lock.Lock()
+		a.status = AllocationFailed
+		a.lock.Unlock()
 		return fmt.Errorf("stop execution: %w", err)
 	}
+
+	a.lock.Lock()
+	a.status = AllocationStopped
+	a.lock.Unlock()
 
 	return nil
 }
@@ -363,8 +369,4 @@ func (a *Allocation) SetHealthCheck(f func() error) {
 	defer a.lock.Unlock()
 
 	a.healthcheck = f
-}
-
-func ConstructAllocationID(ensembleID, allocName string) string {
-	return ensembleID + "_" + allocName
 }

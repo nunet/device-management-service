@@ -41,7 +41,7 @@ func (m *MockResourceManager) EXPECT() *MockResourceManagerMockRecorder {
 }
 
 // AllocateResources mocks base method.
-func (m *MockResourceManager) AllocateResources(arg0 context.Context, arg1 types.ResourceAllocation) error {
+func (m *MockResourceManager) AllocateResources(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AllocateResources", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -125,6 +125,36 @@ func (m *MockResourceManager) GetTotalAllocation() (types.Resources, error) {
 func (mr *MockResourceManagerMockRecorder) GetTotalAllocation() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTotalAllocation", reflect.TypeOf((*MockResourceManager)(nil).GetTotalAllocation))
+}
+
+// IsAllocated mocks base method.
+func (m *MockResourceManager) IsAllocated(allocationID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsAllocated", allocationID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsAllocated indicates an expected call of IsAllocated.
+func (mr *MockResourceManagerMockRecorder) IsAllocated(allocationID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAllocated", reflect.TypeOf((*MockResourceManager)(nil).IsAllocated), allocationID)
+}
+
+// IsCommitted mocks base method.
+func (m *MockResourceManager) IsCommitted(arg0 string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsCommitted", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsCommitted indicates an expected call of IsCommitted.
+func (mr *MockResourceManagerMockRecorder) IsCommitted(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCommitted", reflect.TypeOf((*MockResourceManager)(nil).IsCommitted), arg0)
 }
 
 // UncommitResources mocks base method.
