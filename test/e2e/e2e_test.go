@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+
 	"github.com/shirou/gopsutil/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -198,12 +200,16 @@ func TestDMS(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	allAllocations := dms1.Node.GetAllocations()
+	allAllocations := dms1.Node.Allocator().GetAllocations()
 	require.Len(t, allAllocations, 1)
 
 	// check the node allocations and inspect the status until its running
+	var alloc *jobs.Allocation
+	for _, v := range allAllocations {
+		alloc = v
+	}
 	require.Eventually(t, func() bool {
-		allocStatus := allAllocations[0].Status(context.TODO())
+		allocStatus := alloc.Status(context.Background())
 		return string(allocStatus.Status) == "running"
 	}, 60*time.Second, 100*time.Millisecond, "Allocation for nginx.yaml status is still not running  after 60 seconds")
 
@@ -213,7 +219,7 @@ func TestDMS(t *testing.T) {
 	assert.False(t, freeResourceWhileDeplymentRunning.Equal(freeResourcesBeforeDeplyment.Resources))
 
 	// should have not port mapping
-	ports := allAllocations[0].GetPortMapping()
+	ports := alloc.GetPortMapping()
 	require.Empty(t, ports)
 
 	// finally shutdown the deployment
@@ -235,7 +241,7 @@ func TestDMS(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// check if the allocation was properlly removed
-	allAllocations = dms1.Node.GetAllocations()
+	allAllocations = dms1.Node.Allocator().GetAllocations()
 	require.Len(t, allAllocations, 0)
 
 	// run hello world that exists
@@ -251,11 +257,11 @@ func TestDMS(t *testing.T) {
 		return extractedStatus == "Running"
 	}, 60*time.Second, 100*time.Millisecond, "failed to run second deployment hello.yaml within the expected time")
 
-	allAllocations = dms1.Node.GetAllocations()
+	allAllocations = dms1.Node.Allocator().GetAllocations()
 	require.Len(t, allAllocations, 1)
 
 	// get allocations port mappings
-	ports = allAllocations[0].GetPortMapping()
+	ports = alloc.GetPortMapping()
 	require.NotEmpty(t, ports)
 	require.Equal(t, ports[8080], 80)
 

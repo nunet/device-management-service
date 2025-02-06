@@ -23,3 +23,7 @@ package node
 //go:generate mockgen -destination=mock_actor_test.go -source=../../actor/interface.go -package=node
 // Orchestrator
 //go:generate mockgen -destination=mock_orchestrator_test.go -source=../jobs/orchestrator.go -package=node
+// Allocator
+//go:generate mockgen -destination=mock_allocator_test.go -source=allocator.go -package=node
+// Executor
+//go:generate mockgen -destination=mock_executor_test.go -source=../../types/executor.go -package=node

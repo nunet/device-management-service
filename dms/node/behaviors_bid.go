@@ -148,13 +148,8 @@ loop:
 		return
 	}
 
-	if ok := n.portAllocator.Allocated(toAnswer.V1.PublicPorts.Static); ok {
-		log.Debugf("static ports already allocated")
-		return
-	}
-
-	if ok := n.portAllocator.PortsAvailable(toAnswer.V1.PublicPorts.Dynamic); !ok {
-		log.Debugf("dynamic ports not available")
+	if err := n.allocator.CheckAvailability(toAnswer.V1.PublicPorts.Static, toAnswer.V1.PublicPorts.Dynamic, toAnswer.V1.Resources); err != nil {
+		log.Debugf("no resource availability: %v", err)
 		return
 	}
 

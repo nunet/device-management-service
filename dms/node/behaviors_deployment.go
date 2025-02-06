@@ -50,7 +50,7 @@ func (n *Node) handleVerifyEdgeConstraint(msg actor.Envelope) {
 
 func (n *Node) commitDeployment(
 	ensembleID, allocationID string,
-	resources types.Resources, ports map[int]int,
+	resources types.CommittedResources, ports map[int]int,
 ) error {
 	n.lock.Lock()
 	defer n.lock.Unlock()
@@ -64,34 +64,8 @@ func (n *Node) commitDeployment(
 		return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
 	}
 
-	_, alreadyCommited := n.commitedResources[allocationID]
-	if alreadyCommited {
-		return nil
-	}
-
-	if err := n.resourceManager.CommitResources(context.TODO(), types.CommittedResources{
-		AllocationID: allocationID,
-		Resources:    resources,
-	}); err != nil {
-		return fmt.Errorf("preallocate resources for ensemble id: %s: %w", allocationID, err)
-	}
-
-	n.commitedResources[allocationID] = bid
-
-	if len(ports) > 0 {
-		for port := range ports {
-			err := n.portAllocator.AllocatePorts(allocationID, []int{port})
-			if err != nil {
-				return fmt.Errorf("failed to allocate static ports: %w", err)
-			}
-		}
-	}
-
-	if bid.request.V1.PublicPorts.Dynamic > 0 {
-		_, err := n.portAllocator.AllocateRandom(allocationID, bid.request.V1.PublicPorts.Dynamic)
-		if err != nil {
-			return fmt.Errorf("failed to allocate ports: %w", err)
-		}
+	if err := n.allocator.Commit(context.Background(), allocationID, resources, ports, bid.request.V1.PublicPorts.Dynamic, bid.expire.Unix()); err != nil {
+		return fmt.Errorf("commit resources for ensemble allocID: %s: %w", allocationID, err)
 	}
 
 	return nil
@@ -106,7 +80,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	}
 
 	resp := jobs.CommitDeploymentResponse{}
-	allocationID := jobs.ConstructAllocationID(request.EnsembleID, request.AllocationName)
+	allocationID := types.ConstructAllocationID(request.EnsembleID, request.AllocationName)
 	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources, request.PortMapping)
 	if err != nil {
 		resp.Error = err.Error()
@@ -386,21 +360,6 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) releaseCommit(allocID string) error {
-	err := n.resourceManager.UncommitResources(context.TODO(), allocID)
-	if err != nil {
-		return fmt.Errorf("release resources for ensemble allocID: %s: %w", allocID, err)
-	}
-
-	n.portAllocator.Release(allocID)
-
-	n.lock.Lock()
-	delete(n.commitedResources, allocID)
-	n.lock.Unlock()
-
-	return nil
-}
-
 func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -416,28 +375,10 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	n.lock.Unlock()
 
 	for _, allocName := range request.AllocsByName {
-		allocID := jobs.ConstructAllocationID(ensembleID, allocName)
-
-		// try revert commit phase
-		n.lock.Lock()
-		_, ok := n.commitedResources[allocID]
-		n.lock.Unlock()
-		if ok {
-			err := n.releaseCommit(allocID)
-			if err != nil {
-				log.Errorf("revert commit for ensemble id: %s: %s", ensembleID, err)
-				// we have to try to revert other allocations too, so do not return
-			}
-		}
-
-		// try revert allocations if exist
-		_, err := n.getAllocation(allocID)
-		if err == nil {
-			// allocation exists
-			err := n.releaseAllocation(allocID)
-			if err != nil {
-				log.Errorf("failed to revert allocation %s: %s", allocID, err)
-			}
+		allocID := types.ConstructAllocationID(ensembleID, allocName)
+		err := n.allocator.Release(context.Background(), allocID)
+		if err != nil {
+			log.Errorf("revert commit for ensemble id: %s: %s", ensembleID, err)
 		}
 	}
 	log.Infof("deployment reverted: %+v", ensembleID)
