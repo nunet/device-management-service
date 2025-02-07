@@ -152,6 +152,7 @@ type ResourceAllocation struct {
 // ResourceManager is an interface that defines the methods to manage the resources of the machine
 type ResourceManager interface {
 	// CommitResources commits the resources required by the allocation
+	// TODO: explicit receive Allocation ID as parameter instead of impliclty through the struct
 	CommitResources(context.Context, CommittedResources) error
 	// UncommitResources releases the resources that were committed for the allocation
 	UncommitResources(context.Context, string) error
