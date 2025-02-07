@@ -81,6 +81,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 
 	resp := jobs.CommitDeploymentResponse{}
 	allocationID := types.ConstructAllocationID(request.EnsembleID, request.AllocationName)
+	request.Resources.AllocationID = allocationID
 	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources, request.PortMapping)
 	if err != nil {
 		resp.Error = err.Error()

@@ -20,13 +20,12 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/dms/jobs"
-
 	"github.com/shirou/gopsutil/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
 )
@@ -203,11 +202,14 @@ func TestDMS(t *testing.T) {
 	allAllocations := dms1.Node.Allocator().GetAllocations()
 	require.Len(t, allAllocations, 1)
 
-	// check the node allocations and inspect the status until its running
+	// get the only running allocation
 	var alloc *jobs.Allocation
 	for _, v := range allAllocations {
 		alloc = v
+		break
 	}
+
+	// check the node allocations and inspect the status until its running
 	require.Eventually(t, func() bool {
 		allocStatus := alloc.Status(context.Background())
 		return string(allocStatus.Status) == "running"
@@ -260,8 +262,15 @@ func TestDMS(t *testing.T) {
 	allAllocations = dms1.Node.Allocator().GetAllocations()
 	require.Len(t, allAllocations, 1)
 
+	// get the only running allocation
+	var helloAlloc *jobs.Allocation
+	for _, v := range allAllocations {
+		helloAlloc = v
+		break
+	}
+
 	// get allocations port mappings
-	ports = alloc.GetPortMapping()
+	ports = helloAlloc.GetPortMapping()
 	require.NotEmpty(t, ports)
 	require.Equal(t, ports[8080], 80)
 

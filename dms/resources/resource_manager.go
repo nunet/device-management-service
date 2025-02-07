@@ -55,6 +55,11 @@ var _ types.ResourceManager = (*DefaultManager)(nil)
 
 // CommitResources commits the resources for an allocation
 func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.CommittedResources) error {
+	// TODO: make allocation ID a parameter instead of having the check
+	if allocation.AllocationID == "" {
+		return fmt.Errorf("allocation id cannot be empty")
+	}
+
 	// Check if resources are already allocated for the allocation
 	var ok bool
 	d.store.withCommittedRLock(func() {
