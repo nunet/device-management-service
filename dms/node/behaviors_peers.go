@@ -35,6 +35,11 @@ type PingResponse struct {
 func (n *Node) handlePeerPing(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error pinging peer: %s", err)
+		n.sendReply(msg, PingResponse{Error: err.Error()})
+	}
+
 	var request PingRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		// TODO log
@@ -45,8 +50,7 @@ func (n *Node) handlePeerPing(msg actor.Envelope) {
 
 	res, err := n.network.Ping(context.Background(), request.Host, pingTimeout)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -132,6 +136,11 @@ type PeerConnectResponse struct {
 func (n *Node) handlePeerConnect(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error connecting to peer: %s", err)
+		n.sendReply(msg, PeerConnectResponse{Error: err.Error()})
+	}
+
 	var request PeerConnectRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		// TODO log
@@ -148,14 +157,12 @@ func (n *Node) handlePeerConnect(msg actor.Envelope) {
 
 	peerAddr, err := multiaddr.NewMultiaddr(request.Address)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 	addrInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
