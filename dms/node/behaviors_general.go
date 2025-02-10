@@ -32,56 +32,54 @@ type LoggerConfigResponse struct {
 func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error in logger configuration : %s", err)
+		n.sendReply(msg, LoggerConfigResponse{Error: err.Error()})
+	}
+
 	var (
 		req  LoggerConfigRequest
 		resp LoggerConfigResponse
 	)
 
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
 	if req.Interval != 0 {
 		if err := observability.SetFlushInterval(req.Interval); err != nil {
-			resp.Error = err.Error()
-			n.sendReply(msg, resp)
+			handleErr(err)
 			return
 		}
 	}
 	if req.Level != "" {
 		if err := observability.SetLogLevel(req.Level); err != nil {
-			resp.Error = err.Error()
-			n.sendReply(msg, resp)
+			handleErr(err)
 			return
 		}
 	}
 	if req.URL != "" {
 		if err := observability.SetElasticsearchEndpoint(req.URL); err != nil {
-			resp.Error = err.Error()
-			n.sendReply(msg, resp)
+			handleErr(err)
 			return
 		}
 	}
 	if req.APIKey != "" { // Handle API Key
 		if err := observability.SetAPIKey(req.APIKey); err != nil {
-			resp.Error = err.Error()
-			n.sendReply(msg, resp)
+			handleErr(err)
 			return
 		}
 	}
 	if req.APMURL != "" { // Handle APM URL
 		if err := observability.SetAPMURL(req.APMURL); err != nil {
-			resp.Error = err.Error()
-			n.sendReply(msg, resp)
+			handleErr(err)
 			return
 		}
 	}
 	if req.ElasticEnabled != nil { // Handle Elasticsearch Enabled
 		if err := observability.EnableElasticsearchLogging(*req.ElasticEnabled); err != nil {
-			resp.Error = err.Error()
-			n.sendReply(msg, resp)
+			handleErr(err)
 			return
 		}
 	}
