@@ -54,33 +54,32 @@ func NewResourceManager(repos ManagerRepos, hardware types.HardwareManager) (*De
 var _ types.ResourceManager = (*DefaultManager)(nil)
 
 // CommitResources commits the resources for an allocation
-func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.CommittedResources) error {
-	// TODO: make allocation ID a parameter instead of having the check
-	if allocation.AllocationID == "" {
-		return fmt.Errorf("allocation id cannot be empty")
+func (d *DefaultManager) CommitResources(ctx context.Context, commitment types.CommittedResources) error {
+	if err := commitment.ValidateBasic(); err != nil {
+		return fmt.Errorf("validating commitment: %w", err)
 	}
 
 	// Check if resources are already allocated for the allocation
 	var ok bool
 	d.store.withCommittedRLock(func() {
-		_, ok = d.store.committedResources[allocation.AllocationID]
+		_, ok = d.store.committedResources[commitment.AllocationID]
 	})
 	if ok {
-		return fmt.Errorf("resources already committed for allocation %s", allocation.AllocationID)
+		return fmt.Errorf("resources already committed for allocation %s", commitment.AllocationID)
 	}
 
 	d.committedLock.Lock()
 	defer d.committedLock.Unlock()
 
-	if err := d.checkCapacity(ctx, allocation.Resources); err != nil {
+	if err := d.checkCapacity(ctx, commitment.Resources); err != nil {
 		return fmt.Errorf("checking capacity: %w", err)
 	}
 
 	// update the committed resources in the store
 	d.store.withCommittedLock(func() {
-		d.store.committedResources[allocation.AllocationID] = &types.CommittedResources{
-			Resources:    allocation.Resources,
-			AllocationID: allocation.AllocationID,
+		d.store.committedResources[commitment.AllocationID] = &types.CommittedResources{
+			Resources:    commitment.Resources,
+			AllocationID: commitment.AllocationID,
 		}
 	})
 	return nil

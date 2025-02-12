@@ -432,7 +432,7 @@ func (r *RAM) SizeInGB() float64 {
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
-	// TODO: uint64!!!
+	// float64 is used instead of uint64 because float64 can hold larger values
 	Size float64 `json:"size" description:"Size of the disk in bytes"`
 
 	// TODO: capture the below fields if required
