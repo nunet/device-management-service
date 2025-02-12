@@ -136,6 +136,15 @@ type CommittedResources struct {
 	AllocationID string `json:"allocationID"`
 }
 
+func (c *CommittedResources) ValidateBasic() error {
+	if c.AllocationID == "" {
+		return fmt.Errorf("allocation ID is required")
+	}
+
+	// TODO: validate resources
+	return nil
+}
+
 // OnboardedResources represents the onboarded resources of the machine
 type OnboardedResources struct {
 	BaseDBModel
