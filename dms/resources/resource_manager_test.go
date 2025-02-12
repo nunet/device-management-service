@@ -301,6 +301,55 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		require.NoError(t, err)
 		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
 	})
+
+	t.Run("must validate the commitment of resources", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(func() {
+			ctrl.Finish()
+		})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
+		require.NoError(t, err)
+		defer mockDB.Close()
+
+		repos := setupManagerRepos(mockDB)
+		hm := NewMockHardwareManager(ctrl)
+		rm, err := NewResourceManager(repos, hm)
+		require.NoError(t, err)
+
+		onboardedResources := types.OnboardedResources{
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      5,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
+			},
+		}
+		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
+		require.NoError(t, err)
+
+		demand := types.CommittedResources{
+			AllocationID: "", // invalid allocation ID
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      3,
+					ClockSpeed: 10000,
+				},
+				RAM:  types.RAM{Size: 1024},
+				Disk: types.Disk{Size: 512},
+			},
+		}
+
+		err = rm.CommitResources(context.Background(), demand)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "validating commitment")
+	})
 }
 
 func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
