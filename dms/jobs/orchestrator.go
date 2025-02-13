@@ -40,7 +40,9 @@ const (
 	CommitDeploymentTimeout     = 3 * time.Second
 	AllocationDeploymentTimeout = 5 * time.Second
 
-	AllocationStartTimeout    = 5 * time.Second
+	// Setting a big timeout as the user might have to
+	// download large execution images
+	AllocationStartTimeout    = 5 * time.Minute
 	AllocationShutdownTimeout = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
@@ -1267,14 +1269,16 @@ type CommitDeploymentResponse struct {
 }
 
 func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
-	ncfg, _ := o.cfg.Node(n)
+	ncfg, ok := o.cfg.Node(n)
+	if !ok {
+		return fmt.Errorf("node %s not found", n)
+	}
 
 	getAllocPortMapping := func(allocName string) map[int]int {
 		ports := make(map[int]int)
 		for _, pc := range ncfg.Ports {
 			if pc.Allocation == allocName {
 				ports[pc.Public] = pc.Private
-				break
 			}
 		}
 		return ports
@@ -1282,6 +1286,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(ncfg.Allocations))
+	aggregatedTimeout := time.Duration(len(ncfg.Allocations)) * CommitDeploymentTimeout
 	for _, allocName := range ncfg.Allocations {
 		wg.Add(1)
 		go func(allocName string) {
@@ -1289,6 +1294,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 			allocation, ok := o.cfg.V1.Allocations[allocName]
 			if !ok {
 				errCh <- fmt.Errorf("allocation %s not found: %w", allocName, ErrDeploymentFailed)
+				return
 			}
 
 			allocPorts := getAllocPortMapping(allocName)
@@ -1303,32 +1309,40 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 					Resources:      types.CommittedResources{Resources: allocation.Resources},
 					PortMapping:    allocPorts,
 				},
-				actor.WithMessageTimeout(CommitDeploymentTimeout),
+				actor.WithMessageTimeout(aggregatedTimeout),
 			)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to create commit message for %s: %w", n, err)
+				return
 			}
 
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to invoke commit for %s: %w", n, err)
+				return
 			}
+
+			ticker := time.NewTicker(aggregatedTimeout)
+			defer ticker.Stop()
 
 			var reply actor.Envelope
 			select {
 			case reply = <-replyCh:
-			case <-time.After(CommitDeploymentTimeout):
+				defer reply.Discard()
+			case <-ticker.C:
 				errCh <- fmt.Errorf("timeout committing for %s: %w", n, ErrDeploymentFailed)
+				return
 			}
-			defer reply.Discard()
 
 			var response CommitDeploymentResponse
 			if err := json.Unmarshal(reply.Message, &response); err != nil {
 				errCh <- fmt.Errorf("error unmarshalling commit response for %s: %w", n, err)
+				return
 			}
 
 			if !response.OK {
 				errCh <- fmt.Errorf("error committing for %s: %s: %w", n, response.Error, ErrDeploymentFailed)
+				return
 			}
 		}(allocName)
 	}
@@ -1417,6 +1431,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		}
 	}
 
+	aggregatedTimeout := time.Duration(len(allocs)) * AllocationDeploymentTimeout
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
@@ -1426,7 +1441,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 			NodeID:      n,
 			Allocations: allocs,
 		},
-		actor.WithMessageTimeout(AllocationDeploymentTimeout),
+		actor.WithMessageTimeout(aggregatedTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation message for %s: %w", n, err)
@@ -1441,7 +1456,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 	var reply actor.Envelope
 	select {
 	case reply = <-replyCh:
-	case <-time.After(AllocationDeploymentTimeout):
+	case <-time.After(aggregatedTimeout):
 		return nil, fmt.Errorf("timeout in allocation for %s: %w", n, err)
 	}
 	defer reply.Discard()
@@ -1821,7 +1836,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					GatewayIP:   gatewayIP,
 					PortMapping: manifest.Ports,
 				},
-				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+				actor.WithMessageExpiry(actor.MakeExpiry(AllocationStartTimeout)),
 			)
 			if err != nil {
 				errCh <- fmt.Errorf("error creating allocation start message: %w", err)
@@ -1833,6 +1848,9 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				errCh <- fmt.Errorf("error invoking allocation start: %w", err)
 				return
 			}
+
+			ticker := time.NewTicker(AllocationStartTimeout)
+			defer ticker.Stop()
 
 			var reply actor.Envelope
 			select {
@@ -1855,7 +1873,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
 					return
 				}
-			case <-time.After(2 * time.Minute):
+			case <-ticker.C:
 				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
 				return
 			}
@@ -2160,8 +2178,11 @@ func (o *Orchestrator) supervise() {
 
 						if !resp.OK {
 							log.Errorf("error in healthcheck: %s", resp.Error)
+
+							o.lock.Lock()
 							failures[allocation.Handle.ID.String()]++
 							v := failures[allocation.Handle.ID.String()]
+							o.lock.Unlock()
 							if v >= 3 {
 								if err := o.escalateFailure(allocation.Handle); err != nil {
 									log.Errorf("failed to escalate failure: %s", err)
@@ -2179,8 +2200,10 @@ func (o *Orchestrator) supervise() {
 
 					case <-ticker.C:
 						log.Warnf("timeout waiting for supervisor reply")
+						o.lock.Lock()
 						failures[allocation.Handle.ID.String()]++
 						v := failures[allocation.Handle.ID.String()]
+						o.lock.Unlock()
 						if v >= 3 {
 							if err := o.escalateFailure(allocation.Handle); err != nil {
 								log.Errorf("failed to escalate failure: %s", err)

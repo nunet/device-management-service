@@ -75,7 +75,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error committing deployment: %s", err)
+		log.Errorf("Error committing deployment: %v", err)
 		n.sendReply(msg, jobs.CommitDeploymentResponse{Error: err.Error()})
 	}
 
@@ -84,6 +84,8 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 		handleErr(err)
 		return
 	}
+
+	log.Infof("committing deployment for %s", request.EnsembleID)
 
 	resp := jobs.CommitDeploymentResponse{}
 	allocationID := types.ConstructAllocationID(request.EnsembleID, request.AllocationName)
