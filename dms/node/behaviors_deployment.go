@@ -74,8 +74,14 @@ func (n *Node) commitDeployment(
 func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error committing deployment: %s", err)
+		n.sendReply(msg, jobs.CommitDeploymentResponse{Error: err.Error()})
+	}
+
 	var request jobs.CommitDeploymentRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(err)
 		return
 	}
 
@@ -84,8 +90,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	request.Resources.AllocationID = allocationID
 	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources, request.PortMapping)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -132,22 +137,21 @@ func (n *Node) saveDeployment(orchestrator jobs.OrchestratorAPI) error {
 func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error in new deployment: %s", err)
+		n.sendReply(msg, NewDeploymentResponse{Status: "ERROR", Error: err.Error()})
+	}
+
 	if time.Until(msg.Expiry()) < MinDeploymentTime {
 		log.Debugf("deployment time too short")
-		n.sendReply(msg, NewDeploymentResponse{
-			Status: "ERROR",
-			Error:  "requested deployment time too short",
-		})
+		handleErr(errors.New("requested deployment time too short"))
 		return
 	}
 
 	var request NewDeploymentRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Debugf("unmarshalling deployment request: %s", err)
-		n.sendReply(msg, NewDeploymentResponse{
-			Status: "ERROR",
-			Error:  err.Error(),
-		})
+		handleErr(fmt.Errorf("error unmarshalling deployment request: %s", err))
 		return
 	}
 
@@ -155,10 +159,7 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	orchestrator, err := n.createOrchestrator(childCtx, request.Ensemble, n.actor)
 	if err != nil {
 		log.Warnf("creating orchestrator: %s", err)
-		n.sendReply(msg, NewDeploymentResponse{
-			Status: "ERROR",
-			Error:  err.Error(),
-		})
+		handleErr(err)
 		return
 	}
 
@@ -212,26 +213,28 @@ type DeploymentLogsResponse struct {
 func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error handling deployment logs: %s", err)
+		n.sendReply(msg, DeploymentLogsResponse{Error: err.Error()})
+	}
+
 	var request DeploymentLogsRequest
 	var resp DeploymentLogsResponse
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("error unmarshalling deployment logs: %s", err))
 		return
 	}
 
 	o, err := n.orchestratorProvider.GetOrchestrator(request.EnsembleID)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
 		return
 	}
 
 	data, err := o.GetAllocationLogs(request.AllocationName)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("failed to get allocation logs: %s", err))
 		return
 	}
 
@@ -244,8 +247,7 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 
 	err = n.writeAllocationLogsTo(allocDir, data.Stdout, data.Stderr)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("failed to write allocation logst: %s", err))
 		return
 	}
 
@@ -265,20 +267,23 @@ type DeploymentStatusResponse struct {
 func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error handling deployment status: %s", err)
+		n.sendReply(msg, DeploymentStatusResponse{Error: err.Error()})
+	}
+
 	var request DeploymentStatusRequest
 	var resp DeploymentStatusResponse
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("error unmarshalling deployment status: %s", err))
 		return
 	}
 
 	o, err := n.orchestratorProvider.GetOrchestrator(request.ID)
 	if err != nil {
 		// TODO: check database for persisted deployments data
-		resp.Error = ErrDeploymentNotFound.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
 		return
 	}
 
@@ -298,20 +303,23 @@ type DeploymentManifestResponse struct {
 func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error handling deployment manifest: %s", err)
+		n.sendReply(msg, DeploymentManifestResponse{Error: err.Error()})
+	}
+
 	var request DeploymentManifestRequest
 	var resp DeploymentManifestResponse
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("error unmarshalling deployment manifest: %s", err))
 		return
 	}
 
 	o, err := n.orchestratorProvider.GetOrchestrator(request.ID)
 	if err != nil {
 		// TODO: check database for persisted deployments data
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -331,19 +339,22 @@ type DeploymentShutdownResponse struct {
 func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error shutting down deployment: %s", err)
+		n.sendReply(msg, DeploymentShutdownResponse{Error: err.Error()})
+	}
+
 	var request DeploymentShutdownRequest
 	var resp DeploymentShutdownResponse
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
 	o, err := n.orchestratorProvider.GetOrchestrator(request.ID)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 

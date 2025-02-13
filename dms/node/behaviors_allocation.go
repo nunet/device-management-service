@@ -56,18 +56,21 @@ func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error destroying subnet: %s", err)
+		n.sendReply(msg, jobs.SubnetDestroyResponse{Error: err.Error()})
+	}
+
 	var request jobs.SubnetDestroyRequest
 	resp := jobs.SubnetDestroyResponse{}
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("error unmarshalling subnet destroy: %s", err))
 		return
 	}
 
 	err := n.network.DestroySubnet(request.SubnetID)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -233,17 +236,20 @@ func (n *Node) createAllocations(
 func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error handling allocation deployment: %s", err)
+		n.sendReply(msg, jobs.AllocationDeploymentResponse{Error: err.Error()})
+	}
+
 	var request jobs.AllocationDeploymentRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(err)
 		return
 	}
 
 	resp := jobs.AllocationDeploymentResponse{}
 	if err := n.addEnsembleBehaviors(request.EnsembleID); err != nil {
-		err = fmt.Errorf("failed to register dynamic behaviors: %w", err)
-		log.Error(err)
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("failed to register dynamic behaviors: %s", err))
 		return
 	}
 
@@ -254,8 +260,7 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 		msg.From,
 	)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -277,19 +282,22 @@ func (n *Node) handleAllocationShutdown(msg actor.Envelope) {
 	log.Debugf("handling allocation shutdown request from %s", msg.From.DID)
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error handling allocation shutdown request: %s", err)
+		n.sendReply(msg, AllocationShutdownResponse{Error: err.Error()})
+	}
+
 	var request AllocationShutdownRequest
 	resp := AllocationShutdownResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(fmt.Errorf("error unmarshalling allocation shutdown request: %s", err))
 		return
 	}
 
 	err := n.allocator.Release(context.Background(), request.AllocationID)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 

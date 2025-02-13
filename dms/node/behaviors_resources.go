@@ -23,12 +23,17 @@ type resourcesResponse struct {
 
 func (n *Node) handleAllocatedResources(msg actor.Envelope) {
 	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling allocated resources: %s", err)
+		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+	}
+
 	resp := resourcesResponse{}
 
 	allocatedResources, err := n.resourceManager.GetTotalAllocation()
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -38,12 +43,17 @@ func (n *Node) handleAllocatedResources(msg actor.Envelope) {
 
 func (n *Node) handleFreeResources(msg actor.Envelope) {
 	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling free resources: %s", err)
+		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+	}
+
 	resp := resourcesResponse{}
 
 	freeResources, err := n.resourceManager.GetFreeResources(context.Background())
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -53,12 +63,17 @@ func (n *Node) handleFreeResources(msg actor.Envelope) {
 
 func (n *Node) handleOnboardedResources(msg actor.Envelope) {
 	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling onboarded resources: %s", err)
+		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+	}
+
 	resp := resourcesResponse{}
 
 	onboardedResources, err := n.resourceManager.GetOnboardedResources(context.Background())
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -69,12 +84,17 @@ func (n *Node) handleOnboardedResources(msg actor.Envelope) {
 
 func (n *Node) handleHardwareUsage(msg actor.Envelope) {
 	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling hardware usage: %s", err)
+		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+	}
+
 	resp := resourcesResponse{}
 
 	hardwareUsage, err := n.hardware.GetUsage()
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
