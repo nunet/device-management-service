@@ -31,11 +31,16 @@ type CapListResponse struct {
 
 func (n *Node) handleCapList(msg actor.Envelope) {
 	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling capabilities list: %s", err)
+		n.sendReply(msg, CapListResponse{Error: err.Error()})
+	}
+
 	var request CapListRequest
 	resp := CapListResponse{}
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -62,23 +67,26 @@ type CapAnchorResponse struct {
 
 func (n *Node) handleCapAnchor(msg actor.Envelope) {
 	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling capability anchor: %s", err)
+		n.sendReply(msg, CapAnchorResponse{Error: err.Error()})
+	}
+
 	var request CapAnchorRequest
 	resp := CapAnchorResponse{}
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
 	if err := n.rootCap.AddRoots(nil, request.Require, request.Provide, request.Revoke); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
 	if err := SaveCapabilityContext(n.rootCap, n.dmsConfig.WorkDir); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
