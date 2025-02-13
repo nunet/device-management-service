@@ -31,20 +31,22 @@ type OnboardResponse struct {
 func (n *Node) handleOnboard(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error onboarding: %s", err)
+		n.sendReply(msg, OnboardResponse{Error: err.Error()})
+	}
+
 	resp := OnboardResponse{}
 
 	var request OnboardRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
 	config, err := n.onboarding.Onboard(context.Background(), request.Config)
 	if err != nil {
-		resp.Error = err.Error()
-		resp.Success = false
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -63,11 +65,14 @@ type OffboardResponse struct {
 func (n *Node) handleOffboard(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error while offboarding: %s", err)
+		n.sendReply(msg, OffboardResponse{Error: err.Error()})
+	}
+
 	resp := OffboardResponse{}
 	if err := n.onboarding.Offboard(context.Background()); err != nil {
-		resp.Success = false
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -82,12 +87,17 @@ type OnboardStatusResponse struct {
 
 func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error obtaining onboard status: %s", err)
+		n.sendReply(msg, OnboardStatusResponse{Error: err.Error()})
+	}
+
 	resp := OnboardStatusResponse{}
 
 	onboarded, err := n.onboarding.IsOnboarded()
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
