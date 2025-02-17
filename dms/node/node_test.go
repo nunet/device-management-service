@@ -21,6 +21,7 @@ import (
 	"github.com/avast/retry-go"
 
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/storage"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/db/repositories"
@@ -127,6 +128,8 @@ func TestNode(t *testing.T) {
 			db.Close()
 		})
 
+		volumeTracker := storage.NewVolumeTracker()
+
 		node, err := New(
 			*config.GetConfig(),
 			afero.Afero{Fs: afero.NewMemMapFs()},
@@ -141,6 +144,7 @@ func TestNode(t *testing.T) {
 			mockGeoIPLocator,
 			Geolocation{},
 			PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
+			volumeTracker,
 		)
 		require.NoError(t, err)
 		require.NotNil(t, node)

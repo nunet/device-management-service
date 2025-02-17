@@ -659,16 +659,12 @@ func makeContainerMounts(
 	// these are paths for both input and output data
 	mounts := make([]mount.Mount, 0)
 	for _, input := range inputs {
-		if input.Type != types.StorageVolumeTypeBind {
-			mounts = append(mounts, mount.Mount{
-				Type:     mount.TypeBind,
-				Source:   input.Source,
-				Target:   input.Target,
-				ReadOnly: input.ReadOnly,
-			})
-		} else {
-			return nil, fmt.Errorf("unsupported storage volume type: %s", input.Type)
-		}
+		mounts = append(mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   input.Source,
+			Target:   input.Target,
+			ReadOnly: input.ReadOnly,
+		})
 	}
 
 	for _, output := range outputs {

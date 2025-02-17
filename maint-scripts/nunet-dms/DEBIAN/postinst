@@ -35,11 +35,11 @@ fi
 
 # Set necessary capabilities for network administration
 if [ -x "$(command -v setcap)" ]; then
-    setcap cap_net_admin+ep /usr/bin/nunet
+    setcap cap_net_admin,cap_sys_admin+ep /usr/bin/nunet
     echo "Network capabilities set for nunet binary"
 else
     echo "Warning: setcap command not found. Unable to set network capabilities for nunet binary."
     echo "You may need to run nunet with elevated privileges or manually set the network capabilities."
     echo "For manual setting, install `libcap2-bin` for Debian/Ubuntu or `libcap` for CentOS/RHEL/Arch"
-    echo "After installing, run `sudo setcap cap_net_admin+ep /usr/bin/nunet`"
+    echo "After installing, run `sudo setcap cap_net_admin,cap_sys_admin+ep /usr/bin/nunet`"
 fi

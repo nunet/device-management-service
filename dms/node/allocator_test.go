@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	"gitlab.com/nunet/device-management-service/storage"
 
 	"gitlab.com/nunet/device-management-service/types"
 
@@ -230,7 +231,9 @@ func TestAllocator(t *testing.T) {
 		mockNetwork := NewMockNetwork(ctrl)
 		fs := afero.Afero{Fs: afero.NewMemMapFs()}
 
-		testAllocator := newAllocator(testPortAllocator, resourceManager, hardwareManager, mockNetwork, fs, t.TempDir(), "testHost")
+		vt := storage.NewVolumeTracker()
+
+		testAllocator := newAllocator(vt, testPortAllocator, resourceManager, hardwareManager, mockNetwork, fs, t.TempDir(), "testHost")
 
 		assert.NotNil(t, testAllocator)
 	})

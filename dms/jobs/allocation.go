@@ -45,6 +45,7 @@ type Job struct {
 	Resources        types.Resources
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
+	Volume           *types.VolumeConfig
 }
 
 // Allocation represents an allocation
@@ -152,6 +153,17 @@ func (a *Allocation) Run(ctx context.Context, subnetIP string, gatewayIP string,
 		ResultsDir:          a.resultsDir,
 		PersistLogsDuration: deleteLogsAfter,
 		GatewayIP:           gatewayIP,
+	}
+
+	if a.Job.Volume != nil {
+		executionRequest.Inputs = []*types.StorageVolumeExecutor{
+			{
+				Type:     "bind",
+				Source:   filepath.Join(a.workDir, "volumes", a.ID, a.Job.Volume.Name),
+				Target:   "/" + a.Job.Volume.Name, // its important to prepend with / as target is expected to be an absolute path
+				ReadOnly: false,
+			},
+		}
 	}
 
 	for hostPort, executorPort := range portMapping {

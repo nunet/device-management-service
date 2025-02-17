@@ -39,6 +39,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/types"
 
 	"go.elastic.co/apm/module/apmgin/v2"
@@ -239,10 +240,12 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		AvailableRangeTo:   gcfg.PortAvailableRangeTo,
 	}
 
+	volumeTracker := storage.NewVolumeTracker()
+
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
-		orchestR, geoip2db, hostLocation, portConfig,
+		orchestR, geoip2db, hostLocation, portConfig, volumeTracker,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)

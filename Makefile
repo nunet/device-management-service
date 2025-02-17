@@ -82,7 +82,7 @@ build_e2e_tests:
 	go test -tags e2e -c ./test/e2e/ -o ./test/e2e/testbinary
 
 setcap: 
-	sudo setcap cap_net_admin+ep ./test/e2e/testbinary
+	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/e2e/testbinary
 
 run_e2e_tests: 
 	./test/e2e/testbinary

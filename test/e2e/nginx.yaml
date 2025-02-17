@@ -1,7 +1,7 @@
 version: "V1"
 
 allocations:
-    alloc1:
+    nginxAllocWithStorage:
         executor: docker
         resources:
             cpu:
@@ -25,8 +25,12 @@ allocations:
                 type: string
                 value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
         dns_name: nginxdemo-alloc
+        volume:
+            type: glusterfs
+            name: nunet_vol
+            servers: ["${hostname}"]
 
 nodes:
     node1:
         allocations:
-            - alloc1
+            - nginxAllocWithStorage

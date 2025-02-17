@@ -11,10 +11,14 @@ package node
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/storage/volume"
 
 	"github.com/spf13/afero"
 
@@ -251,12 +255,16 @@ type allocator struct {
 	fs     afero.Afero
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	volumeTracker *storage.VoumeTracker
 }
 
 var _ Allocator = (*allocator)(nil)
 
 // newAllocator returns a new default allocator
-func newAllocator(portAllocator *portAllocator,
+func newAllocator(
+	vt *storage.VoumeTracker,
+	portAllocator *portAllocator,
 	resourceManager types.ResourceManager,
 	hardwareManager types.HardwareManager,
 	network network.Network,
@@ -266,17 +274,18 @@ func newAllocator(portAllocator *portAllocator,
 ) *allocator {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &allocator{
-		ports:       portAllocator,
-		resources:   resourceManager,
-		hardware:    hardwareManager,
-		network:     network,
-		allocations: make(map[string]*jobs.Allocation),
-		fs:          fs,
-		workDir:     workDir,
-		hostID:      hostID,
-		commits:     make(map[string]int64),
-		ctx:         ctx,
-		cancel:      cancel,
+		ports:         portAllocator,
+		resources:     resourceManager,
+		hardware:      hardwareManager,
+		network:       network,
+		allocations:   make(map[string]*jobs.Allocation),
+		fs:            fs,
+		workDir:       workDir,
+		hostID:        hostID,
+		commits:       make(map[string]int64),
+		ctx:           ctx,
+		cancel:        cancel,
+		volumeTracker: vt,
 	}
 }
 
@@ -297,7 +306,7 @@ func (a *allocator) Commit(ctx context.Context,
 	// Check against the actual hardware usage to ensure dms can guarantee the commitment
 	hasCapacity, err := a.hardware.CheckCapacity(resources.Resources)
 	if err != nil {
-		return fmt.Errorf("check hardware capacity: %v", err)
+		return fmt.Errorf("check hardware capacity: %w", err)
 	}
 
 	if !hasCapacity {
@@ -345,7 +354,7 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 	// uncommit the resources
 	err := a.resources.UncommitResources(ctx, allocationID)
 	if err != nil {
-		return fmt.Errorf("uncommit resources: %v", err)
+		return fmt.Errorf("uncommit resources: %w", err)
 	}
 
 	// uncommit the ports
@@ -356,6 +365,38 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 	delete(a.commits, allocationID)
 	a.lock.Unlock()
 
+	return nil
+}
+
+func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
+	if job.Volume != nil {
+		mounter, err := volume.New(a.volumeTracker, *job.Volume)
+		if err != nil {
+			return fmt.Errorf("create volume: %w", err)
+		}
+
+		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
+		err = createDirIfNotExists(desginationPath)
+		if err != nil {
+			return fmt.Errorf("mount directory: %w", err)
+		}
+
+		err = mounter.Mount(desginationPath, nil)
+		if err != nil {
+			return fmt.Errorf("failed to mount volume: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func createDirIfNotExists(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		err := os.MkdirAll(path, 0o755) // Creates parent directories if needed
+		if err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -374,11 +415,16 @@ func (a *allocator) Allocate(
 	// Check against the actual hardware usage to ensure dms can guarantee the allocation
 	hasCapacity, err := a.hardware.CheckCapacity(job.Resources)
 	if err != nil {
-		return nil, fmt.Errorf("check hardware capacity: %v", err)
+		return nil, fmt.Errorf("check hardware capacity: %w", err)
 	}
 
 	if !hasCapacity {
 		return nil, ErrNoHardwareCapacity
+	}
+
+	err = a.mountVolumeOnHost(job, allocationID)
+	if err != nil {
+		return nil, err
 	}
 
 	// allocate the resources
