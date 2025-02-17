@@ -22,6 +22,7 @@ import (
 
 	lcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/storage"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
@@ -152,6 +153,7 @@ func New(cfg config.Config, fs afero.Afero,
 	hardware types.HardwareManager,
 	orchestratorRepo repositories.OrchestratorView,
 	geoIP types.GeoIPLocator, hostLocation Geolocation, portConfig PortConfig,
+	vt *storage.VoumeTracker,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -204,7 +206,7 @@ func New(cfg config.Config, fs afero.Afero,
 
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
-		allocator:            newAllocator(newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID),
+		allocator:            newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID),
 		hostID:               hostID,
 		network:              net,
 		bids:                 make(map[string]*bidState),

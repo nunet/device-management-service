@@ -39,6 +39,7 @@ type AllocationConfig struct {
 	Keys        []string                  `json:"keys,omitempty"`        // names of the authorized ssh keys for the allocation
 	Provision   []string                  `json:"provision,omitempty"`   // names of provisioning scripts to run (in order)
 	HealthCheck types.HealthCheckManifest `json:"healthcheck,omitempty"` // name of the health check script
+	Volume      *types.VolumeConfig       `json:"volume,omitempty"`      // unified storage configuration (optional)
 }
 
 // AllocationExecutor is the executor reoquired for the allocation

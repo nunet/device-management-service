@@ -170,7 +170,7 @@ network configuration tasks without needing to run the entire application as roo
 To set the necessary capabilities, run the following command:
 
 ```shell
-sudo setcap cap_net_admin+ep /usr/bin/nunet
+sudo setcap cap_net_admin,cap_sys_admin+ep /usr/bin/nunet
 ```
 
 The above command depends on: `libcap2-bin` (Debian/Ubuntu) or `libcap` (CentOS/RHEL/Arch...)

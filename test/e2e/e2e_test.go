@@ -13,10 +13,12 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -179,7 +181,22 @@ func TestDMS(t *testing.T) {
 	pingResult := clidms2.connect(t, dms2Pass, dms1.P2P.Host.ID().String())
 	assert.Contains(t, pingResult, `"Status": "CONNECTED"`)
 
-	deploymentResult := clidms2.deploy(t, dms2Pass, filepath.Join(currentDir, "nginx.yaml"))
+	createDirectories()
+	err = runGlusterContainer()
+	require.NoError(t, err)
+	err = runGlusterCommands()
+	require.NoError(t, err)
+
+	hostname, err := os.Hostname()
+	assert.NoError(t, err)
+	srcFile := filepath.Join(currentDir, "nginx.yaml")
+	destinationFile := filepath.Join(dms1Config.WorkDir, "nginx.yaml")
+	err = copyFile(srcFile, destinationFile)
+	assert.NoError(t, err)
+	err = replaceHostnameInFile(destinationFile, hostname)
+	assert.NoError(t, err)
+
+	deploymentResult := clidms2.deploy(t, dms2Pass, destinationFile)
 	assert.Contains(t, deploymentResult, `"Status": "OK"`)
 	manifestID := extractEnsembleID(deploymentResult)
 
@@ -223,6 +240,18 @@ func TestDMS(t *testing.T) {
 	// should have not port mapping
 	ports := alloc.GetPortMapping()
 	require.Empty(t, ports)
+
+	// write test data to volume
+	// writeExampleFilePath := filepath.Join(dms1Config.WorkDir, "volumes", "nunet_vol", "example.txt")
+	// err = os.WriteFile(writeExampleFilePath, []byte("hello nunet"), 0o777)
+	// assert.NoError(t, err)
+
+	// time.Sleep(2 * time.Second)
+
+	// // check if the brick folder has the data
+	// data, err := os.ReadFile(filepath.Join("/glusterfs_data", "brick2", "example.txt"))
+	// assert.NoError(t, err)
+	// assert.Equal(t, data, []byte("hello nunet"))
 
 	// finally shutdown the deployment
 	shutdownRes := clidms2.shutdownDeployment(t, dms2Pass, manifestID)
@@ -359,6 +388,43 @@ func getProc(pid int32) *process.Process {
 		if p.Pid == pid {
 			return p
 		}
+	}
+
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %w", err)
+	}
+
+	return nil
+}
+
+func replaceHostnameInFile(filePath, hostname string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	modifiedContent := strings.ReplaceAll(string(content), "${hostname}", hostname)
+
+	err = os.WriteFile(filePath, []byte(modifiedContent), 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write back to file: %w", err)
 	}
 
 	return nil

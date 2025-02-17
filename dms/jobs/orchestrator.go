@@ -1404,6 +1404,7 @@ type AllocationDeploymentConfig struct {
 	Resources        types.Resources
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
+	Volume           *types.VolumeConfig
 }
 
 type AllocationDeploymentResponse struct {
@@ -1428,6 +1429,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 			Resources:        acfg.Resources,
 			Execution:        acfg.Execution,
 			ProvisionScripts: provisionScripts,
+			Volume:           acfg.Volume,
 		}
 	}
 
