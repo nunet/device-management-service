@@ -3,9 +3,11 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 )
@@ -26,12 +28,15 @@ func createDirectories() {
 }
 
 func runGlusterContainer() error {
+	glusterImage := "ghcr.io/gluster/gluster-containers:fedora"
+	ctx := context.Background()
+
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
 
-	containers, err := cli.ContainerList(context.Background(), container.ListOptions{All: true})
+	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return fmt.Errorf("failed to list containers: %w", err)
 	}
@@ -43,7 +48,7 @@ func runGlusterContainer() error {
 				return nil
 			}
 
-			if err := cli.ContainerStart(context.Background(), c.ID, container.StartOptions{}); err != nil {
+			if err := cli.ContainerStart(ctx, c.ID, container.StartOptions{}); err != nil {
 				return fmt.Errorf("failed to start stopped container: %w", err)
 			}
 			fmt.Println("Container restarted successfully.")
@@ -67,8 +72,18 @@ func runGlusterContainer() error {
 	}
 
 	containerConfig := &container.Config{
-		Image: "ghcr.io/gluster/gluster-containers:centos",
+		Image: glusterImage,
 		Tty:   true,
+	}
+
+	rc, err := cli.ImagePull(ctx, glusterImage, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+
+	_, err = io.Copy(os.Stdout, rc)
+	if err != nil {
+		return fmt.Errorf("failed to copy image pull response to stdout: %w", err)
 	}
 
 	resp, err := cli.ContainerCreate(context.Background(), containerConfig, hostConfig, nil, nil, containerName)

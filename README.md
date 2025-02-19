@@ -145,10 +145,10 @@ You can add the compiled binary to a directory in your `$PATH`. See the [Usage](
 The following applies _only_ for **compute providers using Linux**. If you're running a client/orchestrator, you do _not_ need to set
 any additional permissions.
 
-> **Darwin users**: unfortunately, the DMS can't work with granular permissions on Mac.
-> So, for now, if running a compute provider, you will have to run the nunet daemon (`nunet run`) as root.
+> **Darwin users**: unfortunately, the DMS can neither work with granular permissions nor
+> with iptables and tun interfaces. Thus, on Darwin, for now, the DMS can only be an orchestrator.
 
-For Linux users, granular permissions will have to be set to the binary (optionally, but _NOT_ recommended, you can run the binary as root).
+For Linux users, granular permissions will have to be set to the binary (possible but _NOT_ recommended way is to run as root).
 
 #### Required: Net-admin permission and IP over libp2p
 
@@ -156,16 +156,12 @@ For Linux users, granular permissions will have to be set to the binary (optiona
 >
 > It's needed for those building from source or downloading the binary releases.
 
-**Note**: `cap_net_admin` is a **required** capability for **compute providers**.
+**Note**: `cap_net_admin` and `cap_sys_admin` are **required** capabilities for **compute providers**.
 
-Setting the permission enables IP over libp2p which is a feature that enhances the capabilities of compute providers, allowing them to participate in a wider
-range of jobs. One capability enabled with this feature is to do port forwarding which it won't be possible without setting the right
-unix permissions.
+Setting the `cap_net_admin` permission enables IP over libp2p which is a feature that enhances the capabilities of compute providers, allowing them to participate in a wider
+range of jobs. One capability enabled with this feature is to do port forwarding which it won't be possible without setting the right unix permissions.
 
-> One of the reasons for requiring this permission is because this feature depends on creating and managing tun interfaces.
-
-To enable this feature, the `nunet` binary requires `network-admin` capabilities. These capabilities allow the application to perform
-network configuration tasks without needing to run the entire application as root, which is a more secure approach.
+Setting the `cap_sys_admin` permission allows the DMS to perform a mount for storage functionality. However, due to `cap_sys_admin` being too wide a permission, please make sure the machine you're setting up on can handle security risk until `cap_sys_admin` is narrowed down to specific actions or there is a better alternative.
 
 To set the necessary capabilities, run the following command:
 
