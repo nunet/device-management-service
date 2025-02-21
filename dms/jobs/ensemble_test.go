@@ -78,8 +78,8 @@ func TestGenerateEnsemble(t *testing.T) {
 		Location: LocationConstraints{
 			Accept: []Location{
 				{
-					Region: "Europe",
-					ASN:    123,
+					Continent: "Europe",
+					ASN:       123,
 				},
 			},
 		},

@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ import (
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	multiaddr "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	multihash "github.com/multiformats/go-multihash"
 	msmux "github.com/multiformats/go-multistream"
 	"github.com/spf13/afero"
@@ -103,6 +105,8 @@ type Libp2p struct {
 	// a list of peers discovered by discovery
 	discoveredPeers []peer.AddrInfo
 	discovery       libp2pdiscovery.Discovery
+
+	observedAddr multiaddr.Multiaddr
 
 	// services
 	pingService *ping.PingService
@@ -261,6 +265,8 @@ func (l *Libp2p) Start() error {
 	l.advertiseRendezvousTask = l.config.Scheduler.AddTask(advertiseRendezvousTask)
 
 	l.config.Scheduler.Start()
+
+	go l.watchForObservedAddr()
 
 	return nil
 }
@@ -566,6 +572,78 @@ func (l *Libp2p) GetPeerIP(p PeerID) string {
 	}
 
 	return ""
+}
+
+// TODO: implementation would be better if we had a libp2p event to get the observable address from identify protocol
+// the observable address is ephemeral and disappears after a while from id service initialization
+// that's why an event would be appropriate
+func (l *Libp2p) watchForObservedAddr() {
+	// 1. assume node has public reachability and
+	// search on listening addresses
+	for _, addr := range l.Host.Addrs() {
+		if manet.IsPublicAddr(addr) {
+			l.mx.Lock()
+			l.observedAddr = addr
+			l.mx.Unlock()
+			log.Debugf("observed public address: %s", addr)
+			return
+		}
+	}
+
+	sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
+	if err != nil {
+		log.Debugf("could not subscribe to event: %w", err)
+		return
+	}
+	defer sub.Close()
+
+	// track address observations
+	addrCount := make(map[string]int)
+	var addrMux sync.Mutex
+
+	for e := range sub.Out() {
+		event := e.(event.EvtPeerIdentificationCompleted)
+
+		if event.ObservedAddr.String() == "" {
+			continue
+		}
+
+		// skip peers without public ip
+		hasPublicAddr := false
+		for _, addr := range event.ListenAddrs {
+			if manet.IsPublicAddr(addr) {
+				hasPublicAddr = true
+				break
+			}
+		}
+		if !hasPublicAddr {
+			continue
+		}
+
+		addrStr := event.ObservedAddr.String()
+		// skip relays
+		if strings.Contains(addrStr, "p2p-circuit") {
+			continue
+		}
+		if !manet.IsPublicAddr(event.ObservedAddr) {
+			continue
+		}
+
+		addrMux.Lock()
+		addrCount[addrStr]++
+		count := addrCount[addrStr]
+		addrMux.Unlock()
+
+		log.Debugf("got public addr: %s (seen %d times)", addrStr, count)
+
+		if count >= 3 {
+			l.mx.Lock()
+			l.observedAddr = event.ObservedAddr
+			l.mx.Unlock()
+			log.Debugf("confirmed public address after seeing it %d times: %s", count, addrStr)
+			return
+		}
+	}
 }
 
 // GetHostID returns the host ID.
@@ -1032,6 +1110,10 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 	}
 
 	return nil
+}
+
+func (l *Libp2p) HostPublicIP() (net.IP, error) {
+	return manet.ToIP(l.observedAddr)
 }
 
 func (l *Libp2p) VisiblePeers() []peer.AddrInfo {

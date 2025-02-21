@@ -36,9 +36,9 @@ func TestBid(t *testing.T) {
 				NodeID:     "testNodeID",
 				Peer:       peerID.String(),
 				Location: Location{
-					Region:  "testRegion",
-					Country: "testCountry",
-					City:    "testCity",
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
 				},
 				Handle: actor.Handle{},
 			},
@@ -69,9 +69,9 @@ func TestBid(t *testing.T) {
 				NodeID:     "testNodeID",
 				Peer:       peerID.String(),
 				Location: Location{
-					Region:  "testRegion",
-					Country: "testCountry",
-					City:    "testCity",
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
 				},
 				Handle: actor.Handle{},
 			},
@@ -103,9 +103,9 @@ func TestBid(t *testing.T) {
 				NodeID:     "testNodeID",
 				Peer:       peerID.String(),
 				Location: Location{
-					Region:  "testRegion",
-					Country: "testCountry",
-					City:    "testCity",
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
 				},
 				Handle: actor.Handle{},
 			},
@@ -129,9 +129,9 @@ func TestBid(t *testing.T) {
 				NodeID:     "testNodeID",
 				Peer:       peerID.String(),
 				Location: Location{
-					Region:  "testRegion",
-					Country: "testCountry",
-					City:    "testCity",
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
 				},
 				Handle: actor.Handle{},
 			},
@@ -155,9 +155,9 @@ func TestBid(t *testing.T) {
 				NodeID:     "testNodeID",
 				Peer:       peerID.String(),
 				Location: Location{
-					Region:  "testRegion",
-					Country: "testCountry",
-					City:    "testCity",
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
 				},
 				Handle: actor.Handle{},
 			},
@@ -181,9 +181,9 @@ func TestBid(t *testing.T) {
 				NodeID:     "testNodeID",
 				Peer:       peerID.String(),
 				Location: Location{
-					Region:  "testRegion",
-					Country: "testCountry",
-					City:    "testCity",
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
 				},
 				Handle: actor.Handle{},
 			},
@@ -207,18 +207,18 @@ func TestBid(t *testing.T) {
 				NodeID:     "testNodeID",
 				Peer:       peerID.String(),
 				Location: Location{
-					Region:  "testRegion",
-					Country: "testCountry",
-					City:    "testCity",
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
 				},
 				Handle: actor.Handle{},
 			},
 		}
 		location := testBid.Location()
 		require.Equal(t, Location{
-			Region:  "testRegion",
-			Country: "testCountry",
-			City:    "testCity",
+			Continent: "testContinent",
+			Country:   "testCountry",
+			City:      "testCity",
 		}, location)
 	})
 

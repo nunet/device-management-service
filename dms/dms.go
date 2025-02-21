@@ -229,9 +229,9 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	capCtx.Start(5 * time.Minute)
 
 	hostLocation := node.Geolocation{
+		Continent: gcfg.HostContinent,
 		Country:   gcfg.HostCountry,
 		City:      gcfg.HostCity,
-		Continent: gcfg.HostContinent,
 	}
 
 	portConfig := node.PortConfig{

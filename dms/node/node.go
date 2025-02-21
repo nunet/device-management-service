@@ -73,12 +73,6 @@ type executorMetadata struct {
 	executionType jobs.AllocationExecutor
 }
 
-type Geolocation struct {
-	Continent string
-	Country   string
-	City      string
-}
-
 type PortConfig struct {
 	AvailableRangeFrom int
 	AvailableRangeTo   int

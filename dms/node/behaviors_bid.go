@@ -161,17 +161,28 @@ loop:
 	}
 	log.Debugf("signing bid with provider: %v", provider.DID())
 
+	var location jobtypes.Location
+	if n.hostLocation.Empty() {
+		loc, err := n.geolocate()
+		if err != nil {
+			log.Debugf("bid request: failed to geolocate node: %w", err)
+		}
+		location = loc
+	} else {
+		location = jobtypes.Location{
+			City:      n.hostLocation.City,
+			Country:   n.hostLocation.Country,
+			Continent: n.hostLocation.Continent,
+		}
+	}
+
 	bid := jobtypes.Bid{
 		V1: &jobtypes.BidV1{
 			EnsembleID: request.ID,
 			NodeID:     toAnswer.V1.NodeID,
 			Peer:       n.hostID,
-			Location: jobtypes.Location{
-				Region:  n.hostLocation.Continent,
-				Country: n.hostLocation.Country,
-				City:    n.hostLocation.City,
-			},
-			Handle: n.actor.Handle(),
+			Location:   location,
+			Handle:     n.actor.Handle(),
 		},
 	}
 
