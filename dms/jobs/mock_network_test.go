@@ -11,6 +11,7 @@ package jobs
 
 import (
 	context "context"
+	net "net"
 	reflect "reflect"
 	time "time"
 
@@ -28,6 +29,7 @@ import (
 type MockNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockNetworkMockRecorder
+	isgomock struct{}
 }
 
 // MockNetworkMockRecorder is the mock recorder for MockNetwork.
@@ -199,6 +201,21 @@ func (m *MockNetwork) HandleMessage(messageType string, handler func([]byte, pee
 func (mr *MockNetworkMockRecorder) HandleMessage(messageType, handler any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockNetwork)(nil).HandleMessage), messageType, handler)
+}
+
+// HostPublicIP mocks base method.
+func (m *MockNetwork) HostPublicIP() (net.IP, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HostPublicIP")
+	ret0, _ := ret[0].(net.IP)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HostPublicIP indicates an expected call of HostPublicIP.
+func (mr *MockNetworkMockRecorder) HostPublicIP() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HostPublicIP", reflect.TypeOf((*MockNetwork)(nil).HostPublicIP))
 }
 
 // Init mocks base method.

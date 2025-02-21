@@ -68,11 +68,11 @@ type LocationConstraints struct {
 
 // Location is a geographical location on Planet Earth
 type Location struct {
-	Region  string `json:"region,omitempty"`  // geographical region
-	Country string `json:"country,omitempty"` // country code
-	City    string `json:"city,omitempty"`    // city name
-	ASN     uint   `json:"asn,omitempty"`     // autonomous system number
-	ISP     string `json:"isp,omitempty"`     // internet service provider
+	Continent string `json:"continent,omitempty"` // geographical region
+	Country   string `json:"country,omitempty"`   // country code
+	City      string `json:"city,omitempty"`      // city name
+	ASN       uint   `json:"asn,omitempty"`       // autonomous system number
+	ISP       string `json:"isp,omitempty"`       // internet service provider
 }
 
 // PortConfig is the configuration for a port mapping a public port to a private port
@@ -155,7 +155,7 @@ func (e *EnsembleConfig) Clone() EnsembleConfig {
 }
 
 func (l *Location) Equal(other Location) bool {
-	if l.Region != other.Region {
+	if l.Continent != other.Continent {
 		return false
 	}
 

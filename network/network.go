@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -105,6 +106,9 @@ type Network interface {
 
 	// GetPeerIP returns the ipv4 or v6 of a peer
 	GetPeerIP(p PeerID) string
+
+	// HostPublicIP returns the public IP of the host
+	HostPublicIP() (net.IP, error)
 
 	// CreateSubnet creates a subnet with the given subnetID and CIDR
 	CreateSubnet(ctx context.Context, subnetID string, routingTable map[string]string) error
