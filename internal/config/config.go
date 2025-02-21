@@ -23,8 +23,8 @@ type General struct {
 	WorkDir                string `mapstructure:"work_dir" json:"work_dir"`
 	DataDir                string `mapstructure:"data_dir" json:"data_dir"`
 	Debug                  bool   `mapstructure:"debug" json:"debug"`
-	HostCountry            string `mapstructure:"host_country" json:"host_country"`
 	HostCity               string `mapstructure:"host_city" json:"host_city"`
+	HostCountry            string `mapstructure:"host_country" json:"host_country"`
 	HostContinent          string `mapstructure:"host_continent" json:"host_continent"`
 	PortAvailableRangeFrom int    `mapstructure:"port_available_range_from" json:"port_available_range_from"`
 	PortAvailableRangeTo   int    `mapstructure:"port_available_range_to" json:"port_available_range_to"`
