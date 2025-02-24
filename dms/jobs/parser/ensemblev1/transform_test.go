@@ -12,10 +12,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 )
 
 func TestTransformStringToBytes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		input       any
@@ -42,7 +44,9 @@ func TestTransformStringToBytes(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := TransformStringToBytes(nil, tt.input, "")
 			if tt.expectError {
 				assert.Error(t, err)
@@ -55,6 +59,7 @@ func TestTransformStringToBytes(t *testing.T) {
 }
 
 func TestTransformSpec(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		input       any
@@ -80,7 +85,7 @@ func TestTransformSpec(t *testing.T) {
 			},
 		},
 		{
-			name: "dns_name defaults to allocation name",
+			name: "allocation default values are set",
 			input: map[string]any{
 				"allocations": map[string]any{
 					"alloc1": map[string]any{},
@@ -91,7 +96,27 @@ func TestTransformSpec(t *testing.T) {
 				"V1": map[string]any{
 					"allocations": map[string]any{
 						"alloc1": map[string]any{
-							"dns_name": "alloc1",
+							"dns_name":         "alloc1",
+							"failure_recovery": defaultAllocationFailureStrategy,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "node default values are set",
+			input: map[string]any{
+				"nodes": map[string]any{
+					"node1": map[string]any{},
+				},
+			},
+			expectError: false,
+			expected: map[string]any{
+				"V1": map[string]any{
+					"nodes": map[string]any{
+						"node1": map[string]any{
+							"failure_recovery": defautNodeFailureStrategy,
+							"redundancy":       0,
 						},
 					},
 				},
@@ -117,7 +142,9 @@ func TestTransformSpec(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := TransformSpec(nil, tt.input, "")
 			if tt.expectError {
 				assert.Error(t, err)
@@ -130,6 +157,7 @@ func TestTransformSpec(t *testing.T) {
 }
 
 func TestTransformEdgeConstraint(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		input       any
@@ -171,7 +199,9 @@ func TestTransformEdgeConstraint(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := TransformEdgeConstraint(nil, tt.input, "")
 			if tt.expectError {
 				assert.Error(t, err)
@@ -184,6 +214,7 @@ func TestTransformEdgeConstraint(t *testing.T) {
 }
 
 func TestTransformVolume(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		root        *map[string]any
@@ -252,7 +283,9 @@ func TestTransformVolume(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := TransformVolume(tt.root, tt.input, tt.path)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -265,6 +298,7 @@ func TestTransformVolume(t *testing.T) {
 }
 
 func TestTransformResources(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		root        *map[string]any
@@ -417,7 +451,9 @@ func TestTransformResources(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := TransformResources(tt.root, tt.input, tt.path)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -430,6 +466,7 @@ func TestTransformResources(t *testing.T) {
 }
 
 func TestNewEnsemblev1Transformer(t *testing.T) {
+	t.Parallel()
 	input := map[string]any{
 		"version": "V1",
 		"resources": map[string]any{
@@ -462,7 +499,8 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 					"type":  "docker",
 					"image": "nginx",
 				},
-				"dns_name": "node1",
+				"dns_name":         "node1",
+				"failure_recovery": defaultAllocationFailureStrategy,
 			},
 			"alloc2": map[string]any{
 				"resources": "rc1",
@@ -472,6 +510,11 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 					"image": "redis",
 				},
 				"dns_name": "node2",
+			},
+		},
+		"nodes": map[string]any{
+			"node1": map[string]any{
+				"allocations": []any{"alloc1"},
 			},
 		},
 		"edge_constraints": []any{
@@ -532,7 +575,8 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 							"image": "nginx",
 						},
 					},
-					"dns_name": "node1",
+					"dns_name":         "node1",
+					"failure_recovery": defaultAllocationFailureStrategy,
 				},
 				"alloc2": map[string]any{
 					"resources": map[string]any{
@@ -552,7 +596,15 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 							"image": "redis",
 						},
 					},
-					"dns_name": "node2",
+					"dns_name":         "node2",
+					"failure_recovery": defaultAllocationFailureStrategy,
+				},
+			},
+			"nodes": map[string]any{
+				"node1": map[string]any{
+					"allocations":      []any{"alloc1"},
+					"redundancy":       0,
+					"failure_recovery": defautNodeFailureStrategy,
 				},
 			},
 			"edges": []any{

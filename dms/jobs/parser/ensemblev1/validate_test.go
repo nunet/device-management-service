@@ -19,6 +19,7 @@ import (
 // TODO: avoid asserting error string messages.
 // Only assert error msgs if using sentinel errors
 func TestValidateSpec(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		spec     any
@@ -100,10 +101,54 @@ func TestValidateSpec(t *testing.T) {
 			wantErr:  true,
 			errorMsg: "nodes must be defined when edge_constraints are present",
 		},
+		{
+			// escalation_strategy must be one of the supported values
+			name: "unsupported escalation strategy",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{},
+				},
+				"escalation_strategy": "invalid",
+			},
+			wantErr:  true,
+			errorMsg: "invalid escalation_strategy",
+		},
+		{
+			// valid escalation strategy
+			name: "valid escalation strategy",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{},
+				},
+				"escalation_strategy": "redeploy",
+			},
+			wantErr: false,
+		},
+		{
+			// cyclic dependency detected
+			name: "cyclic dependency detected",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"depends_on": []any{"alloc2", "alloc3"},
+					},
+					"alloc2": map[string]any{
+						"depends_on": []any{"alloc3"},
+					},
+					"alloc3": map[string]any{
+						"depends_on": []any{"alloc1"},
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "cyclic dependencies detected",
+		},
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateSpec(nil, tt.spec, "")
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -116,10 +161,12 @@ func TestValidateSpec(t *testing.T) {
 }
 
 func TestValidateAllocation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		root     map[string]any
 		alloc    any
+		path     tree.Path
 		wantErr  bool
 		errorMsg string
 	}{
@@ -132,8 +179,9 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
 			},
 			wantErr: false,
 		},
@@ -148,8 +196,9 @@ func TestValidateAllocation(t *testing.T) {
 			// Required field 'execution' must exist
 			name: "missing execution",
 			alloc: map[string]any{
-				"executor":  "docker",
-				"resources": map[string]any{},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
 			},
 			wantErr:  true,
 			errorMsg: "allocation must have an execution",
@@ -161,7 +210,8 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"resources": map[string]any{},
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
 			},
 			wantErr:  true,
 			errorMsg: "allocation must have an executor",
@@ -173,7 +223,8 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor": "docker",
+				"executor":         "docker",
+				"failure_recovery": defaultAllocationFailureStrategy,
 			},
 			wantErr:  true,
 			errorMsg: "allocation must have resources",
@@ -182,9 +233,10 @@ func TestValidateAllocation(t *testing.T) {
 			// Execution must have a required field 'type'
 			name: "missing execution type",
 			alloc: map[string]any{
-				"execution": map[string]any{},
-				"executor":  "docker",
-				"resources": map[string]any{},
+				"execution":        map[string]any{},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
 			},
 			wantErr:  true,
 			errorMsg: "execution must have a type",
@@ -196,8 +248,9 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "firecracker",
-				"resources": map[string]any{},
+				"executor":         "firecracker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
 			},
 			wantErr:  true,
 			errorMsg: "must match execution type",
@@ -209,9 +262,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"dns_name":  "invalid..dns",
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"dns_name":         "invalid..dns",
 			},
 			wantErr:  true,
 			errorMsg: "invalid dns_name",
@@ -223,9 +277,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"dns_name":  "valid-dns.com",
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"dns_name":         "valid-dns.com",
 			},
 			wantErr: false,
 		},
@@ -237,9 +292,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"keys":      []any{"valid-key"},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys":             []any{"valid-key"},
 			},
 			wantErr:  true,
 			errorMsg: "keys must be defined",
@@ -256,9 +312,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"keys":      []any{"non-existent-key"},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys":             []any{"non-existent-key"},
 			},
 			wantErr:  true,
 			errorMsg: "key 'non-existent-key' not found",
@@ -271,9 +328,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"keys":      []any{},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys":             []any{},
 			},
 			wantErr: false,
 		},
@@ -289,9 +347,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"keys":      []any{"valid-key"},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys":             []any{"valid-key"},
 			},
 			wantErr: false,
 		},
@@ -303,9 +362,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"provision": []any{"valid-script"},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"provision":        []any{"valid-script"},
 			},
 			wantErr:  true,
 			errorMsg: "scripts must be defined",
@@ -322,9 +382,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"provision": []any{"non-existent-script"},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"provision":        []any{"non-existent-script"},
 			},
 			wantErr:  true,
 			errorMsg: "script 'non-existent-script' not found",
@@ -337,9 +398,10 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
-				"executor":  "docker",
-				"resources": map[string]any{},
-				"provision": []any{},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"provision":        []any{},
 			},
 			wantErr: false,
 		},
@@ -355,20 +417,132 @@ func TestValidateAllocation(t *testing.T) {
 				"execution": map[string]any{
 					"type": "docker",
 				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"provision":        "valid-script",
+			},
+			wantErr: false,
+		},
+		{
+			// failure recovery not defined
+			name: "failure recovery not defined",
+			alloc: map[string]any{
+				"execution": map[string]any{
+					"type": "docker",
+				},
 				"executor":  "docker",
 				"resources": map[string]any{},
-				"provision": "valid-script",
 			},
+			wantErr:  true,
+			errorMsg: "failure_recovery must be specified",
+		},
+		{
+			// failure recovery must be one of the supported options
+			name: "unsupported failure recovery",
+			alloc: map[string]any{
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": "invalid",
+			},
+			wantErr:  true,
+			errorMsg: "invalid failure_recovery",
+		},
+		{
+			// valid failure recovery
+			name: "valid failure recovery",
+			alloc: map[string]any{
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+			},
+			wantErr: false,
+		},
+		{
+			// depends on must be a list of allocations
+			name: "depends on must be a list of allocations",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       "alloc1",
+			},
+			wantErr:  true,
+			errorMsg: "depends_on must be a list",
+		},
+		{
+			// depends on must be a valid reference
+			name: "depends on must be a valid reference",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       []any{"invalid"},
+			},
+			wantErr:  true,
+			errorMsg: "not found",
+		},
+		{
+			// depends on can not reference itself
+			name: "depends on can not reference itself",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       []any{"alloc1"},
+			},
+			path:     tree.NewPath("V1", "allocations", "alloc1"),
+			wantErr:  true,
+			errorMsg: "depends_on must not refer to itself",
+		},
+		{
+			// valid depends on
+			name: "valid depends on",
+			root: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{},
+				},
+			},
+			alloc: map[string]any{
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       []any{"alloc1"},
+			},
+			path:    tree.NewPath("V1", "allocations", "alloc2"),
 			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.root != nil && tt.root["V1"] == nil {
 				tt.root["V1"] = tt.root
 			}
-			err := ValidateAllocation(&tt.root, tt.alloc, "")
+			err := ValidateAllocation(&tt.root, tt.alloc, tt.path)
 			if tt.wantErr {
 				assert.Error(t, err, "expected error: %q", tt.errorMsg)
 				assert.Contains(t, err.Error(), tt.errorMsg)
@@ -380,6 +554,7 @@ func TestValidateAllocation(t *testing.T) {
 }
 
 func TestValidateResources(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		data     any
@@ -870,7 +1045,9 @@ func TestValidateResources(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateResources(nil, tt.data, "")
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -883,6 +1060,7 @@ func TestValidateResources(t *testing.T) {
 }
 
 func TestValidateNode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		node        map[string]any
@@ -895,7 +1073,8 @@ func TestValidateNode(t *testing.T) {
 			// Valid node with all required fields
 			name: "valid node",
 			node: map[string]any{
-				"allocations": []any{"alloc1", "alloc2"},
+				"allocations":      []any{"alloc1", "alloc2"},
+				"failure_recovery": defaultAllocationFailureStrategy,
 				"ports": []any{
 					map[string]any{
 						"public":     8080,
@@ -927,6 +1106,7 @@ func TestValidateNode(t *testing.T) {
 			// Invalid port number
 			name: "invalid port number",
 			node: map[string]any{
+				"failure_recovery": defautNodeFailureStrategy,
 				"ports": []any{
 					map[string]any{
 						"public":     80,
@@ -944,6 +1124,7 @@ func TestValidateNode(t *testing.T) {
 			// Invalid location
 			name: "invalid location",
 			node: map[string]any{
+				"failure_recovery": defautNodeFailureStrategy,
 				"location": map[string]any{
 					"accept": []any{
 						map[string]any{
@@ -962,7 +1143,8 @@ func TestValidateNode(t *testing.T) {
 			// Allocation not found
 			name: "allocation not found",
 			node: map[string]any{
-				"allocations": []any{"nonexistent"},
+				"allocations":      []any{"nonexistent"},
+				"failure_recovery": defautNodeFailureStrategy,
 			},
 			root: map[string]any{
 				"allocations": map[string]any{},
@@ -975,7 +1157,8 @@ func TestValidateNode(t *testing.T) {
 			// Invalid allocation reference type
 			name: "invalid allocation reference type",
 			node: map[string]any{
-				"allocations": []any{123},
+				"allocations":      []any{123},
+				"failure_recovery": defautNodeFailureStrategy,
 			},
 			root: map[string]any{
 				"allocations": map[string]any{},
@@ -984,10 +1167,65 @@ func TestValidateNode(t *testing.T) {
 			expectError: true,
 			errorMsg:    "invalid allocation reference: 123",
 		},
+		{
+			// redundancy should be a number
+			name: "invalid redundancy type",
+			node: map[string]any{
+				"redundancy":       "invalid",
+				"failure_recovery": defautNodeFailureStrategy,
+			},
+			expectError: true,
+			errorMsg:    "redundancy must be a number",
+		},
+		{
+			// redundancy should be positive
+			name: "redundancy should be a positive number",
+			node: map[string]any{
+				"redundancy":       -1,
+				"failure_recovery": defautNodeFailureStrategy,
+			},
+			expectError: true,
+			errorMsg:    "redundancy must be a positive number",
+		},
+		{
+			// valid redundancy
+			name: "valid redundancy",
+			node: map[string]any{
+				"redundancy":       1,
+				"failure_recovery": defautNodeFailureStrategy,
+			},
+			expectError: false,
+		},
+		{
+			// failure recovery not defined
+			name:        "failure recovery not defined",
+			node:        map[string]any{},
+			expectError: true,
+			errorMsg:    "failure_recovery must be specified",
+		},
+		{
+			// failure recovery should be one of the supported options
+			name: "unsupported failure recovery",
+			node: map[string]any{
+				"failure_recovery": "invalid",
+			},
+			expectError: true,
+			errorMsg:    "invalid failure_recovery",
+		},
+		{
+			// valid failure_recovery
+			name: "valid failure_recovery",
+			node: map[string]any{
+				"failure_recovery": defautNodeFailureStrategy,
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.root != nil && tt.root["V1"] == nil {
 				tt.root["V1"] = tt.root
 			}
@@ -995,7 +1233,7 @@ func TestValidateNode(t *testing.T) {
 			if tt.expectError {
 				assert.Error(t, err)
 				if tt.errorMsg != "" {
-					assert.Equal(t, tt.errorMsg, err.Error())
+					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -1005,6 +1243,7 @@ func TestValidateNode(t *testing.T) {
 }
 
 func TestValidateExecution(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		execution   map[string]any
@@ -1168,7 +1407,9 @@ func TestValidateExecution(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateExecution(nil, tt.execution, "")
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1183,6 +1424,7 @@ func TestValidateExecution(t *testing.T) {
 }
 
 func TestValidateSupervisor(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		supervisor  map[string]any
@@ -1250,7 +1492,9 @@ func TestValidateSupervisor(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.root != nil && tt.root["V1"] == nil {
 				tt.root["V1"] = tt.root
 			}
@@ -1268,6 +1512,7 @@ func TestValidateSupervisor(t *testing.T) {
 }
 
 func TestValidateLocation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		location    any
@@ -1363,7 +1608,9 @@ func TestValidateLocation(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateLocation(tt.location, 0)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1378,6 +1625,7 @@ func TestValidateLocation(t *testing.T) {
 }
 
 func TestValidateLocationConstraints(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		location    map[string]any
@@ -1455,7 +1703,9 @@ func TestValidateLocationConstraints(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateLocationConstraints(tt.location)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1470,6 +1720,7 @@ func TestValidateLocationConstraints(t *testing.T) {
 }
 
 func TestValidateEdgeConstraints(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		edgeConstraint any
@@ -1640,7 +1891,9 @@ func TestValidateEdgeConstraints(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.root != nil && tt.root["V1"] == nil {
 				tt.root["V1"] = tt.root
 			}
@@ -1658,6 +1911,7 @@ func TestValidateEdgeConstraints(t *testing.T) {
 }
 
 func TestNewEnsembleV1Validator(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		config      map[string]any
@@ -1668,6 +1922,7 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 			name: "valid complete configuration",
 			config: map[string]any{
 				"V1": map[string]any{
+					"escalation_strategy": "redeploy",
 					"allocations": map[string]any{
 						"alloc1": map[string]any{
 							"executor": "docker",
@@ -1691,6 +1946,7 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 									"size": 10000,
 								},
 							},
+							"failure_recovery": "one_for_one",
 						},
 						"alloc2": map[string]any{
 							"executor": "firecracker",
@@ -1713,6 +1969,8 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 									"size": 10000,
 								},
 							},
+							"failure_recovery": "one_for_all",
+							"depends_on":       []any{"alloc1"},
 						},
 					},
 					"nodes": map[string]any{
@@ -1739,6 +1997,8 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 									"allocation": "alloc1",
 								},
 							},
+							"redundancy":       2,
+							"failure_recovery": "restart",
 						},
 						"node2": map[string]any{
 							"allocations": []any{"alloc2"},
@@ -1749,6 +2009,7 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 									},
 								},
 							},
+							"failure_recovery": "restart",
 						},
 					},
 					"edges": []any{
@@ -1780,7 +2041,9 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			validator := NewEnsembleV1Validator()
 			err := validator.Validate(&tt.config)
 			if tt.expectError {
@@ -1796,6 +2059,7 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 }
 
 func TestValidateHealthCheck(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		data     any
@@ -1839,7 +2103,9 @@ func TestValidateHealthCheck(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateHealthCheck(nil, tt.data, "")
 			if tt.wantErr {
 				assert.Error(t, err, "expected error: %q", tt.errorMsg)

@@ -1,5 +1,7 @@
 version: "V1"
 
+escalation_strategy: redeploy
+
 allocations:
     alloc1:
         executor: docker
@@ -14,6 +16,9 @@ allocations:
         execution:
             type: docker
             image: kennethreitz/httpbin 
+        failure_recovery: rest_for_one
+        depends_on: alloc2
+
     alloc2:
         executor: docker
         resources:
@@ -28,10 +33,13 @@ allocations:
             type: docker
             image: buildpack-deps
             cmd: [tail, -f, /dev/null]
+        # failure_recovery: one_for_one
 nodes:
     node1:
         allocations:
             - alloc1
+        redundancy: 2
+        failure_recovery: stay_down
         ports:
             - public: 8080
               private: 80
@@ -39,6 +47,7 @@ nodes:
     node2:
         allocations:
             - alloc2
+        failure_recovery: restart
         ports:
             - public: 8080
               private: 80

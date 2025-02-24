@@ -11,6 +11,9 @@ The following yaml file contains the available fields of an ensemble with the ex
 ```
 version: "V1"
 
+# (Optional) Escalation strategy for the ensemble; options include "redeploy" and "tear_down"
+escalation_strategy: redeploy
+
 allocations:
   # Named allocation configurations in the ensemble
   alloc1:
@@ -71,11 +74,24 @@ allocations:
     # Health check script name for verifying allocation health
     healthcheck: ""
 
+    # Failure recovery strategy for the allocation; options include "stay_down", "one_for_one", "one_for_all", and "rest_for_one"
+    failure_recovery: stay_down
+
+    # (Optional) List of allocations that this allocation depends on
+    depends_on: ["alloc2"]
+
+
 nodes:
   # Named node configurations in the ensemble
   node1:
     allocations:
       - alloc1               # List of allocations assigned to this node
+
+    # (Optional) redundancy factor for the node
+    redundancy: 1
+
+    # Failure recovery strategy for the node; options include "stay_down", "restart", "redeploy"
+    failure_recovery: stay_down
 
     ports:
         public: 1            # Number of public ports requested
