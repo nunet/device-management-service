@@ -22,24 +22,34 @@ type EnsembleConfig struct {
 
 // EnsembleConfigV1 is version 1 of the configuration for an ensemble
 type EnsembleConfigV1 struct {
-	Allocations map[string]AllocationConfig `json:"allocations"`          // (named) allocations in the ensemble
-	Nodes       map[string]NodeConfig       `json:"nodes"`                // (named) nodes in the ensemble
-	Edges       []EdgeConstraint            `json:"edges,omitempty"`      // network edge constraints
-	Supervisor  SupervisorConfig            `json:"supervisor,omitempty"` // supervision structure
-	Keys        map[string]string           `json:"keys,omitempty"`       // (named) ssh public keys relevant to the allocation
-	Scripts     map[string][]byte           `json:"scripts,omitempty"`    // (named) provisioning scripts
+	EscalationStrategy EscalationStrategy          `json:"escalation_strategy"`  // escalation strategy (redeploy|teardown)
+	Allocations        map[string]AllocationConfig `json:"allocations"`          // (named) allocations in the ensemble
+	Nodes              map[string]NodeConfig       `json:"nodes"`                // (named) nodes in the ensemble
+	Edges              []EdgeConstraint            `json:"edges,omitempty"`      // network edge constraints
+	Supervisor         SupervisorConfig            `json:"supervisor,omitempty"` // supervision structure
+	Keys               map[string]string           `json:"keys,omitempty"`       // (named) ssh public keys relevant to the allocation
+	Scripts            map[string][]byte           `json:"scripts,omitempty"`    // (named) provisioning scripts
 }
+
+type EscalationStrategy string
+
+const (
+	EscalationStrategyRedeploy EscalationStrategy = "redeploy"
+	EscalationStrategyTeardown EscalationStrategy = "teardown"
+)
 
 // AllocationConfig is the configuration of an allocation
 type AllocationConfig struct {
-	Executor    AllocationExecutor        `json:"executor"`              // the executor of the allocation
-	Resources   types.Resources           `json:"resources"`             // the HW resources required by the allocation
-	Execution   types.SpecConfig          `json:"execution"`             // the allocation execution configuration
-	DNSName     string                    `json:"dns_name,omitempty"`    // the internal DNS name of the allocation
-	Keys        []string                  `json:"keys,omitempty"`        // names of the authorized ssh keys for the allocation
-	Provision   []string                  `json:"provision,omitempty"`   // names of provisioning scripts to run (in order)
-	HealthCheck types.HealthCheckManifest `json:"healthcheck,omitempty"` // name of the health check script
-	Volume      *types.VolumeConfig       `json:"volume,omitempty"`      // unified storage configuration (optional)
+	Executor        AllocationExecutor        `json:"executor"`                   // the executor of the allocation
+	Resources       types.Resources           `json:"resources"`                  // the HW resources required by the allocation
+	Execution       types.SpecConfig          `json:"execution"`                  // the allocation execution configuration
+	DNSName         string                    `json:"dns_name,omitempty"`         // the internal DNS name of the allocation
+	Keys            []string                  `json:"keys,omitempty"`             // names of the authorized ssh keys for the allocation
+	Provision       []string                  `json:"provision,omitempty"`        // names of provisioning scripts to run (in order)
+	HealthCheck     types.HealthCheckManifest `json:"healthcheck,omitempty"`      // name of the health check script
+	Volume          *types.VolumeConfig       `json:"volume,omitempty"`           // unified storage configuration (optional)
+	FailureRecovery AllocationFailureRecovery `json:"failure_recovery,omitempty"` // failure recovery (stay_down|one_for_one|one_for_all|rest_for_one)
+	DependsOn       []string                  `json:"depends_on,omitempty"`       // list of allocations that this allocation depends on
 }
 
 // AllocationExecutor is the executor reoquired for the allocation
@@ -51,14 +61,35 @@ const (
 	ExecutorNull        AllocationExecutor = "null"
 )
 
+// AllocationFailureRecovery
+type AllocationFailureRecovery string
+
+const (
+	AllocationFailureRecoveryStayDown   AllocationFailureRecovery = "stay_down"
+	AllocationFailureRecoveryOneForOne  AllocationFailureRecovery = "one_for_one"
+	AllocationFailureRecoveryOneForAll  AllocationFailureRecovery = "one_for_all"
+	AllocationFailureRecoveryRestForOne AllocationFailureRecovery = "rest_for_one"
+)
+
 // NodeConfig is the configuration of a distinct DMS node
 type NodeConfig struct {
-	Allocations []string            `json:"allocations"`        // list of allocation IDs
-	Ports       []PortConfig        `json:"ports,omitempty"`    // list of port mappings
-	Location    LocationConstraints `json:"location,omitempty"` // location constraints
-	Peer        string              `json:"peer,omitempty"`     // peer ID to use for this node
+	Allocations     []string            `json:"allocations"`                // list of allocation IDs
+	Ports           []PortConfig        `json:"ports,omitempty"`            // list of port mappings
+	Location        LocationConstraints `json:"location,omitempty"`         // location constraints
+	Peer            string              `json:"peer,omitempty"`             // peer ID to use for this node
+	Redundancy      int                 `json:"redundancy,omitempty"`       // number of redundant nodes
+	FailureRecovery NodeFailureRecovery `json:"failure_recovery,omitempty"` // failure recovery (stay_down|restart|redeploy)
 	// TODO contract information
 }
+
+// NodeFailureRecovery is the failure recovery strategy for a node
+type NodeFailureRecovery string
+
+const (
+	NodeFailureRecoveryStayDown NodeFailureRecovery = "stay_down"
+	NodeFailureRecoveryRestart  NodeFailureRecovery = "restart"
+	NodeFailureRecoveryRedeploy NodeFailureRecovery = "redeploy"
+)
 
 // LocationConstraints provides the node location placement constraints
 type LocationConstraints struct {

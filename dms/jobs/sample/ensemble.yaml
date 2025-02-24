@@ -108,6 +108,7 @@ allocations:
       - "cleanup"   # Reference to script in scripts section
     keys:
       - "worker1-key"
+    failure_recovery: "stay_down"
 
   worker2:
     executor: "docker"
@@ -123,6 +124,7 @@ allocations:
       - "setup"  # Reference to script in scripts section
     keys:
       - "worker2-key"
+    depends_on: ["worker1"]
 
   vm1:
     executor: "firecracker"

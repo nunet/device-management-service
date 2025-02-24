@@ -11,6 +11,7 @@ package ensemblev1
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
@@ -18,6 +19,17 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/validate"
 	cutils "gitlab.com/nunet/device-management-service/utils/convert"
 	vutils "gitlab.com/nunet/device-management-service/utils/validate"
+)
+
+const (
+	defaultAllocationFailureStrategy = "stay_down"
+	defautNodeFailureStrategy        = "stay_down"
+)
+
+var (
+	validEscalationStrategies        = [...]string{"redeploy", "teardown"}
+	validAllocationFailureStrategies = [...]string{"stay_down", "one_for_one", "one_for_all", "rest_for_one"}
+	validNodeFailureStrategies       = [...]string{"stay_down", "restart", "redeploy"}
 )
 
 // NewEnsembleV1Validator creates a new validator for the NuNet configuration.
@@ -39,9 +51,16 @@ func NewEnsembleV1Validator() validate.Validator {
 
 // ValidateSpec checks the root configuration for consistency.
 func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
-	spec, ok := data.(map[string]any)
-	if !ok {
+	spec, dataOk := data.(map[string]any)
+	if !dataOk {
 		return fmt.Errorf("invalid spec configuration: %v", data)
+	}
+
+	// validate escalation strategy if present
+	if es, ok := spec["escalation_strategy"].(string); ok {
+		if !slices.Contains(validEscalationStrategies[:], es) {
+			return fmt.Errorf("invalid escalation_strategy %q: must be one of %q", es, validEscalationStrategies)
+		}
 	}
 
 	// Check if the allocations map is present and not empty
@@ -57,6 +76,12 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 		}
 	}
 
+	// check for cyclic dependencies
+	graph := utils.CreateAdjencyList(allocs, tree.NewPath("depends_on"))
+	if utils.DetectCycles(graph) {
+		return fmt.Errorf("cyclic dependencies detected in allocations")
+	}
+
 	// Check if nodes are defined when edge_constraints are present
 	if edges, ok := spec["edges"].([]any); ok && len(edges) > 0 {
 		if spec["nodes"] == nil {
@@ -68,7 +93,7 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 }
 
 // ValidateAllocation checks the allocation configuration.
-func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
+func ValidateAllocation(root *map[string]any, data any, path tree.Path) error {
 	allocation, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid allocation configuration: %v", data)
@@ -112,6 +137,39 @@ func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
 		// Add basic DNS name format validation
 		if !vutils.IsDNSNameValid(dnsName) {
 			return fmt.Errorf("invalid dns_name format: %s", dnsName)
+		}
+	}
+
+	// validate failure_recovery
+	if failureRecovery, ok := allocation["failure_recovery"].(string); ok {
+		if !slices.Contains(validAllocationFailureStrategies[:], failureRecovery) {
+			return fmt.Errorf("invalid failure_recovery %q: must be one of %q", failureRecovery, validAllocationFailureStrategies)
+		}
+	} else {
+		return fmt.Errorf("failure_recovery must be specified for allocation")
+	}
+
+	// validate depends_on if present
+	if dependsOn, ok := allocation["depends_on"]; ok {
+		dependsOn, ok := dependsOn.([]any)
+		if !ok {
+			return fmt.Errorf("depends_on must be a list of allocation names")
+		}
+		var allocs map[string]any
+		if cfg, err := utils.GetConfigAtPath(*root, "V1.allocations"); err == nil {
+			allocs, _ = cfg.(map[string]any)
+		}
+		for _, v := range dependsOn {
+			dep, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("depends_on must be a list of allocation names")
+			}
+			if dep != "" && path.Last() == dep {
+				return fmt.Errorf("depends_on must not refer to itself")
+			}
+			if alloc, exists := allocs[dep]; !exists || alloc == nil {
+				return fmt.Errorf("depends_on allocation '%s' not found", dependsOn)
+			}
 		}
 	}
 
@@ -309,6 +367,27 @@ func ValidateNode(root *map[string]any, data any, _ tree.Path) error {
 				return fmt.Errorf("referenced allocation '%s' not found", allocStr)
 			}
 		}
+	}
+
+	// validate redundancy if present
+	if redundancy, ok := node["redundancy"]; ok {
+		// check if redundancy is a positive integer
+		redundancyInt, ok := redundancy.(int)
+		if !ok {
+			return fmt.Errorf("redundancy must be a number")
+		}
+		if redundancyInt < 0 {
+			return fmt.Errorf("redundancy must be a positive number")
+		}
+	}
+
+	// validate failure recovery
+	if failureRecovery, ok := node["failure_recovery"].(string); ok {
+		if !slices.Contains(validNodeFailureStrategies[:], failureRecovery) {
+			return fmt.Errorf("invalid failure_recovery %q: must be one of %q", failureRecovery, validNodeFailureStrategies)
+		}
+	} else {
+		return fmt.Errorf("failure_recovery must be specified for node")
 	}
 
 	// Validate ports if specified

@@ -32,6 +32,8 @@ func TestGenerateEnsemble(t *testing.T) {
 		Scripts:     make(map[string][]byte),
 	}
 
+	ens.EscalationStrategy = jobtypes.EscalationStrategyRedeploy
+
 	specdock := docker.NewDockerEngineBuilder("image1").WithWorkingDirectory("/").WithCmd("withCMD").WithEntrypoint("WithEntrypoint").WithEnvironment("env1").Build()
 
 	ens.Allocations["alloc1"] = jobtypes.AllocationConfig{
@@ -48,8 +50,9 @@ func TestGenerateEnsemble(t *testing.T) {
 				},
 			},
 		},
-		Execution: *specdock,
-		DNSName:   "mydocker",
+		Execution:       *specdock,
+		DNSName:         "mydocker",
+		FailureRecovery: jobtypes.AllocationFailureRecoveryOneForAll,
 	}
 
 	firecrackerspec := firecracker.NewFirecrackerEngineBuilder("/").WithInitrd("WithInitrd").WithKernelImage("WithInitrd").WithRootFileSystem("/").Build()
@@ -61,15 +64,17 @@ func TestGenerateEnsemble(t *testing.T) {
 			Disk: types.Disk{Size: 20},
 			GPUs: make(types.GPUs, 0),
 		},
-		Execution: *firecrackerspec,
-
-		DNSName: "myfirecracker",
+		Execution:       *firecrackerspec,
+		DNSName:         "myfirecracker",
+		FailureRecovery: jobtypes.AllocationFailureRecoveryOneForAll,
 	}
 
 	peerID := "peeridhere"
 
 	ens.Nodes["node1"] = NodeConfig{
-		Allocations: []string{"alloc1"},
+		Allocations:     []string{"alloc1"},
+		Redundancy:      1,
+		FailureRecovery: jobtypes.NodeFailureRecoveryStayDown,
 		Ports: []jobtypes.PortConfig{{
 			Public:     1,
 			Private:    1,
@@ -87,7 +92,9 @@ func TestGenerateEnsemble(t *testing.T) {
 	}
 
 	ens.Nodes["node2"] = NodeConfig{
-		Allocations: []string{"alloc2"},
+		Allocations:     []string{"alloc2"},
+		Redundancy:      2,
+		FailureRecovery: jobtypes.NodeFailureRecoveryStayDown,
 		Ports: []jobtypes.PortConfig{{
 			Public:     1,
 			Private:    1,

@@ -21,11 +21,13 @@ import (
 func NewEnsemblev1Transformer() transform.Transformer {
 	return transform.NewTransformer(
 		[]map[tree.Path]transform.TransformerFunc{
+			// Transform key value pairs to slices with name as key
 			{
 				"allocations.*.volumes": transform.MapToNamedSliceTransformer("volume"),
 				"volumes":               transform.MapToNamedSliceTransformer("volume"),
 				"resources":             transform.MapToNamedSliceTransformer("resource"),
 			},
+			// Transform configs
 			{
 				"allocations.*.volumes.[]": TransformVolume,
 				"allocations.*.resources":  TransformResources,
@@ -61,13 +63,33 @@ func TransformSpec(_ *map[string]interface{}, data any, _ tree.Path) (any, error
 		return nil, fmt.Errorf("invalid spec configuration: %v", data)
 	}
 
-	// set dns_name of allocations to the allocation name if not set
+	// set default values for allocations
 	if allocations, ok := spec["allocations"]; ok {
 		for allocName, alloc := range allocations.(map[string]any) {
-			allocation, ok := alloc.(map[string]any)
-			if ok {
+			if allocation, ok := alloc.(map[string]any); ok {
+				// set dns_name of allocations to the allocation name if not set
 				if allocation["dns_name"] == nil {
 					allocation["dns_name"] = allocName
+				}
+				// set failure_recovery to "stay_down" if not set
+				if allocation["failure_recovery"] == nil {
+					allocation["failure_recovery"] = defaultAllocationFailureStrategy
+				}
+			}
+		}
+	}
+
+	// set default values for nodes
+	if nodes, ok := spec["nodes"]; ok {
+		for _, node := range nodes.(map[string]any) {
+			if nodeConfig, ok := node.(map[string]any); ok {
+				// set failure_recovery to "stay_down" if not set
+				if nodeConfig["failure_recovery"] == nil {
+					nodeConfig["failure_recovery"] = defautNodeFailureStrategy
+				}
+				// set redundancy to 1 if not set
+				if nodeConfig["redundancy"] == nil {
+					nodeConfig["redundancy"] = 0
 				}
 			}
 		}
