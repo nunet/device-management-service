@@ -408,9 +408,11 @@ func (a *allocator) Allocate(
 	executor types.Executor,
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
+	a.lock.Lock()
 	if _, ok := a.commits[allocationID]; !ok {
 		return nil, fmt.Errorf("allocation not committed: %s", allocationID)
 	}
+	a.lock.Unlock()
 
 	// Check against the actual hardware usage to ensure dms can guarantee the allocation
 	hasCapacity, err := a.hardware.CheckCapacity(job.Resources)

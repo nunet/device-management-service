@@ -42,6 +42,20 @@ func GetNetInterfaceByName(name string) (*net.Interface, error) {
 	return net.InterfaceByName(name)
 }
 
+// GetNetInterfaceByFlags gets the network interface by the flags
+func GetNetInterfaceByFlags(flag net.Flags) (*net.Interface, error) {
+	ifaces, err := GetNetInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&flag != 0 {
+			return &iface, nil
+		}
+	}
+	return nil, nil
+}
+
 func GetUsedAddresses() ([]string, error) {
 	ifaces, err := GetNetInterfaces()
 	if err != nil {

@@ -66,6 +66,7 @@ type peerState struct {
 
 type bidState struct {
 	expire  time.Time
+	nonce   uint64
 	request jobtypes.BidRequest
 }
 
@@ -100,6 +101,7 @@ type Node struct {
 	hostLocation Geolocation
 	peers        map[peer.ID]*peerState
 	bids         map[string]*bidState
+	answeredBids map[string][]uint64
 	running      atomic.Bool
 
 	// db state
@@ -204,6 +206,7 @@ func New(cfg config.Config, fs afero.Afero,
 		hostID:               hostID,
 		network:              net,
 		bids:                 make(map[string]*bidState),
+		answeredBids:         make(map[string][]uint64),
 		peers:                make(map[peer.ID]*peerState),
 		resourceManager:      resourceManager,
 		hardware:             hardware,
@@ -485,6 +488,7 @@ func (n *Node) doGCBidState() {
 	for k, bs := range n.bids {
 		if bs.expire.Before(now) {
 			delete(n.bids, k)
+			delete(n.answeredBids, k)
 		}
 	}
 }

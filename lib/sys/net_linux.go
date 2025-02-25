@@ -220,10 +220,9 @@ func ForwardingEnabled() (bool, error) {
 }
 
 // AddDNATRule adds a DNAT rule to iptables PRERROUTING chain
-func AddDNATRule(protocol, sourceIP, sourcePort, destIP, destPort string) error {
+func AddDNATRule(protocol, sourcePort, destIP, destPort string) error {
 	args := []string{
-		"PREROUTING", "-t", "nat",
-		"-d", sourceIP, "-p", protocol,
+		"PREROUTING", "-t", "nat", "-p", protocol,
 		"--dport", sourcePort, "-j", "DNAT",
 		"--to-destination", destIP + ":" + destPort,
 	}
@@ -240,10 +239,9 @@ func AddDNATRule(protocol, sourceIP, sourcePort, destIP, destPort string) error 
 }
 
 // DelDNATRule deletes a DNAT rule to iptables PRERROUTING chain if it exists
-func DelDNATRule(protocol, sourceIP, sourcePort, destIP, destPort string) error {
+func DelDNATRule(protocol, sourcePort, destIP, destPort string) error {
 	args := []string{
-		"PREROUTING", "-t", "nat",
-		"-d", sourceIP, "-p", protocol,
+		"PREROUTING", "-t", "nat", "-p", protocol,
 		"--dport", sourcePort, "-j", "DNAT",
 		"--to-destination", destIP + ":" + destPort,
 	}
@@ -278,6 +276,41 @@ func DelForwardRule(protocol, destIP, destPort string) error {
 		"FORWARD", "-t", "filter",
 		"-p", protocol, "-d", destIP,
 		"--dport", destPort, "-j", "ACCEPT",
+	}
+	if iptRuleExist(args...) {
+		err := iptDeleteRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding froward rule: %w", err)
+		}
+	}
+	return nil
+}
+
+// AddOutputNatRule adds an iptable DNAT rule to OUTPUT chain nat table to redirect
+// the locally originating packets not included in the prerouting chain
+// takes the iface name to restrict the rule to the specified interface (normally loopback)
+// sudo iptables -t nat -A OUTPUT -p tcp --dport 7224 -o lo -j DNAT --to-destination 10.49.64.3:7224
+func AddOutputNatRule(protocol, destIP, destPort, ifaceName string) error {
+	args := []string{
+		"OUTPUT", "-t", "nat", "-p", protocol,
+		"--dport", destPort, "-o", ifaceName,
+		"-j", "DNAT", "--to-destination", destIP + ":" + destPort,
+	}
+	if !iptRuleExist(args...) {
+		err := iptAppendRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding forward rule: %w", err)
+		}
+	}
+	return nil
+}
+
+// DelOutputNatRule deletes an output chain dnat rule
+func DelOutputNatRule(protocol, destIP, destPort, ifaceName string) error {
+	args := []string{
+		"OUTPUT", "-t", "nat", "-p", protocol,
+		"--dport", destPort, "-o", ifaceName,
+		"-j", "DNAT", "--to-destination", destIP + ":" + destPort,
 	}
 	if iptRuleExist(args...) {
 		err := iptDeleteRule(args...)

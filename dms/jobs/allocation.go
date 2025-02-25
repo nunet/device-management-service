@@ -228,7 +228,8 @@ func (a *Allocation) Cleanup() error {
 
 // Terminate stops the allocation and cleans up after
 func (a *Allocation) Terminate(ctx context.Context) error {
-	if a.status != AllocationStopped && a.status != AllocationCompleted {
+	status := a.Status(ctx)
+	if status.Status != AllocationStopped && status.Status != AllocationCompleted {
 		err := a.Stop(ctx)
 		if err != nil {
 			log.Warnf("failed to stop allocation: %s", err)
@@ -289,6 +290,8 @@ func (a *Allocation) Stop(ctx context.Context) error {
 
 // Status returns information about the allocated/usage of resources and execution status of workload.
 func (a *Allocation) Status(_ context.Context) Status {
+	a.lock.Lock()
+	defer a.lock.Unlock()
 	return Status{
 		JobResources: a.Job.Resources,
 		Status:       a.status,

@@ -36,6 +36,8 @@ func runGlusterContainer() error {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
 
+	cli.NegotiateAPIVersion(ctx)
+
 	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return fmt.Errorf("failed to list containers: %w", err)
@@ -105,6 +107,9 @@ func runGlusterCommands() error {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
 
+	ctx := context.Background()
+	cli.NegotiateAPIVersion(ctx)
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		return fmt.Errorf("failed to get hostname: %w", err)
@@ -122,12 +127,12 @@ func runGlusterCommands() error {
 			AttachStderr: true,
 		}
 
-		execIDResp, err := cli.ContainerExecCreate(context.Background(), containerName, execConfig)
+		execIDResp, err := cli.ContainerExecCreate(ctx, containerName, execConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create exec instance: %w", err)
 		}
 
-		if err := cli.ContainerExecStart(context.Background(), execIDResp.ID, container.ExecStartOptions{}); err != nil {
+		if err := cli.ContainerExecStart(ctx, execIDResp.ID, container.ExecStartOptions{}); err != nil {
 			return fmt.Errorf("failed to start exec command: %w", err)
 		}
 	}

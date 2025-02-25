@@ -323,14 +323,14 @@ func startTrace(ctx context.Context, operationName string, keyValues ...interfac
 	}
 
 	startTime := time.Now()
-	log.Info("Operation started with new request-like transaction",
+	log.Debug("Operation started with new request-like transaction",
 		"operation", operationName,
 		"trace.id", newTx.TraceContext().Trace.String(),
 		"transaction.id", newTx.TraceContext().Span.String())
 
 	return func() {
 		duration := time.Since(startTime)
-		log.Info("Operation ended",
+		log.Debug("Operation ended",
 			"operation", operationName,
 			"duration", duration,
 			"trace.id", newTx.TraceContext().Trace.String(),

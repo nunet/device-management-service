@@ -38,12 +38,13 @@ func TestDMS(t *testing.T) {
 	// setup the temporary data directories for each dms
 	const dms1RootDir = "dms1_root_dir"
 	const dms2RootDir = "dms2_root_dir"
+	const dms3RootDir = "dms3_root_dir"
 	currentDir := getCurrentFileDirectory()
 	assert.NotEmpty(t, currentDir)
 
 	// first clear any temp data directory
-	// since we run 2 processes, delete only in main process
-	if os.Getenv("NEW_PROCESS") != "node2" {
+	// since we run 3 processes, delete only in main process
+	if os.Getenv("NEW_PROCESS") != "node2" && os.Getenv("NEW_PROCESS") != "node3" {
 		// kill previous processes if any
 		data, err := os.ReadFile(filepath.Join(currentDir, dms2RootDir, "proc.pid"))
 		if err == nil {
@@ -56,16 +57,30 @@ func TestDMS(t *testing.T) {
 			}
 		}
 
+		data, err = os.ReadFile(filepath.Join(currentDir, dms3RootDir, "proc.pid"))
+		if err == nil {
+			pid, err := strconv.Atoi(string(data))
+			if err == nil {
+				err := killProcess(int32(pid))
+				if err != nil {
+					t.Logf("no process to kill: %d : %v", pid, err)
+				}
+			}
+		}
+
 		os.RemoveAll(filepath.Join(currentDir, dms1RootDir))
 		os.RemoveAll(filepath.Join(currentDir, dms2RootDir))
+		os.RemoveAll(filepath.Join(currentDir, dms3RootDir))
 	}
 
 	dms1Pass := "1234"
 	dms2Pass := "4567"
+	dms3Pass := "7890"
 
 	// due to an issue related to broadcasting, which most probably is from the pubsub package
 	// we run the second dms instance in another process and this fixes the issue.
 	// please dont move this section and leave it here
+	dms3Config := createConfig(dms3RootDir, 8092, "/ip4/127.0.0.1/tcp/10684", []string{})
 	dms2Config := createConfig(dms2RootDir, 8091, "/ip4/127.0.0.1/tcp/10683", []string{})
 	dms1Config := createConfig(dms1RootDir, 8089, "/ip4/127.0.0.1/tcp/10689", []string{})
 
@@ -77,6 +92,18 @@ func TestDMS(t *testing.T) {
 
 		err = dms2.Run()
 		require.NoError(t, err)
+		select {}
+	}
+
+	if os.Getenv("NEW_PROCESS") == "node3" {
+		dms3Config.BootstrapPeers = []string{os.Getenv("BOOTSTRAP_NODE")}
+		dms3, err := dms.NewDMS(dms3Config, dms3Pass, "dms")
+		require.NoError(t, err)
+		assert.NotNil(t, dms3)
+
+		err = dms3.Run()
+		require.NoError(t, err)
+
 		select {}
 	}
 
@@ -102,23 +129,51 @@ func TestDMS(t *testing.T) {
 	dms2UserDID := clidms2.getDID(t, "user.cap", dms2Pass)
 	clidms2.addRootAnchorToDMS(t, dms2UserDID, dms2Pass)
 
-	// grant each other
-	grantToken1 := clidms1.grant(t, dms2UserDID, dms1Pass)
-	clidms1.anchorDMS(t, grantToken1, "dms", "require", dms1Pass)
-	clidms2.anchorDMS(t, grantToken1, "user", "provide", dms2Pass)
+	clidms3 := newCLI(dms3Config)
 
-	grantToken2 := clidms2.grant(t, dms1UserDID, dms2Pass)
-	clidms1.anchorDMS(t, grantToken2, "user", "provide", dms1Pass)
-	clidms2.anchorDMS(t, grantToken2, "dms", "require", dms2Pass)
+	// create keys and caps for dms3
+	clidms3.newKey(t, "dms", dms3Pass)
+	clidms3.newKey(t, "user", dms3Pass)
+	clidms3.newCap(t, "dms", dms3Pass)
+	clidms3.newCap(t, "user", dms3Pass)
+	dms3DID := clidms3.getDID(t, "dms.cap", dms3Pass)
+	dms3UserDID := clidms3.getDID(t, "user.cap", dms3Pass)
+	clidms3.addRootAnchorToDMS(t, dms3UserDID, dms3Pass)
+
+	// grant each other
+	grantToken12 := clidms1.grant(t, dms2UserDID, dms1Pass)
+	grantToken13 := clidms1.grant(t, dms3UserDID, dms1Pass)
+	clidms1.anchorDMS(t, grantToken12, "dms", "require", dms1Pass)
+	clidms1.anchorDMS(t, grantToken13, "dms", "require", dms1Pass)
+	clidms2.anchorDMS(t, grantToken12, "user", "provide", dms2Pass)
+	clidms3.anchorDMS(t, grantToken13, "user", "provide", dms3Pass)
+
+	grantToken21 := clidms2.grant(t, dms1UserDID, dms2Pass)
+	grantToken23 := clidms2.grant(t, dms3UserDID, dms2Pass)
+	clidms1.anchorDMS(t, grantToken21, "user", "provide", dms1Pass)
+	clidms2.anchorDMS(t, grantToken21, "dms", "require", dms2Pass)
+	clidms2.anchorDMS(t, grantToken23, "dms", "require", dms2Pass)
+	clidms3.anchorDMS(t, grantToken23, "dms", "provide", dms3Pass)
+
+	grantToken32 := clidms3.grant(t, dms2UserDID, dms3Pass)
+	clidms2.anchorDMS(t, grantToken32, "dms", "provide", dms2Pass)
+	clidms3.anchorDMS(t, grantToken32, "dms", "require", dms3Pass)
+
+	grantToken31 := clidms3.grant(t, dms1UserDID, dms3Pass)
+	clidms1.anchorDMS(t, grantToken31, "dms", "provide", dms1Pass)
+	clidms3.anchorDMS(t, grantToken31, "dms", "require", dms3Pass)
 
 	delegToken1 := clidms1.delegateToDMS(t, dms1DID, dms1Pass)
 	delgToken2 := clidms2.delegateToDMS(t, dms2DID, dms2Pass)
+	delgToken3 := clidms3.delegateToDMS(t, dms3DID, dms3Pass)
 
 	fmt.Println("DELEGATE TO DMS TOKEN 1", delegToken1)
 	fmt.Println("DELEGATE TO DMS TOKEN 2", delgToken2)
+	fmt.Println("DELEGATE TO DMS TOKEN 3", delgToken3)
 
 	clidms1.anchorDMS(t, delegToken1, "dms", "provide", dms1Pass)
 	clidms2.anchorDMS(t, delgToken2, "dms", "provide", dms2Pass)
+	clidms3.anchorDMS(t, delgToken3, "dms", "provide", dms3Pass)
 
 	// create a dms instance
 	dms1, err := dms.NewDMS(dms1Config, dms1Pass, "dms")
@@ -159,19 +214,44 @@ func TestDMS(t *testing.T) {
 		os.Exit(1)
 	}()
 
+	cmd3 := exec.Command(os.Args[0], "-test.run=TestDMS")
+	cmd3.Env = append(os.Environ(), "NEW_PROCESS=node3", "BOOTSTRAP_NODE="+bootstrap[0])
+	cmd3.Stdout = os.Stdout
+	cmd3.Stderr = os.Stderr
+	if err := cmd3.Start(); err != nil {
+		t.Fatalf("Failed to start Node 3 subprocess: %v", err)
+	}
+	defer func() {
+		_ = cmd3.Process.Kill()
+	}()
+
+	// write the pid to a file and kill the process if its running
+	err = os.WriteFile(filepath.Join(currentDir, dms3RootDir, "proc.pid"), []byte(fmt.Sprintf("%d", cmd3.Process.Pid)), 0o700)
+	require.NoError(t, err)
+
+	go func() {
+		<-internal.ShutdownChan
+		_ = cmd3.Process.Kill()
+		os.Exit(1)
+	}()
+
+	time.Sleep(10 * time.Second)
+
 	require.Eventually(t, func() bool {
 		knownPeers, err := dms1.P2P.KnownPeers()
 		require.NoError(t, err)
-		return len(knownPeers) == 2
-	}, 15*time.Second, 100*time.Millisecond, "Known peers is not 2 within the expected time")
+		return len(knownPeers) == 3
+	}, 15*time.Second, 100*time.Millisecond, "Known peers is not 3 within the expected time")
 
 	// broadcast
 	result := clidms1.broadcast(t, dms1Pass)
-	assert.Equal(t, 2, countDIDOccurrences(result))
+	fmt.Println("BROADCAST RESULT", result)
+	assert.Equal(t, 3, countDIDOccurrences(result))
 
 	// onboard
 	clidms1.onboard(t, dms1Pass)
 	clidms2.onboard(t, dms2Pass)
+	clidms3.onboard(t, dms3Pass)
 	// check onboarded status
 
 	// get the free resources before we deploy anything
@@ -189,7 +269,7 @@ func TestDMS(t *testing.T) {
 
 	hostname, err := os.Hostname()
 	assert.NoError(t, err)
-	srcFile := filepath.Join(currentDir, "nginx.yaml")
+	srcFile := filepath.Join(currentDir, "nginx2.yaml")
 	destinationFile := filepath.Join(dms1Config.WorkDir, "nginx.yaml")
 	err = copyFile(srcFile, destinationFile)
 	assert.NoError(t, err)
@@ -237,9 +317,13 @@ func TestDMS(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, freeResourceWhileDeplymentRunning.Equal(freeResourcesBeforeDeplyment.Resources))
 
-	// should have not port mapping
+	// alloc1 should not have port mapping - alloc2 should have 1
 	ports := alloc.GetPortMapping()
-	require.Empty(t, ports)
+	if strings.Contains(alloc.ID, "alloc1") {
+		require.Empty(t, ports)
+	} else {
+		require.Equal(t, 1, len(ports))
+	}
 
 	// write test data to volume
 	// writeExampleFilePath := filepath.Join(dms1Config.WorkDir, "volumes", "nunet_vol", "example.txt")
@@ -285,11 +369,9 @@ func TestDMS(t *testing.T) {
 		t.Log("second ensemble status", extractedStatus)
 		// TODO: change the following to Completed
 		// after we add the completed status
-		return extractedStatus == "Running"
+		allAllocations = dms1.Node.Allocator().GetAllocations()
+		return extractedStatus == "Running" && len(allAllocations) == 1
 	}, 60*time.Second, 100*time.Millisecond, "failed to run second deployment hello.yaml within the expected time")
-
-	allAllocations = dms1.Node.Allocator().GetAllocations()
-	require.Len(t, allAllocations, 1)
 
 	// get the only running allocation
 	var helloAlloc *jobs.Allocation
@@ -309,7 +391,7 @@ func TestDMS(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	revokeToken := clidms1.revokeToken(t, dms1Pass, grantToken1)
+	revokeToken := clidms1.revokeToken(t, dms1Pass, grantToken12)
 	clidms1.anchorBehaviour(t, dms1Pass, revokeToken)
 
 	time.Sleep(3 * time.Second)

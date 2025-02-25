@@ -72,7 +72,7 @@ func (rs *Server) ActorHandle(c *gin.Context) {
 		},
 	}
 
-	log.Infow("actor_handle_retrieve_success", "id", id, "DID", actorDID)
+	log.Debugw("actor_handle_retrieve_success", "id", id, "DID", actorDID)
 	c.JSON(http.StatusOK, handle)
 }
 
@@ -182,7 +182,7 @@ func (rs *Server) ActorInvoke(c *gin.Context) {
 
 	select {
 	case responseMsg := <-responseCh:
-		log.Infow("actor_invoke_success", "destination", msg.To.Address.HostID)
+		log.Debugw("actor_invoke_success", "destination", msg.To.Address.HostID)
 		c.JSON(http.StatusOK, responseMsg)
 		return
 	case <-time.After(time.Until(msg.Expiry())):
@@ -278,7 +278,7 @@ func (rs *Server) ActorBroadcast(c *gin.Context) {
 	case <-c.Request.Context().Done():
 		// request context done
 	}
-	log.Infow("actor_broadcast_success", "fromAddress", msg.From.Address.HostID, "responsesCount", len(messages))
+	log.Debugw("actor_broadcast_success", "fromAddress", msg.From.Address.HostID, "responsesCount", len(messages))
 	c.JSON(http.StatusOK, messages)
 }
 

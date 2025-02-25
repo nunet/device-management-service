@@ -52,13 +52,13 @@ func (n *Node) commitDeployment(
 	ensembleID, allocationID string,
 	resources types.CommittedResources, ports map[int]int,
 ) error {
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
-	bid, ok := n.bids[ensembleID]
+	bid, ok := n.getBid(ensembleID)
 	if !ok {
 		return fmt.Errorf("no bid requests for ensemble id: %s", ensembleID)
 	}
+
+	n.lock.Lock()
+	defer n.lock.Unlock()
 
 	if bid.expire.Before(time.Now()) {
 		return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
@@ -386,7 +386,13 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	// forget bid
 	n.lock.Lock()
 	delete(n.bids, ensembleID)
+	delete(n.answeredBids, ensembleID)
 	n.lock.Unlock()
+
+	err := n.network.DestroySubnet(request.EnsembleID)
+	if err != nil {
+		log.Warnf("failed to destroy subnet for ensemble id: %s: %v (it may not have been created or may already been destroyed)", ensembleID, err)
+	}
 
 	for _, allocName := range request.AllocsByName {
 		allocID := types.ConstructAllocationID(ensembleID, allocName)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand"
+	"slices"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -26,14 +27,17 @@ func (n *Node) getExecutor(execType jobs.AllocationExecutor) (executorMetadata, 
 	return e, nil
 }
 
-func (n *Node) storeBid(eid string, req jobtypes.BidRequest) {
+func (n *Node) storeBid(eid string, nonce uint64, req jobtypes.BidRequest) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
 	n.bids[eid] = &bidState{
 		expire:  time.Now().Add(bidStateTimeout),
+		nonce:   nonce,
 		request: req,
 	}
+
+	n.answeredBids[eid] = append(n.answeredBids[eid], nonce)
 }
 
 func (n *Node) getBid(eid string) (*bidState, bool) {
@@ -43,6 +47,18 @@ func (n *Node) getBid(eid string) (*bidState, bool) {
 	b, exists := n.bids[eid]
 
 	return b, exists
+}
+
+func (n *Node) bidAnswered(eid string, nonce uint64) bool {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	for e, n := range n.answeredBids {
+		if e == eid && slices.Contains(n, nonce) {
+			return true
+		}
+	}
+	return false
 }
 
 func (n *Node) handleBidRequest(msg actor.Envelope) {
@@ -73,12 +89,6 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		return
 	}
 
-	_, bidExists := n.getBid(request.ID)
-	if bidExists {
-		log.Debugf("bid already sent for request: %s", request.ID)
-		return
-	}
-
 	machineResources, err := n.hardware.GetMachineResources()
 	if err != nil {
 		log.Debugf("get machine resources")
@@ -99,6 +109,12 @@ loop:
 		if v.V1 == nil {
 			log.Debug("bid request not v1")
 			continue
+		}
+
+		answered := n.bidAnswered(request.ID, request.Nonce)
+		if answered {
+			log.Debugf("bid already answered: ensembleID: %s, nonce: %d", request.ID, request.Nonce)
+			return
 		}
 
 		// check if we are excluded
@@ -193,5 +209,5 @@ loop:
 	}
 
 	n.sendReply(msg, bid)
-	n.storeBid(request.ID, toAnswer)
+	n.storeBid(request.ID, request.Nonce, toAnswer)
 }
