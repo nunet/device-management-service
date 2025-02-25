@@ -222,7 +222,7 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 		return types.FreeResources{}, fmt.Errorf("subtracting committed resources: %w", err)
 	}
 
-	log.Debugf("Free Resources: %+v", freeResources)
+	log.Debugf("Free Resources: %+v", freeResources.Resources)
 
 	return freeResources, nil
 }

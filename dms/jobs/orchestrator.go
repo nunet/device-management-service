@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -142,7 +143,7 @@ func restoreDeployment(
 
 	if o.status == DeploymentStatusProvisioning {
 		log.Debug("restoring deployment from manifest")
-		if err := o.provision(o.manifest); err != nil {
+		if err := o.provision(); err != nil {
 			log.Errorf("failed to provision network: %s", err)
 			o.revert(manifest)
 			return o, o.deploy(restoreInfo.Expiry)
@@ -249,6 +250,8 @@ type Orchestrator struct {
 	status   DeploymentStatus
 
 	deploymentSnapshot DeploymentSnapshot
+
+	nonce uint64
 }
 
 var _ OrchestratorAPI = (*Orchestrator)(nil)
@@ -411,6 +414,20 @@ deploy:
 			return true
 		}
 
+		// remove bid from bidMap and peerExclusion
+		rmBid := func(bid Bid) {
+			peerID := bid.Peer()
+			delete(peerExclusion, peerID)
+			nodeID := bid.NodeID()
+			bids := bidMap[nodeID]
+			for i, b := range bids {
+				if b.Peer() == peerID {
+					bidMap[nodeID] = append(bids[:i], bids[i+1:]...)
+					break
+				}
+			}
+		}
+
 		log.Debugf("collecting bids")
 		bidCh, bidDoneCh, bidExpiryTime, err := o.requestBids(bidrq, expiry)
 		if err != nil {
@@ -437,7 +454,7 @@ deploy:
 			// Note: in order to facilitate random selection, the residual bid requests
 			//       can drop some of the original bids
 			log.Debugf("creating residual bid request")
-			bidrq, err := o.makeResidualBidRequest(bidMap, peerExclusion)
+			bidrq, err := o.makeResidualBidRequest(bidMap, rmBid)
 			if err != nil {
 				return fmt.Errorf("creating residual bid request: %w", err)
 			}
@@ -454,6 +471,13 @@ deploy:
 		if !ok {
 			log.Debugf("failed to create candidate deployments - trying again")
 			continue deploy
+		}
+
+		for n, bids := range bidMap {
+			log.Infof("node %s has %d bids", n, len(bids))
+			for _, bid := range bids {
+				log.Infof("    bid from %s", bid.Peer())
+			}
 		}
 
 		// 4. Iterate through the candidates trying to find one that satisfies the
@@ -489,11 +513,15 @@ deploy:
 			continue deploy
 		}
 
+		o.lock.Lock()
+		o.manifest = manifest
+		o.lock.Unlock()
+
 		// 6. provision the network and start the allocations
 		o.setStatus(DeploymentStatusProvisioning)
 
 		log.Info("provisioning network")
-		if err := o.provision(o.manifest); err != nil {
+		if err := o.provision(); err != nil {
 			log.Errorf("failed to provision network: %s", err)
 
 			o.lock.Lock()
@@ -697,6 +725,7 @@ func (o *Orchestrator) requestBids(bidRequest jobtypes.EnsembleBidRequest, expir
 		nodeConfig, _ := o.cfg.Node(req.V1.NodeID)
 		targetedReq := EnsembleBidRequest{
 			ID:            bidRequest.ID,
+			Nonce:         bidRequest.Nonce,
 			Request:       []BidRequest{req},
 			PeerExclusion: bidRequest.PeerExclusion,
 		}
@@ -739,6 +768,7 @@ func (o *Orchestrator) requestBids(bidRequest jobtypes.EnsembleBidRequest, expir
 	if len(broadcastRequests) > 0 {
 		broadcastReq := EnsembleBidRequest{
 			ID:            bidRequest.ID,
+			Nonce:         bidRequest.Nonce,
 			Request:       broadcastRequests,
 			PeerExclusion: bidRequest.PeerExclusion,
 		}
@@ -1492,8 +1522,8 @@ type SubnetCreateResponse struct {
 	Error string
 }
 
-func (o *Orchestrator) provision(em EnsembleManifest) error {
-	log.Infof("provisioning ensemble manifest: %+v", em)
+func (o *Orchestrator) provision() error {
+	log.Infof("provisioning ensemble manifest: %+v", o.manifest)
 
 	// 1. create subnet
 	// 1.a generate routing table
@@ -1517,13 +1547,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	routingTable := make(map[string]string)
 	indexRoutingTable := make(map[string]string)
-	for allocationID, manifest := range em.Allocations {
+	for allocationID, manifest := range o.manifest.Allocations {
 		ip, err := netutils.GetNextIP(cidr, usedIPs)
 		log.Debug("Generated IP", ip, "for alllocation", allocationID)
 		if err != nil {
 			return fmt.Errorf("error getting next IP: %w", err)
 		}
-		routingTable[ip.String()] = em.Nodes[manifest.NodeID].Peer
+		routingTable[ip.String()] = o.manifest.Nodes[manifest.NodeID].Peer
 		indexRoutingTable[allocationID] = ip.String()
 		usedIPs[ip.String()] = true
 
@@ -1535,9 +1565,9 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 		o.lock.Unlock()
 	}
 
-	errCh := make(chan error, len(em.Allocations))
+	errCh := make(chan error, len(o.manifest.Allocations))
 	wg := sync.WaitGroup{}
-	for _, manifest := range em.Nodes {
+	for _, manifest := range o.manifest.Nodes {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1545,9 +1575,9 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, em.ID),
+				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, o.manifest.ID),
 				SubnetCreateRequest{
-					SubnetID:     em.ID,
+					SubnetID:     o.manifest.ID,
 					RoutingTable: routingTable,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -1606,8 +1636,8 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1.b create and plug IPs
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(em.Allocations))
-	for allocationID, manifest := range em.Allocations {
+	errCh = make(chan error, len(o.manifest.Allocations))
+	for allocationID, manifest := range o.manifest.Allocations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1616,9 +1646,9 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				manifest.Handle,
 				behaviors.SubnetAddPeerBehavior,
 				SubnetAddPeerRequest{
-					SubnetID: em.ID,
+					SubnetID: o.manifest.ID,
 					IP:       indexRoutingTable[allocationID],
-					PeerID:   em.Nodes[manifest.NodeID].Peer,
+					PeerID:   o.manifest.Nodes[manifest.NodeID].Peer,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
@@ -1674,13 +1704,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1.c configure DNS
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(em.Allocations))
+	errCh = make(chan error, len(o.manifest.Allocations))
 	dnsRecords := make(map[string]string)
-	for allocationID, manifest := range em.Allocations {
+	for allocationID, manifest := range o.manifest.Allocations {
 		dnsRecords[manifest.DNSName] = indexRoutingTable[allocationID]
 	}
 
-	for _, manifest := range em.Allocations {
+	for _, manifest := range o.manifest.Allocations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1689,7 +1719,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				manifest.Handle,
 				behaviors.SubnetDNSAddRecordsBehavior,
 				SubnetDNSAddRecordsRequest{
-					SubnetID: em.ID,
+					SubnetID: o.manifest.ID,
 					Records:  dnsRecords,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -1747,9 +1777,9 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1.d configure port mapping
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(em.Allocations))
-	for allocationID, manifest := range em.Allocations {
-		for srcPort, destPort := range manifest.Ports {
+	errCh = make(chan error, len(o.manifest.Allocations))
+	for allocationID, manifest := range o.manifest.Allocations {
+		for pubPort := range manifest.Ports {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -1758,12 +1788,12 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 					manifest.Handle,
 					behaviors.SubnetMapPortBehavior,
 					SubnetMapPortRequest{
-						SubnetID:   em.ID,
+						SubnetID:   o.manifest.ID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
-						SourcePort: strconv.Itoa(srcPort),
+						SourcePort: strconv.Itoa(pubPort),
 						DestIP:     indexRoutingTable[allocationID],
-						DestPort:   strconv.Itoa(destPort),
+						DestPort:   strconv.Itoa(pubPort),
 					},
 					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 				)
@@ -1819,12 +1849,13 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	}
 
 	// 2. start the allocations
-	errCh = make(chan error, len(em.Allocations))
+	allocStatuses := make(map[string]AllocationStatus)
+	errCh = make(chan error, len(o.manifest.Allocations))
 	wg = sync.WaitGroup{}
 
-	for allocName, manifest := range em.Allocations {
+	for allocName, manifest := range o.manifest.Allocations {
 		wg.Add(1)
-		go func(manifest AllocationManifest) {
+		go func() {
 			defer wg.Done()
 
 			msg, err := actor.Message(
@@ -1864,12 +1895,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				}
 
 				if !response.OK {
-					o.lock.Lock()
-					if alloc, ok := o.manifest.Allocations[allocName]; ok {
-						alloc.Status = AllocationFailed
-						o.manifest.Allocations[allocName] = alloc
-					}
-					o.lock.Unlock()
+					allocStatuses[allocName] = AllocationFailed
 					errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
 					return
 				}
@@ -1879,16 +1905,24 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			}
 
 			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
-			o.lock.Lock()
-			if alloc, ok := o.manifest.Allocations[allocName]; ok {
-				alloc.Status = AllocationRunning
-				o.manifest.Allocations[allocName] = alloc
-			}
-			o.lock.Unlock()
-		}(manifest)
+			allocStatuses[allocName] = AllocationRunning
+		}()
 	}
 
 	wg.Wait()
+
+	// set alloc statuses
+	o.lock.Lock()
+	for allocName, status := range allocStatuses {
+		if alloc, ok := o.manifest.Allocations[allocName]; ok {
+			alloc.Status = status
+			o.manifest.Allocations[allocName] = alloc
+		} else {
+			log.Warnf("allocation %s not found in manifest", allocName)
+		}
+	}
+	o.lock.Unlock()
+
 	close(errCh)
 	aggErr = nil
 	for err := range errCh {
@@ -1959,7 +1993,7 @@ func (o *Orchestrator) makeInitialBidRequest() (jobtypes.EnsembleBidRequest, err
 	return o.ensembleConfigToBidRequest(&o.cfg)
 }
 
-func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclusion map[string]struct{}) (jobtypes.EnsembleBidRequest, error) {
+func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, rmbid func(jobtypes.Bid)) (jobtypes.EnsembleBidRequest, error) {
 	residualConfig := EnsembleConfig{
 		V1: &jobtypes.EnsembleConfigV1{
 			Allocations: make(map[string]jobtypes.AllocationConfig),
@@ -1967,8 +2001,32 @@ func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclus
 		},
 	}
 
+	// randomly drop some of the candidate bids and exclusion
+	newCandidates := make(map[string][]Bid)
+	newExclusion := make(map[string]struct{})
+
+	// drop half of the bids and delete from candidate and exclusion
+	for n, bids := range candidate {
+		newBids := make([]Bid, 0, len(bids))
+		desiredSize := int(math.Floor(float64(rand.Intn(len(bids))) / 2))
+		for i, bid := range bids {
+			if i > desiredSize {
+				log.Infof("dropping bid from %s (%s) from candidate ", bid.Peer(), bid.V1.Handle.DID)
+				rmbid(bid)
+				continue
+			}
+			log.Infof("keeping bid from %s (%s) for candidate", bid.Peer(), bid.V1.Handle.DID)
+			newBids = append(newBids, bid)
+			newExclusion[bid.Peer()] = struct{}{}
+		}
+		if len(newBids) > 0 {
+			newCandidates[n] = newBids
+		}
+	}
+
 	for n, ncfg := range o.cfg.V1.Nodes {
-		if _, exclude := candidate[n]; exclude {
+		if _, exclude := newCandidates[n]; exclude {
+			log.Debugf("node %s is in candidate, skipping", n)
 			continue
 		}
 
@@ -1987,7 +2045,7 @@ func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclus
 		return result, err
 	}
 
-	for p := range exclusion {
+	for p := range newExclusion {
 		result.PeerExclusion = append(result.PeerExclusion, p)
 	}
 
@@ -1998,7 +2056,8 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (jobty
 	v1Config := config.V1
 
 	ensembleBidRequest := jobtypes.EnsembleBidRequest{
-		ID: o.id,
+		ID:    o.id,
+		Nonce: o.getNonce(),
 	}
 
 	log.Infof("creating bid request for nodes: %+v", v1Config.Nodes)
@@ -2373,4 +2432,9 @@ func (o *Orchestrator) DeploymentSnapshot() DeploymentSnapshot {
 	defer o.lock.Unlock()
 
 	return o.deploymentSnapshot
+}
+
+func (o *Orchestrator) getNonce() uint64 {
+	atomic.AddUint64(&o.nonce, 1)
+	return o.nonce
 }
