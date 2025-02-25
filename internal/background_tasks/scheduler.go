@@ -55,6 +55,26 @@ func (s *Scheduler) AddTask(task *Task) *Task {
 	return task
 }
 
+func (s *Scheduler) GetTasks() map[int]*Task {
+	// create a copy of s.tasks and return the copy
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tasks := make(map[int]*Task)
+	for k, v := range s.tasks {
+		tasks[k] = v
+	}
+	return tasks
+}
+
+func (s *Scheduler) GetTask(taskID int) (Task, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, exists := s.tasks[taskID]
+	return *task, exists
+}
+
 // RemoveTask removes a task from the scheduler.
 func (s *Scheduler) RemoveTask(taskID int) {
 	s.mu.Lock()
@@ -93,8 +113,9 @@ func (s *Scheduler) runningTasksCount() int {
 // runTasks checks and runs tasks based on their triggers and priority.
 func (s *Scheduler) runTasks() {
 	// Sort tasks by priority.
-	sortedTasks := make([]*Task, 0, len(s.tasks))
-	for _, task := range s.tasks {
+	tasks := s.GetTasks()
+	sortedTasks := make([]*Task, 0, len(tasks))
+	for _, task := range tasks {
 		sortedTasks = append(sortedTasks, task)
 	}
 	sort.Slice(sortedTasks, func(i, j int) bool {
@@ -135,13 +156,17 @@ func (s *Scheduler) runTask(taskID int) {
 		s.runningTasks[taskID] = false
 	}()
 
-	task := s.tasks[taskID]
+	task, ok := s.GetTask(taskID)
+	if !ok {
+		return
+	}
+
 	execution := Execution{StartedAt: time.Now()}
 
 	defer func() {
 		s.mu.Lock()
 		task.ExecutionHist = append(task.ExecutionHist, execution)
-		s.tasks[taskID] = task
+		s.tasks[taskID] = &task
 		s.mu.Unlock()
 	}()
 

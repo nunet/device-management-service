@@ -83,6 +83,9 @@ type EnsembleBidRequest struct {
 	// Request is the list of node bid requests
 	Request []BidRequest `json:"request"`
 
+	// Nonce is a sequential number for each request sent out
+	Nonce uint64 `json:"nonce"`
+
 	// PeerExclusion is the list of peers to exclude from bidding
 	PeerExclusion []string `json:"peer_exclusion,omitempty"`
 }

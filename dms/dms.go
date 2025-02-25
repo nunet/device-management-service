@@ -295,15 +295,17 @@ func (d *DMS) Run() error {
 }
 
 func (d *DMS) Stop() {
+	log.Infof("Shutting down DMS")
 	err := d.Node.Stop()
 	if err != nil {
 		log.Errorf("failed to stop node: %s", err)
 	}
+	log.Infof("node stopped")
 	err = d.P2P.Stop()
 	if err != nil {
 		log.Errorf("failed to stop libp2p network: %s", err)
 	}
-	log.Infof("Shutting down after receiving")
+	log.Infof("network stopped")
 }
 
 // GenerateAndStorePrivKey generates a new key pair using Secp256k1,
