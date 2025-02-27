@@ -4,6 +4,7 @@ escalation_strategy: redeploy
 
 allocations:
     alloc1:
+        type: service
         executor: docker
         resources:
             cpu:
@@ -20,6 +21,7 @@ allocations:
         depends_on: alloc2
 
     alloc2:
+        type: service
         executor: docker
         resources:
             cpu:
@@ -41,7 +43,7 @@ nodes:
         redundancy: 2
         failure_recovery: stay_down
         ports:
-            - public: 8080
+            - public: 17000
               private: 80
               allocation: alloc1
     node2:
@@ -49,6 +51,6 @@ nodes:
             - alloc2
         failure_recovery: restart
         ports:
-            - public: 8080
+            - public: 17001
               private: 80
               allocation: alloc2

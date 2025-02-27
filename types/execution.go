@@ -51,11 +51,13 @@ type ExecutionListItem struct {
 }
 
 // ExecutionResult is the result of an execution
+// TODO: wrap ErrorMsg + Killed in one struct
 type ExecutionResult struct {
 	STDOUT   string `json:"stdout"`    // STDOUT of the execution
 	STDERR   string `json:"stderr"`    // STDERR of the execution
 	ExitCode int    `json:"exit_code"` // Exit code of the execution
 	ErrorMsg string `json:"error_msg"` // Error message if the execution failed
+	Killed   bool   `json:"killed"`    // Executor/Application externally killed
 }
 
 // NewExecutionResult creates a new ExecutionResult object

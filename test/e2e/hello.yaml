@@ -2,6 +2,7 @@ version: "V1"
 
 allocations:
     helloAlloc:
+        type: task
         executor: docker
         resources:
             cpu:
@@ -23,7 +24,3 @@ nodes:
     node1:
         allocations:
             - helloAlloc
-        ports:
-            - public: 8080
-              private: 80
-              allocation: helloAlloc

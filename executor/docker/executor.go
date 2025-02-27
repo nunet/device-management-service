@@ -127,7 +127,6 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		activeCh:            make(chan bool),
 		running:             &atomic.Bool{},
 		TTYEnabled:          enableTTY,
-		initScripts:         request.ProvisionScripts,
 	}
 
 	// register the handler for this executionID

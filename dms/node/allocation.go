@@ -10,8 +10,6 @@ package node
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
@@ -54,8 +52,8 @@ func (n *Node) monitorEnsembleAllocations(ensembleID string, allocationIDs []str
 			}
 
 			status := alloc.Status(context.TODO()).Status
-			if status == jobs.AllocationCompleted {
-				log.Warnf("Allocation %s is done with status %s", allocID, status)
+			if status == jobs.AllocationCompleted ||
+				status == jobs.AllocationTerminated {
 				allocationsDone[allocID] = true
 				continue
 			}
@@ -85,25 +83,4 @@ func (n *Node) cleanupFinishedEnsemble(ensembleID string, allocationIDs []string
 			log.Errorf("Monitor Ensemble: failed to release allocation %s: %v", allocID, err)
 		}
 	}
-}
-
-func (n *Node) writeAllocationLogsTo(path string, stdout, stderr []byte) error {
-	err := n.fs.MkdirAll(path, 0o744)
-	if err != nil {
-		return fmt.Errorf("failed to create allocation directory %s: %w", path, err)
-	}
-
-	stdoutPath := filepath.Join(path, "stdout.logs")
-	err = n.fs.WriteFile(stdoutPath, stdout, 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to write stdout logs to %s: %w", stdoutPath, err)
-	}
-
-	stderrPath := filepath.Join(path, "stderr.logs")
-	err = n.fs.WriteFile(stderrPath, stderr, 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to write stderr logs to %s: %w", stderrPath, err)
-	}
-
-	return nil
 }

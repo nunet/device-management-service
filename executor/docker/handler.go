@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/observability"
@@ -56,9 +58,6 @@ type executionHandler struct {
 
 	// TTY setting
 	TTYEnabled bool // Indicates if TTY is enabled for the container.
-
-	// others
-	initScripts map[string][]byte
 }
 
 // active checks if the execution handler's container is running.
@@ -72,6 +71,7 @@ func (h *executionHandler) run(ctx context.Context) {
 	defer endTrace()
 
 	h.running.Store(true)
+	defer close(h.waitCh)
 
 	if err := h.prepareLogFiles(); err != nil {
 		err = fmt.Errorf("failed to create execution log files: %v", err)
@@ -79,6 +79,14 @@ func (h *executionHandler) run(ctx context.Context) {
 		h.result = types.NewFailedExecutionResult(err)
 		return
 	}
+
+	// monitor kill events to see if the container was externally killed
+	eventsCh, errEventsCh := h.client.client.Events(ctx, events.ListOptions{
+		Filters: filters.NewArgs(
+			filters.Arg("container", h.containerID),
+			filters.Arg("event", "kill"),
+		),
+	})
 
 	if err := h.client.StartContainer(ctx, h.containerID); err != nil {
 		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start container: %v", err))
@@ -166,6 +174,7 @@ func (h *executionHandler) run(ctx context.Context) {
 			log.Errorw("docker_execution_handler_inspect_container_failure", "error", err)
 			return
 		}
+
 		if containerJSON.State.OOMKilled {
 			containerError = errors.New("container was killed due to OOM")
 			h.result = &types.ExecutionResult{
@@ -175,6 +184,7 @@ func (h *executionHandler) run(ctx context.Context) {
 			log.Errorw("docker_execution_handler_container_oom_killed", "executionID", h.executionID)
 			return
 		}
+
 		if exitStatus.Error != nil {
 			containerError = errors.New(exitStatus.Error.Message)
 			h.result = &types.ExecutionResult{
@@ -183,6 +193,37 @@ func (h *executionHandler) run(ctx context.Context) {
 			}
 			log.Errorw("docker_execution_handler_container_error", "executionID", h.executionID)
 			return
+		}
+
+		if containerExitStatusCode != 0 {
+			containerError = errors.New("container either killed or application returned non-zero exit code")
+			h.result = &types.ExecutionResult{
+				ExitCode: int(containerExitStatusCode),
+				ErrorMsg: containerError.Error(),
+			}
+			log.Errorw("docker_execution_handler_non_zero_exit_code", "executionID", h.executionID)
+			return
+		}
+
+		// Here we're trying to identify containers terminated by external means but
+		// were returned, gracefully, with a 0 exit code.
+		if containerExitStatusCode == 0 {
+			// Check if there were any kill events
+			select {
+			case err := <-errEventsCh:
+				if err != nil {
+					log.Warnw("docker_execution_handler_events_error", "error", err)
+				}
+			case <-eventsCh:
+				h.result = &types.ExecutionResult{
+					ExitCode: int(containerExitStatusCode),
+					ErrorMsg: "container was killed by external signal",
+					Killed:   true,
+				}
+				log.Infow("docker_execution_handler_container_killed", "executionID", h.executionID)
+				return
+			default:
+			}
 		}
 	}
 
@@ -209,7 +250,6 @@ func (h *executionHandler) run(ctx context.Context) {
 	log.Infow("docker_execution_handler_run_logs_success", "executionID", h.executionID)
 
 	h.running.Store(false)
-	close(h.waitCh)
 }
 
 // pause pauses the main process of the container without terminating it.
