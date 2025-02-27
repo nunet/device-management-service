@@ -19,10 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	lcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
 
@@ -30,10 +27,10 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
@@ -317,7 +314,11 @@ func (n *Node) restoreDeployments() error {
 			continue
 		}
 
-		childActor, err := n.createChildActor(pvkey, d.OrchestratorID, d.Manifest.Orchestrator)
+		childActor, err := n.actor.CreateChild(
+			d.OrchestratorID,
+			d.Manifest.Orchestrator,
+			actor.WithPrivKey(pvkey),
+		)
 		if err != nil {
 			log.Errorf("restore orchestrator actor of ensemble %s: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
@@ -550,19 +551,27 @@ func createEnsembleID(peerID string) (string, error) {
 
 func (n *Node) createOrchestrator(ctx context.Context,
 	ensemble jobtypes.EnsembleConfig,
-	actr actor.Actor,
+	actr actor.Actor, // TODO: unnecessary param, since actr is n.actor
 ) (jobs.OrchestratorAPI, error) {
 	ensembleID, err := createEnsembleID(actr.Handle().Address.HostID)
 	if err != nil {
 		return nil, fmt.Errorf("generate uuid for ensemble: %w", err)
 	}
 
-	childActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+	childActor, err := n.actor.CreateChild(ensembleID, n.actor.Handle())
 	if err != nil {
 		return nil, fmt.Errorf("create child actor: %w", err)
 	}
 
-	orchestrator, err := n.orchestratorProvider.NewOrchestrator(ctx, ensembleID, childActor, ensemble)
+	err = childActor.Start()
+	if err != nil {
+		return nil, fmt.Errorf("start child actor: %w", err)
+	}
+
+	orchestrator, err := n.orchestratorProvider.NewOrchestrator(
+		ctx, n.fs, n.dmsConfig.WorkDir,
+		ensembleID, childActor, ensemble,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new orchestrator: %w", err)
 	}
@@ -586,21 +595,6 @@ func (n *Node) sendReply(msg actor.Envelope, payload interface{}) {
 	if err := n.actor.Send(reply); err != nil {
 		log.Debugf("sending reply: %s", err)
 	}
-}
-
-// createChildActor creates a child actor using node's limiter, scheduler and network.
-func (n *Node) createChildActor(priv crypto.PrivKey, inbox string, supervisor actor.Handle) (*actor.BasicActor, error) {
-	security, err := actor.NewBasicSecurityContext(priv.GetPublic(), priv, n.rootCap)
-	if err != nil {
-		return nil, fmt.Errorf("create security context: %w", err)
-	}
-
-	childActor, err := createActor(security, n.actor.Limiter(), n.hostID, inbox, n.network, supervisor)
-	if err != nil {
-		return nil, fmt.Errorf("create child actor: %w", err)
-	}
-
-	return childActor, nil
 }
 
 // ...

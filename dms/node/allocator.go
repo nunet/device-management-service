@@ -14,17 +14,14 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/network"
-
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
-
 	"gitlab.com/nunet/device-management-service/dms/jobs"
-
-	"gitlab.com/nunet/device-management-service/types"
-
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/utils"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 var (
@@ -39,6 +36,8 @@ var (
 	// ErrNoHardwareCapacity is returned when there is no capacity left on the hardware.
 	ErrNoHardwareCapacity = fmt.Errorf("no capacity left on the hardware")
 )
+
+// TODO: move port allocator stuffs to other file
 
 // portAllocator keeps track of port allocations and manages state.
 type portAllocator struct {
@@ -142,6 +141,7 @@ func (pa *portAllocator) AllocateRandom(allocationID string, numPorts int) ([]in
 	}
 
 	pa.allocations[allocationID] = portsToAllocate
+
 	return portsToAllocate, nil
 }
 
@@ -218,7 +218,9 @@ type Allocator interface {
 	Allocate(
 		ctx context.Context,
 		allocationID string,
+		allocType jobtypes.AllocationType,
 		actr actor.Actor,
+		orchestrator actor.Handle,
 		job jobs.Job,
 		executor types.Executor,
 	) (*jobs.Allocation, error)
@@ -311,11 +313,14 @@ func (a *allocator) Commit(ctx context.Context,
 
 	// commit the ports
 	if len(ports) > 0 {
+		staticPorts := make([]int, 0, len(ports))
 		for port := range ports {
-			err := a.ports.Allocate(allocationID, []int{port})
-			if err != nil {
-				return fmt.Errorf("allocate port: %w", err)
-			}
+			staticPorts = append(staticPorts, port)
+		}
+
+		err := a.ports.Allocate(allocationID, staticPorts)
+		if err != nil {
+			return fmt.Errorf("allocate port: %w", err)
 		}
 	}
 
@@ -336,6 +341,8 @@ func (a *allocator) Commit(ctx context.Context,
 }
 
 func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
+	log.Debugf("uncommitting allocation %s", allocationID)
+
 	// Check if the allocation is committed
 	if _, ok := a.commits[allocationID]; !ok {
 		log.Warnf("allocation %s not committed", allocationID)
@@ -356,13 +363,17 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 	delete(a.commits, allocationID)
 	a.lock.Unlock()
 
+	log.Debugf("uncommitted allocation %s", allocationID)
+
 	return nil
 }
 
 func (a *allocator) Allocate(
 	ctx context.Context,
 	allocationID string,
+	allocType jobtypes.AllocationType,
 	allocActor actor.Actor,
+	orchestrator actor.Handle,
 	job jobs.Job,
 	executor types.Executor,
 ) (*jobs.Allocation, error) {
@@ -391,12 +402,15 @@ func (a *allocator) Allocate(
 
 	allocation, err := jobs.NewAllocation(
 		allocationID,
+		allocType,
+		orchestrator,
 		a.fs,
 		a.workDir,
 		allocActor,
 		jobs.AllocationDetails{Job: job, NodeID: a.hostID},
 		a.network,
 		executor,
+		func() error { return a.Release(ctx, allocationID) },
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation: %w", err)
@@ -417,7 +431,13 @@ func (a *allocator) Allocate(
 	return allocation, nil
 }
 
+// TODO: it should release on best-efforts
+// TODO: locks to avoid callers trying to release the same allocation
 func (a *allocator) Release(ctx context.Context, allocationID string) error {
+	log.Debugf("releasing allocation %s", allocationID)
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
 	// Check if allocated
 	allocation, ok := a.allocations[allocationID]
 	if !ok {
@@ -426,22 +446,28 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 	}
 
 	// stop and cleanup
+	// TODO: maybe we should not call Terminate since it sets
+	// the status of an allocation to Terminated but sometimes we're
+	// releasing Completed task-allocations which should have the
+	// status as Completed rather than Terminated
 	err := allocation.Terminate(ctx)
 	if err != nil {
+		log.Warnf("terminate allocation: %v", err)
 		return fmt.Errorf("terminate allocation: %w", err)
 	}
 
 	// deallocate the resources and ports
 	a.ports.Release(allocationID)
+
 	err = a.resources.DeallocateResources(ctx, allocationID)
 	if err != nil {
+		log.Warnf("deallocate resources for allocation id: %s: %v", allocationID, err)
 		return fmt.Errorf("deallocate resources for allocation id: %s: %w", allocationID, err)
 	}
 
 	// remove the allocation
-	a.lock.Lock()
 	delete(a.allocations, allocationID)
-	a.lock.Unlock()
+	log.Debugf("successfully released allocation %s", allocationID)
 
 	return nil
 }

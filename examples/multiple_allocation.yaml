@@ -2,6 +2,7 @@ version: "V1"
 
 allocations:
     alloc1:
+        type: service
         executor: docker
         resources:
             cpu:
@@ -15,6 +16,7 @@ allocations:
             type: docker
             image: kennethreitz/httpbin 
     alloc2:
+        type: service
         executor: docker
         resources:
             cpu:
@@ -33,13 +35,13 @@ nodes:
         allocations:
             - alloc1
         ports:
-            - public: 8080
+            - public: 17000
               private: 80
               allocation: alloc1
     node2:
         allocations:
             - alloc2
         ports:
-            - public: 8080
+            - public: 17001
               private: 80
               allocation: alloc2

@@ -13,17 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/dms/jobs"
-
-	"gitlab.com/nunet/device-management-service/types"
-
 	"github.com/spf13/afero"
-
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/stretchr/testify/require"
-
-	"github.com/stretchr/testify/assert"
+	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestPortAllocator(t *testing.T) {
@@ -311,7 +309,11 @@ func TestAllocator(t *testing.T) {
 		mockActor.EXPECT().AddBehavior(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		mockActor.EXPECT().Start().Return(nil).Times(1)
 		// allocate
-		allocation, err := testAllocator.Allocate(context.Background(), testAllocationID, mockActor, mockJob, mockExecutor)
+		allocation, err := testAllocator.Allocate(
+			context.Background(), testAllocationID,
+			jobtypes.AllocationTypeService, mockActor,
+			actor.Handle{}, mockJob, mockExecutor,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, allocation)
 
@@ -427,7 +429,11 @@ func TestAllocator(t *testing.T) {
 		mockActor.EXPECT().AddBehavior(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		mockActor.EXPECT().Start().Return(nil).Times(1)
 		// allocate
-		allocation, err := testAllocator.Allocate(context.Background(), testAllocationID, mockActor, mockJob, mockExecutor)
+		allocation, err := testAllocator.Allocate(
+			context.Background(), testAllocationID,
+			jobtypes.AllocationTypeService, mockActor,
+			actor.Handle{}, mockJob, mockExecutor,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, allocation)
 

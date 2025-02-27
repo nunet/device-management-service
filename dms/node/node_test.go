@@ -16,23 +16,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
-
 	"github.com/avast/retry-go"
-
-	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-
-	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/db/repositories"
-	"gitlab.com/nunet/device-management-service/dms/jobs"
-
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	repo "gitlab.com/nunet/device-management-service/db/repositories/clover"
-
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -250,24 +245,29 @@ func TestDeployment(t *testing.T) {
 		node.actor.(*MockActor).EXPECT().Handle().DoAndReturn(func() actor.Handle {
 			return getMockActorHandle(t)
 		}).AnyTimes()
-		node.actor.(*MockActor).EXPECT().CreateChild(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ actor.Handle, _ actor.BasicActorParams) (actor.Actor, error) {
-				return NewMockActor(gomock.NewController(t)), nil
-			},
-		).AnyTimes()
-		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().NewOrchestrator(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, _ string, _ actor.Actor, _ jobs.EnsembleConfig) (jobs.OrchestratorAPI, error) {
-				return mockOrchestrator, nil
-			}).Times(1)
-		mockOrchestrator.EXPECT().ID().Return("test").Times(3)
-		mockOrchestrator.EXPECT().Deploy(gomock.Any()).Return(nil).Times(1)
+
+		// Generate key first since it's used in expectations
 		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
 		require.NoError(t, err)
+
+		// child handling
+		child := NewMockActor(ctrl)
+		child.EXPECT().Start().Return(nil).Times(1)
+		node.actor.(*MockActor).EXPECT().CreateChild(gomock.Any(), gomock.Any(), gomock.Any()).Return(child, nil).Times(1)
+
+		// Set up orchestrator expectations in order
+		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().NewOrchestrator(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), child, gomock.Any()).
+			Return(mockOrchestrator, nil).Times(1)
+
+		mockOrchestrator.EXPECT().ID().Return("test").Times(1)
+		mockOrchestrator.EXPECT().Deploy(gomock.Any()).Return(nil).Times(1)
 		mockOrchestrator.EXPECT().ActorPrivateKey().Return(privKey).Times(1)
 		mockOrchestrator.EXPECT().Config().Return(jobs.EnsembleConfig{}).Times(1)
 		mockOrchestrator.EXPECT().Manifest().Return(jobs.EnsembleManifest{}).Times(1)
 		mockOrchestrator.EXPECT().Status().Return(jobs.DeploymentStatusRunning).Times(1)
 		mockOrchestrator.EXPECT().DeploymentSnapshot().Return(jobs.DeploymentSnapshot{}).Times(1)
+		mockOrchestrator.EXPECT().ID().Return("test").Times(2)
 		node.handleNewDeployment(msg)
 		wg.Wait()
 
@@ -304,8 +304,15 @@ func TestDeployment(t *testing.T) {
 		// restore the deployment
 		mockOrchestrator := NewMockOrchestratorAPI(ctrl)
 		node.actor.(*MockActor).EXPECT().Limiter().Return(actor.NewRateLimiter(actor.DefaultRateLimiterConfig())).AnyTimes()
+		child := NewMockActor(ctrl)
+		node.actor.(*MockActor).EXPECT().CreateChild(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ string, _ actor.Handle, _ actor.CreateChildOption) (actor.Actor, error) {
+				return child, nil
+			},
+		).AnyTimes()
+		child.EXPECT().Start().Return(nil).Times(1)
 		node.network.(*MockNetwork).EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().RestoreDeployment(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().RestoreDeployment(child, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(mockOrchestrator, nil).Times(1)
 		mockOrchestrator.EXPECT().ID().Return("test").AnyTimes()
 		err = node.restoreDeployments()

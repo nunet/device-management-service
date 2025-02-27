@@ -15,6 +15,22 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+type (
+	AllocationExecutor string
+	AllocationType     string
+)
+
+const (
+	// Executor types define the runtime environment for allocations
+	ExecutorFirecracker AllocationExecutor = "firecracker" // Firecracker VM-based execution
+	ExecutorDocker      AllocationExecutor = "docker"      // Docker container-based execution
+	ExecutorNull        AllocationExecutor = "null"        // Null executor for testing
+
+	// AllocationType defines the lifecycle behavior of the allocation
+	AllocationTypeService AllocationType = "service" // Long-running process that should restart on failure
+	AllocationTypeTask    AllocationType = "task"    // One-off job that runs to completion
+)
+
 // EnsembleConfig is the versioned structure that contains the ensemble configuration
 type EnsembleConfig struct {
 	V1 *EnsembleConfigV1 `json:"v1"`
@@ -33,6 +49,7 @@ type EnsembleConfigV1 struct {
 // AllocationConfig is the configuration of an allocation
 type AllocationConfig struct {
 	Executor    AllocationExecutor        `json:"executor"`              // the executor of the allocation
+	Type        AllocationType            `json:"type"`                  // the type of allocation (service vs task)
 	Resources   types.Resources           `json:"resources"`             // the HW resources required by the allocation
 	Execution   types.SpecConfig          `json:"execution"`             // the allocation execution configuration
 	DNSName     string                    `json:"dns_name,omitempty"`    // the internal DNS name of the allocation
@@ -40,15 +57,6 @@ type AllocationConfig struct {
 	Provision   []string                  `json:"provision,omitempty"`   // names of provisioning scripts to run (in order)
 	HealthCheck types.HealthCheckManifest `json:"healthcheck,omitempty"` // name of the health check script
 }
-
-// AllocationExecutor is the executor reoquired for the allocation
-type AllocationExecutor string
-
-const (
-	ExecutorFirecracker AllocationExecutor = "firecracker"
-	ExecutorDocker      AllocationExecutor = "docker"
-	ExecutorNull        AllocationExecutor = "null"
-)
 
 // NodeConfig is the configuration of a distinct DMS node
 type NodeConfig struct {

@@ -104,6 +104,11 @@ func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
 		return fmt.Errorf("allocation executor type (%s) must match execution type (%s)", executor, execType)
 	}
 
+	allocType, ok := allocation["type"].(string)
+	if !ok || allocType == "" {
+		return fmt.Errorf("allocation must have a type (service or task)")
+	}
+
 	// Validate DNS name if present
 	if dnsName, ok := allocation["dns_name"].(string); ok {
 		if dnsName == "" {

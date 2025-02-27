@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -240,14 +239,7 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 		return
 	}
 
-	ensembleDir := filepath.Join(
-		n.dmsConfig.WorkDir,
-		"deployments",
-		request.EnsembleID,
-	)
-	allocDir := filepath.Join(ensembleDir, request.AllocationName)
-
-	err = n.writeAllocationLogsTo(allocDir, data.Stdout, data.Stderr)
+	allocDir, err := o.WriteAllocationLogs(request.AllocationName, data.Stdout, data.Stderr)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to write allocation logst: %s", err))
 		return

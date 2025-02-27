@@ -17,21 +17,17 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"gitlab.com/nunet/device-management-service/lib/did"
-
-	"gitlab.com/nunet/device-management-service/network/libp2p"
-
-	"go.uber.org/mock/gomock"
-
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -42,6 +38,7 @@ func getMockEnsembleConfig(t *testing.T) jobtypes.EnsembleConfig {
 		V1: &jobtypes.EnsembleConfigV1{
 			Allocations: map[string]jobtypes.AllocationConfig{
 				"allocation1": {
+					Type:     "service",
 					Executor: "docker",
 					Resources: types.Resources{
 						CPU: types.CPU{
@@ -116,19 +113,23 @@ func TestOrchestratorProvider(t *testing.T) {
 
 	t.Run("must be able to create a new orchestrator from the provider", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
 		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		orchestrator, err := oProvider.NewOrchestrator(
+			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 	})
 
 	t.Run("must be able to restore an orchestrator", func(t *testing.T) {
 		t.Parallel()
-
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
 
@@ -141,28 +142,40 @@ func TestOrchestratorProvider(t *testing.T) {
 
 	t.Run("must not be able to create duplicate orchestrators", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any()).Times(1)
 
 		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		orchestrator, err := oProvider.NewOrchestrator(
+			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 
-		_, err = oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		_, err = oProvider.NewOrchestrator(
+			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
+		)
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrOrchestratorExists)
 	})
 
 	t.Run("must be able to get orchestrator by id", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
 		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		orchestrator, err := oProvider.NewOrchestrator(
+			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 
@@ -173,12 +186,17 @@ func TestOrchestratorProvider(t *testing.T) {
 
 	t.Run("must be able to delete orchestrator by id", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
 		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(context.Background(), "id", mockActor, getMockEnsembleConfig(t))
+		orchestrator, err := oProvider.NewOrchestrator(
+			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 
@@ -191,16 +209,23 @@ func TestOrchestratorProvider(t *testing.T) {
 
 	t.Run("must be able to list orchestrators", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any()).Times(2)
 
 		oProvider := NewOrchestratorProvider()
-		orchestrator1, err := oProvider.NewOrchestrator(context.Background(), "id1", mockActor, getMockEnsembleConfig(t))
+		orchestrator1, err := oProvider.NewOrchestrator(
+			context.Background(), af, workDir, "id1", mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator1)
 
-		orchestrator2, err := oProvider.NewOrchestrator(context.Background(), "id2", mockActor, getMockEnsembleConfig(t))
+		orchestrator2, err := oProvider.NewOrchestrator(
+			context.Background(), af, workDir, "id2", mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator2)
 
@@ -220,6 +245,9 @@ func TestOrchestrator(t *testing.T) {
 	ensembleID := "ensembleID"
 	t.Run("must be able to create an orchestrator", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
+
 		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 		assert.NoError(t, err)
 		rootDID, root := actor.MakeRootTrustContext(t)
@@ -233,17 +261,20 @@ func TestOrchestrator(t *testing.T) {
 		actr := actor.CreateActor(t, mockPeer, capContext)
 		require.NoError(t, actr.Start())
 
-		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		orchActor, err := actr.CreateChild("orchestratorID", actr.Handle())
 		require.NoError(t, err)
 
-		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, getMockEnsembleConfig(t))
+		orchestrator, err := NewOrchestrator(
+			context.Background(), af, workDir, "id", orchActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 	})
 
 	t.Run("must be able to set and get status", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 		assert.NoError(t, err)
@@ -258,11 +289,12 @@ func TestOrchestrator(t *testing.T) {
 		actr := actor.CreateActor(t, mockPeer, capContext)
 		require.NoError(t, actr.Start())
 
-		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		orchActor, err := actr.CreateChild("orchestratorID", actr.Handle())
 		require.NoError(t, err)
 
-		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, getMockEnsembleConfig(t))
+		orchestrator, err := NewOrchestrator(
+			context.Background(), af, workDir, "id", orchActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 
 		orchestrator.setStatus(DeploymentStatusPreparing)
@@ -271,6 +303,8 @@ func TestOrchestrator(t *testing.T) {
 
 	t.Run("must be able to get ensemble config", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 		assert.NoError(t, err)
@@ -285,12 +319,13 @@ func TestOrchestrator(t *testing.T) {
 		actr := actor.CreateActor(t, mockPeer, capContext)
 		require.NoError(t, actr.Start())
 
-		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		orchActor, err := actr.CreateChild("orchestratorID", actr.Handle())
 		require.NoError(t, err)
 
 		ensembleConfig := getMockEnsembleConfig(t)
-		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, ensembleConfig)
+		orchestrator, err := NewOrchestrator(
+			context.Background(), af, workDir, "id", orchActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 
 		actualConfig := orchestrator.Config()
@@ -304,6 +339,8 @@ func TestOrchestrator(t *testing.T) {
 
 	t.Run("must be able to get id", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
 		assert.NoError(t, err)
@@ -318,11 +355,12 @@ func TestOrchestrator(t *testing.T) {
 		actr := actor.CreateActor(t, mockPeer, capContext)
 		require.NoError(t, actr.Start())
 
-		mockPeer.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		orchActor, err := actr.CreateChild(actr.Handle(), actor.BasicActorParams{})
+		orchActor, err := actr.CreateChild("orchestratorID", actr.Handle())
 		require.NoError(t, err)
 
-		orchestrator, err := NewOrchestrator(context.Background(), "id", orchActor, getMockEnsembleConfig(t))
+		orchestrator, err := NewOrchestrator(
+			context.Background(), af, workDir, "id", orchActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 
 		assert.Equal(t, "id", orchestrator.ID())
@@ -330,9 +368,12 @@ func TestOrchestrator(t *testing.T) {
 
 	t.Run("must be able to deploy an ensemble", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
 		var (
 			bidReplyHandler actor.Behavior
@@ -341,17 +382,28 @@ func TestOrchestrator(t *testing.T) {
 		)
 
 		privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
-		id, err := pubK.Raw()
+		rootDID, root := actor.MakeRootTrustContext(t)
+		actorDID, trust := actor.MakeTrustContext(t, privK)
+		capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+
+		rootSec, err := actor.NewBasicSecurityContext(pubK, privK, capContext)
 		require.NoError(t, err)
 
 		peerID, err := peer.IDFromPublicKey(pubK)
 		require.NoError(t, err)
-		testDID := did.FromPublicKey(pubK)
-		provider := did.NewProvider(testDID, privK)
 
-		orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
+		testDID := did.FromPublicKey(pubK)
+
+		provider, err := did.ProviderFromPrivateKey(privK)
+		require.NoError(t, err, "provider from public key")
+
+		mockActor.EXPECT().Security().Return(rootSec).AnyTimes()
+
+		orchestrator, err := NewOrchestrator(
+			context.Background(), af, workDir, ensembleID, mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 
 		wg.Add(1)
@@ -364,7 +416,7 @@ func TestOrchestrator(t *testing.T) {
 			}).AnyTimes()
 
 		mockActor.EXPECT().Handle().Return(actor.Handle{
-			ID:  actor.ID{PublicKey: id},
+			ID:  rootSec.ID(),
 			DID: testDID,
 			Address: actor.Address{
 				HostID:       "hostID",
@@ -384,7 +436,7 @@ func TestOrchestrator(t *testing.T) {
 							NodeID:     "node1",
 							Peer:       peerID.String(),
 							Handle: actor.Handle{
-								ID:  actor.ID{PublicKey: id},
+								ID:  rootSec.ID(),
 								DID: testDID,
 								Address: actor.Address{
 									HostID:       "hostID",
@@ -481,9 +533,12 @@ func TestOrchestrator(t *testing.T) {
 
 	t.Run("must be able to revert a deployment", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
 		var (
 			bidReplyHandler actor.Behavior
@@ -502,7 +557,9 @@ func TestOrchestrator(t *testing.T) {
 		testDID := did.FromPublicKey(pubK)
 		provider := did.NewProvider(testDID, privK)
 
-		orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
+		orchestrator, err := NewOrchestrator(
+			context.Background(), af, workDir, ensembleID, mockActor, getMockEnsembleConfig(t),
+		)
 		require.NoError(t, err)
 
 		wg.Add(2) // publish and send
@@ -617,9 +674,12 @@ func TestOrchestrator(t *testing.T) {
 
 	t.Run("must be able to request bid from a specific peer", func(t *testing.T) {
 		t.Parallel()
+		af := afero.Afero{Fs: afero.NewMemMapFs()}
+		workDir := t.TempDir()
 
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
+		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
 		var (
 			bidReplyHandler actor.Behavior
@@ -628,15 +688,24 @@ func TestOrchestrator(t *testing.T) {
 		)
 
 		privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
-		id, err := pubK.Raw()
+		rootDID, root := actor.MakeRootTrustContext(t)
+		actorDID, trust := actor.MakeTrustContext(t, privK)
+		capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+
+		rootSec, err := actor.NewBasicSecurityContext(pubK, privK, capContext)
 		require.NoError(t, err)
 
 		peerID, err := peer.IDFromPublicKey(pubK)
 		require.NoError(t, err)
+
 		testDID := did.FromPublicKey(pubK)
-		provider := did.NewProvider(testDID, privK)
+
+		provider, err := did.ProviderFromPrivateKey(privK)
+		require.NoError(t, err, "provider from public key")
+
+		mockActor.EXPECT().Security().Return(rootSec).AnyTimes()
 
 		ensemble := getMockEnsembleConfig(t)
 		ensemble.V1.Nodes = map[string]jobtypes.NodeConfig{
@@ -645,7 +714,9 @@ func TestOrchestrator(t *testing.T) {
 				Allocations: []string{"allocation1"},
 			},
 		}
-		orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, ensemble)
+		orchestrator, err := NewOrchestrator(
+			context.Background(), af, workDir, ensembleID, mockActor, ensemble,
+		)
 		require.NoError(t, err)
 
 		wg.Add(1) // bid event
@@ -658,7 +729,7 @@ func TestOrchestrator(t *testing.T) {
 			}).AnyTimes()
 
 		mockActor.EXPECT().Handle().Return(actor.Handle{
-			ID:  actor.ID{PublicKey: id},
+			ID:  rootSec.ID(),
 			DID: testDID,
 			Address: actor.Address{
 				HostID:       "hostID",
@@ -736,7 +807,7 @@ func TestOrchestrator(t *testing.T) {
 							NodeID:     "node1",
 							Peer:       peerID.String(),
 							Handle: actor.Handle{
-								ID:  actor.ID{PublicKey: id},
+								ID:  rootSec.ID(),
 								DID: testDID,
 								Address: actor.Address{
 									HostID:       "hostID",
@@ -769,9 +840,11 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 	ensembleID := "ensembleID"
 	withTimeout(t,
 		"must be able to escalate failure if healthcheck fails",
-		5*time.Minute,
+		3*time.Minute,
 		func(_ context.Context, t *testing.T) {
 			t.Parallel()
+			af := afero.Afero{Fs: afero.NewMemMapFs()}
+			workDir := t.TempDir()
 
 			ctrl := gomock.NewController(t)
 			mockActor := NewMockActor(ctrl)
@@ -783,20 +856,25 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 			)
 
 			privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
-			id, err := pubK.Raw()
+			rootDID, root := actor.MakeRootTrustContext(t)
+			actorDID, trust := actor.MakeTrustContext(t, privK)
+			capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+
+			rootSec, err := actor.NewBasicSecurityContext(pubK, privK, capContext)
 			require.NoError(t, err)
 
 			peerID, err := peer.IDFromPublicKey(pubK)
 			require.NoError(t, err)
+
 			testDID := did.FromPublicKey(pubK)
-			provider := did.NewProvider(testDID, privK)
 
-			orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
-			require.NoError(t, err)
+			provider, err := did.ProviderFromPrivateKey(privK)
+			require.NoError(t, err, "provider from public key")
 
-			wg.Add(1)
+			mockActor.EXPECT().Security().Return(rootSec).AnyTimes()
+			mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 			mockActor.EXPECT().AddBehavior(behaviors.BidReplyBehavior, gomock.Any(), gomock.Any()).
 				DoAndReturn(func(_ string, continuation actor.Behavior, _ ...actor.BehaviorOption) error {
 					if !didReply.Load() {
@@ -805,13 +883,19 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 					return nil
 				}).AnyTimes()
 			mockActor.EXPECT().Handle().Return(actor.Handle{
-				ID:  actor.ID{PublicKey: id},
+				ID:  rootSec.ID(),
 				DID: testDID,
 				Address: actor.Address{
 					HostID:       "hostID",
 					InboxAddress: "inboxAddress",
 				},
 			}).AnyTimes()
+			orchestrator, err := NewOrchestrator(
+				context.Background(), af, workDir, ensembleID, mockActor, getMockEnsembleConfig(t),
+			)
+			require.NoError(t, err)
+
+			wg.Add(1)
 			mockActor.EXPECT().Publish(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
 				// bid only once
 				if !didReply.Load() {
@@ -825,7 +909,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 								NodeID:     "node1",
 								Peer:       peerID.String(),
 								Handle: actor.Handle{
-									ID:  actor.ID{PublicKey: id},
+									ID:  rootSec.ID(),
 									DID: testDID,
 									Address: actor.Address{
 										HostID:       "hostID",
@@ -955,9 +1039,11 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 	)
 	withTimeout(t,
 		"must be able to escalate failure if supervisor fails",
-		5*time.Minute,
+		3*time.Minute,
 		func(_ context.Context, t *testing.T) {
 			t.Parallel()
+			af := afero.Afero{Fs: afero.NewMemMapFs()}
+			workDir := t.TempDir()
 
 			ctrl := gomock.NewController(t)
 			mockActor := NewMockActor(ctrl)
@@ -969,20 +1055,25 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 			)
 
 			privK, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
-			id, err := pubK.Raw()
+			rootDID, root := actor.MakeRootTrustContext(t)
+			actorDID, trust := actor.MakeTrustContext(t, privK)
+			capContext := actor.MakeCapabilityContext(t, actorDID, rootDID, trust, root)
+
+			rootSec, err := actor.NewBasicSecurityContext(pubK, privK, capContext)
 			require.NoError(t, err)
 
 			peerID, err := peer.IDFromPublicKey(pubK)
 			require.NoError(t, err)
+
 			testDID := did.FromPublicKey(pubK)
-			provider := did.NewProvider(testDID, privK)
 
-			orchestrator, err := NewOrchestrator(context.Background(), ensembleID, mockActor, getMockEnsembleConfig(t))
-			require.NoError(t, err)
+			provider, err := did.ProviderFromPrivateKey(privK)
+			require.NoError(t, err, "provider from public key")
 
-			wg.Add(1)
+			mockActor.EXPECT().Security().Return(rootSec).AnyTimes()
+			mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 			mockActor.EXPECT().AddBehavior(behaviors.BidReplyBehavior, gomock.Any(), gomock.Any()).
 				DoAndReturn(func(_ string, continuation actor.Behavior, _ ...actor.BehaviorOption) error {
 					if !didReply.Load() {
@@ -991,13 +1082,19 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 					return nil
 				}).AnyTimes()
 			mockActor.EXPECT().Handle().Return(actor.Handle{
-				ID:  actor.ID{PublicKey: id},
+				ID:  rootSec.ID(),
 				DID: testDID,
 				Address: actor.Address{
 					HostID:       "hostID",
 					InboxAddress: "inboxAddress",
 				},
 			}).AnyTimes()
+			orchestrator, err := NewOrchestrator(
+				context.Background(), af, workDir, ensembleID, mockActor, getMockEnsembleConfig(t),
+			)
+			require.NoError(t, err)
+
+			wg.Add(1)
 			mockActor.EXPECT().Publish(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
 				// bid only once
 				if !didReply.Load() {
@@ -1011,7 +1108,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 								NodeID:     "node1",
 								Peer:       peerID.String(),
 								Handle: actor.Handle{
-									ID:  actor.ID{PublicKey: id},
+									ID:  rootSec.ID(),
 									DID: testDID,
 									Address: actor.Address{
 										HostID:       "hostID",

@@ -24,6 +24,7 @@ type EnsembleManifest struct {
 
 type AllocationManifest struct {
 	ID          string                    `json:"id"`              // allocation unique id
+	Type        AllocationType            `json:"type"`            // allocation type (e.g.: service, task)
 	NodeID      string                    `json:"node_id"`         // allocation node
 	Handle      actor.Handle              `json:"handle"`          // handle of the allocation control actor
 	DNSName     string                    `json:"dns_name"`        // (internal) DNS name of the allocation
