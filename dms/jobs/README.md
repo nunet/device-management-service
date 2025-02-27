@@ -2,6 +2,7 @@
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
 **Table of Contents**
 
 - [Computing in the NuNet Network](#computing-in-the-nunet-network)
@@ -52,13 +53,20 @@ and constraints; this is done with a YAML file encoding the [ensemble configurat
 configuration structure are described in detail in this [reference](ensemble_fields_reference.md).
 
 Fundamentally the ensemble configuration has the following structure:
+
 - A map of allocations, mapping allocation names to configuration for individual allocations.
 - A map of nodes, mapping node names to configuration for individual nodes.
 - A list of edges between nodes, encoding specific logical edge constraints.
 - There are additional fields in the data structure which allows us to include ssh keys and scripts in the configuration, as well as supervision strategies policies.
 
 An allocation's configuration has the following structure:
-- The name of the allocation executor; this is the environment in which the actual compute job is executed. We currently support docker and firecracker VMs, but we plan to also support WASM and generally any sandbox/VM that makes sense for users.
+
+- The type of allocation:
+  - Service: A long-running process that should be continuously available and automatically restarted on failure
+  - Task: A one-off job that runs to completion and exits
+- The executor type (the runtime environment for the allocation):
+  - Currently supports: docker, firecracker VMs
+  - Future support planned for: WASM and other sandboxed environments
 - The resources required to run the allocation, such as memory, cpu cores, gpus, and so on.
 - The execution details, which encodes the executor specific configuration of the allocation.
 - The DNS name for internal name resolution of the allocation. This can be omitted, in which case the allocation's name becomes the DNS name.
@@ -67,6 +75,7 @@ An allocation's configuration has the following structure:
 - Finally, the user can also specify the application specific health check to be performede by the supervisor, so that the health of the application can be ascertained and failures detected.
 
 A node's configuration has the following structure:
+
 - The list of allocations that are assigned to the node
 - The configuration of mapping public ports to ports in allocations
 - The Location constraints for the node
@@ -86,6 +95,7 @@ control of their ensemble deployment and ensure that certain
 requirements are met.
 
 In DMS v0.5 we support the following constraints:
+
 - Resources for an allocation, such as memory, core count, gpu details, and so on.
 - Location for nodes; the user can specify the region, city, etc all the way to choosing a particular ISP. Location constraints can also be negative, so that a node will not be deployed in certain locations e.g. because of regulatory considerations such as GPDR.
 - Edge Constraints, which specify the relationship between nodes in the allocation in terms of available bandwidth and round trip time.
@@ -102,7 +112,7 @@ network is to find and assign peers to nodes that satisfies the
 constraints of the ensemble. The system treats the deployment as a
 constraint satisfaction problem over permutations of available peers
 (compute nodes) on which the user is authorized to deploy. The process
-of deploying an ensemble is called _orchestration_.  In the following
+of deploying an ensemble is called _orchestration_. In the following
 we summarize how deployment orchestration is performed.
 
 <p align="center">
@@ -112,11 +122,11 @@ we summarize how deployment orchestration is performed.
 Ensemble deployment is initiated with a user invoking the
 `/dms/node/deployment/new` behavior on the node which is willing to
 run an orchestrator for them; this can be just the user's private DMS
-running on his laptop.  The node accepting the invocation creates the
+running on his laptop. The node accepting the invocation creates the
 orchestrator actor inside its process space, initiates the deployment
 orchestration, and return to the user the ensemble identifier. The
 user can use this identifier to poll the status of the deployment and
-control of the ensemble through the orchestrator actor.  The user also
+control of the ensemble through the orchestrator actor. The user also
 specifies a timeout on how long the deployment process should take
 before declaring failure. This is simply the expiration on the message
 that invokes `/dms/node/deployment/new`.
@@ -182,7 +192,7 @@ relevant nodes and creating the VPN. This is initiated by invoking the
 creates a new allocation actor. Subsequently, the orchestrator assigns
 IP addresses to allocations and creates the VPN (what we call the
 subnet) by invoking the appropriate behaviors on the allocation
-actors, and then starts the allocations.  Once all nodes provision,
+actors, and then starts the allocations. Once all nodes provision,
 the deployment is now considered running and enters supervision.
 
 The deployment will keep running until the user shuts it down, as long
@@ -206,6 +216,7 @@ network, we need to distinguish certain actors in the system in the
 course of an ensembles lifetime.
 
 Specifically, we introduce the following notation:
+
 - Let's call `U`, the user as an actor.
 - Let's call `O` the orchestrator, which is an actor living inside a DMS instance (node) for which the user is authorized to initiate a deployment. We call the node where the orchestrator runs `N_o`. Note that the DID of the orchestrator actor will be the same as the DID of the node on which it runs, but it will have an ephemeral actor ID.
 - Let's call `P_i` the set of compute providers that are willing to accept deployment requests from `U`.
@@ -213,6 +224,7 @@ Specifically, we introduce the following notation:
 - And finally let's call `A_i` the allocation actor for each running allocation. The DID of each allocation actor will be the same as the DID of the node on which the allocation is running, but it will have an ephemeral actor ID.
 
 Also note that we have certain identifiers pertaining to these actors; let's define the following notation:
+
 - `DID(x)` is the DID of actor `x`; in general this is the DID that identifies the node on which the actor is running.
 - `ID(x)` is the ID of actor `x`; this is generally ephemeral, except for node root actors which have persistent identities matching their DID.
 - `Peer(x)` is the peer ID of a node/actor `x`.
@@ -234,6 +246,7 @@ capabilities for deployment of an ensemble:
 - Invocations from `O` to `N_{P_i,j}` for allocation control are in the dynamic `/dms/ensemble/<ensemble-id>` namespace and are dynamically granted programatically.
 
 This creates the following structure:
+
 - `U` must be authorized with `/dms/node/deployment` capability in `N_o`
 - `N_o` must be authorized with `/dms/deployment` capability in `N_{P_i,j}` so that the orchestrator can make the appropriate invocations.
 - `N_{P_i,j}` must be authorized with `/dms/deployment/bid` capability on `N_o` so that it can submit bids to the orchestrator.
@@ -241,6 +254,7 @@ This creates the following structure:
 Note that the decentralized structure and fine grained capability model of the
 NuActor system allows for very tight access control. This ensures
 that:
+
 - Orchestrators can only run on DMS instances where the user is authorized to initiate deployment.
 - Bid requests will only be accepted by provider DMS instances where the user is authorized to deploy.
 - Bids will only be accepted by provider DMS instances whom the user has authorized.

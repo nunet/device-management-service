@@ -2,6 +2,7 @@ version: "V1"
 
 allocations:
     alloc1:
+        type: service
         executor: docker
         resources:
             cpu:

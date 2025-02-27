@@ -25,11 +25,14 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -53,6 +56,8 @@ const (
 
 	MaxBidMultiplier = 8
 	MaxPermutations  = 1_000_000
+
+	grantOrchestratorCapsFrequency = 5 * time.Minute
 )
 
 var (
@@ -65,7 +70,7 @@ var (
 // OrchestratorProvider is an interface which acts as a source for orchestrators
 type OrchestratorProvider interface {
 	// NewOrchestrator creates a new orchestrator
-	NewOrchestrator(ctx context.Context, id string, actor actor.Actor, cfg EnsembleConfig) (OrchestratorAPI, error)
+	NewOrchestrator(ctx context.Context, fs afero.Afero, workDir string, id string, actor actor.Actor, cfg EnsembleConfig) (OrchestratorAPI, error)
 	// RestoreDeployment restores deployments where the status is either provisioning, committing or running
 	RestoreDeployment(
 		actr actor.Actor, id string, cfg EnsembleConfig, manifest EnsembleManifest, status DeploymentStatus, restoreInfo DeploymentSnapshot,
@@ -94,8 +99,9 @@ func NewOrchestratorProvider() OrchestratorProvider {
 }
 
 // NewOrchestrator creates a new orchestrator
+// TODO-style: NewOrchestrator calls NewOrchestrator, that is confusing
 func (f *orchestratorProvider) NewOrchestrator(
-	ctx context.Context, id string, actor actor.Actor, cfg EnsembleConfig,
+	ctx context.Context, fs afero.Afero, workDir string, id string, actor actor.Actor, cfg EnsembleConfig,
 ) (OrchestratorAPI, error) {
 	// check if orchestrator already exists
 	f.lock.RLock()
@@ -105,7 +111,7 @@ func (f *orchestratorProvider) NewOrchestrator(
 	}
 	f.lock.RUnlock()
 
-	o, err := NewOrchestrator(ctx, id, actor, cfg)
+	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
 	}
@@ -234,6 +240,7 @@ type OrchestratorAPI interface {
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() DeploymentSnapshot
 	GetAllocationLogs(name string) (AllocationLogsResponse, error)
+	WriteAllocationLogs(name string, stdout, stderr []byte) (string, error)
 }
 
 type Orchestrator struct {
@@ -252,14 +259,19 @@ type Orchestrator struct {
 	deploymentSnapshot DeploymentSnapshot
 
 	nonce uint64
+
+	fs      afero.Afero
+	workDir string
 }
 
 var _ OrchestratorAPI = (*Orchestrator)(nil)
 
 func NewOrchestrator(
 	ctx context.Context,
+	fs afero.Afero,
+	workDir string,
 	id string,
-	actor actor.Actor,
+	oActor actor.Actor,
 	cfg EnsembleConfig,
 ) (*Orchestrator, error) {
 	if err := cfg.Validate(); err != nil {
@@ -272,11 +284,24 @@ func NewOrchestrator(
 	}
 
 	o := &Orchestrator{
-		actor: actor,
-		geo:   geo,
-		id:    id,
-		cfg:   cfg,
-		ctx:   ctx,
+		actor:   oActor,
+		geo:     geo,
+		id:      id,
+		cfg:     cfg,
+		ctx:     ctx,
+		fs:      fs,
+		workDir: workDir,
+	}
+
+	orchestratorBehaviors := map[string]func(actor.Envelope){
+		behaviors.NotifyTaskTerminationBehavior: o.handleTaskTermination,
+	}
+
+	for b, handler := range orchestratorBehaviors {
+		err := o.actor.AddBehavior(b, handler)
+		if err != nil {
+			return nil, fmt.Errorf("add allocation start behavior to allocation actor: %w", err)
+		}
 	}
 
 	return o, nil
@@ -319,6 +344,7 @@ func (o *Orchestrator) initializeManifest() {
 			Healthcheck: alloc.HealthCheck,
 			Status:      AllocationPending,
 			Ports:       make(map[int]int),
+			Type:        alloc.Type,
 		}
 		o.manifest.Allocations[name] = amf
 	}
@@ -1423,6 +1449,7 @@ func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
 	}
 }
 
+// TODO (wrong nomenclature): AllocationDeploymentRequest -> EnsembleDeploymentRequest
 type AllocationDeploymentRequest struct {
 	EnsembleID  string
 	NodeID      string
@@ -1430,6 +1457,7 @@ type AllocationDeploymentRequest struct {
 }
 
 type AllocationDeploymentConfig struct {
+	Type             jobtypes.AllocationType
 	Executor         AllocationExecutor
 	Resources        types.Resources
 	Execution        types.SpecConfig
@@ -1455,6 +1483,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		}
 
 		allocs[a] = AllocationDeploymentConfig{
+			Type:             acfg.Type,
 			Executor:         acfg.Executor,
 			Resources:        acfg.Resources,
 			Execution:        acfg.Execution,
@@ -1502,15 +1531,66 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		return nil, fmt.Errorf("allocation for %s failed: %s: %w", n, response.Error, ErrDeploymentFailed)
 	}
 
-	// verify that the allocation map has all the allocations
 	for a := range allocs {
+		// verify that the allocation map has all the allocations
 		if _, ok := response.Allocations[a]; !ok {
 			return nil, fmt.Errorf("missing allocation %s for %s: %w", a, n, ErrDeploymentFailed)
 		}
 	}
 
+	for _, a := range response.Allocations {
+		if err := o.grantOrchestratorCaps(a.DID); err != nil {
+			return nil, err
+		}
+	}
+
 	log.Debugf("Allocation successful for node: %s", n)
 	return response.Allocations, nil
+}
+
+func (o *Orchestrator) grantOrchestratorCaps(alloc did.DID) error {
+	oDID, err := did.FromID(o.actor.Handle().ID)
+	if err != nil {
+		return fmt.Errorf("failed to parse orchestrator DID: %w", err)
+	}
+
+	err = o.actor.Security().Grant(
+		alloc,
+		oDID,
+		[]ucan.Capability{behaviors.OrchestratorNamespace},
+		grantOrchestratorCapsFrequency,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"granting orchestrator caps to alloc %s: %w",
+			alloc.String(), err)
+	}
+
+	// TODO: create helper func to periodically grant caps as
+	// it's being used here and on createAllocations()
+	go func() {
+		ticker := time.NewTicker(grantOrchestratorCapsFrequency)
+		defer ticker.Stop()
+
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			err := o.actor.Security().Grant(
+				alloc,
+				o.actor.Handle().DID,
+				[]ucan.Capability{},
+				grantOrchestratorCapsFrequency,
+			)
+			if err != nil {
+				log.Errorf(
+					"periodic grant orchestrator caps to alloc %s: %w",
+					alloc.String(), err)
+			}
+			return
+		}
+	}()
+	return nil
 }
 
 type SubnetCreateRequest struct {
@@ -1851,6 +1931,10 @@ func (o *Orchestrator) provision() error {
 	}
 
 	// 2. start the allocations
+	if o.isOnlyTaskEnsemble() {
+		go o.monitorOnlyTasksEnsemble()
+	}
+
 	allocStatuses := make(map[string]AllocationStatus)
 	errCh = make(chan error, len(o.manifest.Allocations))
 	wg = sync.WaitGroup{}
@@ -1905,6 +1989,13 @@ func (o *Orchestrator) provision() error {
 				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
 				return
 			}
+
+			o.lock.Lock()
+			if alloc, ok := o.manifest.Allocations[allocName]; ok {
+				alloc.Status = AllocationRunning
+				o.manifest.Allocations[allocName] = alloc
+			}
+			o.lock.Unlock()
 
 			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
 			allocStatuses[allocName] = AllocationRunning
@@ -2200,7 +2291,7 @@ func (o *Orchestrator) supervise() {
 		case <-ticker.C:
 			expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 			wg := sync.WaitGroup{}
-			for _, allocation := range o.manifest.Allocations {
+			for n, allocation := range o.manifest.Allocations {
 				msg, err := actor.Message(
 					o.actor.Handle(),
 					allocation.Handle,
@@ -2216,6 +2307,9 @@ func (o *Orchestrator) supervise() {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
+					if o.isTerminatedTask(n) {
+						return
+					}
 
 					replyCh, err := o.actor.Invoke(msg)
 					if err != nil {
@@ -2260,6 +2354,10 @@ func (o *Orchestrator) supervise() {
 						}
 
 					case <-ticker.C:
+						if o.isTerminatedTask(n) {
+							return
+						}
+
 						log.Warnf("timeout waiting for supervisor reply")
 						o.lock.Lock()
 						failures[allocation.Handle.ID.String()]++
@@ -2434,6 +2532,57 @@ func (o *Orchestrator) DeploymentSnapshot() DeploymentSnapshot {
 	defer o.lock.Unlock()
 
 	return o.deploymentSnapshot
+}
+
+func (o *Orchestrator) isTerminatedTask(name string) bool {
+	a, ok := o.manifest.Allocations[name]
+	if !ok {
+		return false
+	}
+
+	if a.Type == jobtypes.AllocationTypeTask &&
+		a.Status != AllocationRunning {
+		return true
+	}
+	return false
+}
+
+func (o *Orchestrator) isOnlyTaskEnsemble() bool {
+	for _, a := range o.manifest.Allocations {
+		if a.Type != jobtypes.AllocationTypeTask {
+			return false
+		}
+	}
+	return true
+}
+
+// monitorOnlyTasksEnsemble will be responsible for tearing down
+// the orchestrator after all tasks are terminated.
+func (o *Orchestrator) monitorOnlyTasksEnsemble() {
+	if !o.isOnlyTaskEnsemble() {
+		return
+	}
+
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+selectLoop:
+	for {
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			for name := range o.manifest.Allocations {
+				if !o.isTerminatedTask(name) {
+					continue selectLoop
+				}
+			}
+			log.Infof("All tasks are terminated, shutting down orchestrator.")
+
+			o.setStatus(DeploymentStatusCompleted)
+			o.cancel()
+			return
+		}
+	}
 }
 
 func (o *Orchestrator) getNonce() uint64 {

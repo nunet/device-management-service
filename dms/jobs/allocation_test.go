@@ -21,15 +21,15 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
 func TestAllocation(t *testing.T) {
-	t.Parallel()
-
+	dummyRelease := func() error { return nil }
 	allocationID := "allocation-1"
 
-	t.Run("must be able to initialise the allocation", func(t *testing.T) {
+	withTimeout(t, "must be able to initialise the allocation", 30*time.Second, func(_ context.Context, t *testing.T) {
 		t.Parallel()
 
 		fs := afero.NewMemMapFs()
@@ -48,12 +48,16 @@ func TestAllocation(t *testing.T) {
 		testActor := actor.CreateActor(t, mockNetwork, actorCap)
 		mockExecutor := NewMockExecutor(ctrl)
 
-		allocation, err := NewAllocation(allocationID, af, workDir, testActor, AllocationDetails{}, mockNetwork, mockExecutor)
+		allocation, err := NewAllocation(
+			allocationID, jobtypes.AllocationTypeService,
+			actor.Handle{}, af, workDir, testActor,
+			AllocationDetails{}, mockNetwork, mockExecutor, dummyRelease,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, allocation)
 	})
 
-	t.Run("must be able to start and run the allocation then terminate it", func(t *testing.T) {
+	withTimeout(t, "must be able to start and run the allocation then terminate it", 30*time.Second, func(_ context.Context, t *testing.T) {
 		t.Parallel()
 
 		fs := afero.NewMemMapFs()
@@ -72,7 +76,12 @@ func TestAllocation(t *testing.T) {
 		testActor := actor.CreateActor(t, mockNetwork, actorCap)
 		mockExecutor := NewMockExecutor(ctrl)
 
-		allocation, err := NewAllocation(allocationID, af, workDir, testActor, AllocationDetails{}, mockNetwork, mockExecutor)
+		allocation, err := NewAllocation(
+			allocationID, jobtypes.AllocationTypeService,
+			actor.Handle{}, af, workDir, testActor,
+			AllocationDetails{}, mockNetwork, mockExecutor, dummyRelease,
+		)
+
 		require.NoError(t, err)
 		require.NotNil(t, allocation)
 
@@ -102,7 +111,7 @@ func TestAllocation(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("must be able to get the status of the allocation", func(t *testing.T) {
+	withTimeout(t, "must be able to get the status of the allocation", 30*time.Second, func(_ context.Context, t *testing.T) {
 		t.Parallel()
 
 		fs := afero.NewMemMapFs()
@@ -121,7 +130,11 @@ func TestAllocation(t *testing.T) {
 		testActor := actor.CreateActor(t, mockNetwork, actorCap)
 		mockExecutor := NewMockExecutor(ctrl)
 
-		allocation, err := NewAllocation(allocationID, af, workDir, testActor, AllocationDetails{}, mockNetwork, mockExecutor)
+		allocation, err := NewAllocation(
+			allocationID, jobtypes.AllocationTypeService,
+			actor.Handle{}, af, workDir, testActor,
+			AllocationDetails{}, mockNetwork, mockExecutor, dummyRelease,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, allocation)
 
@@ -148,7 +161,7 @@ func TestAllocation(t *testing.T) {
 		require.Equal(t, AllocationRunning, status.Status)
 	})
 
-	t.Run("must be able to stop the allocation", func(t *testing.T) {
+	withTimeout(t, "must be able to stop the allocation", 30*time.Second, func(_ context.Context, t *testing.T) {
 		t.Parallel()
 
 		fs := afero.NewMemMapFs()
@@ -167,7 +180,11 @@ func TestAllocation(t *testing.T) {
 		testActor := actor.CreateActor(t, mockNetwork, actorCap)
 		mockExecutor := NewMockExecutor(ctrl)
 
-		allocation, err := NewAllocation(allocationID, af, workDir, testActor, AllocationDetails{}, mockNetwork, mockExecutor)
+		allocation, err := NewAllocation(
+			allocationID, jobtypes.AllocationTypeService,
+			actor.Handle{}, af, workDir, testActor,
+			AllocationDetails{}, mockNetwork, mockExecutor, dummyRelease,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, allocation)
 
@@ -204,7 +221,7 @@ func TestAllocation(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("must be able to restart the allocation", func(t *testing.T) {
+	withTimeout(t, "must be able to restart the allocation", 30*time.Second, func(_ context.Context, t *testing.T) {
 		t.Parallel()
 
 		fs := afero.NewMemMapFs()
@@ -223,7 +240,11 @@ func TestAllocation(t *testing.T) {
 		testActor := actor.CreateActor(t, mockNetwork, actorCap)
 		mockExecutor := NewMockExecutor(ctrl)
 
-		allocation, err := NewAllocation(allocationID, af, workDir, testActor, AllocationDetails{}, mockNetwork, mockExecutor)
+		allocation, err := NewAllocation(
+			allocationID, jobtypes.AllocationTypeService,
+			actor.Handle{}, af, workDir, testActor,
+			AllocationDetails{}, mockNetwork, mockExecutor, dummyRelease,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, allocation)
 
@@ -244,8 +265,10 @@ func TestAllocation(t *testing.T) {
 
 		allocation.state.subnetIP = "dummy-port"
 		mockNetwork.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		mockExecutor.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 		mockExecutor.EXPECT().Cancel(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+		mockExecutor.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 		err = allocation.Restart(context.Background())
 		require.NoError(t, err)
 

@@ -15,6 +15,7 @@ import (
 
 	actor "gitlab.com/nunet/device-management-service/actor"
 	crypto "gitlab.com/nunet/device-management-service/lib/crypto"
+	did "gitlab.com/nunet/device-management-service/lib/did"
 	ucan "gitlab.com/nunet/device-management-service/lib/ucan"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -76,18 +77,23 @@ func (mr *MockActorMockRecorder) Context() *gomock.Call {
 }
 
 // CreateChild mocks base method.
-func (m *MockActor) CreateChild(super actor.Handle, params actor.BasicActorParams) (*actor.BasicActor, error) {
+func (m *MockActor) CreateChild(id string, super actor.Handle, opts ...actor.CreateChildOption) (actor.Actor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateChild", super, params)
-	ret0, _ := ret[0].(*actor.BasicActor)
+	varargs := []any{id, super}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateChild", varargs...)
+	ret0, _ := ret[0].(actor.Actor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateChild indicates an expected call of CreateChild.
-func (mr *MockActorMockRecorder) CreateChild(super, params any) *gomock.Call {
+func (mr *MockActorMockRecorder) CreateChild(id, super any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChild", reflect.TypeOf((*MockActor)(nil).CreateChild), super, params)
+	varargs := append([]any{id, super}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChild", reflect.TypeOf((*MockActor)(nil).CreateChild), varargs...)
 }
 
 // Handle mocks base method.
@@ -131,6 +137,34 @@ func (m *MockActor) Limiter() actor.RateLimiter {
 func (mr *MockActorMockRecorder) Limiter() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Limiter", reflect.TypeOf((*MockActor)(nil).Limiter))
+}
+
+// Children mocks base method.
+func (m *MockActor) Children() map[did.DID]actor.Handle {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Children")
+	ret0, _ := ret[0].(map[did.DID]actor.Handle)
+	return ret0
+}
+
+// Children indicates an expected call of Children.
+func (mr *MockActorMockRecorder) Children() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Children", reflect.TypeOf((*MockActor)(nil).Children))
+}
+
+// Parent mocks base method.
+func (m *MockActor) Parent() actor.Handle {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Parent")
+	ret0, _ := ret[0].(actor.Handle)
+	return ret0
+}
+
+// Parent indicates an expected call of Parent.
+func (mr *MockActorMockRecorder) Parent() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Parent", reflect.TypeOf((*MockActor)(nil).Parent))
 }
 
 // Publish mocks base method.

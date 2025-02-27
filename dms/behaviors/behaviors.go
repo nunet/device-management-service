@@ -53,9 +53,10 @@ const (
 	BroadcastHelloBehavior = "/broadcast/hello"
 	BroadcastHelloTopic    = "/nunet/hello"
 
-	EnsembleNamespace   = "/dms/ensemble/%s"
-	AllocationNamespace = "/dms/allocation"
-	NodeNamespace       = "/dms/node"
+	EnsembleNamespace     = "/dms/ensemble/%s"
+	AllocationNamespace   = "/dms/allocation"
+	OrchestratorNamespace = "/dms/orchestrator"
+	NodeNamespace         = "/dms/node"
 
 	AllocationStartBehavior     = "/dms/allocation/start"
 	AllocationRestartBehavior   = "/dms/allocation/restart"
@@ -68,6 +69,8 @@ const (
 	SubnetUnmapPortBehavior       = AllocationNamespace + "/subnet/unmap-port"
 	SubnetDNSAddRecordsBehavior   = AllocationNamespace + "/subnet/dns/add-records"
 	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
+
+	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
 
 	AllocationLogsBehavior     = EnsembleNamespace + "/allocation/logs"
 	AllocationShutdownBehavior = EnsembleNamespace + "/allocation/shutdown"

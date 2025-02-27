@@ -19,6 +19,7 @@ version: "V1"
 
 allocations:
   alloc1:
+    type: task
     executor: docker
     resources:
       cpu:
@@ -32,16 +33,10 @@ allocations:
       type: docker
       image: hello-world
     dnsname: mydocker
-    keys: []
-    provision: []
-    healthcheck: ""
 nodes:
   node1:
     allocations:
       - alloc1
-    location:
-      accept: []
-      reject: []
 ```
 
 For more details about the ensemble configuration format and all possible fields, see the [EnsembleConfig Documentation](../dms/jobs/ensemble_fields_reference.md).

@@ -38,6 +38,7 @@ func TestGenerateEnsemble(t *testing.T) {
 
 	ens.Allocations["alloc1"] = jobtypes.AllocationConfig{
 		Executor: jobtypes.ExecutorDocker,
+		Type:     jobtypes.AllocationTypeService,
 		Resources: types.Resources{
 			CPU:  types.CPU{ClockSpeed: 2, Cores: 2, Threads: 2, Architecture: ""},
 			RAM:  types.RAM{Size: 4, ClockSpeed: 3, Type: ""},
@@ -58,6 +59,7 @@ func TestGenerateEnsemble(t *testing.T) {
 	firecrackerspec := firecracker.NewFirecrackerEngineBuilder("/").WithInitrd("WithInitrd").WithKernelImage("WithInitrd").WithRootFileSystem("/").Build()
 	ens.Allocations["alloc2"] = jobtypes.AllocationConfig{
 		Executor: jobtypes.ExecutorFirecracker,
+		Type:     jobtypes.AllocationTypeService,
 		Resources: types.Resources{
 			CPU:  types.CPU{ClockSpeed: 2, Cores: 2, Threads: 2, Architecture: ""},
 			RAM:  types.RAM{Size: 4, ClockSpeed: 3, Type: ""},

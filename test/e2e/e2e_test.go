@@ -28,6 +28,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
 )
@@ -270,7 +271,7 @@ func TestDMS(t *testing.T) {
 	hostname, err := os.Hostname()
 	assert.NoError(t, err)
 	srcFile := filepath.Join(currentDir, "nginx2.yaml")
-	destinationFile := filepath.Join(dms1Config.WorkDir, "nginx.yaml")
+	destinationFile := filepath.Join(dms1Config.WorkDir, "nginx2.yaml")
 	err = copyFile(srcFile, destinationFile)
 	assert.NoError(t, err)
 	err = replaceHostnameInFile(destinationFile, hostname)
@@ -284,7 +285,7 @@ func TestDMS(t *testing.T) {
 	require.Eventually(t, func() bool {
 		bidRequests := dms1.Node.GetBidRequests()
 		return len(bidRequests) == 1
-	}, 60*time.Second, 100*time.Millisecond, "Bid requests for nginx.yaml deployment were not populated within the expected time")
+	}, 60*time.Second, 100*time.Millisecond, "Bid requests for nginx2.yaml deployment were not populated within the expected time")
 
 	// check the status of deployment until its running
 	require.Eventually(t, func() bool {
@@ -292,14 +293,13 @@ func TestDMS(t *testing.T) {
 		extractedStatus := extractStatus(status)
 
 		return extractedStatus == "Running"
-	}, 60*time.Second, 100*time.Millisecond, "Deployment of nginx.yaml is not running within expected time")
+	}, 60*time.Second, 100*time.Millisecond, "Deployment of nginx2.yaml is not running within expected time")
 
 	time.Sleep(2 * time.Second)
 
 	allAllocations := dms1.Node.Allocator().GetAllocations()
 	require.Len(t, allAllocations, 1)
 
-	// get the only running allocation
 	var alloc *jobs.Allocation
 	for _, v := range allAllocations {
 		alloc = v
@@ -310,16 +310,16 @@ func TestDMS(t *testing.T) {
 	require.Eventually(t, func() bool {
 		allocStatus := alloc.Status(context.Background())
 		return string(allocStatus.Status) == "running"
-	}, 60*time.Second, 100*time.Millisecond, "Allocation for nginx.yaml status is still not running  after 60 seconds")
+	}, 60*time.Second, 100*time.Millisecond, "Allocation for nginx2.yaml status is still not running  after 60 seconds")
 
 	// free resources should be different after we deployed
 	freeResourceWhileDeplymentRunning, err := dms1.Node.ResourceManager().GetFreeResources(context.Background())
 	require.NoError(t, err)
 	assert.False(t, freeResourceWhileDeplymentRunning.Equal(freeResourcesBeforeDeplyment.Resources))
 
-	// alloc1 should not have port mapping - alloc2 should have 1
+	// nginxAllocWithStorage1 should not have port mapping - nginxAllocWithStorage2 should have 1
 	ports := alloc.GetPortMapping()
-	if strings.Contains(alloc.ID, "alloc1") {
+	if strings.Contains(alloc.ID, "nginxAllocWithStorage1") {
 		require.Empty(t, ports)
 	} else {
 		require.Equal(t, 1, len(ports))
@@ -359,6 +359,8 @@ func TestDMS(t *testing.T) {
 	allAllocations = dms1.Node.Allocator().GetAllocations()
 	require.Len(t, allAllocations, 0)
 
+	t.Log("nginx test done")
+
 	// run hello world that exists
 	deployment2Result := clidms2.deploy(t, dms2Pass, filepath.Join(currentDir, "hello.yaml"))
 	assert.Contains(t, deployment2Result, `"Status": "OK"`)
@@ -367,29 +369,25 @@ func TestDMS(t *testing.T) {
 		status := clidms2.deploymentStatus(t, dms2Pass, manifest2ID)
 		extractedStatus := extractStatus(status)
 		t.Log("second ensemble status", extractedStatus)
-		// TODO: change the following to Completed
-		// after we add the completed status
-		allAllocations = dms1.Node.Allocator().GetAllocations()
-		return extractedStatus == "Running" && len(allAllocations) == 1
+		return extractedStatus == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusCompleted)
 	}, 60*time.Second, 100*time.Millisecond, "failed to run second deployment hello.yaml within the expected time")
 
-	// get the only running allocation
-	var helloAlloc *jobs.Allocation
-	for _, v := range allAllocations {
-		helloAlloc = v
-		break
-	}
+	freeResourcesAfterDeplyment, err = dms1.Node.ResourceManager().GetFreeResources(context.Background())
+	require.NoError(t, err)
 
-	// get allocations port mappings
-	ports = helloAlloc.GetPortMapping()
-	require.NotEmpty(t, ports)
-	require.Equal(t, ports[8080], 80)
+	// free resources after deployment is shutdown should be equal to before running the deployment
+	assert.True(t, freeResourcesAfterDeplyment.Equal(freeResourcesBeforeDeplyment.Resources))
 
-	// shutdown previous allocations
-	shutdownRes = clidms2.shutdownDeployment(t, dms2Pass, manifest2ID)
-	require.Contains(t, shutdownRes, `"Error": ""`)
+	time.Sleep(1 * time.Second)
 
-	time.Sleep(2 * time.Second)
+	// check if the allocation was properlly removed
+	require.Eventually(t, func() bool {
+		allAllocations = dms1.Node.Allocator().GetAllocations()
+		for name := range allAllocations {
+			t.Log(name)
+		}
+		return len(allAllocations) == 0
+	}, 10*time.Second, 100*time.Millisecond, "failed to release hello ensemble")
 
 	revokeToken := clidms1.revokeToken(t, dms1Pass, grantToken12)
 	clidms1.anchorBehaviour(t, dms1Pass, revokeToken)

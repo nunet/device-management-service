@@ -18,16 +18,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/afero"
-
 	"github.com/google/uuid"
-	"gitlab.com/nunet/device-management-service/executor/docker"
-
-	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
@@ -104,36 +102,15 @@ func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 	return nil
 }
 
-func (n *Node) grantCaps(orchestrator did.DID, aud did.DID, caps []ucan.Capability) error {
-	tokens, err := n.rootCap.Grant(
-		ucan.Delegate,
-		orchestrator,
-		aud,
-		[]string{},
-		actor.MakeExpiry(grantAllocationCapsFreq),
-		1,
-		caps,
-	)
-	if err != nil {
-		return fmt.Errorf("create granting token for audience %s caps: %w", aud, err)
-	}
-
-	err = n.rootCap.AddRoots([]did.DID{}, tokens, ucan.TokenList{}, ucan.TokenList{})
-	if err != nil {
-		return fmt.Errorf("add roots for audience %s: %w", aud, err)
-	}
-
-	return nil
-}
-
 // createAllocation creates an allocation
-func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor actor.Handle) (*jobs.Allocation, error) {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
-	if err != nil {
-		return nil, fmt.Errorf("generate keypair for allocation job %s: %w", allocationID, err)
-	}
-
-	allocActor, err := n.createChildActor(priv, allocationID, supervisor)
+func (n *Node) createAllocation(
+	allocationID string, orchestrator actor.Handle,
+	allocType jobtypes.AllocationType,
+	job jobs.Job, supervisor actor.Handle,
+) (*jobs.Allocation, error) {
+	allocActor, err := n.actor.CreateChild(
+		allocationID, supervisor,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation actor: %w", err)
 	}
@@ -143,7 +120,11 @@ func (n *Node) createAllocation(allocationID string, job jobs.Job, supervisor ac
 		return nil, fmt.Errorf("create executor: %w", err)
 	}
 
-	allocation, err := n.allocator.Allocate(context.Background(), allocationID, allocActor, job, executor)
+	allocation, err := n.allocator.Allocate(
+		context.Background(), allocationID,
+		allocType, allocActor, orchestrator,
+		job, executor,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("allocate resources: %w", err)
 	}
@@ -165,6 +146,8 @@ func (n *Node) createAllocations(
 
 		allocation, err := n.createAllocation(
 			allocationID,
+			supervisor,
+			allocationConfig.Type,
 			jobs.Job{
 				Resources:        allocationConfig.Resources,
 				Execution:        allocationConfig.Execution,
@@ -181,21 +164,19 @@ func (n *Node) createAllocations(
 		allocationIDs = append(allocationIDs, allocation.ID)
 
 		// node grants subnet create/destroy caps to the orchestrator
-		if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+		if err := n.actor.Security().Grant(orchestrator, n.actor.Handle().DID, []ucan.Capability{
 			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
-		}); err != nil {
+		}, grantAllocationCapsFreq); err != nil {
 			return nil, fmt.Errorf("grant node caps: %w", err)
 		}
 
-		// allocation grants subnet manage caps to the orchestrator
 		allocDID, err := did.FromID(allocation.Actor.Handle().ID)
 		if err != nil {
-			return nil, fmt.Errorf("get did from id: %w", err)
+			return nil, fmt.Errorf("deriving allocation did: %w", err)
 		}
-
-		if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
+		if err := n.actor.Security().Grant(orchestrator, allocDID, []ucan.Capability{
 			behaviors.AllocationNamespace,
-		}); err != nil {
+		}, grantAllocationCapsFreq); err != nil {
 			return nil, fmt.Errorf("grant allocation caps: %w", err)
 		}
 
@@ -210,16 +191,16 @@ func (n *Node) createAllocations(
 					return
 				case <-ticker.C:
 					// node grants subnet create/destroy caps to the orchestrator
-					if err := n.grantCaps(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+					if err := n.actor.Security().Grant(orchestrator, n.actor.Handle().DID, []ucan.Capability{
 						ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
-					}); err != nil {
+					}, grantAllocationCapsFreq); err != nil {
 						log.Warnf("grant node caps: %v", err)
 					}
 
 					// allocation grants subnet manage caps to the orchestrator
-					if err := n.grantCaps(orchestrator, allocDID, []ucan.Capability{
+					if err := n.actor.Security().Grant(orchestrator, allocDID, []ucan.Capability{
 						behaviors.AllocationNamespace,
-					}); err != nil {
+					}, grantAllocationCapsFreq); err != nil {
 						log.Warnf("grant allocation caps: %v", err)
 					}
 				}
@@ -234,6 +215,7 @@ func (n *Node) createAllocations(
 	return allocHandlesByName, nil
 }
 
+// TODO (wrong nomenclature): handleAllocationDeployment -> handleEnsembleDeployment
 func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -314,10 +296,6 @@ func ensembleIDFromBehavior(b string) (string, error) {
 	return "", fmt.Errorf("invalid ensemble behavior: %s", b)
 }
 
-// TODO: instead of having a behavior to get logs from a FINISHED allocation,
-// we may allow only getting logs from ONGOING allocations.
-// For finite allocations, it could send the logs back to the orchestrator
-// if specified on the ensemble.
 func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 	defer msg.Discard()
 	log.Infof("behavior get logs invoked by: %+v", msg.From)
