@@ -49,7 +49,7 @@ func setup() (*clover.DB, string) {
 	return db, path
 }
 
-// teardown closes the GORM database connection after tests.
+// teardown closes the clover database after tests.
 func teardown(db *clover.DB, path string) {
 	// close the clover database
 	db.Close()

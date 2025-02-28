@@ -13,11 +13,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/afero"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
-	rGorm "gitlab.com/nunet/device-management-service/db/repositories/gorm"
+	cloverRepo "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -36,17 +33,13 @@ func SetupVolumeControllerTestKit(basePath string, volumes map[string]*types.Sto
 	// S3 are calling this SetupVolControllerTestSuite, so it's one way to initialize telemetry
 	// for basic controller
 
-	db, err := gorm.Open(
-		sqlite.Open("file:?mode=memory&cache=shared"),
-		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)},
+	db, err := cloverRepo.NewMemDB(
+		[]string{
+			"storage_volume",
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create in-memory mock database: %w", err)
-	}
-
-	err = db.AutoMigrate(&types.StorageVolume{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to automigrate: %w", err)
 	}
 
 	fs := afero.NewMemMapFs()
@@ -56,7 +49,7 @@ func SetupVolumeControllerTestKit(basePath string, volumes map[string]*types.Sto
 		return nil, fmt.Errorf("failed to create base path: %w", err)
 	}
 
-	repo := rGorm.NewStorageVolume(db)
+	repo := cloverRepo.NewStorageVolume(db)
 	vc, err := NewDefaultVolumeController(repo, basePath, fs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create volume controller: %w", err)

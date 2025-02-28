@@ -85,6 +85,7 @@ keys:
 # Allocation definitions
 allocations:
   worker1:
+    type: "task"
     executor: "docker"
     dns_name: "worker1.local"
     resources: "standard"  # Reference to resource template
@@ -97,12 +98,6 @@ allocations:
         - "DEBUG=1"
         - "WORKER_ID=1"
       working_directory: "/app"
-    healthcheck:
-      type: "command"
-      exec: ["echo", "worker1 healthy"]
-      response:
-        type: "string"
-        value: "worker1 healthy"
     provision:
       - "setup"     # Reference to script in scripts section
       - "cleanup"   # Reference to script in scripts section
@@ -110,6 +105,7 @@ allocations:
       - "worker1-key"
 
   worker2:
+    type: "task"
     executor: "docker"
     dns_name: "worker2.local"
     resources: "minimal"  # Reference to resource template
@@ -125,6 +121,7 @@ allocations:
       - "worker2-key"
 
   vm1:
+    type: "service"
     executor: "firecracker"
     dns_name: "vm1.local"
     resources: "standard2"  # Reference to resource template

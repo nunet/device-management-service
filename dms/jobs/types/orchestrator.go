@@ -52,7 +52,7 @@ func DeploymentStatusString(d DeploymentStatus) string {
 
 type OrchestratorView struct {
 	types.BaseDBModel
-	DeploymentID       string
+	OrchestratorID     string
 	Cfg                EnsembleConfig
 	Manifest           EnsembleManifest
 	Status             DeploymentStatus

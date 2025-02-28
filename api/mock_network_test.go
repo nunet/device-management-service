@@ -11,11 +11,11 @@ package api
 
 import (
 	context "context"
+	net "net"
 	reflect "reflect"
 	time "time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-
+	peer "github.com/libp2p/go-libp2p/core/peer"
 	config "gitlab.com/nunet/device-management-service/internal/config"
 	crypto "gitlab.com/nunet/device-management-service/lib/crypto"
 	network "gitlab.com/nunet/device-management-service/network"
@@ -29,6 +29,7 @@ import (
 type MockNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockNetworkMockRecorder
+	isgomock struct{}
 }
 
 // MockNetworkMockRecorder is the mock recorder for MockNetwork.
@@ -189,7 +190,7 @@ func (mr *MockNetworkMockRecorder) GetPeerPubKey(peerID any) *gomock.Call {
 }
 
 // HandleMessage mocks base method.
-func (m *MockNetwork) HandleMessage(messageType string, handler func(msg []byte, peerID peer.ID)) error {
+func (m *MockNetwork) HandleMessage(messageType string, handler func([]byte, peer.ID)) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleMessage", messageType, handler)
 	ret0, _ := ret[0].(error)
@@ -200,6 +201,21 @@ func (m *MockNetwork) HandleMessage(messageType string, handler func(msg []byte,
 func (mr *MockNetworkMockRecorder) HandleMessage(messageType, handler any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockNetwork)(nil).HandleMessage), messageType, handler)
+}
+
+// HostPublicIP mocks base method.
+func (m *MockNetwork) HostPublicIP() (net.IP, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HostPublicIP")
+	ret0, _ := ret[0].(net.IP)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HostPublicIP indicates an expected call of HostPublicIP.
+func (mr *MockNetworkMockRecorder) HostPublicIP() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HostPublicIP", reflect.TypeOf((*MockNetwork)(nil).HostPublicIP))
 }
 
 // Init mocks base method.

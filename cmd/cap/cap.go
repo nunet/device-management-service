@@ -48,6 +48,7 @@ func NewCapCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd.AddCommand(newDelegateCmd(afs, cfg))
 	cmd.AddCommand(newListCmd(afs, cfg))
 	cmd.AddCommand(newRemoveCmd(afs, cfg))
+	cmd.AddCommand(newHelpCmd())
 
 	return cmd
 }

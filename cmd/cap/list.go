@@ -17,7 +17,6 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/did"
 )
 
 func newListCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
@@ -30,24 +29,12 @@ func newListCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 
 It outputs DIDs and capability tokens set for root, provide, require and revoke anchors.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			var trustCtx did.TrustContext
-			if node.IsLedgerContext(context) {
-				provider, err := did.NewLedgerWalletProvider(0)
-				if err != nil {
-					return err
-				}
-
-				trustCtx = did.NewTrustContextWithProvider(provider)
-				context = node.LedgerContext(context)
-			} else {
-				var err error
-				trustCtx, _, err = node.CreateTrustContextFromKeyStore(afs, context, cfg)
-				if err != nil {
-					return fmt.Errorf("failed to create trust context: %w", err)
-				}
+			trustCtx, err := node.GetTrustContext(afs, context, cfg.UserDir)
+			if err != nil {
+				return fmt.Errorf("get trust context: %w", err)
 			}
 
-			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg)
+			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg.UserDir)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}

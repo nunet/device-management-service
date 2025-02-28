@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
@@ -29,10 +30,10 @@ type BasicSecurityContext struct {
 
 var _ SecurityContext = (*BasicSecurityContext)(nil)
 
-func NewBasicSecurityContext(pubk crypto.PubKey, privk crypto.PrivKey, cap ucan.CapabilityContext) (*BasicSecurityContext, error) {
+func NewBasicSecurityContext(pubk crypto.PubKey, privk crypto.PrivKey, capCxt ucan.CapabilityContext) (*BasicSecurityContext, error) {
 	sctx := &BasicSecurityContext{
 		privk: privk,
-		cap:   cap,
+		cap:   capCxt,
 		nonce: uint64(time.Now().UnixNano()),
 	}
 
@@ -67,7 +68,7 @@ func (s *BasicSecurityContext) PrivKey() crypto.PrivKey {
 	return s.privk
 }
 
-func (s *BasicSecurityContext) Require(msg Envelope, cap []Capability) error {
+func (s *BasicSecurityContext) Require(msg Envelope, invoke []Capability) error {
 	// if we are sending to self, nothing to do, signature is alredady verified
 	if s.id.Equal(msg.From.ID) && s.id.Equal(msg.To.ID) {
 		return nil
@@ -79,7 +80,7 @@ func (s *BasicSecurityContext) Require(msg Envelope, cap []Capability) error {
 	}
 
 	// check if any of the requested invocation capabilities are delegated
-	if err := s.cap.Require(s.DID(), msg.From.ID, s.id, cap); err != nil {
+	if err := s.cap.Require(s.DID(), msg.From.ID, s.id, invoke); err != nil {
 		s.cap.Discard(msg.Capability)
 		return fmt.Errorf("requiring capabilities: %w", err)
 	}
@@ -185,6 +186,30 @@ func (s *BasicSecurityContext) Sign(msg *Envelope) error {
 	}
 
 	msg.Signature = sig
+	return nil
+}
+
+func (s *BasicSecurityContext) Grant(
+	sub, aud did.DID, caps []ucan.Capability, expiry time.Duration,
+) error {
+	tokens, err := s.cap.Grant(
+		ucan.Delegate,
+		sub,
+		aud,
+		[]string{},
+		MakeExpiry(expiry),
+		1,
+		caps,
+	)
+	if err != nil {
+		return fmt.Errorf("create granting token for audience %s caps: %w", aud, err)
+	}
+
+	err = s.cap.AddRoots([]did.DID{}, tokens, ucan.TokenList{}, ucan.TokenList{})
+	if err != nil {
+		return fmt.Errorf("add roots for audience %s: %w", aud, err)
+	}
+
 	return nil
 }
 

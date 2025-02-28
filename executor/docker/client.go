@@ -80,7 +80,7 @@ var _ ClientInterface = (*Client)(nil)
 
 // NewDockerClient initializes a new Docker client with environment variables and API version negotiation.
 func NewDockerClient() (*Client, error) {
-	log.Infow("docker_client_init_started")
+	log.Debugw("docker_client_init_started")
 
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
@@ -88,13 +88,13 @@ func NewDockerClient() (*Client, error) {
 		return nil, err
 	}
 
-	log.Infow("docker_client_init_success")
+	log.Debugw("docker_client_init_success")
 	return &Client{client: c}, nil
 }
 
 // IsInstalled checks if Docker is installed and reachable by pinging the Docker daemon.
 func (c *Client) IsInstalled(ctx context.Context) bool {
-	log.Infow("docker_client_is_installed_check_started")
+	log.Debugw("docker_client_is_installed_check_started")
 
 	_, err := c.client.Ping(ctx)
 	if err != nil {
@@ -102,7 +102,7 @@ func (c *Client) IsInstalled(ctx context.Context) bool {
 		return false
 	}
 
-	log.Infow("docker_client_is_installed_success")
+	log.Debugw("docker_client_is_installed_success")
 	return true
 }
 

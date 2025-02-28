@@ -16,20 +16,22 @@ import (
 )
 
 type EnsembleManifest struct {
-	ID           string                        // ensemble globally unique id
-	Orchestrator actor.Handle                  // orchestrator actor
-	Allocations  map[string]AllocationManifest // allocation name -> manifest
-	Nodes        map[string]NodeManifest       // node name -> manifest
+	ID           string                        `json:"id"`           // ensemble globally unique id
+	Orchestrator actor.Handle                  `json:"orchestrator"` // orchestrator actor
+	Allocations  map[string]AllocationManifest `json:"allocations"`  // allocation name -> manifest
+	Nodes        map[string]NodeManifest       `json:"nodes"`        // node name -> manifest
 }
 
 type AllocationManifest struct {
 	ID          string                    `json:"id"`              // allocation unique id
+	Type        AllocationType            `json:"type"`            // allocation type (e.g.: service, task)
 	NodeID      string                    `json:"node_id"`         // allocation node
 	Handle      actor.Handle              `json:"handle"`          // handle of the allocation control actor
 	DNSName     string                    `json:"dns_name"`        // (internal) DNS name of the allocation
 	PrivAddr    string                    `json:"priv_addr"`       // (VPN) private IP address of the allocation peer
 	Ports       map[int]int               `json:"ports,omitempty"` // port mapping, public -> private
 	Healthcheck types.HealthCheckManifest `json:"healthcheck"`     // healthcheck configuration
+	Status      AllocationStatus          `json:"status"`          // current status of the allocation
 }
 
 type NodeManifest struct {

@@ -180,13 +180,13 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 		takenNames = append(takenNames, iface.Name)
 	}
 
-	log.Debug("finding proper iface name for TUN interface", "taken_names", takenNames)
+	log.Debugf("finding proper iface name for TUN interface. taken_names: %s", takenNames)
 	name, err := generateUniqueName(takenNames)
 	if err != nil {
 		return fmt.Errorf("failed to generate unique name for TUN interface: %w", err)
 	}
 
-	log.Debug("Creating TUN interface", "name", name)
+	log.Debugf("Creating TUN interface with name: %s", name)
 	address := fmt.Sprintf("%s/24", ipAddr.String())
 
 	iface, err := sys.NewTunTapInterface(name, sys.NetTunMode, false)
@@ -320,7 +320,7 @@ func (l *Libp2p) writePackets(stream network.Stream) {
 	// Read the incoming packet's size as a binary value.
 	_, err := stream.Read(IDSize)
 	if err != nil {
-		log.Error("failed to read subnet id size from stream", err)
+		log.Errorf("failed to read subnet id size from stream: %v", err)
 		_ = stream.Reset()
 		return
 	}
@@ -335,7 +335,7 @@ func (l *Libp2p) writePackets(stream network.Stream) {
 		tmp, err := stream.Read(subnetID[IDLen:size])
 		IDLen += uint16(tmp)
 		if err != nil {
-			log.Error("failed to read subnet id from stream", err)
+			log.Errorf("failed to read subnet id from stream: %v", err)
 			_ = stream.Reset()
 			return
 		}
@@ -392,7 +392,7 @@ func (s *subnet) readPackets(ctx context.Context, iface *sys.NetInterface) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Debug("context done, abandoning read loop...", "subnet", s.info.id)
+			log.Debugf("context done, abandoning read loop... on subnetID: %s", s.info.id)
 			return
 		default:
 			{
@@ -401,10 +401,10 @@ func (s *subnet) readPackets(ctx context.Context, iface *sys.NetInterface) {
 				plen, err := iface.Iface.Read(packet)
 				if errors.Is(err, fs.ErrClosed) {
 					time.Sleep(1 * time.Second)
-					log.Debug("tun device closed, abandoning read loop...", err, "subnet", s.info.id)
+					log.Debugf("tun device closed, abandoning read loop on subnetID: %s, error: %v", s.info.id, err)
 					return
 				} else if err != nil {
-					log.Error("failed to read packet from tun device ", err, "subnet", s.info.id)
+					log.Errorf("failed to read packet from tun device on subnetID: %s, error: %v", s.info.id, err)
 					continue
 				}
 
@@ -414,11 +414,11 @@ func (s *subnet) readPackets(ctx context.Context, iface *sys.NetInterface) {
 
 				srcPort, destPort, srcIP, destIP, err := s.parseIPPacket(packet)
 				if err != nil {
-					log.Error("failed to parse IP packet", err)
+					log.Error("failed to parse IP packet: ", err)
 					continue
 				}
 
-				log.Debug(
+				log.Debugln(
 					"read packet from tun device",
 					"tun", iface.Iface.Name(),
 					"subnet", s.info.id,
@@ -433,7 +433,7 @@ func (s *subnet) readPackets(ctx context.Context, iface *sys.NetInterface) {
 					continue
 				}
 
-				log.Debug(
+				log.Debugln(
 					"handling DNS query",
 					"subnet", s.info.id,
 					"destIP", destIP,
@@ -443,7 +443,7 @@ func (s *subnet) readPackets(ctx context.Context, iface *sys.NetInterface) {
 				)
 
 				if err := s.handleDNSQueries(iface, packet, plen); err != nil {
-					log.Error("failed to handle DNS query", err)
+					log.Errorf("failed to handle DNS query: %v", err)
 				}
 			}
 		}
@@ -503,12 +503,12 @@ func (s *subnet) handleDNSQueries(iface *sys.NetInterface, packet []byte, packet
 }
 
 func (s *subnet) Route(destIP string, packet []byte, plen int) {
-	log.Debug("routing packet", "subnet", s.info.id, "dstIP", destIP)
+	log.Debugf("routing packet on subnetID: %s, dstIP: %s", s.info.id, destIP)
 	// check if present in our tuns table first
 	defer s.mx.Unlock()
 	s.mx.Lock()
 	if _, ok := s.ifaces[destIP]; ok {
-		log.Debug("found destination ip in tuns table", "subnet", s.info.id, "dstIP", destIP)
+		log.Debugf("found destination ip in tuns table on subnetID: %s, dstIP: %s", s.info.id, destIP)
 		// if so, write to the tun
 		_, _ = s.ifaces[destIP].tun.Iface.Write(packet[:plen])
 		return
@@ -517,11 +517,11 @@ func (s *subnet) Route(destIP string, packet []byte, plen int) {
 	// if else check if present in our routing table
 	peerID, ok := s.info.rtable.GetByIP(destIP)
 	if !ok {
-		log.Debug("unrecognized destination ip", "subnet", s.info.id, "dstIP", destIP)
+		log.Debugf("unrecognized destination ip on subnetID: %s, dstIP: %s", s.info.id, destIP)
 		return
 	}
 
-	log.Debugf("found destination ip in routing table", "subnet", s.info.id, "dstIP", destIP, "peerID", peerID.String())
+	log.Debugf("found destination ip in routing table on subnetID: %s, dstIP: %s, peerID: %s", s.info.id, destIP, peerID.String())
 
 	go s.redirectPacketToStream(s.ctx, peerID, packet, plen)
 }
@@ -532,7 +532,7 @@ func (s *subnet) redirectPacketToStream(ctx context.Context, dst peer.ID, packet
 	s.io.mx.Lock()
 	ms, ok := s.io.streams[dst.String()]
 	if ok {
-		log.Debug("found existing stream to destination peer", "subnet", s.info.id, "dst", dst.String())
+		log.Debug("found existing stream to destination peer on subnetID: %s, dst: %s", s.info.id, dst.String())
 		if func() bool {
 			ms.mx.Lock()
 			defer ms.mx.Unlock()
@@ -573,18 +573,18 @@ func (s *subnet) redirectPacketToStream(ctx context.Context, dst peer.ID, packet
 		}
 	}
 
-	log.Debug("no existing stream to destination peer", "subnet", s.info.id, "dst", dst.String())
+	log.Debugf("no existing stream to destination peer on subnetID: %s, dst: %s", s.info.id, dst.String())
 
 	addrs, err := s.network.ResolveAddress(ctx, dst.String())
 	if err != nil {
-		log.Error("failed to resolve peer address", err, "subnet", s.info.id, "dst", dst.String())
+		log.Errorf("failed to resolve peer address on subnetID: %s, dst: %s, error: %v", s.info.id, "dst", dst.String(), err)
 		return
 	}
 
 	protocolID := types.MessageType(PacketExchangeProtocolID)
 	stream, err := s.network.OpenStream(ctx, addrs[0], protocolID)
 	if err != nil {
-		log.Error("failed to open stream", err, "subnet", s.info.id, "dst", dst.String())
+		log.Errorf("failed to open stream on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
 		return
 	}
 
@@ -593,7 +593,7 @@ func (s *subnet) redirectPacketToStream(ctx context.Context, dst peer.ID, packet
 	// Write packet length
 	err = binary.Write(stream, binary.LittleEndian, uint16(len([]byte(s.info.id))))
 	if err != nil {
-		log.Error("failed to write subnet id length", err, "subnet", s.info.id, "dst", dst.String())
+		log.Errorf("failed to write subnet id length on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
 		stream.Close()
 		return
 	}
@@ -601,7 +601,7 @@ func (s *subnet) redirectPacketToStream(ctx context.Context, dst peer.ID, packet
 	// Write the packet
 	_, err = stream.Write([]byte(s.info.id))
 	if err != nil {
-		log.Error("failed to write subnet id", err, "subnet", s.info.id, "dst", dst.String())
+		log.Errorf("failed to write on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
 		stream.Close()
 		return
 	}
@@ -609,7 +609,7 @@ func (s *subnet) redirectPacketToStream(ctx context.Context, dst peer.ID, packet
 	// Write packet length
 	err = binary.Write(stream, binary.LittleEndian, uint16(plen))
 	if err != nil {
-		log.Error("failed to write packet length", err, "subnet", s.info.id, "dst", dst.String())
+		log.Errorf("failed to write packet length on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
 		stream.Close()
 		return
 	}
@@ -617,7 +617,7 @@ func (s *subnet) redirectPacketToStream(ctx context.Context, dst peer.ID, packet
 	// Write the packet
 	_, err = stream.Write(packet[:plen])
 	if err != nil {
-		log.Error("failed to write packet", err, "subnet", s.info.id, "dst", dst.String())
+		log.Errorf("failed to write packet on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
 		stream.Close()
 		return
 	}
@@ -637,7 +637,7 @@ func (s *subnet) writePackets(stream network.Stream) {
 	defer stream.Close()
 
 	if _, ok := s.info.rtable.Get(stream.Conn().RemotePeer()); !ok {
-		log.Debug("unrecognized source peer", "subnet", s.info.id, "src", stream.Conn().RemotePeer().String())
+		log.Debugf("unrecognized source peer on subnet: %s, src: %s", s.info.id, stream.Conn().RemotePeer().String())
 		_ = stream.Reset()
 		return
 	}
@@ -647,7 +647,7 @@ func (s *subnet) writePackets(stream network.Stream) {
 	for {
 		select {
 		case <-s.ctx.Done():
-			log.Debug("context done", "subnet", s.info.id)
+			log.Debugf("context done - subnetID: %s", s.info.id)
 			_ = stream.Reset()
 			return
 
@@ -657,7 +657,7 @@ func (s *subnet) writePackets(stream network.Stream) {
 				// Read the incoming packet's size as a binary value.
 				_, err := stream.Read(packetSize)
 				if err != nil {
-					log.Error("failed to read packet size from stream", err, "subnet", s.info.id)
+					log.Errorf("failed to read packet size from stream on subnetID: %s, error: %v", s.info.id, err)
 					_ = stream.Reset()
 					return
 				}
@@ -671,14 +671,14 @@ func (s *subnet) writePackets(stream network.Stream) {
 					tmp, err := stream.Read(packet[plen:size])
 					plen += uint16(tmp)
 					if err != nil {
-						log.Error("failed to read packet from stream", err, "subnet", s.info.id)
+						log.Errorf("failed to read packet from stream on subnetID: %s, error: %v", s.info.id, err)
 						_ = stream.Reset()
 						return
 					}
 				}
 				_ = stream.SetWriteDeadline(time.Now().Add(time.Second))
 
-				log.Debug("read packet from stream", "subnet", s.info.id, "src", stream.Conn().RemotePeer().String())
+				log.Debugf("reading packet from stream on subnetID: %s, src: %s", s.info.id, stream.Conn().RemotePeer().String())
 
 				// write_packet
 				destIP := net.IPv4(packet[16], packet[17], packet[18], packet[19]).String()
@@ -687,11 +687,11 @@ func (s *subnet) writePackets(stream network.Stream) {
 				// if no tun is found, drop the packet
 				s.mx.Lock()
 				if iface, ok := s.ifaces[destIP]; ok {
-					log.Debug("writing packet to tun device", "tun", iface.tun.Iface.Name(), "subnet", s.info.id, "dstIP", destIP)
+					log.Debugf("writing packet to tun device: %s on subnetID: %s, dstIP: %s", iface.tun.Iface.Name(), s.info.id, "dstIP", destIP)
 					_, _ = iface.tun.Iface.Write(packet[:plen])
 				} else {
 					// drop the packet
-					log.Debug("unrecognized destination ip, no tun device found for ip", "subnet", s.info.id, "dstIP", destIP)
+					log.Debugf("unrecognized destination ip, no tun device found for ip on subnetID: %s, dstIP: %s", s.info.id, destIP)
 				}
 				s.mx.Unlock()
 			}

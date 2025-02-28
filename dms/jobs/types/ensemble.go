@@ -15,6 +15,22 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+type (
+	AllocationExecutor string
+	AllocationType     string
+)
+
+const (
+	// Executor types define the runtime environment for allocations
+	ExecutorFirecracker AllocationExecutor = "firecracker" // Firecracker VM-based execution
+	ExecutorDocker      AllocationExecutor = "docker"      // Docker container-based execution
+	ExecutorNull        AllocationExecutor = "null"        // Null executor for testing
+
+	// AllocationType defines the lifecycle behavior of the allocation
+	AllocationTypeService AllocationType = "service" // Long-running process that should restart on failure
+	AllocationTypeTask    AllocationType = "task"    // One-off job that runs to completion
+)
+
 // EnsembleConfig is the versioned structure that contains the ensemble configuration
 type EnsembleConfig struct {
 	V1 *EnsembleConfigV1 `json:"v1"`
@@ -33,6 +49,7 @@ type EnsembleConfigV1 struct {
 // AllocationConfig is the configuration of an allocation
 type AllocationConfig struct {
 	Executor    AllocationExecutor        `json:"executor"`              // the executor of the allocation
+	Type        AllocationType            `json:"type"`                  // the type of allocation (service vs task)
 	Resources   types.Resources           `json:"resources"`             // the HW resources required by the allocation
 	Execution   types.SpecConfig          `json:"execution"`             // the allocation execution configuration
 	DNSName     string                    `json:"dns_name,omitempty"`    // the internal DNS name of the allocation
@@ -40,15 +57,6 @@ type AllocationConfig struct {
 	Provision   []string                  `json:"provision,omitempty"`   // names of provisioning scripts to run (in order)
 	HealthCheck types.HealthCheckManifest `json:"healthcheck,omitempty"` // name of the health check script
 }
-
-// AllocationExecutor is the executor reoquired for the allocation
-type AllocationExecutor string
-
-const (
-	ExecutorFirecracker AllocationExecutor = "firecracker"
-	ExecutorDocker      AllocationExecutor = "docker"
-	ExecutorNull        AllocationExecutor = "null"
-)
 
 // NodeConfig is the configuration of a distinct DMS node
 type NodeConfig struct {
@@ -67,11 +75,11 @@ type LocationConstraints struct {
 
 // Location is a geographical location on Planet Earth
 type Location struct {
-	Region  string `json:"region,omitempty"`  // geographical region
-	Country string `json:"country,omitempty"` // country code
-	City    string `json:"city,omitempty"`    // city name
-	ASN     uint   `json:"asn,omitempty"`     // autonomous system number
-	ISP     string `json:"isp,omitempty"`     // internet service provider
+	Continent string `json:"continent,omitempty"` // geographical region
+	Country   string `json:"country,omitempty"`   // country code
+	City      string `json:"city,omitempty"`      // city name
+	ASN       uint   `json:"asn,omitempty"`       // autonomous system number
+	ISP       string `json:"isp,omitempty"`       // internet service provider
 }
 
 // PortConfig is the configuration for a port mapping a public port to a private port
@@ -97,7 +105,7 @@ type SupervisorConfig struct {
 	Children    []SupervisorConfig `json:"children,omitempty"`    // list of child supervisors
 }
 
-// SupervisoryStrategy is the name of a supervision strategy
+// SupervisorStrategy is the name of a supervision strategy
 type SupervisorStrategy string
 
 const (
@@ -106,7 +114,7 @@ const (
 	StrategyRestForOne SupervisorStrategy = "RestForOne"
 )
 
-// config validation
+// Validate validates the ensemble configuration
 func (e *EnsembleConfig) Validate() error {
 	if e == nil || e.V1 == nil {
 		return errors.New("invalid ensemble config")
@@ -137,8 +145,24 @@ func (e *EnsembleConfig) EdgeConstraints() []EdgeConstraint {
 	return e.V1.Edges
 }
 
-func (l *Location) Includes(other Location) bool {
-	if l.Region != other.Region {
+func (e *EnsembleConfig) Clone() EnsembleConfig {
+	var clone EnsembleConfig
+
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		log.Errorf("error marshaling ensemble config: %s", err)
+		return clone
+	}
+
+	if err := json.Unmarshal(bytes, &clone); err != nil {
+		log.Errorf("unmarshaling ensemble config: %s", err)
+	}
+
+	return clone
+}
+
+func (l *Location) Equal(other Location) bool {
+	if l.Continent != other.Continent {
 		return false
 	}
 
@@ -159,20 +183,4 @@ func (l *Location) Includes(other Location) bool {
 	}
 
 	return true
-}
-
-func (e *EnsembleConfig) Clone() EnsembleConfig {
-	var clone EnsembleConfig
-
-	bytes, err := json.Marshal(e)
-	if err != nil {
-		log.Errorf("error marshaling ensemble config: %s", err)
-		return clone
-	}
-
-	if err := json.Unmarshal(bytes, &clone); err != nil {
-		log.Errorf("error unmarshaling ensemble config: %s", err)
-	}
-
-	return clone
 }

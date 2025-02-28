@@ -73,6 +73,7 @@ func (s *ExecutorTestSuite) newExecutionRequest(cmd []string) *types.ExecutionRe
 		},
 		ResultsDir:          filepath.Join(testDirLogs, execID),
 		PersistLogsDuration: persistLogDurationTest,
+		GatewayIP:           "10.0.0.1",
 	}
 }
 
@@ -233,9 +234,9 @@ func (s *ExecutorTestSuite) TestGetStatus() {
 	s.Equal(types.ExecutionStatusRunning, status)
 
 	// Stop the container and check status
-	err = s.executor.Cancel(ctx, request.ExecutionID)
 	// wait until it is killed
 	resCh, errCh := s.executor.Wait(ctx, request.ExecutionID)
+	err = s.executor.Cancel(ctx, request.ExecutionID)
 	select {
 	case <-resCh:
 	case <-errCh:

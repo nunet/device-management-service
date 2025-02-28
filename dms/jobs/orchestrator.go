@@ -12,6 +12,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -20,34 +21,236 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/network"
-	net_utils "gitlab.com/nunet/device-management-service/network/utils"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
+	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-const MaxPermutations = 1_000_000
+const (
+	BidRequestTimeout           = 5 * time.Second
+	VerifyEdgeConstraintTimeout = 5 * time.Second
+	CommitDeploymentTimeout     = 3 * time.Second
+	AllocationDeploymentTimeout = 5 * time.Second
+
+	// Setting a big timeout as the user might have to
+	// download large execution images
+	AllocationStartTimeout    = 5 * time.Minute
+	AllocationShutdownTimeout = 5 * time.Second
+
+	MinEnsembleDeploymentTime = 15 * time.Second
+
+	SubnetCreateTimeout  = 2 * time.Minute
+	SubnetDestroyTimeout = 30 * time.Second
+
+	MaxBidMultiplier = 8
+	MaxPermutations  = 1_000_000
+
+	grantOrchestratorCapsFrequency = 5 * time.Minute
+)
+
+var (
+	ErrProvisioningFailed   = errors.New("failed to provision the ensemble")
+	ErrDeploymentFailed     = errors.New("failed to create deployment")
+	ErrOrchestratorExists   = errors.New("orchestrator with ID already exists")
+	ErrOrchestratorNotFound = errors.New("orchestrator with ID not found")
+)
+
+// OrchestratorProvider is an interface which acts as a source for orchestrators
+type OrchestratorProvider interface {
+	// NewOrchestrator creates a new orchestrator
+	NewOrchestrator(ctx context.Context, fs afero.Afero, workDir string, id string, actor actor.Actor, cfg EnsembleConfig) (OrchestratorAPI, error)
+	// RestoreDeployment restores deployments where the status is either provisioning, committing or running
+	RestoreDeployment(
+		actr actor.Actor, id string, cfg EnsembleConfig, manifest EnsembleManifest, status DeploymentStatus, restoreInfo DeploymentSnapshot,
+	) (OrchestratorAPI, error)
+	// Orchestrators returns a map of all orchestrators
+	Orchestrators() map[string]OrchestratorAPI
+	// GetOrchestrator returns an orchestrator by ID
+	GetOrchestrator(id string) (OrchestratorAPI, error)
+	// DeleteOrchestrator deletes an orchestrator by ID
+	DeleteOrchestrator(id string)
+}
+
+// orchestratorProvider the default implementation of OrchestratorProvider
+type orchestratorProvider struct {
+	lock          sync.RWMutex
+	orchestrators map[string]OrchestratorAPI // map of orchestrators
+}
+
+var _ OrchestratorProvider = (*orchestratorProvider)(nil)
+
+// NewOrchestratorProvider creates a new orchestrator provider
+func NewOrchestratorProvider() OrchestratorProvider {
+	return &orchestratorProvider{
+		orchestrators: make(map[string]OrchestratorAPI),
+	}
+}
+
+// NewOrchestrator creates a new orchestrator
+// TODO-style: NewOrchestrator calls NewOrchestrator, that is confusing
+func (f *orchestratorProvider) NewOrchestrator(
+	ctx context.Context, fs afero.Afero, workDir string, id string, actor actor.Actor, cfg EnsembleConfig,
+) (OrchestratorAPI, error) {
+	// check if orchestrator already exists
+	f.lock.RLock()
+	if _, ok := f.orchestrators[id]; ok {
+		f.lock.RUnlock()
+		return nil, ErrOrchestratorExists
+	}
+	f.lock.RUnlock()
+
+	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
+	}
+
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.orchestrators[id] = o
+
+	return o, nil
+}
+
+// restoreDeployment restores deployments where the status is either provisioning, committing or running
+func restoreDeployment(
+	actr actor.Actor, id string,
+	cfg EnsembleConfig, manifest EnsembleManifest,
+	status DeploymentStatus, restoreInfo DeploymentSnapshot,
+) (*Orchestrator, error) {
+	o := &Orchestrator{
+		id:                 id,
+		actor:              actr,
+		cfg:                cfg,
+		manifest:           manifest,
+		status:             status,
+		deploymentSnapshot: restoreInfo,
+	}
+
+	if o.status == DeploymentStatusCommitting {
+		log.Debug("reverting deployment of old candidates and restarting deployment from the beginning")
+		for nodeID, bid := range restoreInfo.Candidates {
+			o.revertDeployment(nodeID, bid.Handle())
+		}
+
+		return o, o.deploy(restoreInfo.Expiry)
+	}
+
+	if o.status == DeploymentStatusProvisioning {
+		log.Debug("restoring deployment from manifest")
+		if err := o.provision(); err != nil {
+			log.Errorf("failed to provision network: %s", err)
+			o.revert(manifest)
+			return o, o.deploy(restoreInfo.Expiry)
+		}
+
+		o.setStatus(DeploymentStatusRunning)
+	}
+
+	o.ctx, o.cancel = context.WithCancel(context.Background())
+
+	allocations := make(map[string]actor.Handle, len(manifest.Allocations))
+	for _, allocation := range manifest.Allocations {
+		allocations[allocation.ID] = allocation.Handle
+	}
+	o.manifest = manifest
+	go o.supervise()
+
+	return o, nil
+}
+
+// RestoreDeployment creates an orchestrator and attempts to restore its deployment
+func (f *orchestratorProvider) RestoreDeployment(
+	actr actor.Actor, id string, cfg EnsembleConfig, manifest EnsembleManifest, status DeploymentStatus, restoreInfo DeploymentSnapshot,
+) (OrchestratorAPI, error) {
+	// check if orchestrator already exists
+	f.lock.RLock()
+	if _, ok := f.orchestrators[id]; ok {
+		f.lock.RUnlock()
+		return nil, ErrOrchestratorExists
+	}
+	f.lock.RUnlock()
+
+	o, err := restoreDeployment(actr, id, cfg, manifest, status, restoreInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore deployment: %w", err)
+	}
+
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.orchestrators[id] = o
+
+	return o, nil
+}
+
+// Orchestrators returns a map of all orchestrators
+func (f *orchestratorProvider) Orchestrators() map[string]OrchestratorAPI {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	orchestrators := make(map[string]OrchestratorAPI, len(f.orchestrators))
+	for id, o := range f.orchestrators {
+		orchestrators[id] = o
+	}
+
+	return orchestrators
+}
+
+// GetOrchestrator returns an orchestrator by ID
+func (f *orchestratorProvider) GetOrchestrator(id string) (OrchestratorAPI, error) {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	o, ok := f.orchestrators[id]
+	if !ok {
+		return nil, ErrOrchestratorNotFound
+	}
+
+	return o, nil
+}
+
+// DeleteOrchestrator deletes an orchestrator by ID
+func (f *orchestratorProvider) DeleteOrchestrator(id string) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	delete(f.orchestrators, id)
+}
+
+// OrchestratorAPI is the interface for orchestrators
+type OrchestratorAPI interface {
+	Deploy(expiry time.Time) error
+	Shutdown()
+	Stop()
+	Status() DeploymentStatus
+	Manifest() EnsembleManifest
+	Config() EnsembleConfig
+	ID() string
+	ActorPrivateKey() crypto.PrivKey
+	DeploymentSnapshot() DeploymentSnapshot
+	GetAllocationLogs(name string) (AllocationLogsResponse, error)
+	WriteAllocationLogs(name string, stdout, stderr []byte) (string, error)
+}
 
 type Orchestrator struct {
+	lock   sync.Mutex
+	ctx    context.Context
+	cancel func()
+
 	actor actor.Actor
+	geo   *GeoLocator
 
-	// TODO: does the orchestrator needs the network at all?
-	// The Orchestrator's actor already has network embbeded, doesn't it?
-	// The node controlling the orchestrator already owns network
-	//
-	// Otherwise, we'll have this value triplicated for each orchestrator
-	// (node, actor and orchestrator)
-	network network.Network
-	geo     *GeoLocator
-
-	mx       sync.Mutex
 	id       string
 	cfg      EnsembleConfig
 	manifest EnsembleManifest
@@ -55,15 +258,20 @@ type Orchestrator struct {
 
 	deploymentSnapshot DeploymentSnapshot
 
-	ctx    context.Context
-	cancel func()
+	nonce uint64
+
+	fs      afero.Afero
+	workDir string
 }
+
+var _ OrchestratorAPI = (*Orchestrator)(nil)
 
 func NewOrchestrator(
 	ctx context.Context,
+	fs afero.Afero,
+	workDir string,
 	id string,
-	actor actor.Actor,
-	network network.Network,
+	oActor actor.Actor,
 	cfg EnsembleConfig,
 ) (*Orchestrator, error) {
 	if err := cfg.Validate(); err != nil {
@@ -76,22 +284,34 @@ func NewOrchestrator(
 	}
 
 	o := &Orchestrator{
-		actor:   actor,
-		network: network,
+		actor:   oActor,
 		geo:     geo,
 		id:      id,
 		cfg:     cfg,
 		ctx:     ctx,
+		fs:      fs,
+		workDir: workDir,
+	}
+
+	orchestratorBehaviors := map[string]func(actor.Envelope){
+		behaviors.NotifyTaskTerminationBehavior: o.handleTaskTermination,
+	}
+
+	for b, handler := range orchestratorBehaviors {
+		err := o.actor.AddBehavior(b, handler)
+		if err != nil {
+			return nil, fmt.Errorf("add allocation start behavior to allocation actor: %w", err)
+		}
 	}
 
 	return o, nil
 }
 
 func (o *Orchestrator) setStatus(status DeploymentStatus) {
-	o.mx.Lock()
-	defer o.mx.Unlock()
+	o.lock.Lock()
+	defer o.lock.Unlock()
 
-	log.Infof("setting status to: %s", job_types.DeploymentStatusString(status))
+	log.Infof("setting status to: %s", jobtypes.DeploymentStatusString(status))
 	o.status = status
 }
 
@@ -106,6 +326,37 @@ func (o *Orchestrator) Deploy(expiry time.Time) error {
 	return o.deploy(expiry)
 }
 
+func (o *Orchestrator) initializeManifest() {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	o.manifest = EnsembleManifest{
+		ID:           o.id,
+		Orchestrator: o.actor.Handle(),
+		Allocations:  make(map[string]AllocationManifest),
+		Nodes:        make(map[string]NodeManifest),
+	}
+
+	for name, alloc := range o.cfg.Allocations() {
+		amf := AllocationManifest{
+			ID:          types.ConstructAllocationID(o.id, name),
+			DNSName:     alloc.DNSName + ".internal",
+			Healthcheck: alloc.HealthCheck,
+			Status:      AllocationPending,
+			Ports:       make(map[int]int),
+			Type:        alloc.Type,
+		}
+		o.manifest.Allocations[name] = amf
+	}
+	for name, node := range o.cfg.Nodes() {
+		nmf := NodeManifest{
+			Allocations: node.Allocations,
+			Peer:        node.Peer,
+		}
+		o.manifest.Nodes[name] = nmf
+	}
+}
+
 func (o *Orchestrator) deploy(expiry time.Time) error {
 	o.deploymentSnapshot.Expiry = expiry
 	edgeConstraintCache := make(map[string]bool)
@@ -114,11 +365,14 @@ deploy:
 	for time.Now().Before(expiry) {
 		o.setStatus(DeploymentStatusPreparing)
 
+		log.Debugf("manifest being initialized...")
+		o.initializeManifest()
+
 		// delete old state of candidates if any
 		for c := range o.deploymentSnapshot.Candidates {
-			o.mx.Lock()
+			o.lock.Lock()
 			delete(o.deploymentSnapshot.Candidates, c)
-			o.mx.Unlock()
+			o.lock.Unlock()
 		}
 		// 0. check if one of the ensemble nodes have peer specified
 		// If bid request to peer specified fails, the entire deployment must fail
@@ -186,10 +440,24 @@ deploy:
 			return true
 		}
 
+		// remove bid from bidMap and peerExclusion
+		rmBid := func(bid Bid) {
+			peerID := bid.Peer()
+			delete(peerExclusion, peerID)
+			nodeID := bid.NodeID()
+			bids := bidMap[nodeID]
+			for i, b := range bids {
+				if b.Peer() == peerID {
+					bidMap[nodeID] = append(bids[:i], bids[i+1:]...)
+					break
+				}
+			}
+		}
+
 		log.Debugf("collecting bids")
 		bidCh, bidDoneCh, bidExpiryTime, err := o.requestBids(bidrq, expiry)
 		if err != nil {
-			return fmt.Errorf("collecting bids: %w", err)
+			return fmt.Errorf("request bids: %w", err)
 		}
 
 		maxBids := MaxBidMultiplier * len(o.cfg.Nodes())
@@ -197,21 +465,22 @@ deploy:
 
 		// 3. Create a candidate deployment
 		log.Debugf("creating candidate deployments")
-		var nextCandidate func() (map[string]Bid, bool)
-		var ok bool
-
+		var (
+			nextCandidate func() (map[string]Bid, bool)
+			ok            bool
+		)
 		for time.Now().Before(expiry) {
 			nextCandidate, ok = o.makeCandidateDeployments(bidMap)
 			if ok {
 				break
 			}
 
-			// we don't have bids for some of our nodes so we don't have a candidate
+			// we don't have bids for some of our nodes, so we don't have a candidate
 			// we need to make a residual bid request for the remaining nodes
 			// Note: in order to facilitate random selection, the residual bid requests
 			//       can drop some of the original bids
 			log.Debugf("creating residual bid request")
-			bidrq, err := o.makeResidualBidRequest(bidMap, peerExclusion)
+			bidrq, err := o.makeResidualBidRequest(bidMap, rmBid)
 			if err != nil {
 				return fmt.Errorf("creating residual bid request: %w", err)
 			}
@@ -228,6 +497,13 @@ deploy:
 		if !ok {
 			log.Debugf("failed to create candidate deployments - trying again")
 			continue deploy
+		}
+
+		for n, bids := range bidMap {
+			log.Infof("node %s has %d bids", n, len(bids))
+			for _, bid := range bids {
+				log.Infof("    bid from %s", bid.Peer())
+			}
 		}
 
 		// 4. Iterate through the candidates trying to find one that satisfies the
@@ -263,25 +539,27 @@ deploy:
 			continue deploy
 		}
 
-		o.mx.Lock()
+		o.lock.Lock()
 		o.manifest = manifest
-		o.mx.Unlock()
+		o.lock.Unlock()
 
 		// 6. provision the network and start the allocations
 		o.setStatus(DeploymentStatusProvisioning)
 
 		log.Info("provisioning network")
-		if err := o.provision(o.manifest); err != nil {
-			log.Errorf("failed to privision network: %s", err)
-			o.revert(manifest)
+		if err := o.provision(); err != nil {
+			log.Errorf("failed to provision network: %s", err)
+
+			o.lock.Lock()
+			o.revert(o.manifest)
+			o.lock.Unlock()
 			continue deploy
 		}
 
 		// We are done! start the supervisor return the manifest.
-		o.mx.Lock()
-		o.manifest = manifest
+		o.lock.Lock()
 		o.ctx, o.cancel = context.WithCancel(context.Background())
-		o.mx.Unlock()
+		o.lock.Unlock()
 
 		log.Infof("deployment successful, starting supervisor")
 		o.setStatus(DeploymentStatusRunning)
@@ -299,13 +577,31 @@ deploy:
 	return ErrDeploymentFailed
 }
 
+type AllocationStopRequest struct {
+	AllocationID string
+}
+
+type AllocationStopResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetDestroyRequest struct {
+	SubnetID string
+}
+
+type SubnetDestroyResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *Orchestrator) Shutdown() {
 	nodes := o.manifest.Nodes
 	o.setStatus(DeploymentStatusShuttingDown)
-	o.mx.Lock()
+	o.lock.Lock()
 
 	defer func() {
-		o.mx.Unlock()
+		o.lock.Unlock()
 		o.setStatus(DeploymentStatusCompleted)
 		if o.cancel != nil {
 			o.cancel()
@@ -321,7 +617,7 @@ func (o *Orchestrator) Shutdown() {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				fmt.Sprintf(SubnetDestroyBehavior.DynamicTemplate, o.manifest.ID),
+				fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, o.manifest.ID),
 				SubnetDestroyRequest{
 					SubnetID: o.manifest.ID,
 				},
@@ -373,7 +669,7 @@ func (o *Orchestrator) Shutdown() {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				fmt.Sprintf(AllocationShutdownBehavior, o.manifest.ID),
+				fmt.Sprintf(behaviors.AllocationShutdownBehavior, o.manifest.ID),
 				AllocationStopRequest{
 					AllocationID: allocID,
 				},
@@ -416,56 +712,8 @@ func (o *Orchestrator) Shutdown() {
 	wg.Wait()
 }
 
-// Restore restores deployments where the status is either provisioning, committing or running
-func RestoreDeployment(
-	actr actor.Actor, net network.Network, id string,
-	cfg EnsembleConfig, manifest EnsembleManifest,
-	status DeploymentStatus, restoreInfo DeploymentSnapshot,
-) (*Orchestrator, error) {
-	o := &Orchestrator{
-		id:                 id,
-		actor:              actr,
-		network:            net,
-		cfg:                cfg,
-		manifest:           manifest,
-		status:             status,
-		deploymentSnapshot: restoreInfo,
-	}
-
-	if o.status == DeploymentStatusCommitting {
-		log.Debug("reverting deployment of old candidates and restarting deployment from the beginning")
-		for nodeID, bid := range restoreInfo.Candidates {
-			o.revertDeployment(nodeID, bid.Handle())
-		}
-
-		return o, o.deploy(restoreInfo.Expiry)
-	}
-
-	if o.status == DeploymentStatusProvisioning {
-		log.Debug("restoring deployment from manifest")
-		if err := o.provision(o.manifest); err != nil {
-			log.Errorf("failed to provision network: %s", err)
-			o.revert(manifest)
-			return o, o.deploy(restoreInfo.Expiry)
-		}
-
-		o.setStatus(DeploymentStatusRunning)
-	}
-
-	o.ctx, o.cancel = context.WithCancel(context.Background())
-
-	allocations := make(map[string]actor.Handle, len(manifest.Allocations))
-	for _, allocation := range manifest.Allocations {
-		allocations[allocation.ID] = allocation.Handle
-	}
-	o.manifest = manifest
-	go o.supervise()
-
-	return o, nil
-}
-
-func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry time.Time) (chan Bid, chan struct{}, time.Time, error) {
-	log.Debugf("requesting bids: %+v", bidrq)
+func (o *Orchestrator) requestBids(bidRequest jobtypes.EnsembleBidRequest, expiry time.Time) (chan Bid, chan struct{}, time.Time, error) {
+	log.Debugf("requesting bids: %+v", bidRequest)
 
 	bidExpiryTime := time.Now().Add(BidRequestTimeout)
 	if expiry.Before(bidExpiryTime) {
@@ -478,7 +726,7 @@ func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry ti
 	var directRequests []BidRequest
 	var broadcastRequests []BidRequest
 
-	for _, req := range bidrq.Request {
+	for _, req := range bidRequest.Request {
 		if req.V1 == nil {
 			continue
 		}
@@ -502,9 +750,10 @@ func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry ti
 	for _, req := range directRequests {
 		nodeConfig, _ := o.cfg.Node(req.V1.NodeID)
 		targetedReq := EnsembleBidRequest{
-			ID:            bidrq.ID,
+			ID:            bidRequest.ID,
+			Nonce:         bidRequest.Nonce,
 			Request:       []BidRequest{req},
-			PeerExclusion: bidrq.PeerExclusion,
+			PeerExclusion: bidRequest.PeerExclusion,
 		}
 		err := o.requestBidPeer(targetedReq, nodeConfig, bidExpiry)
 		if err != nil {
@@ -516,7 +765,7 @@ func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry ti
 	bidCh := make(chan Bid)
 	bidDoneCh := make(chan struct{})
 	if err := o.actor.AddBehavior(
-		BidReplyBehavior,
+		behaviors.BidReplyBehavior,
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
@@ -544,9 +793,10 @@ func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry ti
 	log.Debugf("sending broadcast requests: %+v", broadcastRequests)
 	if len(broadcastRequests) > 0 {
 		broadcastReq := EnsembleBidRequest{
-			ID:            bidrq.ID,
+			ID:            bidRequest.ID,
+			Nonce:         bidRequest.Nonce,
 			Request:       broadcastRequests,
-			PeerExclusion: bidrq.PeerExclusion,
+			PeerExclusion: bidRequest.PeerExclusion,
 		}
 		err := o.broadcastBid(broadcastReq, bidExpiry)
 		if err != nil {
@@ -557,14 +807,14 @@ func (o *Orchestrator) requestBids(bidrq job_types.EnsembleBidRequest, expiry ti
 	return bidCh, bidDoneCh, bidExpiryTime, nil
 }
 
-func (o *Orchestrator) broadcastBid(bidrq EnsembleBidRequest, bidExpiry uint64) error {
+func (o *Orchestrator) broadcastBid(bidRequest EnsembleBidRequest, bidExpiry uint64) error {
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		actor.Handle{},
-		BidRequestBehavior,
-		bidrq,
-		actor.WithMessageTopic(BidRequestTopic),
-		actor.WithMessageReplyTo(BidReplyBehavior),
+		behaviors.BidRequestBehavior,
+		bidRequest,
+		actor.WithMessageTopic(behaviors.BidRequestTopic),
+		actor.WithMessageReplyTo(behaviors.BidReplyBehavior),
 		actor.WithMessageExpiry(bidExpiry),
 	)
 	if err != nil {
@@ -587,9 +837,9 @@ func (o *Orchestrator) requestBidPeer(targetedReq EnsembleBidRequest, nodeConfig
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		destHandle,
-		BidRequestBehavior,
+		behaviors.BidRequestBehavior,
 		targetedReq,
-		actor.WithMessageReplyTo(BidReplyBehavior),
+		actor.WithMessageReplyTo(behaviors.BidReplyBehavior),
 		actor.WithMessageExpiry(bidExpiry),
 	)
 	if err != nil {
@@ -613,7 +863,11 @@ func (o *Orchestrator) collectBids(bidCh chan Bid, bidDoneCh chan struct{}, bidE
 	bidCount := 0
 	for {
 		select {
-		case bid := <-bidCh:
+		case bid, ok := <-bidCh:
+			if !ok {
+				log.Debugf("bid channel closed")
+				return
+			}
 			log.Debugf("received bid: %+v", bid)
 			if err := bid.Validate(); err != nil {
 				log.Debugf("got invalid bid: %s", err)
@@ -649,7 +903,7 @@ func (o *Orchestrator) makeCandidateDeployments(bids map[string][]Bid) (func() (
 	}
 
 	// count the bits in the permutation space; if it is more than 63, we need to use
-	// a bignum bassed permutation generator or it will overflow.
+	// a bignum based permutation generator, or it will overflow.
 	bits := 0
 	for _, blst := range bids {
 		bits += int(math.Ceil(math.Log2(float64(len(blst)))))
@@ -864,6 +1118,18 @@ func (o *Orchestrator) verifyEdgeConstraints(candidate map[string]Bid, cache map
 	return accept
 }
 
+type VerifyEdgeConstraintRequest struct {
+	EnsembleID string // the ensemble identifier
+	S, T       string // the peer IDs of the edge S->T
+	RTT        uint   //  maximum RTT in ms (if > 0)
+	BW         uint   // minim BW in Kbps
+}
+
+type VerifyEdgeConstraintResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *Orchestrator) verifyEdgeConstraint(candidate map[string]Bid, cst EdgeConstraint) bool {
 	bidS := candidate[cst.S]
 	bidT := candidate[cst.T]
@@ -874,7 +1140,7 @@ func (o *Orchestrator) verifyEdgeConstraint(candidate map[string]Bid, cst EdgeCo
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		handle,
-		VerifyEdgeConstraintBehavior,
+		behaviors.VerifyEdgeConstraintBehavior,
 		VerifyEdgeConstraintRequest{
 			EnsembleID: o.id,
 			S:          bidS.Peer(),
@@ -916,6 +1182,8 @@ func (o *Orchestrator) verifyEdgeConstraint(candidate map[string]Bid, cst EdgeCo
 	return response.OK
 }
 
+// TODO: do we have to return the manifest at all? since we're updating the orchestrator
+// state from here anyway
 func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error) {
 	// This is a two phase commit:
 	// - first commit the resources in all the nodes to ensure the deployment is (still)
@@ -924,6 +1192,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	// - if there are any failures, we need to revert this deployment and start anew
 
 	var mx sync.Mutex
+	mf := o.manifest
 
 	// Phase 1: commit
 	var wg1 sync.WaitGroup
@@ -952,7 +1221,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 			bid := candidate[n]
 			o.revertDeployment(n, bid.Handle())
 		}
-		return EnsembleManifest{}, fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
+		return mf, fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
 	}
 
 	// Phase 2: allocate
@@ -982,73 +1251,90 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		for n, bid := range candidate {
 			o.revertDeployment(n, bid.Handle())
 		}
-		return EnsembleManifest{}, fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
+		return mf, fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
 	}
 
-	// We are done, create the (partial) manifest
 	// There are certain details that are filled during provisioning, e.g. allocation
 	// VPN addresses and public port mappings
-	mf := EnsembleManifest{
-		ID:           o.id,
-		Orchestrator: o.actor.Handle(),
-		Allocations:  make(map[string]AllocationManifest),
-		Nodes:        make(map[string]NodeManifest),
-	}
-
 	allocationNodes := make(map[string]string)
-	portsByAllocation := make(map[string][]job_types.PortConfig)
+	portsByAllocation := make(map[string][]jobtypes.PortConfig)
 	for n, bid := range candidate {
-		ncfg, _ := o.cfg.Node(n)
-		nmf := NodeManifest{
-			ID:          n,
-			Peer:        bid.Peer(),
-			Handle:      bid.Handle(),
-			Location:    bid.Location(),
-			Allocations: ncfg.Allocations,
+		// update manifest only if node already exists
+		o.lock.Lock()
+		if nmf, ok := o.manifest.Nodes[n]; ok {
+			nmf.Peer = bid.Peer()
+			nmf.Handle = bid.Handle()
+			nmf.Location = bid.Location()
+			o.manifest.Nodes[n] = nmf
+		} else {
+			nmf := NodeManifest{
+				ID:       n,
+				Peer:     bid.Peer(),
+				Handle:   bid.Handle(),
+				Location: bid.Location(),
+			}
+			o.manifest.Nodes[n] = nmf
 		}
-		for _, a := range nmf.Allocations {
-			allocationNodes[a] = n
-			// TODO: optimize the manifest format and how node/alloc data is
-			//       being passed around. A bit messy at the moment. see #825
-			for _, portMap := range ncfg.Ports {
-				if portMap.Allocation == a {
-					portsByAllocation[a] = append(portsByAllocation[a], portMap)
+		o.lock.Unlock()
+
+		if ncfg, ok := o.cfg.Node(n); ok {
+			for _, a := range ncfg.Allocations {
+				allocationNodes[a] = n
+				// TODO: optimize the manifest format and how node/alloc data is
+				//       being passed around. A bit messy at the moment. see #825
+				for _, portMap := range ncfg.Ports {
+					if portMap.Allocation == a {
+						portsByAllocation[a] = append(portsByAllocation[a], portMap)
+					}
 				}
 			}
 		}
-		mf.Nodes[n] = nmf
 	}
 
-	for name, alloc := range o.cfg.Allocations() {
+	for name := range o.cfg.Allocations() {
 		allocPorts := make(map[int]int)
 		if ports, ok := portsByAllocation[name]; ok {
 			for _, pc := range ports {
 				allocPorts[pc.Public] = pc.Private
 			}
 		}
-		amf := AllocationManifest{
-			ID:          o.id + "_" + name,
-			NodeID:      allocationNodes[name],
-			Handle:      allocations[name],
-			DNSName:     alloc.DNSName + ".internal",
-			Healthcheck: alloc.HealthCheck,
-			Ports:       allocPorts,
+		o.lock.Lock()
+		if alloc, ok := o.manifest.Allocations[name]; ok {
+			alloc.NodeID = allocationNodes[name]
+			alloc.Handle = allocations[name]
+			alloc.Ports = allocPorts
+			o.manifest.Allocations[name] = alloc
 		}
-		mf.Allocations[name] = amf
+		o.lock.Unlock()
 	}
 
 	return mf, nil
 }
 
+type CommitDeploymentRequest struct {
+	EnsembleID     string
+	AllocationName string
+	NodeID         string
+	Resources      types.CommittedResources
+	PortMapping    map[int]int
+}
+
+type CommitDeploymentResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
-	ncfg, _ := o.cfg.Node(n)
+	ncfg, ok := o.cfg.Node(n)
+	if !ok {
+		return fmt.Errorf("node %s not found", n)
+	}
 
 	getAllocPortMapping := func(allocName string) map[int]int {
 		ports := make(map[int]int)
 		for _, pc := range ncfg.Ports {
 			if pc.Allocation == allocName {
 				ports[pc.Public] = pc.Private
-				break
 			}
 		}
 		return ports
@@ -1056,6 +1342,7 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(ncfg.Allocations))
+	aggregatedTimeout := time.Duration(len(ncfg.Allocations)) * CommitDeploymentTimeout
 	for _, allocName := range ncfg.Allocations {
 		wg.Add(1)
 		go func(allocName string) {
@@ -1063,46 +1350,55 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 			allocation, ok := o.cfg.V1.Allocations[allocName]
 			if !ok {
 				errCh <- fmt.Errorf("allocation %s not found: %w", allocName, ErrDeploymentFailed)
+				return
 			}
 
 			allocPorts := getAllocPortMapping(allocName)
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				CommitDeploymentBehavior,
+				behaviors.CommitDeploymentBehavior,
 				CommitDeploymentRequest{
 					EnsembleID:     o.id,
 					AllocationName: allocName,
 					NodeID:         n,
-					Resources:      allocation.Resources,
+					Resources:      types.CommittedResources{Resources: allocation.Resources},
 					PortMapping:    allocPorts,
 				},
-				actor.WithMessageTimeout(CommitDeploymentTimeout),
+				actor.WithMessageTimeout(aggregatedTimeout),
 			)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to create commit message for %s: %w", n, err)
+				return
 			}
 
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to invoke commit for %s: %w", n, err)
+				return
 			}
+
+			ticker := time.NewTicker(aggregatedTimeout)
+			defer ticker.Stop()
 
 			var reply actor.Envelope
 			select {
 			case reply = <-replyCh:
-			case <-time.After(CommitDeploymentTimeout):
+				defer reply.Discard()
+			case <-ticker.C:
 				errCh <- fmt.Errorf("timeout committing for %s: %w", n, ErrDeploymentFailed)
+				return
 			}
-			defer reply.Discard()
 
 			var response CommitDeploymentResponse
 			if err := json.Unmarshal(reply.Message, &response); err != nil {
 				errCh <- fmt.Errorf("error unmarshalling commit response for %s: %w", n, err)
+				return
 			}
 
 			if !response.OK {
 				errCh <- fmt.Errorf("error committing for %s: %s: %w", n, response.Error, ErrDeploymentFailed)
+				return
 			}
 		}(allocName)
 	}
@@ -1126,13 +1422,18 @@ func (o *Orchestrator) commitDeployment(n string, h actor.Handle) error {
 	return nil
 }
 
+type RevertDeploymentMessage struct {
+	EnsembleID   string
+	AllocsByName []string
+}
+
 func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
 	ncfg, _ := o.cfg.Node(n)
 
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
-		RevertDeploymentBehavior,
+		behaviors.RevertDeploymentBehavior,
 		RevertDeploymentMessage{
 			EnsembleID:   o.id,
 			AllocsByName: ncfg.Allocations,
@@ -1148,6 +1449,27 @@ func (o *Orchestrator) revertDeployment(n string, h actor.Handle) {
 	}
 }
 
+// TODO (wrong nomenclature): AllocationDeploymentRequest -> EnsembleDeploymentRequest
+type AllocationDeploymentRequest struct {
+	EnsembleID  string
+	NodeID      string
+	Allocations map[string]AllocationDeploymentConfig
+}
+
+type AllocationDeploymentConfig struct {
+	Type             jobtypes.AllocationType
+	Executor         AllocationExecutor
+	Resources        types.Resources
+	Execution        types.SpecConfig
+	ProvisionScripts map[string][]byte
+}
+
+type AllocationDeploymentResponse struct {
+	OK          bool
+	Error       string
+	Allocations map[string]actor.Handle
+}
+
 func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Handle, error) {
 	allocs := make(map[string]AllocationDeploymentConfig)
 	ncfg, _ := o.cfg.Node(n)
@@ -1160,6 +1482,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		}
 
 		allocs[a] = AllocationDeploymentConfig{
+			Type:             acfg.Type,
 			Executor:         acfg.Executor,
 			Resources:        acfg.Resources,
 			Execution:        acfg.Execution,
@@ -1167,16 +1490,17 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		}
 	}
 
+	aggregatedTimeout := time.Duration(len(allocs)) * AllocationDeploymentTimeout
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
-		AllocationDeploymentBehavior,
+		behaviors.AllocationDeploymentBehavior,
 		AllocationDeploymentRequest{
 			EnsembleID:  o.id,
 			NodeID:      n,
 			Allocations: allocs,
 		},
-		actor.WithMessageTimeout(AllocationDeploymentTimeout),
+		actor.WithMessageTimeout(aggregatedTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create allocation message for %s: %w", n, err)
@@ -1191,7 +1515,7 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 	var reply actor.Envelope
 	select {
 	case reply = <-replyCh:
-	case <-time.After(AllocationDeploymentTimeout):
+	case <-time.After(aggregatedTimeout):
 		return nil, fmt.Errorf("timeout in allocation for %s: %w", n, err)
 	}
 	defer reply.Discard()
@@ -1205,10 +1529,16 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 		return nil, fmt.Errorf("allocation for %s failed: %s: %w", n, response.Error, ErrDeploymentFailed)
 	}
 
-	// verify that the allocation map has all the allocations
 	for a := range allocs {
+		// verify that the allocation map has all the allocations
 		if _, ok := response.Allocations[a]; !ok {
 			return nil, fmt.Errorf("missing allocation %s for %s: %w", a, n, ErrDeploymentFailed)
+		}
+	}
+
+	for _, a := range response.Allocations {
+		if err := o.grantOrchestratorCaps(a.DID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1216,12 +1546,68 @@ func (o *Orchestrator) allocate(n string, h actor.Handle) (map[string]actor.Hand
 	return response.Allocations, nil
 }
 
-func (o *Orchestrator) provision(em EnsembleManifest) error {
-	log.Infof("provisioning ensemble manifest: %+v", em)
+func (o *Orchestrator) grantOrchestratorCaps(alloc did.DID) error {
+	oDID, err := did.FromID(o.actor.Handle().ID)
+	if err != nil {
+		return fmt.Errorf("failed to parse orchestrator DID: %w", err)
+	}
+
+	err = o.actor.Security().Grant(
+		alloc,
+		oDID,
+		[]ucan.Capability{behaviors.OrchestratorNamespace},
+		grantOrchestratorCapsFrequency,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"granting orchestrator caps to alloc %s: %w",
+			alloc.String(), err)
+	}
+
+	// TODO: create helper func to periodically grant caps as
+	// it's being used here and on createAllocations()
+	go func() {
+		ticker := time.NewTicker(grantOrchestratorCapsFrequency)
+		defer ticker.Stop()
+
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			err := o.actor.Security().Grant(
+				alloc,
+				o.actor.Handle().DID,
+				[]ucan.Capability{},
+				grantOrchestratorCapsFrequency,
+			)
+			if err != nil {
+				log.Errorf(
+					"periodic grant orchestrator caps to alloc %s: %w",
+					alloc.String(), err)
+			}
+			return
+		}
+	}()
+	return nil
+}
+
+type SubnetCreateRequest struct {
+	SubnetID     string
+	IP           string
+	RoutingTable map[string]string
+}
+
+type SubnetCreateResponse struct {
+	OK    bool
+	Error string
+}
+
+func (o *Orchestrator) provision() error {
+	log.Infof("provisioning ensemble manifest: %+v", o.manifest)
 
 	// 1. create subnet
 	// 1.a generate routing table
-	cidr, err := net_utils.GetRandomCIDRInRange(
+	cidr, err := netutils.GetRandomCIDRInRange(
 		24,
 		net.ParseIP("10.0.0.0"),
 		net.ParseIP("10.255.255.255"),
@@ -1241,20 +1627,27 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	routingTable := make(map[string]string)
 	indexRoutingTable := make(map[string]string)
-	for allocationID, manifest := range em.Allocations {
-		ip, err := net_utils.GetNextIP(cidr, usedIPs)
+	for allocationID, manifest := range o.manifest.Allocations {
+		ip, err := netutils.GetNextIP(cidr, usedIPs)
 		log.Debug("Generated IP", ip, "for alllocation", allocationID)
 		if err != nil {
 			return fmt.Errorf("error getting next IP: %w", err)
 		}
-		routingTable[ip.String()] = em.Nodes[manifest.NodeID].Peer
+		routingTable[ip.String()] = o.manifest.Nodes[manifest.NodeID].Peer
 		indexRoutingTable[allocationID] = ip.String()
 		usedIPs[ip.String()] = true
+
+		o.lock.Lock()
+		if alloc, ok := o.manifest.Allocations[allocationID]; ok {
+			alloc.PrivAddr = ip.String()
+			o.manifest.Allocations[allocationID] = alloc
+		}
+		o.lock.Unlock()
 	}
 
-	errCh := make(chan error, len(em.Allocations))
+	errCh := make(chan error, len(o.manifest.Allocations))
 	wg := sync.WaitGroup{}
-	for _, manifest := range em.Nodes {
+	for _, manifest := range o.manifest.Nodes {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1262,9 +1655,9 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				fmt.Sprintf(SubnetCreateBehavior.DynamicTemplate, em.ID),
+				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, o.manifest.ID),
 				SubnetCreateRequest{
-					SubnetID:     em.ID,
+					SubnetID:     o.manifest.ID,
 					RoutingTable: routingTable,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -1285,11 +1678,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			case reply = <-replyCh:
 				defer reply.Discard()
 
-				var response struct {
-					OK    bool
-					Error string
-				}
-
+				var response SubnetCreateResponse
 				if err := json.Unmarshal(reply.Message, &response); err != nil {
 					errCh <- fmt.Errorf("error unmarshalling subnet response: %w", err)
 					return
@@ -1327,19 +1716,19 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1.b create and plug IPs
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(em.Allocations))
-	for allocationID, manifest := range em.Allocations {
+	errCh = make(chan error, len(o.manifest.Allocations))
+	for allocationID, manifest := range o.manifest.Allocations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				SubnetAddPeerBehavior,
+				behaviors.SubnetAddPeerBehavior,
 				SubnetAddPeerRequest{
-					SubnetID: em.ID,
+					SubnetID: o.manifest.ID,
 					IP:       indexRoutingTable[allocationID],
-					PeerID:   em.Nodes[manifest.NodeID].Peer,
+					PeerID:   o.manifest.Nodes[manifest.NodeID].Peer,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
@@ -1359,11 +1748,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			case reply = <-replyCh:
 				defer reply.Discard()
 
-				var response struct {
-					OK    bool
-					Error string
-				}
-
+				var response SubnetAddPeerResponse
 				if err := json.Unmarshal(reply.Message, &response); err != nil {
 					errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
 					return
@@ -1399,22 +1784,22 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1.c configure DNS
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(em.Allocations))
-	dnsRecords := make(map[string]string, 0)
-	for allocationID, manifest := range em.Allocations {
+	errCh = make(chan error, len(o.manifest.Allocations))
+	dnsRecords := make(map[string]string)
+	for allocationID, manifest := range o.manifest.Allocations {
 		dnsRecords[manifest.DNSName] = indexRoutingTable[allocationID]
 	}
 
-	for _, manifest := range em.Allocations {
+	for _, manifest := range o.manifest.Allocations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				SubnetDNSAddRecordsBehavior,
+				behaviors.SubnetDNSAddRecordsBehavior,
 				SubnetDNSAddRecordsRequest{
-					SubnetID: em.ID,
+					SubnetID: o.manifest.ID,
 					Records:  dnsRecords,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -1435,11 +1820,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 			case reply = <-replyCh:
 				defer reply.Discard()
 
-				var response struct {
-					OK    bool
-					Error string
-				}
-
+				var response SubnetDNSAddRecordsResponse
 				if err := json.Unmarshal(reply.Message, &response); err != nil {
 					errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
 					return
@@ -1476,23 +1857,23 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 
 	// 1.d configure port mapping
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(em.Allocations))
-	for allocationID, manifest := range em.Allocations {
-		for srcPort, destPort := range manifest.Ports {
+	errCh = make(chan error, len(o.manifest.Allocations))
+	for allocationID, manifest := range o.manifest.Allocations {
+		for pubPort := range manifest.Ports {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				msg, err := actor.Message(
 					o.actor.Handle(),
 					manifest.Handle,
-					SubnetMapPortBehavior,
+					behaviors.SubnetMapPortBehavior,
 					SubnetMapPortRequest{
-						SubnetID:   em.ID,
+						SubnetID:   o.manifest.ID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
-						SourcePort: strconv.Itoa(srcPort),
+						SourcePort: strconv.Itoa(pubPort),
 						DestIP:     indexRoutingTable[allocationID],
-						DestPort:   strconv.Itoa(destPort),
+						DestPort:   strconv.Itoa(pubPort),
 					},
 					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 				)
@@ -1512,11 +1893,7 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				case reply = <-replyCh:
 					defer reply.Discard()
 
-					var response struct {
-						OK    bool
-						Error string
-					}
-
+					var response SubnetMapPortResponse
 					if err := json.Unmarshal(reply.Message, &response); err != nil {
 						errCh <- fmt.Errorf("error unmarshalling subnet add-peer response: %w", err)
 						return
@@ -1552,23 +1929,29 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 	}
 
 	// 2. start the allocations
-	errCh = make(chan error, len(em.Allocations))
+	if o.isOnlyTaskEnsemble() {
+		go o.monitorOnlyTasksEnsemble()
+	}
+
+	allocStatuses := make(map[string]AllocationStatus)
+	errCh = make(chan error, len(o.manifest.Allocations))
 	wg = sync.WaitGroup{}
-	for allocName, manifest := range em.Allocations {
+
+	for allocName, manifest := range o.manifest.Allocations {
 		wg.Add(1)
-		go func(manifest AllocationManifest) {
+		go func() {
 			defer wg.Done()
 
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				manifest.Handle,
-				AllocationStartBehavior,
+				behaviors.AllocationStartBehavior,
 				AllocationStartRequest{
 					SubnetIP:    indexRoutingTable[allocName],
 					GatewayIP:   gatewayIP,
 					PortMapping: manifest.Ports,
 				},
-				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+				actor.WithMessageExpiry(actor.MakeExpiry(AllocationStartTimeout)),
 			)
 			if err != nil {
 				errCh <- fmt.Errorf("error creating allocation start message: %w", err)
@@ -1580,6 +1963,9 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				errCh <- fmt.Errorf("error invoking allocation start: %w", err)
 				return
 			}
+
+			ticker := time.NewTicker(AllocationStartTimeout)
+			defer ticker.Stop()
 
 			var reply actor.Envelope
 			select {
@@ -1593,19 +1979,41 @@ func (o *Orchestrator) provision(em EnsembleManifest) error {
 				}
 
 				if !response.OK {
+					allocStatuses[allocName] = AllocationFailed
 					errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
 					return
 				}
-			case <-time.After(2 * time.Minute):
+			case <-ticker.C:
 				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
 				return
 			}
 
+			o.lock.Lock()
+			if alloc, ok := o.manifest.Allocations[allocName]; ok {
+				alloc.Status = AllocationRunning
+				o.manifest.Allocations[allocName] = alloc
+			}
+			o.lock.Unlock()
+
 			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
-		}(manifest)
+			allocStatuses[allocName] = AllocationRunning
+		}()
 	}
 
 	wg.Wait()
+
+	// set alloc statuses
+	o.lock.Lock()
+	for allocName, status := range allocStatuses {
+		if alloc, ok := o.manifest.Allocations[allocName]; ok {
+			alloc.Status = status
+			o.manifest.Allocations[allocName] = alloc
+		} else {
+			log.Warnf("allocation %s not found in manifest", allocName)
+		}
+	}
+	o.lock.Unlock()
+
 	close(errCh)
 	aggErr = nil
 	for err := range errCh {
@@ -1645,7 +2053,7 @@ func (o *Orchestrator) acceptPeerLocation(nodeID, peerID string, loc Location) b
 	if len(n.Location.Accept) > 0 {
 		accept := false
 		for _, acceptable := range n.Location.Accept {
-			if acceptable.Includes(loc) {
+			if acceptable.Equal(loc) {
 				accept = true
 				break
 			}
@@ -1659,7 +2067,7 @@ func (o *Orchestrator) acceptPeerLocation(nodeID, peerID string, loc Location) b
 	if len(n.Location.Reject) > 0 {
 		reject := false
 		for _, unacceptable := range n.Location.Reject {
-			if unacceptable.Includes(loc) {
+			if unacceptable.Equal(loc) {
 				reject = true
 				break
 			}
@@ -1672,20 +2080,44 @@ func (o *Orchestrator) acceptPeerLocation(nodeID, peerID string, loc Location) b
 	return true
 }
 
-func (o *Orchestrator) makeInitialBidRequest() (job_types.EnsembleBidRequest, error) {
+func (o *Orchestrator) makeInitialBidRequest() (jobtypes.EnsembleBidRequest, error) {
 	return o.ensembleConfigToBidRequest(&o.cfg)
 }
 
-func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclusion map[string]struct{}) (job_types.EnsembleBidRequest, error) {
+func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, rmbid func(jobtypes.Bid)) (jobtypes.EnsembleBidRequest, error) {
 	residualConfig := EnsembleConfig{
-		V1: &job_types.EnsembleConfigV1{
-			Allocations: make(map[string]job_types.AllocationConfig),
-			Nodes:       make(map[string]job_types.NodeConfig),
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: make(map[string]jobtypes.AllocationConfig),
+			Nodes:       make(map[string]jobtypes.NodeConfig),
 		},
 	}
 
+	// randomly drop some of the candidate bids and exclusion
+	newCandidates := make(map[string][]Bid)
+	newExclusion := make(map[string]struct{})
+
+	// drop half of the bids and delete from candidate and exclusion
+	for n, bids := range candidate {
+		newBids := make([]Bid, 0, len(bids))
+		desiredSize := int(math.Floor(float64(rand.Intn(len(bids))) / 2))
+		for i, bid := range bids {
+			if i > desiredSize {
+				log.Infof("dropping bid from %s (%s) from candidate ", bid.Peer(), bid.V1.Handle.DID)
+				rmbid(bid)
+				continue
+			}
+			log.Infof("keeping bid from %s (%s) for candidate", bid.Peer(), bid.V1.Handle.DID)
+			newBids = append(newBids, bid)
+			newExclusion[bid.Peer()] = struct{}{}
+		}
+		if len(newBids) > 0 {
+			newCandidates[n] = newBids
+		}
+	}
+
 	for n, ncfg := range o.cfg.V1.Nodes {
-		if _, exclude := candidate[n]; exclude {
+		if _, exclude := newCandidates[n]; exclude {
+			log.Debugf("node %s is in candidate, skipping", n)
 			continue
 		}
 
@@ -1704,24 +2136,25 @@ func (o *Orchestrator) makeResidualBidRequest(candidate map[string][]Bid, exclus
 		return result, err
 	}
 
-	for p := range exclusion {
+	for p := range newExclusion {
 		result.PeerExclusion = append(result.PeerExclusion, p)
 	}
 
 	return result, nil
 }
 
-func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (job_types.EnsembleBidRequest, error) {
+func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (jobtypes.EnsembleBidRequest, error) {
 	v1Config := config.V1
 
-	ensembleBidRequest := job_types.EnsembleBidRequest{
-		ID: o.id,
+	ensembleBidRequest := jobtypes.EnsembleBidRequest{
+		ID:    o.id,
+		Nonce: o.getNonce(),
 	}
 
 	log.Infof("creating bid request for nodes: %+v", v1Config.Nodes)
 	for nodeID, nodeConfig := range v1Config.Nodes {
-		bidRequest := job_types.BidRequest{
-			V1: &job_types.BidRequestV1{
+		bidRequest := jobtypes.BidRequest{
+			V1: &jobtypes.BidRequestV1{
 				NodeID:   nodeID,
 				Location: nodeConfig.Location,
 			},
@@ -1743,7 +2176,7 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (job_t
 				executors = append(executors, allocationConfig.Executor)
 			}
 
-			if allocationConfig.Executor == job_types.ExecutorDocker {
+			if allocationConfig.Executor == jobtypes.ExecutorDocker {
 				// check if bid includes allocation requiring privileged docker
 				dockerCfg, err := docker.DecodeSpec(&allocationConfig.Execution)
 				if err != nil {
@@ -1757,7 +2190,7 @@ func (o *Orchestrator) ensembleConfigToBidRequest(config *EnsembleConfig) (job_t
 
 			err := aggregateResources.Add(allocationConfig.Resources)
 			if err != nil {
-				return job_types.EnsembleBidRequest{}, err
+				return jobtypes.EnsembleBidRequest{}, err
 			}
 
 			for _, portConfig := range nodeConfig.Ports {
@@ -1797,7 +2230,7 @@ func (o *Orchestrator) supervise() {
 		msg, err := actor.Message(
 			o.actor.Handle(),
 			allocation.Handle,
-			RegisterHealthcheckBehavior,
+			behaviors.RegisterHealthcheckBehavior,
 			RegisterHealthcheckRequest{
 				EnsembleID:  o.id,
 				HealthCheck: o.manifest.Allocations[allocName].Healthcheck,
@@ -1856,7 +2289,7 @@ func (o *Orchestrator) supervise() {
 		case <-ticker.C:
 			expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 			wg := sync.WaitGroup{}
-			for _, allocation := range o.manifest.Allocations {
+			for n, allocation := range o.manifest.Allocations {
 				msg, err := actor.Message(
 					o.actor.Handle(),
 					allocation.Handle,
@@ -1872,6 +2305,9 @@ func (o *Orchestrator) supervise() {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
+					if o.isTerminatedTask(n) {
+						return
+					}
 
 					replyCh, err := o.actor.Invoke(msg)
 					if err != nil {
@@ -1886,11 +2322,8 @@ func (o *Orchestrator) supervise() {
 					select {
 					case reply = <-replyCh:
 						defer reply.Discard()
-						resp := struct {
-							OK    bool
-							Error string
-						}{}
 
+						var resp HealthCheckResponse
 						if err := json.Unmarshal(reply.Message, &resp); err != nil {
 							log.Errorf("error unmarshalling supervisor reply: %s", err)
 							return
@@ -1898,8 +2331,11 @@ func (o *Orchestrator) supervise() {
 
 						if !resp.OK {
 							log.Errorf("error in healthcheck: %s", resp.Error)
+
+							o.lock.Lock()
 							failures[allocation.Handle.ID.String()]++
 							v := failures[allocation.Handle.ID.String()]
+							o.lock.Unlock()
 							if v >= 3 {
 								if err := o.escalateFailure(allocation.Handle); err != nil {
 									log.Errorf("failed to escalate failure: %s", err)
@@ -1916,9 +2352,15 @@ func (o *Orchestrator) supervise() {
 						}
 
 					case <-ticker.C:
+						if o.isTerminatedTask(n) {
+							return
+						}
+
 						log.Warnf("timeout waiting for supervisor reply")
+						o.lock.Lock()
 						failures[allocation.Handle.ID.String()]++
 						v := failures[allocation.Handle.ID.String()]
+						o.lock.Unlock()
 						if v >= 3 {
 							if err := o.escalateFailure(allocation.Handle); err != nil {
 								log.Errorf("failed to escalate failure: %s", err)
@@ -1948,7 +2390,7 @@ func (o *Orchestrator) escalateFailure(allocHandle actor.Handle) error {
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		allocHandle,
-		AllocationRestartBehavior,
+		behaviors.AllocationRestartBehavior,
 		struct{}{},
 		actor.WithMessageExpiry(expiry),
 	)
@@ -1979,6 +2421,16 @@ func (o *Orchestrator) Stop() {
 	}
 }
 
+type AllocationLogsRequest struct {
+	AllocName string
+}
+
+type AllocationLogsResponse struct {
+	Stdout []byte
+	Stderr []byte
+	Error  string
+}
+
 func (o *Orchestrator) GetAllocationLogs(name string) (AllocationLogsResponse, error) {
 	var allocNodeHandle actor.Handle
 	var logsResp AllocationLogsResponse
@@ -2000,7 +2452,7 @@ func (o *Orchestrator) GetAllocationLogs(name string) (AllocationLogsResponse, e
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		allocNodeHandle,
-		fmt.Sprintf(AllocationLogsBehavior, o.manifest.ID),
+		fmt.Sprintf(behaviors.AllocationLogsBehavior, o.manifest.ID),
 		AllocationLogsRequest{
 			AllocName: name,
 		},
@@ -2045,22 +2497,22 @@ func containsExecutor(executors []AllocationExecutor, executor AllocationExecuto
 }
 
 func (o *Orchestrator) Status() DeploymentStatus {
-	o.mx.Lock()
-	defer o.mx.Unlock()
+	o.lock.Lock()
+	defer o.lock.Unlock()
 
 	return o.status
 }
 
 func (o *Orchestrator) Manifest() EnsembleManifest {
-	o.mx.Lock()
-	defer o.mx.Unlock()
+	o.lock.Lock()
+	defer o.lock.Unlock()
 
 	return o.manifest.Clone()
 }
 
 func (o *Orchestrator) Config() EnsembleConfig {
-	o.mx.Lock()
-	defer o.mx.Unlock()
+	o.lock.Lock()
+	defer o.lock.Unlock()
 
 	return o.cfg.Clone()
 }
@@ -2074,8 +2526,64 @@ func (o *Orchestrator) ActorPrivateKey() crypto.PrivKey {
 }
 
 func (o *Orchestrator) DeploymentSnapshot() DeploymentSnapshot {
-	o.mx.Lock()
-	defer o.mx.Unlock()
+	o.lock.Lock()
+	defer o.lock.Unlock()
 
 	return o.deploymentSnapshot
+}
+
+func (o *Orchestrator) isTerminatedTask(name string) bool {
+	a, ok := o.manifest.Allocations[name]
+	if !ok {
+		return false
+	}
+
+	if a.Type == jobtypes.AllocationTypeTask &&
+		a.Status != AllocationRunning {
+		return true
+	}
+	return false
+}
+
+func (o *Orchestrator) isOnlyTaskEnsemble() bool {
+	for _, a := range o.manifest.Allocations {
+		if a.Type != jobtypes.AllocationTypeTask {
+			return false
+		}
+	}
+	return true
+}
+
+// monitorOnlyTasksEnsemble will be responsible for tearing down
+// the orchestrator after all tasks are terminated.
+func (o *Orchestrator) monitorOnlyTasksEnsemble() {
+	if !o.isOnlyTaskEnsemble() {
+		return
+	}
+
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+selectLoop:
+	for {
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			for name := range o.manifest.Allocations {
+				if !o.isTerminatedTask(name) {
+					continue selectLoop
+				}
+			}
+			log.Infof("All tasks are terminated, shutting down orchestrator.")
+
+			o.setStatus(DeploymentStatusCompleted)
+			o.cancel()
+			return
+		}
+	}
+}
+
+func (o *Orchestrator) getNonce() uint64 {
+	atomic.AddUint64(&o.nonce, 1)
+	return o.nonce
 }

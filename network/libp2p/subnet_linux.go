@@ -13,6 +13,7 @@ package libp2p
 
 import (
 	"fmt"
+	"net"
 
 	"gitlab.com/nunet/device-management-service/lib/sys"
 )
@@ -28,7 +29,7 @@ func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destP
 	}
 
 	// TODO track the port so that we can unmap it when we tear down the subnet
-	err := sys.AddDNATRule(protocol, sourceIP, sourcePort, destIP, destPort)
+	err := sys.AddDNATRule(protocol, sourcePort, destIP, destPort)
 	if err != nil {
 		return err
 	}
@@ -36,6 +37,17 @@ func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destP
 	err = sys.AddForwardRule("tcp", destIP, destPort)
 	if err != nil {
 		return err
+	}
+
+	loIface, err := sys.GetNetInterfaceByFlags(net.FlagLoopback)
+	if err != nil {
+		log.Errorf("failed to get loopback interface: %v", err)
+		log.Warnf("port %s will not be mapped to localhost:%s", sourcePort, destIP, destPort)
+	} else {
+		err = sys.AddOutputNatRule("tcp", destIP, destPort, loIface.Name)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = sys.AddMasqueradeRule()
@@ -71,13 +83,24 @@ func (l *Libp2p) UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, des
 		return fmt.Errorf("port %s is not mapped to %s:%s", sourcePort, destIP, destPort)
 	}
 
-	err := sys.DelDNATRule(protocol, sourceIP, sourcePort, destIP, destPort)
+	err := sys.DelDNATRule(protocol, sourcePort, destIP, destPort)
 	if err != nil {
 		return err
 	}
 	err = sys.DelForwardRule("tcp", destIP, destPort)
 	if err != nil {
 		return err
+	}
+
+	loIface, err := sys.GetNetInterfaceByFlags(net.FlagLoopback)
+	if err != nil {
+		log.Errorf("failed to get loopback interface: %v", err)
+		log.Warnf("Unable to delete localhost OutputNat rule for %s:%s", destIP, destPort)
+	} else {
+		err = sys.DelOutputNatRule("tcp", destIP, destPort, loIface.Name)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = sys.DelMasqueradeRule()

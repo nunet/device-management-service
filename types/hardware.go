@@ -19,6 +19,7 @@ type HardwareManager interface {
 	GetMachineResources() (MachineResources, error)
 	GetUsage() (Resources, error)
 	GetFreeResources() (Resources, error)
+	CheckCapacity(resources Resources) (bool, error)
 }
 
 // GPUManager defines the interface for managing GPU resources.
@@ -86,10 +87,6 @@ type GPU struct {
 	VRAM float64 `json:"vram" description:"Total amount of VRAM on the device"`
 	// UUID is the unique identifier of the device
 	UUID string `json:"uuid" description:"Unique identifier of the device"`
-
-	// Gorm fields
-	// Team, is this the right way to do this? What is the best practice we're following?
-	ResourceID string `json:"-" gorm:"foreignKey:ID"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -435,7 +432,7 @@ func (r *RAM) SizeInGB() float64 {
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
-	// TODO: uint64!!!
+	// float64 is used instead of uint64 because float64 can hold larger values
 	Size float64 `json:"size" description:"Size of the disk in bytes"`
 
 	// TODO: capture the below fields if required

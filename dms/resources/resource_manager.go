@@ -54,36 +54,32 @@ func NewResourceManager(repos ManagerRepos, hardware types.HardwareManager) (*De
 var _ types.ResourceManager = (*DefaultManager)(nil)
 
 // CommitResources commits the resources for an allocation
-func (d *DefaultManager) CommitResources(ctx context.Context, allocation types.CommittedResources) error {
-	d.committedLock.Lock()
-	defer d.committedLock.Unlock()
+func (d *DefaultManager) CommitResources(ctx context.Context, commitment types.CommittedResources) error {
+	if err := commitment.ValidateBasic(); err != nil {
+		return fmt.Errorf("validating commitment: %w", err)
+	}
 
 	// Check if resources are already allocated for the allocation
 	var ok bool
 	d.store.withCommittedRLock(func() {
-		_, ok = d.store.committedResources[allocation.AllocationID]
+		_, ok = d.store.committedResources[commitment.AllocationID]
 	})
 	if ok {
-		return fmt.Errorf("resources already committed for allocation %s", allocation.AllocationID)
+		return fmt.Errorf("resources already committed for allocation %s", commitment.AllocationID)
 	}
 
-	ok = false
-	d.store.withAllocationsLock(func() {
-		_, ok = d.store.allocations[allocation.AllocationID]
-	})
-	if ok {
-		return fmt.Errorf("resources already allocated for allocation %s", allocation.AllocationID)
-	}
+	d.committedLock.Lock()
+	defer d.committedLock.Unlock()
 
-	if err := d.checkCapacity(ctx, allocation.Resources); err != nil {
+	if err := d.checkCapacity(ctx, commitment.Resources); err != nil {
 		return fmt.Errorf("checking capacity: %w", err)
 	}
 
 	// update the committed resources in the store
 	d.store.withCommittedLock(func() {
-		d.store.committedResources[allocation.AllocationID] = &types.CommittedResources{
-			Resources:    allocation.Resources,
-			AllocationID: allocation.AllocationID,
+		d.store.committedResources[commitment.AllocationID] = &types.CommittedResources{
+			Resources:    commitment.Resources,
+			AllocationID: commitment.AllocationID,
 		}
 	})
 	return nil
@@ -112,13 +108,33 @@ func (d *DefaultManager) UncommitResources(_ context.Context, allocationID strin
 	return nil
 }
 
-// AllocateResources allocates resources for a allocation
-func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types.ResourceAllocation) error {
+// IsCommitted checks if the resources are committed for an allocationID
+func (d *DefaultManager) IsCommitted(allocationID string) (bool, error) {
+	var ok bool
+	d.store.withCommittedRLock(func() {
+		_, ok = d.store.committedResources[allocationID]
+	})
+	return ok, nil
+}
+
+// AllocateResources allocates resources for an allocation
+func (d *DefaultManager) AllocateResources(ctx context.Context, allocationID string) error {
 	d.allocationLock.Lock()
 	defer d.allocationLock.Unlock()
 
+	// Ensure that the resources are committed for the allocation
+	var (
+		ok         bool
+		allocation *types.CommittedResources
+	)
+	d.store.withCommittedRLock(func() {
+		allocation, ok = d.store.committedResources[allocationID]
+	})
+	if !ok {
+		return fmt.Errorf("resources not committed for allocation %s", allocationID)
+	}
+
 	// Check if resources are already allocated for the allocation
-	var ok bool
 	d.store.withAllocationsRLock(func() {
 		_, ok = d.store.allocations[allocation.AllocationID]
 	})
@@ -126,13 +142,15 @@ func (d *DefaultManager) AllocateResources(ctx context.Context, allocation types
 		return fmt.Errorf("resources already allocated for allocation %s", allocation.AllocationID)
 	}
 
-	if err := d.checkCapacity(ctx, allocation.Resources); err != nil {
-		return fmt.Errorf("checking capacity: %w", err)
-	}
-
-	if err := d.storeAllocation(ctx, allocation); err != nil {
+	allocatedResource := types.ResourceAllocation{AllocationID: allocationID, Resources: allocation.Resources}
+	if err := d.storeAllocation(ctx, allocatedResource); err != nil {
 		return fmt.Errorf("storing allocations in db: %w", err)
 	}
+
+	// clear the committed resources
+	d.store.withCommittedLock(func() {
+		delete(d.store.committedResources, allocationID)
+	})
 
 	return nil
 }
@@ -157,6 +175,15 @@ func (d *DefaultManager) DeallocateResources(ctx context.Context, allocationID s
 	}
 
 	return nil
+}
+
+// IsAllocated checks if the resources are allocated for an allocationID
+func (d *DefaultManager) IsAllocated(allocationID string) (bool, error) {
+	var ok bool
+	d.store.withAllocationsRLock(func() {
+		_, ok = d.store.allocations[allocationID]
+	})
+	return ok, nil
 }
 
 // GetFreeResources returns the free resources in the allocation pool
@@ -195,7 +222,7 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 		return types.FreeResources{}, fmt.Errorf("subtracting committed resources: %w", err)
 	}
 
-	log.Debugf("Free Resources: %+v", freeResources)
+	log.Debugf("Free Resources: %+v", freeResources.Resources)
 
 	return freeResources, nil
 }
@@ -254,7 +281,7 @@ func (d *DefaultManager) UpdateOnboardedResources(ctx context.Context, resources
 			return fmt.Errorf("getting total allocations: %w", err)
 		}
 
-		// Check if the demand is too high
+		// Check if the allocation is too high
 		if err := resources.Subtract(totalAllocation); err != nil {
 			return fmt.Errorf("couldn't subtract allocation: %w. Demand too high", err)
 		}
@@ -281,22 +308,10 @@ func (d *DefaultManager) checkCapacity(ctx context.Context, resources types.Reso
 		return fmt.Errorf("getting free resources: %w", err)
 	}
 
-	// Check if there are enough free resources in dms pool to allocate
+	// Check if there are enough free resources in dms resource pool to allocate
 	if err := freeResources.Subtract(resources); err != nil {
 		return fmt.Errorf("no free resources: %w", err)
 	}
-
-	// Check if there are enough free resources on the machine to allocate
-	systemFreeResources, err := d.hardware.GetFreeResources()
-	if err != nil {
-		return fmt.Errorf("get system free resources: %w", err)
-	}
-
-	log.Debugf("System Free Resources: %+v", systemFreeResources)
-	if err := systemFreeResources.Subtract(resources); err != nil {
-		return fmt.Errorf("no free resources on the machine: %w", err)
-	}
-	log.Debugf("System Free Resources after subtraction: %+v", systemFreeResources)
 
 	return nil
 }

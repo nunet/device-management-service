@@ -20,24 +20,6 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// EnsembleBidRequest is a request for a bids pertaining to an ensemble
-//
-// Note: At the moment, we embed a bid request for each node
-// This is fine for small deployments, and a small network, which is what we have.
-// For large deployments however, this won't scale and we will have to create aggregate
-// bid requests for related group of nodes and also handle them with bid request
-// aggregators who control multiple nodes.
-type EnsembleBidRequest struct {
-	// ID is the unique identifier of an ensemble (in the context of the orchestrator)
-	ID string `json:"id"`
-
-	// Request is the list of node bid requests
-	Request []BidRequest `json:"request"`
-
-	// PeerExclusion is the list of peers to exclude from bidding
-	PeerExclusion []string `json:"peer_exclusion,omitempty"`
-}
-
 // BidRequest is a versioned bid request
 type BidRequest struct {
 	V1 *BidRequestV1
@@ -87,6 +69,27 @@ type BidV1 struct {
 
 const bidPrefix = "dms-bid-"
 
+// EnsembleBidRequest is a request for a bids pertaining to an ensemble
+//
+// Note: At the moment, we embed a bid request for each node
+// This is fine for small deployments, and a small network, which is what we have.
+// For large deployments however, this won't scale and we will have to create aggregate
+// bid requests for related group of nodes and also handle them with bid request
+// aggregators who control multiple nodes.
+type EnsembleBidRequest struct {
+	// ID is the unique identifier of an ensemble (in the context of the orchestrator)
+	ID string `json:"id"`
+
+	// Request is the list of node bid requests
+	Request []BidRequest `json:"request"`
+
+	// Nonce is a sequential number for each request sent out
+	Nonce uint64 `json:"nonce"`
+
+	// PeerExclusion is the list of peers to exclude from bidding
+	PeerExclusion []string `json:"peer_exclusion,omitempty"`
+}
+
 func (b *EnsembleBidRequest) Validate() error {
 	if b == nil {
 		return errors.New("ensemble bid request is nil")
@@ -112,7 +115,7 @@ func (b *Bid) SignatureData() ([]byte, error) {
 	}
 
 	result := make([]byte, len(bidPrefix)+len(data))
-	copy(result, []byte(bidPrefix))
+	copy(result, bidPrefix)
 	copy(result[len(bidPrefix):], data)
 
 	return result, nil

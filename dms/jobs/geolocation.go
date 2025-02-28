@@ -36,13 +36,13 @@ func (c *Coordinate) Empty() bool {
 }
 
 type GeoLocator struct {
-	coord map[string]map[string]Coordinate // country -> city -> coordinate
+	coordinates map[string]map[string]Coordinate // country -> city -> coordinate
 }
 
 func NewGeoLocator() (*GeoLocator, error) {
 	buf := bytes.NewBufferString(cities5000)
 	geo := &GeoLocator{
-		coord: make(map[string]map[string]Coordinate),
+		coordinates: make(map[string]map[string]Coordinate),
 	}
 
 	scanner := bufio.NewScanner(buf)
@@ -56,37 +56,25 @@ func NewGeoLocator() (*GeoLocator, error) {
 
 		cityName := fields[1]
 		countryCode := fields[8]
-		coord, err := parseCoordinate(fields)
+		coordinate, err := parseCoordinate(fields)
 		if err != nil {
-			log.Warnf("error parsing coordiates for %s in %s: %s", cityName, countryCode, err)
+			log.Warnf("parsing coordiates for %s in %s: %s", cityName, countryCode, err)
 			continue
 		}
 
-		countryMap, ok := geo.coord[countryCode]
+		countryMap, ok := geo.coordinates[countryCode]
 		if !ok {
 			countryMap = make(map[string]Coordinate)
-			geo.coord[countryCode] = countryMap
+			geo.coordinates[countryCode] = countryMap
 		}
-		countryMap[cityName] = coord
+		countryMap[cityName] = coordinate
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading cities file: %w", err)
+		return nil, fmt.Errorf("reading cities file: %w", err)
 	}
 
 	return geo, nil
-}
-
-func parseCoordinate(fields []string) (Coordinate, error) {
-	lat, err := strconv.ParseFloat(fields[4], 64)
-	if err != nil {
-		return Coordinate{}, fmt.Errorf("failed to parse latitude: %w", err)
-	}
-	long, err := strconv.ParseFloat(fields[5], 64)
-	if err != nil {
-		return Coordinate{}, fmt.Errorf("failed to parse longitude: %w", err)
-	}
-	return Coordinate{lat: lat, long: long}, nil
 }
 
 func (geo *GeoLocator) Coordinate(loc Location) (Coordinate, error) {
@@ -94,12 +82,24 @@ func (geo *GeoLocator) Coordinate(loc Location) (Coordinate, error) {
 		return Coordinate{}, fmt.Errorf("no city in location")
 	}
 
-	coord, ok := geo.coord[loc.Country][loc.City]
+	coord, ok := geo.coordinates[loc.Country][loc.City]
 	if !ok {
 		return Coordinate{}, fmt.Errorf("unknown city")
 	}
 
 	return coord, nil
+}
+
+func parseCoordinate(fields []string) (Coordinate, error) {
+	lat, err := strconv.ParseFloat(fields[4], 64)
+	if err != nil {
+		return Coordinate{}, fmt.Errorf("parse latitude: %w", err)
+	}
+	long, err := strconv.ParseFloat(fields[5], 64)
+	if err != nil {
+		return Coordinate{}, fmt.Errorf("parse longitude: %w", err)
+	}
+	return Coordinate{lat: lat, long: long}, nil
 }
 
 // using a haversine formula to calculate the shortest path

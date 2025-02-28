@@ -30,7 +30,9 @@ func TestValidateSpec(t *testing.T) {
 			name: "valid minimal spec",
 			spec: map[string]any{
 				"allocations": map[string]any{
-					"alloc1": map[string]any{},
+					"alloc1": map[string]any{
+						"type": "service",
+					},
 				},
 			},
 			wantErr: false,
@@ -40,7 +42,9 @@ func TestValidateSpec(t *testing.T) {
 			name: "valid spec with empty nodes and edges",
 			spec: map[string]any{
 				"allocations": map[string]any{
-					"alloc1": map[string]any{},
+					"alloc1": map[string]any{
+						"type": "service",
+					},
 				},
 				"nodes": []any{},
 				"edges": []any{},
@@ -76,7 +80,9 @@ func TestValidateSpec(t *testing.T) {
 			name: "edges with empty nodes map",
 			spec: map[string]any{
 				"allocations": map[string]any{
-					"alloc1": map[string]any{},
+					"alloc1": map[string]any{
+						"type": "service",
+					},
 				},
 				"nodes": map[string]any{},
 				"edges": []any{
@@ -129,6 +135,7 @@ func TestValidateAllocation(t *testing.T) {
 			// Detailed validation checks for each are done in their own validators
 			name: "valid minimal docker allocation",
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -148,6 +155,7 @@ func TestValidateAllocation(t *testing.T) {
 			// Required field 'execution' must exist
 			name: "missing execution",
 			alloc: map[string]any{
+				"type":      "task",
 				"executor":  "docker",
 				"resources": map[string]any{},
 			},
@@ -158,6 +166,7 @@ func TestValidateAllocation(t *testing.T) {
 			// Required field 'executor' must exist
 			name: "missing executor",
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -167,9 +176,23 @@ func TestValidateAllocation(t *testing.T) {
 			errorMsg: "allocation must have an executor",
 		},
 		{
+			// Required field 'type' must exist
+			name: "missing executor",
+			alloc: map[string]any{
+				"executor": "docker",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"resources": map[string]any{},
+			},
+			wantErr:  true,
+			errorMsg: "allocation must have a type",
+		},
+		{
 			// Required field 'resources' must exist
 			name: "missing resources",
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -182,6 +205,7 @@ func TestValidateAllocation(t *testing.T) {
 			// Execution must have a required field 'type'
 			name: "missing execution type",
 			alloc: map[string]any{
+				"type":      "task",
 				"execution": map[string]any{},
 				"executor":  "docker",
 				"resources": map[string]any{},
@@ -193,6 +217,7 @@ func TestValidateAllocation(t *testing.T) {
 			// Execution type must match executor
 			name: "mismatched execution type and executor",
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -206,6 +231,7 @@ func TestValidateAllocation(t *testing.T) {
 			// If DNS is provided, it must be valid
 			name: "invalid DNS name",
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -220,6 +246,7 @@ func TestValidateAllocation(t *testing.T) {
 			// Valid DNS should pass
 			name: "valid DNS name",
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -234,6 +261,7 @@ func TestValidateAllocation(t *testing.T) {
 			name: "keys reference not defined",
 			root: map[string]any{},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -253,6 +281,7 @@ func TestValidateAllocation(t *testing.T) {
 				},
 			},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -268,6 +297,7 @@ func TestValidateAllocation(t *testing.T) {
 			name: "empty keys reference",
 			root: map[string]any{},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -286,6 +316,7 @@ func TestValidateAllocation(t *testing.T) {
 				},
 			},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -300,6 +331,7 @@ func TestValidateAllocation(t *testing.T) {
 			name: "provision scripts reference not defined",
 			root: map[string]any{},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -319,6 +351,7 @@ func TestValidateAllocation(t *testing.T) {
 				},
 			},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -334,6 +367,7 @@ func TestValidateAllocation(t *testing.T) {
 			name: "empty provision reference",
 			root: map[string]any{},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -352,6 +386,7 @@ func TestValidateAllocation(t *testing.T) {
 				},
 			},
 			alloc: map[string]any{
+				"type": "task",
 				"execution": map[string]any{
 					"type": "docker",
 				},
@@ -916,8 +951,12 @@ func TestValidateNode(t *testing.T) {
 			},
 			root: map[string]any{
 				"allocations": map[string]any{
-					"alloc1": map[string]any{},
-					"alloc2": map[string]any{},
+					"alloc1": map[string]any{
+						"type": "service",
+					},
+					"alloc2": map[string]any{
+						"type": "service",
+					},
 				},
 			},
 			path:        tree.NewPath("nodes", "node1"),
@@ -1205,9 +1244,15 @@ func TestValidateSupervisor(t *testing.T) {
 			},
 			root: map[string]any{
 				"allocations": map[string]any{
-					"alloc1": map[string]any{},
-					"alloc2": map[string]any{},
-					"alloc3": map[string]any{},
+					"alloc1": map[string]any{
+						"type": "service",
+					},
+					"alloc2": map[string]any{
+						"type": "service",
+					},
+					"alloc3": map[string]any{
+						"type": "service",
+					},
 				},
 			},
 			expectError: false,
@@ -1670,6 +1715,7 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 				"V1": map[string]any{
 					"allocations": map[string]any{
 						"alloc1": map[string]any{
+							"type":     "task",
 							"executor": "docker",
 							"execution": map[string]any{
 								"type": "docker",
@@ -1693,6 +1739,7 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 							},
 						},
 						"alloc2": map[string]any{
+							"type":     "service",
 							"executor": "firecracker",
 							"execution": map[string]any{
 								"type": "firecracker",
