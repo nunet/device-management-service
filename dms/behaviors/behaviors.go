@@ -85,4 +85,8 @@ var (
 		DynamicTemplate: EnsembleNamespace + "/node/subnet/destroy",
 		Static:          NodeNamespace + "/subnet/destroy",
 	}
+	SubnetJoinBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/node/subnet/join",
+		Static:          NodeNamespace + "/subnet/join",
+	}
 )

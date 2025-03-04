@@ -20,6 +20,7 @@ type EnsembleManifest struct {
 	Orchestrator actor.Handle                  `json:"orchestrator"` // orchestrator actor
 	Allocations  map[string]AllocationManifest `json:"allocations"`  // allocation name -> manifest
 	Nodes        map[string]NodeManifest       `json:"nodes"`        // node name -> manifest
+	Subnet       SubnetConfig                  `json:"subnet"`       // subnet configurations
 }
 
 type AllocationManifest struct {

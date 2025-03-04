@@ -45,6 +45,7 @@ type EnsembleConfigV1 struct {
 	Supervisor         SupervisorConfig            `json:"supervisor,omitempty"` // supervision structure
 	Keys               map[string]string           `json:"keys,omitempty"`       // (named) ssh public keys relevant to the allocation
 	Scripts            map[string][]byte           `json:"scripts,omitempty"`    // (named) provisioning scripts
+	Subnet             SubnetConfig                `json:"subnet,omitempty"`     // subnet config
 }
 
 type EscalationStrategy string
@@ -140,6 +141,10 @@ type SupervisorConfig struct {
 // SupervisorStrategy is the name of a supervision strategy
 type SupervisorStrategy string
 
+type SubnetConfig struct {
+	Join bool `json:"join,omitempty"` // for orchestrator to join the subnet
+}
+
 const (
 	StrategyOneForOne  SupervisorStrategy = "OneForOne"
 	StrategyAllForOne  SupervisorStrategy = "AllForOne"
@@ -175,6 +180,10 @@ func (e *EnsembleConfig) Node(nodeID string) (NodeConfig, bool) {
 
 func (e *EnsembleConfig) EdgeConstraints() []EdgeConstraint {
 	return e.V1.Edges
+}
+
+func (e *EnsembleConfig) Subnet() SubnetConfig {
+	return e.V1.Subnet
 }
 
 func (e *EnsembleConfig) Clone() EnsembleConfig {

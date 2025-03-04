@@ -24,6 +24,7 @@ type (
 	DeploymentStatus    = jobtypes.DeploymentStatus
 	DeploymentSnapshot  = jobtypes.DeploymentSnapshot
 	AllocationManifest  = jobtypes.AllocationManifest
+	SubnetConfig        = jobtypes.SubnetConfig
 	AllocationStatus    = jobtypes.AllocationStatus
 	AllocationExecutor  = jobtypes.AllocationExecutor
 	Bid                 = jobtypes.Bid

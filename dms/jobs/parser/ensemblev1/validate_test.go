@@ -2174,3 +2174,50 @@ func TestValidateHealthCheck(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateSubnet(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		data     any
+		wantErr  bool
+		errorMsg string
+	}{
+		{
+			// happy case
+			name: "subnet.join set to true",
+			data: map[string]any{
+				"join": true,
+			},
+			wantErr: false,
+		},
+		{
+			// wrong data type to subnet.join
+			name: "subnet.join set to string",
+			data: map[string]any{
+				"join": "a string value",
+			},
+			wantErr:  true,
+			errorMsg: "subnet.join expects boolean value",
+		},
+		{
+			// subnet must be a map type to include subnet configs
+			data:     "",
+			wantErr:  true,
+			errorMsg: "invalid subnet config",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateSubnet(nil, tt.data, "")
+			if tt.wantErr {
+				assert.Error(t, err, "expected error: %q", tt.errorMsg)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

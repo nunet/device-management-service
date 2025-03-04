@@ -71,3 +71,7 @@ nodes:
             - private: 80
               public: 7224
               allocation: nginxAllocWithStorage2
+
+
+subnet:
+    join: true

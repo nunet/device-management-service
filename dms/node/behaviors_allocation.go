@@ -76,6 +76,33 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
+func (n *Node) handleSubnetJoin(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var request jobs.SubnetJoinRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		return
+	}
+
+	resp := jobs.SubnetJoinResponse{}
+	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	err = n.network.AddSubnetDNSRecords(request.SubnetID, request.Records)
+	if err != nil {
+		resp.Error = err.Error()
+		n.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
 func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 	dmsBehaviors := map[string]struct {
 		fn   func(actor.Envelope)
