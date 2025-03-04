@@ -37,6 +37,7 @@ func NewEnsembleV1Validator() validate.Validator {
 	return validate.NewValidator(
 		map[tree.Path]validate.ValidatorFunc{
 			"V1":                           ValidateSpec,
+			"V1.subnet":                    ValidateSubnet,
 			"V1.allocations.*":             ValidateAllocation,
 			"V1.edges.[]":                  ValidateEdgeConstraints,
 			"V1.nodes.*":                   ValidateNode,
@@ -775,6 +776,24 @@ func ValidateHealthCheck(_ *map[string]any, data any, _ tree.Path) error {
 		}
 	default:
 		return fmt.Errorf("unsupported healthcheck type: %s", hcType)
+	}
+
+	return nil
+}
+
+// ValidateSubnet validates the subnet config
+func ValidateSubnet(_ *map[string]any, data any, _ tree.Path) error {
+	subnet, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid subnet config")
+	}
+
+	if len(subnet) == 0 {
+		return fmt.Errorf("subnet can not be empty if specified")
+	}
+
+	if _, ok := subnet["join"].(bool); !ok {
+		return fmt.Errorf("subnet.join expects boolean value")
 	}
 
 	return nil

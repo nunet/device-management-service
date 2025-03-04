@@ -58,6 +58,8 @@ const (
 	MaxPermutations  = 1_000_000
 
 	grantOrchestratorCapsFrequency = 5 * time.Minute
+
+	orchSubnetName = "orchestrator"
 )
 
 var (
@@ -355,6 +357,8 @@ func (o *Orchestrator) initializeManifest() {
 		}
 		o.manifest.Nodes[name] = nmf
 	}
+
+	o.manifest.Subnet = o.cfg.V1.Subnet
 }
 
 func (o *Orchestrator) deploy(expiry time.Time) error {
@@ -533,15 +537,11 @@ deploy:
 		o.deploymentSnapshot.Candidates = candidate
 
 		log.Info("committing candidate bids")
-		manifest, err := o.commit(candidate)
+		err = o.commit(candidate)
 		if err != nil {
 			log.Warnf("failed to commit deployment: %s", err)
 			continue deploy
 		}
-
-		o.lock.Lock()
-		o.manifest = manifest
-		o.lock.Unlock()
 
 		// 6. provision the network and start the allocations
 		o.setStatus(DeploymentStatusProvisioning)
@@ -563,8 +563,8 @@ deploy:
 
 		log.Infof("deployment successful, starting supervisor")
 		o.setStatus(DeploymentStatusRunning)
-		allocations := make(map[string]actor.Handle, len(manifest.Allocations))
-		for _, allocation := range manifest.Allocations {
+		allocations := make(map[string]actor.Handle, len(o.manifest.Allocations))
+		for _, allocation := range o.manifest.Allocations {
 			allocations[allocation.ID] = allocation.Handle
 		}
 		go o.supervise()
@@ -596,7 +596,6 @@ type SubnetDestroyResponse struct {
 }
 
 func (o *Orchestrator) Shutdown() {
-	nodes := o.manifest.Nodes
 	o.setStatus(DeploymentStatusShuttingDown)
 	o.lock.Lock()
 
@@ -608,8 +607,17 @@ func (o *Orchestrator) Shutdown() {
 		}
 	}()
 
+	destroyHandles := map[string]actor.Handle{}
+	for _, node := range o.manifest.Nodes {
+		destroyHandles[node.ID] = node.Handle
+	}
+
+	if o.manifest.Subnet.Join {
+		destroyHandles["orchestrator"] = o.actor.Supervisor()
+	}
+
 	wg := sync.WaitGroup{}
-	for _, node := range nodes {
+	for id, handle := range destroyHandles {
 		wg.Add(1)
 
 		go func(h actor.Handle, id string) {
@@ -656,7 +664,7 @@ func (o *Orchestrator) Shutdown() {
 			}
 
 			log.Infof("subnet %s destroyed", o.manifest.ID)
-		}(node.Handle, node.ID)
+		}(handle, id)
 	}
 
 	wg.Wait()
@@ -1184,7 +1192,7 @@ func (o *Orchestrator) verifyEdgeConstraint(candidate map[string]Bid, cst EdgeCo
 
 // TODO: do we have to return the manifest at all? since we're updating the orchestrator
 // state from here anyway
-func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error) {
+func (o *Orchestrator) commit(candidate map[string]Bid) error {
 	// This is a two phase commit:
 	// - first commit the resources in all the nodes to ensure the deployment is (still)
 	//   feasible.
@@ -1192,7 +1200,6 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 	// - if there are any failures, we need to revert this deployment and start anew
 
 	var mx sync.Mutex
-	mf := o.manifest
 
 	// Phase 1: commit
 	var wg1 sync.WaitGroup
@@ -1221,7 +1228,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 			bid := candidate[n]
 			o.revertDeployment(n, bid.Handle())
 		}
-		return mf, fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
+		return fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
 	}
 
 	// Phase 2: allocate
@@ -1251,7 +1258,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		for n, bid := range candidate {
 			o.revertDeployment(n, bid.Handle())
 		}
-		return mf, fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
+		return fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
 	}
 
 	// There are certain details that are filled during provisioning, e.g. allocation
@@ -1308,7 +1315,7 @@ func (o *Orchestrator) commit(candidate map[string]Bid) (EnsembleManifest, error
 		o.lock.Unlock()
 	}
 
-	return mf, nil
+	return nil
 }
 
 type CommitDeploymentRequest struct {
@@ -1604,6 +1611,20 @@ type SubnetCreateResponse struct {
 	Error string
 }
 
+type SubnetJoinRequest struct {
+	SubnetID string
+	PeerID   string
+	IP       string
+
+	// map of domain_name:ip
+	Records map[string]string
+}
+
+type SubnetJoinResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *Orchestrator) provision() error {
 	log.Infof("provisioning ensemble manifest: %+v", o.manifest)
 
@@ -1647,16 +1668,58 @@ func (o *Orchestrator) provision() error {
 		o.lock.Unlock()
 	}
 
-	errCh := make(chan error, len(o.manifest.Allocations))
+	dnsRecords := make(map[string]string)
+	for allocationID, manifest := range o.manifest.Allocations {
+		dnsRecords[manifest.DNSName] = indexRoutingTable[allocationID]
+	}
+
+	type subnetRequest struct {
+		handle actor.Handle
+		ip     string
+		peerID string
+		ports  map[int]int
+	}
+
+	// handles to request subnetcreate
+	subCreateHandles := []actor.Handle{}
+	for _, node := range o.manifest.Nodes {
+		subCreateHandles = append(subCreateHandles, node.Handle)
+	}
+
+	// subnet config requests (add peer, dns, port map)
+	subReqs := []subnetRequest{}
+	for allocationID, manifest := range o.manifest.Allocations {
+		subReqs = append(subReqs, subnetRequest{
+			handle: manifest.Handle,
+			ip:     indexRoutingTable[allocationID],
+			peerID: o.manifest.Nodes[manifest.NodeID].Peer,
+			ports:  manifest.Ports,
+		})
+	}
+
+	if o.manifest.Subnet.Join { // orchestrator should join the subnet
+		ip, err := netutils.GetNextIP(cidr, usedIPs)
+		log.Debug("Generated IP %s for orchestrator", ip)
+		if err != nil {
+			return fmt.Errorf("error getting next IP: %w", err)
+		}
+		routingTable[ip.String()] = o.actor.Handle().Address.HostID
+		indexRoutingTable[orchSubnetName] = ip.String()
+		usedIPs[ip.String()] = true
+
+		subCreateHandles = append(subCreateHandles, o.actor.Supervisor())
+		dnsRecords[orchSubnetName] = indexRoutingTable[orchSubnetName]
+	}
+
+	errCh := make(chan error, len(subReqs))
 	wg := sync.WaitGroup{}
-	for _, manifest := range o.manifest.Nodes {
+	for _, handle := range subCreateHandles {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
 			msg, err := actor.Message(
 				o.actor.Handle(),
-				manifest.Handle,
+				handle,
 				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, o.manifest.ID),
 				SubnetCreateRequest{
 					SubnetID:     o.manifest.ID,
@@ -1685,7 +1748,6 @@ func (o *Orchestrator) provision() error {
 					errCh <- fmt.Errorf("error unmarshalling subnet response: %w", err)
 					return
 				}
-
 				if !response.OK {
 					errCh <- fmt.Errorf("error creating subnet: %s: %w", response.Error, ErrDeploymentFailed)
 					return
@@ -1695,7 +1757,7 @@ func (o *Orchestrator) provision() error {
 				return
 			}
 
-			log.Info("subnet successfully created on peer", manifest.Handle)
+			log.Info("subnet successfully created on peer", handle)
 		}()
 	}
 
@@ -1716,21 +1778,72 @@ func (o *Orchestrator) provision() error {
 		return aggErr
 	}
 
+	// if orchestrator should join subnet, setup with one behavior
+	// this doesn't look very good but let's address with #893
+	if o.manifest.Subnet.Join {
+		go func() {
+			msg, err := actor.Message(
+				o.actor.Handle(),
+				o.actor.Supervisor(),
+				fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, o.manifest.ID),
+				SubnetJoinRequest{
+					SubnetID: o.manifest.ID,
+					IP:       indexRoutingTable[orchSubnetName],
+					PeerID:   o.actor.Handle().Address.HostID,
+					Records:  dnsRecords,
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating subnet join message: %w", err)
+				return
+			}
+
+			replyCh, err := o.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking subnet join message: %w", err)
+				return
+			}
+
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response SubnetJoinResponse
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling subnet join response: %w", err)
+					return
+				}
+
+				if !response.OK {
+					errCh <- fmt.Errorf("error joining orchestrator to subnet: %s: %w", response.Error, ErrDeploymentFailed)
+					return
+				}
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("timeout joining orchestrator to subnet: %w", ErrDeploymentFailed)
+				return
+			}
+
+			log.Info("orchestrator successfully joined the subnet")
+		}()
+	}
+
 	// 1.b create and plug IPs
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(o.manifest.Allocations))
-	for allocationID, manifest := range o.manifest.Allocations {
+	errCh = make(chan error, len(subReqs))
+	for _, req := range subReqs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
-				manifest.Handle,
+				req.handle,
 				behaviors.SubnetAddPeerBehavior,
 				SubnetAddPeerRequest{
 					SubnetID: o.manifest.ID,
-					IP:       indexRoutingTable[allocationID],
-					PeerID:   o.manifest.Nodes[manifest.NodeID].Peer,
+					IP:       req.ip,
+					PeerID:   req.peerID,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
@@ -1765,7 +1878,7 @@ func (o *Orchestrator) provision() error {
 				return
 			}
 
-			log.Info("peer successfully added to subnet on peer", manifest.Handle)
+			log.Info("peer successfully added to subnet on peer", req.handle)
 		}()
 	}
 
@@ -1786,19 +1899,15 @@ func (o *Orchestrator) provision() error {
 
 	// 1.c configure DNS
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(o.manifest.Allocations))
-	dnsRecords := make(map[string]string)
-	for allocationID, manifest := range o.manifest.Allocations {
-		dnsRecords[manifest.DNSName] = indexRoutingTable[allocationID]
-	}
+	errCh = make(chan error, len(subReqs))
 
-	for _, manifest := range o.manifest.Allocations {
+	for _, req := range subReqs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
-				manifest.Handle,
+				req.handle,
 				behaviors.SubnetDNSAddRecordsBehavior,
 				SubnetDNSAddRecordsRequest{
 					SubnetID: o.manifest.ID,
@@ -1838,7 +1947,7 @@ func (o *Orchestrator) provision() error {
 				return
 			}
 
-			log.Info("DNS records successfully added to subnet on peer", manifest.Handle)
+			log.Info("DNS records successfully added to subnet on peer", req.handle)
 		}()
 	}
 
@@ -1859,22 +1968,22 @@ func (o *Orchestrator) provision() error {
 
 	// 1.d configure port mapping
 	wg = sync.WaitGroup{}
-	errCh = make(chan error, len(o.manifest.Allocations))
-	for allocationID, manifest := range o.manifest.Allocations {
-		for pubPort := range manifest.Ports {
+	errCh = make(chan error, len(subReqs))
+	for _, req := range subReqs {
+		for pubPort := range req.ports {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				msg, err := actor.Message(
 					o.actor.Handle(),
-					manifest.Handle,
+					req.handle,
 					behaviors.SubnetMapPortBehavior,
 					SubnetMapPortRequest{
 						SubnetID:   o.manifest.ID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
 						SourcePort: strconv.Itoa(pubPort),
-						DestIP:     indexRoutingTable[allocationID],
+						DestIP:     req.ip,
 						DestPort:   strconv.Itoa(pubPort),
 					},
 					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -1910,7 +2019,7 @@ func (o *Orchestrator) provision() error {
 					return
 				}
 
-				log.Info("port mapping successfully added to subnet on peer", manifest.Handle)
+				log.Info("port mapping successfully added to subnet on peer", req.handle)
 			}()
 		}
 	}

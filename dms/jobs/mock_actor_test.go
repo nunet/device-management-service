@@ -24,6 +24,7 @@ import (
 type MockActor struct {
 	ctrl     *gomock.Controller
 	recorder *MockActorMockRecorder
+	isgomock struct{}
 }
 
 // MockActorMockRecorder is the mock recorder for MockActor.
@@ -282,10 +283,25 @@ func (mr *MockActorMockRecorder) Subscribe(topic any, setup ...any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockActor)(nil).Subscribe), varargs...)
 }
 
+// Supervisor mocks base method.
+func (m *MockActor) Supervisor() actor.Handle {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Supervisor")
+	ret0, _ := ret[0].(actor.Handle)
+	return ret0
+}
+
+// Supervisor indicates an expected call of Supervisor.
+func (mr *MockActorMockRecorder) Supervisor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Supervisor", reflect.TypeOf((*MockActor)(nil).Supervisor))
+}
+
 // MockSecurityContext is a mock of SecurityContext interface.
 type MockSecurityContext struct {
 	ctrl     *gomock.Controller
 	recorder *MockSecurityContextMockRecorder
+	isgomock struct{}
 }
 
 // MockSecurityContextMockRecorder is the mock recorder for MockSecurityContext.
@@ -475,6 +491,7 @@ func (mr *MockSecurityContextMockRecorder) Verify(msg any) *gomock.Call {
 type MockRateLimiter struct {
 	ctrl     *gomock.Controller
 	recorder *MockRateLimiterMockRecorder
+	isgomock struct{}
 }
 
 // MockRateLimiterMockRecorder is the mock recorder for MockRateLimiter.

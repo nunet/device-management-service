@@ -578,6 +578,37 @@ func (n *Node) createOrchestrator(ctx context.Context,
 		return nil, fmt.Errorf("new orchestrator: %w", err)
 	}
 
+	// if orchestrator needs to join subnet, add the subnet behaviors under ensemble namespace
+	// and grant the caps
+	if ensemble.Subnet().Join {
+		dmsBehaviors := map[string]struct {
+			fn   func(actor.Envelope)
+			opts []actor.BehaviorOption
+		}{
+			fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
+				fn: n.handleSubnetCreate,
+			},
+			fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
+				fn: n.handleSubnetDestroy,
+			},
+			fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, ensembleID): {
+				fn: n.handleSubnetJoin,
+			},
+		}
+		for behavior, handler := range dmsBehaviors {
+			if err := n.actor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
+				return nil, fmt.Errorf("adding %s behavior for orch to join subnet: %w", behavior, err)
+			}
+		}
+
+		err := n.actor.Security().Grant(childActor.Handle().DID, n.actor.Handle().DID, []ucan.Capability{
+			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
+		}, time.Hour)
+		if err != nil {
+			return nil, fmt.Errorf("granting subnet caps to self orchestrator: %w", err)
+		}
+	}
+
 	return orchestrator, nil
 }
 
