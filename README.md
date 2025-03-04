@@ -143,7 +143,13 @@ You can add the compiled binary to a directory in your `$PATH`. See the [Usage](
 ### Permissions and features (for compute providers using Linux)
 
 The following applies _only_ for **compute providers using Linux**. If you're running a client/orchestrator, you do _not_ need to set
-any additional permissions.
+any additional permissions except if you specify for the orchestrator to join the subnet in the ensemble config. If the ensemble contains the following config
+```yml
+subnet:
+  join: true
+```
+
+then the orchestator will create its own tun interface and join the subnet. For that the `cap_net_admin` permission is required.
 
 > **Darwin users**: unfortunately, the DMS can neither work with granular permissions nor
 > with iptables and tun interfaces. Thus, on Darwin, for now, the DMS can only be an orchestrator.
@@ -156,7 +162,7 @@ For Linux users, granular permissions will have to be set to the binary (possibl
 >
 > It's needed for those building from source or downloading the binary releases.
 
-**Note**: `cap_net_admin` and `cap_sys_admin` are **required** capabilities for **compute providers**.
+**Note**: `cap_net_admin` and `cap_sys_admin` are **required** capabilities for **compute providers**. `cap_net_admin` would be required for orchestrators if they are joining the subnet.
 
 Setting the `cap_net_admin` permission enables IP over libp2p which is a feature that enhances the capabilities of compute providers, allowing them to participate in a wider
 range of jobs. One capability enabled with this feature is to do port forwarding which it won't be possible without setting the right unix permissions.
