@@ -13,12 +13,14 @@ package tokenomics
 import (
 	"errors"
 )
+
 // Should use constants for authentication methods
 const (
-    TokenBasedEncryption = "tokenBasedEncryption"
-    ZKProofAuth         = "ZKProof"
-    OffChainDataAuth    = "OffChainData"
+	TokenBasedEncryption = "tokenBasedEncryption"
+	ZKProofAuth          = "ZKProof"
+	OffChainDataAuth     = "OffChainData"
 )
+
 // GeneralAuthentication contains general authentication methods
 type Authentication struct {
 	encryption string
@@ -43,26 +45,26 @@ type ContractProofOperations struct {
 // Authenticate authenticates using different methods
 func (auth *Authentication) Authenticate(nodeID, method, credentials string) bool {
 	switch method {
-    case TokenBasedEncryption:
-        return auth.tokenBasedEncryptionAuthentication(nodeID, credentials)
-    case ZKProofAuth:
-        return auth.zkProofAuthentication(nodeID, credentials)
-    case OffChainDataAuth:
-        return auth.offChainDataAuthentication(nodeID, credentials)
-    default:
-        return false
+	case TokenBasedEncryption:
+		return auth.tokenBasedEncryptionAuthentication(nodeID, credentials)
+	case ZKProofAuth:
+		return auth.zkProofAuthentication(nodeID, credentials)
+	case OffChainDataAuth:
+		return auth.offChainDataAuthentication(nodeID, credentials)
+	default:
+		return false
 	}
 }
 
 // tokenBasedEncryptionAuthentication simulates token-based encryption authentication
 func (auth *Authentication) tokenBasedEncryptionAuthentication(nodeID, credentials string) bool {
-	//TODO: Implement the logic for token-based encryption authentication
+	// TODO: Implement the logic for token-based encryption authentication
 	return true // Return true or false based on the authentication logic
 }
 
 // zkProofAuthentication simulates zero-knowledge proof authentication
 func (auth *Authentication) zkProofAuthentication(nodeID, credentials string) bool {
-	//TODO: Implement the logic for zero-knowledge proof authentication
+	// TODO: Implement the logic for zero-knowledge proof authentication
 	return true // Return true or false based on the authentication logic
 }
 
@@ -74,13 +76,13 @@ func (auth *Authentication) offChainDataAuthentication(nodeID, credentials strin
 
 // InitiateContractApproval initiates contract approval
 func (ops *ContractProofOperations) InitiateContractApproval() error {
-	//TODO: Simulate contract approval initiation
+	// TODO: Simulate contract approval initiation
 	return nil
 }
 
 // CreateContractProof creates a contract proof
 func (ops *ContractProofOperations) CreateContractProof() (string, error) {
-	//TODO: Simulate creation of a contract proof
+	// TODO: Simulate creation of a contract proof
 	proof := "generated_proof" // Placeholder for the actual proof
 	return proof, nil
 }

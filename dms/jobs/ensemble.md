@@ -11,9 +11,6 @@ The following yaml file contains the available fields of an ensemble with the ex
 ```
 version: "V1"
 
-# (Optional) Escalation strategy for the ensemble; options include "redeploy" and "tear_down"
-escalation_strategy: redeploy
-
 allocations:
   # Named allocation configurations in the ensemble
   alloc1:

@@ -467,99 +467,109 @@ func (o *BasicOrchestrator) provision() error {
 		go o.monitorOnlyTasksEnsemble()
 	}
 
+	interim := map[string][]string{} // a map of verteces to edges (their dependencies)
+	for allocName, allocCfg := range o.cfg.Allocations() {
+		interim[allocName] = allocCfg.DependsOn
+	}
+
+	orderedAllocs, err := orderByDependency(interim)
+	if err != nil {
+		return err
+	}
+
 	allocStatuses := make(map[string]jtypes.AllocationStatus)
-	errCh = make(chan error, len(o.manifest.Allocations))
-	wg = sync.WaitGroup{}
+	for _, allocs := range orderedAllocs {
+		wg = sync.WaitGroup{}
+		for _, allocName := range allocs {
+			errCh := make(chan error, len(allocs))
+			wg.Add(1)
+			go func(manifest jtypes.AllocationManifest) {
+				defer wg.Done()
 
-	for allocName, manifest := range o.manifest.Allocations {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			msg, err := actor.Message(
-				o.actor.Handle(),
-				manifest.Handle,
-				behaviors.AllocationStartBehavior,
-				behaviors.AllocationStartRequest{
-					SubnetIP:    indexRoutingTable[allocName],
-					GatewayIP:   gatewayIP,
-					PortMapping: manifest.Ports,
-				},
-				actor.WithMessageExpiry(actor.MakeExpiry(AllocationStartTimeout)),
-			)
-			if err != nil {
-				errCh <- fmt.Errorf("error creating allocation start message: %w", err)
-				return
-			}
-
-			replyCh, err := o.actor.Invoke(msg)
-			if err != nil {
-				errCh <- fmt.Errorf("error invoking allocation start: %w", err)
-				return
-			}
-
-			ticker := time.NewTicker(AllocationStartTimeout)
-			defer ticker.Stop()
-
-			var reply actor.Envelope
-			select {
-			case reply = <-replyCh:
-				defer reply.Discard()
-
-				var response behaviors.AllocationStartResponse
-				if err := json.Unmarshal(reply.Message, &response); err != nil {
-					errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
+				msg, err := actor.Message(
+					o.actor.Handle(),
+					manifest.Handle,
+					behaviors.AllocationStartBehavior,
+					behaviors.AllocationStartRequest{
+						SubnetIP:    indexRoutingTable[allocName],
+						GatewayIP:   gatewayIP,
+						PortMapping: manifest.Ports,
+					},
+					actor.WithMessageExpiry(actor.MakeExpiry(AllocationStartTimeout)),
+				)
+				if err != nil {
+					errCh <- fmt.Errorf("error creating allocation start message: %w", err)
 					return
 				}
 
-				if !response.OK {
-					allocStatuses[allocName] = jtypes.AllocationFailed
-					errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
+				replyCh, err := o.actor.Invoke(msg)
+				if err != nil {
+					errCh <- fmt.Errorf("error invoking allocation start: %w", err)
 					return
 				}
-			case <-ticker.C:
-				errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
-				return
-			}
+
+				ticker := time.NewTicker(AllocationStartTimeout)
+				defer ticker.Stop()
+
+				var reply actor.Envelope
+				select {
+				case reply = <-replyCh:
+					defer reply.Discard()
+
+					var response behaviors.AllocationStartResponse
+					if err := json.Unmarshal(reply.Message, &response); err != nil {
+						errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
+						return
+					}
+
+					if !response.OK {
+						allocStatuses[allocName] = jtypes.AllocationFailed
+						errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
+						return
+					}
+				case <-ticker.C:
+					errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
+					return
+				}
+
+				o.lock.Lock()
+				if alloc, ok := o.manifest.Allocations[allocName]; ok {
+					alloc.Status = jtypes.AllocationRunning
+					o.manifest.Allocations[allocName] = alloc
+				}
+				o.lock.Unlock()
+
+				log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
+				allocStatuses[allocName] = jtypes.AllocationRunning
+			}(o.manifest.Allocations[allocName])
+
+			wg.Wait()
 
 			o.lock.Lock()
-			if alloc, ok := o.manifest.Allocations[allocName]; ok {
-				alloc.Status = jtypes.AllocationRunning
-				o.manifest.Allocations[allocName] = alloc
+			for allocName, status := range allocStatuses {
+				if alloc, ok := o.manifest.Allocations[allocName]; ok {
+					alloc.Status = status
+					o.manifest.Allocations[allocName] = alloc
+				} else {
+					log.Warnf("allocation %s not found in manifest", allocName)
+				}
 			}
 			o.lock.Unlock()
 
-			log.Infof("allocation successfully started on peer %s for allocation %s", &manifest.Handle.DID, manifest.ID)
-			allocStatuses[allocName] = jtypes.AllocationRunning
-		}()
-	}
-
-	wg.Wait()
-
-	// set alloc statuses
-	o.lock.Lock()
-	for allocName, status := range allocStatuses {
-		if alloc, ok := o.manifest.Allocations[allocName]; ok {
-			alloc.Status = status
-			o.manifest.Allocations[allocName] = alloc
-		} else {
-			log.Warnf("allocation %s not found in manifest", allocName)
+			close(errCh)
+			aggErr = nil
+			for err := range errCh {
+				if aggErr == nil {
+					aggErr = err
+					continue
+				} else if err != nil {
+					aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+				}
+			}
+			if aggErr != nil {
+				return aggErr
+			}
 		}
-	}
-	o.lock.Unlock()
-
-	close(errCh)
-	aggErr = nil
-	for err := range errCh {
-		if aggErr == nil {
-			aggErr = err
-			continue
-		} else if err != nil {
-			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
-		}
-	}
-	if aggErr != nil {
-		return aggErr
 	}
 
 	return nil

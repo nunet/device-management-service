@@ -17,10 +17,11 @@ import (
 )
 
 // PaymentMode represents the type of payment mode (fiat or blockchain)
-type PaymentMode string
-type PricingType string
-type PaymentType string
-
+type (
+	PaymentMode string
+	PricingType string
+	PaymentType string
+)
 
 const (
 	FiatPayment         PaymentMode = "fiat"
@@ -53,8 +54,7 @@ type PeriodicPricing struct {
 	Period      string
 	UsageLimits UsageLimits
 }
-type FixedPricing struct {
-}
+type FixedPricing struct{}
 
 // UsageLimits represents the usage limits or quotas for periodic pricing
 type UsageLimits struct {
