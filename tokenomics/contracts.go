@@ -39,8 +39,8 @@ type BidRequest struct {
 	Requestor   string
 	Provider    string
 	PriceBid    string
-	PaymentType PaymentType  
-	PaymentMode PaymentMode 
+	PaymentType PaymentType
+	PaymentMode PaymentMode
 	PricingMeta PricingMetadata
 }
 

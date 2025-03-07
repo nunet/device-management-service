@@ -473,6 +473,123 @@ func TestValidateAllocation(t *testing.T) {
 				},
 				"executor":  "docker",
 				"resources": map[string]any{},
+				"provision": "valid-script",
+			},
+			wantErr:  true,
+			errorMsg: "failure_recovery must be specified",
+		},
+		{
+			// failure recovery must be one of the supported options
+			name: "unsupported failure recovery",
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": "invalid",
+			},
+			wantErr:  true,
+			errorMsg: "invalid failure_recovery",
+		},
+		{
+			// valid failure recovery
+			name: "valid failure recovery",
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+			},
+			wantErr: false,
+		},
+		{
+			// depends on must be a list of allocations
+			name: "depends on must be a list of allocations",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       "alloc1",
+			},
+			wantErr:  true,
+			errorMsg: "depends_on must be a list",
+		},
+		{
+			// depends on must be a valid reference
+			name: "depends on must be a valid reference",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       []any{"invalid"},
+			},
+			wantErr:  true,
+			errorMsg: "not found",
+		},
+		{
+			// depends on can not reference itself
+			name: "depends on can not reference itself",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       []any{"alloc1"},
+			},
+			path:     tree.NewPath("V1", "allocations", "alloc1"),
+			wantErr:  true,
+			errorMsg: "depends_on must not refer to itself",
+		},
+		{
+			// valid depends on
+			name: "valid depends on",
+			root: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{},
+				},
+			},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"depends_on":       []any{"alloc1"},
+			},
+			path:    tree.NewPath("V1", "allocations", "alloc2"),
+			wantErr: false,
+		},
+		{
+			// failure recovery not defined
+			name: "failure recovery not defined",
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":  "docker",
+				"resources": map[string]any{},
 			},
 			wantErr:  true,
 			errorMsg: "failure_recovery must be specified",
@@ -625,7 +742,6 @@ func TestValidateResources(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// Tests with the common optional fields for resources
 			name: "valid resources with optional fields",
 			data: map[string]any{
 				"cpu": map[string]any{
@@ -1230,6 +1346,15 @@ func TestValidateNode(t *testing.T) {
 		{
 			// redundancy should be positive
 			name: "redundancy should be a positive number",
+			node: map[string]any{
+				"redundancy":       -1,
+				"failure_recovery": defautNodeFailureStrategy,
+			},
+			expectError: true,
+			errorMsg:    "redundancy must be a positive number",
+		},
+		{
+			name: "redundancy should be greater than 0",
 			node: map[string]any{
 				"redundancy":       -1,
 				"failure_recovery": defautNodeFailureStrategy,
