@@ -6,7 +6,7 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package jobs
+package orchestrator
 
 import (
 	"context"
@@ -24,19 +24,19 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
-	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func getMockEnsembleConfig(t *testing.T) jobtypes.EnsembleConfig {
+func getMockEnsembleConfig(t *testing.T) jtypes.EnsembleConfig {
 	t.Helper()
 
-	return jobtypes.EnsembleConfig{
-		V1: &jobtypes.EnsembleConfigV1{
-			Allocations: map[string]jobtypes.AllocationConfig{
+	return jtypes.EnsembleConfig{
+		V1: &jtypes.EnsembleConfigV1{
+			Allocations: map[string]jtypes.AllocationConfig{
 				"allocation1": {
 					Type:     "service",
 					Executor: "docker",
@@ -78,7 +78,7 @@ func getMockEnsembleConfig(t *testing.T) jobtypes.EnsembleConfig {
 					},
 				},
 			},
-			Nodes: map[string]NodeConfig{
+			Nodes: map[string]jtypes.NodeConfig{
 				"node1": {
 					Allocations: []string{"allocation1"},
 				},
@@ -108,10 +108,10 @@ func withTimeout(t *testing.T, name string, duration time.Duration, testFunc fun
 	})
 }
 
-func TestOrchestratorProvider(t *testing.T) {
+func TestOrchestratorRegistry(t *testing.T) {
 	t.Parallel()
 
-	t.Run("must be able to create a new orchestrator from the provider", func(t *testing.T) {
+	t.Run("must be able to create a new orchestrator from the registry", func(t *testing.T) {
 		t.Parallel()
 		af := afero.Afero{Fs: afero.NewMemMapFs()}
 		workDir := t.TempDir()
@@ -120,8 +120,8 @@ func TestOrchestratorProvider(t *testing.T) {
 		mockActor := NewMockActor(ctrl)
 		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
-		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(
+		oRegistry := NewRegistry()
+		orchestrator, err := oRegistry.NewOrchestrator(
 			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
 		)
 		require.NoError(t, err)
@@ -133,9 +133,9 @@ func TestOrchestratorProvider(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockActor := NewMockActor(ctrl)
 
-		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.RestoreDeployment(mockActor, "id", getMockEnsembleConfig(t),
-			EnsembleManifest{}, DeploymentStatusPreparing, DeploymentSnapshot{})
+		oRegistry := NewRegistry()
+		orchestrator, err := oRegistry.RestoreDeployment(mockActor, "id", getMockEnsembleConfig(t),
+			jtypes.EnsembleManifest{}, jtypes.DeploymentStatusPreparing, jtypes.DeploymentSnapshot{})
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 	})
@@ -149,14 +149,14 @@ func TestOrchestratorProvider(t *testing.T) {
 		mockActor := NewMockActor(ctrl)
 		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any()).Times(1)
 
-		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(
+		oRegistry := NewRegistry()
+		orchestrator, err := oRegistry.NewOrchestrator(
 			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 
-		_, err = oProvider.NewOrchestrator(
+		_, err = oRegistry.NewOrchestrator(
 			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
 		)
 		require.Error(t, err)
@@ -172,14 +172,14 @@ func TestOrchestratorProvider(t *testing.T) {
 		mockActor := NewMockActor(ctrl)
 		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
-		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(
+		oRegistry := NewRegistry()
+		orchestrator, err := oRegistry.NewOrchestrator(
 			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 
-		orchestrator, err = oProvider.GetOrchestrator("id")
+		orchestrator, err = oRegistry.GetOrchestrator("id")
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 	})
@@ -193,16 +193,16 @@ func TestOrchestratorProvider(t *testing.T) {
 		mockActor := NewMockActor(ctrl)
 		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any())
 
-		oProvider := NewOrchestratorProvider()
-		orchestrator, err := oProvider.NewOrchestrator(
+		oRegistry := NewRegistry()
+		orchestrator, err := oRegistry.NewOrchestrator(
 			context.Background(), af, workDir, "id", mockActor, getMockEnsembleConfig(t),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator)
 
-		oProvider.DeleteOrchestrator("id")
+		oRegistry.DeleteOrchestrator("id")
 
-		_, err = oProvider.GetOrchestrator("id")
+		_, err = oRegistry.GetOrchestrator("id")
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrOrchestratorNotFound)
 	})
@@ -216,20 +216,20 @@ func TestOrchestratorProvider(t *testing.T) {
 		mockActor := NewMockActor(ctrl)
 		mockActor.EXPECT().AddBehavior(behaviors.NotifyTaskTerminationBehavior, gomock.Any(), gomock.Any()).Times(2)
 
-		oProvider := NewOrchestratorProvider()
-		orchestrator1, err := oProvider.NewOrchestrator(
+		oRegistry := NewRegistry()
+		orchestrator1, err := oRegistry.NewOrchestrator(
 			context.Background(), af, workDir, "id1", mockActor, getMockEnsembleConfig(t),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator1)
 
-		orchestrator2, err := oProvider.NewOrchestrator(
+		orchestrator2, err := oRegistry.NewOrchestrator(
 			context.Background(), af, workDir, "id2", mockActor, getMockEnsembleConfig(t),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, orchestrator2)
 
-		orchestrators := oProvider.Orchestrators()
+		orchestrators := oRegistry.Orchestrators()
 		require.Len(t, orchestrators, 2)
 
 		_, ok := orchestrators["id1"]
@@ -297,8 +297,8 @@ func TestOrchestrator(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		orchestrator.setStatus(DeploymentStatusPreparing)
-		assert.Equal(t, DeploymentStatusPreparing, orchestrator.Status())
+		orchestrator.setStatus(jtypes.DeploymentStatusPreparing)
+		assert.Equal(t, jtypes.DeploymentStatusPreparing, orchestrator.Status())
 	})
 
 	t.Run("must be able to get ensemble config", func(t *testing.T) {
@@ -430,8 +430,8 @@ func TestOrchestrator(t *testing.T) {
 				go func() {
 					defer wg.Done()
 
-					bid := jobtypes.Bid{
-						V1: &jobtypes.BidV1{
+					bid := jtypes.Bid{
+						V1: &jtypes.BidV1{
 							EnsembleID: ensembleID,
 							NodeID:     "node1",
 							Peer:       peerID.String(),
@@ -443,7 +443,7 @@ func TestOrchestrator(t *testing.T) {
 									InboxAddress: "inboxAddress",
 								},
 							},
-							Location: Location{},
+							Location: jtypes.Location{},
 						},
 					}
 					err = bid.Sign(provider)
@@ -467,7 +467,7 @@ func TestOrchestrator(t *testing.T) {
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.AllocationDeploymentBehavior:
-					reply := AllocationDeploymentResponse{
+					reply := jtypes.AllocationDeploymentResponse{
 						OK: true,
 						Allocations: map[string]actor.Handle{
 							"allocation1": {},
@@ -482,17 +482,17 @@ func TestOrchestrator(t *testing.T) {
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.SubnetAddPeerBehavior:
-					reply := SubnetAddPeerResponse{OK: true}
+					reply := behaviors.SubnetAddPeerResponse{OK: true}
 					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.SubnetDNSAddRecordsBehavior:
-					reply := SubnetDNSAddRecordsResponse{OK: true}
+					reply := behaviors.SubnetDNSAddRecordsResponse{OK: true}
 					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.AllocationStartBehavior:
-					reply := AllocationStartResponse{OK: true}
+					reply := behaviors.AllocationStartResponse{OK: true}
 					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
 					require.NoError(t, err)
 					respChan <- env
@@ -585,8 +585,8 @@ func TestOrchestrator(t *testing.T) {
 				go func() {
 					defer wg.Done()
 
-					bid := jobtypes.Bid{
-						V1: &jobtypes.BidV1{
+					bid := jtypes.Bid{
+						V1: &jtypes.BidV1{
 							EnsembleID: ensembleID,
 							NodeID:     "node1",
 							Peer:       peerID.String(),
@@ -598,7 +598,7 @@ func TestOrchestrator(t *testing.T) {
 									InboxAddress: "inboxAddress",
 								},
 							},
-							Location: Location{},
+							Location: jtypes.Location{},
 						},
 					}
 					err = bid.Sign(provider)
@@ -622,7 +622,7 @@ func TestOrchestrator(t *testing.T) {
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.AllocationDeploymentBehavior:
-					reply := AllocationDeploymentResponse{
+					reply := jtypes.AllocationDeploymentResponse{
 						OK: true,
 						Allocations: map[string]actor.Handle{
 							"allocation1": {},
@@ -637,7 +637,7 @@ func TestOrchestrator(t *testing.T) {
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.AllocationStartBehavior:
-					reply := AllocationStartResponse{OK: true}
+					reply := behaviors.AllocationStartResponse{OK: true}
 					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
 					require.NoError(t, err)
 					respChan <- env
@@ -708,7 +708,7 @@ func TestOrchestrator(t *testing.T) {
 		mockActor.EXPECT().Security().Return(rootSec).AnyTimes()
 
 		ensemble := getMockEnsembleConfig(t)
-		ensemble.V1.Nodes = map[string]jobtypes.NodeConfig{
+		ensemble.V1.Nodes = map[string]jtypes.NodeConfig{
 			"node1": {
 				Peer:        peerID.String(),
 				Allocations: []string{"allocation1"},
@@ -750,7 +750,7 @@ func TestOrchestrator(t *testing.T) {
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.AllocationDeploymentBehavior:
-					reply := AllocationDeploymentResponse{
+					reply := jtypes.AllocationDeploymentResponse{
 						OK: true,
 						Allocations: map[string]actor.Handle{
 							"allocation1": {},
@@ -765,17 +765,17 @@ func TestOrchestrator(t *testing.T) {
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.SubnetAddPeerBehavior:
-					reply := SubnetAddPeerResponse{OK: true}
+					reply := behaviors.SubnetAddPeerResponse{OK: true}
 					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.SubnetDNSAddRecordsBehavior:
-					reply := SubnetDNSAddRecordsResponse{OK: true}
+					reply := behaviors.SubnetDNSAddRecordsResponse{OK: true}
 					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
 					require.NoError(t, err)
 					respChan <- env
 				case behaviors.AllocationStartBehavior:
-					reply := AllocationStartResponse{OK: true}
+					reply := behaviors.AllocationStartResponse{OK: true}
 					env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
 					require.NoError(t, err)
 					respChan <- env
@@ -801,8 +801,8 @@ func TestOrchestrator(t *testing.T) {
 				go func() {
 					defer wg.Done()
 
-					bid := jobtypes.Bid{
-						V1: &jobtypes.BidV1{
+					bid := jtypes.Bid{
+						V1: &jtypes.BidV1{
 							EnsembleID: ensembleID,
 							NodeID:     "node1",
 							Peer:       peerID.String(),
@@ -814,7 +814,7 @@ func TestOrchestrator(t *testing.T) {
 									InboxAddress: "inboxAddress",
 								},
 							},
-							Location: Location{},
+							Location: jtypes.Location{},
 						},
 					}
 					err = bid.Sign(provider)
@@ -903,8 +903,8 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 					go func() {
 						defer wg.Done()
 
-						bid := jobtypes.Bid{
-							V1: &jobtypes.BidV1{
+						bid := jtypes.Bid{
+							V1: &jtypes.BidV1{
 								EnsembleID: ensembleID,
 								NodeID:     "node1",
 								Peer:       peerID.String(),
@@ -916,7 +916,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 										InboxAddress: "inboxAddress",
 									},
 								},
-								Location: Location{},
+								Location: jtypes.Location{},
 							},
 						}
 						err = bid.Sign(provider)
@@ -940,7 +940,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.AllocationDeploymentBehavior:
-						reply := AllocationDeploymentResponse{
+						reply := jtypes.AllocationDeploymentResponse{
 							OK: true,
 							Allocations: map[string]actor.Handle{
 								"allocation1": {},
@@ -955,7 +955,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.AllocationStartBehavior:
-						reply := AllocationStartResponse{OK: true}
+						reply := behaviors.AllocationStartResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
@@ -970,12 +970,12 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.SubnetAddPeerBehavior:
-						reply := SubnetAddPeerResponse{OK: true}
+						reply := behaviors.SubnetAddPeerResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.SubnetDNSAddRecordsBehavior:
-						reply := SubnetDNSAddRecordsResponse{OK: true}
+						reply := behaviors.SubnetDNSAddRecordsResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
@@ -999,19 +999,19 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 				go func() {
 					switch msg.Behavior {
 					case behaviors.RegisterHealthcheckBehavior: // supervisor
-						reply := RegisterHealthcheckResponse{OK: true}
+						reply := behaviors.RegisterHealthcheckResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.RegisterHealthcheckBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
 					case actor.HealthCheckBehavior:
 						defer wg.Done()
-						reply := HealthCheckResponse{OK: false}
+						reply := behaviors.HealthCheckResponse{OK: false}
 						env, err := actor.Message(actor.Handle{}, msg.From, actor.HealthCheckBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.AllocationRestartBehavior:
 						defer wg.Done()
-						reply := AllocationRestartResponse{OK: true}
+						reply := behaviors.AllocationRestartResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationRestartBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
@@ -1102,8 +1102,8 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 					go func() {
 						defer wg.Done()
 
-						bid := jobtypes.Bid{
-							V1: &jobtypes.BidV1{
+						bid := jtypes.Bid{
+							V1: &jtypes.BidV1{
 								EnsembleID: ensembleID,
 								NodeID:     "node1",
 								Peer:       peerID.String(),
@@ -1115,7 +1115,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 										InboxAddress: "inboxAddress",
 									},
 								},
-								Location: Location{},
+								Location: jtypes.Location{},
 							},
 						}
 						err = bid.Sign(provider)
@@ -1139,7 +1139,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.AllocationDeploymentBehavior:
-						reply := AllocationDeploymentResponse{
+						reply := jtypes.AllocationDeploymentResponse{
 							OK: true,
 							Allocations: map[string]actor.Handle{
 								"allocation1": {},
@@ -1154,17 +1154,17 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.SubnetAddPeerBehavior:
-						reply := SubnetAddPeerResponse{OK: true}
+						reply := behaviors.SubnetAddPeerResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetAddPeerBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.SubnetDNSAddRecordsBehavior:
-						reply := SubnetDNSAddRecordsResponse{OK: true}
+						reply := behaviors.SubnetDNSAddRecordsResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.SubnetDNSAddRecordsBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
 					case behaviors.AllocationStartBehavior:
-						reply := AllocationStartResponse{OK: true}
+						reply := behaviors.AllocationStartResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationStartBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
@@ -1187,7 +1187,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 				go func() {
 					switch msg.Behavior {
 					case behaviors.RegisterHealthcheckBehavior: // supervisor
-						reply := RegisterHealthcheckResponse{OK: true}
+						reply := behaviors.RegisterHealthcheckResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.RegisterHealthcheckBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env
@@ -1196,7 +1196,7 @@ func TestOrchestrator_Supervisor(t *testing.T) {
 						// do nothing to simulate a failure
 					case behaviors.AllocationRestartBehavior:
 						defer wg.Done()
-						reply := AllocationRestartResponse{OK: true}
+						reply := behaviors.AllocationRestartResponse{OK: true}
 						env, err := actor.Message(actor.Handle{}, msg.From, behaviors.AllocationRestartBehavior, reply)
 						require.NoError(t, err)
 						respChan <- env

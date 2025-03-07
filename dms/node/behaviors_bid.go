@@ -10,6 +10,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -179,7 +180,12 @@ loop:
 
 	var location jobtypes.Location
 	if n.hostLocation.Empty() {
-		loc, err := n.geolocate()
+		ip, err := n.network.HostPublicIP()
+		if err != nil {
+			log.Debugf("(geolocation) bid request: failed to get host public ip: %w", err)
+		}
+
+		loc, err := geolocation.Geolocate(ip, n.geoIP)
 		if err != nil {
 			log.Debugf("bid request: failed to geolocate node: %w", err)
 		}

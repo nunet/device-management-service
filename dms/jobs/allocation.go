@@ -21,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -233,9 +234,9 @@ func (a *Allocation) handleExecutionExit(ctx context.Context) {
 //
 // TODO: retry policy (meanwhile, we'll teardown everything in case of error)
 func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
-	notifyOrchestrator := func(req TaskTerminationNotification) {
+	notifyOrchestrator := func(req behaviors.TaskTerminationNotification) {
 		req.AllocationID = a.ID
-		req.Status = a.status
+		req.Status = string(a.status)
 
 		// send logs if existent
 		if r != nil {
@@ -274,8 +275,8 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 			exitCode = r.ExitCode
 		}
 
-		notifyOrchestrator(TaskTerminationNotification{
-			Error: TerminationError{
+		notifyOrchestrator(behaviors.TaskTerminationNotification{
+			Error: behaviors.TerminationError{
 				ExitCode: exitCode,
 				Err:      fmt.Errorf("general execution failure: %w", err),
 			},
@@ -286,8 +287,8 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 			log.Infof("execution exited with exit code: %d", r.ExitCode)
 			a.status = AllocationFailed
 
-			notifyOrchestrator(TaskTerminationNotification{
-				Error: TerminationError{
+			notifyOrchestrator(behaviors.TaskTerminationNotification{
+				Error: behaviors.TerminationError{
 					ExitCode: r.ExitCode,
 					Err:      fmt.Errorf("execution exit code != 0, exit code: %d", r.ExitCode),
 				},
@@ -295,12 +296,12 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		} else if r.ExitCode == 0 && !r.Killed {
 			log.Infof("execution successfully completed")
 			a.status = AllocationCompleted
-			notifyOrchestrator(TaskTerminationNotification{})
+			notifyOrchestrator(behaviors.TaskTerminationNotification{})
 		} else if r.ExitCode == 0 && r.Killed {
 			log.Infof("execution possibly killed")
 			a.status = AllocationFailed
-			notifyOrchestrator(TaskTerminationNotification{
-				Error: TerminationError{
+			notifyOrchestrator(behaviors.TaskTerminationNotification{
+				Error: behaviors.TerminationError{
 					ExitCode: r.ExitCode,
 					Err:      fmt.Errorf("execution possibly killed"),
 					Killed:   true,
@@ -349,7 +350,7 @@ func (a *Allocation) Cleanup() error {
 		return nil
 	}
 
-	if err := a.executor.Remove(a.executionID, AllocationShutdownTimeout); err != nil {
+	if err := a.executor.Remove(a.executionID, orchestrator.AllocationShutdownTimeout); err != nil {
 		return fmt.Errorf("failed to remove execution: %w", err)
 	}
 	log.Debugf("removed execution: %s", a.executionID)

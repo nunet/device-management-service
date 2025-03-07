@@ -6,7 +6,7 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package jobs
+package geolocation
 
 import (
 	"bufio"
@@ -16,6 +16,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
 // currently only using a GeoNames file for cities with population > 5000
@@ -24,7 +26,7 @@ import (
 //go:embed cities5000.txt
 var cities5000 string
 
-const lightSpeed = 299792.458 // in km/s
+const LightSpeed = 299792.458 // in km/s
 
 type Coordinate struct {
 	lat  float64
@@ -58,7 +60,7 @@ func NewGeoLocator() (*GeoLocator, error) {
 		countryCode := fields[8]
 		coordinate, err := parseCoordinate(fields)
 		if err != nil {
-			log.Warnf("parsing coordiates for %s in %s: %s", cityName, countryCode, err)
+			log.Warnf("failure parsing coordiates for %s in %s: %s", cityName, countryCode, err)
 			continue
 		}
 
@@ -77,7 +79,7 @@ func NewGeoLocator() (*GeoLocator, error) {
 	return geo, nil
 }
 
-func (geo *GeoLocator) Coordinate(loc Location) (Coordinate, error) {
+func (geo *GeoLocator) Coordinate(loc jtypes.Location) (Coordinate, error) {
 	if loc.Country == "" || loc.City == "" {
 		return Coordinate{}, fmt.Errorf("no city in location")
 	}
@@ -103,7 +105,7 @@ func parseCoordinate(fields []string) (Coordinate, error) {
 }
 
 // using a haversine formula to calculate the shortest path
-func computeGeodesic(p1, p2 Coordinate) float64 {
+func ComputeGeodesic(p1, p2 Coordinate) float64 {
 	const earthRadius = 6371 // km
 
 	if p1.Empty() || p2.Empty() {

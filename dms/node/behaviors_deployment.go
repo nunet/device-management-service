@@ -20,6 +20,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -34,10 +35,10 @@ var (
 func (n *Node) handleVerifyEdgeConstraint(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request jobs.VerifyEdgeConstraintRequest
+	var request orchestrator.VerifyEdgeConstraintRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Warnf("unmarshalling constraint request: %s", err)
-		n.sendReply(msg, jobs.VerifyEdgeConstraintResponse{
+		n.sendReply(msg, orchestrator.VerifyEdgeConstraintResponse{
 			OK:    false,
 			Error: err.Error(),
 		})
@@ -75,10 +76,10 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("Error committing deployment: %v", err)
-		n.sendReply(msg, jobs.CommitDeploymentResponse{Error: err.Error()})
+		n.sendReply(msg, orchestrator.CommitDeploymentResponse{Error: err.Error()})
 	}
 
-	var request jobs.CommitDeploymentRequest
+	var request orchestrator.CommitDeploymentRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		handleErr(err)
 		return
@@ -86,7 +87,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 
 	log.Infof("committing deployment for %s", request.EnsembleID)
 
-	resp := jobs.CommitDeploymentResponse{}
+	resp := orchestrator.CommitDeploymentResponse{}
 	allocationID := types.ConstructAllocationID(request.EnsembleID, request.AllocationName)
 	request.Resources.AllocationID = allocationID
 	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources, request.PortMapping)
@@ -109,7 +110,7 @@ type NewDeploymentResponse struct {
 	Error      string `json:",omitempty"`
 }
 
-func (n *Node) saveDeployment(orchestrator jobs.OrchestratorAPI) error {
+func (n *Node) saveDeployment(orchestrator orchestrator.Orchestrator) error {
 	pvkey := orchestrator.ActorPrivateKey()
 
 	pkRaw, err := crypto.MarshalPrivateKey(pvkey)
@@ -157,30 +158,30 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	}
 
 	childCtx := context.WithoutCancel(n.ctx)
-	orchestrator, err := n.createOrchestrator(childCtx, request.Ensemble, n.actor)
+	orch, err := n.createOrchestrator(childCtx, request.Ensemble, n.actor)
 	if err != nil {
 		log.Warnf("creating orchestrator: %s", err)
 		handleErr(err)
 		return
 	}
 
-	log.Infof("deploying ensemble: %s", orchestrator.ID())
+	log.Infof("deploying ensemble: %s", orch.ID())
 	n.sendReply(msg, NewDeploymentResponse{
 		Status:     "OK",
-		EnsembleID: orchestrator.ID(),
+		EnsembleID: orch.ID(),
 	})
 
-	if err := orchestrator.Deploy(msg.Expiry().Add(-jobs.MinEnsembleDeploymentTime)); err != nil {
-		orchestrator.Stop()
+	if err := orch.Deploy(msg.Expiry().Add(-orchestrator.MinEnsembleDeploymentTime)); err != nil {
+		orch.Stop()
 		log.Errorf("error creating ensemble: %s", err)
-		n.orchestratorProvider.DeleteOrchestrator(orchestrator.ID())
+		n.orchestratorRegistry.DeleteOrchestrator(orch.ID())
 
 		return
 	}
 
 	// save the deployment
-	if err := n.saveDeployment(orchestrator); err != nil {
-		log.Errorf("error saving deployment %s: %s", orchestrator.ID(), err)
+	if err := n.saveDeployment(orch); err != nil {
+		log.Errorf("error saving deployment %s: %s", orch.ID(), err)
 	}
 }
 
@@ -194,7 +195,7 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 	var resp DeploymentListResponse
 
 	resp.Deployments = make(map[string]string)
-	for ID, dep := range n.orchestratorProvider.Orchestrators() {
+	for ID, dep := range n.orchestratorRegistry.Orchestrators() {
 		resp.Deployments[ID] = jobtypes.DeploymentStatusString(dep.Status())
 	}
 
@@ -227,7 +228,7 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 		return
 	}
 
-	o, err := n.orchestratorProvider.GetOrchestrator(request.EnsembleID)
+	o, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
 		return
@@ -274,7 +275,7 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
-	o, err := n.orchestratorProvider.GetOrchestrator(request.ID)
+	o, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
 	if err != nil {
 		// TODO: check database for persisted deployments data
 		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
@@ -310,7 +311,7 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 		return
 	}
 
-	o, err := n.orchestratorProvider.GetOrchestrator(request.ID)
+	o, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
 	if err != nil {
 		// TODO: check database for persisted deployments data
 		handleErr(err)
@@ -346,7 +347,7 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 		return
 	}
 
-	o, err := n.orchestratorProvider.GetOrchestrator(request.ID)
+	o, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
 	if err != nil {
 		handleErr(err)
 		return
@@ -369,7 +370,7 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request jobs.RevertDeploymentMessage
+	var request orchestrator.RevertDeploymentMessage
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		return
 	}

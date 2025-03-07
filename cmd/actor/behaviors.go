@@ -21,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
@@ -433,16 +434,16 @@ Examples:
 	},
 
 	behaviors.SubnetCreateBehavior.Static: {
-		Payload: func() any { return &jobs.SubnetCreateRequest{} },
+		Payload: func() any { return &orchestrator.SubnetCreateRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetCreateRequest)
+			p := payload.(*orchestrator.SubnetCreateRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*jobs.SubnetCreateRequest)
+			req, ok := payload.(*orchestrator.SubnetCreateRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
@@ -460,15 +461,15 @@ Examples:
 	},
 
 	behaviors.SubnetDestroyBehavior.Static: {
-		Payload: func() any { return &jobs.SubnetDestroyRequest{} },
+		Payload: func() any { return &orchestrator.SubnetDestroyRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetDestroyRequest)
+			p := payload.(*orchestrator.SubnetDestroyRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
 		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*jobs.SubnetDestroyRequest)
+			req, ok := payload.(*orchestrator.SubnetDestroyRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
