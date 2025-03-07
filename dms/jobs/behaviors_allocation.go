@@ -15,31 +15,21 @@ import (
 	"strings"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/types"
 )
-
-type AllocationStartRequest struct {
-	SubnetIP    string
-	GatewayIP   string
-	PortMapping map[int]int
-}
-
-type AllocationStartResponse struct {
-	OK    bool
-	Error string
-}
 
 func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	log.Infof("behavior allocation start invoked by: %+v", msg.From)
 	defer msg.Discard()
 
-	var req AllocationStartRequest
+	var req behaviors.AllocationStartRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
 		log.Errorf("error unmarshalling allocation start request: %s", err)
 		return
 	}
 
-	var resp AllocationStartResponse
+	var resp behaviors.AllocationStartResponse
 	// TODO: context should cancel when the actor is stopped to stop monitor
 	if err := a.Run(context.TODO(), req.SubnetIP, req.GatewayIP, req.PortMapping); err != nil {
 		err = fmt.Errorf("failed to run allocation: %w", err)
@@ -69,7 +59,7 @@ type AllocationRestartResponse struct {
 func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := AllocationRestartResponse{}
+	resp := behaviors.AllocationRestartResponse{}
 	if err := a.Restart(context.TODO()); err != nil { // TODO: fix context.TODO()
 		err = fmt.Errorf("failed to restart allocation: %w", err)
 		log.Error(err)
@@ -84,21 +74,11 @@ func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-type RegisterHealthcheckRequest struct {
-	EnsembleID  string
-	HealthCheck types.HealthCheckManifest
-}
-
-type RegisterHealthcheckResponse struct {
-	OK    bool
-	Error string
-}
-
 func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request RegisterHealthcheckRequest
-	resp := RegisterHealthcheckResponse{}
+	var request behaviors.RegisterHealthcheckRequest
+	resp := behaviors.RegisterHealthcheckResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()

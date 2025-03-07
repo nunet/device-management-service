@@ -28,7 +28,9 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -95,7 +97,7 @@ type Node struct {
 	// in-memory state
 	hostID       string
 	geoIP        types.GeoIPLocator
-	hostLocation Geolocation
+	hostLocation geolocation.Geolocation
 	peers        map[peer.ID]*peerState
 	bids         map[string]*bidState
 	answeredBids map[string][]uint64
@@ -105,7 +107,7 @@ type Node struct {
 	orchestratorRepo repositories.OrchestratorView
 
 	// utils
-	orchestratorProvider jobs.OrchestratorProvider
+	orchestratorRegistry orchestrator.Registry
 	dmsConfig            config.Config
 	fs                   afero.Afero
 	ctx                  context.Context
@@ -145,8 +147,8 @@ func New(cfg config.Config, fs afero.Afero,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
 	orchestratorRepo repositories.OrchestratorView,
-	geoIP types.GeoIPLocator, hostLocation Geolocation, portConfig PortConfig,
-	vt *storage.VoumeTracker,
+	geoIP types.GeoIPLocator, hostLocation geolocation.Geolocation,
+	portConfig PortConfig, vt *storage.VoumeTracker,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -215,7 +217,7 @@ func New(cfg config.Config, fs afero.Afero,
 		ctx:                  ctx,
 		cancel:               cancel,
 		orchestratorRepo:     orchestratorRepo,
-		orchestratorProvider: jobs.NewOrchestratorProvider(),
+		orchestratorRegistry: orchestrator.NewRegistry(),
 		geoIP:                geoIP,
 		hostLocation:         hostLocation,
 		dmsConfig:            cfg,
@@ -246,7 +248,7 @@ func (n *Node) saveDeployments() error {
 	defer n.lock.Unlock()
 
 	var failed []string
-	for id, o := range n.orchestratorProvider.Orchestrators() {
+	for id, o := range n.orchestratorRegistry.Orchestrators() {
 		if err := n.saveDeployment(o); err != nil {
 			log.Errorf("error saving deployment %s: %s", id, err)
 			failed = append(failed, id)
@@ -333,7 +335,7 @@ func (n *Node) restoreDeployments() error {
 			continue
 		}
 
-		orchestrator, err := n.orchestratorProvider.RestoreDeployment(childActor, d.OrchestratorID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
+		orchestrator, err := n.orchestratorRegistry.RestoreDeployment(childActor, d.OrchestratorID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
 		if err != nil {
 			log.Errorf("restore orchestrator of id %s; Error: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
@@ -554,7 +556,7 @@ func createEnsembleID(peerID string) (string, error) {
 func (n *Node) createOrchestrator(ctx context.Context,
 	ensemble jobtypes.EnsembleConfig,
 	actr actor.Actor, // TODO: unnecessary param, since actr is n.actor
-) (jobs.OrchestratorAPI, error) {
+) (orchestrator.Orchestrator, error) {
 	ensembleID, err := createEnsembleID(actr.Handle().Address.HostID)
 	if err != nil {
 		return nil, fmt.Errorf("generate uuid for ensemble: %w", err)
@@ -570,7 +572,7 @@ func (n *Node) createOrchestrator(ctx context.Context,
 		return nil, fmt.Errorf("start child actor: %w", err)
 	}
 
-	orchestrator, err := n.orchestratorProvider.NewOrchestrator(
+	orchestrator, err := n.orchestratorRegistry.NewOrchestrator(
 		ctx, n.fs, n.dmsConfig.WorkDir,
 		ensembleID, childActor, ensemble,
 	)

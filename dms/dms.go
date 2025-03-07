@@ -26,11 +26,13 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
+	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
 	clover_db "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
@@ -41,8 +43,6 @@ import (
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/types"
-
-	"go.elastic.co/apm/module/apmgin/v2"
 )
 
 //go:embed data/GeoLite2-Country.mmdb
@@ -229,7 +229,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	trustCtx.Start(time.Hour)
 	capCtx.Start(5 * time.Minute)
 
-	hostLocation := node.Geolocation{
+	hostLocation := geolocation.Geolocation{
 		Continent: gcfg.HostContinent,
 		Country:   gcfg.HostCountry,
 		City:      gcfg.HostCity,

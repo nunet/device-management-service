@@ -25,6 +25,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -34,12 +35,12 @@ import (
 func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request jobs.SubnetCreateRequest
+	var request orchestrator.SubnetCreateRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		return
 	}
 
-	resp := jobs.SubnetCreateResponse{}
+	resp := orchestrator.SubnetCreateResponse{}
 	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
 	if err != nil {
 		resp.Error = err.Error()
@@ -56,11 +57,11 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("Error destroying subnet: %s", err)
-		n.sendReply(msg, jobs.SubnetDestroyResponse{Error: err.Error()})
+		n.sendReply(msg, orchestrator.SubnetDestroyResponse{Error: err.Error()})
 	}
 
-	var request jobs.SubnetDestroyRequest
-	resp := jobs.SubnetDestroyResponse{}
+	var request orchestrator.SubnetDestroyRequest
+	resp := orchestrator.SubnetDestroyResponse{}
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		handleErr(fmt.Errorf("error unmarshalling subnet destroy: %s", err))
 		return
@@ -79,12 +80,12 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 func (n *Node) handleSubnetJoin(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request jobs.SubnetJoinRequest
+	var request orchestrator.SubnetJoinRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		return
 	}
 
-	resp := jobs.SubnetJoinResponse{}
+	resp := orchestrator.SubnetJoinResponse{}
 	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
 	if err != nil {
 		resp.Error = err.Error()
@@ -162,7 +163,7 @@ func (n *Node) createAllocation(
 func (n *Node) createAllocations(
 	orchestrator did.DID,
 	ensembleID string,
-	allocations map[string]jobs.AllocationDeploymentConfig,
+	allocations map[string]jobtypes.AllocationDeploymentConfig,
 	supervisor actor.Handle,
 ) (map[string]actor.Handle, error) {
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
@@ -248,16 +249,16 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("Error handling allocation deployment: %s", err)
-		n.sendReply(msg, jobs.AllocationDeploymentResponse{Error: err.Error()})
+		n.sendReply(msg, jobtypes.AllocationDeploymentResponse{Error: err.Error()})
 	}
 
-	var request jobs.AllocationDeploymentRequest
+	var request jobtypes.AllocationDeploymentRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		handleErr(err)
 		return
 	}
 
-	resp := jobs.AllocationDeploymentResponse{}
+	resp := jobtypes.AllocationDeploymentResponse{}
 	if err := n.addEnsembleBehaviors(request.EnsembleID); err != nil {
 		handleErr(fmt.Errorf("failed to register dynamic behaviors: %s", err))
 		return
@@ -329,17 +330,17 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("error getting allocation logs: %s", err)
-		n.sendReply(msg, jobs.AllocationLogsResponse{Error: err.Error()})
+		n.sendReply(msg, orchestrator.AllocationLogsResponse{Error: err.Error()})
 	}
 
-	var resp jobs.AllocationLogsResponse
+	var resp orchestrator.AllocationLogsResponse
 	ensembleID, err := ensembleIDFromBehavior(msg.Behavior)
 	if err != nil {
 		handleErr(fmt.Errorf("error getting ensemble ID from behavior %s: %s", msg.Behavior, err))
 		return
 	}
 
-	var req jobs.AllocationLogsRequest
+	var req orchestrator.AllocationLogsRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
 		handleErr(fmt.Errorf("error unmarshalling allocation logs request: %s", err))
 		return

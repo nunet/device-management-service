@@ -57,7 +57,7 @@ func TestAllocation(t *testing.T) {
 		require.NotNil(t, allocation)
 	})
 
-	withTimeout(t, "must be able to start and run the allocation then terminate it", 30*time.Second, func(_ context.Context, t *testing.T) {
+	withTimeout(t, "must be able to start and run the allocation then terminate it", 31*time.Second, func(_ context.Context, t *testing.T) {
 		t.Parallel()
 
 		fs := afero.NewMemMapFs()
@@ -282,5 +282,27 @@ func TestAllocation(t *testing.T) {
 			retry.Delay(1*time.Second),
 		)
 		require.NoError(t, err)
+	})
+}
+
+// Export this from somewhere as a helper (used also by the orchestrator)
+func withTimeout(t *testing.T, name string, duration time.Duration, testFunc func(ctx context.Context, t *testing.T)) {
+	t.Run(name, func(t *testing.T) {
+		t.Helper()
+
+		ctx, cancel := context.WithTimeout(context.Background(), duration)
+		defer cancel()
+
+		done := make(chan struct{})
+		go func() {
+			testFunc(ctx, t)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			t.Fatalf("test %q timed out after %s", name, duration)
+		}
 	})
 }

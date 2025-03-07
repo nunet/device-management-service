@@ -6,11 +6,13 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package jobs
+package geolocation
 
 import (
 	"math"
 	"testing"
+
+	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
 func TestCoordinate(t *testing.T) {
@@ -131,9 +133,9 @@ func TestCoordinate(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				t.Parallel()
 
-				got := computeGeodesic(tt.p1, tt.p2)
+				got := ComputeGeodesic(tt.p1, tt.p2)
 				if math.Abs(got-tt.want) > 0.01 {
-					t.Errorf("computeGeodesic() = %v, want %v", got, tt.want)
+					t.Errorf("ComputeGeodesic() = %v, want %v", got, tt.want)
 				}
 			})
 		}
@@ -166,7 +168,7 @@ func TestGeoLocator(t *testing.T) {
 			t.Fatalf("NewGeoLocator() error = %v", err)
 		}
 
-		loc := Location{Country: "US", City: "Los Angeles"}
+		loc := jtypes.Location{Country: "US", City: "Los Angeles"}
 		coord, err := geo.Coordinate(loc)
 		if err != nil {
 			t.Fatalf("GeoLocator.Coordinate() error = %v", err)

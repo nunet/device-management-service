@@ -1,4 +1,4 @@
-package jobs
+package orchestrator
 
 import (
 	"encoding/json"
@@ -7,32 +7,14 @@ import (
 	"strings"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
-type TaskTerminationNotification struct {
-	AllocationID string
-	Status       AllocationStatus
-
-	Error TerminationError
-
-	Stdout []byte
-	Stderr []byte
-}
-
-// TerminationError holds information necessary to handle
-// failure recovery given retry policies.
-type TerminationError struct {
-	Err      error
-	ExitCode int
-	// Killed is used to identify if the application was killed
-	// by external means, rather than app exiting itself
-	Killed bool
-}
-
-func (o *Orchestrator) handleTaskTermination(msg actor.Envelope) {
+func (o *BasicOrchestrator) handleTaskTermination(msg actor.Envelope) {
 	msg.Discard()
 
-	var req TaskTerminationNotification
+	var req behaviors.TaskTerminationNotification
 
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
 		log.Debugf("unmarshalling task completion request: %s", err)
@@ -50,7 +32,7 @@ func (o *Orchestrator) handleTaskTermination(msg actor.Envelope) {
 
 	// update allocation status
 	o.lock.Lock()
-	a.Status = req.Status
+	a.Status = jtypes.AllocationStatus(req.Status)
 	o.manifest.Allocations[allocName] = a
 	o.lock.Unlock()
 
@@ -69,7 +51,7 @@ func (o *Orchestrator) handleTaskTermination(msg actor.Envelope) {
 	log.Infof("allocation logs for %s written to %s (ensemble: %s)", allocName, allocDir, o.id)
 }
 
-func (o *Orchestrator) WriteAllocationLogs(
+func (o *BasicOrchestrator) WriteAllocationLogs(
 	allocName string, stdout, stderr []byte,
 ) (string, error) {
 	ensembleDir := filepath.Join(

@@ -28,6 +28,7 @@ import (
 	repo "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -87,12 +88,12 @@ func getMockNode(t *testing.T, ctrl *gomock.Controller) *Node {
 		executors:            make(map[string]executorMetadata),
 		hostID:               "hostID",
 		geoIP:                mockGeoIPLocator,
-		hostLocation:         Geolocation{},
+		hostLocation:         geolocation.Geolocation{},
 		orchestratorRepo:     repo.NewOrchestratorView(db),
 		fs:                   afero.Afero{Fs: afero.NewMemMapFs()},
 		ctx:                  ctx,
 		cancel:               cancel,
-		orchestratorProvider: mockOrchestratorFactory,
+		orchestratorRegistry: mockOrchestratorFactory,
 		bids:                 make(map[string]*bidState),
 		allocator:            mockAllocator,
 	}
@@ -137,7 +138,7 @@ func TestNode(t *testing.T) {
 			mockHardwareManager,
 			repo.NewOrchestratorView(db),
 			mockGeoIPLocator,
-			Geolocation{},
+			geolocation.Geolocation{},
 			PortConfig{AvailableRangeFrom: 49152, AvailableRangeTo: 65535},
 			volumeTracker,
 		)
@@ -168,7 +169,7 @@ func TestNode(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, node.running.Load())
 
-		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().Orchestrators().Return(nil).AnyTimes()
+		node.orchestratorRegistry.(*MockOrchestratorProvider).EXPECT().Orchestrators().Return(nil).AnyTimes()
 		node.network.(*MockNetwork).EXPECT().Unsubscribe(gomock.Any(), subscriptionID).Return(nil).AnyTimes()
 		node.network.(*MockNetwork).EXPECT().UnregisterMessageHandler(gomock.Any()).Return().AnyTimes()
 		node.actor.(*MockActor).EXPECT().Stop().Return(nil).Times(1)
@@ -234,7 +235,7 @@ func TestDeployment(t *testing.T) {
 		msg := getMockDeploymentRequest(t)
 		var wg sync.WaitGroup
 
-		mockOrchestrator := NewMockOrchestratorAPI(ctrl)
+		mockOrchestrator := NewMockOrchestrator(ctrl)
 		wg.Add(1)
 		node.actor.(*MockActor).EXPECT().Send(gomock.Any()).DoAndReturn(func(msg actor.Envelope) error {
 			var response NewDeploymentResponse
@@ -260,7 +261,7 @@ func TestDeployment(t *testing.T) {
 		node.actor.(*MockActor).EXPECT().CreateChild(gomock.Any(), gomock.Any(), gomock.Any()).Return(child, nil).Times(1)
 
 		// Set up orchestrator expectations in order
-		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().NewOrchestrator(
+		node.orchestratorRegistry.(*MockOrchestratorProvider).EXPECT().NewOrchestrator(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), child, gomock.Any()).
 			Return(mockOrchestrator, nil).Times(1)
 
@@ -306,7 +307,7 @@ func TestDeployment(t *testing.T) {
 		require.NoError(t, err)
 
 		// restore the deployment
-		mockOrchestrator := NewMockOrchestratorAPI(ctrl)
+		mockOrchestrator := NewMockOrchestrator(ctrl)
 		node.actor.(*MockActor).EXPECT().Limiter().Return(actor.NewRateLimiter(actor.DefaultRateLimiterConfig())).AnyTimes()
 		child := NewMockActor(ctrl)
 		node.actor.(*MockActor).EXPECT().CreateChild(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -316,7 +317,7 @@ func TestDeployment(t *testing.T) {
 		).AnyTimes()
 		child.EXPECT().Start().Return(nil).Times(1)
 		node.network.(*MockNetwork).EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-		node.orchestratorProvider.(*MockOrchestratorProvider).EXPECT().RestoreDeployment(child, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		node.orchestratorRegistry.(*MockOrchestratorProvider).EXPECT().RestoreDeployment(child, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(mockOrchestrator, nil).Times(1)
 		mockOrchestrator.EXPECT().ID().Return("test").AnyTimes()
 		err = node.restoreDeployments()

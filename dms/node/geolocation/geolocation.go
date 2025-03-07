@@ -6,9 +6,14 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package node
+package geolocation
 
-import jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+import (
+	"net"
+
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	types "gitlab.com/nunet/device-management-service/types"
+)
 
 type Geolocation struct {
 	Continent string
@@ -20,12 +25,8 @@ func (g *Geolocation) Empty() bool {
 	return g.Continent == "" && g.Country == "" && g.City == ""
 }
 
-func (n *Node) geolocate() (jobtypes.Location, error) {
-	ip, err := n.network.HostPublicIP()
-	if err != nil {
-		return jobtypes.Location{}, err
-	}
-	rec, err := n.geoIP.Country(ip)
+func Geolocate(ip net.IP, geoIP types.GeoIPLocator) (jobtypes.Location, error) {
+	rec, err := geoIP.Country(ip)
 	if err != nil {
 		return jobtypes.Location{}, err
 	}
