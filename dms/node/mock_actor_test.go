@@ -25,6 +25,7 @@ import (
 type MockActor struct {
 	ctrl     *gomock.Controller
 	recorder *MockActorMockRecorder
+	isgomock struct{}
 }
 
 // MockActorMockRecorder is the mock recorder for MockActor.
@@ -301,6 +302,7 @@ func (mr *MockActorMockRecorder) Supervisor() *gomock.Call {
 type MockSecurityContext struct {
 	ctrl     *gomock.Controller
 	recorder *MockSecurityContextMockRecorder
+	isgomock struct{}
 }
 
 // MockSecurityContextMockRecorder is the mock recorder for MockSecurityContext.
@@ -504,6 +506,7 @@ func (mr *MockSecurityContextMockRecorder) Verify(msg any) *gomock.Call {
 type MockRateLimiter struct {
 	ctrl     *gomock.Controller
 	recorder *MockRateLimiterMockRecorder
+	isgomock struct{}
 }
 
 // MockRateLimiterMockRecorder is the mock recorder for MockRateLimiter.

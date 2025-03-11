@@ -21,6 +21,7 @@ import (
 type MockModelType struct {
 	ctrl     *gomock.Controller
 	recorder *MockModelTypeMockRecorder
+	isgomock struct{}
 }
 
 // MockModelTypeMockRecorder is the mock recorder for MockModelType.
@@ -44,6 +45,7 @@ func (m *MockModelType) EXPECT() *MockModelTypeMockRecorder {
 type MockGenericRepository[T repositories.ModelType] struct {
 	ctrl     *gomock.Controller
 	recorder *MockGenericRepositoryMockRecorder[T]
+	isgomock struct{}
 }
 
 // MockGenericRepositoryMockRecorder is the mock recorder for MockGenericRepository.

@@ -24,6 +24,7 @@ import (
 type MockAllocator struct {
 	ctrl     *gomock.Controller
 	recorder *MockAllocatorMockRecorder
+	isgomock struct{}
 }
 
 // MockAllocatorMockRecorder is the mock recorder for MockAllocator.

@@ -21,6 +21,7 @@ import (
 type MockGeoIPLocator struct {
 	ctrl     *gomock.Controller
 	recorder *MockGeoIPLocatorMockRecorder
+	isgomock struct{}
 }
 
 // MockGeoIPLocatorMockRecorder is the mock recorder for MockGeoIPLocator.
