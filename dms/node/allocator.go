@@ -378,22 +378,41 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 }
 
 func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
-	if job.Volume != nil {
-		mounter, err := volume.New(a.volumeTracker, *job.Volume)
-		if err != nil {
-			return fmt.Errorf("create volume: %w", err)
-		}
+	if job.Volume == nil {
+		return nil
+	}
+	mounter, err := volume.New(a.volumeTracker, *job.Volume)
+	if err != nil {
+		return fmt.Errorf("create volume: %w", err)
+	}
 
-		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
-		err = createDirIfNotExists(desginationPath)
-		if err != nil {
-			return fmt.Errorf("mount directory: %w", err)
-		}
+	desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
+	err = createDirIfNotExists(desginationPath)
+	if err != nil {
+		return fmt.Errorf("mount directory: %w", err)
+	}
 
-		err = mounter.Mount(desginationPath, nil)
-		if err != nil {
-			return fmt.Errorf("failed to mount volume: %w", err)
-		}
+	err = mounter.Mount(desginationPath, nil)
+	if err != nil {
+		return fmt.Errorf("failed to mount volume: %w", err)
+	}
+
+	return nil
+}
+
+func (a *allocator) unmountVolumeOnHost(job jobs.Job, allocationID string) error {
+	if job.Volume == nil {
+		return nil
+	}
+	mounter, err := volume.New(a.volumeTracker, *job.Volume)
+	if err != nil {
+		return fmt.Errorf("create volume: %w", err)
+	}
+
+	desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
+	err = mounter.Unmount(desginationPath)
+	if err != nil {
+		return fmt.Errorf("failed to unmount volume: %w", err)
 	}
 
 	return nil
@@ -509,6 +528,10 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 	if err != nil {
 		log.Warnf("deallocate resources for allocation id: %s: %v", allocationID, err)
 		return fmt.Errorf("deallocate resources for allocation id: %s: %w", allocationID, err)
+	}
+
+	if err := a.unmountVolumeOnHost(allocation.Job, allocationID); err != nil {
+		return fmt.Errorf("unmount volume: %w", err)
 	}
 
 	// remove the allocation

@@ -78,20 +78,14 @@ clean:
 	@echo "Cleaning up..."
 	rm -rf builds/
 
-build_e2e_tests: 
-	go test -tags e2e -c ./test/e2e/ -o ./test/e2e/testbinary
-
 setcap: 
-	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/e2e/testbinary
+	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/integration/dms
 
-run_e2e_tests: 
-	./test/e2e/testbinary
-
-e2e_test:
-	@echo "Running e2e test"
-	make build_e2e_tests
+itest:
+	@echo "Running integration tests"
+	go build -o ./test/integration/dms -ldflags=$(LDFLAGS)
 	make setcap
-	make run_e2e_tests
+	go test -v ./test/integration/... -tags=integration -timeout=5m
 
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common

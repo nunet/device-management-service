@@ -1,0 +1,254 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
+package itest
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/shirou/gopsutil/v4/process"
+
+	"gitlab.com/nunet/device-management-service/internal/config"
+)
+
+type DIDData struct {
+	DID struct {
+		URI string `json:"uri"`
+	} `json:"DID"`
+	Roots   []interface{}          `json:"Roots"`
+	Require map[string]interface{} `json:"Require"`
+	Provide map[string]interface{} `json:"Provide"`
+}
+
+func countDIDOccurrences(input string) int {
+	pattern := `"DID":\s*{[^}]*}`
+
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		fmt.Println("Error compiling regex:", err)
+		return 0
+	}
+
+	matches := re.FindAllString(input, -1)
+
+	return len(matches)
+}
+
+func getCurrentFileDirectory() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("Unable to get current file info")
+	}
+	return filepath.Dir(file)
+}
+
+func extractURIFromFile(filePath string) (string, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	var data DIDData
+	if err := json.Unmarshal(content, &data); err != nil {
+		return "", fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return data.DID.URI, nil
+}
+
+func extractEnsembleID(input string) string {
+	re := regexp.MustCompile(`"EnsembleID":\s*"(.*?)"`)
+
+	matches := re.FindStringSubmatch(input)
+
+	if len(matches) < 2 {
+		return ""
+	}
+
+	return matches[1]
+}
+
+func extractStatus(input string) string {
+	re := regexp.MustCompile(`"Status":\s*"(.*?)"`)
+
+	matches := re.FindStringSubmatch(input)
+
+	if len(matches) < 2 {
+		return ""
+	}
+
+	return matches[1]
+}
+
+func createConfig(dmsRootDir string, restPort uint32, p2pListenAddr string, bootstrap []string) *config.Config {
+	currentDir := getCurrentFileDirectory()
+
+	return &config.Config{
+		General: config.General{
+			UserDir:                filepath.Join(currentDir, dmsRootDir),
+			WorkDir:                filepath.Join(currentDir, dmsRootDir, "work_dir"),
+			DataDir:                filepath.Join(currentDir, dmsRootDir, "data_dir"),
+			HostCountry:            "NL",
+			HostCity:               "Amsterdam",
+			HostContinent:          "Europe",
+			PortAvailableRangeFrom: 1024,
+			PortAvailableRangeTo:   10000,
+			Debug:                  true,
+		},
+		Rest: config.Rest{
+			Addr: "localhost",
+			Port: restPort,
+		},
+		Job: config.Job{
+			AllowPrivilegedDocker: false,
+		},
+		P2P: config.P2P{
+			ListenAddress:   []string{p2pListenAddr},
+			BootstrapPeers:  bootstrap,
+			Memory:          1024,
+			FileDescriptors: 10444,
+		},
+		Observability: config.Observability{
+			FlushInterval:        3,
+			ElasticsearchEnabled: false,
+			ElasticsearchURL:     "https://telemetry.nunet.io",
+			ElasticsearchIndex:   "nunet-dms",
+			LogLevel:             "debug",
+			ElasticsearchAPIKey:  os.Getenv("ES_API"),
+			LogFile:              filepath.Join(currentDir, dmsRootDir, "logs.txt"),
+		},
+		Profiler: config.Profiler{
+			Enabled: false,
+		},
+		APM: config.APM{
+			ServerURL:   "https://apm.telemetry.nunet.io",
+			ServiceName: "nunet-dms",
+			APIKey:      os.Getenv("ES_API"),
+			Environment: "production",
+		},
+	}
+}
+
+// killProcess attempts to kill a process with the given pid.
+func killProcess(pid int32) error {
+	p := getProc(pid)
+	if p != nil {
+		pname, err := p.Name()
+		if err == nil && pname == "dms" {
+			return p.Kill()
+		}
+	}
+	return fmt.Errorf("process not found")
+}
+
+// getProc finds a process by pid.
+func getProc(pid int32) *process.Process {
+	processes, err := process.Processes()
+	if err != nil {
+		return nil
+	}
+	for _, p := range processes {
+		if p.Pid == pid {
+			return p
+		}
+	}
+	return nil
+}
+
+// setupKeysAndCaps creates keys and capabilities for the given CLI instance.
+func setupKeysAndCaps(t *testing.T, cli *Client, pass, keyType1, keyType2 string) {
+	cli.newKey(t, keyType1, pass)
+	cli.newKey(t, keyType2, pass)
+	cli.newCap(t, keyType1, pass)
+	cli.newCap(t, keyType2, pass)
+}
+
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %w", err)
+	}
+
+	return nil
+}
+
+func replaceHostnameInFile(filePath, hostname string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	modifiedContent := strings.ReplaceAll(string(content), "${hostname}", hostname)
+
+	err = os.WriteFile(filePath, []byte(modifiedContent), 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write back to file: %w", err)
+	}
+
+	return nil
+}
+
+type mockNode struct {
+	index       int
+	config      *config.Config
+	client      *Client
+	password    string
+	rootDir     string
+	userDID     string
+	dmsDID      string
+	userContext string
+	dmsContext  string
+}
+
+func newMockNode(t *testing.T, config *config.Config, password, rootDir string, index int) *mockNode {
+	t.Helper()
+
+	cliHelper := newClient(t, config)
+	dmsContext := fmt.Sprintf("dms%d", index)
+	userContext := fmt.Sprintf("user%d", index)
+	setupKeysAndCaps(t, cliHelper, password, dmsContext, userContext)
+
+	userDID := cliHelper.getDID(t, fmt.Sprintf("%s.cap", userContext), password)
+	require.NotEmpty(t, userDID)
+	dmsDID := cliHelper.getDID(t, fmt.Sprintf("%s.cap", dmsContext), password)
+	require.NotEmpty(t, dmsDID)
+
+	return &mockNode{
+		config:      config,
+		client:      cliHelper,
+		password:    password,
+		rootDir:     rootDir,
+		index:       index,
+		userDID:     userDID,
+		dmsDID:      dmsDID,
+		userContext: userContext,
+		dmsContext:  dmsContext,
+	}
+}

@@ -66,7 +66,7 @@ func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, keyStore
 
 	ksPrivKey, err := ks.Get(contextKey, passphrase)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get key from keystore: %w", err)
+		return nil, nil, fmt.Errorf("failed to get key from keystore %s: %w", contextKey, err)
 	}
 
 	priv, err := ksPrivKey.PrivKey()
