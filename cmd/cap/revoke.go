@@ -62,6 +62,7 @@ The above command revokes a token`,
 				outputJSON = append(outputJSON, tokensJSON...)
 				outputJSON = append(outputJSON, []byte("\n")...)
 			}
+			fmt.Println("Revoked tokens", string(outputJSON))
 			fmt.Fprintln(cmd.OutOrStdout(), string(outputJSON))
 
 			return nil

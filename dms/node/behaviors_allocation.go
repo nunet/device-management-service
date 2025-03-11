@@ -154,7 +154,7 @@ func (n *Node) createAllocation(
 		job, executor,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("allocate resources: %w", err)
+		return nil, fmt.Errorf("allocate: %w", err)
 	}
 
 	return allocation, nil

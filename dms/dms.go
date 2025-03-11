@@ -91,6 +91,7 @@ func initialize(gcfg *config.Config) {
 }
 
 func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error) {
+	log.Debugf("starting dms with config: %v", gcfg)
 	if contextName == "" {
 		contextName = node.DefaultContextName
 	}
@@ -296,16 +297,21 @@ func (d *DMS) Run() error {
 
 func (d *DMS) Stop() {
 	log.Infof("Shutting down DMS")
-	err := d.Node.Stop()
-	if err != nil {
-		log.Errorf("failed to stop node: %s", err)
+	if d.Node != nil {
+		if err := d.Node.Stop(); err != nil {
+			log.Errorf("failed to stop node: %s", err)
+		}
 	}
 	log.Infof("node stopped")
-	err = d.P2P.Stop()
-	if err != nil {
-		log.Errorf("failed to stop libp2p network: %s", err)
+
+	if d.P2P != nil {
+		if err := d.P2P.Stop(); err != nil {
+			log.Errorf("failed to stop libp2p network: %s", err)
+		}
 	}
 	log.Infof("network stopped")
+
+	// TODO: stop rest server
 }
 
 // GenerateAndStorePrivKey generates a new key pair using Secp256k1,

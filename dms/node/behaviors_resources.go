@@ -15,7 +15,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type resourcesResponse struct {
+type ResourcesResponse struct {
 	OK        bool
 	Resources types.Resources
 	Error     string `json:"error,omitempty"`
@@ -26,10 +26,10 @@ func (n *Node) handleAllocatedResources(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("Error handling allocated resources: %s", err)
-		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+		n.sendReply(msg, ResourcesResponse{Error: err.Error()})
 	}
 
-	resp := resourcesResponse{}
+	resp := ResourcesResponse{}
 
 	allocatedResources, err := n.resourceManager.GetTotalAllocation()
 	if err != nil {
@@ -46,10 +46,10 @@ func (n *Node) handleFreeResources(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("Error handling free resources: %s", err)
-		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+		n.sendReply(msg, ResourcesResponse{Error: err.Error()})
 	}
 
-	resp := resourcesResponse{}
+	resp := ResourcesResponse{}
 
 	freeResources, err := n.resourceManager.GetFreeResources(context.Background())
 	if err != nil {
@@ -57,6 +57,7 @@ func (n *Node) handleFreeResources(msg actor.Envelope) {
 		return
 	}
 
+	resp.OK = true
 	resp.Resources = freeResources.Resources
 	n.sendReply(msg, resp)
 }
@@ -66,10 +67,10 @@ func (n *Node) handleOnboardedResources(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("Error handling onboarded resources: %s", err)
-		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+		n.sendReply(msg, ResourcesResponse{Error: err.Error()})
 	}
 
-	resp := resourcesResponse{}
+	resp := ResourcesResponse{}
 
 	onboardedResources, err := n.resourceManager.GetOnboardedResources(context.Background())
 	if err != nil {
@@ -87,10 +88,10 @@ func (n *Node) handleHardwareUsage(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorf("Error handling hardware usage: %s", err)
-		n.sendReply(msg, resourcesResponse{Error: err.Error()})
+		n.sendReply(msg, ResourcesResponse{Error: err.Error()})
 	}
 
-	resp := resourcesResponse{}
+	resp := ResourcesResponse{}
 
 	hardwareUsage, err := n.hardware.GetUsage()
 	if err != nil {
