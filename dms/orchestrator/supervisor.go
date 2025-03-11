@@ -1,14 +1,7 @@
-// Copyright 2024, Nunet
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
-
 package orchestrator
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -17,251 +10,319 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
-func (o *BasicOrchestrator) supervise() {
-	log.Debugf("Starting supervision for allocations: %+v", o.manifest.Allocations)
-	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
+const (
+	RegisterHealthCheckTimeout = 5 * time.Second
+	HealthCheckTimeout         = 5 * time.Second
+	FailureEscalationTimeout   = 2 * time.Minute
+)
+
+// Supervisor encapsulates supervision logic.
+type Supervisor struct {
+	id       string
+	ctx      context.Context
+	actor    actor.Actor
+	manifest jtypes.EnsembleManifest
+
+	registeredHealthChecks map[string]struct{} // allocationID -> struct{}
+	failures               map[string]int      // allocationID -> failureCount
+	escalations            map[string]int      // allocationID -> escalationCount
+	lock                   sync.Mutex
+}
+
+// NewSupervisor creates a new Supervisor instance.
+func NewSupervisor(ctx context.Context, actor actor.Actor, id string) *Supervisor {
+	return &Supervisor{
+		ctx:                    ctx,
+		actor:                  actor,
+		id:                     id,
+		failures:               make(map[string]int),
+		escalations:            make(map[string]int),
+		registeredHealthChecks: make(map[string]struct{}),
+		manifest: jtypes.EnsembleManifest{
+			ID:          id,
+			Allocations: make(map[string]jtypes.AllocationManifest),
+			Nodes:       make(map[string]jtypes.NodeManifest),
+		},
+	}
+}
+
+// Supervise runs the supervision loop, including registration and periodic healthchecks.
+func (s *Supervisor) Supervise(manifest jtypes.EnsembleManifest) {
+	log.Infof("Starting supervision for allocations: %+v", manifest.Allocations)
+
+	manifestCopy := manifest.Clone()
+
 	wg := sync.WaitGroup{}
-
-	for allocName, allocation := range o.manifest.Allocations {
-		// skip empty healthchecks
-		if o.manifest.Allocations[allocName].Healthcheck.Type == "" {
-			continue
-		}
-
-		msg, err := actor.Message(
-			o.actor.Handle(),
-			allocation.Handle,
-			behaviors.RegisterHealthcheckBehavior,
-			behaviors.RegisterHealthcheckRequest{
-				EnsembleID:  o.id,
-				HealthCheck: o.manifest.Allocations[allocName].Healthcheck,
-			},
-			actor.WithMessageExpiry(expiry),
-		)
-		if err != nil {
-			log.Errorf("failed to create supervisor message: %s", err)
+	// Registration Phase – register allocations that have a defined healthcheck.
+	for _, allocation := range manifestCopy.Allocations {
+		if allocation.Healthcheck.Type == "" {
 			continue
 		}
 
 		wg.Add(1)
-		go func() {
+		go func(allocation jtypes.AllocationManifest) {
 			defer wg.Done()
 
-			replyCh, err := o.actor.Invoke(msg)
-			if err != nil {
-				log.Errorf("failed to invoke heartbeat on allocation: %s", err)
-				return
+			if err := s.registerHealthCheck(allocation, manifest.Orchestrator); err != nil {
+				log.Errorf("register healthcheck for allocation: %s", err)
 			}
-
-			var reply actor.Envelope
-			select {
-			case reply = <-replyCh:
-				defer reply.Discard()
-
-				var response behaviors.RegisterHealthcheckResponse
-				if err := json.Unmarshal(reply.Message, &response); err != nil {
-					log.Errorf("error unmarshalling supervisor reply: %s", err)
-					return
-				}
-
-				if !response.OK {
-					log.Errorf("error registering healthcheck: %s", response.Error)
-					return
-				}
-			case <-time.After(time.Second * 5):
-				log.Errorf("timeout waiting for supervisor reply")
-				return
-			}
-
-			log.Info("successfully registered healthcheck for allocation: %s", allocation.ID)
-		}()
+		}(allocation)
 	}
-
 	wg.Wait()
 
+	// Update the manifest
+	s.lock.Lock()
+	s.manifest = manifestCopy
+	s.lock.Unlock()
+
+	// Supervision Phase – start the supervision loop
+	s.startSupervision()
+}
+
+// startSupervision performs periodic health checks on registered allocations.
+func (s *Supervisor) startSupervision() {
 	ticker := time.NewTicker(actor.HealthCheckInterval)
 	defer ticker.Stop()
-
-	failures := map[string]int{}
 	for {
 		select {
-		case <-o.ctx.Done():
+		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
 			wg := sync.WaitGroup{}
-			for n, allocation := range o.manifest.Allocations {
-				msg, err := actor.Message(
-					o.actor.Handle(),
-					allocation.Handle,
-					actor.HealthCheckBehavior,
-					struct{}{},
-					actor.WithMessageExpiry(expiry),
-				)
-				if err != nil {
-					log.Errorf("failed to create supervisor message: %s", err)
+			for allocationID := range s.registeredHealthChecks {
+				allocation, ok := s.getAllocation(types.AllocationNameFromID(allocationID))
+				if !ok {
+					log.Warnf("allocation not found in manifest to supervise: %s", allocationID)
+					continue
+				}
+				if allocation.Healthcheck.Type == "" {
+					log.Debugf("allocation does not have a healthcheck: %s", allocationID)
 					continue
 				}
 
 				wg.Add(1)
-				go func() {
+				go func(allocation jtypes.AllocationManifest) {
 					defer wg.Done()
-					if o.isTerminatedTask(n) {
-						return
+					if err := s.performHealthCheck(allocation); err != nil {
+						log.Errorf("failed to perform healthcheck for allocation %s: %s", allocation.ID, err)
 					}
-
-					replyCh, err := o.actor.Invoke(msg)
-					if err != nil {
-						log.Errorf("failed to invoke heartbeat on allocation: %s", err)
-						return
-					}
-
-					ticker := time.NewTicker(time.Second * 5)
-					defer ticker.Stop()
-
-					var reply actor.Envelope
-					select {
-					case reply = <-replyCh:
-						defer reply.Discard()
-
-						var resp behaviors.HealthCheckResponse
-						if err := json.Unmarshal(reply.Message, &resp); err != nil {
-							log.Errorf("error unmarshalling supervisor reply: %s", err)
-							return
-						}
-
-						if !resp.OK {
-							log.Errorf("error in healthcheck: %s", resp.Error)
-
-							o.lock.Lock()
-							failures[allocation.Handle.ID.String()]++
-							v := failures[allocation.Handle.ID.String()]
-							o.lock.Unlock()
-							if v >= 3 {
-								if err := o.escalateFailure(allocation.Handle); err != nil {
-									log.Errorf("failed to escalate failure: %s", err)
-								} else {
-									log.Debug("escalated failure, resetting healthcheck failures counter")
-									delete(failures, allocation.Handle.ID.String())
-								}
-							}
-							return
-						} else {
-							log.Infof("successfully healthchecked allocation %s", allocation.ID)
-							delete(failures, allocation.Handle.ID.String())
-							return
-						}
-
-					case <-ticker.C:
-						if o.isTerminatedTask(n) {
-							return
-						}
-
-						log.Warnf("timeout waiting for supervisor reply")
-						o.lock.Lock()
-						failures[allocation.Handle.ID.String()]++
-						v := failures[allocation.Handle.ID.String()]
-						o.lock.Unlock()
-						if v >= 3 {
-							if err := o.escalateFailure(allocation.Handle); err != nil {
-								log.Errorf("failed to escalate failure: %s", err)
-							} else {
-								log.Debug("escalated failure, resetting healthcheck failures counter")
-								delete(failures, allocation.Handle.ID.String())
-							}
-							return
-						}
-					}
-				}()
+				}(allocation)
+				wg.Wait()
 			}
-
-			wg.Wait()
 		}
 	}
 }
 
-func (o *BasicOrchestrator) escalateFailure(allocHandle actor.Handle) error {
+func (s *Supervisor) registerHealthCheck(allocation jtypes.AllocationManifest, orchestrator actor.Handle) error {
+	expiry := actor.MakeExpiry(RegisterHealthCheckTimeout)
+	msg, err := actor.Message(
+		orchestrator,
+		allocation.Handle,
+		behaviors.RegisterHealthcheckBehavior,
+		behaviors.RegisterHealthcheckRequest{
+			EnsembleID:  s.id,
+			HealthCheck: allocation.Healthcheck,
+		},
+		actor.WithMessageExpiry(expiry),
+	)
+	if err != nil {
+		return fmt.Errorf("create actor message: %w", err)
+	}
+
+	replyCh, err := s.actor.Invoke(msg)
+	if err != nil {
+		return fmt.Errorf("register healthcheck on allocation: %w", err)
+	}
+
+	var reply actor.Envelope
+	select {
+	case reply = <-replyCh:
+		defer reply.Discard()
+
+		var response behaviors.RegisterHealthcheckResponse
+		if err := json.Unmarshal(reply.Message, &response); err != nil {
+			return fmt.Errorf("unmarshalling supervisor reply: %w", err)
+		}
+
+		if !response.OK {
+			return fmt.Errorf("error registering healthcheck: %s", response.Error)
+		}
+
+		s.lock.Lock()
+		s.registeredHealthChecks[allocation.ID] = struct{}{}
+		s.lock.Unlock()
+		log.Info("successfully registered healthcheck for allocation: %s", allocation.ID)
+		return nil
+
+	case <-time.After(RegisterHealthCheckTimeout):
+		return fmt.Errorf("timeout waiting for supervisor reply")
+	}
+}
+
+func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) error {
+	if s.manifest.IsTerminatedTask(types.AllocationNameFromID(allocation.ID)) {
+		return nil
+	}
+	expiry := actor.MakeExpiry(HealthCheckTimeout)
+	msg, err := actor.Message(
+		s.actor.Handle(),
+		allocation.Handle,
+		actor.HealthCheckBehavior,
+		allocation.ID,
+		actor.WithMessageExpiry(expiry),
+	)
+	if err != nil {
+		return fmt.Errorf("create supervisor message: %w", err)
+	}
+
+	replyCh, err := s.actor.Invoke(msg)
+	if err != nil {
+		return fmt.Errorf("invoke healthcheck on allocation: %w", err)
+	}
+
+	var reply actor.Envelope
+	select {
+	case reply = <-replyCh:
+		defer reply.Discard()
+
+		var resp behaviors.HealthCheckResponse
+		if err := json.Unmarshal(reply.Message, &resp); err != nil {
+			return fmt.Errorf("unmarshalling supervisor reply: %w", err)
+		}
+
+		if !resp.OK {
+			log.Errorf("error in healthcheck: %s", resp.Error)
+
+			s.lock.Lock()
+			s.failures[allocation.ID]++
+			failureCount := s.failures[allocation.ID]
+			s.lock.Unlock()
+			if failureCount >= 3 {
+				log.Infof("escalating failure for allocation %s", allocation.ID)
+				if err := s.escalateFailure(allocation); err != nil {
+					log.Errorf("failed to escalate failure: %s", err)
+				} else {
+					log.Debug("escalated failure, resetting healthcheck failures counter")
+					s.lock.Lock()
+					delete(s.failures, allocation.ID)
+					s.lock.Unlock()
+				}
+			}
+		} else {
+			log.Infof("successfully healthchecked allocation %s", allocation.ID)
+			s.lock.Lock()
+			delete(s.failures, allocation.ID)
+			s.lock.Unlock()
+		}
+	case <-time.After(HealthCheckTimeout):
+		if s.manifest.IsTerminatedTask(types.AllocationNameFromID(allocation.ID)) {
+			return nil
+		}
+
+		log.Warnf("timeout waiting for supervisor reply")
+		s.lock.Lock()
+		s.failures[allocation.ID]++
+		v := s.failures[allocation.ID]
+		s.lock.Unlock()
+		if v >= 3 {
+			if err := s.escalateFailure(allocation); err != nil {
+				log.Errorf("failed to escalate failure: %s", err)
+			} else {
+				log.Debug("escalated failure, resetting healthcheck failures counter")
+				s.lock.Lock()
+				delete(s.failures, allocation.ID)
+				s.lock.Unlock()
+			}
+		}
+		return fmt.Errorf("timeout waiting for supervisor reply")
+	}
+
+	return nil
+}
+
+// escalateFailure handles escalation when an allocation repeatedly fails its healthcheck.
+func (s *Supervisor) escalateFailure(allocation jtypes.AllocationManifest) error {
 	// TODO we need to decide how to handle repeated failures and also correlated failures
 	//      from a node.
 	//      Also, we should not restart at first failure, but wait for a number of
 	//      consecutive failures.
 	//      See https://gitlab.com/nunet/device-management-service/-/issues/794
-	log.Debugf("escalating failure for allocation %s", allocHandle.String())
-	expiry := uint64(time.Now().Add(5 * time.Second).UnixNano())
+	log.Debugf("escalating failure for allocation %s", allocation.Handle.String())
+	expiry := actor.MakeExpiry(5 * time.Second)
 	msg, err := actor.Message(
-		o.actor.Handle(),
-		allocHandle,
+		s.actor.Handle(),
+		allocation.Handle,
 		behaviors.AllocationRestartBehavior,
-		struct{}{},
+		allocation.ID,
 		actor.WithMessageExpiry(expiry),
 	)
 	if err != nil {
 		return err
 	}
 
-	replyCh, err := o.actor.Invoke(msg)
+	replyCh, err := s.actor.Invoke(msg)
 	if err != nil {
 		return err
 	}
 
 	select {
 	case reply := <-replyCh:
-		reply.Discard()
+		defer reply.Discard()
+
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		s.escalations[allocation.ID]++
 		return nil
-	case <-time.After(time.Minute * 2):
+	case <-time.After(FailureEscalationTimeout):
 		return fmt.Errorf("timeout waiting for supervisor reply")
 	}
 }
 
-func (o *BasicOrchestrator) isTerminatedTask(name string) bool {
-	a, ok := o.manifest.Allocations[name]
-	if !ok {
-		return false
-	}
+// Update updates the supervisor with a new ensemble manifest.
+// TODO: this is just a placeholder implementation to demonstrate the update concept which is needed for #793.
+// TODO: unit tests
+func (s *Supervisor) Update(manifest jtypes.EnsembleManifest) {
+	manifestCopy := manifest.Clone()
 
-	if a.Type == jtypes.AllocationTypeTask &&
-		a.Status != jtypes.AllocationRunning {
-		return true
-	}
-	return false
-}
+	// We need to handle 3 scenarios
+	// 1. Registering the healthchecks for new allocations
+	// 2. Update the manifest
+	// 3. Removing healthchecks for allocations that are no longer present
+	//
+	// 3 Will be taken care by 2 automatically on the next ticker.
 
-func (o *BasicOrchestrator) isOnlyTaskEnsemble() bool {
-	for _, a := range o.manifest.Allocations {
-		if a.Type != jtypes.AllocationTypeTask {
-			return false
+	// 1. Registering the healthchecks for just the new allocations
+	var wg sync.WaitGroup
+	for _, allocation := range manifestCopy.Allocations {
+		if allocation.Healthcheck.Type == "" {
+			continue
 		}
-	}
-	return true
-}
 
-// monitorOnlyTasksEnsemble will be responsible for tearing down
-// the orchestrator after all tasks are terminated.
-func (o *BasicOrchestrator) monitorOnlyTasksEnsemble() {
-	if !o.isOnlyTaskEnsemble() {
-		return
-	}
+		// register healthcheck only if it is not already present
+		if _, ok := s.getAllocation(types.AllocationNameFromID(allocation.ID)); !ok {
+			wg.Add(1)
+			go func(allocation jtypes.AllocationManifest) {
+				defer wg.Done()
 
-	ticker := time.NewTicker(time.Second * 10)
-	defer ticker.Stop()
-selectLoop:
-	for {
-		select {
-		case <-o.ctx.Done():
-			return
-		case <-ticker.C:
-			for name := range o.manifest.Allocations {
-				if !o.isTerminatedTask(name) {
-					continue selectLoop
+				if err := s.registerHealthCheck(allocation, manifest.Orchestrator); err != nil {
+					log.Errorf("failed to register healthcheck for allocation: %s", err)
 				}
-			}
-			log.Infof("All tasks are terminated, shutting down orchestrator.")
-
-			o.setStatus(jtypes.DeploymentStatusCompleted)
-			o.cancel()
-			return
+			}(allocation)
 		}
+
+		// TODO: unregister healthcheck if it is no longer present
 	}
+
+	// 2. Update the manifest
+	// TODO: we need to merge the manifest instead of replacing it
+}
+
+func (s *Supervisor) getAllocation(name string) (jtypes.AllocationManifest, bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	a, ok := s.manifest.Allocations[name]
+	return a, ok
 }

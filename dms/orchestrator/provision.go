@@ -564,3 +564,41 @@ func (o *BasicOrchestrator) provision() error {
 
 	return nil
 }
+
+func (o *BasicOrchestrator) isOnlyTaskEnsemble() bool {
+	for _, a := range o.manifest.Allocations {
+		if a.Type != jtypes.AllocationTypeTask {
+			return false
+		}
+	}
+	return true
+}
+
+// monitorOnlyTasksEnsemble will be responsible for tearing down
+// the orchestrator after all tasks are terminated.
+func (o *BasicOrchestrator) monitorOnlyTasksEnsemble() {
+	if !o.isOnlyTaskEnsemble() {
+		return
+	}
+
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+selectLoop:
+	for {
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			for name := range o.manifest.Allocations {
+				if !o.manifest.IsTerminatedTask(name) {
+					continue selectLoop
+				}
+			}
+			log.Infof("All tasks are terminated, shutting down orchestrator.")
+
+			o.setStatus(jtypes.DeploymentStatusCompleted)
+			o.cancel()
+			return
+		}
+	}
+}

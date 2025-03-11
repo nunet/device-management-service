@@ -94,6 +94,7 @@ func restoreDeployment(
 		manifest:           manifest,
 		status:             status,
 		deploymentSnapshot: restoreInfo,
+		supervisor:         NewSupervisor(context.TODO(), actr, id),
 	}
 
 	if o.status == jtypes.DeploymentStatusCommitting {
@@ -123,7 +124,7 @@ func restoreDeployment(
 		allocations[allocation.ID] = allocation.Handle
 	}
 	o.manifest = manifest
-	go o.supervise()
+	go o.supervisor.Supervise(o.manifest)
 
 	return o, nil
 }

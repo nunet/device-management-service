@@ -89,6 +89,7 @@ type BasicOrchestrator struct {
 	status   jtypes.DeploymentStatus
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
+	supervisor         *Supervisor
 
 	nonce uint64
 }
@@ -113,13 +114,14 @@ func NewOrchestrator(
 	}
 
 	o := &BasicOrchestrator{
-		actor:   oActor,
-		geo:     geo,
-		id:      id,
-		cfg:     cfg,
-		ctx:     ctx,
-		fs:      fs,
-		workDir: workDir,
+		actor:      oActor,
+		geo:        geo,
+		id:         id,
+		cfg:        cfg,
+		ctx:        ctx,
+		fs:         fs,
+		workDir:    workDir,
+		supervisor: NewSupervisor(ctx, oActor, id),
 	}
 
 	orchestratorBehaviors := map[string]func(actor.Envelope){
@@ -152,7 +154,12 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 	}()
 	o.setStatus(jtypes.DeploymentStatusPreparing)
 
-	return o.deploy(expiry)
+	if err := o.deploy(expiry); err != nil {
+		return fmt.Errorf("deploying ensemble: %w", err)
+	}
+
+	go o.supervisor.Supervise(o.manifest)
+	return nil
 }
 
 func (o *BasicOrchestrator) initializeManifest() {
@@ -394,7 +401,6 @@ deploy:
 		for _, allocation := range o.manifest.Allocations {
 			allocations[allocation.ID] = allocation.Handle
 		}
-		go o.supervise()
 
 		return nil
 	}
