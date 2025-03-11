@@ -59,3 +59,16 @@ func (mf *EnsembleManifest) Clone() EnsembleManifest {
 
 	return clone
 }
+
+func (mf *EnsembleManifest) IsTerminatedTask(name string) bool {
+	a, ok := mf.Allocations[name]
+	if !ok {
+		return false
+	}
+
+	if a.Type == AllocationTypeTask &&
+		a.Status != AllocationRunning {
+		return true
+	}
+	return false
+}
