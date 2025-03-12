@@ -428,6 +428,15 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to decode docker engine spec: %w", err)
 	}
 
+	// expose mapped ports
+	exposes := nat.PortSet{}
+	for _, port := range params.PortsToBind {
+		p, err := nat.NewPort("tcp", fmt.Sprintf("%d", port.ExecutorPort))
+		if err == nil {
+			exposes[p] = struct{}{}
+		}
+	}
+
 	containerConfig := container.Config{
 		Image:      dockerArgs.Image,
 		Env:        dockerArgs.Environment,
@@ -436,7 +445,8 @@ func (e *Executor) newDockerExecutionContainer(
 		Labels:     e.containerLabels(params.JobID, params.ExecutionID),
 		WorkingDir: dockerArgs.WorkingDirectory,
 		// Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
-		Tty: tty,
+		Tty:          tty,
+		ExposedPorts: exposes,
 	}
 
 	mounts, err := makeContainerMounts(params.Inputs, params.Outputs, params.ResultsDir)
