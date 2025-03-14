@@ -99,21 +99,72 @@ We currently support Linux and MacOS (Darwin).
 
 #### Dependencies
 
+##### Linux only
+
 - iproute2 (linux only)
 - build-essential (linux only)
 - libsystemd-dev (linux only)
 - go (v1.21.7 or later)
 - [git-lfs](https://git-lfs.com/) (for downloading large files)
 
+##### macOS (Apple Silicon - M1/M2) only:
+- [Homebrew installed] (/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")
+- Recommended: iTerm2 for improved CLI experience.
+
+#### MacOS (ARM64 architecture)
+
+Before you begin, ensure that you have the following installed:
+    1. Homebrew: to manage dependencies easily
+       If you don't have Homebrew installed, run:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+    2. Go (Golang): The Go programming language, which is used to build the project.
+       Verify if Go is installed: 
+
+```bash
+go version
+```
+
+       Install if needed
+
+```bash
+brew install go
+```
+
+    3. Git: To clone the GitLab repository.
+    4. Make: Used for automating the build process.
+       Verify if make is installed
+
+```bash
+make --version
+```
+
+       Install if needed
+
+```bash
+xcode-select --install
+```
+
+#### 🐧 Linux Installation
+
+Install dependencies:
+```shell
+sudo apt update && sudo apt install -y iproute2 build-essential libsystemd-dev gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+ent-service.git
+```
+
 Clone the repository:
 
-```
+```shell
 git clone https://gitlab.com/nunet/device-management-service.git
+cd device-management-service
 ```
 
 Configure git-lfs:
 
-```
+```shell
 git lfs install && \
 git lfs fetch && \
 git lfs pull
@@ -122,11 +173,10 @@ git lfs pull
 Build the CLI:
 
 ```bash
-cd device-management-service
 make
 ```
 
-This will result in a binary file in builds/ folder named as `dms_linux_amd64` or `dms_darwin_arm64` depending on the platform.
+This will produce a binary in `builds/` named `dms_linux_amd64`.
 
 **Note**: If you built from source and would like to act as a compute provider,
 you may need to check [permissions and features](#permissions-and-features) to enable some _required_ and optional features.
@@ -134,7 +184,7 @@ you may need to check [permissions and features](#permissions-and-features) to e
 To cross compile to arm, cross compilers need to be installed. In particular arm-linux-gnueabihf and aarch64-linux-gnu.
 For debian systems, install with:
 
-```
+```shell
 apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 ```
 
@@ -196,6 +246,100 @@ sudo update-alternatives --config iptables
 ```
 
 Then, select the number which corresponds to the `iptables-nft` option and press enter.
+
+#### 🍏 macOS ARM64 Installation & Debugging Guide (Apple Silicon)
+
+Check your macOS version (important for compatibility):
+
+```shell
+sw_vers
+```
+
+Clone the repository:
+
+```shell
+git clone https://gitlab.com/nunet/device-management-service.git
+cd device-management-service
+```
+
+Configure Git LFS:
+
+```shell
+git lfs install && \
+git lfs fetch && \
+git lfs pull
+```
+
+Build the CLI:
+
+```shell
+make
+```
+
+This will produce a binary in `builds/` named `dms_darwin_arm64`.
+
+##### ✅ Troubleshooting Build Issues
+
+Ensure Go is installed via Homebrew:
+
+```shell
+brew install go
+```
+
+If you see errors like:
+
+```bash
+zsh: permission denied: ./dms
+```
+
+Fix with:
+
+```shell
+chmod +x builds/dms_darwin_arm64
+```
+
+If macOS blocks execution:
+
+```shell
+sudo xattr -d com.apple.quarantine builds/dms_darwin_arm64
+```
+
+Confirm binary format:
+
+```shell
+file builds/dms_darwin_arm64
+```
+
+###### Output should include: Mach-O 64-bit executable arm64
+Run the CLI:
+
+```shell
+./builds/dms_darwin_arm64
+```
+
+You should see:
+
+```scss
+The Device Management Service (DMS) Command Line Interface (CLI)
+Usage:
+  nunet [flags]
+  nunet [command]
+...
+```
+
+###### ⚠️ macOS Limitations:
+
+- `cap_net_admin` and `cap_sys_admin` are not supported on macOS.
+- DMS cannot act as a compute provider — only as an orchestrator.
+- IP over libp2p, port forwarding, and TAP interfaces are unsupported.
+
+###### 📁 Optional: Add Binary to PATH
+
+You may copy the binary into a directory in your $PATH:
+
+```shell
+cp builds/dms_darwin_arm64 /usr/local/bin/nunet
+```
 
 ### Installation on VMs
 
@@ -667,3 +811,4 @@ Find additional data models within specific packages.
 ### References
 
 In addition to the relevant links added in the sections above, you can also find useful links here: [NuNet Links](https://www.nunet.io/links).
+
