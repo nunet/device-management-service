@@ -60,7 +60,10 @@ func NewGeoLocator() (*GeoLocator, error) {
 		countryCode := fields[8]
 		coordinate, err := parseCoordinate(fields)
 		if err != nil {
-			log.Warnf("failure parsing coordiates for %s in %s: %s", cityName, countryCode, err)
+			log.Warnw("parsing_coordinates_failure",
+				"cityName", cityName,
+				"countryCode", countryCode,
+				"error", err)
 			continue
 		}
 

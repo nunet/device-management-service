@@ -11,9 +11,9 @@ package hardware
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
-
 	"gitlab.com/nunet/device-management-service/dms/hardware/cpu"
+	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -71,20 +71,40 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get CPU usage: %w", err)
 	}
+	// Log CPU usage with "accounting" and "metric" labels
+	log.Debugw("cpu_usage_computed",
+		"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+		"usage", cpuDetails)
 
 	ram, err := GetRAMUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get RAM usage: %w", err)
 	}
+	// Log RAM usage
+	log.Debugw("ram_usage_computed",
+		"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+		"usedMemoryBytes", ram.Size)
 
 	diskDetails, err := GetDiskUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get Disk usage: %w", err)
 	}
+	// Log disk usage
+	log.Debugw("disk_usage_computed",
+		"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+		"usedStorageBytes", diskDetails.Size)
 
 	gpus, err := m.gpuManager.GetGPUUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get GPU usage: %w", err)
+	}
+	// Log GPU usage
+	for _, gpuItem := range gpus {
+		log.Debugw("gpu_usage_computed",
+			"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+			"gpuUUID", gpuItem.UUID,
+			"vendor", gpuItem.Vendor,
+			"usedVRAM", gpuItem.VRAM)
 	}
 
 	return types.Resources{

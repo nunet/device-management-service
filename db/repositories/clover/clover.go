@@ -41,7 +41,9 @@ func NewDB(path string, collections []string) (*clover.DB, error) {
 
 	db, err := clover.Open(path)
 	if err != nil {
-		logger.Errorw("clover_db_init_failure", "error", fmt.Errorf("failed to connect to database: %w", err))
+		logger.Errorw("clover_db_init_failure",
+			"error", fmt.Errorf("failed to connect to database: %w", err),
+		)
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 

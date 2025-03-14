@@ -18,7 +18,6 @@ import (
 	clover "github.com/ostafen/clover/v2"
 	clover_d "github.com/ostafen/clover/v2/document"
 	clover_q "github.com/ostafen/clover/v2/query"
-
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/observability"
 )

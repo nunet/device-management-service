@@ -23,6 +23,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -153,7 +154,9 @@ func (a *Allocation) Run(
 	defer a.lock.Unlock()
 
 	if a.status == AllocationRunning {
-		log.Warnf("allocation %s is already running", a.ID)
+		log.Warnw("allocation_already_running",
+			"labels", []string{string(observability.LabelAllocation)},
+			"allocationID", a.ID)
 		return nil
 	}
 
@@ -323,7 +326,9 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 
-	log.Debugf("stopping execution for alloc: %s", a.ID)
+	log.Debugw("allocation_stopping_execution",
+		"labels", []string{string(observability.LabelAllocation)},
+		"allocationID", a.ID)
 
 	if a.status != AllocationRunning {
 		return nil
@@ -340,8 +345,9 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 		return fmt.Errorf("stop execution: %w", err)
 	}
 
-	log.Debugf("stopped execution for alloc: %s", a.ID)
-
+	log.Debugw("allocation_stopped_execution",
+		"labels", []string{string(observability.LabelAllocation)},
+		"allocationID", a.ID)
 	return nil
 }
 
@@ -353,7 +359,10 @@ func (a *Allocation) Cleanup() error {
 	if err := a.executor.Remove(a.executionID, orchestrator.AllocationShutdownTimeout); err != nil {
 		return fmt.Errorf("failed to remove execution: %w", err)
 	}
-	log.Debugf("removed execution: %s", a.executionID)
+
+	log.Debugw("allocation_removed_execution",
+		"labels", []string{string(observability.LabelAllocation)},
+		"executionID", a.executionID)
 	return nil
 }
 
@@ -366,7 +375,10 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 	if status.Status != AllocationStopped && status.Status != AllocationCompleted {
 		err := a.Stop(ctx)
 		if err != nil {
-			log.Warnf("failed to stop allocation: %s", err)
+			log.Warnw("allocation_failed_to_stop",
+				"labels", []string{string(observability.LabelAllocation)},
+				"error", err,
+				"allocationID", a.ID)
 			return fmt.Errorf("failed to stop allocation: %w", err)
 		}
 	}
@@ -375,9 +387,10 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 	defer a.lock.Unlock()
 
 	if err := a.Cleanup(); err != nil {
-		// TODO: exec.Remove should return a defined custom error
-		//       container already removed is not an error
-		log.Warnf("failed to cleanup allocation: %s", err)
+		log.Warnw("allocation_failed_to_cleanup",
+			"labels", []string{string(observability.LabelAllocation)},
+			"error", err,
+			"allocationID", a.ID)
 	}
 
 	a.status = AllocationTerminated
@@ -392,9 +405,14 @@ func (a *Allocation) stopActor() error {
 
 	if a.actorRunning {
 		if err := a.Actor.Stop(); err != nil {
-			log.Warnf("stopping allocation actor: %s", err)
+			log.Warnw("allocation_actor_stop_failure",
+				"labels", []string{string(observability.LabelAllocation)},
+				"error", err,
+				"allocationID", a.ID)
 		}
-		log.Debugf("stopped allocation actor: %s", a.ID)
+		log.Debugw("allocation_actor_stopped",
+			"labels", []string{string(observability.LabelAllocation)},
+			"allocationID", a.ID)
 		a.actorRunning = false
 	}
 	return nil

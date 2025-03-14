@@ -89,8 +89,10 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	endTrace := observability.StartTrace(ctx, "docker_executor_start_duration")
 	defer endTrace()
 
-	// Log starting execution
-	log.Infow("docker_executor_start_begin", "jobID", request.JobID, "executionID", request.ExecutionID)
+	log.Infow("docker_executor_start_begin",
+		"labels", []string{string(observability.LabelDeployment)},
+		"jobID", request.JobID,
+		"executionID", request.ExecutionID)
 
 	// It's possible that this is being called due to a restart. We should check if the
 	// container is already running.
@@ -100,17 +102,26 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		// failing that will create a new container.
 		if handler, ok := e.handlers.Get(request.ExecutionID); ok {
 			if handler.active() {
-				log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution already started")
+				log.Errorw("docker_executor_start_failure",
+					"labels", []string{string(observability.LabelDeployment)},
+					"executionID", request.ExecutionID,
+					"error", "execution already started")
 				return fmt.Errorf("execution is already started")
 			}
-			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution completed")
+			log.Errorw("docker_executor_start_failure",
+				"labels", []string{string(observability.LabelDeployment)},
+				"executionID", request.ExecutionID,
+				"error", "execution completed")
 			return fmt.Errorf("execution is already completed")
 		}
 
 		// Create a new handler for the execution.
 		containerID, err = e.newDockerExecutionContainer(ctx, request, enableTTY)
 		if err != nil {
-			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", err)
+			log.Errorw("docker_executor_start_failure",
+				"labels", []string{string(observability.LabelDeployment)},
+				"executionID", request.ExecutionID,
+				"error", err)
 			return fmt.Errorf("failed to create new container: %w", err)
 		}
 	}
@@ -374,15 +385,22 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 	endTrace := observability.StartTrace(ctx, "docker_executor_cleanup_duration")
 	defer endTrace()
 
-	log.Infow("docker_executor_cleanup_begin", "executorID", e.ID)
+	log.Infow("docker_executor_cleanup_begin",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executorID", e.ID)
 
 	err := e.client.RemoveObjectsWithLabel(ctx, labelExecutorName, e.ID)
 	if err != nil {
-		log.Errorw("docker_executor_cleanup_failure", "executorID", e.ID, "error", err)
+		log.Errorw("docker_executor_cleanup_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"executorID", e.ID,
+			"error", err)
 		return fmt.Errorf("failed to remove containers: %w", err)
 	}
 
-	log.Infow("docker_executor_cleanup_success", "executorID", e.ID)
+	log.Infow("docker_executor_cleanup_success",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executorID", e.ID)
 
 	// Remove all provision scripts used for mounting
 	pattern := initScriptsBaseDir + "*"

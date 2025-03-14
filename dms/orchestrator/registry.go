@@ -17,6 +17,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 // Registry is an interface which acts as a source for orchestrators
@@ -98,7 +99,11 @@ func restoreDeployment(
 	}
 
 	if o.status == jtypes.DeploymentStatusCommitting {
-		log.Debug("reverting deployment of old candidates and restarting deployment from the beginning")
+		log.Debugw("reverting deployment of old candidates and restarting deployment from the beginning",
+			"labels", []string{string(observability.LabelDeployment)},
+			"reason", "deployment was in committing state",
+			"orchestratorID", id,
+		)
 		for nodeID, bid := range restoreInfo.Candidates {
 			o.revertDeployment(nodeID, bid.Handle())
 		}
@@ -107,7 +112,10 @@ func restoreDeployment(
 	}
 
 	if o.status == jtypes.DeploymentStatusProvisioning {
-		log.Debug("restoring deployment from manifest")
+		log.Debugw("restoring deployment from manifest",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", id,
+		)
 		if err := o.provision(); err != nil {
 			log.Errorf("failed to provision network: %s", err)
 			o.revert(manifest)

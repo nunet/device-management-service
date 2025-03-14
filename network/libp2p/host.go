@@ -35,6 +35,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	mafilt "github.com/whyrusleeping/multiaddr-filter"
+
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -56,7 +58,11 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	for _, s := range defaultServerFilters {
 		f, err := mafilt.NewMask(s)
 		if err != nil {
-			log.Errorf("incorrectly formatted address filter in config: %s - %v", s, err)
+			log.Errorw("incorrectly formatted address filter in config",
+				"labels", []string{string(observability.LabelNode)},
+				"filter", s,
+				"error", err,
+			)
 		}
 		filter.AddFilter(*f, ma.ActionDeny)
 	}
@@ -95,7 +101,10 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	limits.SystemBaseLimit.Streams = 16384
 	scaled := limits.Scale(mem, fds)
 
-	log.Infof("libp2p limits: %+v", scaled)
+	log.Infow("libp2p_limits",
+		"labels", []string{string(observability.LabelNode)},
+		"limits", scaled,
+	)
 
 	mgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(scaled))
 	if err != nil {
@@ -213,7 +222,10 @@ func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.Add
 		&event.EvtPeerProtocolsUpdated{},
 	})
 	if err != nil {
-		log.Errorf("failed to subscribe to peer identification events: %v", err)
+		log.Errorw("failed to subscribe to peer identification events",
+			"labels", []string{string(observability.LabelNode)},
+			"error", err,
+		)
 		return
 	}
 	defer sub.Close()

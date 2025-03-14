@@ -44,7 +44,10 @@ func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugf("added peer: %q to subnet: %q", request.PeerID, request.SubnetID)
+	log.Debugw("subnet_peer_added",
+		"labels", []string{},
+		"peerID", request.PeerID,
+		"subnetID", request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -80,7 +83,10 @@ func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugf("accepted peer: %q to subnet: %q", request.PeerID, request.SubnetID)
+	log.Debugw("subnet_peer_accepted",
+		"labels", []string{},
+		"peerID", request.PeerID,
+		"subnetID", request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -102,13 +108,15 @@ type SubnetMapPortResponse struct {
 
 func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 	defer msg.Discard()
-	log.Debugf("behavior handleSubnetMapPort invoked by: %+v", msg.From)
+	log.Debugw("handle_subnet_map_port_invoked", "from", msg.From)
 
 	var request SubnetMapPortRequest
 	resp := SubnetMapPortResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		log.Debugf("error unmarshalling subnet map port request: %s", err)
+		log.Debugw("subnet_map_port_unmarshal_error",
+			"labels", []string{},
+			"error", err)
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
 		return
@@ -116,14 +124,18 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 
 	err := a.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
 	if err != nil {
-		log.Debugf("error mapping port: %s", err)
+		log.Debugw("subnet_map_port_error",
+			"labels", []string{},
+			"error", err)
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
 		return
 	}
 
-	log.Debugf("mapped port: %d to subnet: %q", request.SourcePort, request.SubnetID)
-
+	log.Debugw("subnet_port_mapped",
+		"labels", []string{},
+		"sourcePort", request.SourcePort,
+		"subnetID", request.SubnetID)
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -158,7 +170,10 @@ func (a *Allocation) handleSubnetDNSAddRecords(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugf("added dns record(s): %q to subnet: %q", request.Records, request.SubnetID)
+	log.Debugw("subnet_dns_records_added",
+		"labels", []string{},
+		"records", request.Records,
+		"subnetID", request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -199,8 +214,10 @@ func (a *Allocation) handleSubnetUnmapPort(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugf("unmapped port: %d from subnet: %q", request.SourcePort, request.SubnetID)
-
+	log.Debugw("subnet_port_unmapped",
+		"labels", []string{},
+		"sourcePort", request.SourcePort,
+		"subnetID", request.SubnetID)
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -234,8 +251,10 @@ func (a *Allocation) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugf("removed dns record: %q from subnet: %q", request.DomainName, request.SubnetID)
-
+	log.Debugw("subnet_dns_record_removed",
+		"labels", []string{},
+		"domainName", request.DomainName,
+		"subnetID", request.SubnetID)
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -270,7 +289,10 @@ func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugf("removed peer: %q from subnet: %q", request.PeerID, request.SubnetID)
+	log.Debugw("subnet_peer_removed",
+		"labels", []string{},
+		"peerID", request.PeerID,
+		"subnetID", request.SubnetID)
 
 	resp.OK = true
 	a.sendReply(msg, resp)

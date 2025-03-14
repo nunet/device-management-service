@@ -23,6 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -142,7 +143,10 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
-	log.Infof("setting status to: %s", jtypes.DeploymentStatusString(status))
+	log.Infow("orchestrator_status_updated",
+		"labels", []string{string(observability.LabelDeployment)},
+		"status", jtypes.DeploymentStatusString(status),
+		"orchestratorID", o.id)
 	o.status = status
 }
 
@@ -203,7 +207,9 @@ deploy:
 	for time.Now().Before(expiry) {
 		o.setStatus(jtypes.DeploymentStatusPreparing)
 
-		log.Debugf("manifest being initialized...")
+		log.Debugw("initializing manifest",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", o.id)
 		o.initializeManifest()
 
 		// delete old state of candidates if any
@@ -222,13 +228,19 @@ deploy:
 		}
 
 		// 1. Create bid requests for nodes
-		log.Debugf("creating bid requests for nodes: %+v", o.cfg.Nodes())
+		log.Debugw("creating initial bid request",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", o.id,
+			"nodes: ", o.cfg.Nodes())
 		bidrq, err := o.makeInitialBidRequest()
 		if err != nil {
 			return fmt.Errorf("creating bid request: %w", err)
 		}
 
 		// 2. Collect bids
+		log.Debugw("collecting bids",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", o.id)
 		bidMap := make(map[string][]jtypes.Bid)
 		peerExclusion := make(map[string]struct{})
 		addBid := func(bid jtypes.Bid) bool {
@@ -242,33 +254,47 @@ deploy:
 			// check that the peer has not already submitted a bid
 			peerID := bid.Peer()
 			if _, exclude := peerExclusion[peerID]; exclude {
-				log.Debugf("ignoring duplicate bid from peer %s", peerID)
+				log.Debugw("ignoring duplicate bid from peer",
+					"labels", []string{string(observability.LabelDeployment)},
+					"peerID", peerID)
 				return false
 			}
 
 			err := bid.Validate()
 			if err != nil {
-				log.Debugf("failed to validate bid from peer %s: %s", peerID, err)
+				log.Debugw("failed to validate bid",
+					"labels", []string{string(observability.LabelDeployment)},
+					"peerID", peerID,
+					"error", err)
 				return false
 			}
 
 			// verify that this is a node in the ensemble
 			nodeID := bid.NodeID()
 			if _, ok := o.cfg.Node(nodeID); !ok {
-				log.Debugf("ignoring bid from peer %s for unknown node %s", peerID, nodeID)
+				log.Debugw("ignoring bid for unknown node",
+					"labels", []string{string(observability.LabelDeployment)},
+					"peerID", peerID,
+					"nodeID", nodeID)
 				return false
 			}
 
 			// verify the location constraints of the node
 			loc := bid.Location()
 			if !o.acceptPeerLocation(nodeID, peerID, loc) {
-				log.Debugf("ignoring out of location bid from peer %s for node %s", peerID, nodeID)
+				log.Debugw("ignoring out-of-location bid",
+					"labels", []string{string(observability.LabelDeployment)},
+					"peerID", peerID,
+					"nodeID", nodeID)
 				return false
 			}
 
 			// don't bloat the permutation space
 			if len(bidMap[nodeID]) >= MaxBidMultiplier {
-				log.Debugf("ignore bid from peer %s for saturated node %s", peerID, nodeID)
+				log.Debugw("node is saturated, ignoring new bid",
+					"labels", []string{string(observability.LabelDeployment)},
+					"peerID", peerID,
+					"nodeID", nodeID)
 				return false
 			}
 
@@ -302,7 +328,9 @@ deploy:
 		o.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
 
 		// 3. Create a candidate deployment
-		log.Debugf("creating candidate deployments")
+		log.Debugw("creating candidate deployments",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", o.id)
 		var (
 			nextCandidate func() (map[string]jtypes.Bid, bool)
 			ok            bool
@@ -317,7 +345,9 @@ deploy:
 			// we need to make a residual bid request for the remaining nodes
 			// Note: in order to facilitate random selection, the residual bid requests
 			//       can drop some of the original bids
-			log.Debugf("creating residual bid request")
+			log.Debugw("not enough bids for all nodes, making residual request",
+				"labels", []string{string(observability.LabelDeployment)},
+				"orchestratorID", o.id)
 			bidrq, err := o.makeResidualBidRequest(bidMap, rmBid)
 			if err != nil {
 				return fmt.Errorf("creating residual bid request: %w", err)
@@ -333,7 +363,9 @@ deploy:
 		}
 
 		if !ok {
-			log.Debugf("failed to create candidate deployments - trying again")
+			log.Debugw("failed to create candidate deployments, retrying",
+				"labels", []string{string(observability.LabelDeployment)},
+				"orchestratorID", o.id)
 			continue deploy
 		}
 
@@ -370,10 +402,15 @@ deploy:
 		o.setStatus(jtypes.DeploymentStatusCommitting)
 		o.deploymentSnapshot.Candidates = candidate
 
-		log.Info("committing candidate bids")
+		log.Infow("committing candidate bids",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", o.id)
 		err = o.commit(candidate)
 		if err != nil {
-			log.Warnf("failed to commit deployment: %s", err)
+			log.Warnw("commit failed",
+				"labels", []string{string(observability.LabelDeployment)},
+				"orchestratorID", o.id,
+				"error", err)
 			continue deploy
 		}
 
@@ -382,7 +419,10 @@ deploy:
 
 		log.Info("provisioning network")
 		if err := o.provision(); err != nil {
-			log.Errorf("failed to provision network: %s", err)
+			log.Errorw("network provisioning failed",
+				"labels", []string{string(observability.LabelDeployment)},
+				"error", err,
+				"orchestratorID", o.id)
 
 			o.lock.Lock()
 			o.revert(o.manifest)
@@ -395,7 +435,8 @@ deploy:
 		o.ctx, o.cancel = context.WithCancel(context.Background())
 		o.lock.Unlock()
 
-		log.Infof("deployment successful, starting supervisor")
+		log.Infof("deployment successful, starting supervisor",
+			"orchestratorID", o.id)
 		o.setStatus(jtypes.DeploymentStatusRunning)
 		allocations := make(map[string]actor.Handle, len(o.manifest.Allocations))
 		for _, allocation := range o.manifest.Allocations {
@@ -406,7 +447,9 @@ deploy:
 	}
 
 	// we failed to create the deployment in time
-	log.Errorf("failed to create the deployment in time")
+	log.Errorw("deployment creation timed out",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id)
 	return ErrDeploymentFailed
 }
 

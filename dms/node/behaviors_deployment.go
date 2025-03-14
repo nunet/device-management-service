@@ -21,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -37,7 +38,9 @@ func (n *Node) handleVerifyEdgeConstraint(msg actor.Envelope) {
 
 	var request orchestrator.VerifyEdgeConstraintRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		log.Warnf("unmarshalling constraint request: %s", err)
+		log.Warnw("verify_edge_constraint_unmarshal_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		n.sendReply(msg, orchestrator.VerifyEdgeConstraintResponse{
 			OK:    false,
 			Error: err.Error(),
@@ -75,7 +78,9 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error committing deployment: %v", err)
+		log.Errorw("commit_deployment_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		n.sendReply(msg, orchestrator.CommitDeploymentResponse{Error: err.Error()})
 	}
 
@@ -85,7 +90,9 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 		return
 	}
 
-	log.Infof("committing deployment for %s", request.EnsembleID)
+	log.Infow("commit_deployment_started",
+		"labels", []string{string(observability.LabelDeployment)},
+		"ensembleID", request.EnsembleID)
 
 	resp := orchestrator.CommitDeploymentResponse{}
 	allocationID := types.ConstructAllocationID(request.EnsembleID, request.AllocationName)
@@ -140,7 +147,9 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error in new deployment: %s", err)
+		log.Errorw("new_deployment_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		n.sendReply(msg, NewDeploymentResponse{Status: "ERROR", Error: err.Error()})
 	}
 
@@ -152,20 +161,24 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 
 	var request NewDeploymentRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		log.Debugf("unmarshalling deployment request: %s", err)
-		handleErr(fmt.Errorf("error unmarshalling deployment request: %s", err))
+		handleErr(fmt.Errorf("unmarshal new deployment request: %s", err))
 		return
 	}
 
 	childCtx := context.WithoutCancel(n.ctx)
 	orch, err := n.createOrchestrator(childCtx, request.Ensemble, n.actor)
 	if err != nil {
-		log.Warnf("creating orchestrator: %s", err)
+		log.Warnw("orchestrator_creation_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		handleErr(err)
 		return
 	}
 
-	log.Infof("deploying ensemble: %s", orch.ID())
+	log.Infow("new_ensemble_deployment_initiated",
+		"labels", []string{string(observability.LabelDeployment)},
+		"ensembleID", orch.ID())
+
 	n.sendReply(msg, NewDeploymentResponse{
 		Status:     "OK",
 		EnsembleID: orch.ID(),
@@ -173,7 +186,10 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 
 	if err := orch.Deploy(msg.Expiry().Add(-orchestrator.MinEnsembleDeploymentTime)); err != nil {
 		orch.Stop()
-		log.Errorf("error creating ensemble: %s", err)
+		log.Errorw("ensemble_deployment_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"ensembleID", orch.ID(),
+			"error", err)
 		n.orchestratorRegistry.DeleteOrchestrator(orch.ID())
 
 		return
@@ -181,7 +197,10 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 
 	// save the deployment
 	if err := n.saveDeployment(orch); err != nil {
-		log.Errorf("error saving deployment %s: %s", orch.ID(), err)
+		log.Errorw("save_deployment_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"ensembleID", orch.ID(),
+			"error", err)
 	}
 }
 
@@ -216,7 +235,9 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error handling deployment logs: %s", err)
+		log.Errorw("deployment_logs_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		n.sendReply(msg, DeploymentLogsResponse{Error: err.Error()})
 	}
 
@@ -263,7 +284,9 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error handling deployment status: %s", err)
+		log.Errorw("deployment_status_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		n.sendReply(msg, DeploymentStatusResponse{Error: err.Error()})
 	}
 
@@ -299,7 +322,9 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error handling deployment manifest: %s", err)
+		log.Errorw("deployment_manifest_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		n.sendReply(msg, DeploymentManifestResponse{Error: err.Error()})
 	}
 
@@ -335,7 +360,9 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error shutting down deployment: %s", err)
+		log.Errorw("deployment_shutdown_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		n.sendReply(msg, DeploymentShutdownResponse{Error: err.Error()})
 	}
 
@@ -354,7 +381,10 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	}
 
 	if o.Status() != jobs.DeploymentStatusRunning {
-		log.Debugf("deployment %q is not running(status=%q), cannot shutdown", request.ID, o.Status())
+		log.Debugw("deployment_not_running_for_shutdown",
+			"labels", []string{string(observability.LabelDeployment)},
+			"deploymentID", request.ID,
+			"status", o.Status())
 		// maybe-TODO: if it's still provisioning/committing,
 		// we should stop the deployment process anyway
 		resp.Error = ErrorDeploymentNotRunning.Error()
@@ -372,6 +402,9 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 
 	var request orchestrator.RevertDeploymentMessage
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		log.Debugw("revert_deployment_unmarshal_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 		return
 	}
 	ensembleID := request.EnsembleID
@@ -391,8 +424,13 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 		allocID := types.ConstructAllocationID(ensembleID, allocName)
 		err := n.allocator.Release(context.Background(), allocID)
 		if err != nil {
-			log.Errorf("revert commit for ensemble id: %s: %s", ensembleID, err)
+			log.Errorw("revert_deployment_release_failure",
+				"labels", []string{string(observability.LabelDeployment)},
+				"ensembleID", ensembleID,
+				"error", err)
 		}
 	}
-	log.Infof("deployment reverted: %+v", ensembleID)
+	log.Infow("deployment_reverted",
+		"labels", []string{string(observability.LabelDeployment)},
+		"ensembleID", ensembleID)
 }

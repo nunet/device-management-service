@@ -70,11 +70,14 @@ func (l *Libp2p) BootstrapDHT(ctx context.Context) error {
 	defer endTrace()
 
 	if err := l.DHT.Bootstrap(ctx); err != nil {
-		log.Errorw("libp2p_bootstrap_failure", "error", err)
+		log.Errorw("libp2p_bootstrap_failure",
+			"labels", []string{string(observability.LabelNode)},
+			"error", err)
 		return err
 	}
 
-	log.Infow("libp2p_bootstrap_success")
+	log.Infow("libp2p_bootstrap_success",
+		"labels", []string{string(observability.LabelNode)})
 	return nil
 }
 
@@ -218,12 +221,17 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 
 	// empty value is considered deleting an item from the dht
 	if len(value) == 0 {
-		log.Infow("libp2p_dht_validate_success", "key", key)
+		log.Infow("libp2p_dht_validate_success",
+			"labels", []string{string(observability.LabelNode)},
+			"key", key)
 		return nil
 	}
 
 	if !strings.HasPrefix(key, d.customNamespace) {
-		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", "invalid key namespace")
+		log.Errorw("libp2p_dht_validate_failure",
+			"labels", []string{string(observability.LabelNode)},
+			"key", key,
+			"error", "invalid key namespace")
 		return errors.New("invalid key namespace")
 	}
 
@@ -231,13 +239,19 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 	var envelope commonproto.Advertisement
 	err := proto.Unmarshal(value, &envelope)
 	if err != nil {
-		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", fmt.Sprintf("failed to unmarshal envelope: %v", err))
+		log.Errorw("libp2p_dht_validate_failure",
+			"labels", []string{string(observability.LabelNode)},
+			"key", key,
+			"error", fmt.Sprintf("failed to unmarshal envelope: %v", err))
 		return fmt.Errorf("failed to unmarshal envelope: %w", err)
 	}
 
 	pubKey, err := crypto.UnmarshalSecp256k1PublicKey(envelope.PublicKey)
 	if err != nil {
-		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", fmt.Sprintf("failed to unmarshal public key: %v", err))
+		log.Errorw("libp2p_dht_validate_failure",
+			"labels", []string{string(observability.LabelNode)},
+			"key", key,
+			"error", fmt.Sprintf("failed to unmarshal public key: %v", err))
 		return fmt.Errorf("failed to unmarshal public key: %w", err)
 	}
 
@@ -249,16 +263,24 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 	}, nil)
 	ok, err := pubKey.Verify(concatenatedBytes, envelope.Signature)
 	if err != nil {
-		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", fmt.Sprintf("failed to verify envelope: %v", err))
+		log.Errorw("libp2p_dht_validate_failure",
+			"labels", []string{string(observability.LabelNode)},
+			"key", key,
+			"error", fmt.Sprintf("failed to verify envelope: %v", err))
 		return fmt.Errorf("failed to verify envelope: %w", err)
 	}
 
 	if !ok {
-		log.Errorw("libp2p_dht_validate_failure", "key", key, "error", "public key didn't sign the payload")
+		log.Errorw("libp2p_dht_validate_failure",
+			"labels", []string{string(observability.LabelNode)},
+			"key", key,
+			"error", "public key didn't sign the payload")
 		return errors.New("failed to verify envelope, public key didn't sign payload")
 	}
 
-	log.Infow("libp2p_dht_validate_success", "key", key)
+	log.Infow("libp2p_dht_validate_success",
+		"labels", []string{string(observability.LabelNode)},
+		"key", key)
 	return nil
 }
 

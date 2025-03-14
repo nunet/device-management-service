@@ -10,6 +10,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -51,7 +52,10 @@ func NewSupervisor(ctx context.Context, actor actor.Actor, id string) *Superviso
 
 // Supervise runs the supervision loop, including registration and periodic healthchecks.
 func (s *Supervisor) Supervise(manifest jtypes.EnsembleManifest) {
-	log.Infof("Starting supervision for allocations: %+v", manifest.Allocations)
+	log.Debugw("supervisor started for orchestrator",
+		"labels", []string{string(observability.LabelDeployment)},
+		"supervisorID", s.id,
+		"allocations", s.manifest.Allocations)
 
 	manifestCopy := manifest.Clone()
 
@@ -251,6 +255,10 @@ func (s *Supervisor) escalateFailure(allocation jtypes.AllocationManifest) error
 	//      consecutive failures.
 	//      See https://gitlab.com/nunet/device-management-service/-/issues/794
 	log.Debugf("escalating failure for allocation %s", allocation.Handle.String())
+	log.Debugw("escalating failure for allocation",
+		"labels", []string{string(observability.LabelAllocation)},
+		"allocationHandle", allocation.Handle.String(),
+		"supervisorID", s.id)
 	expiry := actor.MakeExpiry(5 * time.Second)
 	msg, err := actor.Message(
 		s.actor.Handle(),

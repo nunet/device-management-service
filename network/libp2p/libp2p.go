@@ -201,17 +201,17 @@ func (l *Libp2p) Start() error {
 	// connect to bootstrap nodes
 	err := l.ConnectToBootstrapNodes(l.ctx)
 	if err != nil {
-		log.Errorf("libp2p_bootstrap_failure", "error", err)
+		log.Errorw("libp2p_bootstrap_failure", "labels", []string{string(observability.LabelNode)}, "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success")
+	log.Infow("libp2p_bootstrap_success", "labels", []string{string(observability.LabelNode)})
 
 	err = l.BootstrapDHT(l.ctx)
 	if err != nil {
-		log.Errorf("libp2p_bootstrap_failure", "error", err)
+		log.Errorw("libp2p_bootstrap_failure", "labels", []string{string(observability.LabelNode)}, "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success")
+	log.Infow("libp2p_bootstrap_success", "labels", []string{string(observability.LabelNode)})
 
 	// Start random walk
 	l.startRandomWalk(l.ctx)
@@ -227,16 +227,16 @@ func (l *Libp2p) Start() error {
 		// advertise randevouz discovery
 		err = l.advertiseForRendezvousDiscovery(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_advertise_rendezvous_failure", "error", err)
+			log.Warnf("libp2p_advertise_rendezvous_failure", "labels", []string{string(observability.LabelNode)}, "error", err)
 		} else {
-			log.Infow("libp2p_advertise_rendezvous_success")
+			log.Infow("libp2p_advertise_rendezvous_success", "labels", []string{string(observability.LabelNode)})
 		}
 
 		err = l.DiscoverDialPeers(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_peer_discover_failure", "error", err)
+			log.Warnf("libp2p_peer_discover_failure", "labels", []string{string(observability.LabelNode)}, "error", err)
 		} else {
-			log.Infow("libp2p_peer_discover_success", "foundPeers", len(l.discoveredPeers))
+			log.Infow("libp2p_peer_discover_success", "labels", []string{string(observability.LabelNode)}, "foundPeers", len(l.discoveredPeers))
 		}
 	}()
 
