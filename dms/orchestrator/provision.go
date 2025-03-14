@@ -21,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 type SubnetCreateRequest struct {
@@ -49,7 +50,10 @@ type SubnetJoinResponse struct {
 }
 
 func (o *BasicOrchestrator) provision() error {
-	log.Infof("provisioning ensemble manifest: %+v", o.manifest)
+	log.Infow("provisioning ensemble manifest",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id,
+	)
 
 	// 1. create subnet
 	// 1.a generate routing table

@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -210,9 +211,16 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 		}
 	})
 
-	log.Debugf("Onboarded Resources: %+v \nTotal Allocation: %+v\nCommitted Resources: %+v",
-		onboardedResources.Resources, totalAllocation, committedResources)
-	// calculate the free resources
+	log.Debugw("onboarded_resources",
+		"labels", []string{string(observability.LabelMetric)},
+		"resources", onboardedResources.Resources)
+	log.Debugw("total_allocation",
+		"labels", []string{string(observability.LabelMetric)},
+		"allocation", totalAllocation)
+	log.Debugw("committed_resources",
+		"labels", []string{string(observability.LabelMetric)},
+		"committed", committedResources)
+
 	freeResources.Resources = onboardedResources.Resources
 	if err := freeResources.Resources.Subtract(totalAllocation); err != nil {
 		return types.FreeResources{}, fmt.Errorf("subtracting total allocation: %w", err)
@@ -222,8 +230,9 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 		return types.FreeResources{}, fmt.Errorf("subtracting committed resources: %w", err)
 	}
 
-	log.Debugf("Free Resources: %+v", freeResources.Resources)
-
+	log.Debugw("free_resources",
+		"labels", []string{string(observability.LabelMetric)},
+		"free", freeResources.Resources)
 	return freeResources, nil
 }
 

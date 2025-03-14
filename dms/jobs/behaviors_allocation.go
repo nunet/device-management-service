@@ -16,16 +16,21 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
-	log.Infof("behavior allocation start invoked by: %+v", msg.From)
+	log.Infow("behavior_allocation_start_invoked",
+		"labels", []string{string(observability.LabelAllocation)},
+		"from", msg.From)
 	defer msg.Discard()
 
 	var req behaviors.AllocationStartRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		log.Errorf("error unmarshalling allocation start request: %s", err)
+		log.Errorw("allocation_start_request_unmarshal_error",
+			"labels", []string{string(observability.LabelAllocation)},
+			"error", err)
 		return
 	}
 
@@ -33,15 +38,18 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 	// TODO: context should cancel when the actor is stopped to stop monitor
 	if err := a.Run(context.TODO(), req.SubnetIP, req.GatewayIP, req.PortMapping); err != nil {
 		err = fmt.Errorf("failed to run allocation: %w", err)
-		log.Error(err)
-
+		log.Errorw("allocation_start_run_failure",
+			"labels", []string{string(observability.LabelAllocation)},
+			"error", err)
 		resp.Error = err.Error()
 		resp.OK = false
 		a.sendReply(msg, resp)
 		return
 	}
 
-	log.Info("Running allocation's job: ", a.ID)
+	log.Infow("allocation_start_success",
+		"labels", []string{string(observability.LabelAllocation)},
+		"allocationID", a.ID)
 
 	a.state.subnetIP = req.SubnetIP
 	a.state.gatewayIP = req.GatewayIP
@@ -62,14 +70,18 @@ func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 	resp := behaviors.AllocationRestartResponse{}
 	if err := a.Restart(context.TODO()); err != nil { // TODO: fix context.TODO()
 		err = fmt.Errorf("failed to restart allocation: %w", err)
-		log.Error(err)
-
+		log.Errorw("allocation_restart_failure",
+			"labels", []string{string(observability.LabelAllocation)},
+			"error", err)
 		resp.Error = err.Error()
 		resp.OK = false
 		a.sendReply(msg, resp)
 		return
 	}
 
+	log.Infow("allocation_restart_success",
+		"labels", []string{string(observability.LabelAllocation)},
+		"allocationID", a.ID)
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
@@ -89,23 +101,35 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
 		exitCode, stdout, stderr, err := a.executor.Exec(context.TODO(), a.executionID, mf.Exec)
 
-		log.Debugf("health check command: %s\nstdout: %s\nstderr: %s", mf.Exec, stdout, stderr)
+		log.Debugw("health_check_command_output",
+			"labels", []string{string(observability.LabelAllocation)},
+			"command", mf.Exec,
+			"stdout", stdout,
+			"stderr", stderr)
 		if err != nil {
-			log.Warnf("health check command failed: %s", err)
+			log.Warnw("health_check_command_exec_failure",
+				"labels", []string{string(observability.LabelAllocation)},
+				"error", err)
 			return fmt.Errorf("health check command failed: %w", err)
 		}
 
 		if exitCode != 0 {
-			log.Warnf("health check command failed with exit code: %d", exitCode)
+			log.Warnw("health_check_command_exitcode_failure",
+				"labels", []string{string(observability.LabelAllocation)},
+				"exitCode", exitCode)
 			return fmt.Errorf("health check command failed with exit code %d", exitCode)
 		}
 
 		if !strings.Contains(stdout+stderr, mf.Response.Value) {
-			log.Warnf("health check command err: %s", stderr)
+			log.Warnw("health_check_command_unexpected_output",
+				"labels", []string{string(observability.LabelAllocation)},
+				"stderr", stderr,
+				"expectedValue", mf.Response.Value)
 			return fmt.Errorf("unexpected health check command output: %s\nstderr: %s", stdout, stderr)
 		}
 
-		log.Debugf("health check command succeeded")
+		log.Debugw("health_check_command_succeeded",
+			"labels", []string{string(observability.LabelAllocation)})
 		return nil
 	})
 	if err != nil {
@@ -144,10 +168,14 @@ func (a *Allocation) handleHealthcheck(msg actor.Envelope) {
 
 	reply, err := actor.ReplyTo(msg, resp)
 	if err != nil {
-		log.Warnf("failed to create healthcheck reply: %s", err)
+		log.Warnw("allocation_healthcheck_reply_creation_failure",
+			"labels", []string{string(observability.LabelAllocation)},
+			"error", err)
 		return
 	}
 	if err := a.Actor.Send(reply); err != nil {
-		log.Warnf("failed to send healthcheck reply: %s", err)
+		log.Warnw("allocation_healthcheck_reply_send_failure",
+			"labels", []string{string(observability.LabelAllocation)},
+			"error", err)
 	}
 }

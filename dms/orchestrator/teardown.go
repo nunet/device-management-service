@@ -17,6 +17,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 type SubnetDestroyRequest struct {
@@ -40,6 +41,10 @@ type AllocationStopResponse struct {
 func (o *BasicOrchestrator) Shutdown() {
 	o.setStatus(jtypes.DeploymentStatusShuttingDown)
 	o.lock.Lock()
+
+	log.Infow("orchestrator_shutdown_initiated",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id)
 
 	defer func() {
 		o.lock.Unlock()
@@ -160,6 +165,9 @@ func (o *BasicOrchestrator) Shutdown() {
 	}
 
 	wg.Wait()
+	log.Infow("orchestrator_shutdown_complete",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id)
 }
 
 type RevertDeploymentMessage struct {
@@ -180,17 +188,25 @@ func (o *BasicOrchestrator) revertDeployment(n string, h actor.Handle) {
 		},
 	)
 	if err != nil {
-		log.Debugf("failed to create revert message for %s: %s", n, err)
+		log.Debugw("revert_message_create_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"nodeID", n,
+			"error", err)
 		return
 	}
 
 	if err := o.actor.Send(msg); err != nil {
-		log.Debugf("failed to send revert message for %s: %s", n, err)
+		log.Debugw("revert_message_send_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"nodeID", n,
+			"error", err)
 	}
 }
 
 func (o *BasicOrchestrator) revert(mf jtypes.EnsembleManifest) {
-	log.Infof("reverting ensemble manifest: %+v", mf)
+	log.Infow("reverting manifest",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", mf.ID)
 	for n, nmf := range mf.Nodes {
 		o.revertDeployment(n, nmf.Handle)
 	}

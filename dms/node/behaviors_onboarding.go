@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -32,7 +33,9 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error onboarding: %s", err)
+		log.Errorw("onboard_error",
+			"labels", []string{string(observability.LabelNode)},
+			"error", err)
 		n.sendReply(msg, OnboardResponse{Error: err.Error()})
 	}
 
@@ -66,7 +69,9 @@ func (n *Node) handleOffboard(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error while offboarding: %s", err)
+		log.Errorw("offboard_error",
+			"labels", []string{string(observability.LabelNode)},
+			"error", err)
 		n.sendReply(msg, OffboardResponse{Error: err.Error()})
 	}
 
@@ -89,7 +94,9 @@ func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error obtaining onboard status: %s", err)
+		log.Errorw("onboard_status_error",
+			"labels", []string{string(observability.LabelNode)},
+			"error", err)
 		n.sendReply(msg, OnboardStatusResponse{Error: err.Error()})
 	}
 

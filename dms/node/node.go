@@ -35,6 +35,7 @@ import (
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -237,7 +238,9 @@ func New(cfg config.Config, fs afero.Afero,
 	}
 
 	if err := n.restoreDeployments(); err != nil {
-		log.Errorf("restoring deployments: %s", err)
+		log.Errorw("restoring deployments failed",
+			"labels", []string{string(observability.LabelNode)},
+			"error", err)
 	}
 
 	return n, nil
@@ -250,7 +253,10 @@ func (n *Node) saveDeployments() error {
 	var failed []string
 	for id, o := range n.orchestratorRegistry.Orchestrators() {
 		if err := n.saveDeployment(o); err != nil {
-			log.Errorf("error saving deployment %s: %s", id, err)
+			log.Errorw("error saving active deployment",
+				"labels", []string{string(observability.LabelDeployment)},
+				"deploymentID", id,
+				"error", err)
 			failed = append(failed, id)
 		}
 	}
@@ -281,10 +287,7 @@ func (n *Node) restoreDeployments() error {
 	var failedToRestore []string
 	for _, d := range orchestratorsViews {
 		if d.Status < jobtypes.DeploymentStatusCommitting {
-			log.Warnf(
-				"deployment %s will not be restaured because it was not previously committed",
-				d.OrchestratorID,
-			)
+			log.Warnf("deployment %s was not previously committed; ignoring restoration", d.OrchestratorID)
 			continue
 		}
 
@@ -301,19 +304,19 @@ func (n *Node) restoreDeployments() error {
 		case jobtypes.DeploymentStatusRunning:
 			restoreDeadline = RestoreDeadlineRunning
 		default:
-			log.Warnf("Unknown restorable deployment status for %s, skipping restoration", d.OrchestratorID)
+			log.Warnf("deployment %s has unknown restorable status %d; ignoring", d.OrchestratorID, d.Status)
 			continue
 		}
 
 		if time.Since(d.CreatedAt) > restoreDeadline {
-			log.Warnf("Deployment %s has exceeded its restore deadline, skipping restoration", d.OrchestratorID)
+			log.Warnf("deployment %s exceeded restore deadline; skipping", d.OrchestratorID)
 			continue
 		}
 
 		// recreate actor given priv key
 		pvkey, err := lcrypto.UnmarshalPrivateKey(d.PrivKey)
 		if err != nil {
-			log.Errorf("unmarshall orchestrator's actor priv key: %v", err)
+			log.Errorf("unmarshal orchestrator actor private key for %s: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
 			continue
 		}
@@ -324,25 +327,26 @@ func (n *Node) restoreDeployments() error {
 			actor.WithPrivKey(pvkey),
 		)
 		if err != nil {
-			log.Errorf("restore orchestrator actor of ensemble %s: %v", d.OrchestratorID, err)
+			log.Errorf("restore actor creation error for %s: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
 			continue
 		}
 
-		err = childActor.Start()
-		if err != nil {
-			log.Errorf("start actor: %v", err)
+		if err := childActor.Start(); err != nil {
+			log.Errorf("start orchestrator actor for %s: %v", d.OrchestratorID, err)
 			continue
 		}
 
 		orchestrator, err := n.orchestratorRegistry.RestoreDeployment(childActor, d.OrchestratorID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
 		if err != nil {
-			log.Errorf("restore orchestrator of id %s; Error: %v", d.OrchestratorID, err)
+			log.Errorf("restore orchestrator %s: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
 			continue
 		}
 
-		log.Debugf("deployment %s restored!\n", orchestrator.ID())
+		log.Infow("restored deployment",
+			"labels", []string{string(observability.LabelDeployment)},
+			"deploymentID", orchestrator.ID())
 	}
 
 	if len(failedToRestore) > 0 {
@@ -498,6 +502,9 @@ func (n *Node) doGCBidState() {
 
 // Start node
 func (n *Node) Start() error {
+	log.Infow("node_start_initiated",
+		"labels", []string{string(observability.LabelNode)})
+
 	if err := n.allocator.Run(); err != nil {
 		return fmt.Errorf("start node allocator: %w", err)
 	}
@@ -513,17 +520,25 @@ func (n *Node) Start() error {
 
 	n.running.Store(true)
 	go n.gcBidState()
+
+	log.Infow("node_started_successfully",
+		"labels", []string{string(observability.LabelNode)})
 	return nil
 }
 
 // Stop node
 func (n *Node) Stop() error {
+	log.Infow("node_stop_initiated",
+		"labels", []string{string(observability.LabelNode)})
+
 	if err := n.allocator.Stop(context.Background()); err != nil {
-		log.Errorf("stop node allocator: %s", err)
+		log.Errorf("stopping node allocator: %s", err)
 	}
 
 	if err := n.saveDeployments(); err != nil {
-		log.Errorf("saving active deployments: %s", err)
+		log.Errorw("error saving active deployments during node stop",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
 	}
 
 	n.cancel()
@@ -536,6 +551,9 @@ func (n *Node) Stop() error {
 	}
 
 	n.running.Store(false)
+
+	log.Infow("node_stopped_successfully",
+		"labels", []string{string(observability.LabelNode)})
 	return nil
 }
 
@@ -559,13 +577,17 @@ func (n *Node) createOrchestrator(ctx context.Context,
 ) (orchestrator.Orchestrator, error) {
 	ensembleID, err := createEnsembleID(actr.Handle().Address.HostID)
 	if err != nil {
-		return nil, fmt.Errorf("generate uuid for ensemble: %w", err)
+		return nil, fmt.Errorf("generate ensemble id: %w", err)
 	}
 
 	childActor, err := n.actor.CreateChild(ensembleID, n.actor.Handle())
 	if err != nil {
 		return nil, fmt.Errorf("create child actor: %w", err)
 	}
+
+	log.Infow("deploying ensemble",
+		"labels", []string{string(observability.LabelDeployment)},
+		"ensembleID", ensembleID)
 
 	err = childActor.Start()
 	if err != nil {

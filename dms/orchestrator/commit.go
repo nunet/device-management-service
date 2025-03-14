@@ -19,6 +19,7 @@ import (
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -41,7 +42,10 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 			err := o.commitDeployment(n, bid.Handle())
 			mx.Lock()
 			if err != nil {
-				log.Errorf("error committing bid for %s: %s", n, err)
+				log.Errorw("commit resources error",
+					"labels", []string{string(observability.LabelDeployment)},
+					"nodeID", n,
+					"error", err)
 				ok = false
 			} else {
 				log.Debugf("committed resources for %s", n)
@@ -70,7 +74,10 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 			allocated, err := o.allocate(n, bid.Handle())
 			mx.Lock()
 			if err != nil {
-				log.Errorf("error allocating deployment for %s: %s", n, err)
+				log.Errorw("allocation error",
+					"labels", []string{string(observability.LabelDeployment)},
+					"nodeID", n,
+					"error", err)
 				ok = false
 			} else {
 				log.Debugf("allocating deployment for %s", n)

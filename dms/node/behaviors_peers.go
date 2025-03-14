@@ -36,13 +36,13 @@ func (n *Node) handlePeerPing(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error pinging peer: %s", err)
+		log.Errorw("peer_ping_error", "error", err)
 		n.sendReply(msg, PingResponse{Error: err.Error()})
 	}
 
 	var request PingRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		// TODO log
+		log.Debugw("peer_ping_unmarshal_error", "error", err)
 		return
 	}
 
@@ -71,7 +71,7 @@ func (n *Node) handlePeersList(msg actor.Envelope) {
 	// get the underlying libp2p instance and extract the DHT data
 	libp2pNet, ok := n.network.(*libp2p.Libp2p)
 	if !ok {
-		// TODO log
+		log.Debug("peers_list_not_libp2p_network")
 		return
 	}
 
@@ -113,7 +113,7 @@ func (n *Node) handlePeerDHT(msg actor.Envelope) {
 	// get the underlying libp2p instance and extract the DHT data
 	libp2pNet, ok := n.network.(*libp2p.Libp2p)
 	if !ok {
-		// TODO log
+		log.Debug("peer_dht_not_libp2p_network")
 		return
 	}
 
@@ -137,19 +137,19 @@ func (n *Node) handlePeerConnect(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error connecting to peer: %s", err)
+		log.Errorw("peer_connect_error", "error", err)
 		n.sendReply(msg, PeerConnectResponse{Error: err.Error()})
 	}
 
 	var request PeerConnectRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		// TODO log
+		log.Debugw("peer_connect_unmarshal_error", "error", err)
 		return
 	}
 
 	libp2pNet, ok := n.network.(*libp2p.Libp2p)
 	if !ok {
-		// TODO log
+		log.Debug("peer_connect_not_libp2p_network")
 		return
 	}
 

@@ -24,6 +24,7 @@ import (
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -88,7 +89,10 @@ func (o *BasicOrchestrator) requestBids(
 
 			var bid jtypes.Bid
 			if err := json.Unmarshal(msg.Message, &bid); err != nil {
-				log.Debugf("failed to unmarshal bid from %s: %s", msg.From, err)
+				log.Debugw("failed to unmarshal bid",
+					"labels", []string{string(observability.LabelDeployment)},
+					"from", msg.From,
+					"error", err)
 				return
 			}
 
@@ -165,6 +169,10 @@ func (o *BasicOrchestrator) requestBidPeer(
 		return fmt.Errorf("creating targeted bid message: %w", err)
 	}
 
+	log.Infow("requesting bid from targeted peer",
+		"labels", []string{string(observability.LabelDeployment)},
+		"peerID", nodeConfig.Peer,
+		"orchestratorID", o.id)
 	if err := o.actor.Send(msg); err != nil {
 		return fmt.Errorf("sending targeted bid request: %w", err)
 	}
@@ -187,16 +195,26 @@ func (o *BasicOrchestrator) collectBids(
 		select {
 		case bid, ok := <-bidCh:
 			if !ok {
-				log.Debugf("bid channel closed")
+				log.Debugw("bid channel closed",
+					"labels", []string{string(observability.LabelDeployment)})
 				return
 			}
-			log.Debugf("received bid: %+v", bid)
+			log.Debugw("received bid",
+				"labels", []string{string(observability.LabelDeployment)},
+				"ensembleID", bid.EnsembleID(),
+				"peerID", bid.Peer(),
+				"nodeID", bid.NodeID())
 			if err := bid.Validate(); err != nil {
-				log.Debugf("got invalid bid: %s", err)
+				log.Debugw("invalid bid",
+					"labels", []string{string(observability.LabelDeployment)},
+					"error", err)
 				continue
 			}
 			if bid.EnsembleID() != o.id {
-				log.Debugf("got bid for unexpected ensemble ID: %s", bid.EnsembleID())
+				log.Debugw("bid for unexpected ensemble id",
+					"labels", []string{string(observability.LabelDeployment)},
+					"expectedID", o.id,
+					"gotID", bid.EnsembleID())
 				continue
 			}
 			if addBid(bid) {
@@ -342,7 +360,9 @@ func (o *BasicOrchestrator) makeCandidateDeploymentBig(bids map[string][]jtypes.
 			count++
 
 			if _, err := crand.Read(bytes); err != nil {
-				log.Errorf("error reading random bytes: %s", err)
+				log.Errorw("random_bytes_read_error",
+					"labels", []string{string(observability.LabelDeployment)},
+					"error", err)
 				return nil, false
 			}
 
@@ -387,7 +407,12 @@ func (o *BasicOrchestrator) checkPermutationEdgeConstraints(candidate map[string
 		minRTT := (distance / geolocation.LightSpeed) * 2 * 1000
 
 		if minRTT > float64(cst.RTT) {
-			log.Debugf("Edge constraint not satisfied: min RTT %.2f ms > constraint %d ms for %s -> %s", minRTT, cst.RTT, cst.S, cst.T)
+			log.Debugw("edge constraint not satisfied",
+				"labels", []string{string(observability.LabelDeployment)},
+				"minRTT", minRTT,
+				"constraint", cst.RTT,
+				"from", cst.S,
+				"to", cst.T)
 			return false
 		}
 
@@ -456,7 +481,11 @@ func (o *BasicOrchestrator) verifyEdgeConstraint(candidate map[string]jtypes.Bid
 	bidS := candidate[cst.S]
 	bidT := candidate[cst.T]
 	key := bidS.Peer() + ":" + bidT.Peer()
-	log.Debugf("verify edge constraint %s %v", key, cst)
+	log.Debugw("verifying edge constraint",
+		"labels", []string{string(observability.LabelDeployment)},
+		"peerS", bidS.Peer(),
+		"peerT", bidT.Peer(),
+		"constraint", cst)
 
 	handle := bidS.Handle()
 	msg, err := actor.Message(
@@ -473,13 +502,19 @@ func (o *BasicOrchestrator) verifyEdgeConstraint(candidate map[string]jtypes.Bid
 		actor.WithMessageTimeout(VerifyEdgeConstraintTimeout),
 	)
 	if err != nil {
-		log.Warnf("error creating constraint check message for %s: %s", key, err)
+		log.Warnw("creating constraint check message error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"edgeKey", key,
+			"error", err)
 		return false
 	}
 
 	replyCh, err := o.actor.Invoke(msg)
 	if err != nil {
-		log.Warnf("error invoking constraint check for %s: %s", key, err)
+		log.Warnw("invoke constraint check error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"edgeKey", key,
+			"error", err)
 		return false
 	}
 
@@ -493,12 +528,18 @@ func (o *BasicOrchestrator) verifyEdgeConstraint(candidate map[string]jtypes.Bid
 
 	var response VerifyEdgeConstraintResponse
 	if err := json.Unmarshal(reply.Message, &response); err != nil {
-		log.Warnf("error unmarshalling bid constraint response for %s: %s", key, err)
+		log.Warnw("unmarshal bid constraint response error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"edgeKey", key,
+			"error", err)
 		return false
 	}
 
 	if response.Error != "" {
-		log.Debugf("error verifying bid constraint for %s: %s", key, err)
+		log.Debugw("verify bid constraint not satisfied",
+			"labels", []string{string(observability.LabelDeployment)},
+			"edgeKey", key,
+			"error", response.Error)
 	}
 
 	return response.OK
@@ -585,7 +626,11 @@ func (o *BasicOrchestrator) makeResidualBidRequest(
 
 	for n, ncfg := range o.cfg.V1.Nodes {
 		if _, exclude := newCandidates[n]; exclude {
-			log.Debugf("node %s is in candidate, skipping", n)
+			log.Debugw(
+				fmt.Sprintf("node %s is in candidate, skipping", n),
+				"labels", []string{string(observability.LabelDeployment)},
+				"nodeID", n,
+			)
 			continue
 		}
 
@@ -593,7 +638,11 @@ func (o *BasicOrchestrator) makeResidualBidRequest(
 	}
 
 	for id, ncfg := range residualConfig.V1.Nodes {
-		log.Debugf("still looking for node %s", id)
+		log.Debugw(
+			fmt.Sprintf("still looking for node %s", id),
+			"labels", []string{string(observability.LabelDeployment)},
+			"nodeID", id,
+		)
 		for _, a := range ncfg.Allocations {
 			residualConfig.V1.Allocations[a] = o.cfg.V1.Allocations[a]
 		}
@@ -619,7 +668,10 @@ func (o *BasicOrchestrator) ensembleConfigToBidRequest(config *jtypes.EnsembleCo
 		Nonce: o.getNonce(),
 	}
 
-	log.Infof("creating bid request for nodes: %+v", v1Config.Nodes)
+	log.Infow("generating bid request",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id,
+		"nodes", v1Config.Nodes)
 	for nodeID, nodeConfig := range v1Config.Nodes {
 		bidRequest := jtypes.BidRequest{
 			V1: &jtypes.BidRequestV1{
