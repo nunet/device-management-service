@@ -20,6 +20,7 @@ import (
 type MockGPUManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockGPUManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockGPUManagerMockRecorder is the mock recorder for MockGPUManager.

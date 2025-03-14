@@ -20,6 +20,7 @@ import (
 type MockGPUConnector struct {
 	ctrl     *gomock.Controller
 	recorder *MockGPUConnectorMockRecorder
+	isgomock struct{}
 }
 
 // MockGPUConnectorMockRecorder is the mock recorder for MockGPUConnector.

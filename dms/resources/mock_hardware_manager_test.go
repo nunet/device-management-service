@@ -20,6 +20,7 @@ import (
 type MockHardwareManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockHardwareManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockHardwareManagerMockRecorder is the mock recorder for MockHardwareManager.
@@ -103,6 +104,7 @@ func (mr *MockHardwareManagerMockRecorder) GetUsage() *gomock.Call {
 type MockGPUManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockGPUManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockGPUManagerMockRecorder is the mock recorder for MockGPUManager.
@@ -174,6 +176,7 @@ func (mr *MockGPUManagerMockRecorder) Shutdown() *gomock.Call {
 type MockGPUConnector struct {
 	ctrl     *gomock.Controller
 	recorder *MockGPUConnectorMockRecorder
+	isgomock struct{}
 }
 
 // MockGPUConnectorMockRecorder is the mock recorder for MockGPUConnector.

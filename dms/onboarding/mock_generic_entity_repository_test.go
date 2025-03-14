@@ -21,6 +21,7 @@ import (
 type MockGenericEntityRepository[T repositories.ModelType] struct {
 	ctrl     *gomock.Controller
 	recorder *MockGenericEntityRepositoryMockRecorder[T]
+	isgomock struct{}
 }
 
 // MockGenericEntityRepositoryMockRecorder is the mock recorder for MockGenericEntityRepository.
