@@ -74,6 +74,8 @@ type Orchestrator interface {
 	WriteAllocationLogs(name string, stdout, stderr []byte) (string, error)
 }
 
+// TODO: use immutable data structures (there are libraries for that), specially
+// for EnsembleManifest and EnsembleConfig
 type BasicOrchestrator struct {
 	lock   sync.Mutex
 	ctx    context.Context
@@ -84,10 +86,11 @@ type BasicOrchestrator struct {
 	actor   actor.Actor
 	geo     *geolocation.GeoLocator
 
-	id       string
-	cfg      jtypes.EnsembleConfig
-	manifest jtypes.EnsembleManifest
-	status   jtypes.DeploymentStatus
+	id             string
+	cfg            jtypes.EnsembleConfig
+	manifest       jtypes.EnsembleManifest
+	subnetManifest SubnetManifest
+	status         jtypes.DeploymentStatus
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
 	supervisor         *Supervisor
@@ -114,15 +117,21 @@ func NewOrchestrator(
 		return nil, fmt.Errorf("failed to create geolocator: %w", err)
 	}
 
+	subnet, err := newSubnetManifest()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subnet manifest: %w", err)
+	}
+
 	o := &BasicOrchestrator{
-		actor:      oActor,
-		geo:        geo,
-		id:         id,
-		cfg:        cfg,
-		ctx:        ctx,
-		fs:         fs,
-		workDir:    workDir,
-		supervisor: NewSupervisor(ctx, oActor, id),
+		actor:          oActor,
+		geo:            geo,
+		id:             id,
+		cfg:            cfg,
+		ctx:            ctx,
+		fs:             fs,
+		workDir:        workDir,
+		subnetManifest: subnet,
+		supervisor:     NewSupervisor(ctx, oActor, id),
 	}
 
 	orchestratorBehaviors := map[string]func(actor.Envelope){
@@ -158,26 +167,32 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 	}()
 	o.setStatus(jtypes.DeploymentStatusPreparing)
 
-	if err := o.deploy(expiry); err != nil {
+	log.Debugw("initializing manifest",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id)
+	o.manifest = o.newManifest(o.cfg)
+
+	if err := o.deploy(o.cfg, o.manifest, expiry); err != nil {
 		return fmt.Errorf("deploying ensemble: %w", err)
 	}
 
+	log.Infof("deployment successful, starting supervisor",
+		"orchestratorID", o.id)
 	go o.supervisor.Supervise(o.manifest)
 	return nil
 }
 
-func (o *BasicOrchestrator) initializeManifest() {
-	o.lock.Lock()
-	defer o.lock.Unlock()
-
-	o.manifest = jtypes.EnsembleManifest{
+func (o *BasicOrchestrator) newManifest(
+	cfg jtypes.EnsembleConfig,
+) jtypes.EnsembleManifest {
+	manifest := jtypes.EnsembleManifest{
 		ID:           o.id,
 		Orchestrator: o.actor.Handle(),
 		Allocations:  make(map[string]jtypes.AllocationManifest),
 		Nodes:        make(map[string]jtypes.NodeManifest),
 	}
 
-	for name, alloc := range o.cfg.Allocations() {
+	for name, alloc := range cfg.Allocations() {
 		amf := jtypes.AllocationManifest{
 			ID:          types.ConstructAllocationID(o.id, name),
 			DNSName:     alloc.DNSName + ".internal",
@@ -186,31 +201,34 @@ func (o *BasicOrchestrator) initializeManifest() {
 			Ports:       make(map[int]int),
 			Type:        alloc.Type,
 		}
-		o.manifest.Allocations[name] = amf
+		manifest.Allocations[name] = amf
 	}
-	for name, node := range o.cfg.Nodes() {
+	for name, node := range cfg.Nodes() {
 		nmf := jtypes.NodeManifest{
 			Allocations: node.Allocations,
 			Peer:        node.Peer,
 		}
-		o.manifest.Nodes[name] = nmf
+		manifest.Nodes[name] = nmf
 	}
 
-	o.manifest.Subnet = o.cfg.V1.Subnet
+	manifest.Subnet = cfg.V1.Subnet
+
+	return manifest
 }
 
-func (o *BasicOrchestrator) deploy(expiry time.Time) error {
+// TODO (dynamic ensemble PR): documentation on how updates
+// and revert handle manifest changes
+// TODO: provision/commit should not update o.manifest by themselves
+func (o *BasicOrchestrator) deploy(
+	cfg jtypes.EnsembleConfig,
+	partialManifest jtypes.EnsembleManifest,
+	expiry time.Time,
+) error {
 	o.deploymentSnapshot.Expiry = expiry
-	edgeConstraintCache := make(map[string]bool)
 
 deploy:
 	for time.Now().Before(expiry) {
 		o.setStatus(jtypes.DeploymentStatusPreparing)
-
-		log.Debugw("initializing manifest",
-			"labels", []string{string(observability.LabelDeployment)},
-			"orchestratorID", o.id)
-		o.initializeManifest()
 
 		// delete old state of candidates if any
 		for c := range o.deploymentSnapshot.Candidates {
@@ -218,230 +236,48 @@ deploy:
 			delete(o.deploymentSnapshot.Candidates, c)
 			o.lock.Unlock()
 		}
-		// 0. check if one of the ensemble nodes have peer specified
-		// If bid request to peer specified fails, the entire deployment must fail
-		nodeForTargetPeer := make(map[string]string)
-		for nodeID, node := range o.cfg.Nodes() {
-			if node.Peer != "" {
-				nodeForTargetPeer[node.Peer] = nodeID
-			}
-		}
 
-		// 1. Create bid requests for nodes
-		log.Debugw("creating initial bid request",
-			"labels", []string{string(observability.LabelDeployment)},
-			"orchestratorID", o.id,
-			"nodes: ", o.cfg.Nodes())
-		bidrq, err := o.makeInitialBidRequest()
+		// 1. bid
+		candidateDeployment, err := o.bid(cfg, expiry)
 		if err != nil {
-			return fmt.Errorf("creating bid request: %w", err)
-		}
-
-		// 2. Collect bids
-		log.Debugw("collecting bids",
-			"labels", []string{string(observability.LabelDeployment)},
-			"orchestratorID", o.id)
-		bidMap := make(map[string][]jtypes.Bid)
-		peerExclusion := make(map[string]struct{})
-		addBid := func(bid jtypes.Bid) bool {
-			// if peer is already specified on another node, ignore the bid
-			if _, ok := nodeForTargetPeer[bid.Peer()]; ok {
-				if nodeForTargetPeer[bid.Peer()] != bid.NodeID() {
-					return false
-				}
-			}
-
-			// check that the peer has not already submitted a bid
-			peerID := bid.Peer()
-			if _, exclude := peerExclusion[peerID]; exclude {
-				log.Debugw("ignoring duplicate bid from peer",
-					"labels", []string{string(observability.LabelDeployment)},
-					"peerID", peerID)
-				return false
-			}
-
-			err := bid.Validate()
-			if err != nil {
-				log.Debugw("failed to validate bid",
-					"labels", []string{string(observability.LabelDeployment)},
-					"peerID", peerID,
-					"error", err)
-				return false
-			}
-
-			// verify that this is a node in the ensemble
-			nodeID := bid.NodeID()
-			if _, ok := o.cfg.Node(nodeID); !ok {
-				log.Debugw("ignoring bid for unknown node",
-					"labels", []string{string(observability.LabelDeployment)},
-					"peerID", peerID,
-					"nodeID", nodeID)
-				return false
-			}
-
-			// verify the location constraints of the node
-			loc := bid.Location()
-			if !o.acceptPeerLocation(nodeID, peerID, loc) {
-				log.Debugw("ignoring out-of-location bid",
-					"labels", []string{string(observability.LabelDeployment)},
-					"peerID", peerID,
-					"nodeID", nodeID)
-				return false
-			}
-
-			// don't bloat the permutation space
-			if len(bidMap[nodeID]) >= MaxBidMultiplier {
-				log.Debugw("node is saturated, ignoring new bid",
-					"labels", []string{string(observability.LabelDeployment)},
-					"peerID", peerID,
-					"nodeID", nodeID)
-				return false
-			}
-
-			log.Debugf("added bid to bitMap from peer %s for %s", peerID, nodeID)
-			bidMap[nodeID] = append(bidMap[nodeID], bid)
-			peerExclusion[peerID] = struct{}{}
-			return true
-		}
-
-		// remove bid from bidMap and peerExclusion
-		rmBid := func(bid jtypes.Bid) {
-			peerID := bid.Peer()
-			delete(peerExclusion, peerID)
-			nodeID := bid.NodeID()
-			bids := bidMap[nodeID]
-			for i, b := range bids {
-				if b.Peer() == peerID {
-					bidMap[nodeID] = append(bids[:i], bids[i+1:]...)
-					break
-				}
-			}
-		}
-
-		log.Debugf("collecting bids")
-		bidCh, bidDoneCh, bidExpiryTime, err := o.requestBids(bidrq, expiry)
-		if err != nil {
-			return fmt.Errorf("request bids: %w", err)
-		}
-
-		maxBids := MaxBidMultiplier * len(o.cfg.Nodes())
-		o.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
-
-		// 3. Create a candidate deployment
-		log.Debugw("creating candidate deployments",
-			"labels", []string{string(observability.LabelDeployment)},
-			"orchestratorID", o.id)
-		var (
-			nextCandidate func() (map[string]jtypes.Bid, bool)
-			ok            bool
-		)
-		for time.Now().Before(expiry) {
-			nextCandidate, ok = o.makeCandidateDeployments(bidMap)
-			if ok {
-				break
-			}
-
-			// we don't have bids for some of our nodes, so we don't have a candidate
-			// we need to make a residual bid request for the remaining nodes
-			// Note: in order to facilitate random selection, the residual bid requests
-			//       can drop some of the original bids
-			log.Debugw("not enough bids for all nodes, making residual request",
-				"labels", []string{string(observability.LabelDeployment)},
-				"orchestratorID", o.id)
-			bidrq, err := o.makeResidualBidRequest(bidMap, rmBid)
-			if err != nil {
-				return fmt.Errorf("creating residual bid request: %w", err)
-			}
-
-			bidCh, bidDoneCh, bidExpiryTime, err := o.requestBids(bidrq, expiry)
-			if err != nil {
-				return fmt.Errorf("collecting residual bids: %w", err)
-			}
-
-			maxBids := MaxBidMultiplier * (len(o.cfg.Nodes()) - len(bidMap))
-			o.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
-		}
-
-		if !ok {
-			log.Debugw("failed to create candidate deployments, retrying",
-				"labels", []string{string(observability.LabelDeployment)},
-				"orchestratorID", o.id)
-			continue deploy
-		}
-
-		for n, bids := range bidMap {
-			log.Infof("node %s has %d bids", n, len(bids))
-			for _, bid := range bids {
-				log.Infof("    bid from %s", bid.Peer())
-			}
-		}
-
-		// 4. Iterate through the candidates trying to find one that satisfies the
-		//    edge constraints
-		o.setStatus(jtypes.DeploymentStatusGenerating)
-
-		log.Debugf("generating candidate deployment")
-		var candidate map[string]jtypes.Bid
-		for time.Now().Before(expiry) {
-			candidate, ok = nextCandidate()
-			if !ok {
-				log.Debugf("failed to find candidate that satisfies edge constraints")
+			if errors.Is(err, ErrCandidateNotFound) {
+				log.Warnf("candidate deployment not found, redeploying: %v", err)
 				continue deploy
 			}
 
-			log.Debugf("candidate deployment: %+v", candidate)
-			if ok := o.verifyEdgeConstraints(candidate, edgeConstraintCache); !ok {
-				log.Debugf("candidate does not satisfy edge constraints")
-				continue
-			}
-
-			break
+			log.Errorf("failed to bid: %v", err)
 		}
 
-		// 5. Commit the deployment
-		o.setStatus(jtypes.DeploymentStatusCommitting)
-		o.deploymentSnapshot.Candidates = candidate
-
-		log.Infow("committing candidate bids",
-			"labels", []string{string(observability.LabelDeployment)},
-			"orchestratorID", o.id)
-		err = o.commit(candidate)
+		// 2. Commit the deployment
+		o.deploymentSnapshot.Candidates = candidateDeployment
+		manifest, err := o.commit(cfg, partialManifest, candidateDeployment)
 		if err != nil {
-			log.Warnw("commit failed",
+			log.Warnw("failed to commit deployment",
 				"labels", []string{string(observability.LabelDeployment)},
 				"orchestratorID", o.id,
 				"error", err)
 			continue deploy
 		}
 
-		// 6. provision the network and start the allocations
-		o.setStatus(jtypes.DeploymentStatusProvisioning)
-
-		log.Info("provisioning network")
-		if err := o.provision(); err != nil {
-			log.Errorw("network provisioning failed",
+		// 3. provision the network and start the allocations
+		if err := o.provision(cfg, manifest); err != nil {
+			log.Errorw("provisioning failed",
 				"labels", []string{string(observability.LabelDeployment)},
 				"error", err,
 				"orchestratorID", o.id)
 
 			o.lock.Lock()
-			o.revert(o.manifest)
+			o.revert(cfg, manifest)
 			o.lock.Unlock()
 			continue deploy
 		}
 
-		// We are done! start the supervisor return the manifest.
 		o.lock.Lock()
 		o.ctx, o.cancel = context.WithCancel(context.Background())
 		o.lock.Unlock()
 
-		log.Infof("deployment successful, starting supervisor",
-			"orchestratorID", o.id)
+		log.Infof("deployment successful")
 		o.setStatus(jtypes.DeploymentStatusRunning)
-		allocations := make(map[string]actor.Handle, len(o.manifest.Allocations))
-		for _, allocation := range o.manifest.Allocations {
-			allocations[allocation.ID] = allocation.Handle
-		}
 
 		return nil
 	}

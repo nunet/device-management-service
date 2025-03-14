@@ -83,19 +83,30 @@ func (f *basicRegistry) NewOrchestrator(
 }
 
 // restoreDeployment restores deployments where the status is either provisioning, committing or running
+// TODO: restore subnetManifest if necessary
 func restoreDeployment(
 	actr actor.Actor, id string,
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
 	status jtypes.DeploymentStatus, restoreInfo jtypes.DeploymentSnapshot,
 ) (Orchestrator, error) {
+	subnet, err := newSubnetManifest()
+	if err != nil {
+		return nil, err
+	}
+
 	o := &BasicOrchestrator{
 		id:                 id,
 		actor:              actr,
 		cfg:                cfg,
-		manifest:           manifest,
 		status:             status,
 		deploymentSnapshot: restoreInfo,
 		supervisor:         NewSupervisor(context.TODO(), actr, id),
+		subnetManifest:     subnet,
+	}
+
+	// TODO: manifest.Empty()
+	if manifest.ID == "" {
+		o.manifest = o.newManifest(cfg)
 	}
 
 	if o.status == jtypes.DeploymentStatusCommitting {
@@ -105,10 +116,10 @@ func restoreDeployment(
 			"orchestratorID", id,
 		)
 		for nodeID, bid := range restoreInfo.Candidates {
-			o.revertDeployment(nodeID, bid.Handle())
+			o.revertNodeDeployment(cfg, nodeID, bid.Handle())
 		}
 
-		return o, o.deploy(restoreInfo.Expiry)
+		return o, o.deploy(cfg, o.manifest, restoreInfo.Expiry)
 	}
 
 	if o.status == jtypes.DeploymentStatusProvisioning {
@@ -116,10 +127,10 @@ func restoreDeployment(
 			"labels", []string{string(observability.LabelDeployment)},
 			"orchestratorID", id,
 		)
-		if err := o.provision(); err != nil {
+		if err := o.provision(cfg, manifest); err != nil {
 			log.Errorf("failed to provision network: %s", err)
-			o.revert(manifest)
-			return o, o.deploy(restoreInfo.Expiry)
+			o.revert(cfg, manifest)
+			return o, o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
 		}
 
 		o.setStatus(jtypes.DeploymentStatusRunning)
@@ -131,7 +142,6 @@ func restoreDeployment(
 	for _, allocation := range manifest.Allocations {
 		allocations[allocation.ID] = allocation.Handle
 	}
-	o.manifest = manifest
 	go o.supervisor.Supervise(o.manifest)
 
 	return o, nil

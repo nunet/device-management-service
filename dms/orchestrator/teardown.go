@@ -175,8 +175,18 @@ type RevertDeploymentMessage struct {
 	AllocsByName []string
 }
 
-func (o *BasicOrchestrator) revertDeployment(n string, h actor.Handle) {
-	ncfg, _ := o.cfg.Node(n)
+func (o *BasicOrchestrator) revertNodeDeployment(
+	cfg jtypes.EnsembleConfig, n string, h actor.Handle,
+) {
+	defer func() {
+		o.removeNodeFromManifest(n)
+	}()
+
+	ncfg, ok := cfg.Node(n)
+	if !ok {
+		log.Warnf("revert node: failed to find node config for %s", n)
+		return
+	}
 
 	msg, err := actor.Message(
 		o.actor.Handle(),
@@ -203,11 +213,29 @@ func (o *BasicOrchestrator) revertDeployment(n string, h actor.Handle) {
 	}
 }
 
-func (o *BasicOrchestrator) revert(mf jtypes.EnsembleManifest) {
+func (o *BasicOrchestrator) revert(cfg jtypes.EnsembleConfig, mf jtypes.EnsembleManifest) {
 	log.Infow("reverting manifest",
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", mf.ID)
 	for n, nmf := range mf.Nodes {
-		o.revertDeployment(n, nmf.Handle)
+		o.revertNodeDeployment(cfg, n, nmf.Handle)
 	}
+}
+
+// removeNodeFromManifest removes the node from the manifest and its allocations
+func (o *BasicOrchestrator) removeNodeFromManifest(name string) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	n, ok := o.manifest.Nodes[name]
+	if !ok {
+		return
+	}
+	for _, a := range n.Allocations {
+		// TODO: be careful with redundancy
+		delete(o.manifest.Allocations, a)
+	}
+	delete(o.manifest.Nodes, name)
+
+	// TODO: remove from subnetManifest (Tables, IPs...)?
+	// maybe this will be handled somewhere else
 }
