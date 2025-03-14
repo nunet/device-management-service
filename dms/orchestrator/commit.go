@@ -28,7 +28,21 @@ import (
 //     feasible.
 //   - then create all the allocations for provisioning
 //   - if there are any failures, we need to revert this deployment and start anew
-func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
+
+// Note: do not rely on `o.cfg` orchestrator state. A parametrized config should be used
+//
+// TODO: maybe create a commit struct with the following methods so that it becomes impossible
+// to mess with orchestrator state
+func (o *BasicOrchestrator) commit(
+	cfg jtypes.EnsembleConfig,
+	manifest jtypes.EnsembleManifest,
+	candidate map[string]jtypes.Bid,
+) (jtypes.EnsembleManifest, error) {
+	o.setStatus(jtypes.DeploymentStatusCommitting)
+	log.Infow("committing candidate bids",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id)
+
 	var mx sync.Mutex
 
 	// Phase 1: commit
@@ -39,7 +53,7 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 	for n, bid := range candidate {
 		go func(n string, bid jtypes.Bid) {
 			defer wg1.Done()
-			err := o.commitDeployment(n, bid.Handle())
+			err := o.commitDeployment(cfg, n, bid.Handle())
 			mx.Lock()
 			if err != nil {
 				log.Errorw("commit resources error",
@@ -59,9 +73,9 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 	if !ok {
 		for _, n := range committed {
 			bid := candidate[n]
-			o.revertDeployment(n, bid.Handle())
+			o.revertNodeDeployment(cfg, n, bid.Handle())
 		}
-		return fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
+		return manifest, fmt.Errorf("failed to commit resources: %w", ErrDeploymentFailed)
 	}
 
 	// Phase 2: allocate
@@ -71,7 +85,7 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 	for n, bid := range candidate {
 		go func(n string, bid jtypes.Bid) {
 			defer wg2.Done()
-			allocated, err := o.allocate(n, bid.Handle())
+			allocated, err := o.allocate(cfg, n, bid.Handle())
 			mx.Lock()
 			if err != nil {
 				log.Errorw("allocation error",
@@ -92,9 +106,9 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 
 	if !ok {
 		for n, bid := range candidate {
-			o.revertDeployment(n, bid.Handle())
+			o.revertNodeDeployment(cfg, n, bid.Handle())
 		}
-		return fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
+		return manifest, fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
 	}
 
 	// There are certain details that are filled during provisioning, e.g. allocation
@@ -103,12 +117,14 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 	portsByAllocation := make(map[string][]jtypes.PortConfig)
 	for n, bid := range candidate {
 		// update manifest only if node already exists
-		o.lock.Lock()
-		if nmf, ok := o.manifest.Nodes[n]; ok {
+		if nmf, ok := manifest.Nodes[n]; ok {
 			nmf.Peer = bid.Peer()
 			nmf.Handle = bid.Handle()
 			nmf.Location = bid.Location()
-			o.manifest.Nodes[n] = nmf
+			manifest.Nodes[n] = nmf
+			// TODO: remove from here on the dynamic ensemble modification PR
+			// use diffs instead, after o.commit
+			o.updateNodeManifest(n, nmf)
 		} else {
 			nmf := jtypes.NodeManifest{
 				ID:       n,
@@ -116,11 +132,13 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 				Handle:   bid.Handle(),
 				Location: bid.Location(),
 			}
-			o.manifest.Nodes[n] = nmf
+			manifest.Nodes[n] = nmf
+			// TODO: remove from here on the dynamic ensemble modification PR
+			// use diffs instead, after o.commit
+			o.updateNodeManifest(n, nmf)
 		}
-		o.lock.Unlock()
 
-		if ncfg, ok := o.cfg.Node(n); ok {
+		if ncfg, ok := cfg.Node(n); ok {
 			for _, a := range ncfg.Allocations {
 				allocationNodes[a] = n
 				// TODO: optimize the manifest format and how node/alloc data is
@@ -134,24 +152,25 @@ func (o *BasicOrchestrator) commit(candidate map[string]jtypes.Bid) error {
 		}
 	}
 
-	for name := range o.cfg.Allocations() {
+	for name := range cfg.Allocations() {
 		allocPorts := make(map[int]int)
 		if ports, ok := portsByAllocation[name]; ok {
 			for _, pc := range ports {
 				allocPorts[pc.Public] = pc.Private
 			}
 		}
-		o.lock.Lock()
-		if alloc, ok := o.manifest.Allocations[name]; ok {
+		if alloc, ok := manifest.Allocations[name]; ok {
 			alloc.NodeID = allocationNodes[name]
 			alloc.Handle = allocations[name]
 			alloc.Ports = allocPorts
-			o.manifest.Allocations[name] = alloc
+			manifest.Allocations[name] = alloc
+			// TODO: remove from here on the dynamic ensemble modification PR
+			// use diffs instead, after o.commit
+			o.updateAllocationManifest(name, alloc)
 		}
-		o.lock.Unlock()
 	}
 
-	return nil
+	return manifest, nil
 }
 
 type CommitDeploymentRequest struct {
@@ -167,8 +186,8 @@ type CommitDeploymentResponse struct {
 	Error string
 }
 
-func (o *BasicOrchestrator) commitDeployment(n string, h actor.Handle) error {
-	ncfg, ok := o.cfg.Node(n)
+func (o *BasicOrchestrator) commitDeployment(cfg jtypes.EnsembleConfig, n string, h actor.Handle) error {
+	ncfg, ok := cfg.Node(n)
 	if !ok {
 		return fmt.Errorf("node %s not found", n)
 	}
@@ -190,7 +209,7 @@ func (o *BasicOrchestrator) commitDeployment(n string, h actor.Handle) error {
 		wg.Add(1)
 		go func(allocName string) {
 			defer wg.Done()
-			allocation, ok := o.cfg.V1.Allocations[allocName]
+			allocation, ok := cfg.V1.Allocations[allocName]
 			if !ok {
 				errCh <- fmt.Errorf("allocation %s not found: %w", allocName, ErrDeploymentFailed)
 				return
@@ -265,15 +284,15 @@ func (o *BasicOrchestrator) commitDeployment(n string, h actor.Handle) error {
 	return nil
 }
 
-func (o *BasicOrchestrator) allocate(n string, h actor.Handle) (map[string]actor.Handle, error) {
+func (o *BasicOrchestrator) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle) (map[string]actor.Handle, error) {
 	allocs := make(map[string]jtypes.AllocationDeploymentConfig)
-	ncfg, _ := o.cfg.Node(n)
+	ncfg, _ := cfg.Node(n)
 	for _, a := range ncfg.Allocations {
-		acfg, _ := o.cfg.Allocation(a)
+		acfg, _ := cfg.Allocation(a)
 
 		provisionScripts := make(map[string][]byte)
 		for _, p := range acfg.Provision {
-			provisionScripts[p] = o.cfg.V1.Scripts[p]
+			provisionScripts[p] = cfg.V1.Scripts[p]
 		}
 
 		allocs[a] = jtypes.AllocationDeploymentConfig{
@@ -385,4 +404,18 @@ func (o *BasicOrchestrator) grantOrchestratorCaps(alloc did.DID) error {
 		}
 	}()
 	return nil
+}
+
+func (o *BasicOrchestrator) updateNodeManifest(node string, manifest jtypes.NodeManifest) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	o.manifest.Nodes[node] = manifest
+}
+
+func (o *BasicOrchestrator) updateAllocationManifest(allocation string, manifest jtypes.AllocationManifest) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	o.manifest.Allocations[allocation] = manifest
 }
