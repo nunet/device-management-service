@@ -188,6 +188,7 @@ func (o *BasicOrchestrator) newManifest(
 	manifest := jtypes.EnsembleManifest{
 		ID:           o.id,
 		Orchestrator: o.actor.Handle(),
+		Metadata:     cfg.V1.Metadata,
 		Allocations:  make(map[string]jtypes.AllocationManifest),
 		Nodes:        make(map[string]jtypes.NodeManifest),
 	}

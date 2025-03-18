@@ -208,13 +208,45 @@ type DeploymentListResponse struct {
 	Deployments map[string]string
 }
 
+type DeploymentListRequest struct {
+	Metadata map[string]string
+}
+
 func (n *Node) handleDeploymentList(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorw("deployment_list_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		n.sendReply(msg, DeploymentListResponse{Deployments: make(map[string]string)})
+	}
+
+	var request DeploymentListRequest
 	var resp DeploymentListResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment list request: %s", err))
+		return
+	}
 
 	resp.Deployments = make(map[string]string)
 	for ID, dep := range n.orchestratorRegistry.Orchestrators() {
+		if len(request.Metadata) > 0 {
+			manifest := dep.Manifest()
+			shouldInclude := true
+
+			for k, v := range request.Metadata {
+				manifestValue, exists := manifest.Metadata[k]
+				if !exists || manifestValue != v {
+					shouldInclude = false
+					break
+				}
+			}
+			if !shouldInclude {
+				continue
+			}
+		}
 		resp.Deployments[ID] = jobtypes.DeploymentStatusString(dep.Status())
 	}
 

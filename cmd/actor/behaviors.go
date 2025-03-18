@@ -267,14 +267,27 @@ Examples:
 
 	// /dms/node/deployment/list
 	behaviors.DeploymentListBehavior: {
-		Type:  bInvoke,
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentListRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentListRequest)
+
+			cmd.Flags().StringToStringVarP(&p.Metadata, "filter", "f", nil, "metadata filter to filter deployments (optional)")
+		},
+		PayloadEnc: func(payload any) (any, error) {
+			req, ok := payload.(*node.DeploymentListRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+			return req, nil
+		},
 		Short: "List deployments",
 		Long: `Invokes the /dms/node/deployment/list behavior on an actor
 
 This behavior retrieves a list of all deployments on the node.
 
 Examples:
-  nunet actor cmd --context user /dms/node/deployment/list`,
+  nunet actor cmd --context user /dms/node/deployment/list --filter "<metadata_key>=<metadata_value>"`,
 	},
 
 	// /dms/node/deployment/status
