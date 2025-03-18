@@ -38,6 +38,7 @@ type EnsembleConfig struct {
 
 // EnsembleConfigV1 is version 1 of the configuration for an ensemble
 type EnsembleConfigV1 struct {
+	Metadata           map[string]string           `json:"metadata,omitempty"`   // metadata
 	EscalationStrategy EscalationStrategy          `json:"escalation_strategy"`  // escalation strategy (redeploy|teardown)
 	Allocations        map[string]AllocationConfig `json:"allocations"`          // (named) allocations in the ensemble
 	Nodes              map[string]NodeConfig       `json:"nodes"`                // (named) nodes in the ensemble

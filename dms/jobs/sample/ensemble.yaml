@@ -1,5 +1,8 @@
 version: "ensembleV1"
 
+metadata:
+  name: "test-ensemble"
+
 # Node definitions for edge constraints
 nodes:
   node1:
