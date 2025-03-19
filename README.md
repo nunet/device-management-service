@@ -102,6 +102,7 @@ We currently support Linux and MacOS (Darwin).
 ##### Linux only
 
 - iproute2 (linux only)
+- gcc
 - build-essential (linux only)
 - libsystemd-dev (linux only)
 - go (v1.21.7 or later)
