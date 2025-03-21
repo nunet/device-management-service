@@ -500,6 +500,44 @@ func (n *Node) doGCBidState() {
 	}
 }
 
+func (n *Node) geolocate() {
+	log.Infow("geolocation_initiated",
+		"labels", []string{string(observability.LabelNode)},
+	)
+
+	ip, err := n.network.HostPublicIP()
+	if err != nil {
+		log.Errorw("failed to get host public IP: %v", err)
+		return
+	}
+
+	if ip == nil {
+		log.Errorw("host public IP is nil")
+		return
+	}
+
+	location, err := geolocation.Geolocate(ip, n.geoIP)
+	if err != nil {
+		log.Errorw("failed to geolocate host: %v", err)
+		return
+	}
+
+	n.lock.Lock()
+	n.hostLocation = geolocation.Geolocation{
+		Continent: location.Continent,
+		Country:   location.Country,
+		City:      location.City,
+	}
+	n.lock.Unlock()
+
+	log.Infow("geolocation_successful",
+		"labels", []string{string(observability.LabelNode)},
+		"continent", location.Continent,
+		"country", location.Country,
+		"city", location.City,
+	)
+}
+
 // Start node
 func (n *Node) Start() error {
 	log.Infow("node_start_initiated",
@@ -520,6 +558,7 @@ func (n *Node) Start() error {
 
 	n.running.Store(true)
 	go n.gcBidState()
+	go n.geolocate()
 
 	log.Infow("node_started_successfully",
 		"labels", []string{string(observability.LabelNode)})

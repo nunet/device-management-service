@@ -10,7 +10,6 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -61,6 +60,17 @@ func (n *Node) bidAnswered(eid string, nonce uint64) bool {
 		}
 	}
 	return false
+}
+
+func (n *Node) location() jobtypes.Location {
+	n.lock.RLock()
+	defer n.lock.RUnlock()
+
+	return jobtypes.Location{
+		Continent: n.hostLocation.Continent,
+		Country:   n.hostLocation.Country,
+		City:      n.hostLocation.City,
+	}
 }
 
 func (n *Node) handleBidRequest(msg actor.Envelope) {
@@ -221,32 +231,12 @@ loop:
 		"labels", []string{string(observability.LabelDeployment)},
 		"providerDID", provider.DID())
 
-	var location jobtypes.Location
-	if n.hostLocation.Empty() {
-		ip, err := n.network.HostPublicIP()
-		if err != nil {
-			log.Debugf("(geolocation) bid request: failed to get host public ip: %w", err)
-		}
-
-		loc, err := geolocation.Geolocate(ip, n.geoIP)
-		if err != nil {
-			log.Debugf("bid request: failed to geolocate node: %w", err)
-		}
-		location = loc
-	} else {
-		location = jobtypes.Location{
-			City:      n.hostLocation.City,
-			Country:   n.hostLocation.Country,
-			Continent: n.hostLocation.Continent,
-		}
-	}
-
 	bid := jobtypes.Bid{
 		V1: &jobtypes.BidV1{
 			EnsembleID: request.ID,
 			NodeID:     toAnswer.V1.NodeID,
 			Peer:       n.hostID,
-			Location:   location,
+			Location:   n.location(),
 			Handle:     n.actor.Handle(),
 		},
 	}

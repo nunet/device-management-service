@@ -21,8 +21,9 @@ type Geolocation struct {
 	City      string
 }
 
+// TODO: Add city check when we have GeoIP database with cities
 func (g *Geolocation) Empty() bool {
-	return g.Continent == "" && g.Country == "" && g.City == ""
+	return g.Continent == "" && g.Country == ""
 }
 
 func Geolocate(ip net.IP, geoIP types.GeoIPLocator) (jobtypes.Location, error) {

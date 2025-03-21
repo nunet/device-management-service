@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -106,7 +107,9 @@ type Libp2p struct {
 	discoveredPeers []peer.AddrInfo
 	discovery       libp2pdiscovery.Discovery
 
-	observedAddr multiaddr.Multiaddr
+	// channel to signal when a public IP address has been confirmed
+	observedAddrCh chan multiaddr.Multiaddr
+	observedAddr   multiaddr.Multiaddr
 
 	// services
 	pingService *ping.PingService
@@ -152,6 +155,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		sendSemaphore:     make(chan struct{}, sendSemaphoreLimit),
 		fs:                fs,
 		subnets:           make(map[string]*subnet),
+		observedAddrCh:    make(chan multiaddr.Multiaddr, 1), // buffer of 1 to avoid blocking
 	}, nil
 }
 
@@ -574,22 +578,7 @@ func (l *Libp2p) GetPeerIP(p PeerID) string {
 	return ""
 }
 
-// TODO: implementation would be better if we had a libp2p event to get the observable address from identify protocol
-// the observable address is ephemeral and disappears after a while from id service initialization
-// that's why an event would be appropriate
 func (l *Libp2p) watchForObservedAddr() {
-	// 1. assume node has public reachability and
-	// search on listening addresses
-	for _, addr := range l.Host.Addrs() {
-		if manet.IsPublicAddr(addr) {
-			l.mx.Lock()
-			l.observedAddr = addr
-			l.mx.Unlock()
-			log.Debugf("observed public address: %s", addr)
-			return
-		}
-	}
-
 	sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
 	if err != nil {
 		log.Debugf("could not subscribe to event: %w", err)
@@ -608,39 +597,46 @@ func (l *Libp2p) watchForObservedAddr() {
 			continue
 		}
 
-		// skip peers without public ip
-		hasPublicAddr := false
-		for _, addr := range event.ListenAddrs {
-			if manet.IsPublicAddr(addr) {
-				hasPublicAddr = true
-				break
-			}
-		}
-		if !hasPublicAddr {
+		// peer that reported the event
+		isPeerPublic := slices.ContainsFunc(event.ListenAddrs, manet.IsPublicAddr)
+		if !isPeerPublic {
 			continue
 		}
 
-		addrStr := event.ObservedAddr.String()
+		if !manet.IsPublicAddr(event.ObservedAddr) {
+			continue
+		}
 		// skip relays
+		addrStr := event.ObservedAddr.String()
 		if strings.Contains(addrStr, "p2p-circuit") {
 			continue
 		}
-		if !manet.IsPublicAddr(event.ObservedAddr) {
+
+		ip, err := manet.ToIP(event.ObservedAddr)
+		if err != nil {
 			continue
 		}
 
 		addrMux.Lock()
-		addrCount[addrStr]++
-		count := addrCount[addrStr]
+		addrCount[ip.String()]++
+		count := addrCount[ip.String()]
 		addrMux.Unlock()
 
-		log.Debugf("got public addr: %s (seen %d times)", addrStr, count)
+		log.Debugf("got public ip: %s (seen %d times)", ip.String(), count)
 
 		if count >= 3 {
 			l.mx.Lock()
 			l.observedAddr = event.ObservedAddr
 			l.mx.Unlock()
 			log.Debugf("confirmed public address after seeing it %d times: %s", count, addrStr)
+
+			// send the observed address on the channel
+			select {
+			case l.observedAddrCh <- event.ObservedAddr:
+				log.Debugf("sent observed address signal: %s", addrStr)
+			default:
+				log.Debugf("channel full, couldn't send observed address signal: %s", addrStr)
+			}
 			return
 		}
 	}
@@ -1113,7 +1109,32 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 }
 
 func (l *Libp2p) HostPublicIP() (net.IP, error) {
-	return manet.ToIP(l.observedAddr)
+	addr, err := l.WaitForObservedAddr(l.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve observed addr: %w", err)
+	}
+	return manet.ToIP(addr)
+}
+
+// WaitForObservedAddr waits for the node to confirm its public IP address
+// Returns the observed multiaddress or an error if the context expires
+func (l *Libp2p) WaitForObservedAddr(ctx context.Context) (multiaddr.Multiaddr, error) {
+	// if we already have an observed address, return it immediately
+	l.mx.Lock()
+	if l.observedAddr != nil {
+		addr := l.observedAddr
+		l.mx.Unlock()
+		return addr, nil
+	}
+	l.mx.Unlock()
+
+	// otherwise wait for the signal
+	select {
+	case addr := <-l.observedAddrCh:
+		return addr, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (l *Libp2p) VisiblePeers() []peer.AddrInfo {
