@@ -222,6 +222,25 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 		return fmt.Errorf("could not get machine resources: %w", err)
 	}
 
+	{
+		gpuCount := len(machineResources.Resources.GPUs)
+		log.Infow("machine_hardware_resources",
+			"labels", []string{string(observability.LabelNode)},
+			"cpuCores", machineResources.Resources.CPU.Cores,
+			"ramGB", machineResources.Resources.RAM.SizeInGB(),
+			"gpuCount", gpuCount,
+		)
+		for idx, gpu := range machineResources.Resources.GPUs {
+			log.Infow("machine_hardware_gpu",
+				"labels", []string{string(observability.LabelNode)},
+				"gpuIndex", gpu.Index,
+				"gpuModel", gpu.Model,
+				"gpuVramGB", gpu.VRAMInGB(),
+				"gpuLogIndex", idx, // just to see the loop index
+			)
+		}
+	}
+
 	if err := validateCapacity(config.OnboardedResources, machineResources.Resources); err != nil {
 		return fmt.Errorf("%w: %v", ErrUnmetCapacity, err)
 	}
@@ -230,6 +249,26 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 	if err != nil {
 		return fmt.Errorf("could not get system free resources: %w", err)
 	}
+
+	{
+		gpuCount := len(systemFreeResources.GPUs)
+		log.Infow("machine_free_resources",
+			"labels", []string{string(observability.LabelNode)},
+			"freeCpuCores", systemFreeResources.CPU.Cores,
+			"freeRamGB", systemFreeResources.RAM.SizeInGB(),
+			"freeGpuCount", gpuCount,
+		)
+		for idx, gpu := range systemFreeResources.GPUs {
+			log.Infow("machine_free_gpu",
+				"labels", []string{string(observability.LabelNode)},
+				"gpuIndex", gpu.Index,
+				"gpuModel", gpu.Model,
+				"gpuVramGB", gpu.VRAMInGB(),
+				"gpuLogIndex", idx,
+			)
+		}
+	}
+
 	if err := validateUsage(config.OnboardedResources, systemFreeResources); err != nil {
 		return fmt.Errorf("%w: %v", ErrHighUsage, err)
 	}
@@ -251,6 +290,14 @@ func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig)
 	if err := o.ResourceManager.UpdateOnboardedResources(ctx, config.OnboardedResources); err != nil {
 		return types.OnboardingConfig{}, fmt.Errorf("could not update onboarded resources: %w", err)
 	}
+
+	log.Infow("onboarded_resources_assigned",
+		"labels", []string{string(observability.LabelNode)},
+		"cpuCoresAssigned", config.OnboardedResources.CPU.Cores,
+		"ramGBAssigned", config.OnboardedResources.RAM.SizeInGB(),
+		"diskMBAssigned", config.OnboardedResources.Disk.Size/(1024.0*1024.0),
+		"gpuCountAssigned", len(config.OnboardedResources.GPUs),
+	)
 
 	config.IsOnboarded = true
 	if _, err := o.ConfigRepo.Save(ctx, config); err != nil {

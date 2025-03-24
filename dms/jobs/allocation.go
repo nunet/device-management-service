@@ -1,11 +1,3 @@
-// Copyright 2024, Nunet
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
-
 package jobs
 
 import (
@@ -145,7 +137,7 @@ func (a *Allocation) GetPortMapping() map[int]int {
 	return ports
 }
 
-// Run creates the executor based on th e execution engine configuration.
+// Run creates the executor based on the execution engine configuration.
 func (a *Allocation) Run(
 	ctx context.Context, subnetIP string,
 	gatewayIP string, portMapping map[int]int,
@@ -206,6 +198,15 @@ func (a *Allocation) Run(
 	}
 
 	a.status = AllocationRunning
+
+	// NEW: Log the resources we've assigned for this run
+	log.Infow("allocation_run_started",
+		"labels", []string{string(observability.LabelAllocation)},
+		"allocationID", a.ID,
+		"cpuCoresAssigned", a.Job.Resources.CPU.Cores,
+		"ramGBAssigned", a.Job.Resources.RAM.SizeInGB(),
+		"gpuCountAssigned", len(a.Job.Resources.GPUs),
+	)
 
 	if a.allocType == jobtypes.AllocationTypeTask {
 		go a.handleExecutionExit(ctx)
