@@ -18,46 +18,34 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/cmd"
-
-	"gitlab.com/nunet/device-management-service/dms/node"
-
 	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
+	"gitlab.com/nunet/device-management-service/cmd"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
 type Client struct {
-	afero      afero.Afero
-	httpClient *utils.HTTPClient
-	cfg        *config.Config
+	afero afero.Afero
+	cfg   *config.Config
 }
 
 func newClient(t *testing.T, cfg *config.Config) *Client {
 	t.Helper()
 	afs := afero.Afero{Fs: afero.NewOsFs()}
 
-	client := utils.NewHTTPClient(
-		fmt.Sprintf("http://%s:%d",
-			cfg.Rest.Addr,
-			cfg.Rest.Port),
-		"/api/v1",
-	)
-
 	return &Client{
-		afero:      afs,
-		httpClient: client,
-		cfg:        cfg,
+		afero: afs,
+		cfg:   cfg,
 	}
 }
 
 func (c *Client) newCommandCtx() *cobra.Command {
-	return cmd.NewRootCMD(c.httpClient, c.afero, c.cfg)
+	return cmd.NewRootCMD(c.afero, c.cfg)
 }
 
 func (c *Client) newKey(t *testing.T, identity, passphrase string) {

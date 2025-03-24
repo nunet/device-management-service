@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/client"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
@@ -38,10 +39,9 @@ type Payload struct {
 type behaviorConfig struct {
 	Behavior    string
 	Type        string
-	Topic       string
 	Payload     func() any
-	PayloadEnc  func(payload any) (any, error)
 	SetFlags    func(cmd *Command, payload any)
+	Run         func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error)
 	PreRunE     func(cmd *Command, payload any) error
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
@@ -64,11 +64,14 @@ type CapAnchorRequestCmd struct {
 var registeredBehaviors = map[string]behaviorConfig{
 	// /public/hello
 	behaviors.PublicHelloBehavior: {
-		Type:  bInvoke,
-		Short: "Broadcast a 'hello' message",
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.Hello(cmd.Context(), msgOpts...)
+		},
+		Short: "Invoke a 'hello' message",
 		Long: `Invoke the /public/hello behavior on an actor
 
-This behavior broadcasts a "hello" for a polite introduction.
+This behavior invokes a "hello" for a polite introduction.
 
 Examples:
 
@@ -78,8 +81,9 @@ Examples:
 	// /broadcast/hello
 	behaviors.BroadcastHelloBehavior: {
 		Type: bBroadcast,
-
-		Topic: behaviors.BroadcastHelloTopic,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.BroadcastHello(cmd.Context(), msgOpts...)
+		},
 		Short: "Broadcast a 'hello' message to a topic",
 		Long: `Invokes the /broadcast/hello behavior on an actor
 
@@ -91,7 +95,10 @@ Examples:
 	},
 	// /public/status
 	behaviors.PublicStatusBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.Status(cmd.Context(), msgOpts...)
+		},
 		Short: "Retrieve actor status",
 		Long: `Invokes the /public/status behavior on an actor
 
@@ -103,7 +110,10 @@ Examples:
 	},
 	// /dms/node/peers/list
 	behaviors.PeersListBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.PeersList(cmd.Context(), msgOpts...)
+		},
 		Short: "List connected peers",
 		Long: `Invokes the /dms/node/peers/list behavior on an actor
 
@@ -115,7 +125,10 @@ Examples:
 	},
 	// /dms/node/peers/self
 	behaviors.PeerAddrInfoBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.PeersSelf(cmd.Context(), msgOpts...)
+		},
 		Short: "Get peer's ID and addresses",
 		Long: `Invokes the /dms/node/peers/self behavior on an actor
 
@@ -135,12 +148,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.Host, "host", "H", "", "host address to ping (required)")
 			_ = cmd.MarkFlagRequired("host")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.PingRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.PeerPing(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Ping a peer",
 		Long: `Invokes the /dms/node/peers/ping behavior on an actor
@@ -171,12 +184,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.Address, "address", "a", "", "peer address to connect to (required)")
 			_ = cmd.MarkFlagRequired("address")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.PeerConnectRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.PeerConnect(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Connect to a peer",
 		Long: `Invokes the /dms/node/peers/connect behavior on an actor
@@ -188,7 +201,10 @@ Examples:
 	},
 	// /dms/node/peers/score
 	behaviors.PeerScoreBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.PeerScore(cmd.Context(), msgOpts...)
+		},
 		Short: "Retrieves gossipsub broadcast score",
 		Long: `Invokes the /dms/node/peers/score behavior on an actor
 
@@ -213,7 +229,7 @@ Examples:
 			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
 		PreRunE: onboardBehaviorPreRun,
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.OnboardRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -222,7 +238,7 @@ Examples:
 			// convert RAM and Disk from GB to bytes
 			req.Config.OnboardedResources.RAM.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.RAM.Size)
 			req.Config.OnboardedResources.Disk.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.Disk.Size)
-			return req, nil
+			return cli.Onboard(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Onboard a node to the network",
 		Long: `Invokes the /dms/node/onboarding/onboard behavior on an actor
@@ -234,15 +250,10 @@ Examples:
 	},
 	// /dms/node/onboarding/offboard
 	behaviors.OffboardBehavior: {
-		Type:     bInvoke,
-		Payload:  func() any { return &node.OffboardRequest{} },
-		SetFlags: func(_ *cobra.Command, _ any) {},
-		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.OffboardRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-			return req, nil
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			req := node.OffboardRequest{}
+			return cli.Offboard(cmd.Context(), req, msgOpts...)
 		},
 		Short: "Offboard a node from the network",
 		Long: `Invokes the /dms/node/onboarding/offboard behavior on an actor
@@ -255,7 +266,10 @@ Examples:
 	},
 	// /dms/node/onboarding/status
 	behaviors.OnboardStatusBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.OnboardStatus(cmd.Context(), msgOpts...)
+		},
 		Short: "Retrieve onboarding status of a node",
 		Long: `Invokes the /dms/node/onboarding/status behavior on an actor
 
@@ -274,12 +288,12 @@ Examples:
 
 			cmd.Flags().StringToStringVarP(&p.Metadata, "filter", "f", nil, "metadata filter to filter deployments (optional)")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentListRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentList(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "List deployments",
 		Long: `Invokes the /dms/node/deployment/list behavior on an actor
@@ -299,12 +313,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentStatusRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentStatus(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Get deployment status",
 		Long: `Invokes the /dms/node/deployment/status behavior on an actor
@@ -326,12 +340,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("id")
 			_ = cmd.MarkFlagRequired("allocation")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentLogsRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentLogs(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Get deployment logs",
 		Long: `Invokes the /dms/node/deployment/logs behavior on an actor
@@ -352,12 +366,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentManifestRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentManifest(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Get deployment manifest",
 		Long: `Invokes the /dms/node/deployment/manifest behavior on an actor
@@ -377,12 +391,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentShutdownRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentShutdown(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Shutdown a deployment",
 		Long: `Invokes the /dms/node/deployment/shutdown behavior on an actor
@@ -407,10 +421,10 @@ Examples:
 			p := payload.(*NewDeploymentRequestCmd)
 			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file (required)")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*NewDeploymentRequestCmd)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
 			data, err := os.ReadFile(req.Config)
 			if err != nil {
@@ -442,7 +456,7 @@ Examples:
 
 			}
 
-			return cfg, nil
+			return cli.DeploymentNew(cmd.Context(), *cfg, msgOpts...)
 		},
 	},
 
@@ -455,13 +469,12 @@ Examples:
 			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*orchestrator.SubnetCreateRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetCreate(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Create a subnet",
@@ -481,13 +494,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*orchestrator.SubnetDestroyRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetDestroy(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Destroy a subnet",
@@ -511,13 +523,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("peer-id")
 			_ = cmd.MarkFlagRequired("ip")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetAddPeerRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetAddPeer(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Add a peer to a subnet",
@@ -539,13 +550,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("peer-id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetRemovePeerRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetRemovePeer(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Remove a peer from a subnet",
@@ -569,13 +579,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("peer-id")
 			_ = cmd.MarkFlagRequired("ip")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetAcceptPeerRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetAcceptPeer(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Accept a peer to a subnet",
@@ -604,13 +613,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("dest-ip")
 			_ = cmd.MarkFlagRequired("dest-port")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetMapPortRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetMapPort(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Map a port",
@@ -639,13 +647,12 @@ Examples:
 
 			p.Records = map[string]string{domainName: ip}
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetDNSAddRecordsRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetDNSAddRecords(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Add a DNS record",
@@ -674,13 +681,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("dest-ip")
 			_ = cmd.MarkFlagRequired("dest-port")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetUnmapPortRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetUnmapPort(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Unmap a port",
@@ -702,13 +708,13 @@ Examples:
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("name")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetDNSRemoveRecordRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
 
-			return req, nil
+			return cli.SubnetDNSRemoveRecord(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Remove a DNS record",
@@ -722,7 +728,10 @@ Examples:
 	},
 
 	behaviors.ResourcesAllocatedBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.ResourcesAllocated(cmd.Context(), msgOpts...)
+		},
 		Short: "Get allocated resources",
 		Long: `Invokes the /dms/node/resources/allocated behavior on an actor
 
@@ -734,7 +743,10 @@ Examples:
 	},
 
 	behaviors.ResourcesFreeBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.ResourcesFree(cmd.Context(), msgOpts...)
+		},
 		Short: "Get free resources",
 		Long: `Invokes the /dms/node/resources/free behavior on an actor
 
@@ -746,7 +758,10 @@ Examples:
 	},
 
 	behaviors.ResourcesOnboardedBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.ResourcesOnboarded(cmd.Context(), msgOpts...)
+		},
 		Short: "Get onboarded resources",
 		Long: `Invokes the /dms/node/resources/onboarded behavior on an actor
 
@@ -768,27 +783,28 @@ Examples:
 			cmd.Flags().StringVar(&p.APIKey, "api-key", "", "API Key for Elasticsearch and APM")
 			cmd.Flags().StringVar(&p.APMURL, "apm-url", "", "APM Server URL")
 			cmd.Flags().Bool("enable-elastic", false, "Enable Elasticsearch logging")
-
-			// PreRunE function to capture if 'enable-elastic' flag was provided
-			cmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
-				flag := cmd.Flags().Lookup("enable-elastic")
-				if flag != nil && flag.Changed {
-					val, err := strconv.ParseBool(flag.Value.String())
-					if err != nil {
-						return fmt.Errorf("invalid value for --enable-elastic: %v", err)
-					}
-					p.ElasticEnabled = &val
-				}
-				return nil
-			}
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		PreRunE: func(cmd *cobra.Command, payload any) error {
+			p, ok := payload.(*node.LoggerConfigRequest)
+			if !ok {
+				return fmt.Errorf("failed to decode payload")
+			}
+			flag := cmd.Flags().Lookup("enable-elastic")
+			if flag != nil && flag.Changed {
+				val, err := strconv.ParseBool(flag.Value.String())
+				if err != nil {
+					return fmt.Errorf("invalid value for --enable-elastic: %v", err)
+				}
+				p.ElasticEnabled = &val
+			}
+			return nil
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.LoggerConfigRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.LoggerConfig(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Adjust logger settings",
@@ -806,7 +822,10 @@ Examples:
   nunet actor cmd --context user /dms/node/logger/config --enable-elastic`,
 	},
 	behaviors.HardwareSpecBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.HardwareSpec(cmd.Context(), msgOpts...)
+		},
 		Short: "Get hardware specifications",
 		Long: `Invokes the /dms/node/hardware/spec behavior on an actor
 
@@ -817,7 +836,10 @@ Examples:
 	nunet actor cmd --context user /dms/node/hardware/spec`,
 	},
 	behaviors.HardwareUsageBehavior: {
-		Type:  bInvoke,
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.HardwareUsage(cmd.Context(), msgOpts...)
+		},
 		Short: "Get hardware usage",
 		Long: `Invokes the /dms/node/hardware/usage behavior on an actor
 
@@ -829,12 +851,19 @@ Examples:
 	},
 	behaviors.CapListBehavior: {
 		Type:    bInvoke,
-		Short:   "List capabilities",
 		Payload: func() any { return &node.CapListRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.CapListRequest)
 			cmd.Flags().StringVarP(&p.Context, "context", "c", "", "context name")
 		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*node.CapListRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return cli.CapList(cmd.Context(), *req, msgOpts...)
+		},
+		Short: "List capabilities",
 		Long: `Invokes the /dms/cap/list behavior on an actor
 
 This behavior retrieves a list of capabilities available on the node.
@@ -853,10 +882,10 @@ Examples:
 			cmd.Flags().BoolVarP(&p.Revoke, "revoke", "", false, "add revoke anchor")
 			cmd.Flags().StringVarP(&p.Data, "data", "", "", "capability token or DID to anchor")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*CapAnchorRequestCmd)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
 
 			request := &node.CapAnchorRequest{
@@ -902,7 +931,7 @@ Examples:
 				request.Revoke.Tokens = append(request.Revoke.Tokens, &token)
 			}
 
-			return request, nil
+			return cli.CapAnchor(cmd.Context(), *request, msgOpts...)
 		},
 		Short: "Add capability anchors",
 		Long: `Invokes the /dms/cap/anchor behavior on an actor

@@ -16,12 +16,12 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/client"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
-func newActorMsgCmd(client *dmsUtils.HTTPClient, afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newActorMsgCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	fnDest := "dest"
 	fnBroadcast := "broadcast"
 	fnTimeout := "timeout"
@@ -51,15 +51,29 @@ Example:
 			behavior := args[0]
 			payload := args[1]
 
-			dmsHandle, err := getDMSHandle(client)
+			// Create security context first
+			sctx, err := utils.NewSecurityContext(afs, contextName, cfg)
 			if err != nil {
-				return fmt.Errorf("could not get source handle: %w", err)
+				return fmt.Errorf("could not create security context: %w", err)
 			}
 
-			msg, err := newActorMessage(afs, dmsHandle, destStr, topic, behavior, payload, timeout, expiry, invocation, contextName, cfg)
+			// Now call newClient with the correct arguments
+			cli, err := utils.NewClient(cfg, sctx)
+			if err != nil {
+				return fmt.Errorf("could not create client: %w", err)
+			}
+
+			msg, err := cli.NewActorMessage(cmd.Context(), behavior, payload, client.MessageOptions{
+				Destination:  destStr,
+				Topic:        topic,
+				Timeout:      timeout,
+				Expiry:       expiry,
+				IsInvocation: invocation,
+			})
 			if err != nil {
 				return fmt.Errorf("could not create message: %w", err)
 			}
+
 			msgData, err := json.Marshal(msg)
 			if err != nil {
 				return err
