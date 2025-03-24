@@ -12,13 +12,15 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/utils"
+	"gitlab.com/nunet/device-management-service/cmd/utils"
+	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
-func newActorBroadcastCmd(client *utils.HTTPClient) *cobra.Command {
+func newActorBroadcastCmd(_ afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "broadcast <msg>",
 		Short: "Broadcast a message",
@@ -33,15 +35,21 @@ If a topic is specified in the message's payload, the message will be published 
 				return fmt.Errorf("could not unmarshal message: %w", err)
 			}
 
-			resBody, resCode, err := client.MakeRequest(cmd.Context(), "POST", "/actor/broadcast", []byte(args[0]))
-			fmt.Fprintln(cmd.OutOrStdout(), string(resBody))
+			cli, err := utils.NewClient(cfg, nil)
 			if err != nil {
-				return fmt.Errorf("unable to make internal request: %w", err)
-			}
-			if resCode != 200 {
-				return fmt.Errorf("request failed with status code: %d", resCode)
+				return fmt.Errorf("could not create client: %w", err)
 			}
 
+			res, err := cli.BroadcastMessageRaw(cmd.Context(), msg)
+			if err != nil {
+				return fmt.Errorf("could not broadcast message: %w", err)
+			}
+
+			for _, r := range res {
+				if err := displayResponse(cmd, r); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}

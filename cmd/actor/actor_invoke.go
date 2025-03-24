@@ -12,14 +12,16 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/utils"
+	"gitlab.com/nunet/device-management-service/cmd/utils"
+	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
 // NewActorInvokeCmd is a constructor for `actor invoke` subcommand
-func newActorInvokeCmd(client *utils.HTTPClient) *cobra.Command {
+func newActorInvokeCmd(_ afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "invoke <msg>",
 		Short: "Invoke a behaviour in an actor and return the result",
@@ -35,16 +37,17 @@ func newActorInvokeCmd(client *utils.HTTPClient) *cobra.Command {
 				return fmt.Errorf("missing replyTo field in message")
 			}
 
-			resBody, resCode, err := client.MakeRequest(cmd.Context(), "POST", "/actor/invoke", []byte(args[0]))
-			fmt.Fprintln(cmd.OutOrStdout(), string(resBody))
+			cli, err := utils.NewClient(cfg, nil)
 			if err != nil {
-				return fmt.Errorf("unable to make internal request: %w", err)
-			}
-			if resCode != 200 {
-				return fmt.Errorf("request failed with status code: %d", resCode)
+				return fmt.Errorf("could not create client: %w", err)
 			}
 
-			return nil
+			res, err := cli.InvokeBehaviorRaw(cmd.Context(), msg)
+			if err != nil {
+				return fmt.Errorf("could not invoke behaviour: %w", err)
+			}
+
+			return displayResponse(cmd, res.Message)
 		},
 	}
 	return cmd

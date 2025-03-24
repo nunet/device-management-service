@@ -11,14 +11,14 @@ package cmd
 import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+
 	"gitlab.com/nunet/device-management-service/cmd/actor"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
 // NewRootCMD returns the cmds
-func NewRootCMD(client *utils.HTTPClient, afs afero.Afero, cfg *config.Config) *cobra.Command {
+func NewRootCMD(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "nunet",
 		Short: "NuNet Device Management Service",
@@ -37,11 +37,16 @@ func NewRootCMD(client *utils.HTTPClient, afs afero.Afero, cfg *config.Config) *
 	cmd.AddCommand(newRunCmd(cfg))
 	cmd.AddCommand(newKeyCmd(afs, cfg))
 	cmd.AddCommand(cap.NewCapCmd(afs, cfg))
-	cmd.AddCommand(actor.NewActorCmd(client, afs, cfg))
+	cmd.AddCommand(actor.NewActorCmd(afs, cfg))
 	cmd.AddCommand(newConfigCmd(afs.Fs, cfg))
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
 
 	cmd.AddCommand(newGPUCommand())
 	return cmd
+}
+
+func Execute(cfg *config.Config) {
+	afs := afero.Afero{Fs: afero.NewOsFs()}
+	cobra.CheckErr(NewRootCMD(afs, cfg).Execute())
 }
