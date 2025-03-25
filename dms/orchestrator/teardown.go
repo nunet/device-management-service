@@ -39,6 +39,8 @@ type AllocationStopResponse struct {
 }
 
 func (o *BasicOrchestrator) Shutdown() {
+	allocStatuses := make(map[string]jtypes.AllocationStatus)
+
 	o.setStatus(jtypes.DeploymentStatusShuttingDown)
 	o.lock.Lock()
 
@@ -48,6 +50,11 @@ func (o *BasicOrchestrator) Shutdown() {
 
 	defer func() {
 		o.lock.Unlock()
+		// set alloc statuses
+		for allocName, status := range allocStatuses {
+			o.updateAllocationStatus(allocName, status)
+		}
+		// set orchestrator status
 		o.setStatus(jtypes.DeploymentStatusCompleted)
 		if o.cancel != nil {
 			o.cancel()
@@ -117,7 +124,7 @@ func (o *BasicOrchestrator) Shutdown() {
 	wg.Wait()
 
 	wg = sync.WaitGroup{}
-	for _, alloc := range o.manifest.Allocations {
+	for allocName, alloc := range o.manifest.Allocations {
 		wg.Add(1)
 		go func(h actor.Handle, allocID string) {
 			defer wg.Done()
@@ -161,6 +168,7 @@ func (o *BasicOrchestrator) Shutdown() {
 				return
 			}
 			log.Infof("allocation %s stopped", allocID)
+			allocStatuses[allocName] = jtypes.AllocationCompleted
 		}(o.manifest.Nodes[alloc.NodeID].Handle, alloc.ID)
 	}
 
