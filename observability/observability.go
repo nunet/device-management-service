@@ -97,7 +97,12 @@ func initLogger(observabilityConfig config.Observability) error {
 		return nil
 	}
 
-	// Parse the global log level
+	// 1. Check if GOLOG_LOG_LEVEL is set. If so, let that override any config-based level
+	if envLogLevel := os.Getenv("GOLOG_LOG_LEVEL"); envLogLevel != "" {
+		observabilityConfig.LogLevel = envLogLevel
+	}
+
+	// 2. Parse the final log level string
 	logLevel, err := parseLogLevel(observabilityConfig.LogLevel)
 	if err != nil {
 		return fmt.Errorf("invalid log level: %w", err)
