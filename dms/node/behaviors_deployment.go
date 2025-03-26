@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
@@ -135,10 +136,29 @@ func (n *Node) saveDeployment(orchestrator orchestrator.Orchestrator) error {
 		PrivKey:            pkRaw,
 	}
 
-	_, err = n.orchestratorRepo.Create(n.ctx, view)
-	if err != nil {
-		return fmt.Errorf("save deployment on database: %w", err)
+	q := n.orchestratorRepo.GetQuery()
+	q.Conditions = append(q.Conditions,
+		repositories.EQ("OrchestratorID", orchestrator.ID()),
+	)
+	orchView, err := n.orchestratorRepo.Find(n.ctx, q)
+	// NOTE: what we're doing here is basically UpInsert, not
+	// very supported by Clover as we can not define custom IDs
+	if errors.Is(err, repositories.ErrNotFound) {
+		// record does not exist, create it
+		_, err = n.orchestratorRepo.Create(n.ctx, view)
+		if err != nil {
+			return fmt.Errorf("save deployment on database: %w", err)
+		}
+	} else {
+		// record already exists, update it
+		_, err = n.orchestratorRepo.Update(n.ctx, orchView.ID, view)
+		if err != nil {
+			return fmt.Errorf("save deployment on database: %w", err)
+		}
 	}
+
+	log.Debugf("deployment %s of status %s saved", view.OrchestratorID,
+		jobtypes.DeploymentStatusString(view.Status))
 
 	return nil
 }
