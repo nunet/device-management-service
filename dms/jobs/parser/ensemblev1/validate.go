@@ -70,11 +70,19 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 		return fmt.Errorf("at least one allocation must be defined")
 	}
 
-	// All allocation names must be fully qualified domain names
+	allocationNames := make(map[string]string)
 	for allocName := range allocs {
+		// All allocation names must be fully qualified domain names
 		if !vutils.IsDNSNameValid(allocName) {
 			return fmt.Errorf("invalid allocation name, must be a valid hostname: %s", allocName)
 		}
+
+		// Check for duplicate allocation names (case-insensitive)
+		lowerName := strings.ToLower(allocName)
+		if originalName, exists := allocationNames[lowerName]; exists {
+			return fmt.Errorf("duplicate allocation names found: '%s' and '%s'", originalName, allocName)
+		}
+		allocationNames[lowerName] = allocName
 	}
 
 	// check for cyclic dependencies
@@ -87,6 +95,63 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 	if edges, ok := spec["edges"].([]any); ok && len(edges) > 0 {
 		if spec["nodes"] == nil {
 			return fmt.Errorf("nodes must be defined when edge_constraints are present")
+		}
+	}
+
+	// Check that no allocation is present in multiple nodes and that dependencies are in the same node
+	if nodes, ok := spec["nodes"].(map[string]any); ok && len(nodes) > 0 {
+		// Create a map to track which node each allocation belongs to
+		allocToNode := make(map[string]string)
+
+		// Build the allocation-to-node map
+		for nodeName, nodeConfig := range nodes {
+			nodeMap, ok := nodeConfig.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			nodeAllocs, ok := nodeMap["allocations"].([]any)
+			if !ok {
+				continue
+			}
+
+			for _, alloc := range nodeAllocs {
+				allocName, ok := alloc.(string)
+				if !ok {
+					continue
+				}
+
+				// Check if this allocation is already assigned to another node
+				if existingNode, exists := allocToNode[allocName]; exists {
+					return fmt.Errorf("allocation '%s' is assigned to multiple nodes ('%s' and '%s'): an allocation can only be assigned to one node", allocName, existingNode, nodeName)
+				}
+
+				// Record this allocation's node
+				allocToNode[allocName] = nodeName
+
+				// Check dependencies immediately
+				allocConfig, ok := allocs[allocName].(map[string]any)
+				if !ok {
+					continue // Should never happen
+				}
+
+				dependencies, ok := allocConfig["depends_on"].([]any)
+				if !ok {
+					continue
+				}
+
+				for _, dep := range dependencies {
+					depName, ok := dep.(string)
+					if !ok {
+						continue
+					}
+
+					// Check if the dependency is in the same node
+					if !slices.Contains(nodeAllocs, dep) {
+						return fmt.Errorf("allocation '%s' depends on '%s', but '%s' is not in the same node: dependent allocations must be in the same node", allocName, depName, depName)
+					}
+				}
+			}
 		}
 	}
 
@@ -407,6 +472,11 @@ func ValidateNode(root *map[string]any, data any, _ tree.Path) error {
 			// Validate private port
 			if private, ok := portMap["private"].(int); !ok || private <= 0 {
 				return fmt.Errorf("port must have a valid private port number")
+			}
+
+			// Require public port when private port is specified
+			if _, ok := portMap["public"].(int); !ok {
+				return fmt.Errorf("public port must be specified when private port is defined")
 			}
 
 			// Validate public port

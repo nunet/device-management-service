@@ -76,6 +76,22 @@ func TestValidateSpec(t *testing.T) {
 			errorMsg: "at least one allocation must be defined",
 		},
 		{
+			// Duplicate allocation names (case-insensitive) should be rejected
+			name: "duplicate allocation names",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type": "service",
+					},
+					"Alloc1": map[string]any{
+						"type": "service",
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "duplicate allocation names found",
+		},
+		{
 			// When edges exist, nodes field must be present (empty nodes map is valid)
 			// Actual node references will be validated at a later stage
 			name: "edges with empty nodes map",
@@ -151,6 +167,98 @@ func TestValidateSpec(t *testing.T) {
 			},
 			wantErr:  true,
 			errorMsg: "cyclic dependencies detected",
+		},
+		{
+			// allocation assigned to multiple nodes
+			name: "allocation assigned to multiple nodes",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type": "service",
+					},
+					"alloc2": map[string]any{
+						"type": "service",
+					},
+				},
+				"nodes": map[string]any{
+					"node1": map[string]any{
+						"allocations": []any{"alloc1"},
+					},
+					"node2": map[string]any{
+						"allocations": []any{"alloc1", "alloc2"},
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "allocation 'alloc1' is assigned to multiple nodes",
+		},
+		{
+			// dependent allocations in different nodes
+			name: "dependent allocations in different nodes",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type":       "service",
+						"depends_on": []any{"alloc2"},
+					},
+					"alloc2": map[string]any{
+						"type": "service",
+					},
+				},
+				"nodes": map[string]any{
+					"node1": map[string]any{
+						"allocations": []any{"alloc1"},
+					},
+					"node2": map[string]any{
+						"allocations": []any{"alloc2"},
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "allocation 'alloc1' depends on 'alloc2', but 'alloc2' is not in the same node",
+		},
+		{
+			// valid configuration with dependencies in the same node
+			name: "valid configuration with dependencies in the same node",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type":       "service",
+						"depends_on": []any{"alloc2"},
+					},
+					"alloc2": map[string]any{
+						"type": "service",
+					},
+				},
+				"nodes": map[string]any{
+					"node1": map[string]any{
+						"allocations": []any{"alloc1", "alloc2"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			// valid configuration with dependency not in any node
+			name: "valid configuration with dependency not in any node",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type":       "service",
+						"depends_on": []any{"alloc2"},
+					},
+					"alloc2": map[string]any{
+						"type": "service",
+					},
+				},
+				"nodes": map[string]any{
+					"node1": map[string]any{
+						"allocations": []any{"alloc1"},
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "allocation 'alloc1' depends on 'alloc2', but 'alloc2' is not in the same node",
 		},
 	}
 
@@ -1269,6 +1377,23 @@ func TestValidateNode(t *testing.T) {
 			expectError: false,
 		},
 		{
+			// Missing public port when private port is specified
+			name: "missing public port",
+			node: map[string]any{
+				"failure_recovery": defautNodeFailureStrategy,
+				"ports": []any{
+					map[string]any{
+						"private":    8080,
+						"allocation": "alloc1",
+					},
+				},
+			},
+			root:        map[string]any{},
+			path:        tree.NewPath("nodes", "node1"),
+			expectError: true,
+			errorMsg:    "public port must be specified when private port is defined",
+		},
+		{
 			// Invalid port number
 			name: "invalid port number",
 			node: map[string]any{
@@ -2155,10 +2280,32 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 							"failure_recovery": "one_for_all",
 							"depends_on":       []any{"alloc1"},
 						},
+						"alloc3": map[string]any{
+							"type":     "service",
+							"executor": "docker",
+							"execution": map[string]any{
+								"type": "docker",
+								"params": map[string]any{
+									"image": "nginx:latest",
+								},
+							},
+							"resources": map[string]any{
+								"cpu": map[string]any{
+									"cores": 1,
+								},
+								"ram": map[string]any{
+									"size": 2048,
+								},
+								"disk": map[string]any{
+									"size": 5000,
+								},
+							},
+							"failure_recovery": "one_for_one",
+						},
 					},
 					"nodes": map[string]any{
 						"node1": map[string]any{
-							"allocations": []any{"alloc1"},
+							"allocations": []any{"alloc1", "alloc2"},
 							"location": map[string]any{
 								"accept": []any{
 									map[string]any{
@@ -2184,7 +2331,7 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 							"failure_recovery": "restart",
 						},
 						"node2": map[string]any{
-							"allocations": []any{"alloc2"},
+							"allocations": []any{"alloc3"},
 							"location": map[string]any{
 								"accept": []any{
 									map[string]any{
@@ -2208,12 +2355,19 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 						"allocations": []any{
 							"alloc1",
 							"alloc2",
+							"alloc3",
 						},
 						"children": []any{
 							map[string]any{
 								"strategy": "AllForOne",
 								"allocations": []any{
 									"alloc2",
+								},
+							},
+							map[string]any{
+								"strategy": "OneForOne",
+								"allocations": []any{
+									"alloc3",
 								},
 							},
 						},
