@@ -13,7 +13,7 @@ import (
 func New(t *storage.VoumeTracker, sc types.VolumeConfig) (types.Mounter, error) {
 	switch sc.Type {
 	case "glusterfs":
-		return glusterfs.New(t, sc.Servers, sc.Name, sc.SSLCert, sc.SSLKey, sc.SSLCa)
+		return glusterfs.New(t, sc.Servers, sc.Name)
 	case "local":
 		return localfs.New(sc.Path)
 	default:

@@ -51,3 +51,49 @@ gluster volume start nunet_vol
 sudo mount -t glusterfs ${hostname}:/nunet_vol /mnt
 ```
 
+
+## Authentication using TLS
+
+Generate a private key:
+```
+openssl genrsa -out /etc/ssl/glusterfs.key 2048
+```
+
+Generate a Certificate Signing Request (CSR)
+Fill out the details (ensure Common Name (CN) matches the hostname).
+```
+openssl req -new -key /etc/ssl/glusterfs.key -out /etc/ssl/glusterfs.csr
+```
+
+Generate a Self-Signed Certificate
+
+```
+openssl x509 -req -days 365 -in /etc/ssl/glusterfs.csr -signkey /etc/ssl/glusterfs.key -out /etc/ssl/glusterfs.pem
+```
+
+```
+cp /etc/ssl/glusterfs.pem /etc/ssl/glusterfs.ca
+```
+
+set permissions:
+
+```
+chmod 600 /etc/ssl/glusterfs.*
+chown gluster:gluster /etc/ssl/glusterfs.*
+```
+
+set volumes:
+
+```
+sudo gluster volume set <volname> client.ssl on
+sudo gluster volume set <volname> server.ssl on
+sudo gluster volume set <volname> auth.ssl-allow '*'
+```
+
+
+
+client: 
+```
+mount -t glusterfs -o transport=tcp,ssl,servercert=/etc/ssl/glusterfs.ca <gluster-node>:/<volname> /mnt/glusterfs
+```
+

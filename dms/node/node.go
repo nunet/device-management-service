@@ -37,6 +37,7 @@ import (
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -107,6 +108,10 @@ type Node struct {
 	// db state
 	orchestratorRepo repositories.OrchestratorView
 
+	// volume controller
+	volumeController controller.GlusterControllerInterface
+	volumeOwners     map[string]string // mapping volume name with did
+
 	// utils
 	orchestratorRegistry orchestrator.Registry
 	dmsConfig            config.Config
@@ -150,6 +155,7 @@ func New(cfg config.Config, fs afero.Afero,
 	orchestratorRepo repositories.OrchestratorView,
 	geoIP types.GeoIPLocator, hostLocation geolocation.Geolocation,
 	portConfig PortConfig, vt *storage.VoumeTracker,
+	volumeController controller.GlusterControllerInterface,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -223,6 +229,8 @@ func New(cfg config.Config, fs afero.Afero,
 		hostLocation:         hostLocation,
 		dmsConfig:            cfg,
 		fs:                   fs,
+		volumeController:     volumeController,
+		volumeOwners:         make(map[string]string),
 	}
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
@@ -465,6 +473,15 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		},
 		behaviors.CommitDeploymentBehavior: {
 			fn: n.handleCommitDeployment,
+		},
+		behaviors.VolumeCreateBehavior: {
+			fn: n.handleCreateVolume,
+		},
+		behaviors.VolumeDeleteBehavior: {
+			fn: n.handleDeleteVolume,
+		},
+		behaviors.VolumeStartBehavior: {
+			fn: n.handleStartVolume,
 		},
 	}
 

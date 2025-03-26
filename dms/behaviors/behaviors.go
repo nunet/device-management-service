@@ -43,6 +43,10 @@ const (
 	HardwareSpecBehavior       = "/dms/node/hardware/spec"
 	HardwareUsageBehavior      = "/dms/node/hardware/usage"
 
+	VolumeCreateBehavior = "/dms/node/volume/create"
+	VolumeDeleteBehavior = "/dms/node/volume/delete"
+	VolumeStartBehavior  = "/dms/node/volume/start"
+
 	LoggerConfigBehavior = "/dms/node/logger/config"
 
 	CapListBehavior   = "/dms/cap/list"

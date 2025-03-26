@@ -61,7 +61,107 @@ type CapAnchorRequestCmd struct {
 	Data    string
 }
 
+type CreateVolumeRequestCmd struct {
+	ClientPEMFile string
+	VolumeName    string
+}
+
 var registeredBehaviors = map[string]behaviorConfig{
+	// /dms/node/volume/create
+	behaviors.VolumeCreateBehavior: {
+		Payload: func() any { return &CreateVolumeRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CreateVolumeRequestCmd)
+			cmd.Flags().StringVarP(&p.VolumeName, "name", "n", "", "name (required)")
+			cmd.Flags().StringVarP(&p.ClientPEMFile, "client-pem-file", "c", "", "client-pem-file (required)")
+
+			_ = cmd.MarkFlagRequired("name")
+			_ = cmd.MarkFlagRequired("client-pem")
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*CreateVolumeRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			data, err := os.ReadFile(req.ClientPEMFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read config file: %w", err)
+			}
+
+			cfg := &node.CreateVolumeRequest{
+				Name:      req.VolumeName,
+				ClientPEM: string(data),
+			}
+
+			return cli.CreateVolume(cmd.Context(), *cfg, msgOpts...)
+		},
+		Type:  bInvoke,
+		Short: "Send a create volume message",
+		Long: `Invoke the /dms/node/volume/create behavior on an actor
+	
+	This behavior calls the actors create volume behaviour.
+	
+	Examples:
+	
+	  nunet actor cmd --context user /dms/node/volume/create --name <volname> --client-pem-file <filename>`,
+	},
+	// /dms/node/volume/delete
+	behaviors.VolumeDeleteBehavior: {
+		Payload: func() any { return &node.DeleteVolumeRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeleteVolumeRequest)
+
+			cmd.Flags().StringVarP(&p.Name, "name", "n", "", "name (required)")
+
+			_ = cmd.MarkFlagRequired("name")
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*node.DeleteVolumeRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return cli.DeleteVolume(cmd.Context(), *req, msgOpts...)
+		},
+		Type:  bInvoke,
+		Short: "Send a delete volume message",
+		Long: `Invoke the /dms/node/volume/delete behavior on an actor
+		
+		This behavior calls the actors delete volume behaviour.
+		
+		Examples:
+		
+		  nunet actor cmd --context user /dms/node/volume/delete --name <volname>`,
+	},
+	// /dms/node/volume/start
+	behaviors.VolumeStartBehavior: {
+		Payload: func() any { return &node.StartVolumeRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.StartVolumeRequest)
+
+			cmd.Flags().StringVarP(&p.Name, "name", "n", "", "name (required)")
+
+			_ = cmd.MarkFlagRequired("name")
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*node.StartVolumeRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return cli.StartVolume(cmd.Context(), *req, msgOpts...)
+		},
+		Type:  bInvoke,
+		Short: "Send a start volume message",
+		Long: `Invoke the /dms/node/volume/start behavior on an actor
+		
+		This behavior calls the actors start volume behaviour.
+		
+		Examples:
+		
+		  nunet actor cmd --context user /dms/node/volume/start --name <volname>`,
+	},
 	// /public/hello
 	behaviors.PublicHelloBehavior: {
 		Type: bInvoke,
