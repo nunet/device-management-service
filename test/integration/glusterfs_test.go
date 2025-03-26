@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -85,20 +83,6 @@ func runGlusterContainer() error {
 	}
 
 	fmt.Println("Container started successfully with ID:", resp.ID)
-
-	srcPath := filepath.Join(getCurrentFileDirectory(), "dms")
-
-	err = copyToContainer(srcPath, resp.ID, "/home/dms")
-	if err != nil {
-		return fmt.Errorf("failed to copy binary to container: %w", err)
-	}
-
-	dataDirNodeSrcPath := filepath.Join(getCurrentFileDirectory(), "testdata", "dms3")
-
-	err = copyToContainer(dataDirNodeSrcPath, resp.ID, "/home/data")
-	if err != nil {
-		return fmt.Errorf("failed to copy binary to container: %w", err)
-	}
 
 	return nil
 }
@@ -192,19 +176,6 @@ func pullGlusterImage() error {
 	}
 	defer out.Close()
 	fmt.Println("Image pulled successfully.")
-	return nil
-}
-
-// TODO: use docker SDK. The copying functionality wasnt working thats why i used the cmd directly.
-func copyToContainer(srcPath string, containerID string, destPath string) error {
-	cmd := exec.Command("docker", "cp", srcPath, containerID+":"+destPath)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to copy to container: %v, output: %s", err, output)
-	}
-
-	fmt.Println("Successfully copied", srcPath, "to container", containerID, "at", destPath)
 	return nil
 }
 

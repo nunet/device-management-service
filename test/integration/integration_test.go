@@ -15,6 +15,7 @@ package itest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,11 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/internal"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 
 	"gitlab.com/nunet/device-management-service/types"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/suite"
 
@@ -42,25 +41,43 @@ const (
 // TestSuite defines our end-to-end test suite.
 type TestSuite struct {
 	suite.Suite
-	shutdownCh chan struct{}
 
 	currentDir     string
 	testDataDir    string
 	bootstrapPeers []string
 	nodes          map[int]*mockNode
 	grantTokens    map[int]map[int]string // map[nodeIndex]map[otherNodeIndex]grantToken
-
-	// glusternode
-	glusterDMSDID string
 }
 
 var dmsTestSuite = new(TestSuite)
 
+type prefixWriter struct {
+	prefix string
+	w      io.Writer
+}
+
+func (pw *prefixWriter) Write(p []byte) (n int, err error) {
+	lines := strings.Split(string(p), "\n")
+	for i, line := range lines {
+		if line != "" {
+			if _, err := fmt.Fprintf(pw.w, "%s%s", pw.prefix, line); err != nil {
+				return 0, err
+			}
+		}
+		if i < len(lines)-1 {
+			if _, err := fmt.Fprintln(pw.w); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(p), nil
+}
+
 func (suite *TestSuite) startNode(index int) {
-	fmt.Println("Starting node", index)
+	suite.T().Logf("Starting node%d", index)
 	node, ok := suite.nodes[index]
-	require.True(suite.T(), ok)
-	require.NotNil(suite.T(), node)
+	suite.Require().True(ok)
+	suite.Require().NotNil(node)
 
 	// save config to a file
 	configPath := filepath.Join(suite.currentDir, node.rootDir, "dms_config.json")
@@ -69,13 +86,14 @@ func (suite *TestSuite) startNode(index int) {
 	jsonData, err := json.MarshalIndent(node.config, "", "  ")
 	suite.Require().NoError(err)
 	err = os.WriteFile(configPath, jsonData, 0o644)
-	require.NoError(suite.T(), err)
+	suite.Require().NoError(err)
 
 	binaryPath := filepath.Join(suite.currentDir, binaryName)
 	cmd := exec.Command(binaryPath, "run", "--config", filepath.Join(suite.currentDir, node.rootDir, "dms_config.json"), "--context", node.dmsContext)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("GOLOG_LOG_LEVEL=%s", "debug"), fmt.Sprintf("DMS_PASSPHRASE=%s", node.password))
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	prefix := fmt.Sprintf("[node-%d] ", index)
+	cmd.Stdout = &prefixWriter{prefix: prefix, w: os.Stdout}
+	cmd.Stderr = &prefixWriter{prefix: prefix, w: os.Stderr}
 
 	// Start the node process.
 	err = cmd.Start()
@@ -87,16 +105,14 @@ func (suite *TestSuite) startNode(index int) {
 
 	// Start a goroutine to wait for shutdown.
 	go func() {
-		select {
-		case <-internal.ShutdownChan: // Assuming you close this channel on shutdown.
-			_ = cmd.Process.Kill()
-			os.Exit(1)
-		case <-suite.shutdownCh:
-			_ = cmd.Wait()
-		}
+		<-node.shutdownCh
+		_ = cmd.Process.Kill()
 	}()
 
 	suite.T().Logf("started node %d with pid %d", index, cmd.Process.Pid)
+
+	err = cmd.Wait()
+	suite.T().Logf("node %d exited with error: %v", index, err)
 }
 
 // setupGlusterfsServer creates a glusterfs server env
@@ -117,10 +133,7 @@ func (suite *TestSuite) setupTestNetwork() {
 		p2pPortIndex  = 10689
 	)
 
-	// we want to setup one more node which will be on the gluster container
-	tmpNodes := NumNodes + 1
-
-	for i := 0; i < tmpNodes; i++ {
+	for i := 0; i < NumNodes; i++ {
 		rootDir := fmt.Sprintf("testdata/dms%d", i)
 		password := fmt.Sprintf("password%d", i)
 		nodeConfig := createConfig(rootDir, uint32(restPortIndex), fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", p2pPortIndex), []string{})
@@ -129,12 +142,6 @@ func (suite *TestSuite) setupTestNetwork() {
 
 		restPortIndex++
 		p2pPortIndex++
-
-		suite.T().Logf("FOR NODE %d we have DMSDID %s USERDID %s", i, suite.nodes[nodeIndex].dmsDID, suite.nodes[nodeIndex].userDID)
-
-		if i == tmpNodes-1 {
-			suite.glusterDMSDID = suite.nodes[nodeIndex].dmsDID
-		}
 	}
 
 	suite.T().Logf("setting up caps")
@@ -173,65 +180,79 @@ func (suite *TestSuite) setupTestNetwork() {
 		node.client.anchor(suite.T(), delegateToken, node.dmsContext, "provide", node.password)
 	}
 
-	suite.T().Logf("starting bootstrap node")
-
-	// delete the last node suite.nodes because it will be uploaded to the gluster container
-	// and wont be started locally
-	delete(suite.nodes, 3)
-
-	// create and run bootstrap node
-	bootstrapNode := suite.nodes[0]
-	suite.startNode(0)
-
-	var (
-		networkStats types.NetworkStats
-		err          error
-	)
-	suite.Require().Eventually(func() bool {
-		networkStats, err = bootstrapNode.client.self(suite.T(), bootstrapNode.dmsContext, bootstrapNode.password)
-		return err == nil
-	}, 15*time.Second, 3*time.Second, "Expected bootstrap node to be ready")
-
-	bootstrapAddr := make([]string, 0)
-	addrs := strings.Split(networkStats.ListenAddr, ", ")
-	for _, a := range addrs {
-		bootstrapAddr = append(bootstrapAddr, fmt.Sprintf("%s/p2p/%s", a, networkStats.ID)) // TODO: use better converter
-	}
-	suite.Require().NoError(err)
-	suite.Require().Len(bootstrapAddr, 1)
-	suite.bootstrapPeers = bootstrapAddr
-
 	suite.T().Logf("creating network")
-	// start the other nodes
-	for i, node := range suite.nodes {
-		if i == 0 {
-			continue
-		}
-
-		// set the bootstrap peer
-		if len(suite.bootstrapPeers) == 0 {
-			suite.T().Fatalf("bootstrap peers not found")
-		}
+	for i := 0; i < len(suite.nodes); i++ {
+		node := suite.nodes[i]
 		node.config.BootstrapPeers = suite.bootstrapPeers
+
 		go suite.startNode(i)
+		// wait for the node to be ready
+		var (
+			networkStats types.NetworkStats
+			err          error
+		)
+		suite.Require().Eventually(func() bool {
+			networkStats, err = node.client.self(suite.T(), node.dmsContext, node.password)
+			return err == nil && networkStats.ID != ""
+		}, 15*time.Second, 3*time.Second, "Expected node %s to be ready", node.index)
+
+		node.peerID = networkStats.ID
+		suite.T().Logf("node %d peerID: %s", node.index, node.peerID)
+
+		// We add all the nodes except the last one to the bootstrap peers to ensure that the network is connected.
+		if i != NumNodes-1 {
+			bootstrapAddr := make([]string, 0)
+			addrs := strings.Split(networkStats.ListenAddr, ", ")
+			for _, a := range addrs {
+				bootstrapAddr = append(bootstrapAddr, fmt.Sprintf("%s/p2p/%s", a, networkStats.ID))
+			}
+
+			suite.bootstrapPeers = append(suite.bootstrapPeers, bootstrapAddr...)
+		}
 	}
 
 	suite.T().Logf("waiting for the network to be ready")
-
 	suite.Require().Eventually(func() bool {
-		resp, err := bootstrapNode.client.peers(suite.T(), bootstrapNode.dmsContext, bootstrapNode.password)
-		suite.Require().NoError(err)
-		return len(resp.Peers) == NumNodes
-	}, 120*time.Second, 10*time.Second, fmt.Sprintf("Expected %d known peers within the timeout", NumNodes))
+		expectedPeers := make(map[string]struct{})
+		for _, node := range suite.nodes {
+			expectedPeers[node.peerID] = struct{}{}
+		}
+
+		suite.T().Logf("expected peers: %v", expectedPeers)
+
+		for _, node := range suite.nodes {
+			resp, err := node.client.peers(suite.T(), node.dmsContext, node.password)
+			if err != nil {
+				suite.T().Logf("Error fetching peers for node %d: %v", node.index, err)
+				return false
+			}
+
+			suite.T().Logf("peers for node %d: %v", node.index, resp.Peers)
+
+			// ensure that it has all peers by checking their peerID
+			peerCount := 0
+			for _, peer := range resp.Peers {
+				if _, ok := expectedPeers[peer.String()]; ok {
+					peerCount++
+				}
+			}
+
+			if peerCount != NumNodes {
+				suite.T().Logf("Node %d has not found all peers yet", node.index)
+				return false
+			}
+		}
+		return true
+	}, 120*time.Second, 2*time.Second, fmt.Sprintf("Expected all %d nodes to have %d peers within timeout", NumNodes, NumNodes-1))
 
 	suite.T().Logf("network is ready. Connecting peers ...")
 
 	// connect all the nodes in the network
-	for _, node := range suite.nodes {
-		for _, otherNode := range suite.nodes {
-			if node.index == otherNode.index {
-				continue
-			}
+	time.Sleep(5 * time.Second)
+	for i, node := range suite.nodes {
+		for j := i + 1; j < len(suite.nodes); j++ {
+			suite.T().Logf("connecting node %d to node %d", i, j)
+			otherNode := suite.nodes[j]
 
 			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
 			suite.Require().NoError(err)
@@ -250,19 +271,12 @@ func (suite *TestSuite) SetupSuite() {
 	suite.nodes = make(map[int]*mockNode)
 	suite.currentDir = getCurrentFileDirectory()
 	suite.testDataDir = filepath.Join(suite.currentDir, "testdata")
-	suite.shutdownCh = make(chan struct{})
 	suite.Require().NotEmpty(suite.currentDir)
 }
 
 // TearDownSuite runs once after all tests are complete.
 func (suite *TestSuite) TearDownSuite() {
-	suite.T().Log("cleaning up")
-
-	// send shutdown signal
-	suite.shutdownCh <- struct{}{}
-	close(suite.shutdownCh)
-
-	// TODO: stop the processes
+	suite.T().Log("stopping nodes")
 	for _, node := range suite.nodes {
 		data, err := os.ReadFile(filepath.Join(suite.currentDir, node.rootDir, "proc.pid"))
 		if err != nil {
@@ -276,14 +290,26 @@ func (suite *TestSuite) TearDownSuite() {
 			continue
 		}
 
-		err = killProcess(int32(pid))
-		if err != nil {
-			suite.T().Logf("cant p kill: %d : %v", pid, err)
+		// Get process handle
+		proc := getProc(int32(pid))
+		if proc == nil {
+			suite.T().Logf("process %d not found", pid)
+			continue
 		}
+
+		// Send kill signal
+		node.shutdownCh <- struct{}{}
+
+		// Wait for process to actually terminate with timeout
+		suite.Require().Eventually(func() bool {
+			if exists, _ := proc.IsRunning(); !exists {
+				return true
+			}
+			return false
+		}, 10*time.Second, 100*time.Millisecond, fmt.Sprintf("process %d not terminated", pid))
 	}
 
-	// clean up the directories.
-	_ = os.RemoveAll(filepath.Join(suite.currentDir, "testdata", "dms3"))
+	suite.T().Logf("cleaning up directories")
 	for _, node := range suite.nodes {
 		err := os.RemoveAll(filepath.Join(suite.currentDir, node.rootDir))
 		if err != nil {
@@ -292,6 +318,8 @@ func (suite *TestSuite) TearDownSuite() {
 	}
 
 	_ = deleteGlusterContainer()
+
+	suite.T().Logf("teardown complete")
 }
 
 // TestBasic performs basic tests to ensure the setup is correct.
@@ -310,14 +338,65 @@ func (suite *TestSuite) BasicTests() {
 
 // DeploymentTest runs the deployment tests.
 func (suite *TestSuite) DeploymentTest() {
-	// setup glusterfs
-
-	suite.T().Run("must be able to deploy nginx demo", func(_ *testing.T) {
+	suite.Run("must be able to deploy nginx demo with storage", func() {
 		// deploy nginx.yaml to node1 using node2's orchestrator
 		node1 := suite.nodes[0]
 		hostname, err := os.Hostname()
 		suite.Require().NoError(err)
-		srcFile := filepath.Join(suite.testDataDir, "nginx.yaml")
+		srcFile := filepath.Join(suite.testDataDir, "ensembles", "nginx-storage.yaml")
+		destinationFile := filepath.Join(node1.config.WorkDir, "nginx-storage.yaml")
+		err = copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+		err = replaceHostnameInFile(destinationFile, hostname)
+		suite.Require().NoError(err)
+
+		freeResourcesBefore, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
+		suite.Require().NoError(err)
+
+		// Deploy nginx.yaml from node2's orchestrator.
+		node2 := suite.nodes[1]
+		deploymentResult := node2.client.deploy(suite.T(), node2.userContext, node2.password, filepath.Join(node1.config.WorkDir, "nginx-storage.yaml"))
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		// Wait until the deployment status is "Running".
+		suite.Require().Eventually(func() bool {
+			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
+			suite.T().Log("Deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusRunning)
+		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+		time.Sleep(2 * time.Second)
+
+		// Ensure resources are allocated.
+		freeResourcesDuring, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
+		suite.Require().NoError(err)
+		suite.False(freeResourcesDuring.Equal(freeResourcesBefore))
+
+		// TODO: check port mapping
+
+		// Shutdown the nginx deployment.
+		shutdownRes := node2.client.shutdownDeployment(suite.T(), node2.userContext, node2.password, manifestID)
+		suite.Contains(shutdownRes, `"Error": ""`)
+
+		// wait for the ensemble to be shutdown
+		suite.Require().Eventually(func() bool {
+			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
+			suite.T().Log("deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusCompleted)
+		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+
+		// Ensure resources are freed.
+		freeResourcesAfter, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
+		suite.Require().NoError(err)
+		suite.True(freeResourcesAfter.Equal(freeResourcesBefore))
+	})
+
+	suite.Run("must be able to deploy nginx demo", func() {
+		// deploy nginx.yaml to node1 using node2's orchestrator
+		node1 := suite.nodes[0]
+		hostname, err := os.Hostname()
+		suite.Require().NoError(err)
+		srcFile := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
 		destinationFile := filepath.Join(node1.config.WorkDir, "nginx.yaml")
 		err = copyFile(srcFile, destinationFile)
 		suite.Require().NoError(err)
@@ -337,7 +416,7 @@ func (suite *TestSuite) DeploymentTest() {
 		suite.Require().Eventually(func() bool {
 			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
 			suite.T().Log("Deployment status:", extractStatus(status))
-			return extractStatus(status) == "Running"
+			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusRunning)
 		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
 		time.Sleep(2 * time.Second)
 
@@ -352,27 +431,40 @@ func (suite *TestSuite) DeploymentTest() {
 		shutdownRes := node2.client.shutdownDeployment(suite.T(), node2.userContext, node2.password, manifestID)
 		suite.Contains(shutdownRes, `"Error": ""`)
 
+		// wait for the ensemble to be shutdown
+		suite.Require().Eventually(func() bool {
+			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
+			suite.T().Log("deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusCompleted)
+		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+
 		// Ensure resources are freed.
 		freeResourcesAfter, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
 		suite.Require().NoError(err)
 		suite.True(freeResourcesAfter.Equal(freeResourcesBefore))
 	})
 
-	suite.T().Run("must be able to deploy docker hello-world", func(_ *testing.T) {
+	suite.Run("must be able to deploy docker hello-world", func() {
 		node2 := suite.nodes[1]
-		deployment2Result := node2.client.deploy(suite.T(), node2.userContext, node2.password, filepath.Join(suite.testDataDir, "hello.yaml"))
+		deployment2Result := node2.client.deploy(suite.T(), node2.userContext, node2.password, filepath.Join(suite.testDataDir, "ensembles", "hello.yaml"))
 		suite.Contains(deployment2Result, `"Status": "OK"`)
-		manifest2ID := extractEnsembleID(deployment2Result)
+		manifestID := extractEnsembleID(deployment2Result)
 		suite.Require().Eventually(func() bool {
-			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifest2ID)
+			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
 			suite.T().Log("Second deployment status:", extractStatus(status))
-			return extractStatus(status) == "Running"
+			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusRunning)
 		}, 60*time.Second, 5*time.Second, "Hello-world deployment did not reach Running status")
 
 		// Shutdown the hello-world deployment.
-		shutdownRes := node2.client.shutdownDeployment(suite.T(), node2.dmsContext, node2.password, manifest2ID)
+		shutdownRes := node2.client.shutdownDeployment(suite.T(), node2.dmsContext, node2.password, manifestID)
 		suite.Require().Contains(shutdownRes, `"Error": ""`)
-		time.Sleep(2 * time.Second)
+
+		// wait for the ensemble to be shutdown
+		suite.Require().Eventually(func() bool {
+			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
+			suite.T().Log("deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusCompleted)
+		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
 	})
 }
 
@@ -394,8 +486,12 @@ func (suite *TestSuite) RevokeTokenTests() {
 	}, 120*time.Second, 10*time.Second, "Expected request to fail after revoking all tokens")
 }
 
-// TestEndToEndFlow runs the end-to-end test flow.
-func (suite *TestSuite) TestEndToEndFlow() {
+// Test_RunSuite runs the test suite.
+//
+// Note: While adding new test cases, we need to ensure we use the suite's Require() method instead of using the direct package level functions.
+// This is because the suite's Require() method will ensure that the test case is marked as failed and the suite's TearDownSuite() method is called.
+// If we use the package level functions, the test case will be marked as PASS but the tests will ultimately FAIL since the suite can't track it.
+func (suite *TestSuite) Test_RunSuite() {
 	gin.SetMode(gin.DebugMode)
 	os.Setenv("GOLOG_LOG_LEVEL", "debug")
 
@@ -403,23 +499,28 @@ func (suite *TestSuite) TestEndToEndFlow() {
 
 	suite.setupGlusterfsServer()
 
-	suite.T().Run("must pass basic tests", func(_ *testing.T) {
+	suite.Run("must pass basic tests", func() {
 		suite.BasicTests()
 	})
 
-	suite.T().Run("must be able to deploy ensembles", func(_ *testing.T) {
+	suite.Run("must be able to deploy ensembles", func() {
 		suite.DeploymentTest()
 	})
+	suite.Run("must be able to revoke tokens", func() {
+		suite.T().Skip("Skipping token revocation test since it is failing")
+		suite.RevokeTokenTests()
+	})
 
-	suite.T().Run("dms creates a volume on storage node", func(_ *testing.T) {
+	suite.Run("dms creates a volume on storage node", func() {
+		suite.T().Skip("Skipping unimplemeted test")
+
 		// glusterfs container is running in host mode
 		// we can directly use the bootstrap nodes here
-
 		// peers := strings.Join(suite.bootstrapPeers, ",")
 		// envVars := []string{
-		// 	"DMS_PASSPHRASE=password3",
-		// 	"GOLOG_LOG_LEVEL=debug",
-		// 	"BOOTSTRAP_PEERS=" + peers,
+		//	"DMS_PASSPHRASE=password3",
+		//	"GOLOG_LOG_LEVEL=debug",
+		//	"BOOTSTRAP_PEERS=" + peers,
 		// }
 		// err := runBinaryInContainer(glusterContainerName, "/home/dms", []string{"run", "--data-dir", "/home/data"}, envVars, "/home/output.log")
 		// require.NoError(t, err)
@@ -429,18 +530,9 @@ func (suite *TestSuite) TestEndToEndFlow() {
 		// _, err = firstNodeClient.client.createVolume(t, firstNodeClient.userContext, firstNodeClient.password, suite.glusterDMSDID)
 		// require.NoError(t, err)
 	})
-
-	// sigChan := make(chan os.Signal, 1)
-	// signal.Notify(sigChan, syscall.SIGUSR1)
-	// <-sigChan
-
-	// suite.T().Run("must be able to revoke tokens", func(t *testing.T) {
-	// 	t.Skip("Skipping token revocation test since it is failing")
-	// 	suite.RevokeTokenTests()
-	// })
 }
 
-// TestDMSTestSuite is the entry point for the test suite.
-func TestDMSTestSuite(t *testing.T) {
+// TestIntegration is the entry point for the integration tests.
+func TestIntegration(t *testing.T) {
 	suite.Run(t, dmsTestSuite)
 }
