@@ -454,12 +454,26 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 
 	for _, allocName := range request.AllocsByName {
 		allocID := types.ConstructAllocationID(ensembleID, allocName)
-		err := n.allocator.Release(context.Background(), allocID)
-		if err != nil {
-			log.Errorw("revert_deployment_release_failure",
-				"labels", []string{string(observability.LabelDeployment)},
-				"ensembleID", ensembleID,
-				"error", err)
+
+		// Here we're considering both the committed and uncommitted resources/allocations/ports from the orchestrator
+		// TODO: consider the allocation state and perform the necessary actions eg: uncommit, release, etc.
+		// This would need addition of a new behavior. UnCommitAllocationBehavior?
+		// https://gitlab.com/nunet/device-management-service/-/issues/961
+		if a, _ := n.allocator.GetAllocation(allocID); a != nil {
+			if err := n.allocator.Release(context.Background(), allocID); err != nil {
+				log.Errorw("revert_deployment_release_failure",
+					"labels", []string{string(observability.LabelDeployment)},
+					"ensembleID", ensembleID,
+					"error", err)
+			}
+		} else {
+			if err := n.allocator.Uncommit(context.Background(), allocID); err != nil {
+				log.Errorw("revert_deployment_uncommit_failure",
+					"labels", []string{string(observability.LabelDeployment)},
+					"ensembleID", ensembleID,
+					"error", err,
+				)
+			}
 		}
 	}
 	log.Infow("deployment_reverted",

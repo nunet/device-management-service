@@ -144,18 +144,6 @@ func createConfig(dmsRootDir string, restPort uint32, p2pListenAddr string, boot
 	}
 }
 
-// killProcess attempts to kill a process with the given pid.
-func killProcess(pid int32) error {
-	p := getProc(pid)
-	if p != nil {
-		pname, err := p.Name()
-		if err == nil && pname == "dms" {
-			return p.Kill()
-		}
-	}
-	return fmt.Errorf("process not found")
-}
-
 // getProc finds a process by pid.
 func getProc(pid int32) *process.Process {
 	processes, err := process.Processes()
@@ -221,10 +209,13 @@ type mockNode struct {
 	client      *Client
 	password    string
 	rootDir     string
+	peerID      string
 	userDID     string
 	dmsDID      string
 	userContext string
 	dmsContext  string
+
+	shutdownCh chan struct{}
 }
 
 func newMockNode(t *testing.T, config *config.Config, password, rootDir string, index int) *mockNode {
@@ -250,5 +241,6 @@ func newMockNode(t *testing.T, config *config.Config, password, rootDir string, 
 		dmsDID:      dmsDID,
 		userContext: userContext,
 		dmsContext:  dmsContext,
+		shutdownCh:  make(chan struct{}),
 	}
 }
