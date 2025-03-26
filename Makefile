@@ -90,6 +90,16 @@ itest:
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
 
+CN ?= did:key:here
+SSL_DIR = /etc/ssl
+
+# make generate-glusterfs-client-certs CN=did:key:here
+generate-glusterfs-client-certs:
+	openssl genrsa -out glusterfs.key 2048
+	openssl req -new -x509 -key glusterfs.key -subj "/CN=$(CN)" -out glusterfs.pem
+	sudo cp glusterfs.key $(SSL_DIR)/
+	sudo cp glusterfs.pem $(SSL_DIR)/
+
 LICENSE_FLAGS := -v \
 		-l="apache" \
 		-f copyright.txt \

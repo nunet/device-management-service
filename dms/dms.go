@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -96,7 +98,28 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		contextName = node.DefaultContextName
 	}
 
+	// if bootstrap peers were passed by env var then override them
+	btPeers := os.Getenv("BOOTSTRAP_PEERS")
+	if btPeers != "" {
+		peers := strings.Split(btPeers, ",")
+		gcfg.P2P.BootstrapPeers = peers
+	}
+
 	initialize(gcfg)
+
+	var volumeController *controller.GlusterController
+
+	if gcfg.StorageMode {
+		var err error
+		volumeController, err = controller.NewGlusterController(gcfg.StorageCADirectory, gcfg.StorageBricks, gcfg.StorageReplicaCount)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create glusterfs controller: %w", err)
+		}
+
+		if !volumeController.IsServerWorking() {
+			return nil, errors.New("failed to start in storage mode")
+		}
+	}
 
 	geoip2db, err := geoip2.FromBytes(geoLite2Country)
 	if err != nil {
@@ -247,6 +270,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
 		orchestR, geoip2db, hostLocation, portConfig, volumeTracker,
+		volumeController,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)

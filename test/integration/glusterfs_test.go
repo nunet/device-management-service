@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 )
 
-const containerName = "gluster-container"
+const glusterContainerName = "gluster-container"
 
 func createDirectories() {
 	dirs := []string{
@@ -37,7 +41,7 @@ func runGlusterContainer() error {
 	}
 
 	for _, c := range containers {
-		if c.Names[0] == "/"+containerName {
+		if c.Names[0] == "/"+glusterContainerName {
 			if c.State == "running" {
 				fmt.Println("Container is already running.")
 				return nil
@@ -71,7 +75,7 @@ func runGlusterContainer() error {
 		Tty:   true,
 	}
 
-	resp, err := cli.ContainerCreate(context.Background(), containerConfig, hostConfig, nil, nil, containerName)
+	resp, err := cli.ContainerCreate(context.Background(), containerConfig, hostConfig, nil, nil, glusterContainerName)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
 	}
@@ -81,6 +85,21 @@ func runGlusterContainer() error {
 	}
 
 	fmt.Println("Container started successfully with ID:", resp.ID)
+
+	srcPath := filepath.Join(getCurrentFileDirectory(), "dms")
+
+	err = copyToContainer(srcPath, resp.ID, "/home/dms")
+	if err != nil {
+		return fmt.Errorf("failed to copy binary to container: %w", err)
+	}
+
+	dataDirNodeSrcPath := filepath.Join(getCurrentFileDirectory(), "testdata", "dms3")
+
+	err = copyToContainer(dataDirNodeSrcPath, resp.ID, "/home/data")
+	if err != nil {
+		return fmt.Errorf("failed to copy binary to container: %w", err)
+	}
+
 	return nil
 }
 
@@ -107,7 +126,7 @@ func runGlusterCommands() error {
 			AttachStderr: true,
 		}
 
-		execIDResp, err := cli.ContainerExecCreate(context.Background(), containerName, execConfig)
+		execIDResp, err := cli.ContainerExecCreate(context.Background(), glusterContainerName, execConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create exec instance: %w", err)
 		}
@@ -118,5 +137,106 @@ func runGlusterCommands() error {
 	}
 
 	fmt.Println("Gluster volume setup completed successfully.")
+	return nil
+}
+
+func deleteGlusterContainer() error {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker Client: %w", err)
+	}
+
+	containers, err := cli.ContainerList(context.Background(), container.ListOptions{All: true})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	for _, c := range containers {
+		if c.Names[0] == "/"+glusterContainerName {
+			if err := cli.ContainerRemove(context.Background(), c.ID, container.RemoveOptions{Force: true}); err != nil {
+				return fmt.Errorf("failed to remove container: %w", err)
+			}
+			fmt.Println("Container deleted successfully.")
+			return nil
+		}
+	}
+
+	fmt.Println("Container not found.")
+	return nil
+}
+
+func pullGlusterImage() error {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker Client: %w", err)
+	}
+
+	imageName := "ghcr.io/gluster/gluster-containers:fedora"
+	images, err := cli.ImageList(context.Background(), image.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list images: %w", err)
+	}
+
+	for _, img := range images {
+		for _, tag := range img.RepoTags {
+			if tag == imageName {
+				fmt.Println("Image is already present.")
+				return nil
+			}
+		}
+	}
+
+	out, err := cli.ImagePull(context.Background(), imageName, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer out.Close()
+	fmt.Println("Image pulled successfully.")
+	return nil
+}
+
+// TODO: use docker SDK. The copying functionality wasnt working thats why i used the cmd directly.
+func copyToContainer(srcPath string, containerID string, destPath string) error {
+	cmd := exec.Command("docker", "cp", srcPath, containerID+":"+destPath)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to copy to container: %v, output: %s", err, output)
+	}
+
+	fmt.Println("Successfully copied", srcPath, "to container", containerID, "at", destPath)
+	return nil
+}
+
+// runBinaryInContainer executes a binary inside the container and redirects output to a file.
+//
+//nolint:unused // to be used later for testing
+func runBinaryInContainer(containerID string, binaryPath string, args []string, envVars []string, outputFilePath string) error {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker Client: %w", err)
+	}
+
+	cmd := []string{"sh", "-c", fmt.Sprintf("%s %s > %s 2>&1", binaryPath, strings.Join(args, " "), outputFilePath)}
+
+	execConfig := container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: false,
+		AttachStderr: false,
+		Env:          envVars,
+		Detach:       true,
+	}
+
+	execIDResp, err := cli.ContainerExecCreate(context.Background(), containerID, execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create exec instance: %w", err)
+	}
+
+	err = cli.ContainerExecStart(context.Background(), execIDResp.ID, container.ExecStartOptions{Detach: true})
+	if err != nil {
+		return fmt.Errorf("failed to start exec command in background: %w", err)
+	}
+
+	fmt.Printf("Binary %s executed inside container %s, output redirected to %s\n", binaryPath, containerID, outputFilePath)
 	return nil
 }

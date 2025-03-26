@@ -41,11 +41,7 @@ var execCommand ExecFunc = func(name string, args ...string) Commander {
 type GlusterFS struct {
 	servers []string
 	name    string
-	sslCert string
-	sslKey  string
-	sslCA   string
-
-	mu sync.Mutex
+	mu      sync.Mutex
 
 	tracker *storage.VoumeTracker
 }
@@ -53,8 +49,7 @@ type GlusterFS struct {
 var _ types.Mounter = (*GlusterFS)(nil)
 
 // New creates a new GlusterFS mounter with the provided configuration.
-// The servers slice and volume are required; SSL certificate parameters are optional.
-func New(t *storage.VoumeTracker, servers []string, name, sslCert, sslKey, sslCA string) (*GlusterFS, error) {
+func New(t *storage.VoumeTracker, servers []string, name string) (*GlusterFS, error) {
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("no GlusterFS servers provided")
 	}
@@ -66,9 +61,6 @@ func New(t *storage.VoumeTracker, servers []string, name, sslCert, sslKey, sslCA
 	return &GlusterFS{
 		servers: servers,
 		name:    name,
-		sslCert: sslCert,
-		sslKey:  sslKey,
-		sslCA:   sslCA,
 		tracker: t,
 	}, nil
 }
@@ -94,18 +86,7 @@ func (g *GlusterFS) Mount(targetPath string, options map[string]string) error {
 	for k, v := range options {
 		opts = append(opts, fmt.Sprintf("%s=%s", k, v))
 	}
-	if g.sslCert != "" {
-		opts = append(opts, fmt.Sprintf("ssl_cert=%s", g.sslCert))
-	}
-	if g.sslKey != "" {
-		opts = append(opts, fmt.Sprintf("ssl_key=%s", g.sslKey))
-	}
-	if g.sslCA != "" {
-		opts = append(opts, fmt.Sprintf("ssl_ca=%s", g.sslCA))
-	}
 
-	// build the arguments for the mount command:
-	//   mount -t glusterfs -o <options> server1,server2:volume /target/path
 	args := []string{"-t", "glusterfs"}
 	if len(opts) > 0 {
 		args = append(args, "-o", strings.Join(opts, ","))
@@ -113,6 +94,7 @@ func (g *GlusterFS) Mount(targetPath string, options map[string]string) error {
 	args = append(args, source, targetPath)
 
 	cmd := execCommand("mount", args...)
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to mount GlusterFS volume: %w, output: %s", err, output)

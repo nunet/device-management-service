@@ -74,7 +74,7 @@ func TestMountSuccess(t *testing.T) {
 
 	execCommand = fakeExecCommand
 	servers := []string{"10.0.0.1", "10.0.0.2"}
-	g, err := New(vt, servers, volName, "", "", "")
+	g, err := New(vt, servers, volName)
 	require.NoError(t, err)
 
 	options := map[string]string{
@@ -92,7 +92,7 @@ func TestMountFailure(t *testing.T) {
 	vt := storage.NewVolumeTracker()
 
 	servers := []string{"10.0.0.1"}
-	g, err := New(vt, servers, volName, "", "", "")
+	g, err := New(vt, servers, volName)
 	require.NoError(t, err)
 
 	options := map[string]string{
@@ -117,7 +117,7 @@ func TestUnmountSuccess(t *testing.T) {
 	vt := storage.NewVolumeTracker()
 
 	servers := []string{"10.0.0.1"}
-	g, err := New(vt, servers, volName, "", "", "")
+	g, err := New(vt, servers, volName)
 	require.NoError(t, err)
 	err = g.Unmount(mountPath)
 	require.EqualError(t, err, "/mnt/glusterfs is not mounted")
@@ -134,7 +134,7 @@ func TestUnmountFailure(t *testing.T) {
 	execCommand = fakeExecCommand
 	vt := storage.NewVolumeTracker()
 	servers := []string{"10.0.0.1"}
-	g, err := New(vt, servers, volName, "", "", "")
+	g, err := New(vt, servers, volName)
 	require.NoError(t, err)
 
 	targetPath := "/mnt/fail_umount"
@@ -154,12 +154,12 @@ func TestUnmountFailure(t *testing.T) {
 
 func TestNewValidation(t *testing.T) {
 	vt := storage.NewVolumeTracker()
-	_, err := New(vt, []string{}, "volume", "", "", "")
+	_, err := New(vt, []string{}, "volume")
 	if err == nil {
 		t.Error("expected error when no servers provided, got nil")
 	}
 
-	_, err = New(vt, []string{"10.0.0.1"}, "", "", "", "")
+	_, err = New(vt, []string{"10.0.0.1"}, "")
 	if err == nil {
 		t.Error("expected error when no volume provided, got nil")
 	}
@@ -182,11 +182,9 @@ func TestMountCommandArgs(t *testing.T) {
 
 	servers := []string{"10.0.0.1", "10.0.0.2"}
 	volume := "myvolume"
-	sslCert := "/path/to/cert.pem"
-	sslKey := "/path/to/key.pem"
-	sslCA := "/path/to/ca.pem"
+
 	vt := storage.NewVolumeTracker()
-	g, err := New(vt, servers, volume, sslCert, sslKey, sslCA)
+	g, err := New(vt, servers, volume)
 	require.NoError(t, err)
 
 	options := map[string]string{
@@ -206,12 +204,6 @@ func TestMountCommandArgs(t *testing.T) {
 		expectedOpts = append(expectedOpts, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	expectedOpts = append(expectedOpts, fmt.Sprintf("ssl_cert=%s", sslCert))
-	expectedOpts = append(expectedOpts, fmt.Sprintf("ssl_key=%s", sslKey))
-	expectedOpts = append(expectedOpts, fmt.Sprintf("ssl_ca=%s", sslCA))
-
-	// expect the following structure:
-	// ["-t", "glusterfs", "-o", "<opts>", "<source>", "<targetPath>"]
 	expectedArgs := []string{"-t", "glusterfs", "-o", strings.Join(expectedOpts, ","), expectedSource, mountPath}
 
 	if !reflect.DeepEqual(capturedArgs, expectedArgs) {

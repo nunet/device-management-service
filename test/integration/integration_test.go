@@ -34,7 +34,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const binaryName = "dms"
+const (
+	binaryName = "dms"
+	NumNodes   = 3
+)
 
 // TestSuite defines our end-to-end test suite.
 type TestSuite struct {
@@ -46,6 +49,9 @@ type TestSuite struct {
 	bootstrapPeers []string
 	nodes          map[int]*mockNode
 	grantTokens    map[int]map[int]string // map[nodeIndex]map[otherNodeIndex]grantToken
+
+	// glusternode
+	glusterDMSDID string
 }
 
 var dmsTestSuite = new(TestSuite)
@@ -93,13 +99,28 @@ func (suite *TestSuite) startNode(index int) {
 	suite.T().Logf("started node %d with pid %d", index, cmd.Process.Pid)
 }
 
+// setupGlusterfsServer creates a glusterfs server env
+func (suite *TestSuite) setupGlusterfsServer() {
+	createDirectories()
+	err := pullGlusterImage()
+	suite.Require().NoError(err)
+	err = runGlusterContainer()
+	suite.Require().NoError(err)
+	err = runGlusterCommands()
+	suite.Require().NoError(err)
+}
+
 // setupTestNetwork creates a network of nodes and grants mutual access to all nodes.
 func (suite *TestSuite) setupTestNetwork() {
 	var (
 		restPortIndex = 8090
 		p2pPortIndex  = 10689
 	)
-	for i := 0; i < NumNodes; i++ {
+
+	// we want to setup one more node which will be on the gluster container
+	tmpNodes := NumNodes + 1
+
+	for i := 0; i < tmpNodes; i++ {
 		rootDir := fmt.Sprintf("testdata/dms%d", i)
 		password := fmt.Sprintf("password%d", i)
 		nodeConfig := createConfig(rootDir, uint32(restPortIndex), fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", p2pPortIndex), []string{})
@@ -108,6 +129,12 @@ func (suite *TestSuite) setupTestNetwork() {
 
 		restPortIndex++
 		p2pPortIndex++
+
+		suite.T().Logf("FOR NODE %d we have DMSDID %s USERDID %s", i, suite.nodes[nodeIndex].dmsDID, suite.nodes[nodeIndex].userDID)
+
+		if i == tmpNodes-1 {
+			suite.glusterDMSDID = suite.nodes[nodeIndex].dmsDID
+		}
 	}
 
 	suite.T().Logf("setting up caps")
@@ -147,6 +174,10 @@ func (suite *TestSuite) setupTestNetwork() {
 	}
 
 	suite.T().Logf("starting bootstrap node")
+
+	// delete the last node suite.nodes because it will be uploaded to the gluster container
+	// and wont be started locally
+	delete(suite.nodes, 3)
 
 	// create and run bootstrap node
 	bootstrapNode := suite.nodes[0]
@@ -252,12 +283,15 @@ func (suite *TestSuite) TearDownSuite() {
 	}
 
 	// clean up the directories.
+	_ = os.RemoveAll(filepath.Join(suite.currentDir, "testdata", "dms3"))
 	for _, node := range suite.nodes {
 		err := os.RemoveAll(filepath.Join(suite.currentDir, node.rootDir))
 		if err != nil {
 			suite.T().Logf("failed to remove directory %s: %v", node.rootDir, err)
 		}
 	}
+
+	_ = deleteGlusterContainer()
 }
 
 // TestBasic performs basic tests to ensure the setup is correct.
@@ -277,11 +311,6 @@ func (suite *TestSuite) BasicTests() {
 // DeploymentTest runs the deployment tests.
 func (suite *TestSuite) DeploymentTest() {
 	// setup glusterfs
-	createDirectories()
-	err := runGlusterContainer()
-	suite.Require().NoError(err)
-	err = runGlusterCommands()
-	suite.Require().NoError(err)
 
 	suite.T().Run("must be able to deploy nginx demo", func(_ *testing.T) {
 		// deploy nginx.yaml to node1 using node2's orchestrator
@@ -365,9 +394,6 @@ func (suite *TestSuite) RevokeTokenTests() {
 	}, 120*time.Second, 10*time.Second, "Expected request to fail after revoking all tokens")
 }
 
-// NumNodes is the number of nodes in the test network.
-const NumNodes = 3
-
 // TestEndToEndFlow runs the end-to-end test flow.
 func (suite *TestSuite) TestEndToEndFlow() {
 	gin.SetMode(gin.DebugMode)
@@ -375,16 +401,43 @@ func (suite *TestSuite) TestEndToEndFlow() {
 
 	suite.setupTestNetwork()
 
+	suite.setupGlusterfsServer()
+
 	suite.T().Run("must pass basic tests", func(_ *testing.T) {
 		suite.BasicTests()
 	})
+
 	suite.T().Run("must be able to deploy ensembles", func(_ *testing.T) {
 		suite.DeploymentTest()
 	})
-	suite.T().Run("must be able to revoke tokens", func(t *testing.T) {
-		t.Skip("Skipping token revocation test since it is failing")
-		suite.RevokeTokenTests()
+
+	suite.T().Run("dms creates a volume on storage node", func(_ *testing.T) {
+		// glusterfs container is running in host mode
+		// we can directly use the bootstrap nodes here
+
+		// peers := strings.Join(suite.bootstrapPeers, ",")
+		// envVars := []string{
+		// 	"DMS_PASSPHRASE=password3",
+		// 	"GOLOG_LOG_LEVEL=debug",
+		// 	"BOOTSTRAP_PEERS=" + peers,
+		// }
+		// err := runBinaryInContainer(glusterContainerName, "/home/dms", []string{"run", "--data-dir", "/home/data"}, envVars, "/home/output.log")
+		// require.NoError(t, err)
+		// firstNodeClient := suite.nodes[0]
+		// suite.T().Logf("createVolume: glusterDMSDID: %s", suite.glusterDMSDID)
+		// time.Sleep(20 * time.Second)
+		// _, err = firstNodeClient.client.createVolume(t, firstNodeClient.userContext, firstNodeClient.password, suite.glusterDMSDID)
+		// require.NoError(t, err)
 	})
+
+	// sigChan := make(chan os.Signal, 1)
+	// signal.Notify(sigChan, syscall.SIGUSR1)
+	// <-sigChan
+
+	// suite.T().Run("must be able to revoke tokens", func(t *testing.T) {
+	// 	t.Skip("Skipping token revocation test since it is failing")
+	// 	suite.RevokeTokenTests()
+	// })
 }
 
 // TestDMSTestSuite is the entry point for the test suite.
