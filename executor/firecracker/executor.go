@@ -60,20 +60,20 @@ var _ types.Executor = (*Executor)(nil)
 // NewExecutor initializes a new executor for Firecracker VMs.
 func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	log.Infow("firecracker_executor_init_started",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executorID", id)
 
 	firecrackerClient, err := NewFirecrackerClient()
 	if err != nil {
 		log.Errorw("firecracker_executor_init_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return nil, err
 	}
 
 	if !firecrackerClient.IsInstalled(ctx) {
 		log.Errorw("firecracker_executor_not_installed",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"executorID", id)
 		return nil, ErrNotInstalled
 	}
@@ -84,7 +84,7 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	}
 
 	log.Infow("firecracker_executor_init_success",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executorID", id)
 	return fe, nil
 }
@@ -118,7 +118,7 @@ func (e *Executor) List() []types.ExecutionListItem {
 // start begins the execution of a request by starting a new Firecracker VM.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
 	log.Infow("firecracker_start_execution",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"jobID", request.JobID,
 		"executionID", request.ExecutionID)
 
@@ -139,7 +139,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		machine, err = e.newFirecrackerExecutionVM(ctx, request)
 		if err != nil {
 			log.Errorw("firecracker_create_vm_failure",
-				"labels", []string{string(observability.LabelDeployment)},
+				"labels", string(observability.LabelDeployment),
 				"error", err)
 			return fmt.Errorf("failed to create new firecracker VM: %w", err)
 		}
@@ -161,7 +161,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	go handler.run(ctx)
 
 	log.Infow("firecracker_start_execution_success",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"jobID", request.JobID,
 		"executionID", request.ExecutionID)
 	return nil
@@ -356,7 +356,7 @@ func (e *Executor) WaitForStatus(
 // This includes stopping and removing all running VMs and deleting their socket paths.
 func (e *Executor) Cleanup(_ context.Context) error {
 	log.Infow("firecracker_cleanup_started",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executorID", e.ID)
 
 	wg := sync.WaitGroup{}
@@ -380,7 +380,7 @@ func (e *Executor) Cleanup(_ context.Context) error {
 	}
 
 	log.Infow("firecracker_cleanup_complete",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executorID", e.ID)
 	return errs
 }
@@ -403,13 +403,13 @@ func (e *Executor) newFirecrackerExecutionVM(
 	params *types.ExecutionRequest,
 ) (*firecracker.Machine, error) {
 	log.Infow("firecracker_create_vm_started",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executionID", params.ExecutionID)
 
 	fcArgs, err := DecodeSpec(params.EngineSpec)
 	if err != nil {
 		log.Errorw("firecracker_create_vm_decode_spec_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return nil, fmt.Errorf("failed to decode firecracker engine spec: %w", err)
 	}
@@ -448,7 +448,7 @@ func (e *Executor) newFirecrackerExecutionVM(
 	)
 	if err != nil {
 		log.Errorw("firecracker_create_vm_mounts_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return nil, fmt.Errorf("failed to create VM mounts: %w", err)
 	}
@@ -457,13 +457,13 @@ func (e *Executor) newFirecrackerExecutionVM(
 	machine, err := e.client.CreateVM(ctx, fcConfig)
 	if err != nil {
 		log.Errorw("firecracker_create_vm_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return nil, fmt.Errorf("failed to create VM: %w", err)
 	}
 
 	log.Infow("firecracker_create_vm_success",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executionID", params.ExecutionID)
 	return machine, nil
 }

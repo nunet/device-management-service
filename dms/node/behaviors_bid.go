@@ -85,7 +85,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 
 	log.Debugw(
 		"got a bid request from actor",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"from", msg.From.Address,
 	)
 
@@ -93,7 +93,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 	if err != nil {
 		log.Debugw(
 			"onboarding_check_error",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err,
 		)
 		return
@@ -101,7 +101,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 	if !onboarded {
 		log.Debugw(
 			"node_not_onboarded_ignoring_bid_request",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 		)
 		return
 	}
@@ -110,7 +110,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Debugw(
 			"unmarshal_bid_request_error",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err,
 		)
 		return
@@ -120,7 +120,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 	if err != nil {
 		log.Debugw(
 			"machine_resources_retrieval_error",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err,
 		)
 		return
@@ -140,7 +140,7 @@ loop:
 		// check if it is a V1 request
 		if v.V1 == nil {
 			log.Debugw("bid_request_not_v1",
-				"labels", []string{string(observability.LabelDeployment)})
+				"labels", string(observability.LabelDeployment))
 			continue
 		}
 
@@ -155,7 +155,7 @@ loop:
 		for _, p := range request.PeerExclusion {
 			if p == hostID {
 				log.Debugw("bid_request_excluded_peer",
-					"labels", []string{string(observability.LabelDeployment)},
+					"labels", string(observability.LabelDeployment),
 					"hostID", hostID)
 				continue loop
 			}
@@ -166,7 +166,7 @@ loop:
 			executor, err := n.getExecutor(e)
 			if err != nil {
 				log.Debugw("executor_unavailable",
-					"labels", []string{string(observability.LabelDeployment)},
+					"labels", string(observability.LabelDeployment),
 					"executor", e,
 					"error", err)
 				continue loop
@@ -176,7 +176,7 @@ loop:
 				if v.V1.GeneralRequirements.PrivilegedDocker {
 					if !n.dmsConfig.AllowPrivilegedDocker {
 						log.Debugw("privileged_docker_not_allowed",
-							"labels", []string{string(observability.LabelDeployment)})
+							"labels", string(observability.LabelDeployment))
 						continue loop
 					}
 				}
@@ -186,14 +186,14 @@ loop:
 		comparisonResult, err := machineResources.Compare(v.V1.Resources)
 		if err != nil {
 			log.Debugw("compare_machine_resources_error",
-				"labels", []string{string(observability.LabelDeployment)},
+				"labels", string(observability.LabelDeployment),
 				"error", err)
 			continue loop
 		}
 
 		if comparisonResult != types.Better {
 			log.Debugw("resource_not_better",
-				"labels", []string{string(observability.LabelDeployment)},
+				"labels", string(observability.LabelDeployment),
 				"comparisonResult", comparisonResult)
 			continue
 		}
@@ -205,30 +205,30 @@ loop:
 
 	if !found {
 		log.Debugw("bid_requirements_not_satisfied",
-			"labels", []string{string(observability.LabelDeployment)})
+			"labels", string(observability.LabelDeployment))
 		return
 	}
 
 	if err := n.allocator.CheckAvailability(toAnswer.V1.PublicPorts.Static, toAnswer.V1.PublicPorts.Dynamic, toAnswer.V1.Resources); err != nil {
 		log.Debugw("no_resource_availability_for_bid",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return
 	}
 
 	log.Debugw("signing_bid_with_node_identity",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"DID", n.actor.Security().DID())
 
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
 		log.Debugw("provider_retrieval_error",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return
 	}
 	log.Debugw("signing_bid_with_provider",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"providerDID", provider.DID())
 
 	bid := jobtypes.Bid{
@@ -243,7 +243,7 @@ loop:
 
 	if err := bid.Sign(provider); err != nil {
 		log.Debugw("bid_signing_error",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return
 	}

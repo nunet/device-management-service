@@ -212,13 +212,13 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 	})
 
 	log.Debugw("onboarded_resources",
-		"labels", []string{string(observability.LabelMetric)},
+		"labels", string(observability.LabelMetric),
 		"resources", onboardedResources.Resources)
 	log.Debugw("total_allocation",
-		"labels", []string{string(observability.LabelMetric)},
+		"labels", string(observability.LabelMetric),
 		"allocation", totalAllocation)
 	log.Debugw("committed_resources",
-		"labels", []string{string(observability.LabelMetric)},
+		"labels", string(observability.LabelMetric),
 		"committed", committedResources)
 
 	freeResources.Resources = onboardedResources.Resources
@@ -231,7 +231,7 @@ func (d *DefaultManager) GetFreeResources(ctx context.Context) (types.FreeResour
 	}
 
 	log.Debugw("free_resources",
-		"labels", []string{string(observability.LabelMetric)},
+		"labels", string(observability.LabelMetric),
 		"free", freeResources.Resources)
 	return freeResources, nil
 }

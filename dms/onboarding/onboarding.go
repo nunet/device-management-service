@@ -113,22 +113,22 @@ func New(ctx context.Context,
 			switch {
 			case errors.Is(err, ErrUnmetCapacity):
 				log.Errorw("machine onboarded, but capacity not fully met",
-					"labels", []string{string(observability.LabelNode)},
+					"labels", string(observability.LabelNode),
 					"error", err)
 			case errors.Is(err, ErrHighUsage):
 				log.Errorw("machine onboarded, but high usage detected",
-					"labels", []string{string(observability.LabelNode)},
+					"labels", string(observability.LabelNode),
 					"error", err)
 				return onboardingManager, nil
 			default:
 				log.Errorw("machine is onboarded but prerequisites are not met",
-					"labels", []string{string(observability.LabelNode)},
+					"labels", string(observability.LabelNode),
 					"error", err)
 			}
 
 			// if the machine is onboarded but the prerequisites are not met, offboard the machine
 			log.Infow("offboarding the machine because onboarded resources are no longer valid",
-				"labels", []string{string(observability.LabelNode)})
+				"labels", string(observability.LabelNode))
 			if err := onboardingManager.Offboard(context.Background()); err != nil {
 				return nil, fmt.Errorf("offboard the machine: %w", err)
 			}
@@ -225,14 +225,14 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 	{
 		gpuCount := len(machineResources.Resources.GPUs)
 		log.Infow("machine_hardware_resources",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"cpuCores", machineResources.Resources.CPU.Cores,
 			"ramGB", machineResources.Resources.RAM.SizeInGB(),
 			"gpuCount", gpuCount,
 		)
 		for idx, gpu := range machineResources.Resources.GPUs {
 			log.Infow("machine_hardware_gpu",
-				"labels", []string{string(observability.LabelNode)},
+				"labels", string(observability.LabelNode),
 				"gpuIndex", gpu.Index,
 				"gpuModel", gpu.Model,
 				"gpuVramGB", gpu.VRAMInGB(),
@@ -253,14 +253,14 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 	{
 		gpuCount := len(systemFreeResources.GPUs)
 		log.Infow("machine_free_resources",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"freeCpuCores", systemFreeResources.CPU.Cores,
 			"freeRamGB", systemFreeResources.RAM.SizeInGB(),
 			"freeGpuCount", gpuCount,
 		)
 		for idx, gpu := range systemFreeResources.GPUs {
 			log.Infow("machine_free_gpu",
-				"labels", []string{string(observability.LabelNode)},
+				"labels", string(observability.LabelNode),
 				"gpuIndex", gpu.Index,
 				"gpuModel", gpu.Model,
 				"gpuVramGB", gpu.VRAMInGB(),
@@ -292,7 +292,7 @@ func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig)
 	}
 
 	log.Infow("onboarded_resources_assigned",
-		"labels", []string{string(observability.LabelNode)},
+		"labels", string(observability.LabelNode),
 		"cpuCoresAssigned", config.OnboardedResources.CPU.Cores,
 		"ramGBAssigned", config.OnboardedResources.RAM.SizeInGB(),
 		"diskMBAssigned", config.OnboardedResources.Disk.Size/(1024.0*1024.0),
@@ -305,7 +305,7 @@ func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig)
 	}
 
 	log.Infow("machine_onboarded_successfully",
-		"labels", []string{string(observability.LabelNode)})
+		"labels", string(observability.LabelNode))
 
 	o.Config = config
 	return o.Config, nil
@@ -332,7 +332,7 @@ func (o *Onboarding) Offboard(ctx context.Context) error {
 	}
 
 	log.Infow("machine_offboarded_successfully",
-		"labels", []string{string(observability.LabelNode)})
+		"labels", string(observability.LabelNode))
 
 	return nil
 }

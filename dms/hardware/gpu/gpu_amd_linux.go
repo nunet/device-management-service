@@ -45,19 +45,19 @@ func NewGPUManager() types.GPUManager {
 	nvidiaConnector, err := newNVIDIAGPUConnector()
 	if err != nil {
 		log.Warnw("create NVIDIA GPU connector",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 	}
 	amdConnector, err := newAMDGPUConnector()
 	if err != nil {
 		log.Warnw("create AMD GPU connector",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 	}
 	intelConnector, err := newIntelGPUConnector()
 	if err != nil {
 		log.Warnw("create Intel GPU connector",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 	}
 	connector := gpuConnectors{
@@ -227,7 +227,7 @@ func (g *gpuManager) Shutdown() error {
 	if g.connectors.nvidia != nil {
 		if err := g.connectors.nvidia.Shutdown(); err != nil {
 			log.Errorw("shutdown nvml",
-				"labels", []string{string(observability.LabelNode)},
+				"labels", string(observability.LabelNode),
 				"error", err)
 		}
 	}
@@ -235,7 +235,7 @@ func (g *gpuManager) Shutdown() error {
 	if g.connectors.amd != nil {
 		if err := g.connectors.amd.Shutdown(); err != nil {
 			log.Errorw("shutdown amdsmi",
-				"labels", []string{string(observability.LabelNode)},
+				"labels", string(observability.LabelNode),
 				"error", err)
 		}
 	}
@@ -243,7 +243,7 @@ func (g *gpuManager) Shutdown() error {
 	if g.connectors.intel != nil {
 		if err := g.connectors.intel.Shutdown(); err != nil {
 			log.Errorw("shutdowm xpum",
-				"labels", []string{string(observability.LabelNode)},
+				"labels", string(observability.LabelNode),
 				"error", err)
 		}
 	}

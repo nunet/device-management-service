@@ -76,7 +76,7 @@ func (h *executionHandler) run(ctx context.Context) {
 	if err := h.prepareLogFiles(); err != nil {
 		err = fmt.Errorf("failed to create execution log files: %v", err)
 		log.Errorw("docker_execution_handler_run_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		h.result = types.NewFailedExecutionResult(err)
 		return
@@ -93,14 +93,14 @@ func (h *executionHandler) run(ctx context.Context) {
 	if err := h.client.StartContainer(ctx, h.containerID); err != nil {
 		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start container: %v", err))
 		log.Errorw("docker_execution_handler_run_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 		return
 	}
 
 	close(h.activeCh)
 	log.Infow("docker_execution_handler_run_success",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executionID", h.executionID)
 
 	var containerError error
@@ -189,7 +189,7 @@ func (h *executionHandler) run(ctx context.Context) {
 				ErrorMsg: containerError.Error(),
 			}
 			log.Errorw("docker_execution_handler_container_oom_killed",
-				"labels", []string{string(observability.LabelAllocation)},
+				"labels", string(observability.LabelAllocation),
 				"executionID", h.executionID)
 			return
 		}
@@ -283,13 +283,13 @@ func (h *executionHandler) kill(ctx context.Context) error {
 	err := h.client.StopContainer(ctx, h.containerID, stopOptions)
 	if err != nil {
 		log.Errorw("docker_execution_handler_kill_failure",
-			"labels", []string{string(observability.LabelAllocation)},
+			"labels", string(observability.LabelAllocation),
 			"error", err,
 			"executionID", h.executionID)
 		return err
 	}
 	log.Infow("docker_execution_handler_kill_success",
-		"labels", []string{string(observability.LabelAllocation)},
+		"labels", string(observability.LabelAllocation),
 		"executionID", h.executionID)
 	return nil
 }
@@ -305,7 +305,7 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 	// stop the container
 	if err := h.kill(ctx); err != nil {
 		log.Errorw("docker_execution_handler_destroy_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err,
 			"executionID", h.executionID)
 		return fmt.Errorf("failed to kill container (%s): %w", h.containerID, err)
@@ -313,7 +313,7 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 
 	if err := h.client.RemoveContainer(ctx, h.containerID); err != nil {
 		log.Errorw("docker_execution_handler_destroy_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err,
 			"executionID", h.executionID)
 		return err
@@ -333,7 +333,7 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 	)
 	if err != nil {
 		log.Errorw("docker_execution_handler_destroy_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err,
 			"executionID", h.executionID)
 		return err
@@ -342,7 +342,7 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 	h.handleDeletionOfLogFiles(h.persistLogsDuration)
 
 	log.Infow("docker_execution_handler_destroy_success",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executionID", h.executionID)
 	return nil
 }

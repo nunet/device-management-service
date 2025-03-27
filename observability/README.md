@@ -137,7 +137,7 @@ log.Infow("Operation completed",
 
 // Example 3: Log an info message with labels
 log.Infow("docker_executor_cleanup_success",
-	"labels", []string{string(observability.LabelDeployment)},
+	"labels", string(observability.LabelDeployment),
 	"executorID", e.ID,
 )
 

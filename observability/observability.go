@@ -93,6 +93,7 @@ func initLogger(observabilityConfig config.Observability) error {
 	localEsDisabled := esDisabled
 	mutex.Unlock()
 
+	// If we're in no-op mode, do nothing and return
 	if localNoOp {
 		return nil
 	}

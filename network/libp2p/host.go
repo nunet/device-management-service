@@ -59,7 +59,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		f, err := mafilt.NewMask(s)
 		if err != nil {
 			log.Errorw("incorrectly formatted address filter in config",
-				"labels", []string{string(observability.LabelNode)},
+				"labels", string(observability.LabelNode),
 				"filter", s,
 				"error", err,
 			)
@@ -102,7 +102,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	scaled := limits.Scale(mem, fds)
 
 	log.Infow("libp2p_limits",
-		"labels", []string{string(observability.LabelNode)},
+		"labels", string(observability.LabelNode),
 		"limits", scaled,
 	)
 
@@ -223,7 +223,7 @@ func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.Add
 	})
 	if err != nil {
 		log.Errorw("failed to subscribe to peer identification events",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err,
 		)
 		return

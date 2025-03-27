@@ -61,7 +61,7 @@ func newGPUListCommand(gpuManager types.GPUManager) *cobra.Command {
 
 			if len(gpus) == 0 {
 				log.Infow("no_gpus_detected_on_host",
-					"labels", []string{string(observability.LabelNode)})
+					"labels", string(observability.LabelNode))
 				return nil
 			}
 

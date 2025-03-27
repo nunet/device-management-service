@@ -148,7 +148,7 @@ func (a *Allocation) Run(
 
 	if a.status == AllocationRunning {
 		log.Warnw("allocation_already_running",
-			"labels", []string{string(observability.LabelAllocation)},
+			"labels", string(observability.LabelAllocation),
 			"allocationID", a.ID)
 		return nil
 	}
@@ -203,7 +203,7 @@ func (a *Allocation) Run(
 
 	// NEW: Log the resources we've assigned for this run
 	log.Infow("allocation_run_started",
-		"labels", []string{string(observability.LabelAllocation)},
+		"labels", string(observability.LabelAllocation),
 		"allocationID", a.ID,
 		"cpuCoresAssigned", a.Job.Resources.CPU.Cores,
 		"ramGBAssigned", a.Job.Resources.RAM.SizeInGB(),
@@ -330,7 +330,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	defer a.lock.Unlock()
 
 	log.Debugw("allocation_stopping_execution",
-		"labels", []string{string(observability.LabelAllocation)},
+		"labels", string(observability.LabelAllocation),
 		"allocationID", a.ID)
 
 	if a.status != AllocationRunning {
@@ -349,7 +349,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	}
 
 	log.Debugw("allocation_stopped_execution",
-		"labels", []string{string(observability.LabelAllocation)},
+		"labels", string(observability.LabelAllocation),
 		"allocationID", a.ID)
 	return nil
 }
@@ -364,7 +364,7 @@ func (a *Allocation) Cleanup() error {
 	}
 
 	log.Debugw("allocation_removed_execution",
-		"labels", []string{string(observability.LabelAllocation)},
+		"labels", string(observability.LabelAllocation),
 		"executionID", a.executionID)
 	return nil
 }
@@ -379,7 +379,7 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 		err := a.Stop(ctx)
 		if err != nil {
 			log.Warnw("allocation_failed_to_stop",
-				"labels", []string{string(observability.LabelAllocation)},
+				"labels", string(observability.LabelAllocation),
 				"error", err,
 				"allocationID", a.ID)
 			return fmt.Errorf("failed to stop allocation: %w", err)
@@ -391,7 +391,7 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 
 	if err := a.Cleanup(); err != nil {
 		log.Warnw("allocation_failed_to_cleanup",
-			"labels", []string{string(observability.LabelAllocation)},
+			"labels", string(observability.LabelAllocation),
 			"error", err,
 			"allocationID", a.ID)
 	}
@@ -409,12 +409,12 @@ func (a *Allocation) stopActor() error {
 	if a.actorRunning {
 		if err := a.Actor.Stop(); err != nil {
 			log.Warnw("allocation_actor_stop_failure",
-				"labels", []string{string(observability.LabelAllocation)},
+				"labels", string(observability.LabelAllocation),
 				"error", err,
 				"allocationID", a.ID)
 		}
 		log.Debugw("allocation_actor_stopped",
-			"labels", []string{string(observability.LabelAllocation)},
+			"labels", string(observability.LabelAllocation),
 			"allocationID", a.ID)
 		a.actorRunning = false
 	}

@@ -34,7 +34,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorw("logger_config_error",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 		n.sendReply(msg, LoggerConfigResponse{Error: err.Error()})
 	}
@@ -50,7 +50,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 	}
 
 	log.Debugw("logger_config_request_received",
-		"labels", []string{string(observability.LabelNode)},
+		"labels", string(observability.LabelNode),
 		"configRequest", req)
 
 	if req.Interval != 0 {
@@ -59,7 +59,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 		log.Debugw("logger_flush_interval_updated",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"interval", req.Interval)
 	}
 	if req.Level != "" {
@@ -68,7 +68,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 		log.Debugw("logger_level_updated",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"level", req.Level)
 	}
 	if req.URL != "" {
@@ -77,7 +77,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 		log.Debugw("logger_elasticsearch_endpoint_updated",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"url", req.URL)
 	}
 	if req.APIKey != "" { // Handle API Key
@@ -86,7 +86,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 		log.Debugw("logger_api_key_updated",
-			"labels", []string{string(observability.LabelNode)})
+			"labels", string(observability.LabelNode))
 	}
 	if req.APMURL != "" { // Handle APM URL
 		if err := observability.SetAPMURL(req.APMURL); err != nil {
@@ -94,7 +94,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 		log.Debugw("logger_apm_url_updated",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"apmUrl", req.APMURL)
 	}
 	if req.ElasticEnabled != nil { // Handle Elasticsearch Enabled
@@ -103,7 +103,7 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 			return
 		}
 		log.Debugw("logger_elasticsearch_enabled_flag_updated",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"enabled", *req.ElasticEnabled)
 	}
 
