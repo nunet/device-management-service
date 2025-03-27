@@ -72,7 +72,7 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	}
 
 	if !firecrackerClient.IsInstalled(ctx) {
-		log.Errorw("firecracker_executor_not_installed",
+		log.Warnw("firecracker_executor_not_installed",
 			"labels", string(observability.LabelNode),
 			"executorID", id)
 		return nil, ErrNotInstalled
