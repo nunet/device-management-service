@@ -397,6 +397,65 @@ func IntersectionSlices(slice1, slice2 []interface{}) []interface{} {
 	return intersectionSlice
 }
 
+// CreateTarArchive creates a tar archive of the source directory
+func CreateTarArchive(sourceDir, targetFile string) error {
+	tarFile, err := os.Create(targetFile)
+	if err != nil {
+		return fmt.Errorf("failed to create tar file: %w", err)
+	}
+	defer tarFile.Close()
+
+	tw := tar.NewWriter(tarFile)
+	defer tw.Close()
+
+	// Walk through the source directory
+	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Get the relative path
+		relPath, err := filepath.Rel(filepath.Dir(sourceDir), path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path: %w", err)
+		}
+
+		// Skip the source directory itself
+		if path == sourceDir {
+			return nil
+		}
+
+		// Create a tar header
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return fmt.Errorf("failed to create tar header: %w", err)
+		}
+
+		// Set the name to the relative path
+		header.Name = relPath
+
+		// Write the header
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("failed to write tar header: %w", err)
+		}
+
+		// If it's a regular file, write the content
+		if info.Mode().IsRegular() {
+			file, err := os.Open(path)
+			if err != nil {
+				return fmt.Errorf("failed to open file: %w", err)
+			}
+			defer file.Close()
+
+			if _, err := io.Copy(tw, file); err != nil {
+				return fmt.Errorf("failed to copy file content to tar: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
 func IsSameShallowType(a, b interface{}) bool {
 	aType := reflect.TypeOf(a)
 	bType := reflect.TypeOf(b)

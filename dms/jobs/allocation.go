@@ -42,6 +42,7 @@ type Job struct {
 	Resources        types.Resources
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
+	Keys             []types.AllocationKey
 	Volume           *types.VolumeConfig
 }
 
@@ -165,6 +166,7 @@ func (a *Allocation) Run(
 		EngineSpec:          &a.Job.Execution,
 		Resources:           &a.Job.Resources,
 		ProvisionScripts:    a.Job.ProvisionScripts,
+		Keys:                a.Job.Keys,
 		ResultsDir:          a.resultsDir,
 		PersistLogsDuration: deleteLogsAfter,
 		GatewayIP:           gatewayIP,

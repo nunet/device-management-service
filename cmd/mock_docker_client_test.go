@@ -46,6 +46,20 @@ func (m *MockClientInterface) EXPECT() *MockClientInterfaceMockRecorder {
 	return m.recorder
 }
 
+// CopyToContainer mocks base method.
+func (m *MockClientInterface) CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CopyToContainer", ctx, containerID, dstPath, content, options)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CopyToContainer indicates an expected call of CopyToContainer.
+func (mr *MockClientInterfaceMockRecorder) CopyToContainer(ctx, containerID, dstPath, content, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyToContainer", reflect.TypeOf((*MockClientInterface)(nil).CopyToContainer), ctx, containerID, dstPath, content, options)
+}
+
 // CreateContainer mocks base method.
 func (m *MockClientInterface) CreateContainer(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, platform *v1.Platform, name string, pullImage bool) (string, error) {
 	m.ctrl.T.Helper()

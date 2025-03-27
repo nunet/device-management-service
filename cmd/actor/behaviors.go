@@ -546,16 +546,6 @@ Examples:
 				cfg.Ensemble.V1.Scripts[name] = scriptData
 
 			}
-
-			for name, key := range cfg.Ensemble.V1.Keys {
-				key, err := os.ReadFile(key)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read script file: %w", err)
-				}
-				cfg.Ensemble.V1.Keys[name] = string(key)
-
-			}
-
 			return cli.DeploymentNew(cmd.Context(), *cfg, msgOpts...)
 		},
 	},

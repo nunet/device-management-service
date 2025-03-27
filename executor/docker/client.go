@@ -69,6 +69,7 @@ type ClientInterface interface {
 		follow bool,
 	) (io.ReadCloser, error)
 	Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error)
+	CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error
 }
 
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
@@ -565,4 +566,26 @@ func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (in
 		"bytesCopied", n,
 		"containerID", containerID)
 	return execInspect.ExitCode, stdout.String(), stderr.String(), nil
+}
+
+// CopyToContainer copies content to a container's file system.
+// dstPath is the path in the container where the content will be copied.
+func (c *Client) CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error {
+	log.Infow("docker_copy_to_container_started",
+		"containerID", containerID,
+		"dstPath", dstPath)
+
+	err := c.client.CopyToContainer(ctx, containerID, dstPath, content, options)
+	if err != nil {
+		log.Errorw("docker_copy_to_container_failure",
+			"containerID", containerID,
+			"dstPath", dstPath,
+			"error", err)
+		return err
+	}
+
+	log.Infow("docker_copy_to_container_success",
+		"containerID", containerID,
+		"dstPath", dstPath)
+	return nil
 }

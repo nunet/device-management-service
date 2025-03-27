@@ -424,44 +424,6 @@ func TestValidateAllocation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// Keys reference not defined in spec
-			name: "keys reference not defined",
-			root: map[string]any{},
-			alloc: map[string]any{
-				"type": "task",
-				"execution": map[string]any{
-					"type": "docker",
-				},
-				"executor":         "docker",
-				"resources":        map[string]any{},
-				"failure_recovery": defaultAllocationFailureStrategy,
-				"keys":             []any{"valid-key"},
-			},
-			wantErr:  true,
-			errorMsg: "keys must be defined",
-		},
-		{
-			// Keys reference not found in spec
-			name: "keys reference not found",
-			root: map[string]any{
-				"keys": map[string]any{
-					"valid-key": "value",
-				},
-			},
-			alloc: map[string]any{
-				"type": "task",
-				"execution": map[string]any{
-					"type": "docker",
-				},
-				"executor":         "docker",
-				"resources":        map[string]any{},
-				"failure_recovery": defaultAllocationFailureStrategy,
-				"keys":             []any{"non-existent-key"},
-			},
-			wantErr:  true,
-			errorMsg: "key 'non-existent-key' not found",
-		},
-		{
 			// Empty keys reference should pass without validation
 			name: "empty keys reference",
 			root: map[string]any{},
@@ -474,26 +436,6 @@ func TestValidateAllocation(t *testing.T) {
 				"resources":        map[string]any{},
 				"failure_recovery": defaultAllocationFailureStrategy,
 				"keys":             []any{},
-			},
-			wantErr: false,
-		},
-		{
-			// Valid keys reference
-			name: "valid keys reference",
-			root: map[string]any{
-				"keys": map[string]any{
-					"valid-key": "value",
-				},
-			},
-			alloc: map[string]any{
-				"type": "task",
-				"execution": map[string]any{
-					"type": "docker",
-				},
-				"executor":         "docker",
-				"resources":        map[string]any{},
-				"failure_recovery": defaultAllocationFailureStrategy,
-				"keys":             []any{"valid-key"},
 			},
 			wantErr: false,
 		},
