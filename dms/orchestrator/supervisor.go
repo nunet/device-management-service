@@ -53,7 +53,7 @@ func NewSupervisor(ctx context.Context, actor actor.Actor, id string) *Superviso
 // Supervise runs the supervision loop, including registration and periodic healthchecks.
 func (s *Supervisor) Supervise(manifest jtypes.EnsembleManifest) {
 	log.Debugw("supervisor started for orchestrator",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"supervisorID", s.id,
 		"allocations", s.manifest.Allocations)
 
@@ -256,7 +256,7 @@ func (s *Supervisor) escalateFailure(allocation jtypes.AllocationManifest) error
 	//      See https://gitlab.com/nunet/device-management-service/-/issues/794
 	log.Debugf("escalating failure for allocation %s", allocation.Handle.String())
 	log.Debugw("escalating failure for allocation",
-		"labels", []string{string(observability.LabelAllocation)},
+		"labels", string(observability.LabelAllocation),
 		"allocationHandle", allocation.Handle.String(),
 		"supervisorID", s.id)
 	expiry := actor.MakeExpiry(5 * time.Second)

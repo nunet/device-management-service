@@ -34,7 +34,7 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorw("onboard_error",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 		n.sendReply(msg, OnboardResponse{Error: err.Error()})
 	}
@@ -70,7 +70,7 @@ func (n *Node) handleOffboard(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorw("offboard_error",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 		n.sendReply(msg, OffboardResponse{Error: err.Error()})
 	}
@@ -95,7 +95,7 @@ func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 
 	handleErr := func(err error) {
 		log.Errorw("onboard_status_error",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 		n.sendReply(msg, OnboardStatusResponse{Error: err.Error()})
 	}

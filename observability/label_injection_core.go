@@ -1,6 +1,8 @@
 package observability
 
 import (
+	"reflect"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -86,19 +88,43 @@ func (l *labelInjectionCore) Sync() error {
 // extractLabels looks for a field with key == "labels" and returns a string slice.
 func extractLabels(fields []zapcore.Field) []string {
 	for _, f := range fields {
-		if f.Key == "labels" {
-			if f.Type == zapcore.StringType {
-				return []string{f.String}
+		if f.Key != "labels" {
+			continue
+		}
+
+		// CASE 1: Directly handle a single string field
+		if f.Type == zapcore.StringType {
+			return []string{f.String}
+		}
+
+		// CASE 2: Switch on f.Interface's concrete type
+		switch val := f.Interface.(type) {
+		case []string:
+			return val
+
+		case string:
+			// e.g. if we only have one label
+			return []string{val}
+
+		case []interface{}:
+			// e.g. if the library passes an array of interfaces
+			var s []string
+			for _, i := range val {
+				if str, ok := i.(string); ok {
+					s = append(s, str)
+				}
 			}
-			switch val := f.Interface.(type) {
-			case []string:
-				return val
-			case string:
-				return []string{val}
-			case []interface{}:
+			return s
+		}
+
+		// CASE 3: If the field is using reflection (zapcore.ReflectType)
+		if f.Type == zapcore.ReflectType {
+			rv := reflect.ValueOf(f.Interface)
+			if rv.Kind() == reflect.Slice {
 				var s []string
-				for _, i := range val {
-					if str, ok := i.(string); ok {
+				for i := 0; i < rv.Len(); i++ {
+					elem := rv.Index(i).Interface()
+					if str, ok := elem.(string); ok {
 						s = append(s, str)
 					}
 				}
@@ -106,5 +132,7 @@ func extractLabels(fields []zapcore.Field) []string {
 			}
 		}
 	}
+
+	// If we found no "labels" field or couldn't parse it, return nil
 	return nil
 }

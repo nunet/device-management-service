@@ -247,7 +247,7 @@ func New(cfg config.Config, fs afero.Afero,
 
 	if err := n.restoreDeployments(); err != nil {
 		log.Errorw("restoring deployments failed",
-			"labels", []string{string(observability.LabelNode)},
+			"labels", string(observability.LabelNode),
 			"error", err)
 	}
 
@@ -262,7 +262,7 @@ func (n *Node) saveDeployments() error {
 	for id, o := range n.orchestratorRegistry.Orchestrators() {
 		if err := n.saveDeployment(o); err != nil {
 			log.Errorw("error saving active deployment",
-				"labels", []string{string(observability.LabelDeployment)},
+				"labels", string(observability.LabelDeployment),
 				"deploymentID", id,
 				"error", err)
 			failed = append(failed, id)
@@ -353,7 +353,7 @@ func (n *Node) restoreDeployments() error {
 		}
 
 		log.Infow("restored deployment",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"deploymentID", orchestrator.ID())
 	}
 
@@ -519,7 +519,7 @@ func (n *Node) doGCBidState() {
 
 func (n *Node) geolocate() {
 	log.Infow("geolocation_initiated",
-		"labels", []string{string(observability.LabelNode)},
+		"labels", string(observability.LabelNode),
 	)
 
 	ip, err := n.network.HostPublicIP()
@@ -548,7 +548,7 @@ func (n *Node) geolocate() {
 	n.lock.Unlock()
 
 	log.Infow("geolocation_successful",
-		"labels", []string{string(observability.LabelNode)},
+		"labels", string(observability.LabelNode),
 		"continent", location.Continent,
 		"country", location.Country,
 		"city", location.City,
@@ -558,7 +558,7 @@ func (n *Node) geolocate() {
 // Start node
 func (n *Node) Start() error {
 	log.Infow("node_start_initiated",
-		"labels", []string{string(observability.LabelNode)})
+		"labels", string(observability.LabelNode))
 
 	if err := n.allocator.Run(); err != nil {
 		return fmt.Errorf("start node allocator: %w", err)
@@ -578,14 +578,14 @@ func (n *Node) Start() error {
 	go n.geolocate()
 
 	log.Infow("node_started_successfully",
-		"labels", []string{string(observability.LabelNode)})
+		"labels", string(observability.LabelNode))
 	return nil
 }
 
 // Stop node
 func (n *Node) Stop() error {
 	log.Infow("node_stop_initiated",
-		"labels", []string{string(observability.LabelNode)})
+		"labels", string(observability.LabelNode))
 
 	if err := n.allocator.Stop(context.Background()); err != nil {
 		log.Errorf("stopping node allocator: %s", err)
@@ -593,7 +593,7 @@ func (n *Node) Stop() error {
 
 	if err := n.saveDeployments(); err != nil {
 		log.Errorw("error saving active deployments during node stop",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err)
 	}
 
@@ -609,7 +609,7 @@ func (n *Node) Stop() error {
 	n.running.Store(false)
 
 	log.Infow("node_stopped_successfully",
-		"labels", []string{string(observability.LabelNode)})
+		"labels", string(observability.LabelNode))
 	return nil
 }
 
@@ -642,7 +642,7 @@ func (n *Node) createOrchestrator(ctx context.Context,
 	}
 
 	log.Infow("deploying ensemble",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"ensembleID", ensembleID)
 
 	err = childActor.Start()

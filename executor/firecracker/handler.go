@@ -72,12 +72,12 @@ func (h *executionHandler) run(ctx context.Context) {
 
 	// Start the VM
 	log.Infow("firecracker_execution_starting",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executionID", h.executionID)
 	if err := h.client.StartVM(ctx, h.machine); err != nil {
 		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start VM: %v", err))
 		log.Errorw("firecracker_vm_start_failure",
-			"labels", []string{string(observability.LabelDeployment)},
+			"labels", string(observability.LabelDeployment),
 			"error", err,
 			"executionID", h.executionID)
 		return
@@ -104,7 +104,7 @@ func (h *executionHandler) run(ctx context.Context) {
 // kill stops the firecracker VM.
 func (h *executionHandler) kill(ctx context.Context) error {
 	log.Infow("firecracker_kill_vm",
-		"labels", []string{string(observability.LabelAllocation)},
+		"labels", string(observability.LabelAllocation),
 		"executionID", h.executionID)
 	return h.client.ShutdownVM(ctx, h.machine)
 }
@@ -112,7 +112,7 @@ func (h *executionHandler) kill(ctx context.Context) error {
 // destroy stops the firecracker VM and removes its resources.
 func (h *executionHandler) destroy(timeout time.Duration) error {
 	log.Infow("firecracker_destroy_vm",
-		"labels", []string{string(observability.LabelDeployment)},
+		"labels", string(observability.LabelDeployment),
 		"executionID", h.executionID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

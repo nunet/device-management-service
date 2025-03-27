@@ -73,7 +73,7 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	}
 	// Log CPU usage with "accounting" and "metric" labels
 	log.Debugw("cpu_usage_computed",
-		"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+		"labels", string(observability.LabelAccounting),
 		"usage", cpuDetails)
 
 	ram, err := GetRAMUsage()
@@ -82,7 +82,7 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	}
 	// Log RAM usage
 	log.Debugw("ram_usage_computed",
-		"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+		"labels", string(observability.LabelAccounting),
 		"usedMemoryBytes", ram.Size)
 
 	diskDetails, err := GetDiskUsage()
@@ -91,7 +91,7 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	}
 	// Log disk usage
 	log.Debugw("disk_usage_computed",
-		"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+		"labels", string(observability.LabelAccounting),
 		"usedStorageBytes", diskDetails.Size)
 
 	gpus, err := m.gpuManager.GetGPUUsage()
@@ -101,7 +101,7 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	// Log GPU usage
 	for _, gpuItem := range gpus {
 		log.Debugw("gpu_usage_computed",
-			"labels", []string{string(observability.LabelAccounting), string(observability.LabelMetric)},
+			"labels", string(observability.LabelAccounting),
 			"gpuUUID", gpuItem.UUID,
 			"vendor", gpuItem.Vendor,
 			"usedVRAM", gpuItem.VRAM)
