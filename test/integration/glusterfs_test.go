@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -210,4 +213,17 @@ func runBinaryInContainer(containerID string, binaryPath string, args []string, 
 
 	fmt.Printf("Binary %s executed inside container %s, output redirected to %s\n", binaryPath, containerID, outputFilePath)
 	return nil
+}
+
+// setupGlusterfsServer creates a glusterfs server env
+func setupGlusterfsServer(t *testing.T) {
+	t.Helper()
+
+	createDirectories()
+	err := pullGlusterImage()
+	require.NoError(t, err)
+	err = runGlusterContainer()
+	require.NoError(t, err)
+	err = runGlusterCommands()
+	require.NoError(t, err)
 }
