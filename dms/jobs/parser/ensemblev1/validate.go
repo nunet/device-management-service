@@ -244,23 +244,31 @@ func ValidateAllocation(root *map[string]any, data any, path tree.Path) error {
 		}
 	}
 
-	// Validate keys reference if specified
+	// Validate keys if specified
 	if keys, ok := allocation["keys"].([]any); ok && len(keys) > 0 {
-		rootKeys, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.keys"))
-		if err != nil || rootKeys == nil {
-			return fmt.Errorf("keys must be defined when referenced in allocation")
-		}
-		rootKeysMap, ok := rootKeys.(map[string]any)
-		if !ok {
-			return fmt.Errorf("invalid keys configuration")
-		}
-		for _, key := range keys {
-			keyStr, ok := key.(string)
+		for i, keyObj := range keys {
+			keyMap, ok := keyObj.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid key reference: %v", key)
+				return fmt.Errorf("invalid key at index %d: must be an object", i)
 			}
-			if _, exists := rootKeysMap[keyStr]; !exists {
-				return fmt.Errorf("referenced key '%s' not found", keyStr)
+
+			keyType, ok := keyMap["type"].(string)
+			if !ok || keyType == "" {
+				return fmt.Errorf("key at index %d must have a type", i)
+			}
+
+			if keyType != "ssh" && keyType != "gpg" {
+				return fmt.Errorf("key at index %d has invalid type: %s (must be 'ssh' or 'gpg')", i, keyType)
+			}
+
+			keyFile, ok := keyMap["file"].(string)
+			if !ok || keyFile == "" {
+				return fmt.Errorf("key at index %d must have a file", i)
+			}
+
+			keyDest, ok := keyMap["dest"].(string)
+			if !ok || keyDest == "" {
+				return fmt.Errorf("key at index %d must have a dest", i)
 			}
 		}
 	}

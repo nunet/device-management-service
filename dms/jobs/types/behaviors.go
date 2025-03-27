@@ -20,6 +20,7 @@ type AllocationDeploymentConfig struct {
 	Resources        types.Resources
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
+	Keys             []types.AllocationKey
 	Volume           *types.VolumeConfig
 }
 

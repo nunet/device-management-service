@@ -63,7 +63,7 @@ type AllocationConfig struct {
 	Resources       types.Resources           `json:"resources"`                  // the HW resources required by the allocation
 	Execution       types.SpecConfig          `json:"execution"`                  // the allocation execution configuration
 	DNSName         string                    `json:"dns_name,omitempty"`         // the internal DNS name of the allocation
-	Keys            []string                  `json:"keys,omitempty"`             // names of the authorized ssh keys for the allocation
+	Keys            []types.AllocationKey     `json:"keys,omitempty"`             // names of the authorized ssh keys for the allocation
 	Provision       []string                  `json:"provision,omitempty"`        // names of provisioning scripts to run (in order)
 	HealthCheck     types.HealthCheckManifest `json:"healthcheck,omitempty"`      // name of the health check script
 	Volume          *types.VolumeConfig       `json:"volume,omitempty"`           // unified storage configuration (optional)

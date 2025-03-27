@@ -34,6 +34,7 @@ type ExecutionRequest struct {
 	ResultsDir          string                   // Directory to store the results
 	PersistLogsDuration time.Duration            // Duration to persist logs on disk
 	ProvisionScripts    map[string][]byte        // (named) Scripts to run when initiating the execution
+	Keys                []AllocationKey          // (named) SSH public keys relevant to the allocation
 	PortsToBind         []PortsToBind            // List of ports to bind
 	GatewayIP           string                   // Gateway IP to use as dns resolver
 }

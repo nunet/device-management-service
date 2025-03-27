@@ -79,12 +79,6 @@ scripts:
   setup: "scripts/setup.sh"
   cleanup: "scripts/cleanup.sh"
 
-# Key definitions
-keys:
-  worker1-key: "keys/worker1_key"
-  worker2-key: "keys/worker2_key"
-  vm1-key: "keys/vm1_key"
-
 # Allocation definitions
 allocations:
   worker1:
@@ -105,7 +99,9 @@ allocations:
       - "setup"     # Reference to script in scripts section
       - "cleanup"   # Reference to script in scripts section
     keys:
-      - "worker1-key"
+      - type: ssh
+        file: /path/to/worker1-key
+        dest: /root/.ssh/authorized_keys
     failure_recovery: "stay_down"
 
   worker2:
@@ -122,7 +118,9 @@ allocations:
     provision:
       - "setup"  # Reference to script in scripts section
     keys:
-      - "worker2-key"
+      - type: ssh
+        file: /path/to/worker2-key
+        dest: /root/.ssh/authorized_keys
     depends_on: ["worker1"]
 
   vm1:
@@ -139,7 +137,9 @@ allocations:
       - "setup"     # Reference to script in scripts section
       - "cleanup"   # Reference to script in scripts section
     keys:
-      - "vm1-key"
+      - type: ssh
+        file: /path/to/vm1-key
+        dest: /root/.ssh/authorized_keys
 
 # Supervisor configuration
 supervisor:

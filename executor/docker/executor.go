@@ -431,6 +431,64 @@ func (e *Executor) Exec(ctx context.Context, executionID string, command []strin
 	return e.client.Exec(ctx, h.containerID, command)
 }
 
+// copyKeysToContainer copies the keys from the request to the
+// container, respecting each key's destination path
+func (e *Executor) copyKeysToContainer(ctx context.Context,
+	containerID string, keys []types.AllocationKey,
+) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	log.Infof("copying %d keys to container %s", len(keys), containerID)
+
+	tempDir, err := os.MkdirTemp("", "keys-")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory for keys: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	for _, key := range keys {
+		keyContent, err := os.ReadFile(key.File)
+		if err != nil {
+			return fmt.Errorf("failed to read key file %s: %w", key.File, err)
+		}
+
+		destDir := filepath.Dir(key.Dest)
+		fullDestDir := filepath.Join(tempDir, destDir)
+		if err := os.MkdirAll(fullDestDir, 0o755); err != nil {
+			return fmt.Errorf("failed to create destination directory %s: %w", destDir, err)
+		}
+
+		destFile := filepath.Join(tempDir, key.Dest)
+		if err := os.WriteFile(destFile, keyContent, 0o600); err != nil {
+			return fmt.Errorf("failed to write key to destination file %s: %w", destFile, err)
+		}
+
+		log.Infof("prepared key %s for copying to %s", key.File, key.Dest)
+	}
+
+	tarPath := filepath.Join(tempDir, "keys.tar")
+	if err := utils.CreateTarArchive(tempDir, tarPath); err != nil {
+		return fmt.Errorf("failed to create tar archive: %w", err)
+	}
+
+	tarFile, err := os.Open(tarPath)
+	if err != nil {
+		return fmt.Errorf("failed to open tar file: %w", err)
+	}
+	defer tarFile.Close()
+
+	// Copy the tar file to the container's root directory
+	// This will extract all files to their proper paths
+	if err := e.client.CopyToContainer(ctx, containerID, "/", tarFile, container.CopyToContainerOptions{}); err != nil {
+		return fmt.Errorf("failed to copy keys to container: %w", err)
+	}
+
+	log.Infof("successfully copied keys to container %s", containerID)
+	return nil
+}
+
 // newDockerExecutionContainer is an internal method called by Start to set up a new Docker container
 // for the job execution. It configures the container based on the provided ExecutionRequest.
 // This includes decoding engine specifications, setting up environment variables, mounts and resource
@@ -518,6 +576,13 @@ func (e *Executor) newDockerExecutionContainer(
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
+
+	if len(params.Keys) > 0 {
+		if err := e.copyKeysToContainer(ctx, executionContainer, params.Keys); err != nil {
+			log.Warnf("failed to copy SSH keys to container: %v", err)
+		}
+	}
+
 	return executionContainer, nil
 }
 
