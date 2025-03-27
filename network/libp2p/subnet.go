@@ -657,7 +657,7 @@ func (s *subnet) writePackets(stream network.Stream) {
 				// Read the incoming packet's size as a binary value.
 				_, err := stream.Read(packetSize)
 				if err != nil {
-					log.Errorf("failed to read packet size from stream on subnetID: %s, error: %v", s.info.id, err)
+					log.Warnf("failed to read packet size from stream on subnetID: %s, error: %v", s.info.id, err)
 					_ = stream.Reset()
 					return
 				}
@@ -671,7 +671,7 @@ func (s *subnet) writePackets(stream network.Stream) {
 					tmp, err := stream.Read(packet[plen:size])
 					plen += uint16(tmp)
 					if err != nil {
-						log.Errorf("failed to read packet from stream on subnetID: %s, error: %v", s.info.id, err)
+						log.Warnf("failed to read packet from stream on subnetID: %s, error: %v", s.info.id, err)
 						_ = stream.Reset()
 						return
 					}

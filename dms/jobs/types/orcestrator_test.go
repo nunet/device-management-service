@@ -69,9 +69,9 @@ func TestDeploymentStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := DeploymentStatusString(tt.d)
+			got := tt.d.String()
 			if got != tt.want {
-				t.Errorf("DeploymentStatusString() = %v, want %v", got, tt.want)
+				t.Errorf("DeploymentStatus String = %v, want %v", got, tt.want)
 			}
 		})
 	}
