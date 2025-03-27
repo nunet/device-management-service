@@ -34,7 +34,7 @@ func DeploymentTest(suite *TestSuite) {
 		suite.Require().Eventually(func() bool {
 			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
 			suite.T().Log("Deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusRunning)
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
 		time.Sleep(2 * time.Second)
 
@@ -53,7 +53,7 @@ func DeploymentTest(suite *TestSuite) {
 		suite.Require().Eventually(func() bool {
 			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
 			suite.T().Log("deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusCompleted)
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
 
 		// Ensure resources are freed.
@@ -87,7 +87,7 @@ func DeploymentTest(suite *TestSuite) {
 		suite.Require().Eventually(func() bool {
 			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
 			suite.T().Log("Deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusRunning)
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
 		time.Sleep(2 * time.Second)
 
@@ -106,7 +106,7 @@ func DeploymentTest(suite *TestSuite) {
 		suite.Require().Eventually(func() bool {
 			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
 			suite.T().Log("deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusCompleted)
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
 
 		// Ensure resources are freed.
@@ -123,7 +123,7 @@ func DeploymentTest(suite *TestSuite) {
 		suite.Require().Eventually(func() bool {
 			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
 			suite.T().Log("Second deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusRunning)
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Hello-world deployment did not reach Running status")
 
 		// Shutdown the hello-world deployment.
@@ -134,7 +134,7 @@ func DeploymentTest(suite *TestSuite) {
 		suite.Require().Eventually(func() bool {
 			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
 			suite.T().Log("deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusString(jobtypes.DeploymentStatusCompleted)
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
 	})
 }

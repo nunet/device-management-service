@@ -154,7 +154,7 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 
 	log.Infow("orchestrator_status_updated",
 		"labels", []string{string(observability.LabelDeployment)},
-		"status", jtypes.DeploymentStatusString(status),
+		"status", status.String(),
 		"orchestratorID", o.id)
 	o.status = status
 }

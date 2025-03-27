@@ -158,7 +158,7 @@ func (n *Node) saveDeployment(orchestrator orchestrator.Orchestrator) error {
 	}
 
 	log.Debugf("deployment %s of status %s saved", view.OrchestratorID,
-		jobtypes.DeploymentStatusString(view.Status))
+		view.Status.String())
 
 	return nil
 }
@@ -267,7 +267,7 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 				continue
 			}
 		}
-		resp.Deployments[ID] = jobtypes.DeploymentStatusString(dep.Status())
+		resp.Deployments[ID] = dep.Status().String()
 	}
 
 	n.sendReply(msg, resp)
@@ -357,7 +357,7 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
-	resp.Status = jobtypes.DeploymentStatusString(o.Status())
+	resp.Status = o.Status().String()
 	n.sendReply(msg, resp)
 }
 

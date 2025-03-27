@@ -58,6 +58,7 @@ func PromptForPassphrase(confirm bool) (string, error) {
 				err = fmt.Errorf("failed to read passphrase: %w", err)
 				return
 			}
+			fmt.Println("") // new line after passphrase input
 
 			if confirm {
 				fmt.Print("Please confirm your passphrase: ")
@@ -66,6 +67,7 @@ func PromptForPassphrase(confirm bool) (string, error) {
 					err = fmt.Errorf("failed to read passphrase confirmation: %w", err)
 					return
 				}
+				fmt.Println("") // new line after passphrase confirm input
 
 				if string(bytePassphrase) != string(byteConfirmation) {
 					err = fmt.Errorf("passphrases do not match")

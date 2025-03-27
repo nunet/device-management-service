@@ -27,7 +27,7 @@ const (
 	DeploymentStatusCompleted
 )
 
-func DeploymentStatusString(d DeploymentStatus) string {
+func (d DeploymentStatus) String() string {
 	switch d {
 	case DeploymentStatusPreparing:
 		return "Preparing"

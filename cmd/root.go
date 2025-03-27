@@ -41,8 +41,8 @@ func NewRootCMD(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd.AddCommand(newConfigCmd(afs.Fs, cfg))
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
-
 	cmd.AddCommand(newGPUCommand())
+	cmd.AddCommand(newNetworkCommand(afs, cfg))
 	return cmd
 }
 
