@@ -52,7 +52,7 @@ func (c *Client) IsInstalled(ctx context.Context) bool {
 
 	version, err := cmd.Output()
 	if err != nil || !cmd.ProcessState.Success() {
-		log.Errorw("firecracker_client_is_installed_failure",
+		log.Warnw("firecracker_client_is_installed_failure",
 			"labels", string(observability.LabelNode),
 			"error", err)
 		return false
