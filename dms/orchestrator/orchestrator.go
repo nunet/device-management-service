@@ -247,6 +247,7 @@ deploy:
 			}
 
 			log.Errorf("failed to bid: %v", err)
+			return fmt.Errorf("failed to bid: %w", err)
 		}
 
 		// 2. Commit the deployment
