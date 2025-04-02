@@ -73,6 +73,7 @@ func (n *Node) location() jobtypes.Location {
 	}
 }
 
+// TODO: ignore bid if our location is rejected or not included on accepted
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 

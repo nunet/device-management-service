@@ -105,11 +105,13 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 
 		// verify the location constraints of the node
 		loc := bid.Location()
-		if !o.acceptPeerLocation(cfg, nodeID, peerID, loc) {
+		if !acceptPeerLocation(cfg, nodeID, peerID, loc) {
 			log.Debugw("ignoring out-of-location bid",
 				"labels", []string{string(observability.LabelDeployment)},
 				"peerID", peerID,
-				"nodeID", nodeID)
+				"nodeID", nodeID,
+				"location", loc,
+			)
 			return false
 		}
 
@@ -754,7 +756,7 @@ func (o *BasicOrchestrator) verifyEdgeConstraint(candidate map[string]jtypes.Bid
 	return response.OK
 }
 
-func (o *BasicOrchestrator) acceptPeerLocation(
+func acceptPeerLocation(
 	cfg jtypes.EnsembleConfig, nodeID, peerID string, loc jtypes.Location,
 ) bool {
 	n, ok := cfg.Node(nodeID)
@@ -768,6 +770,8 @@ func (o *BasicOrchestrator) acceptPeerLocation(
 	}
 
 	// check acceptable locations
+	// if acceptable locations are specified, then reject locations are ignored
+	// (since the user probably wants only specified locations)
 	if len(n.Location.Accept) > 0 {
 		accept := false
 		for _, acceptable := range n.Location.Accept {
@@ -776,9 +780,8 @@ func (o *BasicOrchestrator) acceptPeerLocation(
 				break
 			}
 		}
-		if !accept {
-			return false
-		}
+
+		return accept
 	}
 
 	// check unacceptable locations

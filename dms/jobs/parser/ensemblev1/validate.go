@@ -738,10 +738,10 @@ func validateLocation(data any, _ int) error {
 		return fmt.Errorf("location must be a map")
 	}
 
-	// Region is required
-	region, ok := location["region"].(string)
-	if !ok || region == "" {
-		return fmt.Errorf("region is required and cannot be empty")
+	// continent required if specifying location
+	continent, ok := location["continent"].(string)
+	if !ok || continent == "" {
+		return fmt.Errorf("continent is required when specifying a location")
 	}
 
 	// Country is optional
