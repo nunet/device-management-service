@@ -403,7 +403,6 @@ func (b *bufferedElasticsearchSyncer) Write(p []byte) (n int, err error) {
 
 	if len(b.buffer) >= b.maxBufferSize {
 		if !b.warnLogged {
-			log.Warn("Elasticsearch log buffer is full, dropping log entries")
 			b.warnLogged = true
 		}
 		return 0, fmt.Errorf("log buffer is full")
@@ -430,7 +429,6 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 	if b.client == nil {
 		if !b.warnLogged {
-			log.Warn("Elasticsearch client is not initialized, cannot flush logs")
 			b.warnLogged = true
 		}
 		return
@@ -447,7 +445,6 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 		var record map[string]interface{}
 		if err := json.Unmarshal([]byte(logEntry), &record); err != nil {
 			// If parsing fails, skip or store as-is. We'll skip to avoid malformed JSON in ES.
-			log.Debugw("Failed to parse logEntry JSON, skipping", "error", err)
 			continue
 		}
 
@@ -467,25 +464,13 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 		}
 	}
 
-	log.Debugw("Starting Flush to Elasticsearch",
-		"bufferSize", len(bufferCopy),
-		"errorCount", b.errorCount,
-	)
-
 	flushCtx, cancel := context.WithTimeout(b.ctx, 3*time.Second)
 	defer cancel()
 
 	_, err := bulkRequest.Do(flushCtx)
-	log.Debugw("Completed Flush call to Elasticsearch",
-		"err", err,
-		"bufferSize", len(bufferCopy),
-		"errorCountBefore", b.errorCount,
-	)
-
 	if err != nil {
 		// If it’s a 401, disable ES immediately
 		if esErr, ok := err.(*elastic.Error); ok && esErr.Status == 401 {
-			log.Warn("Elasticsearch returned 401 Unauthorized. Disabling ES logging.")
 			mutex.Lock()
 			esDisabled = true
 			mutex.Unlock()
@@ -495,7 +480,6 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 		now := time.Now()
 		// Throttle repeated warnings
 		if b.errorCount == 0 || now.Sub(b.lastErrorTime) > 5*time.Minute {
-			log.Warn("Error flushing logs to Elasticsearch, will keep trying", zap.Error(err))
 			b.lastErrorTime = now
 			b.errorCount = 1
 		} else {
@@ -504,7 +488,6 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 		// If it fails too many times in a short window, disable ES
 		if b.errorCount >= 3 {
-			log.Warn("Repeated Elasticsearch flush failures. Disabling Elasticsearch logging.")
 			mutex.Lock()
 			esDisabled = true
 			mutex.Unlock()
