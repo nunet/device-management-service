@@ -1,12 +1,18 @@
 #!/bin/bash
 
-# This script allows the user to either create or join a restricted network interactively.
+# This script allows the user to either create or join a private network interactively.
 #
 # It assumes both user and node local identities are created beforehand, as well as the node
 # having your user set as anchor root. Please refer to quickstart.sh
 #
-# Create: it will perform all operations locally and you should run this script in the machine
-# in which it will reside your organization. It also grants the local user/node on that same machine, if any.
+# Create: simply creates a new capability context for your organization (locally)
+#
+# Join: allow your local user to join an existing organization. It will require:
+# 	- DID of organization
+# 	- Token granted to your user from organization
+#
+# Grant: allow other users to join your local organization. It will require:
+# 	- DID of user being granted
 
 set -e
 
@@ -28,7 +34,7 @@ setup() {
 }
 
 if [[ -z "$DMS_PASSPHRASE" ]]; then
-	echo "Your passphrase is not set. Setting a passphrase will prevent the script from prompting it every time."
+	echo "Your passphrase is not set. You can always set DMS_PASSPHRASE environment variable to avoid prompting."
 	read -srp "Passphrase: " PASSPHRASE
 	export DMS_PASSPHRASE="$PASSPHRASE"
 	echo
@@ -41,37 +47,8 @@ select opt in Create Join Grant Quit; do
 	Create)
 		read -rp "Organization name (default: org): " ORG_NAME
 		ORG_NAME=${ORG_NAME:-org}
-		read -rp "User name (default: user): " USER_NAME
-		USER_NAME=${USER_NAME:-user}
-		read -rp "Node name (default: dms): " DMS_NAME
-		DMS_NAME=${DMS_NAME:-dms}
 
-		DEFAULT_EXPIRY=$(date -d "+30 days" +%Y-%m-%d)
-		read -rp "Set an expiry date for your tokens (default: $DEFAULT_EXPIRY): " EXPIRY_DATE
-		EXPIRY_DATE=${EXPIRY_DATE:-$DEFAULT_EXPIRY}
-
-		if [ -f "$HOME/.nunet/cap/$ORG_NAME.cap" ]; then
-			while true; do
-				read -rp "'$ORG_NAME' already exists. Do you want to overwrite it? (y/N) " yn
-				case $yn in
-				[Yy]*)
-					nunet cap new -f "$ORG_NAME"
-					break
-					;;
-				[Nn]*) break ;;
-				*) echo "Please answer yes or no." ;;
-				esac
-			done
-		else
-			nunet cap new "$ORG_NAME"
-		fi
-
-		ORG_DID=$(nunet key did "$ORG_NAME")
-		USER_DID=$(nunet key did "$USER_NAME")
-		DMS_DID=$(nunet key did "$DMS_NAME")
-		GRANT_FROM_ORG=$(nunet cap grant --context "$ORG_NAME" --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry "$EXPIRY_DATE" "$USER_DID")
-
-		setup
+		nunet cap new "$ORG_NAME"
 		;;
 	Join)
 		read -rp "Organization DID: " ORG_DID
