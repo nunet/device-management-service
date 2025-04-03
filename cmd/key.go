@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -69,7 +68,7 @@ Example:
 			}
 
 			if dmsUtils.SliceContains(keys, keyID) {
-				confirmed, err := utils.PromptYesNo(
+				confirmed, err := dmsUtils.PromptYesNo(
 					cmd.InOrStdin(),
 					cmd.OutOrStdout(),
 					fmt.Sprintf("A key with name '%s' already exists. Do you want to overwrite it with a new one?", keyID),
@@ -84,7 +83,7 @@ Example:
 
 			passphrase := os.Getenv("DMS_PASSPHRASE")
 			if passphrase == "" {
-				passphrase, err = utils.PromptForPassphrase(true)
+				passphrase, err = dmsUtils.PromptForPassphrase(true)
 				if err != nil {
 					return fmt.Errorf("failed to get passphrase: %w", err)
 				}
@@ -137,7 +136,7 @@ Example:
 
 			passphrase := os.Getenv("DMS_PASSPHRASE")
 			if passphrase == "" {
-				passphrase, err = utils.PromptForPassphrase(false)
+				passphrase, err = dmsUtils.PromptForPassphrase(false)
 				if err != nil {
 					return fmt.Errorf("failed to get passphrase: %w", err)
 				}

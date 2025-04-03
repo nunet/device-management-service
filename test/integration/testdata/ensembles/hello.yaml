@@ -1,0 +1,26 @@
+version: "V1"
+
+allocations:
+    helloAlloc:
+        type: task
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 1
+            disk:
+                size: 1
+        execution:
+            type: docker
+            image: hello-world
+            working_directory: /
+        keys: []
+        provision: []
+        dns_name: hellodocker
+
+nodes:
+    node1:
+        allocations:
+            - helloAlloc

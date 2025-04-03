@@ -20,6 +20,7 @@ import (
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	fcmodels "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 const pidCheckTickTime = 100 * time.Millisecond
@@ -29,15 +30,20 @@ type Client struct{}
 
 // NewFirecrackerClient initializes a new Firecracker client.
 func NewFirecrackerClient() (*Client, error) {
-	log.Infow("firecracker_client_init_started")
+	log.Infow("firecracker_client_init_started",
+		"labels", string(observability.LabelDeployment))
+
 	client := &Client{}
-	log.Infow("firecracker_client_init_success")
+
+	log.Infow("firecracker_client_init_success",
+		"labels", string(observability.LabelDeployment))
 	return client, nil
 }
 
 // IsInstalled checks if Firecracker is installed on the host.
 func (c *Client) IsInstalled(ctx context.Context) bool {
-	log.Infow("firecracker_client_is_installed_check_started")
+	log.Infow("firecracker_client_is_installed_check_started",
+		"labels", string(observability.LabelNode))
 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -46,15 +52,20 @@ func (c *Client) IsInstalled(ctx context.Context) bool {
 
 	version, err := cmd.Output()
 	if err != nil || !cmd.ProcessState.Success() {
-		log.Errorw("firecracker_client_is_installed_failure", "error", err)
+		log.Warnw("firecracker_client_is_installed_failure",
+			"labels", string(observability.LabelNode),
+			"error", err)
 		return false
 	}
 
 	isInstalled := string(version) != ""
 	if isInstalled {
-		log.Infow("firecracker_client_is_installed_success")
+		log.Infow("firecracker_client_is_installed_success",
+			"labels", string(observability.LabelNode))
 	} else {
-		log.Errorw("firecracker_client_is_installed_failure", "error", "version check failed")
+		log.Errorw("firecracker_client_is_installed_failure",
+			"labels", string(observability.LabelNode),
+			"error", "version check failed")
 	}
 	return isInstalled
 }
@@ -64,7 +75,10 @@ func (c *Client) CreateVM(
 	ctx context.Context,
 	cfg firecracker.Config,
 ) (*firecracker.Machine, error) {
-	log.Infow("firecracker_create_vm_started", "socketPath", cfg.SocketPath)
+	log.Infow("firecracker_create_vm_started",
+		"labels", string(observability.LabelDeployment),
+		"socketPath", cfg.SocketPath)
+
 	cmd := firecracker.VMCommandBuilder{}.
 		WithSocketPath(cfg.SocketPath).
 		Build(ctx)
@@ -74,23 +88,31 @@ func (c *Client) CreateVM(
 
 	m, err := firecracker.NewMachine(ctx, cfg, machineOpts...)
 	if err != nil {
-		log.Errorw("firecracker_create_vm_failure", "error", err)
+		log.Errorw("firecracker_create_vm_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
 		return nil, err
 	}
 
-	log.Infow("firecracker_create_vm_success", "socketPath", cfg.SocketPath)
+	log.Infow("firecracker_create_vm_success",
+		"labels", string(observability.LabelDeployment),
+		"socketPath", cfg.SocketPath)
 	return m, nil
 }
 
 // StartVM starts the Firecracker VM.
 func (c *Client) StartVM(ctx context.Context, m *firecracker.Machine) error {
-	log.Infow("firecracker_start_vm_started")
+	log.Infow("firecracker_start_vm_started",
+		"labels", string(observability.LabelDeployment))
 	err := m.Start(ctx)
 	if err != nil {
-		log.Errorw("firecracker_start_vm_failure", "error", err)
+		log.Errorw("firecracker_start_vm_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
 		return err
 	}
-	log.Infow("firecracker_start_vm_success")
+	log.Infow("firecracker_start_vm_success",
+		"labels", string(observability.LabelDeployment))
 	return nil
 }
 
@@ -101,13 +123,17 @@ func (c *Client) StopVM(_ context.Context, m *firecracker.Machine) error {
 
 // ShutdownVM shuts down the Firecracker VM.
 func (c *Client) ShutdownVM(ctx context.Context, m *firecracker.Machine) error {
-	log.Infow("firecracker_shutdown_vm_started")
+	log.Infow("firecracker_shutdown_vm_started",
+		"labels", string(observability.LabelAllocation))
 	err := m.Shutdown(ctx)
 	if err != nil {
-		log.Errorw("firecracker_shutdown_vm_failure", "error", err)
+		log.Errorw("firecracker_shutdown_vm_failure",
+			"labels", string(observability.LabelAllocation),
+			"error", err)
 		return err
 	}
-	log.Infow("firecracker_shutdown_vm_success")
+	log.Infow("firecracker_shutdown_vm_success",
+		"labels", string(observability.LabelAllocation))
 	return nil
 }
 
@@ -117,7 +143,8 @@ func (c *Client) DestroyVM(
 	m *firecracker.Machine,
 	timeout time.Duration,
 ) error {
-	log.Infow("firecracker_destroy_vm_started")
+	log.Infow("firecracker_destroy_vm_started",
+		"labels", string(observability.LabelDeployment))
 
 	defer os.Remove(m.Cfg.SocketPath)
 
@@ -169,12 +196,16 @@ func (c *Client) DestroyVM(
 		// The shutdown request timed out, kill the process with SIGKILL.
 		err := syscall.Kill(pid, syscall.SIGKILL)
 		if err != nil {
-			log.Errorw("firecracker_destroy_vm_kill_failure", "error", err)
+			log.Errorw("firecracker_destroy_vm_kill_failure",
+				"labels", string(observability.LabelAllocation),
+				"error", err)
 			return fmt.Errorf("failed to kill process: %v", err)
 		}
-		log.Infow("firecracker_destroy_vm_kill_success")
+		log.Infow("firecracker_destroy_vm_kill_success",
+			"labels", string(observability.LabelAllocation))
 	}
-	log.Infow("firecracker_destroy_vm_success")
+	log.Infow("firecracker_destroy_vm_success",
+		"labels", string(observability.LabelDeployment))
 	return nil
 }
 

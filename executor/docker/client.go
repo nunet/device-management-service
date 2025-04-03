@@ -28,6 +28,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"gitlab.com/nunet/device-management-service/observability"
 	"go.uber.org/multierr"
 )
 
@@ -68,6 +69,7 @@ type ClientInterface interface {
 		follow bool,
 	) (io.ReadCloser, error)
 	Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error)
+	CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error
 }
 
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
@@ -80,29 +82,37 @@ var _ ClientInterface = (*Client)(nil)
 
 // NewDockerClient initializes a new Docker client with environment variables and API version negotiation.
 func NewDockerClient() (*Client, error) {
-	log.Infow("docker_client_init_started")
+	log.Debugw("docker_client_init_started",
+		"labels", string(observability.LabelDeployment))
 
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
-		log.Errorw("docker_client_init_failure", "error", err)
+		log.Errorw("docker_client_init_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
 		return nil, err
 	}
 
-	log.Infow("docker_client_init_success")
+	log.Debugw("docker_client_init_success",
+		"labels", string(observability.LabelDeployment))
 	return &Client{client: c}, nil
 }
 
 // IsInstalled checks if Docker is installed and reachable by pinging the Docker daemon.
 func (c *Client) IsInstalled(ctx context.Context) bool {
-	log.Infow("docker_client_is_installed_check_started")
+	log.Debugw("docker_client_is_installed_check_started",
+		"labels", string(observability.LabelNode))
 
 	_, err := c.client.Ping(ctx)
 	if err != nil {
-		log.Errorw("docker_client_is_installed_failure", "error", err)
+		log.Errorw("docker_client_is_installed_failure",
+			"labels", string(observability.LabelNode),
+			"error", err)
 		return false
 	}
 
-	log.Infow("docker_client_is_installed_success")
+	log.Debugw("docker_client_is_installed_success",
+		"labels", string(observability.LabelNode))
 	return true
 }
 
@@ -116,12 +126,17 @@ func (c *Client) CreateContainer(
 	name string,
 	pullImage bool,
 ) (string, error) {
-	if pullImage {
-		log.Infow("docker_create_container_started", "image", config.Image)
+	log.Infow("docker_create_container_started",
+		"labels", string(observability.LabelDeployment),
+		"image", config.Image,
+		"name", name)
 
+	if pullImage {
 		_, err := c.PullImage(ctx, config.Image)
 		if err != nil {
-			log.Errorw("docker_create_container_failure", "error", err)
+			log.Errorw("docker_create_container_failure",
+				"labels", string(observability.LabelDeployment),
+				"error", err)
 			return "", err
 		}
 	}
@@ -135,11 +150,15 @@ func (c *Client) CreateContainer(
 		name,
 	)
 	if err != nil {
-		log.Errorw("docker_create_container_failure", "error", err)
+		log.Errorw("docker_create_container_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
 		return "", err
 	}
 
-	log.Infow("docker_create_container_success", "containerID", resp.ID)
+	log.Infow("docker_create_container_success",
+		"labels", string(observability.LabelDeployment),
+		"containerID", resp.ID)
 	return resp.ID, nil
 }
 
@@ -197,7 +216,9 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 
 // StartContainer starts a specified Docker container.
 func (c *Client) StartContainer(ctx context.Context, containerID string) error {
-	log.Infow("docker_start_container_started", "containerID", containerID)
+	log.Infow("docker_start_container_started",
+		"labels", string(observability.LabelDeployment),
+		"containerID", containerID)
 	return c.client.ContainerStart(ctx, containerID, container.StartOptions{})
 }
 
@@ -226,13 +247,17 @@ func (c *Client) StopContainer(
 	containerID string,
 	options container.StopOptions,
 ) error {
-	log.Infow("docker_stop_container_started", "containerID", containerID)
+	log.Infow("docker_stop_container_started",
+		"labels", string(observability.LabelAllocation),
+		"containerID", containerID)
 	return c.client.ContainerStop(ctx, containerID, options)
 }
 
 // RemoveContainer removes a Docker container, optionally forcing removal and removing associated volumes.
 func (c *Client) RemoveContainer(ctx context.Context, containerID string) error {
-	log.Infow("docker_remove_container_started", "containerID", containerID)
+	log.Infow("docker_remove_container_started",
+		"labels", string(observability.LabelDeployment),
+		"containerID", containerID)
 	return c.client.ContainerRemove(
 		ctx,
 		containerID,
@@ -242,14 +267,17 @@ func (c *Client) RemoveContainer(ctx context.Context, containerID string) error 
 
 // removeContainers removes all containers matching the specified filters.
 func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) error {
-	log.Infow("docker_remove_containers_started")
+	log.Infow("docker_remove_containers_started",
+		"labels", string(observability.LabelDeployment))
 
 	containers, err := c.client.ContainerList(
 		ctx,
 		container.ListOptions{All: true, Filters: filterz},
 	)
 	if err != nil {
-		log.Errorw("docker_remove_containers_failure", "error", err)
+		log.Errorw("docker_remove_containers_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
 		return err
 	}
 
@@ -273,20 +301,26 @@ func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) err
 	}
 
 	if errs != nil {
-		log.Errorw("docker_remove_containers_failure", "error", errs)
+		log.Errorw("docker_remove_containers_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", errs)
 	} else {
-		log.Infow("docker_remove_containers_success")
+		log.Infow("docker_remove_containers_success",
+			"labels", string(observability.LabelDeployment))
 	}
 	return errs
 }
 
 // removeNetworks removes all networks matching the specified filters.
 func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error {
-	log.Infow("docker_remove_networks_started")
+	log.Infow("docker_remove_networks_started",
+		"labels", string(observability.LabelDeployment))
 
 	networks, err := c.client.NetworkList(ctx, network.ListOptions{Filters: filterz})
 	if err != nil {
-		log.Errorw("docker_remove_networks_failure", "error", err)
+		log.Errorw("docker_remove_networks_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
 		return err
 	}
 
@@ -311,16 +345,21 @@ func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error
 	}
 
 	if errs != nil {
-		log.Errorw("docker_remove_networks_failure", "error", errs)
+		log.Errorw("docker_remove_networks_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", errs)
 	} else {
-		log.Infow("docker_remove_networks_success")
+		log.Infow("docker_remove_networks_success",
+			"labels", string(observability.LabelDeployment))
 	}
 	return errs
 }
 
 // RemoveObjectsWithLabel removes all Docker containers and networks with a specific label.
 func (c *Client) RemoveObjectsWithLabel(ctx context.Context, label string, value string) error {
-	log.Infow("docker_remove_objects_with_label_started", "label", label, "value", value)
+	log.Infow("docker_remove_objects_with_label_started",
+		"labels", string(observability.LabelDeployment),
+		"label", label, "value", value)
 
 	filterz := filters.NewArgs(
 		filters.Arg("label", fmt.Sprintf("%s=%s", label, value)),
@@ -330,10 +369,14 @@ func (c *Client) RemoveObjectsWithLabel(ctx context.Context, label string, value
 	networkErr := c.removeNetworks(ctx, filterz)
 
 	if containerErr != nil || networkErr != nil {
-		log.Errorw("docker_remove_objects_with_label_failure", "containerErr", containerErr, "networkErr", networkErr)
+		log.Errorw("docker_remove_objects_with_label_failure",
+			"labels", string(observability.LabelDeployment),
+			"containerErr", containerErr,
+			"networkErr", networkErr)
 	}
 
-	log.Infow("docker_remove_objects_with_label_success")
+	log.Infow("docker_remove_objects_with_label_success",
+		"labels", string(observability.LabelDeployment))
 	return multierr.Combine(containerErr, networkErr)
 }
 
@@ -432,11 +475,15 @@ func (c *Client) GetImage(ctx context.Context, imageName string) (image.Summary,
 
 // PullImage pulls a Docker image from a registry.
 func (c *Client) PullImage(ctx context.Context, imageName string) (string, error) {
-	log.Infow("docker_pull_image_started", "image", imageName)
+	log.Infow("docker_pull_image_started",
+		"labels", string(observability.LabelDeployment),
+		"image", imageName)
 
 	out, err := c.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
-		log.Errorw("docker_pull_image_failure", "error", err)
+		log.Errorw("docker_pull_image_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
 		return "", err
 	}
 
@@ -450,14 +497,18 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 			if err == io.EOF {
 				break
 			}
-			log.Errorw("docker_pull_image_failure", "error", err)
+			log.Errorw("docker_pull_image_failure",
+				"labels", string(observability.LabelDeployment),
+				"error", err)
 			return "", err
 		}
 		if message.Aux != nil {
 			continue
 		}
 		if message.Error != nil {
-			log.Errorw("docker_pull_image_failure", "error", message.Error.Message)
+			log.Errorw("docker_pull_image_failure",
+				"labels", string(observability.LabelDeployment),
+				"error", message.Error.Message)
 			return "", errors.New(message.Error.Message)
 		}
 		if strings.HasPrefix(message.Status, "Digest") {
@@ -465,7 +516,9 @@ func (c *Client) PullImage(ctx context.Context, imageName string) (string, error
 		}
 	}
 
-	log.Infow("docker_pull_image_success", "digest", digest)
+	log.Infow("docker_pull_image_success",
+		"labels", string(observability.LabelDeployment),
+		"digest", digest)
 	return digest, nil
 }
 
@@ -496,14 +549,11 @@ func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (in
 	defer hijconn.Close()
 
 	var stdout, stderr bytes.Buffer
-
 	n, err := stdcopy.StdCopy(&stdout, &stderr, hijconn.Reader)
 	if err != nil {
 		log.Errorw("docker_container_exec_failure", "error", err)
 		return 1, "", "", err
 	}
-
-	log.Debugf("Exec output: %d bytes", n)
 
 	execInspect, err := c.client.ContainerExecInspect(ctx, idresp.ID)
 	if err != nil {
@@ -511,5 +561,31 @@ func (c *Client) Exec(ctx context.Context, containerID string, cmd []string) (in
 		return 1, "", "", err
 	}
 
+	log.Debugw("docker_container_exec_inspect",
+		"exitCode", execInspect.ExitCode,
+		"bytesCopied", n,
+		"containerID", containerID)
 	return execInspect.ExitCode, stdout.String(), stderr.String(), nil
+}
+
+// CopyToContainer copies content to a container's file system.
+// dstPath is the path in the container where the content will be copied.
+func (c *Client) CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error {
+	log.Infow("docker_copy_to_container_started",
+		"containerID", containerID,
+		"dstPath", dstPath)
+
+	err := c.client.CopyToContainer(ctx, containerID, dstPath, content, options)
+	if err != nil {
+		log.Errorw("docker_copy_to_container_failure",
+			"containerID", containerID,
+			"dstPath", dstPath,
+			"error", err)
+		return err
+	}
+
+	log.Infow("docker_copy_to_container_success",
+		"containerID", containerID,
+		"dstPath", dstPath)
+	return nil
 }

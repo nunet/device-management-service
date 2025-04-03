@@ -10,6 +10,7 @@ package actor
 
 import (
 	"context"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -61,6 +62,7 @@ type Actor interface {
 	Context() context.Context
 	Handle() Handle
 	Security() SecurityContext
+	Supervisor() Handle
 
 	AddBehavior(behavior string, continuation Behavior, opt ...BehaviorOption) error
 	RemoveBehavior(behavior string)
@@ -75,7 +77,13 @@ type Actor interface {
 	Start() error
 	Stop() error
 
-	CreateChild(super Handle, params BasicActorParams) (*BasicActor, error)
+	// TODO: add child termination strategies
+	// e.g.: childSelfRelease which relies on a func `f` to self release and terminate
+	// the child actor
+	CreateChild(id string, super Handle, opts ...CreateChildOption) (Actor, error)
+
+	Parent() Handle
+	Children() map[did.DID]Handle
 
 	Limiter() RateLimiter
 }
@@ -117,7 +125,13 @@ type SecurityContext interface {
 	// Sign signs an envelope; the envelope is modified in place.
 	Sign(msg *Envelope) error
 
-	// Disparcrd discards unwanted tokens from a consumed envelope
+	// Grant grants the specified capabilities to the specified audience.
+	//
+	// Useful for granting capabilities between actors without sending
+	// tokens to each other.
+	Grant(sub, aud did.DID, caps []ucan.Capability, expiry time.Duration) error
+
+	// Discard discards unwanted tokens from a consumed envelope
 	Discard(msg Envelope)
 
 	// Return the capability context
@@ -160,3 +174,16 @@ type BehaviorOptions struct {
 }
 
 type BroadcastSetup func(topic string) error
+
+type CreateChildOption func(*CreateChildOptions)
+
+type CreateChildOptions struct {
+	PrivKey crypto.PrivKey
+}
+
+// WithPrivKey sets a specific private key for the child actor
+func WithPrivKey(privKey crypto.PrivKey) CreateChildOption {
+	return func(o *CreateChildOptions) {
+		o.PrivKey = privKey
+	}
+}

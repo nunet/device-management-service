@@ -872,18 +872,10 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 			{
 				name: "Executors checks",
 				host: HardwareCapability{
-					Executors: []Executor{
-						{
-							ExecutorType: ExecutorTypeDocker,
-						},
-					},
+					Executors: Executors{ExecutorTypeDocker},
 				},
 				job: HardwareCapability{
-					Executors: []Executor{
-						{
-							ExecutorType: ExecutorTypeDocker,
-						},
-					},
+					Executors: Executors{ExecutorTypeDocker},
 				},
 				want: Equal,
 			},
@@ -1274,28 +1266,13 @@ func TestHardwareCapability_Calculable_Add(t *testing.T) {
 			{
 				name: "can add Executors",
 				l: HardwareCapability{
-					Executors: []Executor{
-						{
-							ExecutorType: ExecutorTypeDocker,
-						},
-					},
+					Executors: Executors{ExecutorTypeDocker},
 				},
 				r: HardwareCapability{
-					Executors: []Executor{
-						{
-							ExecutorType: ExecutorTypeFirecracker,
-						},
-					},
+					Executors: Executors{ExecutorTypeFirecracker},
 				},
 				want: HardwareCapability{
-					Executors: []Executor{
-						{
-							ExecutorType: ExecutorTypeDocker,
-						},
-						{
-							ExecutorType: ExecutorTypeFirecracker,
-						},
-					},
+					Executors: Executors{ExecutorTypeDocker, ExecutorTypeFirecracker},
 				},
 			},
 			{
@@ -1882,28 +1859,13 @@ func TestHardwareCapability_Calculable_Subtract(t *testing.T) {
 			{
 				name: "can subtract Executors",
 				l: HardwareCapability{
-					Executors: Executors{
-						{
-							ExecutorType: ExecutorTypeDocker,
-						},
-						{
-							ExecutorType: ExecutorTypeFirecracker,
-						},
-					},
+					Executors: Executors{ExecutorTypeDocker, ExecutorTypeFirecracker},
 				},
 				r: HardwareCapability{
-					Executors: Executors{
-						{
-							ExecutorType: ExecutorTypeDocker,
-						},
-					},
+					Executors: Executors{ExecutorTypeDocker},
 				},
 				want: HardwareCapability{
-					Executors: Executors{
-						{
-							ExecutorType: ExecutorTypeFirecracker,
-						},
-					},
+					Executors: Executors{ExecutorTypeFirecracker},
 				},
 			},
 			{

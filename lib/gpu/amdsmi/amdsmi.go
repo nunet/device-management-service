@@ -228,9 +228,14 @@ func Shutdown() Status {
 // GetSocketHandles returns the socket handles of the GPUs.
 func GetSocketHandles() ([]SocketHandle, Status) {
 	var socketCount C.uint32_t
+
 	ret := C.call_amdsmi_get_socket_handles(&socketCount, nil)
 	if ret != C.AMDSMI_STATUS_SUCCESS {
 		return nil, Status{Code: StatusCode(ret), Message: "get socket count"}
+	}
+
+	if socketCount == 0 {
+		return nil, Status{Code: StatusSuccess, Message: "no socket found"}
 	}
 
 	sockets := make([]C.amdsmi_socket_handle, socketCount)

@@ -844,49 +844,49 @@ func (c *HardwareCapability) Add(other HardwareCapability) error {
 }
 
 // Subtract subtracts the resources of the given HardwareCapability from the current HardwareCapability
-func (c *HardwareCapability) Subtract(cap HardwareCapability) error {
+func (c *HardwareCapability) Subtract(hwCap HardwareCapability) error {
 	// Executors
-	if err := c.Executors.Subtract(cap.Executors); err != nil {
+	if err := c.Executors.Subtract(hwCap.Executors); err != nil {
 		return fmt.Errorf("error subtracting Executors: %v", err)
 	}
 
 	// JobTypes
-	if err := c.JobTypes.Subtract(cap.JobTypes); err != nil {
+	if err := c.JobTypes.Subtract(hwCap.JobTypes); err != nil {
 		return fmt.Errorf("error comparing JobTypes: %v", err)
 	}
 
 	// Resources
-	if err := c.Resources.Subtract(cap.Resources); err != nil {
+	if err := c.Resources.Subtract(hwCap.Resources); err != nil {
 		return fmt.Errorf("error subtracting Resources: %v", err)
 	}
 
 	// Libraries
-	if err := c.Libraries.Subtract(cap.Libraries); err != nil {
+	if err := c.Libraries.Subtract(hwCap.Libraries); err != nil {
 		return fmt.Errorf("error subtracting Libraries: %v", err)
 	}
 
 	// Localities
-	if err := c.Localities.Subtract(cap.Localities); err != nil {
+	if err := c.Localities.Subtract(hwCap.Localities); err != nil {
 		return fmt.Errorf("error subtracting Localities: %v", err)
 	}
 
 	// Connectivity
-	if err := c.Connectivity.Subtract(cap.Connectivity); err != nil {
+	if err := c.Connectivity.Subtract(hwCap.Connectivity); err != nil {
 		return fmt.Errorf("error subtracting Connectivity: %v", err)
 	}
 
 	// Price
-	if err := c.Price.Subtract(cap.Price); err != nil {
+	if err := c.Price.Subtract(hwCap.Price); err != nil {
 		return fmt.Errorf("error subtracting Price: %v", err)
 	}
 
 	// Time
-	if err := c.Time.Subtract(cap.Time); err != nil {
+	if err := c.Time.Subtract(hwCap.Time); err != nil {
 		return fmt.Errorf("error subtracting Time: %v", err)
 	}
 
 	// KYCs
-	if err := c.KYCs.Subtract(cap.KYCs); err != nil {
+	if err := c.KYCs.Subtract(hwCap.KYCs); err != nil {
 		return fmt.Errorf("error subtracting KYCs: %v", err)
 	}
 

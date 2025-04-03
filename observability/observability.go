@@ -1,20 +1,9 @@
-// observability.go
-// Copyright 2024, Nunet
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package observability
 
 import (
 	context "context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -104,11 +93,17 @@ func initLogger(observabilityConfig config.Observability) error {
 	localEsDisabled := esDisabled
 	mutex.Unlock()
 
+	// If we're in no-op mode, do nothing and return
 	if localNoOp {
 		return nil
 	}
 
-	// Parse the global log level
+	// 1. Check if GOLOG_LOG_LEVEL is set. If so, let that override any config-based level
+	if envLogLevel := os.Getenv("GOLOG_LOG_LEVEL"); envLogLevel != "" {
+		observabilityConfig.LogLevel = envLogLevel
+	}
+
+	// 2. Parse the final log level string
 	logLevel, err := parseLogLevel(observabilityConfig.LogLevel)
 	if err != nil {
 		return fmt.Errorf("invalid log level: %w", err)
@@ -149,17 +144,21 @@ func initLogger(observabilityConfig config.Observability) error {
 	}
 	eventCore = eventCore.With([]zapcore.Field{didField})
 
-	// Combine the cores
+	// Combine the cores into a Tee
 	cores := []zapcore.Core{consoleCore, fileCore, eventCore}
 	if esCore != nil {
 		cores = append(cores, esCore)
 	}
-	newCombined := zapcore.NewTee(cores...)
+	baseTee := zapcore.NewTee(cores...)
+
+	// Wrap the combined tee with our label injection core
+	labelInjectedCore := newLabelInjectionCore(baseTee, atomicLevel)
 
 	// Lock again to replace global references
 	mutex.Lock()
 	defer mutex.Unlock()
-	combinedCore = newCombined
+
+	combinedCore = labelInjectedCore
 	logging.SetPrimaryCore(combinedCore)
 
 	return nil
@@ -197,9 +196,9 @@ func createFileCore(observabilityConfig config.Observability, levelEnabler zapco
 	fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
 	fileWS := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   observabilityConfig.LogFile,
-		MaxSize:    observabilityConfig.MaxSize, // in MB
-		MaxBackups: observabilityConfig.MaxBackups,
-		MaxAge:     observabilityConfig.MaxAge, // in days
+		MaxSize:    observabilityConfig.MaxSize,    // in MB
+		MaxBackups: observabilityConfig.MaxBackups, // number of backups
+		MaxAge:     observabilityConfig.MaxAge,     // in days
 		Compress:   true,
 	})
 
@@ -404,7 +403,6 @@ func (b *bufferedElasticsearchSyncer) Write(p []byte) (n int, err error) {
 
 	if len(b.buffer) >= b.maxBufferSize {
 		if !b.warnLogged {
-			log.Warn("Elasticsearch log buffer is full, dropping log entries")
 			b.warnLogged = true
 		}
 		return 0, fmt.Errorf("log buffer is full")
@@ -419,7 +417,8 @@ func (b *bufferedElasticsearchSyncer) Sync() error {
 	return nil
 }
 
-// Flush sends the buffered log entries to Elasticsearch
+// Flush sends the buffered log entries to Elasticsearch with advanced routing,
+// but never sends the same log to both the override index and the default index.
 func (b *bufferedElasticsearchSyncer) Flush() {
 	b.bufferMutex.Lock()
 	defer b.bufferMutex.Unlock()
@@ -430,40 +429,48 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 	if b.client == nil {
 		if !b.warnLogged {
-			log.Warn("Elasticsearch client is not initialized, cannot flush logs")
 			b.warnLogged = true
 		}
 		return
 	}
 
+	// Copy and clear the buffer so we can release the lock sooner
 	bufferCopy := b.buffer
-	b.buffer = make([]string, 0)
+	b.buffer = nil
 
 	bulkRequest := b.client.Bulk()
-	for _, logEntry := range bufferCopy {
-		req := elastic.NewBulkIndexRequest().Index(b.index).Doc(logEntry)
-		bulkRequest = bulkRequest.Add(req)
-	}
 
-	log.Debugw("Starting Flush to Elasticsearch",
-		"bufferSize", len(bufferCopy),
-		"errorCount", b.errorCount,
-	)
+	for _, logEntry := range bufferCopy {
+		// Parse the JSON to check "es_skip" and "es_index"
+		var record map[string]interface{}
+		if err := json.Unmarshal([]byte(logEntry), &record); err != nil {
+			// If parsing fails, skip or store as-is. We'll skip to avoid malformed JSON in ES.
+			continue
+		}
+
+		// If "es_skip" is true, do not send to ES at all
+		if skipVal, ok := record["es_skip"].(bool); ok && skipVal {
+			continue
+		}
+
+		// If "es_index" is set, store in that override index only
+		if overrideIndex, ok := record["es_index"].(string); ok && overrideIndex != "" {
+			req := elastic.NewBulkIndexRequest().Index(overrideIndex).Doc(record)
+			bulkRequest = bulkRequest.Add(req)
+		} else {
+			// Otherwise, store in the default index
+			req := elastic.NewBulkIndexRequest().Index(b.index).Doc(record)
+			bulkRequest = bulkRequest.Add(req)
+		}
+	}
 
 	flushCtx, cancel := context.WithTimeout(b.ctx, 3*time.Second)
 	defer cancel()
 
 	_, err := bulkRequest.Do(flushCtx)
-	log.Debugw("Completed Flush call to Elasticsearch",
-		"err", err,
-		"bufferSize", len(bufferCopy),
-		"errorCountBefore", b.errorCount,
-	)
-
 	if err != nil {
 		// If it’s a 401, disable ES immediately
 		if esErr, ok := err.(*elastic.Error); ok && esErr.Status == 401 {
-			log.Warn("Elasticsearch returned 401 Unauthorized. Disabling ES logging.")
 			mutex.Lock()
 			esDisabled = true
 			mutex.Unlock()
@@ -473,7 +480,6 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 		now := time.Now()
 		// Throttle repeated warnings
 		if b.errorCount == 0 || now.Sub(b.lastErrorTime) > 5*time.Minute {
-			log.Warn("Error flushing logs to Elasticsearch, will keep trying", zap.Error(err))
 			b.lastErrorTime = now
 			b.errorCount = 1
 		} else {
@@ -482,7 +488,6 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 		// If it fails too many times in a short window, disable ES
 		if b.errorCount >= 3 {
-			log.Warn("Repeated Elasticsearch flush failures. Disabling Elasticsearch logging.")
 			mutex.Lock()
 			esDisabled = true
 			mutex.Unlock()
@@ -677,6 +682,7 @@ func SetNoOpMode(enabled bool) {
 	mutex.Lock()
 	noOpMode = enabled
 	if noOpMode {
+		// If in no-op mode, set the log level to a very high threshold
 		atomicLevel.SetLevel(zapcore.Level(100))
 	} else {
 		cfg := config.GetConfig()

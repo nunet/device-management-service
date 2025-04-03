@@ -25,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -61,6 +60,8 @@ type Executor struct {
 	fs afero.Afero
 }
 
+var _ types.Executor = (*Executor)(nil)
+
 // NewExecutor initializes a new Executor instance with a Docker client.
 func NewExecutor(ctx context.Context, fs afero.Afero, id string) (*Executor, error) {
 	dockerClient, err := NewDockerClient()
@@ -88,8 +89,10 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	endTrace := observability.StartTrace(ctx, "docker_executor_start_duration")
 	defer endTrace()
 
-	// Log starting execution
-	log.Infow("docker_executor_start_begin", "jobID", request.JobID, "executionID", request.ExecutionID)
+	log.Infow("docker_executor_start_begin",
+		"labels", []string{string(observability.LabelDeployment)},
+		"jobID", request.JobID,
+		"executionID", request.ExecutionID)
 
 	// It's possible that this is being called due to a restart. We should check if the
 	// container is already running.
@@ -99,17 +102,26 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		// failing that will create a new container.
 		if handler, ok := e.handlers.Get(request.ExecutionID); ok {
 			if handler.active() {
-				log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution already started")
+				log.Errorw("docker_executor_start_failure",
+					"labels", []string{string(observability.LabelDeployment)},
+					"executionID", request.ExecutionID,
+					"error", "execution already started")
 				return fmt.Errorf("execution is already started")
 			}
-			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", "execution completed")
+			log.Errorw("docker_executor_start_failure",
+				"labels", []string{string(observability.LabelDeployment)},
+				"executionID", request.ExecutionID,
+				"error", "execution completed")
 			return fmt.Errorf("execution is already completed")
 		}
 
 		// Create a new handler for the execution.
 		containerID, err = e.newDockerExecutionContainer(ctx, request, enableTTY)
 		if err != nil {
-			log.Errorw("docker_executor_start_failure", "executionID", request.ExecutionID, "error", err)
+			log.Errorw("docker_executor_start_failure",
+				"labels", []string{string(observability.LabelDeployment)},
+				"executionID", request.ExecutionID,
+				"error", err)
 			return fmt.Errorf("failed to create new container: %w", err)
 		}
 	}
@@ -126,7 +138,6 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		activeCh:            make(chan bool),
 		running:             &atomic.Bool{},
 		TTYEnabled:          enableTTY,
-		initScripts:         request.ProvisionScripts,
 	}
 
 	// register the handler for this executionID
@@ -374,15 +385,22 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 	endTrace := observability.StartTrace(ctx, "docker_executor_cleanup_duration")
 	defer endTrace()
 
-	log.Infow("docker_executor_cleanup_begin", "executorID", e.ID)
+	log.Infow("docker_executor_cleanup_begin",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executorID", e.ID)
 
 	err := e.client.RemoveObjectsWithLabel(ctx, labelExecutorName, e.ID)
 	if err != nil {
-		log.Errorw("docker_executor_cleanup_failure", "executorID", e.ID, "error", err)
+		log.Errorw("docker_executor_cleanup_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"executorID", e.ID,
+			"error", err)
 		return fmt.Errorf("failed to remove containers: %w", err)
 	}
 
-	log.Infow("docker_executor_cleanup_success", "executorID", e.ID)
+	log.Infow("docker_executor_cleanup_success",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executorID", e.ID)
 
 	// Remove all provision scripts used for mounting
 	pattern := initScriptsBaseDir + "*"
@@ -413,6 +431,64 @@ func (e *Executor) Exec(ctx context.Context, executionID string, command []strin
 	return e.client.Exec(ctx, h.containerID, command)
 }
 
+// copyKeysToContainer copies the keys from the request to the
+// container, respecting each key's destination path
+func (e *Executor) copyKeysToContainer(ctx context.Context,
+	containerID string, keys []types.AllocationKey,
+) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	log.Infof("copying %d keys to container %s", len(keys), containerID)
+
+	tempDir, err := os.MkdirTemp("", "keys-")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory for keys: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	for _, key := range keys {
+		keyContent, err := os.ReadFile(key.File)
+		if err != nil {
+			return fmt.Errorf("failed to read key file %s: %w", key.File, err)
+		}
+
+		destDir := filepath.Dir(key.Dest)
+		fullDestDir := filepath.Join(tempDir, destDir)
+		if err := os.MkdirAll(fullDestDir, 0o755); err != nil {
+			return fmt.Errorf("failed to create destination directory %s: %w", destDir, err)
+		}
+
+		destFile := filepath.Join(tempDir, key.Dest)
+		if err := os.WriteFile(destFile, keyContent, 0o600); err != nil {
+			return fmt.Errorf("failed to write key to destination file %s: %w", destFile, err)
+		}
+
+		log.Infof("prepared key %s for copying to %s", key.File, key.Dest)
+	}
+
+	tarPath := filepath.Join(tempDir, "keys.tar")
+	if err := utils.CreateTarArchive(tempDir, tarPath); err != nil {
+		return fmt.Errorf("failed to create tar archive: %w", err)
+	}
+
+	tarFile, err := os.Open(tarPath)
+	if err != nil {
+		return fmt.Errorf("failed to open tar file: %w", err)
+	}
+	defer tarFile.Close()
+
+	// Copy the tar file to the container's root directory
+	// This will extract all files to their proper paths
+	if err := e.client.CopyToContainer(ctx, containerID, "/", tarFile, container.CopyToContainerOptions{}); err != nil {
+		return fmt.Errorf("failed to copy keys to container: %w", err)
+	}
+
+	log.Infof("successfully copied keys to container %s", containerID)
+	return nil
+}
+
 // newDockerExecutionContainer is an internal method called by Start to set up a new Docker container
 // for the job execution. It configures the container based on the provided ExecutionRequest.
 // This includes decoding engine specifications, setting up environment variables, mounts and resource
@@ -428,30 +504,12 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to decode docker engine spec: %w", err)
 	}
 
-	// TODO: Move this code block ( L263-272) to the allocator in future
-	// Select the GPU with the highest available free VRAM and choose the GPU vendor for container's host config
-	// TODO: use the hardware manager instantiated in the dms package
-	hardwareManager := hardware.NewHardwareManager()
-	machineResources, err := hardwareManager.GetMachineResources()
-	if err != nil {
-		return "", fmt.Errorf("failed to get machine resources: %w", err)
-	}
-
-	var chosenGPUVendor types.GPUVendor
-	if len(machineResources.GPUs) == 0 {
-		log.Infow("no GPUs available on the machine")
-		chosenGPUVendor = types.GPUVendorNone
-	} else {
-		// Essential for multi-vendor GPU nodes. For example,
-		// if a machine has an 8 GB NVIDIA and a 16 GB Intel GPU, the latter should be used first.
-		// Even for machines with a single GPU, this is important as integrated GPUs would also be commonly detected.
-		maxFreeVRAMGpu, err := machineResources.GPUs.MaxFreeVRAMGPU()
-		if err != nil {
-			// TODO: log a warning here
-
-			chosenGPUVendor = types.GPUVendorNone
-		} else {
-			chosenGPUVendor = maxFreeVRAMGpu.Vendor
+	// expose mapped ports
+	exposes := nat.PortSet{}
+	for _, port := range params.PortsToBind {
+		p, err := nat.NewPort("tcp", fmt.Sprintf("%d", port.ExecutorPort))
+		if err == nil {
+			exposes[p] = struct{}{}
 		}
 	}
 
@@ -463,7 +521,8 @@ func (e *Executor) newDockerExecutionContainer(
 		Labels:     e.containerLabels(params.JobID, params.ExecutionID),
 		WorkingDir: dockerArgs.WorkingDirectory,
 		// Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
-		Tty: tty,
+		Tty:          tty,
+		ExposedPorts: exposes,
 	}
 
 	mounts, err := makeContainerMounts(params.Inputs, params.Outputs, params.ResultsDir)
@@ -498,7 +557,7 @@ func (e *Executor) newDockerExecutionContainer(
 	}
 
 	log.Infof("Adding %d GPUs to request", len(params.Resources.GPUs))
-	hostConfig, err := configureHostConfig(chosenGPUVendor, params, dockerArgs, mounts)
+	hostConfig, err := configureHostConfig(params, dockerArgs, mounts)
 	if err != nil {
 		return "", fmt.Errorf("failed to configure host config: %w", err)
 	}
@@ -517,6 +576,13 @@ func (e *Executor) newDockerExecutionContainer(
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
+
+	if len(params.Keys) > 0 {
+		if err := e.copyKeysToContainer(ctx, executionContainer, params.Keys); err != nil {
+			log.Warnf("failed to copy SSH keys to container: %v", err)
+		}
+	}
+
 	return executionContainer, nil
 }
 
@@ -558,86 +624,80 @@ func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
 
 // configureHostConfig sets up the host configuration for the container based on the
 // GPU vendor and resources requested by the execution. It supports both GPU and CPU configurations.
-func configureHostConfig(vendor types.GPUVendor, params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) (container.HostConfig, error) {
+func configureHostConfig(params *types.ExecutionRequest, dockerArgs EngineSpec, mounts []mount.Mount) (container.HostConfig, error) {
 	var hostConfig container.HostConfig
 
-	switch vendor {
-	case types.GPUVendorNvidia:
-		deviceIDs := make([]string, len(params.Resources.GPUs))
-		for i, gpu := range params.Resources.GPUs {
-			deviceIDs[i] = fmt.Sprint(gpu.Index)
-		}
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-				DeviceRequests: []container.DeviceRequest{
-					{
-						DeviceIDs:    deviceIDs,
-						Capabilities: [][]string{{"gpu"}},
+	// set the config for the first selected gpu
+	// TODO: support multiple GPUs
+	if len(params.Resources.GPUs) >= 1 {
+		switch params.Resources.GPUs[0].Vendor {
+		case types.GPUVendorNvidia:
+			deviceIDs := make([]string, len(params.Resources.GPUs))
+			for i, gpu := range params.Resources.GPUs {
+				deviceIDs[i] = fmt.Sprint(gpu.Index)
+			}
+			hostConfig = container.HostConfig{
+				Resources: container.Resources{
+					DeviceRequests: []container.DeviceRequest{
+						{
+							DeviceIDs:    deviceIDs,
+							Capabilities: [][]string{{"gpu"}},
+						},
 					},
 				},
-			},
-		}
-	case types.GPUVendorAMDATI:
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Binds: []string{
-				"/dev/kfd:/dev/kfd",
-				"/dev/dri:/dev/dri",
-			},
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-				Devices: []container.DeviceMapping{
-					{
-						PathOnHost:        "/dev/kfd",
-						PathInContainer:   "/dev/kfd",
-						CgroupPermissions: "rwm",
-					},
-					{
-						PathOnHost:        "/dev/dri",
-						PathInContainer:   "/dev/dri",
-						CgroupPermissions: "rwm",
+			}
+		case types.GPUVendorAMDATI:
+			hostConfig = container.HostConfig{
+				Binds: []string{
+					"/dev/kfd:/dev/kfd",
+					"/dev/dri:/dev/dri",
+				},
+				Resources: container.Resources{
+					Devices: []container.DeviceMapping{
+						{
+							PathOnHost:        "/dev/kfd",
+							PathInContainer:   "/dev/kfd",
+							CgroupPermissions: "rwm",
+						},
+						{
+							PathOnHost:        "/dev/dri",
+							PathInContainer:   "/dev/dri",
+							CgroupPermissions: "rwm",
+						},
 					},
 				},
-			},
-			GroupAdd: []string{"video"},
-		}
-	// Updated the device handling for Intel GPUs.
-	// Previously, specific device paths were determined using PCI addresses and symlinks.
-	// Now, the approach has been simplified by directly binding the entire /dev/dri directory.
-	// This change exposes all Intel GPUs to the container, which may be preferable for
-	// environments with multiple Intel GPUs. It reduces complexity as granular control
-	// is not required if all GPUs need to be accessible.
-	case types.GPUVendorIntel:
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Binds: []string{
-				"/dev/dri:/dev/dri",
-			},
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-				Devices: []container.DeviceMapping{
-					{
-						PathOnHost:        "/dev/dri",
-						PathInContainer:   "/dev/dri",
-						CgroupPermissions: "rwm",
+				GroupAdd: []string{"video"},
+			}
+		// Updated the device handling for Intel GPUs.
+		// Previously, specific device paths were determined using PCI addresses and symlinks.
+		// Now, the approach has been simplified by directly binding the entire /dev/dri directory.
+		// This change exposes all Intel GPUs to the container, which may be preferable for
+		// environments with multiple Intel GPUs. It reduces complexity as granular control
+		// is not required if all GPUs need to be accessible.
+		case types.GPUVendorIntel:
+			hostConfig = container.HostConfig{
+				Binds: []string{
+					"/dev/dri:/dev/dri",
+				},
+				Resources: container.Resources{
+					Devices: []container.DeviceMapping{
+						{
+							PathOnHost:        "/dev/dri",
+							PathInContainer:   "/dev/dri",
+							CgroupPermissions: "rwm",
+						},
 					},
 				},
-			},
-		}
-	default:
-		hostConfig = container.HostConfig{
-			Mounts: mounts,
-			Resources: container.Resources{
-				NanoCPUs: int64(params.Resources.CPU.Cores * nanoCPUsPerCore),
-				CPUCount: int64(params.Resources.CPU.Cores),
-			},
+			}
 		}
 	}
+
+	// Set the cpu config
+	hostConfig.Resources.NanoCPUs = int64(params.Resources.CPU.Cores * nanoCPUsPerCore)
+	hostConfig.Resources.CPUCount = int64(params.Resources.CPU.Cores)
+
+	// setup mounts
+	hostConfig.Mounts = mounts
 
 	// configure port binding
 	portMaps := make(map[nat.Port][]nat.PortBinding)
@@ -691,16 +751,12 @@ func makeContainerMounts(
 	// these are paths for both input and output data
 	mounts := make([]mount.Mount, 0)
 	for _, input := range inputs {
-		if input.Type != types.StorageVolumeTypeBind {
-			mounts = append(mounts, mount.Mount{
-				Type:     mount.TypeBind,
-				Source:   input.Source,
-				Target:   input.Target,
-				ReadOnly: input.ReadOnly,
-			})
-		} else {
-			return nil, fmt.Errorf("unsupported storage volume type: %s", input.Type)
-		}
+		mounts = append(mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   input.Source,
+			Target:   input.Target,
+			ReadOnly: input.ReadOnly,
+		})
 	}
 
 	for _, output := range outputs {

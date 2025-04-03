@@ -11,9 +11,9 @@ package hardware
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
-
 	"gitlab.com/nunet/device-management-service/dms/hardware/cpu"
+	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -71,20 +71,40 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get CPU usage: %w", err)
 	}
+	// Log CPU usage with "accounting" and "metric" labels
+	log.Debugw("cpu_usage_computed",
+		"labels", string(observability.LabelAccounting),
+		"usage", cpuDetails)
 
 	ram, err := GetRAMUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get RAM usage: %w", err)
 	}
+	// Log RAM usage
+	log.Debugw("ram_usage_computed",
+		"labels", string(observability.LabelAccounting),
+		"usedMemoryBytes", ram.Size)
 
 	diskDetails, err := GetDiskUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get Disk usage: %w", err)
 	}
+	// Log disk usage
+	log.Debugw("disk_usage_computed",
+		"labels", string(observability.LabelAccounting),
+		"usedStorageBytes", diskDetails.Size)
 
 	gpus, err := m.gpuManager.GetGPUUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get GPU usage: %w", err)
+	}
+	// Log GPU usage
+	for _, gpuItem := range gpus {
+		log.Debugw("gpu_usage_computed",
+			"labels", string(observability.LabelAccounting),
+			"gpuUUID", gpuItem.UUID,
+			"vendor", gpuItem.Vendor,
+			"usedVRAM", gpuItem.VRAM)
 	}
 
 	return types.Resources{
@@ -114,6 +134,21 @@ func (m *defaultHardwareManager) GetFreeResources() (types.Resources, error) {
 	}
 
 	return availableResources.Resources, nil
+}
+
+// CheckCapacity checks if the machine has enough resources to commit/allocate.
+func (m *defaultHardwareManager) CheckCapacity(resources types.Resources) (bool, error) {
+	// Check if there are enough free resources on the machine to allocate
+	freeResources, err := m.GetFreeResources()
+	if err != nil {
+		return false, fmt.Errorf("get free resources: %w", err)
+	}
+
+	if err := freeResources.Subtract(resources); err != nil {
+		return false, fmt.Errorf("no free resources on the machine: %w", err)
+	}
+
+	return true, nil
 }
 
 // Shutdown shuts down the hardware manager.

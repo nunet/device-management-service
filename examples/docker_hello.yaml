@@ -2,6 +2,7 @@ version: "V1"
 
 allocations:
     alloc1:
+        type: task
         executor: docker
         resources:
             cpu:
@@ -14,7 +15,9 @@ allocations:
         execution:
             type: docker
             image: hello-world
+        failure_recovery: stay_down
 nodes:
     node1:
         allocations:
             - alloc1
+        failure_recovery: stay_down

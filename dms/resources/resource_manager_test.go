@@ -16,10 +16,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	cloverRepo "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -27,10 +26,16 @@ import (
 func TestNewResourceManager(t *testing.T) {
 	t.Parallel()
 
-	mockDB, err := gorm.Open(sqlite.Open("file:test_newResourceManager?mode=memory&cache=shared"), &gorm.Config{})
+	mockDB, err := cloverRepo.NewMemDB(
+		[]string{
+			"onboarded_resources",
+			"resource_allocation",
+		},
+	)
 	require.NoError(t, err)
+	defer mockDB.Close()
 
-	repos := setupManagerRepos(t, mockDB)
+	repos := setupManagerRepos(mockDB)
 
 	hm := hardware.NewHardwareManager()
 	rm, err := NewResourceManager(repos, hm)
@@ -48,10 +53,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -81,7 +91,6 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			},
 		}
 
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
 		err = rm.CommitResources(context.Background(), demand)
 		require.NoError(t, err)
 
@@ -89,6 +98,10 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		demandFromMap, ok := rm.store.committedResources[demand.AllocationID]
 		require.True(t, ok)
 		assertResources(t, demand.Resources, demandFromMap.Resources)
+
+		isCommitted, err := rm.IsCommitted(demand.AllocationID)
+		require.NoError(t, err)
+		require.True(t, isCommitted)
 	})
 
 	t.Run("Must return an error when resources are already committed for the allocation", func(t *testing.T) {
@@ -97,10 +110,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -133,10 +151,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -226,10 +249,15 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources4?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -259,7 +287,6 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 			},
 		}
 
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
 		err = rm.CommitResources(context.Background(), demand)
 		require.NoError(t, err)
 
@@ -275,53 +302,53 @@ func TestDefaultManager_CommitResources(t *testing.T) {
 		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
 	})
 
-	t.Run("Must fail when there are not enough resources in the machine", func(t *testing.T) {
+	t.Run("must validate the commitment of resources", func(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_CommitResources5?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
 
-		// setting a very high unrealistic resources to onboard
-		// this is so that the test can skip this check
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
 					Cores:      5,
-					ClockSpeed: 5000,
+					ClockSpeed: 10000,
 				},
-				RAM:  types.RAM{Size: 50000},
-				Disk: types.Disk{Size: 50000},
+				RAM:  types.RAM{Size: 2048},
+				Disk: types.Disk{Size: 1024},
 			},
 		}
-
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		// Since this demand is higher than the actual resources on the machine
-		// it shouldn't have free resources to allocate
 		demand := types.CommittedResources{
-			AllocationID: "alloc1",
+			AllocationID: "", // invalid allocation ID
 			Resources: types.Resources{
 				CPU: types.CPU{
-					Cores:      4,
-					ClockSpeed: 4000,
+					Cores:      3,
+					ClockSpeed: 10000,
 				},
-				RAM:  types.RAM{Size: 40000},
-				Disk: types.Disk{Size: 40000},
+				RAM:  types.RAM{Size: 1024},
+				Disk: types.Disk{Size: 512},
 			},
 		}
 
-		hm.EXPECT().GetFreeResources().Return(types.Resources{}, fmt.Errorf("no free resources on the machine"))
 		err = rm.CommitResources(context.Background(), demand)
-		require.ErrorContains(t, err, "no free resources on the machine")
+		require.Error(t, err)
+		require.ErrorContains(t, err, "validating commitment")
 	})
 }
 
@@ -334,10 +361,15 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_ReleaseResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -366,8 +398,6 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 				Disk: types.Disk{Size: 512},
 			},
 		}
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
-
 		err = rm.CommitResources(context.Background(), demand)
 		require.NoError(t, err)
 
@@ -391,10 +421,15 @@ func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_ReleaseCommittedResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -415,10 +450,15 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -429,7 +469,7 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 					ClockSpeed: 10000,
 				},
 				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
+				Disk: types.Disk{Size: 2048},
 			},
 		}
 
@@ -440,70 +480,49 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 			AllocationID: "alloc1",
 			Resources: types.Resources{
 				CPU: types.CPU{
-					Cores:      3,
+					Cores:      1,
 					ClockSpeed: 10000,
 				},
-				RAM:  types.RAM{Size: 1024},
+				RAM:  types.RAM{Size: 512},
 				Disk: types.Disk{Size: 512},
 			},
 		}
+		err = rm.CommitResources(context.Background(), types.CommittedResources{
+			AllocationID: demand.AllocationID,
+			Resources:    demand.Resources,
+		})
+		require.NoError(t, err)
 
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
-		err = rm.AllocateResources(context.Background(), demand)
+		err = rm.AllocateResources(context.Background(), demand.AllocationID)
 		require.NoError(t, err)
 
 		// Check if the allocations is stored in the map
 		demandFromMap, ok := rm.store.allocations[demand.AllocationID]
 		require.True(t, ok)
 		assertResources(t, demand.Resources, demandFromMap.Resources)
+
+		isAllocated, err := rm.IsAllocated(demand.AllocationID)
+		require.NoError(t, err)
+		require.True(t, isAllocated)
 	})
 
 	t.Run("Must return an error when resources are already allocated for the allocation", func(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{"resource_allocation", "onboarded_resources"},
+		)
+		require.NoError(t, err)
 		t.Cleanup(func() {
 			ctrl.Finish()
+			mockDB.Close()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources2?mode=memory&cache=shared"), &gorm.Config{})
-		require.NoError(t, err)
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
 
-		demand := types.ResourceAllocation{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM: types.RAM{Size: 1024},
-			},
-		}
-		rm.store.withAllocationsLock(func() {
-			rm.store.allocations[demand.AllocationID] = demand
-		})
-
-		err = rm.AllocateResources(context.Background(), demand)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "resources already allocated for allocation")
-	})
-
-	t.Run("Must return an error when there are insufficient resources to allocate", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources3?mode=memory&cache=shared"), &gorm.Config{})
-		require.NoError(t, err)
-
-		repos := setupManagerRepos(t, mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -511,77 +530,35 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 					ClockSpeed: 10000,
 				},
 				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
+				Disk: types.Disk{Size: 2048},
 			},
 		}
 
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		// Table tests for insufficient resources
-		tests := []struct {
-			name   string
-			demand types.ResourceAllocation
-			error  bool
-		}{
-			{
-				name: "CPU allocations exceeds",
-				demand: types.ResourceAllocation{
-					AllocationID: "alloc1",
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      6,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 512},
-					},
+		demand := types.ResourceAllocation{
+			AllocationID: "alloc1",
+			Resources: types.Resources{
+				CPU: types.CPU{
+					Cores:      1,
+					ClockSpeed: 10000,
 				},
-				error: true,
-			},
-			{
-				name: "RAM allocations exceeds",
-				demand: types.ResourceAllocation{
-					AllocationID: "alloc1",
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      3,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 4096},
-						Disk: types.Disk{Size: 512},
-					},
-				},
-				error: true,
-			},
-			{
-				name: "Disk allocations exceeds",
-				demand: types.ResourceAllocation{
-					AllocationID: "alloc1",
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      3,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 2048},
-					},
-				},
-				error: true,
+				RAM: types.RAM{Size: 1024},
 			},
 		}
+		err = rm.CommitResources(context.Background(), types.CommittedResources{
+			AllocationID: demand.AllocationID,
+			Resources:    demand.Resources,
+		})
+		require.NoError(t, err)
+		rm.store.withAllocationsLock(func() {
+			rm.store.allocations[demand.AllocationID] = demand
+		})
 
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				err := rm.AllocateResources(context.Background(), tt.demand)
-				if tt.error {
-					require.Error(t, err)
-					require.Contains(t, err.Error(), "no free resources: error subtracting")
-				} else {
-					require.NoError(t, err)
-				}
-			})
-		}
+		err = rm.AllocateResources(context.Background(), demand.AllocationID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "resources already allocated for allocation")
 	})
 
 	t.Run("Must be able to update the free resources after allocating resources", func(t *testing.T) {
@@ -590,10 +567,16 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources4?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -623,8 +606,10 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 			},
 		}
 
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
-		err = rm.AllocateResources(context.Background(), demand)
+		err = rm.CommitResources(context.Background(), types.CommittedResources{Resources: demand.Resources, AllocationID: demand.AllocationID})
+		require.NoError(t, err)
+
+		err = rm.AllocateResources(context.Background(), demand.AllocationID)
 		require.NoError(t, err)
 
 		// Check if the free resources are updated in the store
@@ -638,55 +623,6 @@ func TestDefaultManager_AllocateResources(t *testing.T) {
 		require.NoError(t, err)
 		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
 	})
-
-	t.Run("Must fail when there are not enough resources in the machine", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_AllocateResources6?mode=memory&cache=shared"), &gorm.Config{})
-		require.NoError(t, err)
-
-		repos := setupManagerRepos(t, mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		// setting a very high unrealistic resources to onboard
-		// this is so that the test can skip this check
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 5000,
-				},
-				RAM:  types.RAM{Size: 50000},
-				Disk: types.Disk{Size: 50000},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		// Since this demand is higher than the actual resources on the machine
-		// it shouldn't have free resources to allocate
-		demand := types.ResourceAllocation{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      4,
-					ClockSpeed: 4000,
-				},
-				RAM:  types.RAM{Size: 40000},
-				Disk: types.Disk{Size: 40000},
-			},
-		}
-
-		hm.EXPECT().GetFreeResources().Return(types.Resources{}, fmt.Errorf("no free resources on the machine"))
-		err = rm.AllocateResources(context.Background(), demand)
-		require.ErrorContains(t, err, "no free resources on the machine")
-	})
 }
 
 func TestDefaultManager_DeallocateResources(t *testing.T) {
@@ -698,10 +634,16 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_DeallocateResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -730,8 +672,9 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 				Disk: types.Disk{Size: 512},
 			},
 		}
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
-		err = rm.AllocateResources(context.Background(), demand)
+		err = rm.CommitResources(context.Background(), types.CommittedResources{Resources: demand.Resources, AllocationID: demand.AllocationID})
+		require.NoError(t, err)
+		err = rm.AllocateResources(context.Background(), demand.AllocationID)
 		require.NoError(t, err)
 
 		err = rm.DeallocateResources(context.Background(), demand.AllocationID)
@@ -753,10 +696,13 @@ func TestDefaultManager_DeallocateResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_DefaultManager_DeallocateResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{}, // no database used in deallocation only in-mem store
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -777,10 +723,15 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 	t.Run("Must be able to get onboarded resources", func(t *testing.T) {
 		t.Parallel()
-		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -804,10 +755,15 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 	t.Run("Must be able to update onboarded resources both in store and db", func(t *testing.T) {
 		t.Parallel()
-		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -847,10 +803,15 @@ func TestDefaultManager_OnboardedResources(t *testing.T) {
 
 	t.Run("Must be able to get onboarded resources from DB if not in store", func(t *testing.T) {
 		t.Parallel()
-		mockDB, err := gorm.Open(sqlite.Open("file:test_OnboardedResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -888,10 +849,15 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_FreeResources1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -923,17 +889,23 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 		assertResources(t, freeResources.Resources, updatedFreeResources.Resources)
 	})
 
-	t.Run("Must be able to up to date free resources", func(t *testing.T) {
+	t.Run("Must be able to update free resources", func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_FreeResources3?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		onboardedResources := types.OnboardedResources{
 			Resources: types.Resources{
 				CPU: types.CPU{
@@ -961,9 +933,9 @@ func TestDefaultManager_FreeResources(t *testing.T) {
 				Disk: types.Disk{Size: 512},
 			},
 		}
-
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil)
-		err = rm.AllocateResources(context.Background(), demand)
+		err = rm.CommitResources(context.Background(), types.CommittedResources{Resources: demand.Resources, AllocationID: demand.AllocationID})
+		require.NoError(t, err)
+		err = rm.AllocateResources(context.Background(), demand.AllocationID)
 		require.NoError(t, err)
 
 		updatedFreeResources, err := rm.GetFreeResources(context.Background())
@@ -990,10 +962,16 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_GetTotalDemand1?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -1038,10 +1016,13 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		}
 
 		var totalDemand types.Resources
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil).Times(len(demands))
 		for _, demand := range demands {
-			err = rm.AllocateResources(context.Background(), demand)
+			err = rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
+			require.NoError(t, err)
+
+			err = rm.AllocateResources(context.Background(), demand.AllocationID)
 			require.NoErrorf(t, err, "failed to allocate resources for allocation %s", demand.AllocationID)
+
 			err = totalDemand.Add(demand.Resources)
 			require.NoError(t, err)
 		}
@@ -1057,10 +1038,16 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		t.Cleanup(func() {
 			ctrl.Finish()
 		})
-		mockDB, err := gorm.Open(sqlite.Open("file:test_GetTotalDemand2?mode=memory&cache=shared"), &gorm.Config{})
+		mockDB, err := cloverRepo.NewMemDB(
+			[]string{
+				"onboarded_resources",
+				"resource_allocation",
+			},
+		)
 		require.NoError(t, err)
+		defer mockDB.Close()
 
-		repos := setupManagerRepos(t, mockDB)
+		repos := setupManagerRepos(mockDB)
 		hm := NewMockHardwareManager(ctrl)
 		rm, err := NewResourceManager(repos, hm)
 		require.NoError(t, err)
@@ -1105,10 +1092,13 @@ func TestDefaultManager_GetTotalAllocation(t *testing.T) {
 		}
 
 		var totalDemand types.Resources
-		hm.EXPECT().GetFreeResources().Return(onboardedResources.Resources, nil).Times(len(demands))
 		for _, demand := range demands {
-			err = rm.AllocateResources(context.Background(), demand)
+			err = rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
+			require.NoError(t, err)
+
+			err = rm.AllocateResources(context.Background(), demand.AllocationID)
 			require.NoErrorf(t, err, "failed to allocate resources for allocation %s", demand.AllocationID)
+
 			err = totalDemand.Add(demand.Resources)
 			require.NoError(t, err)
 		}
@@ -1172,13 +1162,13 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 						Disk: types.Disk{Size: 10},
 					},
 				}
+				err := rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
+				require.NoError(t, err)
+
 				mutex.Lock()
-				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
-					return onboardedResources.Resources, nil
-				})
 				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil)
 				mutex.Unlock()
-				err := rm.AllocateResources(context.Background(), demand)
+				err = rm.AllocateResources(context.Background(), demand.AllocationID)
 				require.NoError(t, err)
 			}()
 		}
@@ -1292,11 +1282,11 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 					},
 				}
 
+				err := rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
+				require.NoError(t, err)
+
 				mutex.Lock()
 				// allocate expectations
-				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
-					return onboardedResources.Resources, nil
-				}).Times(1)
 				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil).Times(1)
 
 				// deallocate expectations
@@ -1311,7 +1301,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 				resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 				mutex.Unlock()
 
-				err := rm.AllocateResources(context.Background(), demand)
+				err = rm.AllocateResources(context.Background(), demand.AllocationID)
 				require.NoError(t, err)
 
 				// Deallocate the resources
@@ -1364,10 +1354,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		var (
-			wg    sync.WaitGroup
-			mutex sync.Mutex
-		)
+		var wg sync.WaitGroup
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			index := i
@@ -1384,11 +1371,6 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 						Disk: types.Disk{Size: 10},
 					},
 				}
-				mutex.Lock()
-				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
-					return onboardedResources.Resources, nil
-				})
-				mutex.Unlock()
 				err := rm.CommitResources(context.Background(), demand)
 				require.NoError(t, err)
 			}()
@@ -1468,10 +1450,7 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
 		require.NoError(t, err)
 
-		var (
-			wg    sync.WaitGroup
-			mutex sync.Mutex
-		)
+		var wg sync.WaitGroup
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			index := i
@@ -1488,12 +1467,6 @@ func TestDefaultManager_Concurrency(t *testing.T) {
 						Disk: types.Disk{Size: 1},
 					},
 				}
-
-				mutex.Lock()
-				rm.hardware.(*MockHardwareManager).EXPECT().GetFreeResources().DoAndReturn(func() (types.Resources, error) {
-					return onboardedResources.Resources, nil
-				})
-				mutex.Unlock()
 
 				err := rm.CommitResources(context.Background(), demand)
 				require.NoError(t, err)

@@ -3,8 +3,11 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 //go:build linux
 // +build linux
@@ -20,7 +23,7 @@ import (
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	fcmodels "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
-
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -68,10 +71,15 @@ func (h *executionHandler) run(ctx context.Context) {
 	}()
 
 	// Start the VM
-	log.Infow("firecracker_execution_starting", "executionID", h.executionID)
+	log.Infow("firecracker_execution_starting",
+		"labels", string(observability.LabelDeployment),
+		"executionID", h.executionID)
 	if err := h.client.StartVM(ctx, h.machine); err != nil {
 		h.result = types.NewFailedExecutionResult(fmt.Errorf("failed to start VM: %v", err))
-		log.Errorw("firecracker_vm_start_failure", "error", err, "executionID", h.executionID)
+		log.Errorw("firecracker_vm_start_failure",
+			"labels", string(observability.LabelDeployment),
+			"error", err,
+			"executionID", h.executionID)
 		return
 	}
 
@@ -95,13 +103,18 @@ func (h *executionHandler) run(ctx context.Context) {
 
 // kill stops the firecracker VM.
 func (h *executionHandler) kill(ctx context.Context) error {
-	log.Infow("firecracker_kill_vm", "executionID", h.executionID)
+	log.Infow("firecracker_kill_vm",
+		"labels", string(observability.LabelAllocation),
+		"executionID", h.executionID)
 	return h.client.ShutdownVM(ctx, h.machine)
 }
 
 // destroy stops the firecracker VM and removes its resources.
 func (h *executionHandler) destroy(timeout time.Duration) error {
-	log.Infow("firecracker_destroy_vm", "executionID", h.executionID)
+	log.Infow("firecracker_destroy_vm",
+		"labels", string(observability.LabelDeployment),
+		"executionID", h.executionID)
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 

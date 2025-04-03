@@ -22,7 +22,7 @@ LDFLAGS := \
 
 GOFLAGS := "-buildvcs=false"
 
-.PHONY: all clean linux_amd64 darwin_arm64 license
+.PHONY: all clean linux_amd64 darwin_arm64 license mock
 
 all:
 	@if [ $(UNAME) = Linux ]; then\
@@ -78,23 +78,50 @@ clean:
 	@echo "Cleaning up..."
 	rm -rf builds/
 
-build_e2e_tests: 
-	go test -tags e2e -c ./test/e2e/ -o ./test/e2e/testbinary
-
 setcap: 
-	sudo setcap cap_net_admin+ep ./test/e2e/testbinary
+	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/integration/dms
 
-run_e2e_tests: 
-	./test/e2e/testbinary
-
-e2e_test:
-	@echo "Running e2e test"
-	make build_e2e_tests
+itest:
+	@echo "Running integration tests"
+	@if ! docker image inspect nunet-glusterfs-client >/dev/null 2>&1; then \
+		echo "Docker image nunet-glusterfs-client not found. Building..."; \
+		make build-nunet-glusterfs-client; \
+	fi
+	go build -o ./test/integration/dms -ldflags=$(LDFLAGS)
 	make setcap
-	make run_e2e_tests
+	go test -v ./test/integration/... -tags=integration -timeout=10m
+
+build-nunet-glusterfs-client:
+	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image
+
+build_storage_tests: 
+	go test -tags storagetst -c ./test/integration/ -o ./test/integration/storagetestbinary
+
+setcapstorage: 
+	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/integration/storagetestbinary
+ 
+storage_test:
+	@echo "Running storage test"
+	make linux_amd64
+	cp builds/dms_linux_amd64 test/integration/dms
+	make build_storage_tests
+	make setcapstorage
+	./test/integration/storagetestbinary
 
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
+
+# make generate-glusterfs-client-certs CN=did:key:here or clientA
+generate-glusterfs-client-certs:
+	@if [ -z "$(CN)" ]; then \
+		echo "Error: CN variable is required. Usage: make generate-glusterfs-client-certs CN=<client_name>"; \
+		exit 1; \
+	fi
+	@echo "Generating client certificates"
+	mkdir glusterfs_certificates
+	openssl genrsa -out glusterfs_certificates/glusterfs.key 2048
+	openssl req -new -x509 -key glusterfs_certificates/glusterfs.key -subj "/CN=$(CN)" -out glusterfs_certificates/glusterfs.pem
+	
 
 LICENSE_FLAGS := -v \
 		-l="apache" \
@@ -134,3 +161,47 @@ $(FC_TEST_DATA_PATH)/vmlinux.bin:
 	@echo "Downloading vmlinux.bin..."
 	mkdir -p $(FC_TEST_DATA_PATH)
 	curl -L -o $@ https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/$(arch)/kernels/vmlinux.bin
+
+mock:
+	@echo "Generating mock files... :("
+	# API mocks
+	mockgen -destination=api/mock_network_test.go -source=network/network.go -package=api -exclude_interfaces=Messenger
+	
+	# CMD mocks
+	mockgen -destination=cmd/mock_gpu_manager_test.go -source=types/hardware.go -package=cmd -exclude_interfaces=HardwareManager,GPUConnector
+	mockgen -destination=cmd/mock_docker_client_test.go -source=executor/docker/client.go -package=cmd
+	
+	# DMS/Onboarding mocks
+	mockgen -source=db/repositories/generic_entity_repository.go -destination=dms/onboarding/mock_generic_entity_repository_test.go -package=onboarding
+	mockgen -destination=dms/onboarding/mock_hardware_manager_test.go -source=types/hardware.go -package=onboarding
+	mockgen -destination=dms/onboarding/mock_resource_manager_test.go -source=types/resources.go -package=onboarding -exclude_interfaces=UsageMonitor,ResourceOps
+	
+	# DMS/Hardware mocks
+	mockgen -destination=dms/hardware/gpu/mock_gpu_connector_test.go -source=types/hardware.go -package=gpu -exclude_interfaces=HardwareManager,GPUManager
+	mockgen -destination=dms/hardware/mock_gpu_connector_test.go -source=types/hardware.go -package=hardware -exclude_interfaces=HardwareManager,GPUConnector
+	
+	# DMS/Node mocks
+	mockgen -destination=dms/node/mock_geoip_locator_test.go -source=types/types.go -package=node
+	mockgen -destination=dms/node/mock_network_test.go -source=network/network.go -package=node -exclude_interfaces=Messenger
+	mockgen -destination=dms/node/mock_orch_registry_test.go -source=dms/orchestrator/registry.go -package=node
+	mockgen -destination=dms/node/mock_orchestrator_test.go -source=dms/orchestrator/orchestrator.go -package=node
+	mockgen -destination=dms/node/mock_executor_test.go -source=types/executor.go -package=node
+	mockgen -destination=dms/node/mock_actor_test.go -source=actor/interface.go -package=node
+	mockgen -destination=dms/node/mock_hardware_manager_test.go -source=types/hardware.go -package=node
+	mockgen -destination=dms/node/mock_resource_manager_test.go -source=types/resources.go -package=node -exclude_interfaces=UsageMonitor,ResourceOps
+	mockgen -destination=dms/node/mock_allocator_test.go -source=dms/node/allocator.go -package=node
+	
+	# DMS/Resources mocks
+	mockgen -source=db/repositories/generic_repository.go -destination=dms/resources/mock_generic_repository_test.go -package=resources
+	mockgen -source=db/repositories/generic_entity_repository.go -destination=dms/resources/mock_generic_entity_repository_test.go -package=resources
+	mockgen -destination=dms/resources/mock_hardware_manager_test.go -source=types/hardware.go -package=resources
+	
+	# DMS/Jobs mocks
+	mockgen -destination=dms/jobs/mock_network_test.go -source=network/network.go -package=jobs -exclude_interfaces=Messenger
+	mockgen -destination=dms/jobs/mock_executor_test.go -source=types/executor.go -package=jobs
+	mockgen -destination=dms/jobs/mock_actor_test.go -source=actor/interface.go -package=jobs
+	mockgen -destination=dms/jobs/mock_resource_manager_test.go -source=types/resources.go -package=jobs -exclude_interfaces=UsageMonitor,ResourceOps
+
+	# DMS/Orchestrator mocks
+	mockgen -destination=dms/orchestrator/mock_network_test.go -source=network/network.go -package=orchestrator -exclude_interfaces=Messenger
+	mockgen -destination=dms/orchestrator/mock_actor_test.go -source=actor/interface.go -package=orchestrator

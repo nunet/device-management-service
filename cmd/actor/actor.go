@@ -13,17 +13,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/utils"
-)
-
-const (
-	CapstoreDir            = "cap/"
-	DefaultUserContextName = "user"
-	KeystoreDir            = "key/"
 )
 
 // NewActorCmd is a constructor for `actor` parent command
-func NewActorCmd(client *utils.HTTPClient, afs afero.Afero, cfg *config.Config) *cobra.Command {
+func NewActorCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "actor",
 		Short: "Interact with the actor system",
@@ -34,10 +27,10 @@ Actors are connected through the libp2p network substrate and communication is a
 
 For more information on the actor system, please refer to actor/README.md`,
 	}
-	cmd.AddCommand(newActorMsgCmd(client, afs, cfg))
-	cmd.AddCommand(newActorSendCmd(client))
-	cmd.AddCommand(newActorInvokeCmd(client))
-	cmd.AddCommand(newActorBroadcastCmd(client))
-	cmd.AddCommand(newActorCmdGroup(client, afs, cfg))
+	cmd.AddCommand(newActorMsgCmd(afs, cfg))
+	cmd.AddCommand(newActorSendCmd(afs, cfg))
+	cmd.AddCommand(newActorInvokeCmd(afs, cfg))
+	cmd.AddCommand(newActorBroadcastCmd(afs, cfg))
+	cmd.AddCommand(newActorCmdGroup(afs, cfg))
 	return cmd
 }

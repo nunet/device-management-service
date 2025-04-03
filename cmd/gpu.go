@@ -14,11 +14,11 @@ import (
 	"os"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
-
-	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
+	"gitlab.com/nunet/device-management-service/observability"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
 
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -60,7 +60,8 @@ func newGPUListCommand(gpuManager types.GPUManager) *cobra.Command {
 			}
 
 			if len(gpus) == 0 {
-				log.Info("No GPUs detected on the host")
+				log.Infow("no_gpus_detected_on_host",
+					"labels", string(observability.LabelNode))
 				return nil
 			}
 

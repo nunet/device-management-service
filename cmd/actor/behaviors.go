@@ -13,14 +13,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/client"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
-	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
@@ -37,10 +40,9 @@ type Payload struct {
 type behaviorConfig struct {
 	Behavior    string
 	Type        string
-	Topic       string
 	Payload     func() any
-	PayloadEnc  func(payload any) (any, error)
 	SetFlags    func(cmd *Command, payload any)
+	Run         func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error)
 	PreRunE     func(cmd *Command, payload any) error
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
@@ -60,14 +62,132 @@ type CapAnchorRequestCmd struct {
 	Data    string
 }
 
-var behaviors = map[string]behaviorConfig{
-	// /public/hello
-	node.PublicHelloBehavior: {
+type CreateVolumeRequestCmd struct {
+	ClientPEMFile string
+	VolumeName    string
+	CAOutputDir   string
+}
+
+var registeredBehaviors = map[string]behaviorConfig{
+	// /dms/volume/create
+	behaviors.VolumeCreateBehavior: {
+		Payload: func() any { return &CreateVolumeRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CreateVolumeRequestCmd)
+			cmd.Flags().StringVarP(&p.VolumeName, "name", "n", "", "name (required)")
+			cmd.Flags().StringVarP(&p.ClientPEMFile, "client-pem-file", "p", "", "client-pem-file (required)")
+			cmd.Flags().StringVarP(&p.CAOutputDir, "ca-output-dir", "", "", "ca-output-dir (required)")
+
+			_ = cmd.MarkFlagRequired("name")
+			_ = cmd.MarkFlagRequired("client-pem")
+			_ = cmd.MarkFlagRequired("ca-output-dir")
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*CreateVolumeRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			data, err := os.ReadFile(req.ClientPEMFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read config file: %w", err)
+			}
+
+			// validate client pem
+
+			cfg := &node.CreateVolumeRequest{
+				Name:      req.VolumeName,
+				ClientPEM: string(data),
+			}
+
+			resp, err := cli.CreateVolume(cmd.Context(), *cfg, msgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			err = os.WriteFile(filepath.Join(req.CAOutputDir, "glusterfs.ca"), []byte(resp.CAData), 0o775)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
+		},
 		Type:  bInvoke,
-		Short: "Broadcast a 'hello' message",
+		Short: "Send a create volume message",
+		Long: `Invoke the /dms/volume/create behavior on an actor
+	
+	This behavior calls the actors create volume behaviour.
+	
+	Examples:
+	
+	  nunet actor cmd --context user /dms/volume/create --name <volname> --client-pem-file <filename>`,
+	},
+	// /dms/volume/delete
+	behaviors.VolumeDeleteBehavior: {
+		Payload: func() any { return &node.DeleteVolumeRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeleteVolumeRequest)
+
+			cmd.Flags().StringVarP(&p.Name, "name", "n", "", "name (required)")
+
+			_ = cmd.MarkFlagRequired("name")
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*node.DeleteVolumeRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return cli.DeleteVolume(cmd.Context(), *req, msgOpts...)
+		},
+		Type:  bInvoke,
+		Short: "Send a delete volume message",
+		Long: `Invoke the /dms/volume/delete behavior on an actor
+		
+		This behavior calls the actors delete volume behaviour.
+		
+		Examples:
+		
+		  nunet actor cmd --context user /dms/volume/delete --name <volname>`,
+	},
+	// /dms/volume/start
+	behaviors.VolumeStartBehavior: {
+		Payload: func() any { return &node.StartVolumeRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.StartVolumeRequest)
+
+			cmd.Flags().StringVarP(&p.Name, "name", "n", "", "name (required)")
+
+			_ = cmd.MarkFlagRequired("name")
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*node.StartVolumeRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			return cli.StartVolume(cmd.Context(), *req, msgOpts...)
+		},
+		Type:  bInvoke,
+		Short: "Send a start volume message",
+		Long: `Invoke the /dms/volume/start behavior on an actor
+		
+		This behavior calls the actors start volume behaviour.
+		
+		Examples:
+		
+		  nunet actor cmd --context user /dms/volume/start --name <volname>`,
+	},
+	// /public/hello
+	behaviors.PublicHelloBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.Hello(cmd.Context(), msgOpts...)
+		},
+		Short: "Invoke a 'hello' message",
 		Long: `Invoke the /public/hello behavior on an actor
 
-This behavior broadcasts a "hello" for a polite introduction.
+This behavior invokes a "hello" for a polite introduction.
 
 Examples:
 
@@ -75,10 +195,11 @@ Examples:
   nunet actor cmd --context user /public/hello --dest <did/peer_id/actor_handle>`,
 	},
 	// /broadcast/hello
-	node.BroadcastHelloBehavior: {
+	behaviors.BroadcastHelloBehavior: {
 		Type: bBroadcast,
-
-		Topic: node.BroadcastHelloTopic,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.BroadcastHello(cmd.Context(), msgOpts...)
+		},
 		Short: "Broadcast a 'hello' message to a topic",
 		Long: `Invokes the /broadcast/hello behavior on an actor
 
@@ -89,8 +210,11 @@ Examples:
   nunet actor cmd --context user /broadcast/hello`,
 	},
 	// /public/status
-	node.PublicStatusBehavior: {
-		Type:  bInvoke,
+	behaviors.PublicStatusBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.Status(cmd.Context(), msgOpts...)
+		},
 		Short: "Retrieve actor status",
 		Long: `Invokes the /public/status behavior on an actor
 
@@ -101,8 +225,11 @@ Examples:
   nunet actor cmd --context user /public/status --dest <did/peer_id/actor_handle> # status of specified destination`,
 	},
 	// /dms/node/peers/list
-	node.PeersListBehavior: {
-		Type:  bInvoke,
+	behaviors.PeersListBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.PeersList(cmd.Context(), msgOpts...)
+		},
 		Short: "List connected peers",
 		Long: `Invokes the /dms/node/peers/list behavior on an actor
 
@@ -113,8 +240,11 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/list --dest <did/peer_id/actor_handle> # specified node actor peer list`,
 	},
 	// /dms/node/peers/self
-	node.PeerAddrInfoBehavior: {
-		Type:  bInvoke,
+	behaviors.PeerAddrInfoBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.PeersSelf(cmd.Context(), msgOpts...)
+		},
 		Short: "Get peer's ID and addresses",
 		Long: `Invokes the /dms/node/peers/self behavior on an actor
 
@@ -125,7 +255,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/self --dest <did/peer_id/actor_handle> # specified node actor peer ID`,
 	},
 	// /dms/node/peers/ping
-	node.PeerPingBehavior: {
+	behaviors.PeerPingBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.PingRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -134,12 +264,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.Host, "host", "H", "", "host address to ping (required)")
 			_ = cmd.MarkFlagRequired("host")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.PingRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.PeerPing(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Ping a peer",
 		Long: `Invokes the /dms/node/peers/ping behavior on an actor
@@ -150,7 +280,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/ping --host <peer_id>`,
 	},
 	// /dms/node/peers/dht
-	node.PeerDHTBehavior: {
+	behaviors.PeerDHTBehavior: {
 		Type:  bInvoke,
 		Short: "List peers connected to DHT",
 		Long: `Invokes the /dms/node/peers/dht behavior on an actor
@@ -161,7 +291,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/dht`,
 	},
 	// /dms/node/peers/connect
-	node.PeerConnectBehavior: {
+	behaviors.PeerConnectBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.PeerConnectRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -170,12 +300,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.Address, "address", "a", "", "peer address to connect to (required)")
 			_ = cmd.MarkFlagRequired("address")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.PeerConnectRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.PeerConnect(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Connect to a peer",
 		Long: `Invokes the /dms/node/peers/connect behavior on an actor
@@ -186,8 +316,11 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/connect --address /p2p/<peer_id>`,
 	},
 	// /dms/node/peers/score
-	node.PeerScoreBehavior: {
-		Type:  bInvoke,
+	behaviors.PeerScoreBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.PeerScore(cmd.Context(), msgOpts...)
+		},
 		Short: "Retrieves gossipsub broadcast score",
 		Long: `Invokes the /dms/node/peers/score behavior on an actor
 
@@ -197,7 +330,7 @@ Examples:
   nunet actor cmd --context user /dms/node/peers/score`,
 	},
 	// /dms/node/onboarding/onboard
-	node.OnboardBehavior: {
+	behaviors.OnboardBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.OnboardRequest{} },
 		SetFlags: func(cmd *Command, payload any) {
@@ -212,7 +345,7 @@ Examples:
 			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
 		PreRunE: onboardBehaviorPreRun,
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.OnboardRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -221,7 +354,7 @@ Examples:
 			// convert RAM and Disk from GB to bytes
 			req.Config.OnboardedResources.RAM.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.RAM.Size)
 			req.Config.OnboardedResources.Disk.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.Disk.Size)
-			return req, nil
+			return cli.Onboard(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Onboard a node to the network",
 		Long: `Invokes the /dms/node/onboarding/onboard behavior on an actor
@@ -232,16 +365,11 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/onboard --disk 1 --ram 1 --cpu 2`,
 	},
 	// /dms/node/onboarding/offboard
-	node.OffboardBehavior: {
-		Type:     bInvoke,
-		Payload:  func() any { return &node.OffboardRequest{} },
-		SetFlags: func(_ *cobra.Command, _ any) {},
-		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.OffboardRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-			return req, nil
+	behaviors.OffboardBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			req := node.OffboardRequest{}
+			return cli.Offboard(cmd.Context(), req, msgOpts...)
 		},
 		Short: "Offboard a node from the network",
 		Long: `Invokes the /dms/node/onboarding/offboard behavior on an actor
@@ -253,8 +381,11 @@ Examples:
   nunet actor cmd --context user /dms/node/onboarding/offboard --force`,
 	},
 	// /dms/node/onboarding/status
-	node.OnboardStatusBehavior: {
-		Type:  bInvoke,
+	behaviors.OnboardStatusBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.OnboardStatus(cmd.Context(), msgOpts...)
+		},
 		Short: "Retrieve onboarding status of a node",
 		Long: `Invokes the /dms/node/onboarding/status behavior on an actor
 
@@ -265,19 +396,32 @@ Examples:
 	},
 
 	// /dms/node/deployment/list
-	node.DeploymentListBehavior: {
-		Type:  bInvoke,
+	behaviors.DeploymentListBehavior: {
+		Type:    bInvoke,
+		Payload: func() any { return &node.DeploymentListRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentListRequest)
+
+			cmd.Flags().StringToStringVarP(&p.Metadata, "filter", "f", nil, "metadata filter to filter deployments (optional)")
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*node.DeploymentListRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return cli.DeploymentList(cmd.Context(), *req, msgOpts...)
+		},
 		Short: "List deployments",
 		Long: `Invokes the /dms/node/deployment/list behavior on an actor
 
 This behavior retrieves a list of all deployments on the node.
 
 Examples:
-  nunet actor cmd --context user /dms/node/deployment/list`,
+  nunet actor cmd --context user /dms/node/deployment/list --filter "<metadata_key>=<metadata_value>"`,
 	},
 
 	// /dms/node/deployment/status
-	node.DeploymentStatusBehavior: {
+	behaviors.DeploymentStatusBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentStatusRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -285,12 +429,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentStatusRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentStatus(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Get deployment status",
 		Long: `Invokes the /dms/node/deployment/status behavior on an actor
@@ -302,7 +446,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/logs
-	node.DeploymentLogsBehavior: {
+	behaviors.DeploymentLogsBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentLogsRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -312,12 +456,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("id")
 			_ = cmd.MarkFlagRequired("allocation")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentLogsRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentLogs(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Get deployment logs",
 		Long: `Invokes the /dms/node/deployment/logs behavior on an actor
@@ -330,7 +474,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/manifest
-	node.DeploymentManifestBehavior: {
+	behaviors.DeploymentManifestBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentManifestRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -338,12 +482,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentManifestRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentManifest(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Get deployment manifest",
 		Long: `Invokes the /dms/node/deployment/manifest behavior on an actor
@@ -355,7 +499,7 @@ Examples:
 	},
 
 	// /dms/node/deployment/shutdown
-	node.DeploymentShutdownBehavior: {
+	behaviors.DeploymentShutdownBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &node.DeploymentShutdownRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -363,12 +507,12 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentShutdownRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-			return req, nil
+			return cli.DeploymentShutdown(cmd.Context(), *req, msgOpts...)
 		},
 		Short: "Shutdown a deployment",
 		Long: `Invokes the /dms/node/deployment/shutdown behavior on an actor
@@ -379,82 +523,7 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/shutdown --id <deployment_id>`,
 	},
 
-	// /dms/node/vm/start/custom
-	node.VMStartBehavior: {
-		Type:    bInvoke,
-		Payload: func() any { return &vmStartOpts{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*vmStartOpts)
-			cmd.Flags().StringVarP(&p.Engine.KernelImage, "kernel", "k", "", "path to kernel image file (required)")
-			cmd.Flags().StringVarP(&p.Engine.RootFileSystem, "rootfs", "r", "", "path to root fs image file (required)")
-			cmd.Flags().StringVarP(&p.Engine.Initrd, "initrd", "i", "", "path to initial ram disk")
-			cmd.Flags().StringVarP(&p.Engine.KernelArgs, "args", "a", "", "arguments to pas to the kernel")
-			cmd.Flags().Float32Var(&p.Resources.CPU.Cores, "cpu", 1, "CPU cores to allocate")
-			cmd.Flags().Float64VarP(&p.Resources.RAM.Size, "ram", "m", 1, "Memory to allocate in GB")
-			cmd.Flags().Float64Var(&p.Resources.Disk.Size, "disk", 0.5, "path to disk image file")
-			_ = cmd.MarkFlagRequired("kernel")
-			_ = cmd.MarkFlagFilename("kernel")
-			_ = cmd.MarkFlagRequired("rootfs")
-			_ = cmd.MarkFlagFilename("rootfs")
-		},
-		PayloadEnc: func(payload any) (any, error) {
-			opts, ok := payload.(*vmStartOpts)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-
-			return newCustomVMStartRequest(opts)
-		},
-		Short: "Starts a custom VM",
-		Long: `Invokes the /dms/node/vm/start/custom behavior on an actor
-
-This behavior starts a new VM with custom configurations.
-
-Examples:
-  nunet actor cmd --context user /dms/node/vm/start/custom --kernel /path/to/kernel --rootfs /path/to/rootfs --cpu 2 --memory 2048`,
-	},
-	// /dms/node/vm/stop
-	node.VMStopBehavior: {
-		Payload: func() any { return &node.VMStopRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.VMStopRequest)
-			p.ExecutionType = job_types.ExecutorFirecracker
-			cmd.Flags().StringVarP(&p.ExecutionID, "id", "i", "", "execution ID of the VM (required)")
-			_ = cmd.MarkFlagRequired("id")
-		},
-		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*node.VMStopRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-			return req, nil
-		},
-		Type:  bInvoke,
-		Short: "Stops a running VM",
-		Long: `Invokes the /dms/node/vm/stop behavior on an actor
-
-This behavior stops a running VM.
-
-Examples:
-  nunet actor cmd --context user /dms/node/vm/stop --id <execution_id>`,
-	},
-	// /dms/node/vm/list
-	node.VMListBehavior: {
-		Payload: func() any {
-			return &node.ListVMResponse{
-				ExecutionType: job_types.ExecutorFirecracker,
-			}
-		},
-		Type:  bInvoke,
-		Short: "List running VMs",
-		Long: `Invokes the /dms/node/vm/list behavior on an actor
-
-This behavior retrieves a list of virtual machines (VMs) running on the node.
-
-Examples:
-  nunet actor cmd --context user /dms/node/vm/list`,
-	},
-	node.NewDeploymentBehavior: {
+	behaviors.NewDeploymentBehavior: {
 		Type:  bInvoke,
 		Short: "Create a new deployment",
 		Long: `Invokes the /dms/node/deployment/new behavior on an actor
@@ -468,10 +537,10 @@ Examples:
 			p := payload.(*NewDeploymentRequestCmd)
 			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file (required)")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*NewDeploymentRequestCmd)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
 			data, err := os.ReadFile(req.Config)
 			if err != nil {
@@ -494,35 +563,55 @@ Examples:
 
 			}
 
-			for name, key := range cfg.Ensemble.V1.Keys {
-				key, err := os.ReadFile(key)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read script file: %w", err)
+			for i, alloc := range cfg.Ensemble.V1.Allocations {
+				if alloc.Volume == nil {
+					continue
 				}
-				cfg.Ensemble.V1.Keys[name] = string(key)
 
+				if alloc.Volume.ClientPrivateKey != "" {
+					pvkeyData, err := os.ReadFile(alloc.Volume.ClientPrivateKey)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[i].Volume.ClientPrivateKey = string(pvkeyData)
+				}
+
+				if alloc.Volume.ClientPEM != "" {
+					pemData, err := os.ReadFile(alloc.Volume.ClientPEM)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read pem data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[i].Volume.ClientPEM = string(pemData)
+				}
+
+				if alloc.Volume.ClientCA != "" {
+					caData, err := os.ReadFile(alloc.Volume.ClientCA)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read ca data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[i].Volume.ClientCA = string(caData)
+				}
 			}
 
-			return cfg, nil
+			return cli.DeploymentNew(cmd.Context(), *cfg, msgOpts...)
 		},
 	},
 
-	jobs.SubnetCreateBehavior.Static: {
-		Payload: func() any { return &jobs.SubnetCreateRequest{} },
+	behaviors.SubnetCreateBehavior.Static: {
+		Payload: func() any { return &orchestrator.SubnetCreateRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetCreateRequest)
+			p := payload.(*orchestrator.SubnetCreateRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*jobs.SubnetCreateRequest)
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*orchestrator.SubnetCreateRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetCreate(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Create a subnet",
@@ -534,21 +623,20 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
 	},
 
-	jobs.SubnetDestroyBehavior.Static: {
-		Payload: func() any { return &jobs.SubnetDestroyRequest{} },
+	behaviors.SubnetDestroyBehavior.Static: {
+		Payload: func() any { return &orchestrator.SubnetDestroyRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetDestroyRequest)
+			p := payload.(*orchestrator.SubnetDestroyRequest)
 
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
-			req, ok := payload.(*jobs.SubnetDestroyRequest)
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*orchestrator.SubnetDestroyRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetDestroy(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Destroy a subnet",
@@ -560,7 +648,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/destroy --subnet-id <subnet_id>`,
 	},
 
-	jobs.SubnetAddPeerBehavior: {
+	behaviors.SubnetAddPeerBehavior: {
 		Payload: func() any { return &jobs.SubnetAddPeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetAddPeerRequest)
@@ -572,13 +660,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("peer-id")
 			_ = cmd.MarkFlagRequired("ip")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetAddPeerRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetAddPeer(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Add a peer to a subnet",
@@ -590,7 +677,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/add-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
 	},
 
-	jobs.SubnetRemovePeerBehavior: {
+	behaviors.SubnetRemovePeerBehavior: {
 		Payload: func() any { return &jobs.SubnetRemovePeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetRemovePeerRequest)
@@ -600,13 +687,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("peer-id")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetRemovePeerRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetRemovePeer(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Remove a peer from a subnet",
@@ -618,7 +704,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/remove-peer --subnet-id <subnet_id> --peer-id <peer_id>`,
 	},
 
-	jobs.SubnetAcceptPeerBehavior: {
+	behaviors.SubnetAcceptPeerBehavior: {
 		Payload: func() any { return &jobs.SubnetAcceptPeerRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetAcceptPeerRequest)
@@ -630,13 +716,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("peer-id")
 			_ = cmd.MarkFlagRequired("ip")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetAcceptPeerRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetAcceptPeer(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Accept a peer to a subnet",
@@ -648,7 +733,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/accept-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
 	},
 
-	jobs.SubnetMapPortBehavior: {
+	behaviors.SubnetMapPortBehavior: {
 		Payload: func() any { return &jobs.SubnetMapPortRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetMapPortRequest)
@@ -665,13 +750,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("dest-ip")
 			_ = cmd.MarkFlagRequired("dest-port")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetMapPortRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetMapPort(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Map a port",
@@ -683,7 +767,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
 	},
 
-	jobs.SubnetDNSAddRecordsBehavior: {
+	behaviors.SubnetDNSAddRecordsBehavior: {
 		Payload: func() any { return &jobs.SubnetDNSAddRecordsRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetDNSAddRecordsRequest)
@@ -700,13 +784,12 @@ Examples:
 
 			p.Records = map[string]string{domainName: ip}
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetDNSAddRecordsRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetDNSAddRecords(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Add a DNS record",
@@ -717,7 +800,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/dns/add-record --subnet-id <subnet_id> --name <record_name> --ip <ip>`,
 	},
 
-	jobs.SubnetUnmapPortBehavior: {
+	behaviors.SubnetUnmapPortBehavior: {
 		Payload: func() any { return &jobs.SubnetUnmapPortRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetUnmapPortRequest)
@@ -735,13 +818,12 @@ Examples:
 			_ = cmd.MarkFlagRequired("dest-ip")
 			_ = cmd.MarkFlagRequired("dest-port")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetUnmapPortRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.SubnetUnmapPort(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Unmap a port",
@@ -753,7 +835,7 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/unmap-port --subnet-id <subnet_id> --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
 	},
 
-	jobs.SubnetDNSRemoveRecordBehavior: {
+	behaviors.SubnetDNSRemoveRecordBehavior: {
 		Payload: func() any { return &jobs.SubnetDNSRemoveRecordRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*jobs.SubnetDNSRemoveRecordRequest)
@@ -763,13 +845,13 @@ Examples:
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("name")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetDNSRemoveRecordRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
 
-			return req, nil
+			return cli.SubnetDNSRemoveRecord(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Remove a DNS record",
@@ -782,8 +864,11 @@ Examples:
   nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
 
-	node.ResourcesAllocatedBehavior: {
-		Type:  bInvoke,
+	behaviors.ResourcesAllocatedBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.ResourcesAllocated(cmd.Context(), msgOpts...)
+		},
 		Short: "Get allocated resources",
 		Long: `Invokes the /dms/node/resources/allocated behavior on an actor
 
@@ -794,8 +879,11 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/allocated`,
 	},
 
-	node.ResourcesFreeBehavior: {
-		Type:  bInvoke,
+	behaviors.ResourcesFreeBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.ResourcesFree(cmd.Context(), msgOpts...)
+		},
 		Short: "Get free resources",
 		Long: `Invokes the /dms/node/resources/free behavior on an actor
 
@@ -806,8 +894,11 @@ Examples:
 	  nunet actor cmd --context user /dms/node/resources/free`,
 	},
 
-	node.ResourcesOnboardedBehavior: {
-		Type:  bInvoke,
+	behaviors.ResourcesOnboardedBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.ResourcesOnboarded(cmd.Context(), msgOpts...)
+		},
 		Short: "Get onboarded resources",
 		Long: `Invokes the /dms/node/resources/onboarded behavior on an actor
 
@@ -817,7 +908,7 @@ The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk s
 Examples:
 	  nunet actor cmd --context user /dms/node/resources/onboarded`,
 	},
-	node.LoggerConfigBehavior: {
+	behaviors.LoggerConfigBehavior: {
 		Payload: func() any { return &node.LoggerConfigRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.LoggerConfigRequest)
@@ -829,27 +920,28 @@ Examples:
 			cmd.Flags().StringVar(&p.APIKey, "api-key", "", "API Key for Elasticsearch and APM")
 			cmd.Flags().StringVar(&p.APMURL, "apm-url", "", "APM Server URL")
 			cmd.Flags().Bool("enable-elastic", false, "Enable Elasticsearch logging")
-
-			// PreRunE function to capture if 'enable-elastic' flag was provided
-			cmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
-				flag := cmd.Flags().Lookup("enable-elastic")
-				if flag != nil && flag.Changed {
-					val, err := strconv.ParseBool(flag.Value.String())
-					if err != nil {
-						return fmt.Errorf("invalid value for --enable-elastic: %v", err)
-					}
-					p.ElasticEnabled = &val
-				}
-				return nil
-			}
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		PreRunE: func(cmd *cobra.Command, payload any) error {
+			p, ok := payload.(*node.LoggerConfigRequest)
+			if !ok {
+				return fmt.Errorf("failed to decode payload")
+			}
+			flag := cmd.Flags().Lookup("enable-elastic")
+			if flag != nil && flag.Changed {
+				val, err := strconv.ParseBool(flag.Value.String())
+				if err != nil {
+					return fmt.Errorf("invalid value for --enable-elastic: %v", err)
+				}
+				p.ElasticEnabled = &val
+			}
+			return nil
+		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.LoggerConfigRequest)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
-
-			return req, nil
+			return cli.LoggerConfig(cmd.Context(), *req, msgOpts...)
 		},
 		Type:  bInvoke,
 		Short: "Adjust logger settings",
@@ -866,8 +958,11 @@ Examples:
   nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
   nunet actor cmd --context user /dms/node/logger/config --enable-elastic`,
 	},
-	node.HardwareSpecBehavior: {
-		Type:  bInvoke,
+	behaviors.HardwareSpecBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.HardwareSpec(cmd.Context(), msgOpts...)
+		},
 		Short: "Get hardware specifications",
 		Long: `Invokes the /dms/node/hardware/spec behavior on an actor
 
@@ -877,8 +972,11 @@ Examples:
 
 	nunet actor cmd --context user /dms/node/hardware/spec`,
 	},
-	node.HardwareUsageBehavior: {
-		Type:  bInvoke,
+	behaviors.HardwareUsageBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.HardwareUsage(cmd.Context(), msgOpts...)
+		},
 		Short: "Get hardware usage",
 		Long: `Invokes the /dms/node/hardware/usage behavior on an actor
 
@@ -888,14 +986,21 @@ Examples:
 
 	nunet actor cmd --context user /dms/node/hardware/usage`,
 	},
-	node.CapListBehavior: {
+	behaviors.CapListBehavior: {
 		Type:    bInvoke,
-		Short:   "List capabilities",
 		Payload: func() any { return &node.CapListRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.CapListRequest)
 			cmd.Flags().StringVarP(&p.Context, "context", "c", "", "context name")
 		},
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+			req, ok := payload.(*node.CapListRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return cli.CapList(cmd.Context(), *req, msgOpts...)
+		},
+		Short: "List capabilities",
 		Long: `Invokes the /dms/cap/list behavior on an actor
 
 This behavior retrieves a list of capabilities available on the node.
@@ -903,7 +1008,7 @@ This behavior retrieves a list of capabilities available on the node.
 Examples:
   nunet actor cmd --context user /dms/cap/list`,
 	},
-	node.CapAnchorBehavior: {
+	behaviors.CapAnchorBehavior: {
 		Type:    bInvoke,
 		Payload: func() any { return &CapAnchorRequestCmd{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -914,10 +1019,10 @@ Examples:
 			cmd.Flags().BoolVarP(&p.Revoke, "revoke", "", false, "add revoke anchor")
 			cmd.Flags().StringVarP(&p.Data, "data", "", "", "capability token or DID to anchor")
 		},
-		PayloadEnc: func(payload any) (any, error) {
+		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*CapAnchorRequestCmd)
 			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
+				return nil, fmt.Errorf("failed to decode payload")
 			}
 
 			request := &node.CapAnchorRequest{
@@ -963,7 +1068,7 @@ Examples:
 				request.Revoke.Tokens = append(request.Revoke.Tokens, &token)
 			}
 
-			return request, nil
+			return cli.CapAnchor(cmd.Context(), *request, msgOpts...)
 		},
 		Short: "Add capability anchors",
 		Long: `Invokes the /dms/cap/anchor behavior on an actor

@@ -17,12 +17,11 @@ import (
 
 	"github.com/spf13/afero"
 
-	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
@@ -34,21 +33,23 @@ const (
 
 const ledger = "ledger"
 
+// IsLedgerContext checks if the context is a ledger context.
 func IsLedgerContext(context string) bool {
 	return strings.HasPrefix(context, ledger)
 }
 
-func LedgerContext(context string) string {
+// GetContextKey returns the key part of the context, if it has a prefix.
+func GetContextKey(context string) string {
 	parts := strings.Split(context, ":")
-	if len(parts) == 2 {
-		return parts[1]
+	if len(parts) != 2 {
+		return context
 	}
 
-	return ledger
+	return parts[1]
 }
 
-func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, cfg *config.Config) (did.TrustContext, crypto.PrivKey, error) {
-	keyStoreDir := filepath.Join(cfg.General.UserDir, KeystoreDir)
+func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, keyStorePath string) (did.TrustContext, crypto.PrivKey, error) {
+	keyStoreDir := filepath.Join(keyStorePath, KeystoreDir)
 
 	ks, err := keystore.New(afs.Fs, keyStoreDir)
 	if err != nil {
@@ -65,7 +66,7 @@ func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, cfg *con
 
 	ksPrivKey, err := ks.Get(contextKey, passphrase)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get key from keystore: %w", err)
+		return nil, nil, fmt.Errorf("failed to get key from keystore %s: %w", contextKey, err)
 	}
 
 	priv, err := ksPrivKey.PrivKey()
@@ -81,8 +82,8 @@ func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, cfg *con
 	return trustCtx, priv, nil
 }
 
-func LoadCapabilityContext(trustCtx did.TrustContext, name string, cfg *config.Config) (ucan.CapabilityContext, error) {
-	capStoreDir := filepath.Join(cfg.General.UserDir, CapstoreDir)
+func LoadCapabilityContext(trustCtx did.TrustContext, name string, capStorePath string) (ucan.CapabilityContext, error) {
+	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 
 	f, err := os.Open(capStoreFile)
@@ -99,11 +100,16 @@ func LoadCapabilityContext(trustCtx did.TrustContext, name string, cfg *config.C
 	return capCtx, nil
 }
 
-func SaveCapabilityContext(capCtx ucan.CapabilityContext, cfg *config.Config) error {
+func SaveCapabilityContext(capCtx ucan.CapabilityContext, capStorePath string) error {
 	name := capCtx.Name()
-	capStoreDir := filepath.Join(cfg.General.UserDir, CapstoreDir)
+	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capCtxFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 	capCtxBackup := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap.%d", name, time.Now().Unix()))
+
+	// ensure the directory exists
+	if err := os.MkdirAll(capStoreDir, os.FileMode(0o700)); err != nil {
+		return fmt.Errorf("creating capability context director: %w", err)
+	}
 
 	// first take a backup -- move the current context
 	if _, err := os.Stat(capCtxFile); err == nil {
@@ -124,4 +130,18 @@ func SaveCapabilityContext(capCtx ucan.CapabilityContext, cfg *config.Config) er
 	}
 
 	return nil
+}
+
+func GetTrustContext(fs afero.Afero, context, userDir string) (did.TrustContext, error) {
+	if IsLedgerContext(context) {
+		provider, err := did.NewLedgerWalletProvider(0)
+		if err != nil {
+			return nil, err
+		}
+
+		return did.NewTrustContextWithProvider(provider), nil
+	}
+
+	trustCtx, _, err := CreateTrustContextFromKeyStore(fs, context, userDir)
+	return trustCtx, err
 }

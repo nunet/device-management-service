@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"gitlab.com/nunet/device-management-service/db/repositories"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -30,8 +31,8 @@ var (
 )
 
 // validateRange validates the actual value is within the min and max range
-func validateRange(actual, min, max float64) error {
-	if actual < min || actual > max {
+func validateRange(actual, minimum, maximum float64) error {
+	if actual < minimum || actual > maximum {
 		return ErrOutOfRange
 	}
 	return nil
@@ -111,16 +112,23 @@ func New(ctx context.Context,
 		if err := onboardingManager.validatePrerequisites(config); err != nil {
 			switch {
 			case errors.Is(err, ErrUnmetCapacity):
-				log.Errorf("🚫 machine onboarded, but capacity left to use onboarded resources, Did you change your hardware recently?: %v", err)
+				log.Errorw("machine onboarded, but capacity not fully met",
+					"labels", string(observability.LabelNode),
+					"error", err)
 			case errors.Is(err, ErrHighUsage):
-				log.Errorf("⚠️ machine onboarded, but high usage detected. Reduce usage to use onboarded resources: %v", err)
+				log.Errorw("machine onboarded, but high usage detected",
+					"labels", string(observability.LabelNode),
+					"error", err)
 				return onboardingManager, nil
 			default:
-				log.Errorf("❌️ machine is onboarded but the prerequisites are not met: %v", err)
+				log.Errorw("machine is onboarded but prerequisites are not met",
+					"labels", string(observability.LabelNode),
+					"error", err)
 			}
 
 			// if the machine is onboarded but the prerequisites are not met, offboard the machine
-			log.Info("🔌 offboarding the machine because the onboarded resources are no longer valid")
+			log.Infow("offboarding the machine because onboarded resources are no longer valid",
+				"labels", string(observability.LabelNode))
 			if err := onboardingManager.Offboard(context.Background()); err != nil {
 				return nil, fmt.Errorf("offboard the machine: %w", err)
 			}
@@ -214,6 +222,25 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 		return fmt.Errorf("could not get machine resources: %w", err)
 	}
 
+	{
+		gpuCount := len(machineResources.Resources.GPUs)
+		log.Infow("machine_hardware_resources",
+			"labels", string(observability.LabelNode),
+			"cpuCores", machineResources.Resources.CPU.Cores,
+			"ramGB", machineResources.Resources.RAM.SizeInGB(),
+			"gpuCount", gpuCount,
+		)
+		for idx, gpu := range machineResources.Resources.GPUs {
+			log.Infow("machine_hardware_gpu",
+				"labels", string(observability.LabelNode),
+				"gpuIndex", gpu.Index,
+				"gpuModel", gpu.Model,
+				"gpuVramGB", gpu.VRAMInGB(),
+				"gpuLogIndex", idx, // just to see the loop index
+			)
+		}
+	}
+
 	if err := validateCapacity(config.OnboardedResources, machineResources.Resources); err != nil {
 		return fmt.Errorf("%w: %v", ErrUnmetCapacity, err)
 	}
@@ -222,6 +249,26 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 	if err != nil {
 		return fmt.Errorf("could not get system free resources: %w", err)
 	}
+
+	{
+		gpuCount := len(systemFreeResources.GPUs)
+		log.Infow("machine_free_resources",
+			"labels", string(observability.LabelNode),
+			"freeCpuCores", systemFreeResources.CPU.Cores,
+			"freeRamGB", systemFreeResources.RAM.SizeInGB(),
+			"freeGpuCount", gpuCount,
+		)
+		for idx, gpu := range systemFreeResources.GPUs {
+			log.Infow("machine_free_gpu",
+				"labels", string(observability.LabelNode),
+				"gpuIndex", gpu.Index,
+				"gpuModel", gpu.Model,
+				"gpuVramGB", gpu.VRAMInGB(),
+				"gpuLogIndex", idx,
+			)
+		}
+	}
+
 	if err := validateUsage(config.OnboardedResources, systemFreeResources); err != nil {
 		return fmt.Errorf("%w: %v", ErrHighUsage, err)
 	}
@@ -233,7 +280,8 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig) (types.OnboardingConfig, error) {
 	o.Lock.Lock()
 	defer o.Lock.Unlock()
-	log.Debugf("onboarding the machine with the config: %+v", config)
+
+	log.Debugf("onboarding machine with config: %+v", config)
 
 	if err := o.validatePrerequisites(config); err != nil {
 		return types.OnboardingConfig{}, fmt.Errorf("could not validate onboarding prerequisites: %w", err)
@@ -243,11 +291,21 @@ func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig)
 		return types.OnboardingConfig{}, fmt.Errorf("could not update onboarded resources: %w", err)
 	}
 
+	log.Infow("onboarded_resources_assigned",
+		"labels", string(observability.LabelNode),
+		"cpuCoresAssigned", config.OnboardedResources.CPU.Cores,
+		"ramGBAssigned", config.OnboardedResources.RAM.SizeInGB(),
+		"diskMBAssigned", config.OnboardedResources.Disk.Size/(1024.0*1024.0),
+		"gpuCountAssigned", len(config.OnboardedResources.GPUs),
+	)
+
 	config.IsOnboarded = true
 	if _, err := o.ConfigRepo.Save(ctx, config); err != nil {
 		return types.OnboardingConfig{}, fmt.Errorf("could not save onboarding config: %w", err)
 	}
-	log.Info("🌩️Successfully onboarded the machine")
+
+	log.Infow("machine_onboarded_successfully",
+		"labels", string(observability.LabelNode))
 
 	o.Config = config
 	return o.Config, nil
@@ -273,7 +331,8 @@ func (o *Onboarding) Offboard(ctx context.Context) error {
 		return fmt.Errorf("could not clear onboarded resources: %w", err)
 	}
 
-	log.Info("🔌 Successfully offboarded the machine")
+	log.Infow("machine_offboarded_successfully",
+		"labels", string(observability.LabelNode))
 
 	return nil
 }

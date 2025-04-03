@@ -19,15 +19,19 @@ type Config struct {
 }
 
 type General struct {
-	UserDir                string `mapstructure:"user_dir" json:"user_dir"`
-	WorkDir                string `mapstructure:"work_dir" json:"work_dir"`
-	DataDir                string `mapstructure:"data_dir" json:"data_dir"`
-	Debug                  bool   `mapstructure:"debug" json:"debug"`
-	HostCountry            string `mapstructure:"host_country" json:"host_country"`
-	HostCity               string `mapstructure:"host_city" json:"host_city"`
-	HostContinent          string `mapstructure:"host_continent" json:"host_continent"`
-	PortAvailableRangeFrom int    `mapstructure:"port_available_range_from" json:"port_available_range_from"`
-	PortAvailableRangeTo   int    `mapstructure:"port_available_range_to" json:"port_available_range_to"`
+	UserDir                  string `mapstructure:"user_dir" json:"user_dir"`
+	WorkDir                  string `mapstructure:"work_dir" json:"work_dir"`
+	DataDir                  string `mapstructure:"data_dir" json:"data_dir"`
+	Debug                    bool   `mapstructure:"debug" json:"debug"`
+	HostCity                 string `mapstructure:"host_city" json:"host_city"`
+	HostCountry              string `mapstructure:"host_country" json:"host_country"`
+	HostContinent            string `mapstructure:"host_continent" json:"host_continent"`
+	PortAvailableRangeFrom   int    `mapstructure:"port_available_range_from" json:"port_available_range_from"`
+	PortAvailableRangeTo     int    `mapstructure:"port_available_range_to" json:"port_available_range_to"`
+	StorageMode              bool   `mapstructure:"storage_mode" json:"storage_mode"`
+	StorageCADirectory       string `mapstructure:"storage_ca_directory" json:"storage_ca_directory"`
+	StorageBricksDir         string `mapstructure:"storage_bricks_dir" json:"storage_bricks_dir"`
+	StorageGlusterfsHostname string `mapstructure:"storage_glusterfs_hostname" json:"storage_glusterfs_hostname"`
 }
 
 type Rest struct {

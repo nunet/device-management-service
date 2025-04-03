@@ -39,7 +39,6 @@ func TestEnsemble(t *testing.T) {
 	assert.NotEmpty(t, config.V1.Nodes, "Nodes should be present")
 	assert.NotEmpty(t, config.V1.Edges, "Edges should be present")
 	assert.NotEmpty(t, config.V1.Allocations, "Allocations should be present")
-	assert.NotEmpty(t, config.V1.Keys, "Keys should be present")
 	assert.NotEmpty(t, config.V1.Scripts, "Scripts should be present")
 	assert.NotNil(t, config.V1.Supervisor, "Supervisor should be present")
 

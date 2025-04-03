@@ -27,7 +27,7 @@ const (
 	DeploymentStatusCompleted
 )
 
-func DeploymentStatusString(d DeploymentStatus) string {
+func (d DeploymentStatus) String() string {
 	switch d {
 	case DeploymentStatusPreparing:
 		return "Preparing"
@@ -52,7 +52,7 @@ func DeploymentStatusString(d DeploymentStatus) string {
 
 type OrchestratorView struct {
 	types.BaseDBModel
-	DeploymentID       string
+	OrchestratorID     string
 	Cfg                EnsembleConfig
 	Manifest           EnsembleManifest
 	Status             DeploymentStatus

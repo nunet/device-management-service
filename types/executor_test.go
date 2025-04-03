@@ -48,47 +48,6 @@ func TestExecutorType_Comparable(t *testing.T) {
 	}
 }
 
-func TestExecutor_Comparable(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		e    *Executor
-		r    Executor
-		want Comparison
-	}{
-		{
-			name: "Equal",
-			e: &Executor{
-				ExecutorType: ExecutorTypeDocker,
-			},
-			r: Executor{
-				ExecutorType: ExecutorTypeDocker,
-			},
-			want: Equal,
-		},
-		{
-			name: "None",
-			e: &Executor{
-				ExecutorType: ExecutorTypeDocker,
-			},
-			r: Executor{
-				ExecutorType: ExecutorTypeFirecracker,
-			},
-			want: None,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := tt.e.Compare(tt.r)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestExecutors_Comparable(t *testing.T) {
 	t.Parallel()
 
@@ -100,64 +59,26 @@ func TestExecutors_Comparable(t *testing.T) {
 	}{
 		{
 			name: "Equal",
-			l: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-			},
-			r: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-			},
+			l:    Executors{ExecutorTypeDocker},
+			r:    Executors{ExecutorTypeDocker},
 			want: Equal,
 		},
 		{
 			name: "Worse",
-			l: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-			},
-			r: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-				Executor{
-					ExecutorType: ExecutorTypeFirecracker,
-				},
-			},
+			l:    Executors{ExecutorTypeDocker},
+			r:    Executors{ExecutorTypeDocker, ExecutorTypeFirecracker},
 			want: Worse,
 		},
 		{
 			name: "Better",
-			l: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-				Executor{
-					ExecutorType: ExecutorTypeFirecracker,
-				},
-			},
-			r: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-			},
+			l:    Executors{ExecutorTypeDocker, ExecutorTypeFirecracker},
+			r:    Executors{ExecutorTypeDocker},
 			want: Better,
 		},
 		{
 			name: "None",
-			l: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-			},
-			r: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeFirecracker,
-				},
-			},
+			l:    Executors{ExecutorTypeDocker},
+			r:    Executors{ExecutorTypeFirecracker},
 			want: None,
 		},
 	}
@@ -184,24 +105,9 @@ func TestExecutors_Calculable(t *testing.T) {
 		}{
 			{
 				name: "Add",
-				l: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeDocker,
-					},
-				},
-				r: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeFirecracker,
-					},
-				},
-				want: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeDocker,
-					},
-					Executor{
-						ExecutorType: ExecutorTypeFirecracker,
-					},
-				},
+				l:    Executors{ExecutorTypeDocker},
+				r:    Executors{ExecutorTypeFirecracker},
+				want: Executors{ExecutorTypeDocker, ExecutorTypeFirecracker},
 			},
 		}
 
@@ -228,37 +134,16 @@ func TestExecutors_Calculable(t *testing.T) {
 		}{
 			{
 				name: "Subtract",
-				l: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeDocker,
-					},
-					Executor{
-						ExecutorType: ExecutorTypeFirecracker,
-					},
-				},
+				l:    Executors{ExecutorTypeDocker, ExecutorTypeFirecracker},
 				r: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeFirecracker,
-					},
+					ExecutorTypeFirecracker,
 				},
-				want: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeDocker,
-					},
-				},
+				want: Executors{ExecutorTypeDocker},
 			},
 			{
 				name: "Subtract all",
-				l: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeDocker,
-					},
-				},
-				r: Executors{
-					Executor{
-						ExecutorType: ExecutorTypeDocker,
-					},
-				},
+				l:    Executors{ExecutorTypeDocker},
+				r:    Executors{ExecutorTypeDocker},
 				want: Executors{},
 			},
 		}
@@ -281,33 +166,21 @@ func TestExecutors_Contains(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		executor Executor
+		executor ExecutorType
 		list     Executors
 		want     bool
 	}{
 		{
-			name: "Contains",
-			executor: Executor{
-				ExecutorType: ExecutorTypeDocker,
-			},
-			list: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-			},
-			want: true,
+			name:     "Contains",
+			executor: ExecutorTypeDocker,
+			list:     Executors{ExecutorTypeDocker},
+			want:     true,
 		},
 		{
-			name: "!Contains",
-			executor: Executor{
-				ExecutorType: ExecutorTypeFirecracker,
-			},
-			list: Executors{
-				Executor{
-					ExecutorType: ExecutorTypeDocker,
-				},
-			},
-			want: false,
+			name:     "!Contains",
+			executor: ExecutorTypeFirecracker,
+			list:     Executors{ExecutorTypeDocker},
+			want:     false,
 		},
 	}
 
@@ -316,47 +189,6 @@ func TestExecutors_Contains(t *testing.T) {
 			t.Parallel()
 			if got := tt.list.Contains(tt.executor); got != tt.want {
 				t.Errorf("Executors.Contains() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestExecutor_Equal(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		executor1 Executor
-		executor2 Executor
-		want      bool
-	}{
-		{
-			name: "Equal",
-			executor1: Executor{
-				ExecutorType: ExecutorTypeDocker,
-			},
-			executor2: Executor{
-				ExecutorType: ExecutorTypeDocker,
-			},
-			want: true,
-		},
-		{
-			name: "!Equal",
-			executor1: Executor{
-				ExecutorType: ExecutorTypeFirecracker,
-			},
-			executor2: Executor{
-				ExecutorType: ExecutorTypeDocker,
-			},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := tt.executor1.Equal(tt.executor2); got != tt.want {
-				t.Errorf("Executor.Equal() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -17,6 +17,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +40,7 @@ import (
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	multiaddr "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	multihash "github.com/multiformats/go-multihash"
 	msmux "github.com/multiformats/go-multistream"
 	"github.com/spf13/afero"
@@ -104,6 +107,10 @@ type Libp2p struct {
 	discoveredPeers []peer.AddrInfo
 	discovery       libp2pdiscovery.Discovery
 
+	// channel to signal when a public IP address has been confirmed
+	observedAddrCh chan multiaddr.Multiaddr
+	observedAddr   multiaddr.Multiaddr
+
 	// services
 	pingService *ping.PingService
 
@@ -148,6 +155,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		sendSemaphore:     make(chan struct{}, sendSemaphoreLimit),
 		fs:                fs,
 		subnets:           make(map[string]*subnet),
+		observedAddrCh:    make(chan multiaddr.Multiaddr, 1), // buffer of 1 to avoid blocking
 	}, nil
 }
 
@@ -197,17 +205,17 @@ func (l *Libp2p) Start() error {
 	// connect to bootstrap nodes
 	err := l.ConnectToBootstrapNodes(l.ctx)
 	if err != nil {
-		log.Errorf("libp2p_bootstrap_failure", "error", err)
+		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success")
+	log.Infow("libp2p_bootstrap_success", "labels", string(observability.LabelNode))
 
 	err = l.BootstrapDHT(l.ctx)
 	if err != nil {
-		log.Errorf("libp2p_bootstrap_failure", "error", err)
+		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success")
+	log.Infow("libp2p_bootstrap_success", "labels", string(observability.LabelNode))
 
 	// Start random walk
 	l.startRandomWalk(l.ctx)
@@ -223,16 +231,16 @@ func (l *Libp2p) Start() error {
 		// advertise randevouz discovery
 		err = l.advertiseForRendezvousDiscovery(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_advertise_rendezvous_failure", "error", err)
+			log.Warnf("libp2p_advertise_rendezvous_failure", "labels", string(observability.LabelNode), "error", err)
 		} else {
-			log.Infow("libp2p_advertise_rendezvous_success")
+			log.Infow("libp2p_advertise_rendezvous_success", "labels", string(observability.LabelNode))
 		}
 
 		err = l.DiscoverDialPeers(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_peer_discover_failure", "error", err)
+			log.Warnf("libp2p_peer_discover_failure", "labels", string(observability.LabelNode), "error", err)
 		} else {
-			log.Infow("libp2p_peer_discover_success", "foundPeers", len(l.discoveredPeers))
+			log.Infow("libp2p_peer_discover_success", "labels", string(observability.LabelNode), "foundPeers", len(l.discoveredPeers))
 		}
 	}()
 
@@ -261,6 +269,8 @@ func (l *Libp2p) Start() error {
 	l.advertiseRendezvousTask = l.config.Scheduler.AddTask(advertiseRendezvousTask)
 
 	l.config.Scheduler.Start()
+
+	go l.watchForObservedAddr()
 
 	return nil
 }
@@ -566,6 +576,70 @@ func (l *Libp2p) GetPeerIP(p PeerID) string {
 	}
 
 	return ""
+}
+
+func (l *Libp2p) watchForObservedAddr() {
+	sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
+	if err != nil {
+		log.Debugf("could not subscribe to event: %w", err)
+		return
+	}
+	defer sub.Close()
+
+	// track address observations
+	addrCount := make(map[string]int)
+	var addrMux sync.Mutex
+
+	for e := range sub.Out() {
+		event := e.(event.EvtPeerIdentificationCompleted)
+
+		if event.ObservedAddr.String() == "" {
+			continue
+		}
+
+		// peer that reported the event
+		isPeerPublic := slices.ContainsFunc(event.ListenAddrs, manet.IsPublicAddr)
+		if !isPeerPublic {
+			continue
+		}
+
+		if !manet.IsPublicAddr(event.ObservedAddr) {
+			continue
+		}
+		// skip relays
+		addrStr := event.ObservedAddr.String()
+		if strings.Contains(addrStr, "p2p-circuit") {
+			continue
+		}
+
+		ip, err := manet.ToIP(event.ObservedAddr)
+		if err != nil {
+			continue
+		}
+
+		addrMux.Lock()
+		addrCount[ip.String()]++
+		count := addrCount[ip.String()]
+		addrMux.Unlock()
+
+		log.Debugf("got public ip: %s (seen %d times)", ip.String(), count)
+
+		if count >= 3 {
+			l.mx.Lock()
+			l.observedAddr = event.ObservedAddr
+			l.mx.Unlock()
+			log.Debugf("confirmed public address after seeing it %d times: %s", count, addrStr)
+
+			// send the observed address on the channel
+			select {
+			case l.observedAddrCh <- event.ObservedAddr:
+				log.Debugf("sent observed address signal: %s", addrStr)
+			default:
+				log.Debugf("channel full, couldn't send observed address signal: %s", addrStr)
+			}
+			return
+		}
+	}
 }
 
 // GetHostID returns the host ID.
@@ -1032,6 +1106,35 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 	}
 
 	return nil
+}
+
+func (l *Libp2p) HostPublicIP() (net.IP, error) {
+	addr, err := l.WaitForObservedAddr(l.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve observed addr: %w", err)
+	}
+	return manet.ToIP(addr)
+}
+
+// WaitForObservedAddr waits for the node to confirm its public IP address
+// Returns the observed multiaddress or an error if the context expires
+func (l *Libp2p) WaitForObservedAddr(ctx context.Context) (multiaddr.Multiaddr, error) {
+	// if we already have an observed address, return it immediately
+	l.mx.Lock()
+	if l.observedAddr != nil {
+		addr := l.observedAddr
+		l.mx.Unlock()
+		return addr, nil
+	}
+	l.mx.Unlock()
+
+	// otherwise wait for the signal
+	select {
+	case addr := <-l.observedAddrCh:
+		return addr, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (l *Libp2p) VisiblePeers() []peer.AddrInfo {

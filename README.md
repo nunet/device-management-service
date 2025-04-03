@@ -99,21 +99,73 @@ We currently support Linux and MacOS (Darwin).
 
 #### Dependencies
 
+##### Linux only
+
 - iproute2 (linux only)
+- gcc
 - build-essential (linux only)
 - libsystemd-dev (linux only)
 - go (v1.21.7 or later)
 - [git-lfs](https://git-lfs.com/) (for downloading large files)
 
+##### macOS (Apple Silicon - M1/M2) only:
+- [Homebrew installed] (/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")
+- Recommended: iTerm2 for improved CLI experience.
+
+#### MacOS (ARM64 architecture)
+
+Before you begin, ensure that you have the following installed:
+    1. Homebrew: to manage dependencies easily
+       If you don't have Homebrew installed, run:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+    2. Go (Golang): The Go programming language, which is used to build the project.
+       Verify if Go is installed: 
+
+```bash
+go version
+```
+
+       Install if needed
+
+```bash
+brew install go
+```
+
+    3. Git: To clone the GitLab repository.
+    4. Make: Used for automating the build process.
+       Verify if make is installed
+
+```bash
+make --version
+```
+
+       Install if needed
+
+```bash
+xcode-select --install
+```
+
+#### 🐧 Linux Installation
+
+Install dependencies:
+```shell
+sudo apt update && sudo apt install -y iproute2 build-essential libsystemd-dev gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+ent-service.git
+```
+
 Clone the repository:
 
-```
+```shell
 git clone https://gitlab.com/nunet/device-management-service.git
+cd device-management-service
 ```
 
 Configure git-lfs:
 
-```
+```shell
 git lfs install && \
 git lfs fetch && \
 git lfs pull
@@ -122,11 +174,10 @@ git lfs pull
 Build the CLI:
 
 ```bash
-cd device-management-service
 make
 ```
 
-This will result in a binary file in builds/ folder named as `dms_linux_amd64` or `dms_darwin_arm64` depending on the platform.
+This will produce a binary in `builds/` named `dms_linux_amd64`.
 
 **Note**: If you built from source and would like to act as a compute provider,
 you may need to check [permissions and features](#permissions-and-features) to enable some _required_ and optional features.
@@ -134,7 +185,7 @@ you may need to check [permissions and features](#permissions-and-features) to e
 To cross compile to arm, cross compilers need to be installed. In particular arm-linux-gnueabihf and aarch64-linux-gnu.
 For debian systems, install with:
 
-```
+```shell
 apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 ```
 
@@ -143,12 +194,18 @@ You can add the compiled binary to a directory in your `$PATH`. See the [Usage](
 ### Permissions and features (for compute providers using Linux)
 
 The following applies _only_ for **compute providers using Linux**. If you're running a client/orchestrator, you do _not_ need to set
-any additional permissions.
+any additional permissions except if you specify for the orchestrator to join the subnet in the ensemble config. If the ensemble contains the following config
+```yml
+subnet:
+  join: true
+```
 
-> **Darwin users**: unfortunately, the DMS can't work with granular permissions on Mac.
-> So, for now, if running a compute provider, you will have to run the nunet daemon (`nunet run`) as root.
+then the orchestator will create its own tun interface and join the subnet. For that the `cap_net_admin` permission is required.
 
-For Linux users, granular permissions will have to be set to the binary (optionally, but _NOT_ recommended, you can run the binary as root).
+> **Darwin users**: unfortunately, the DMS can neither work with granular permissions nor
+> with iptables and tun interfaces. Thus, on Darwin, for now, the DMS can only be an orchestrator.
+
+For Linux users, granular permissions will have to be set to the binary (possible but _NOT_ recommended way is to run as root).
 
 #### Required: Net-admin permission and IP over libp2p
 
@@ -156,21 +213,17 @@ For Linux users, granular permissions will have to be set to the binary (optiona
 >
 > It's needed for those building from source or downloading the binary releases.
 
-**Note**: `cap_net_admin` is a **required** capability for **compute providers**.
+**Note**: `cap_net_admin` and `cap_sys_admin` are **required** capabilities for **compute providers**. `cap_net_admin` would be required for orchestrators if they are joining the subnet.
 
-Setting the permission enables IP over libp2p which is a feature that enhances the capabilities of compute providers, allowing them to participate in a wider
-range of jobs. One capability enabled with this feature is to do port forwarding which it won't be possible without setting the right
-unix permissions.
+Setting the `cap_net_admin` permission enables IP over libp2p which is a feature that enhances the capabilities of compute providers, allowing them to participate in a wider
+range of jobs. One capability enabled with this feature is to do port forwarding which it won't be possible without setting the right unix permissions.
 
-> One of the reasons for requiring this permission is because this feature depends on creating and managing tun interfaces.
-
-To enable this feature, the `nunet` binary requires `network-admin` capabilities. These capabilities allow the application to perform
-network configuration tasks without needing to run the entire application as root, which is a more secure approach.
+Setting the `cap_sys_admin` permission allows the DMS to perform a mount for storage functionality. However, due to `cap_sys_admin` being too wide a permission, please make sure the machine you're setting up on can handle security risk until `cap_sys_admin` is narrowed down to specific actions or there is a better alternative.
 
 To set the necessary capabilities, run the following command:
 
 ```shell
-sudo setcap cap_net_admin+ep /usr/bin/nunet
+sudo setcap cap_net_admin,cap_sys_admin+ep /usr/bin/nunet
 ```
 
 The above command depends on: `libcap2-bin` (Debian/Ubuntu) or `libcap` (CentOS/RHEL/Arch...)
@@ -194,6 +247,100 @@ sudo update-alternatives --config iptables
 ```
 
 Then, select the number which corresponds to the `iptables-nft` option and press enter.
+
+#### 🍏 macOS ARM64 Installation & Debugging Guide (Apple Silicon)
+
+Check your macOS version (important for compatibility):
+
+```shell
+sw_vers
+```
+
+Clone the repository:
+
+```shell
+git clone https://gitlab.com/nunet/device-management-service.git
+cd device-management-service
+```
+
+Configure Git LFS:
+
+```shell
+git lfs install && \
+git lfs fetch && \
+git lfs pull
+```
+
+Build the CLI:
+
+```shell
+make
+```
+
+This will produce a binary in `builds/` named `dms_darwin_arm64`.
+
+##### ✅ Troubleshooting Build Issues
+
+Ensure Go is installed via Homebrew:
+
+```shell
+brew install go
+```
+
+If you see errors like:
+
+```bash
+zsh: permission denied: ./dms
+```
+
+Fix with:
+
+```shell
+chmod +x builds/dms_darwin_arm64
+```
+
+If macOS blocks execution:
+
+```shell
+sudo xattr -d com.apple.quarantine builds/dms_darwin_arm64
+```
+
+Confirm binary format:
+
+```shell
+file builds/dms_darwin_arm64
+```
+
+###### Output should include: Mach-O 64-bit executable arm64
+Run the CLI:
+
+```shell
+./builds/dms_darwin_arm64
+```
+
+You should see:
+
+```scss
+The Device Management Service (DMS) Command Line Interface (CLI)
+Usage:
+  nunet [flags]
+  nunet [command]
+...
+```
+
+###### ⚠️ macOS Limitations:
+
+- `cap_net_admin` and `cap_sys_admin` are not supported on macOS.
+- DMS cannot act as a compute provider — only as an orchestrator.
+- IP over libp2p, port forwarding, and TAP interfaces are unsupported.
+
+###### 📁 Optional: Add Binary to PATH
+
+You may copy the binary into a directory in your $PATH:
+
+```shell
+cp builds/dms_darwin_arm64 /usr/local/bin/nunet
+```
 
 ### Installation on VMs
 
@@ -361,6 +508,8 @@ The `key did` command returns a DID key for the specified identity.
 Remember to secure your keys and capability contexts, as they control access to your NuNet resources.
 They are encrypted and stored under `$HOME/.nunet` by default.
 
+For a quick start, please take a look at the script [maint-scripts/quickstart.sh](./maint-scripts/quickstart.sh).
+
 ##### Using a Ledger Wallet
 
 It is also possible to use a Ledger Wallet instead of creating a new
@@ -368,7 +517,7 @@ key; this is recommended for _user_ contexts, but you **should not** use it
 for the _dms_ context as it needs the key to sign capability tokens.
 
 To set up a _user_ context with a Ledger Wallet, you need the
-`ledger-cli` script from [NuNet's ledger wallet tool](https://gitlab.com/nunet/ledger-wallet).
+`ledger-cli` script from [NuNet's ledger wallet tool](https://gitlab.com/nunet/dev-tools/ledger-wallet).
 The tool uses the Eth application and specifically the first Eth
 account with signing of personal messages. Everything that needs to be
 signed (namely capability tokens) will be presented on your Nano's
@@ -395,13 +544,16 @@ Once both identities are created, you'll need to set up capabilities. Specifical
 1. Create capability contexts for both the user and each of your DMS instances.
 2. Add the user's DID as a _root anchor_ for the DMS capability context. This ensures that the DMS instance fully trusts the user, granting complete control over the DMS (the root capability).
 3. If you want your DMS to participate in the public NuNet testnet (and eventually the mainnet), you'll need to set up capability anchors for your DMS:
-   1. Create a capability anchor to allow your DMS to accept _public and deployment behavior invocations_
+   1. Create a capability anchor to allow your DMS to accept _public behavior invocations_
       from authorized users and DMSs in the NuNet ecosystem.
    2. Add this token to your DMS as a _require anchor_.
    3. Request a capability token from NuNet to invoke public behaviors on the network.
    4. Add the token as a _provide anchor_ in your personal capability context.
    5. Delegate to your DMS the ability to make public invocations using your token.
    6. Add the delegation token as a _provide anchor_ in your DMS.
+
+
+For more on capabilities and behaviors, see the [DMS Capabilities and Behaviors](dms/behaviors/README.md) document. Alternatively, if you installed the DMS using one of the debian packages, there is a man page with descriptions of the capabilities and behaviors you can access with `man nunet`.
 
 ###### Add a root anchor for your DMS context
 
@@ -431,18 +583,18 @@ $ nunet key did ledger:<user>
 did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
 ```
 
-1. **Create a capability anchor for public and deployment behaviors**
+1. **Create a capability anchor for public behaviors**
 
 Create the grant
 
 ```shell
-$ nunet cap grant --context user --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <nunet-did>
+$ nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <nunet-did>
 ```
 
 or if you are using a Ledger Wallet
 
 ```shell
-$ nunet cap grant --context ledger:user --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <nunet-did>
+$ nunet cap grant --context ledger:user --cap --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <nunet-did>
 ```
 
 And the granted token as a require anchor
@@ -451,7 +603,7 @@ And the granted token as a require anchor
 $ nunet cap anchor --context dms --require <the-grant-output>
 ```
 
-The first command grants nunet authorized users the capability to invoke public and deployment behaviors until December 31, 2025, and outputs a token.
+The first command grants nunet authorized users the capability to invoke public behaviors until December 31, 2025, and outputs a token.
 
 The second command consumes the token and adds the require anchor for your DMS
 
@@ -459,7 +611,7 @@ The second command consumes the token and adds the require anchor for your DMS
 
 To request tokens for participating in the testnet, please go to [did.nunet.io](https://did.nunet.io) and submit the did you generated along with your gitlab username and an email address to receive the token. It's highly recommended that you use a Ledger hardware wallet for your keys.
 
-3. **Use the NuNet granted token to authorize public and deployment behavior invocations in the public network**
+3. **Use the NuNet granted token to authorize public behavior invocations in the public network**
 
 3.1 **Add the provide anchor to your personal context**
 
@@ -476,13 +628,13 @@ $ nunet cap anchor --context ledger:user --provide <the-token-you-got-from-nunet
 3.2 **Delegate to your DMS**
 
 ```shell
-$ nunet cap delegate --context user --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
+$ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
 ```
 
 or if you are using a Ledger Wallet
 
 ```shell
-$ nunet cap delegate --context ledger:user --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
+$ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
 
 ```
 
@@ -492,8 +644,7 @@ $ nunet cap delegate --context ledger:user --cap /dms/deployment --cap /public -
 $ nunet cap anchor --context dms --provide <the-delegate-output>
 ```
 
-The first command ingests the NuNet provided token and the last two commands use this token to delegate the public and deployment
-behavior capabilities to your DMS.
+The first command ingests the NuNet provided token and the last two commands use this token to delegate the public behavior capabilities to your DMS.
 
 #### Running DMS
 
@@ -512,11 +663,25 @@ By default, DMS runs on port 9999.
 
 If you want to contribute your computer's resources (CPU, RAM, GPU, storage) to the network, you have to onboard your machine.
 
-Follow our [Compute Provider Guide](docs/onboarding.md) to get started.
+Follow our [Compute Provider Guide](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding/README.md) to get started.
 
 ### Deploy Jobs on the Network
 
-Every node on the network can deploy workloads across available compute resources, given the necessary capabilities. Learn how deployments work by following our [Deployments Guide](docs/deployments.md).
+Every node on the network, given the necessary capabilities, can deploy workloads across available compute resources. The first thing to complete before participating
+in deployments is to delegate or be delegated deployment capabilities depending on
+whether the machine is an orchestrator or compute provider.
+
+Deployments require the /dms/deployment capability to invoke behaviors under it such
+as the /dms/deployment/request behavior an orchestrator invokes on, or broadcasts to
+compute providers requesting bids for a job. The compute provider too will need to be
+granted the capability to submit bids on /dms/deployment/bid by the orchestrator. The
+latter can be achieved by simply granting the specific compute providers that are allowed
+and anchoring the token on the require anchor of the orchestrator without having to send
+the token. This is mainly because this release intends to provide a fine grained control
+to orchestrators on who they allow to run their jobs.
+
+
+ Learn how deployments work by following our [Deployments Guide](docs/deployments/README.md).
 
 ### REST Endpoints
 
@@ -616,7 +781,7 @@ DMS (Device Management Service) acts as the foundation of the NuNet platform, or
 - **`test`**: Contains some automated tests, not including unit tests.
 - **`maint-scripts`**: Utility scripts for building / development assistance and runtime.
 - **`examples`**: Examples of ensembles to be used to deploy jobs on NuNet platform.
-- **`docs`**: Documentation about main functionalities in DMS as onboarding, deployments, how to create a restricted network.
+- **`docs`**: Documentation about main functionalities in DMS as onboarding, deployments, how to create a private network.
 - **`specs`**: Platform components specifications.
 
 ### Design and Architecture
@@ -628,13 +793,13 @@ Main concepts of the architecture of DMS, the main component of the NuNet platfo
 Current key functional areas of DMS:
 
 - Actor-based system: NuNet's network communication is powered by the [NuActor System](https://gitlab.com/nunet/device-management-service/-/blob/main/actor/README.md), a zero-trust system that utilizes fine-grained capabilities, anchored on [DIDs](https://www.w3.org/TR/did-core/), following the [UCAN model](https://github.com/ucan-wg/).
-- Node management: Supports [onboarding/offboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding.md) of nodes and manages peer connections.
-- Compute ensembles: Defines ensembles as collections of logical nodes and allocations that represent compute workloads (as explained [here](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/dms/jobs/README.md)). Each allocation is a compute job assigned to a node.
-- Orchestration: [Deploys an ensemble](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/deployments.md) across nodes by fulfilling the specified constraints. This is done using a constraint satisfaction process where bids are requested from nodes and evaluated based on the required resources and locations.
+- Node management: Supports [onboarding/offboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding/README.md) of nodes and manages peer connections.
+- Compute ensembles: Defines ensembles as collections of logical nodes and allocations that represent compute workloads (as explained [here](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/jobs/README.md)). Each allocation is a compute job assigned to a node.
+- Orchestration: [Deploys an ensemble](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/deployments/README.md) across nodes by fulfilling the specified constraints. This is done using a constraint satisfaction process where bids are requested from nodes and evaluated based on the required resources and locations.
 - Supervision: Once deployed, ensembles are continuously monitored.
 - VM/container lifecycle management: Allows creation, customization, and management of containers and virtual machines on the network.
 - Resource management: Controls different types of compute resources (VMs, CPUs, GPUs).
-- API and CLI support: Offers both an [API](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/api/README.md) and [CLI](https://gitlab.com/nunet/device-management-service/-/blob/deployment-docs/cmd/actor/README.md) for programmatic and manual interaction with the system.
+- API and CLI support: Offers both an [API](https://gitlab.com/nunet/device-management-service/-/blob/main/api/README.md) and [CLI](https://gitlab.com/nunet/device-management-service/-/blob/main/cmd/actor/README.md) for programmatic and manual interaction with the system.
 - Observability: Collects information of events happening in the network allowing to perform real-time or post-mortem analysis and visualizations.
 
 ### Data Types
@@ -647,3 +812,4 @@ Find additional data models within specific packages.
 ### References
 
 In addition to the relevant links added in the sections above, you can also find useful links here: [NuNet Links](https://www.nunet.io/links).
+

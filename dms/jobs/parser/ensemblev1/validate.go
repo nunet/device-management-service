@@ -11,6 +11,7 @@ package ensemblev1
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
@@ -20,11 +21,23 @@ import (
 	vutils "gitlab.com/nunet/device-management-service/utils/validate"
 )
 
+const (
+	defaultAllocationFailureStrategy = "stay_down"
+	defautNodeFailureStrategy        = "stay_down"
+)
+
+var (
+	validEscalationStrategies        = [...]string{"redeploy", "teardown"}
+	validAllocationFailureStrategies = [...]string{"stay_down", "one_for_one", "one_for_all", "rest_for_one"}
+	validNodeFailureStrategies       = [...]string{"stay_down", "restart", "redeploy"}
+)
+
 // NewEnsembleV1Validator creates a new validator for the NuNet configuration.
 func NewEnsembleV1Validator() validate.Validator {
 	return validate.NewValidator(
 		map[tree.Path]validate.ValidatorFunc{
 			"V1":                           ValidateSpec,
+			"V1.subnet":                    ValidateSubnet,
 			"V1.allocations.*":             ValidateAllocation,
 			"V1.edges.[]":                  ValidateEdgeConstraints,
 			"V1.nodes.*":                   ValidateNode,
@@ -39,9 +52,16 @@ func NewEnsembleV1Validator() validate.Validator {
 
 // ValidateSpec checks the root configuration for consistency.
 func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
-	spec, ok := data.(map[string]any)
-	if !ok {
+	spec, dataOk := data.(map[string]any)
+	if !dataOk {
 		return fmt.Errorf("invalid spec configuration: %v", data)
+	}
+
+	// validate escalation strategy if present
+	if es, ok := spec["escalation_strategy"].(string); ok {
+		if !slices.Contains(validEscalationStrategies[:], es) {
+			return fmt.Errorf("invalid escalation_strategy %q: must be one of %q", es, validEscalationStrategies)
+		}
 	}
 
 	// Check if the allocations map is present and not empty
@@ -50,11 +70,25 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 		return fmt.Errorf("at least one allocation must be defined")
 	}
 
-	// All allocation names must be fully qualified domain names
+	allocationNames := make(map[string]string)
 	for allocName := range allocs {
+		// All allocation names must be fully qualified domain names
 		if !vutils.IsDNSNameValid(allocName) {
 			return fmt.Errorf("invalid allocation name, must be a valid hostname: %s", allocName)
 		}
+
+		// Check for duplicate allocation names (case-insensitive)
+		lowerName := strings.ToLower(allocName)
+		if originalName, exists := allocationNames[lowerName]; exists {
+			return fmt.Errorf("duplicate allocation names found: '%s' and '%s'", originalName, allocName)
+		}
+		allocationNames[lowerName] = allocName
+	}
+
+	// check for cyclic dependencies
+	graph := utils.CreateAdjencyList(allocs, tree.NewPath("depends_on"))
+	if utils.DetectCycles(graph) {
+		return fmt.Errorf("cyclic dependencies detected in allocations")
 	}
 
 	// Check if nodes are defined when edge_constraints are present
@@ -64,11 +98,68 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 		}
 	}
 
+	// Check that no allocation is present in multiple nodes and that dependencies are in the same node
+	if nodes, ok := spec["nodes"].(map[string]any); ok && len(nodes) > 0 {
+		// Create a map to track which node each allocation belongs to
+		allocToNode := make(map[string]string)
+
+		// Build the allocation-to-node map
+		for nodeName, nodeConfig := range nodes {
+			nodeMap, ok := nodeConfig.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			nodeAllocs, ok := nodeMap["allocations"].([]any)
+			if !ok {
+				continue
+			}
+
+			for _, alloc := range nodeAllocs {
+				allocName, ok := alloc.(string)
+				if !ok {
+					continue
+				}
+
+				// Check if this allocation is already assigned to another node
+				if existingNode, exists := allocToNode[allocName]; exists {
+					return fmt.Errorf("allocation '%s' is assigned to multiple nodes ('%s' and '%s'): an allocation can only be assigned to one node", allocName, existingNode, nodeName)
+				}
+
+				// Record this allocation's node
+				allocToNode[allocName] = nodeName
+
+				// Check dependencies immediately
+				allocConfig, ok := allocs[allocName].(map[string]any)
+				if !ok {
+					continue // Should never happen
+				}
+
+				dependencies, ok := allocConfig["depends_on"].([]any)
+				if !ok {
+					continue
+				}
+
+				for _, dep := range dependencies {
+					depName, ok := dep.(string)
+					if !ok {
+						continue
+					}
+
+					// Check if the dependency is in the same node
+					if !slices.Contains(nodeAllocs, dep) {
+						return fmt.Errorf("allocation '%s' depends on '%s', but '%s' is not in the same node: dependent allocations must be in the same node", allocName, depName, depName)
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
 // ValidateAllocation checks the allocation configuration.
-func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
+func ValidateAllocation(root *map[string]any, data any, path tree.Path) error {
 	allocation, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid allocation configuration: %v", data)
@@ -104,6 +195,11 @@ func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
 		return fmt.Errorf("allocation executor type (%s) must match execution type (%s)", executor, execType)
 	}
 
+	allocType, ok := allocation["type"].(string)
+	if !ok || allocType == "" {
+		return fmt.Errorf("allocation must have a type (service or task)")
+	}
+
 	// Validate DNS name if present
 	if dnsName, ok := allocation["dns_name"].(string); ok {
 		if dnsName == "" {
@@ -115,23 +211,64 @@ func ValidateAllocation(root *map[string]any, data any, _ tree.Path) error {
 		}
 	}
 
-	// Validate keys reference if specified
-	if keys, ok := allocation["keys"].([]any); ok && len(keys) > 0 {
-		rootKeys, err := utils.GetConfigAtPath(*root, tree.NewPath("V1.keys"))
-		if err != nil || rootKeys == nil {
-			return fmt.Errorf("keys must be defined when referenced in allocation")
+	// validate failure_recovery
+	if failureRecovery, ok := allocation["failure_recovery"].(string); ok {
+		if !slices.Contains(validAllocationFailureStrategies[:], failureRecovery) {
+			return fmt.Errorf("invalid failure_recovery %q: must be one of %q", failureRecovery, validAllocationFailureStrategies)
 		}
-		rootKeysMap, ok := rootKeys.(map[string]any)
+	} else {
+		return fmt.Errorf("failure_recovery must be specified for allocation")
+	}
+
+	// validate depends_on if present
+	if dependsOn, ok := allocation["depends_on"]; ok {
+		dependsOn, ok := dependsOn.([]any)
 		if !ok {
-			return fmt.Errorf("invalid keys configuration")
+			return fmt.Errorf("depends_on must be a list of allocation names")
 		}
-		for _, key := range keys {
-			keyStr, ok := key.(string)
+		var allocs map[string]any
+		if cfg, err := utils.GetConfigAtPath(*root, "V1.allocations"); err == nil {
+			allocs, _ = cfg.(map[string]any)
+		}
+		for _, v := range dependsOn {
+			dep, ok := v.(string)
 			if !ok {
-				return fmt.Errorf("invalid key reference: %v", key)
+				return fmt.Errorf("depends_on must be a list of allocation names")
 			}
-			if _, exists := rootKeysMap[keyStr]; !exists {
-				return fmt.Errorf("referenced key '%s' not found", keyStr)
+			if dep != "" && path.Last() == dep {
+				return fmt.Errorf("depends_on must not refer to itself")
+			}
+			if alloc, exists := allocs[dep]; !exists || alloc == nil {
+				return fmt.Errorf("depends_on allocation '%s' not found", dependsOn)
+			}
+		}
+	}
+
+	// Validate keys if specified
+	if keys, ok := allocation["keys"].([]any); ok && len(keys) > 0 {
+		for i, keyObj := range keys {
+			keyMap, ok := keyObj.(map[string]any)
+			if !ok {
+				return fmt.Errorf("invalid key at index %d: must be an object", i)
+			}
+
+			keyType, ok := keyMap["type"].(string)
+			if !ok || keyType == "" {
+				return fmt.Errorf("key at index %d must have a type", i)
+			}
+
+			if keyType != "ssh" && keyType != "gpg" {
+				return fmt.Errorf("key at index %d has invalid type: %s (must be 'ssh' or 'gpg')", i, keyType)
+			}
+
+			keyFile, ok := keyMap["file"].(string)
+			if !ok || keyFile == "" {
+				return fmt.Errorf("key at index %d must have a file", i)
+			}
+
+			keyDest, ok := keyMap["dest"].(string)
+			if !ok || keyDest == "" {
+				return fmt.Errorf("key at index %d must have a dest", i)
 			}
 		}
 	}
@@ -311,6 +448,27 @@ func ValidateNode(root *map[string]any, data any, _ tree.Path) error {
 		}
 	}
 
+	// validate redundancy if present
+	if redundancy, ok := node["redundancy"]; ok {
+		// check if redundancy is a positive integer
+		redundancyInt, ok := redundancy.(int)
+		if !ok {
+			return fmt.Errorf("redundancy must be a number")
+		}
+		if redundancyInt < 0 {
+			return fmt.Errorf("redundancy must be a positive number")
+		}
+	}
+
+	// validate failure recovery
+	if failureRecovery, ok := node["failure_recovery"].(string); ok {
+		if !slices.Contains(validNodeFailureStrategies[:], failureRecovery) {
+			return fmt.Errorf("invalid failure_recovery %q: must be one of %q", failureRecovery, validNodeFailureStrategies)
+		}
+	} else {
+		return fmt.Errorf("failure_recovery must be specified for node")
+	}
+
 	// Validate ports if specified
 	if ports, ok := node["ports"].([]any); ok {
 		for _, port := range ports {
@@ -322,6 +480,11 @@ func ValidateNode(root *map[string]any, data any, _ tree.Path) error {
 			// Validate private port
 			if private, ok := portMap["private"].(int); !ok || private <= 0 {
 				return fmt.Errorf("port must have a valid private port number")
+			}
+
+			// Require public port when private port is specified
+			if _, ok := portMap["public"].(int); !ok {
+				return fmt.Errorf("public port must be specified when private port is defined")
 			}
 
 			// Validate public port
@@ -575,10 +738,10 @@ func validateLocation(data any, _ int) error {
 		return fmt.Errorf("location must be a map")
 	}
 
-	// Region is required
-	region, ok := location["region"].(string)
-	if !ok || region == "" {
-		return fmt.Errorf("region is required and cannot be empty")
+	// continent required if specifying location
+	continent, ok := location["continent"].(string)
+	if !ok || continent == "" {
+		return fmt.Errorf("continent is required when specifying a location")
 	}
 
 	// Country is optional
@@ -691,6 +854,24 @@ func ValidateHealthCheck(_ *map[string]any, data any, _ tree.Path) error {
 		}
 	default:
 		return fmt.Errorf("unsupported healthcheck type: %s", hcType)
+	}
+
+	return nil
+}
+
+// ValidateSubnet validates the subnet config
+func ValidateSubnet(_ *map[string]any, data any, _ tree.Path) error {
+	subnet, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid subnet config")
+	}
+
+	if len(subnet) == 0 {
+		return fmt.Errorf("subnet can not be empty if specified")
+	}
+
+	if _, ok := subnet["join"].(bool); !ok {
+		return fmt.Errorf("subnet.join expects boolean value")
 	}
 
 	return nil

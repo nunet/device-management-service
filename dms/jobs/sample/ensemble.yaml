@@ -1,11 +1,12 @@
 version: "ensembleV1"
-
+metadata:
+  name: "test-ensemble"
 # Node definitions for edge constraints
 nodes:
   node1:
     location:
       accept:
-        - region: "us-west"
+        - continent: "NA"
           country: "US"
           city: "San Francisco"
     peer: "12D3KooWJwNf7KGNwGxgkGXuYvfS5ZKrHhXH2qwvVDiGFsGV5xqz"
@@ -17,16 +18,14 @@ nodes:
   node2:
     location:
       accept:
-        - region: "eu-west"
+        - continent: "EU"
           country: "UK"
           city: "London"
-
 # Edge constraints between nodes (will be transformed to edges with S/T)
 edge_constraints:
   - edges: ["node1", "node2"]
     rtt: 100
     bw: 1000
-
 # Resource templates
 # NOTE: referencing yaml fields won't correctly work with our parser
 resources:
@@ -35,59 +34,52 @@ resources:
     cpu:
       cores: 2
       architecture: "x86_64"
-      clock_speed: 2.4  # GHz
+      clock_speed: 2.4 # GHz
     ram:
-      size: 2  # GiB
-      clock_speed: 3200  # MHz
+      size: 2 # GiB
+      clock_speed: 3200 # MHz
     disk:
-      size: 2  # GiB
+      size: 2 # GiB
       type: "ssd"
     gpus:
       - vendor: "nvidia"
         model: "rtx3080"
-        vram: 2  # GiB
+        vram: 2 # GiB
   standard2:
     name: "standard2"
     cpu:
       cores: 2
       architecture: "x86_64"
-      clock_speed: 2.4  # GHz
+      clock_speed: 2.4 # GHz
     ram:
-      size: 2  # GiB
-      clock_speed: 3200  # MHz
+      size: 2 # GiB
+      clock_speed: 3200 # MHz
     disk:
-      size: 2  # GiB
+      size: 2 # GiB
       type: "ssd"
     gpus:
       - vendor: "nvidia"
         model: "rtx3080"
-        vram: 2  # GiB
+        vram: 2 # GiB
   minimal:
     name: "minimal"
     cpu:
       cores: 1
     ram:
-      size: 2  # GiB
+      size: 2 # GiB
     disk:
-      size: 2  # GiB
-
+      size: 2 # GiB
 # Scripts for provisioning (will be transformed to bytes)
 scripts:
   setup: "scripts/setup.sh"
   cleanup: "scripts/cleanup.sh"
-
-# Key definitions
-keys:
-  worker1-key: "keys/worker1_key"
-  worker2-key: "keys/worker2_key"
-  vm1-key: "keys/vm1_key"
-
 # Allocation definitions
 allocations:
   worker1:
+    type: "task"
     executor: "docker"
     dns_name: "worker1.local"
-    resources: "standard"  # Reference to resource template
+    resources: "standard" # Reference to resource template
     execution:
       type: "docker"
       image: "ubuntu:22.04"
@@ -97,22 +89,19 @@ allocations:
         - "DEBUG=1"
         - "WORKER_ID=1"
       working_directory: "/app"
-    healthcheck:
-      type: "command"
-      exec: ["echo", "worker1 healthy"]
-      response:
-        type: "string"
-        value: "worker1 healthy"
     provision:
-      - "setup"     # Reference to script in scripts section
-      - "cleanup"   # Reference to script in scripts section
+      - "setup" # Reference to script in scripts section
+      - "cleanup" # Reference to script in scripts section
     keys:
-      - "worker1-key"
-
+      - type: ssh
+        file: /path/to/worker1-key
+        dest: /root/.ssh/authorized_keys
+    failure_recovery: "stay_down"
   worker2:
+    type: "task"
     executor: "docker"
     dns_name: "worker2.local"
-    resources: "minimal"  # Reference to resource template
+    resources: "minimal" # Reference to resource template
     execution:
       type: "docker"
       image: "python:3.9-slim"
@@ -120,25 +109,29 @@ allocations:
       environment:
         - "WORKER_ID=2"
     provision:
-      - "setup"  # Reference to script in scripts section
+      - "setup" # Reference to script in scripts section
     keys:
-      - "worker2-key"
-
+      - type: ssh
+        file: /path/to/worker2-key
+        dest: /root/.ssh/authorized_keys
+    depends_on: ["worker1"]
   vm1:
+    type: "service"
     executor: "firecracker"
     dns_name: "vm1.local"
-    resources: "standard2"  # Reference to resource template
+    resources: "standard2" # Reference to resource template
     execution:
       type: "firecracker"
       kernel_image: "vmlinux-5.10"
       root_file_system: "ubuntu-22.04.ext4"
       kernel_args: "console=ttyS0 reboot=k panic=1"
     provision:
-      - "setup"     # Reference to script in scripts section
-      - "cleanup"   # Reference to script in scripts section
+      - "setup" # Reference to script in scripts section
+      - "cleanup" # Reference to script in scripts section
     keys:
-      - "vm1-key"
-
+      - type: ssh
+        file: /path/to/vm1-key
+        dest: /root/.ssh/authorized_keys
 # Supervisor configuration
 supervisor:
   strategy: "OneForOne"

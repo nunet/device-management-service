@@ -3,8 +3,11 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package dms
 
@@ -15,18 +18,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
+	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
 	clover_db "gitlab.com/nunet/device-management-service/db/repositories/clover"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
@@ -35,6 +42,8 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/storage"
+	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -84,11 +93,33 @@ func initialize(gcfg *config.Config) {
 }
 
 func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error) {
+	log.Debugf("starting dms with config: %v", gcfg)
 	if contextName == "" {
 		contextName = node.DefaultContextName
 	}
 
+	// if bootstrap peers were passed by env var then override them
+	btPeers := os.Getenv("BOOTSTRAP_PEERS")
+	if btPeers != "" {
+		peers := strings.Split(btPeers, ",")
+		gcfg.P2P.BootstrapPeers = peers
+	}
+
 	initialize(gcfg)
+
+	var volumeController *controller.GlusterController
+
+	if gcfg.StorageMode {
+		var err error
+		volumeController, err = controller.NewGlusterController(gcfg.StorageGlusterfsHostname, gcfg.StorageBricksDir, gcfg.StorageCADirectory)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create glusterfs controller: %w", err)
+		}
+
+		if !volumeController.IsServerWorking() {
+			return nil, errors.New("failed to start in storage mode")
+		}
+	}
 
 	geoip2db, err := geoip2.FromBytes(geoLite2Country)
 	if err != nil {
@@ -140,7 +171,6 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 
 	onboardR := clover_db.NewOnboardingConfig(db)
 	orchestR := clover_db.NewOrchestratorView(db)
-	contractR := clover_db.NewContractRepo(db)
 
 	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardR)
 	if err != nil {
@@ -223,10 +253,10 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	trustCtx.Start(time.Hour)
 	capCtx.Start(5 * time.Minute)
 
-	hostLocation := node.HostGeolocation{
-		HostCountry:   gcfg.HostCountry,
-		HostCity:      gcfg.HostCity,
-		HostContinent: gcfg.HostContinent,
+	hostLocation := geolocation.Geolocation{
+		Continent: gcfg.HostContinent,
+		Country:   gcfg.HostCountry,
+		City:      gcfg.HostCity,
 	}
 
 	portConfig := node.PortConfig{
@@ -234,11 +264,13 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		AvailableRangeTo:   gcfg.PortAvailableRangeTo,
 	}
 
+	volumeTracker := storage.NewVolumeTracker()
+
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
-		orchestR, geoip2db, hostLocation, portConfig,
-		contractR,
+		orchestR, geoip2db, hostLocation, portConfig, volumeTracker,
+		volumeController,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -253,6 +285,10 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		Port:        gcfg.Rest.Port,
 		Addr:        gcfg.Rest.Addr,
 	}
+
+	// Add APM middleware by appending to restConfig.MidW
+	restConfig.Middlewares = append(restConfig.Middlewares, apmgin.Middleware(gin.Default()))
+
 	rServer := api.NewServer(&restConfig)
 	rServer.SetupRoutes()
 
@@ -284,15 +320,22 @@ func (d *DMS) Run() error {
 }
 
 func (d *DMS) Stop() {
-	err := d.Node.Stop()
-	if err != nil {
-		log.Errorf("failed to stop node: %s", err)
+	log.Infof("Shutting down DMS")
+	if d.Node != nil {
+		if err := d.Node.Stop(); err != nil {
+			log.Errorf("failed to stop node: %s", err)
+		}
 	}
-	err = d.P2P.Stop()
-	if err != nil {
-		log.Errorf("failed to stop libp2p network: %s", err)
+	log.Infof("node stopped")
+
+	if d.P2P != nil {
+		if err := d.P2P.Stop(); err != nil {
+			log.Errorf("failed to stop libp2p network: %s", err)
+		}
 	}
-	log.Infof("Shutting down after receiving")
+	log.Infof("network stopped")
+
+	// TODO: stop rest server
 }
 
 // GenerateAndStorePrivKey generates a new key pair using Secp256k1,

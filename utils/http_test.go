@@ -9,6 +9,7 @@
 package utils
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,7 +26,6 @@ func TestNewHTTPClient(t *testing.T) {
 
 	assert.Equal(t, baseURL, httpClient.BaseURL)
 	assert.Equal(t, version, httpClient.APIVersion)
-	assert.Equal(t, http.DefaultClient, httpClient.Client)
 }
 
 func TestMakeRequest(t *testing.T) {
@@ -38,7 +38,7 @@ func TestMakeRequest(t *testing.T) {
 
 	client := NewHTTPClient(mockServer.URL, "api/v1")
 
-	respBody, statusCode, err := client.MakeRequest("GET", "/test/path", nil)
+	respBody, statusCode, err := client.MakeRequest(context.Background(), "GET", "/test/path", nil)
 	assert.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, statusCode)

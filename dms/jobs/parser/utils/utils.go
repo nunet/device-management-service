@@ -18,8 +18,8 @@ import (
 )
 
 // getConfigAtPath retrieves a part of the configuration at a given path
-func GetConfigAtPath(config map[string]interface{}, path tree.Path) (any, error) {
-	current := any(config)
+func GetConfigAtPath(config any, path tree.Path) (any, error) {
+	current := config
 	for _, key := range path.Parts() {
 		switch v := current.(type) {
 		case map[string]any:
@@ -59,6 +59,58 @@ func ToAnySlice(slice any) ([]any, error) {
 	}
 
 	return anySlice, nil
+}
+
+// CreateAdjencyList creates an adjacency list from a map
+func CreateAdjencyList[T comparable](m map[T]any, path tree.Path) map[T][]T {
+	adjencyList := make(map[T][]T)
+	for key, value := range m {
+		if val, err := GetConfigAtPath(value, path); err == nil {
+			switch v := val.(type) {
+			case []T:
+				adjencyList[key] = v
+			case []any:
+				for _, v := range v {
+					if k, ok := v.(T); ok {
+						adjencyList[key] = append(adjencyList[key], k)
+					}
+				}
+			case T:
+				adjencyList[key] = []T{v}
+			}
+		}
+	}
+	return adjencyList
+}
+
+func hasCycle[T comparable](adjencyList map[T][]T, node T, visited, recursionStack map[T]bool) bool {
+	if recursionStack[node] {
+		return true
+	}
+	recursionStack[node] = true
+	for _, neighbor := range adjencyList[node] {
+		if visited[neighbor] {
+			continue
+		}
+		if hasCycle(adjencyList, neighbor, visited, recursionStack) {
+			return true
+		}
+	}
+	recursionStack[node] = false
+	return false
+}
+
+func DetectCycles[T comparable](adjencyList map[T][]T) bool {
+	visited := make(map[T]bool)
+	recursionStack := make(map[T]bool)
+	for node := range adjencyList {
+		if !visited[node] {
+			if hasCycle(adjencyList, node, visited, recursionStack) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func normalizeMap(m interface{}) interface{} {

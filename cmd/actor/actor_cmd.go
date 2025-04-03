@@ -9,7 +9,6 @@
 package actor
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -17,9 +16,9 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/client"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	dmsUtil "gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
@@ -33,7 +32,7 @@ const (
 	bSend      = "send"
 )
 
-func newActorCmdGroup(client *dmsUtil.HTTPClient, afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newActorCmdGroup(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cmd",
 		Short: "Invoke a predefined behavior on an actor",
@@ -50,7 +49,7 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 				return nil, cobra.ShellCompDirectiveDefault
 			}
 			var completions []string
-			for k := range behaviors {
+			for k := range registeredBehaviors {
 				completions = append(completions, strings.Split(k, "/")[2])
 			}
 			return completions, cobra.ShellCompDirectiveNoFileComp
@@ -63,9 +62,9 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 		},
 	}
 
-	for behavior := range behaviors {
-		if behaviorCfg, ok := behaviors[behavior]; ok {
-			cmd.AddCommand(newActorCmdCmd(client, afs, behavior, behaviorCfg, cfg))
+	for behavior := range registeredBehaviors {
+		if behaviorCfg, ok := registeredBehaviors[behavior]; ok {
+			cmd.AddCommand(newActorCmdCmd(afs, behavior, behaviorCfg, cfg))
 		}
 	}
 
@@ -77,7 +76,7 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 	return cmd
 }
 
-func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string, behaviorCfg behaviorConfig, cfg *config.Config) *cobra.Command {
+func newActorCmdCmd(afs afero.Afero, behavior string, behaviorCfg behaviorConfig, cfg *config.Config) *cobra.Command {
 	payload := &Payload{val: nil}
 	if behaviorCfg.Payload != nil {
 		payload.val = behaviorCfg.Payload()
@@ -101,59 +100,31 @@ func newActorCmdCmd(client *dmsUtil.HTTPClient, afs afero.Afero, behavior string
 			contextName, _ := cmd.Flags().GetString(fnContextName)
 			dest, _ := cmd.Flags().GetString(fnDest)
 
-			dmsHandle, err := getDMSHandle(client)
+			// Create security context first
+			sctx, err := utils.NewSecurityContext(afs, contextName, cfg)
 			if err != nil {
-				return fmt.Errorf("could not get source DMS handle: %w", err)
+				return fmt.Errorf("could not create security context: %w", err)
 			}
 
-			topic := ""
-			if behaviorCfg.Type == bBroadcast {
-				topic = behaviorCfg.Topic
-			}
-
-			if behaviorCfg.PayloadEnc != nil {
-				payload.val, err = behaviorCfg.PayloadEnc(payload.val)
-				if err != nil {
-					return fmt.Errorf("could not marshal payload: %w", err)
-				}
-			}
-
-			invocation := behaviorCfg.Type == bInvoke
-
-			msg, err := newActorMessage(afs, dmsHandle, dest, topic, behavior, payload.val, timeout, expiry, invocation, contextName, cfg)
+			// Now call newClient with the correct arguments
+			cli, err := utils.NewClient(cfg, sctx)
 			if err != nil {
-				return fmt.Errorf("could not create message: %w", err)
+				return fmt.Errorf("could not create client: %w", err)
 			}
 
-			msgData, err := json.Marshal(msg)
+			res, err := behaviorCfg.Run(
+				cmd,
+				cli,
+				payload.val,
+				client.WithTimeout(timeout),
+				client.WithExpiry(expiry),
+				client.WithDestination(dest),
+			)
 			if err != nil {
-				return fmt.Errorf("could not marshal message: %w", err)
+				return err
 			}
 
-			endpoint := fmt.Sprintf("/actor/%s", behaviorCfg.Type)
-			resBody, resCode, err := client.MakeRequest("POST", endpoint, msgData)
-			if err != nil {
-				return fmt.Errorf("unable to make internal request: %w", err)
-			}
-			if resCode != 200 {
-				return fmt.Errorf("request failed with status code: %d", resCode)
-			}
-
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "    ")
-
-			if behaviorCfg.Type == bBroadcast {
-				var resMsgs []cmdResponse
-				if err := json.Unmarshal(resBody, &resMsgs); err != nil {
-					return fmt.Errorf("could not unmarshal response: %w", err)
-				}
-				return enc.Encode(resMsgs)
-			}
-			var resMsg cmdResponse
-			if err := json.Unmarshal(resBody, &resMsg); err != nil {
-				return nil
-			}
-			return enc.Encode(resMsg)
+			return displayResponse(cmd, res)
 		},
 	}
 

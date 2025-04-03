@@ -1,0 +1,67 @@
+@startuml
+
+title Solutions Enabler External Contract Sequence Diagram (not finished)
+
+actor "Business consumer" as b
+entity "Solutions Enabler" as n
+participant "DMS on\nSolutionsEnabler" as dmsn
+database "Contract Host" as cd
+entity "Hardware Provider" as c
+participant "DMS 1 on\nHardware Provider" as dmsc
+participant "DMS 2 on\nHardware Provider" as dmsc2
+participant "DMS 3 on\nHardware Provider" as dmsc3
+
+group Outside platform
+b <--> n: B2B agreement
+n --> b: Login credentials to web interface
+n --> cd: Contract terms with unique identifier
+n <--> c: B2B agreement for supply of resources
+c --> n: Authorization token for deployment
+n --> c: Authorization token for bid 
+n --> dmsn: Delegate token with deployment capability (Provide Anchor)
+n --> cd: Contract terms of the provider with DID
+c --> dmsc: Save Contract terms in DMS database
+c --> dmsc: Delegate token with capability to send bids
+c --> dmsc2: Delegate token with capability to send bids
+c --> dmsc3: Delegate token with capability to send bids
+end
+
+b --> dmsn : Ensemble Configuration\n(via web interface)
+dmsn -> dmsc : Bid Request
+dmsn -> dmsc2 : Bid Request
+dmsn -> dmsc3 : Bid Request
+dmsc -> dmsc: Retrieve price as per B2B Contract
+dmsc -> dmsn: Bid-1 
+dmsc2 -> dmsc2: Retrieve price as per B2B Contract
+dmsc2 -> dmsn: Bid-2
+dmsc3 -> dmsc3: Retrieve price as per B2B Contract
+dmsc3 -> dmsn: Bid-3
+
+dmsn -> cd: Lookup contract with consumer
+cd -> dmsn: Contract terms for consumer
+dmsn -> dmsn: Find suitable configuration considering price
+dmsn -> dmsn: Select provider(s) 
+note right
+Provided ensemble configuration may require deployment on multiple providers or nodes
+Here only one node/provider is consider for sake of simplicity
+end note
+dmsn -> dmsc: Invocation
+dmsc -> dmsc: Deploy and run job
+dmsc -> dmsn: Result with proof
+dmsc -> dmsc: Update the database with usage
+dmsn -> dmsn: Update the database with usage data for this job
+
+group Outside platform
+n --> dmsn: Get consumer usage 
+dmsn -> n: Usage data for 1 month
+n --> b: Invoice based on usage
+b --> n: Payment in FIAT
+c --> dmsc: Get machine usage
+dmsc -> c: Machine usage for 1 month
+c --> n: Invoice based on usage
+n --> dmsn: Get usage of provider
+dmsn -> n: Usage of provider machine for 1 month
+n -> c: Payment in FIAT
+end 
+
+@enduml
