@@ -1,0 +1,41 @@
+version: "V1"
+
+allocations:
+  nginxAllocWithStorage:
+    type: service
+    executor: docker
+    resources:
+      cpu:
+        cores: 1
+      gpus: []
+      ram:
+        size: 1 # in GB
+      disk:
+        size: 1 # in GB
+    execution:
+      type: docker
+      image: nginxdemos/hello:plain-text
+      working_directory: /
+    keys: []
+    provision: []
+    healthcheck:
+      type: command
+      exec: ["nginx", "-t"]
+      response:
+        type: string
+        value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
+    dns_name: nginxdemo-alloc2
+    volume:
+      type: glusterfs
+      name: volumenunet123
+      servers: ["host"]
+      client_private_key: /client_certs/client_gluster_tls_certs/glusterfs.key
+      client_pem: /client_certs/client_gluster_tls_certs/glusterfs.pem
+      client_ca: /client_certs/client_gluster_tls_certs/glusterfs.ca
+
+      
+
+nodes:
+  node1:
+    allocations:
+      - nginxAllocWithStorage

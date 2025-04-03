@@ -83,22 +83,45 @@ setcap:
 
 itest:
 	@echo "Running integration tests"
+	@if ! docker image inspect nunet-glusterfs-client >/dev/null 2>&1; then \
+		echo "Docker image nunet-glusterfs-client not found. Building..."; \
+		make build-nunet-glusterfs-client; \
+	fi
 	go build -o ./test/integration/dms -ldflags=$(LDFLAGS)
 	make setcap
 	go test -v ./test/integration/... -tags=integration -timeout=10m
 
+build-nunet-glusterfs-client:
+	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image
+
+build_storage_tests: 
+	go test -tags storagetst -c ./test/integration/ -o ./test/integration/storagetestbinary
+
+setcapstorage: 
+	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/integration/storagetestbinary
+ 
+storage_test:
+	@echo "Running storage test"
+	make linux_amd64
+	cp builds/dms_linux_amd64 test/integration/dms
+	make build_storage_tests
+	make setcapstorage
+	./test/integration/storagetestbinary
+
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
 
-CN ?= did:key:here
-SSL_DIR = /etc/ssl
-
-# make generate-glusterfs-client-certs CN=did:key:here
+# make generate-glusterfs-client-certs CN=did:key:here or clientA
 generate-glusterfs-client-certs:
-	openssl genrsa -out glusterfs.key 2048
-	openssl req -new -x509 -key glusterfs.key -subj "/CN=$(CN)" -out glusterfs.pem
-	sudo cp glusterfs.key $(SSL_DIR)/
-	sudo cp glusterfs.pem $(SSL_DIR)/
+	@if [ -z "$(CN)" ]; then \
+		echo "Error: CN variable is required. Usage: make generate-glusterfs-client-certs CN=<client_name>"; \
+		exit 1; \
+	fi
+	@echo "Generating client certificates"
+	mkdir glusterfs_certificates
+	openssl genrsa -out glusterfs_certificates/glusterfs.key 2048
+	openssl req -new -x509 -key glusterfs_certificates/glusterfs.key -subj "/CN=$(CN)" -out glusterfs_certificates/glusterfs.pem
+	
 
 LICENSE_FLAGS := -v \
 		-l="apache" \

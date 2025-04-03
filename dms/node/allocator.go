@@ -381,7 +381,7 @@ func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
 	if job.Volume == nil {
 		return nil
 	}
-	mounter, err := volume.New(a.volumeTracker, *job.Volume)
+	mounter, err := volume.New(a.volumeTracker, *job.Volume, allocationID)
 	if err != nil {
 		return fmt.Errorf("create volume: %w", err)
 	}
@@ -392,7 +392,7 @@ func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
 		return fmt.Errorf("mount directory: %w", err)
 	}
 
-	err = mounter.Mount(desginationPath, nil)
+	err = mounter.Mount(desginationPath, make(map[string]string))
 	if err != nil {
 		return fmt.Errorf("failed to mount volume: %w", err)
 	}
@@ -404,7 +404,7 @@ func (a *allocator) unmountVolumeOnHost(job jobs.Job, allocationID string) error
 	if job.Volume == nil {
 		return nil
 	}
-	mounter, err := volume.New(a.volumeTracker, *job.Volume)
+	mounter, err := volume.New(a.volumeTracker, *job.Volume, allocationID)
 	if err != nil {
 		return fmt.Errorf("create volume: %w", err)
 	}
@@ -420,7 +420,7 @@ func (a *allocator) unmountVolumeOnHost(job jobs.Job, allocationID string) error
 
 func createDirIfNotExists(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		err := os.MkdirAll(path, 0o755) // Creates parent directories if needed
+		err := os.MkdirAll(path, 0o777) // Creates parent directories if needed
 		if err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}

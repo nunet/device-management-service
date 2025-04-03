@@ -95,7 +95,7 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 
 	err := os.Setenv("DMS_PASSPHRASE", passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/node/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
+	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -110,7 +110,7 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 
 	err := os.Setenv("DMS_PASSPHRASE", passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/node/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
+	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -179,21 +179,37 @@ func (c *Client) hello(t *testing.T, context, passphrase, dest string) (string, 
 	return buf.String(), err
 }
 
-// func (c *Client) createVolume(t *testing.T, context, passphrase, dest string) (string, error) {
-// 	root := c.newCommandCtx()
+func (c *Client) createVolume(t *testing.T, volName, pemFilePath, outputDir, context, passphrase, dest string) (string, error) {
+	root := c.newCommandCtx()
 
-// 	err := os.Setenv("DMS_PASSPHRASE", passphrase)
-// 	require.NoError(t, err)
+	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	require.NoError(t, err)
 
-// 	args := []string{"actor", "cmd", "--context", context, "/dms/node/volume/create", "--timeout", "5s", "--dest", dest}
-// 	root.SetArgs(args)
+	args := []string{"actor", "cmd", "--context", context, "/dms/volume/create", "--name", volName, "--client-pem-file", pemFilePath, "--ca-output-dir", outputDir, "--timeout", "5s", "--dest", dest}
+	root.SetArgs(args)
 
-// 	var buf bytes.Buffer
-// 	root.SetOutput(&buf)
-// 	err = root.Execute()
-// 	fmt.Println("createVolume response: ", buf.String())
-// 	return buf.String(), err
-// }
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("createVolume response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) startVolume(t *testing.T, volName, context, passphrase, dest string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/volume/start", "--name", volName, "--timeout", "5s", "--dest", dest}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("createStart response: ", buf.String())
+	return buf.String(), err
+}
 
 func (c *Client) deploy(t *testing.T, context, passphrase, specPath string) string {
 	root := c.newCommandCtx()

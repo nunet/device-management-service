@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func createDirectories() {
 	}
 }
 
-func runGlusterContainer() error {
+func runGlusterContainer(containerName string) error {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
 		return fmt.Errorf("failed to create Docker Client: %w", err)
@@ -42,7 +43,7 @@ func runGlusterContainer() error {
 	}
 
 	for _, c := range containers {
-		if c.Names[0] == "/"+glusterContainerName {
+		if c.Names[0] == "/"+containerName {
 			if c.State == "running" {
 				fmt.Println("Container is already running.")
 				return nil
@@ -58,12 +59,7 @@ func runGlusterContainer() error {
 
 	hostConfig := &container.HostConfig{
 		Binds: []string{
-			"/etc/glusterfs:/etc/glusterfs:z",
-			"/var/lib/glusterd:/var/lib/glusterd:z",
-			"/var/log/glusterfs:/var/log/glusterfs:z",
 			"/sys/fs/cgroup:/sys/fs/cgroup:rw",
-			"/dev/:/dev",
-			"/glusterfs_data:/data",
 		},
 		Privileged:   true,
 		NetworkMode:  "host",
@@ -76,7 +72,7 @@ func runGlusterContainer() error {
 		Tty:   true,
 	}
 
-	resp, err := cli.ContainerCreate(context.Background(), containerConfig, hostConfig, nil, nil, glusterContainerName)
+	resp, err := cli.ContainerCreate(context.Background(), containerConfig, hostConfig, nil, nil, containerName)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
 	}
@@ -90,20 +86,10 @@ func runGlusterContainer() error {
 	return nil
 }
 
-func runGlusterCommands() error {
+func runGlusterCommands(containerName string, commands [][]string) error {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
 		return fmt.Errorf("failed to create Docker Client: %w", err)
-	}
-
-	hostname, err := os.Hostname()
-	if err != nil {
-		return fmt.Errorf("failed to get hostname: %w", err)
-	}
-
-	commands := [][]string{
-		{"gluster", "volume", "create", "nunet_vol", hostname + ":/data/brick2", "force"},
-		{"gluster", "volume", "start", "nunet_vol"},
 	}
 
 	for _, cmd := range commands {
@@ -113,7 +99,7 @@ func runGlusterCommands() error {
 			AttachStderr: true,
 		}
 
-		execIDResp, err := cli.ContainerExecCreate(context.Background(), glusterContainerName, execConfig)
+		execIDResp, err := cli.ContainerExecCreate(context.Background(), containerName, execConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create exec instance: %w", err)
 		}
@@ -127,7 +113,7 @@ func runGlusterCommands() error {
 	return nil
 }
 
-func deleteGlusterContainer() error {
+func deleteGlusterContainer(containerName string) error {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
 		return fmt.Errorf("failed to create Docker Client: %w", err)
@@ -139,7 +125,7 @@ func deleteGlusterContainer() error {
 	}
 
 	for _, c := range containers {
-		if c.Names[0] == "/"+glusterContainerName {
+		if c.Names[0] == "/"+containerName {
 			if err := cli.ContainerRemove(context.Background(), c.ID, container.RemoveOptions{Force: true}); err != nil {
 				return fmt.Errorf("failed to remove container: %w", err)
 			}
@@ -182,9 +168,17 @@ func pullGlusterImage() error {
 	return nil
 }
 
+//nolint:unparam
+func copyToContainer(containerName, what, whereInContainer string) error {
+	cmd := exec.Command("docker", "cp", what, fmt.Sprintf("%s:%s", containerName, whereInContainer))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error copying to container: %v, output: %s", err, string(output))
+	}
+	return nil
+}
+
 // runBinaryInContainer executes a binary inside the container and redirects output to a file.
-//
-//nolint:unused // to be used later for testing
 func runBinaryInContainer(containerID string, binaryPath string, args []string, envVars []string, outputFilePath string) error {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
@@ -222,8 +216,15 @@ func setupGlusterfsServer(t *testing.T) {
 	createDirectories()
 	err := pullGlusterImage()
 	require.NoError(t, err)
-	err = runGlusterContainer()
+	err = runGlusterContainer(glusterContainerName)
 	require.NoError(t, err)
-	err = runGlusterCommands()
+
+	hostname, err := os.Hostname()
+	require.NoError(t, err)
+	commands := [][]string{
+		{"gluster", "volume", "create", "nunet_vol", hostname + ":/data/brick2", "force"},
+		{"gluster", "volume", "start", "nunet_vol"},
+	}
+	err = runGlusterCommands(glusterContainerName, commands)
 	require.NoError(t, err)
 }

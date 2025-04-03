@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -64,19 +65,22 @@ type CapAnchorRequestCmd struct {
 type CreateVolumeRequestCmd struct {
 	ClientPEMFile string
 	VolumeName    string
+	CAOutputDir   string
 }
 
 var registeredBehaviors = map[string]behaviorConfig{
-	// /dms/node/volume/create
+	// /dms/volume/create
 	behaviors.VolumeCreateBehavior: {
 		Payload: func() any { return &CreateVolumeRequestCmd{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*CreateVolumeRequestCmd)
 			cmd.Flags().StringVarP(&p.VolumeName, "name", "n", "", "name (required)")
-			cmd.Flags().StringVarP(&p.ClientPEMFile, "client-pem-file", "c", "", "client-pem-file (required)")
+			cmd.Flags().StringVarP(&p.ClientPEMFile, "client-pem-file", "p", "", "client-pem-file (required)")
+			cmd.Flags().StringVarP(&p.CAOutputDir, "ca-output-dir", "", "", "ca-output-dir (required)")
 
 			_ = cmd.MarkFlagRequired("name")
 			_ = cmd.MarkFlagRequired("client-pem")
+			_ = cmd.MarkFlagRequired("ca-output-dir")
 		},
 		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*CreateVolumeRequestCmd)
@@ -89,24 +93,36 @@ var registeredBehaviors = map[string]behaviorConfig{
 				return nil, fmt.Errorf("failed to read config file: %w", err)
 			}
 
+			// validate client pem
+
 			cfg := &node.CreateVolumeRequest{
 				Name:      req.VolumeName,
 				ClientPEM: string(data),
 			}
 
-			return cli.CreateVolume(cmd.Context(), *cfg, msgOpts...)
+			resp, err := cli.CreateVolume(cmd.Context(), *cfg, msgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			err = os.WriteFile(filepath.Join(req.CAOutputDir, "glusterfs.ca"), []byte(resp.CAData), 0o775)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
 		},
 		Type:  bInvoke,
 		Short: "Send a create volume message",
-		Long: `Invoke the /dms/node/volume/create behavior on an actor
+		Long: `Invoke the /dms/volume/create behavior on an actor
 	
 	This behavior calls the actors create volume behaviour.
 	
 	Examples:
 	
-	  nunet actor cmd --context user /dms/node/volume/create --name <volname> --client-pem-file <filename>`,
+	  nunet actor cmd --context user /dms/volume/create --name <volname> --client-pem-file <filename>`,
 	},
-	// /dms/node/volume/delete
+	// /dms/volume/delete
 	behaviors.VolumeDeleteBehavior: {
 		Payload: func() any { return &node.DeleteVolumeRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -126,15 +142,15 @@ var registeredBehaviors = map[string]behaviorConfig{
 		},
 		Type:  bInvoke,
 		Short: "Send a delete volume message",
-		Long: `Invoke the /dms/node/volume/delete behavior on an actor
+		Long: `Invoke the /dms/volume/delete behavior on an actor
 		
 		This behavior calls the actors delete volume behaviour.
 		
 		Examples:
 		
-		  nunet actor cmd --context user /dms/node/volume/delete --name <volname>`,
+		  nunet actor cmd --context user /dms/volume/delete --name <volname>`,
 	},
-	// /dms/node/volume/start
+	// /dms/volume/start
 	behaviors.VolumeStartBehavior: {
 		Payload: func() any { return &node.StartVolumeRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
@@ -154,13 +170,13 @@ var registeredBehaviors = map[string]behaviorConfig{
 		},
 		Type:  bInvoke,
 		Short: "Send a start volume message",
-		Long: `Invoke the /dms/node/volume/start behavior on an actor
+		Long: `Invoke the /dms/volume/start behavior on an actor
 		
 		This behavior calls the actors start volume behaviour.
 		
 		Examples:
 		
-		  nunet actor cmd --context user /dms/node/volume/start --name <volname>`,
+		  nunet actor cmd --context user /dms/volume/start --name <volname>`,
 	},
 	// /public/hello
 	behaviors.PublicHelloBehavior: {
@@ -546,6 +562,37 @@ Examples:
 				cfg.Ensemble.V1.Scripts[name] = scriptData
 
 			}
+
+			for i, alloc := range cfg.Ensemble.V1.Allocations {
+				if alloc.Volume == nil {
+					continue
+				}
+
+				if alloc.Volume.ClientPrivateKey != "" {
+					pvkeyData, err := os.ReadFile(alloc.Volume.ClientPrivateKey)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[i].Volume.ClientPrivateKey = string(pvkeyData)
+				}
+
+				if alloc.Volume.ClientPEM != "" {
+					pemData, err := os.ReadFile(alloc.Volume.ClientPEM)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read pem data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[i].Volume.ClientPEM = string(pemData)
+				}
+
+				if alloc.Volume.ClientCA != "" {
+					caData, err := os.ReadFile(alloc.Volume.ClientCA)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read ca data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[i].Volume.ClientCA = string(caData)
+				}
+			}
+
 			return cli.DeploymentNew(cmd.Context(), *cfg, msgOpts...)
 		},
 	},

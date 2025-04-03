@@ -119,6 +119,9 @@ func setDefaultConfig() {
 	v.SetDefault("general.port_available_range_from", 16384)
 	v.SetDefault("general.port_available_range_to", 32768)
 
+	v.SetDefault("general.storage_ca_directory", fmt.Sprintf("%s/.nunet/storage_ca_directory", homeDir))
+	v.SetDefault("general.storage_bricks_dir", fmt.Sprintf("%s/.nunet/storage_bricks_dir", homeDir))
+
 	v.SetDefault("rest.addr", "127.0.0.1")
 	v.SetDefault("rest.port", 9999)
 	v.SetDefault("profiler.enabled", true)

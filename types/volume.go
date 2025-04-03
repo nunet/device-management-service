@@ -10,9 +10,11 @@ type VolumeConfig struct {
 	// The type of storage backend, e.g., "glusterfs" or "local".
 	Type string `json:"type"`
 
-	//  GlusterFS:
-	Servers []string `json:"servers,omitempty"` // List of GlusterFS server addresses.
-	Name    string   `json:"name,omitempty"`    // Name of the GlusterFS volume.
+	Name             string   `json:"name"`
+	Servers          []string `json:"servers"`
+	ClientPrivateKey string   `json:"client_private_key"`
+	ClientPEM        string   `json:"client_pem"`
+	ClientCA         string   `json:"client_ca"`
 
 	// Local
 	Path string `json:"path,omitempty"` // The path on the local filesystem.
