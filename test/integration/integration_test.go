@@ -28,7 +28,7 @@ func TestIntegration(t *testing.T) {
 	t.Parallel()
 	setupGlusterfsServer(t)
 	t.Cleanup(func() {
-		if err := deleteGlusterContainer(); err != nil {
+		if err := deleteGlusterContainer(glusterContainerName); err != nil {
 			t.Logf("failed to delete gluster container: %v", err)
 		}
 	})

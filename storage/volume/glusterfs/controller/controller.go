@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	logging "github.com/ipfs/go-log/v2"
+	dmscrypto "gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/sys"
 )
 
@@ -26,20 +27,19 @@ type GlusterControllerInterface interface {
 	DeleteVolume(volName string) error
 	CheckServer() error
 	IsServerWorking() bool
-	EnableTLS(volName string) error
 }
 
 const fuseModel = "fuse"
 
 // GlusterController is responsible for managing GlusterFS volumes.
 type GlusterController struct {
-	bricks      []string // {"host1:/brick1", "host2:/brick2"}
-	replica     int
-	caAuthority string
+	glusterfsServerHostname string
+	bricksDir               string
+	caAuthority             string
 }
 
 // NewGlusterController creates a new instance of GlusterController.
-func NewGlusterController(caDir string, bricks []string, replica int) (*GlusterController, error) {
+func NewGlusterController(glusterfsServerHostname, bricksDir, caDir string) (*GlusterController, error) {
 	if caDir == "" {
 		return nil, errors.New("glusterfs CA directory is empty")
 	}
@@ -52,31 +52,38 @@ func NewGlusterController(caDir string, bricks []string, replica int) (*GlusterC
 	}
 
 	g := &GlusterController{
-		bricks:      bricks,
-		replica:     replica,
-		caAuthority: caDir,
+		glusterfsServerHostname: glusterfsServerHostname,
+		bricksDir:               bricksDir,
+		caAuthority:             caDir,
 	}
 
-	err := g.ensureDirectories()
+	g.ensureDirectories()
+
+	// check if the glusterfs_nodes contains a list of server certificates
+	empty, err := isPEMDirectoryEmpty(filepath.Join(g.caAuthority, "glusterfs_nodes"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to check glusterfs_nodes for server certificates: %w", err)
+	}
+
+	if empty {
+		return nil, errors.New("glusterfs_nodes must contain server certificates")
 	}
 
 	return g, nil
 }
 
-func (gc *GlusterController) ensureDirectories() error {
+func (gc *GlusterController) ensureDirectories() {
 	dirs := []string{
 		filepath.Join(gc.caAuthority, "glusterfs_nodes"),
 		filepath.Join(gc.caAuthority, "clients"),
+		gc.bricksDir,
 	}
 
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+			log.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
-	return nil
 }
 
 func (gc *GlusterController) createCACerts(folders []string, output string) error {
@@ -98,7 +105,6 @@ func (gc *GlusterController) createCACerts(folders []string, output string) erro
 					return fmt.Errorf("failed to read file %s: %w", filePath, err)
 				}
 				caContent.Write(content)
-				caContent.WriteString("\n")
 			}
 		}
 	}
@@ -127,12 +133,11 @@ func (gc *GlusterController) generateGlusterFSClientCA() error {
 	return gc.createCACerts(folders, "glusterfs-client.ca")
 }
 
-// EnableTLS enables tls for the volume.
-func (gc *GlusterController) EnableTLS(volName string) error {
+// enableTLS enables tls for the volume.
+func (gc *GlusterController) enableTLS(volName string) error {
 	cmds := [][]string{
 		{"volume", "set", volName, "server.ssl", "on"},
 		{"volume", "set", volName, "client.ssl", "on"},
-		{"volume", "set", volName, "auth.ssl-allow", "*"},
 	}
 
 	for _, cmd := range cmds {
@@ -156,11 +161,18 @@ func (gc *GlusterController) CreateVolume(volName string, clientPem string) (str
 		return "", fmt.Errorf("failed to save client certificate: %w", err)
 	}
 
-	args := []string{"volume", "create", volName}
-	if gc.replica > 0 {
-		args = append(args, "replica", fmt.Sprintf("%d", gc.replica))
+	// create a random brick name
+	randomBytes, err := dmscrypto.RandomEntropy(20)
+	if err != nil {
+		return "", fmt.Errorf("failed to create random brick name: %w", err)
 	}
-	args = append(args, gc.bricks...)
+
+	generatedBrickName, err := dmscrypto.Sha3(randomBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate brick hash: %w", err)
+	}
+
+	args := []string{"volume", "create", volName, fmt.Sprintf("%s:%s", gc.glusterfsServerHostname, filepath.Join(gc.bricksDir, hex.EncodeToString(generatedBrickName)))}
 
 	// force create
 	args = append(args, "force")
@@ -180,7 +192,7 @@ func (gc *GlusterController) CreateVolume(volName string, clientPem string) (str
 		return "", fmt.Errorf("failed to reload glusterfs client ca: %w", err)
 	}
 
-	if err := gc.EnableTLS(volName); err != nil {
+	if err := gc.enableTLS(volName); err != nil {
 		return "", fmt.Errorf("failed to enable TLS for volume %s: %v", volName, err)
 	}
 
@@ -194,7 +206,7 @@ func (gc *GlusterController) CreateVolume(volName string, clientPem string) (str
 
 // StartVolume starts a given GlusterFS volume.
 func (gc *GlusterController) StartVolume(volName string) error {
-	output, err := sys.ExecCommand("gluster", "volume", "start", volName).CombinedOutput()
+	output, err := sys.ExecCommand("gluster", "volume", "start", volName, "force").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to start volume %s: %v, output: %s", volName, err, string(output))
 	}
@@ -287,4 +299,18 @@ func validatePEM(data []byte) error {
 	}
 
 	return nil
+}
+
+func isPEMDirectoryEmpty(dirPath string) (bool, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".pem" {
+			return false, nil
+		}
+	}
+	return true, nil
 }

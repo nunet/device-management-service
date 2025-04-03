@@ -111,7 +111,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 
 	if gcfg.StorageMode {
 		var err error
-		volumeController, err = controller.NewGlusterController(gcfg.StorageCADirectory, gcfg.StorageBricks, gcfg.StorageReplicaCount)
+		volumeController, err = controller.NewGlusterController(gcfg.StorageGlusterfsHostname, gcfg.StorageBricksDir, gcfg.StorageCADirectory)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create glusterfs controller: %w", err)
 		}

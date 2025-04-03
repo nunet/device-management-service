@@ -1,10 +1,8 @@
 package glusterfs
 
-// func TestXxx(t *testing.T) {
+// func TestMount(t *testing.T) {
 
-// 	//
-// 	//
-// 	pkey := `-----BEGIN PRIVATE KEY-----
+// 	pk := `-----BEGIN PRIVATE KEY-----
 // MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCgkh80NVkwOMpj
 // Vw5ThluXOnZAyCira1SeV67aCtIdji6rVrt1BFcqda+3LrWEWGwvCJxQ4ZNtg3W8
 // p8pjwb8DvqKVJ7niMVRQ5+ZMuOSBO2EWeucS69TvcIim73XqpeLt83M2VgJzGnLG
@@ -51,7 +49,6 @@ package glusterfs
 // verZsEaiGlnB1EOMUzoUk7/hi3L6oCjXOrTlgu2qrmeSqaqehFA78JVCnGMsfpu0
 // iV6jidvKz3b3
 // -----END CERTIFICATE-----`
-
 // 	ca := `-----BEGIN CERTIFICATE-----
 // MIIDEzCCAfugAwIBAgIUJZwBtUigat6dRfOiNYfieqcQCngwDQYJKoZIhvcNAQEL
 // BQAwGTEXMBUGA1UEAwwOcHV0aG90bmFtZWhlcmUwHhcNMjUwMzMxMTUxMzU2WhcN
@@ -71,11 +68,10 @@ package glusterfs
 // a010DbqMA/TV6PsXL51jWYIWXRhqmzvrYPb7WfV63V7H+BeXFbintfs458xAdR2x
 // tYYiweo8X20W+2eRMB54sIuOYRk9MoQ=
 // -----END CERTIFICATE-----`
-
-// 	mounter, _ := New(storage.NewVolumeTracker(), []string{"host"}, "summer", pkey, pem, ca, "skjhdakjsdh7238632")
-// 	err := mounter.Mount("/tmp/my_testpath_on_host", make(map[string]string))
+// 	s, _ := New(storage.NewVolumeTracker(), []string{"host"}, "cyprus1", pk, pem, ca, "1234")
+// 	err := s.Mount("/home/blockchain/strg", make(map[string]string))
 // 	if err != nil {
-// 		fmt.Println("err", err.Error())
+// 		fmt.Println("error ", err.Error())
 // 		t.Fail()
 // 	}
 // }
