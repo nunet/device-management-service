@@ -139,7 +139,10 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 	s.info.rtable.Clear()
 
 	for sourcePort, mapping := range s.portMapping {
-		_ = l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
+		err := l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
+		if err != nil {
+			log.Errorf("failed to unmap port %s: %v", sourcePort, err)
+		}
 	}
 
 	if len(l.subnets) == 1 {
@@ -149,6 +152,7 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 	}
 
 	delete(l.subnets, subnetID)
+	log.Debugf("subnet %s destroyed", subnetID)
 	return nil
 }
 

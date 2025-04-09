@@ -474,3 +474,11 @@ func ConvertTypedSliceToUntypedSlice(typedSlice interface{}) []interface{} {
 	}
 	return result
 }
+
+func MapKeysToSlice[R comparable, T any](m map[R]T) []R {
+	keys := make([]R, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}

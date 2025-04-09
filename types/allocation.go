@@ -11,3 +11,7 @@ func ConstructAllocationID(ensembleID, allocName string) string {
 func AllocationNameFromID(id string) string {
 	return id[strings.LastIndex(id, "_")+1:]
 }
+
+func EnsembleIDFromAllocationID(id string) string {
+	return id[:strings.LastIndex(id, "_")]
+}
