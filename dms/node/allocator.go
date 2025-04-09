@@ -22,10 +22,11 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/network"
-	"gitlab.com/nunet/device-management-service/network/utils"
+	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 var (
@@ -72,7 +73,7 @@ func (pa *portAllocator) allocate(port int) error {
 		return fmt.Errorf("port %d is already reserved", port)
 	}
 
-	if !utils.IsFreePort(port) {
+	if !netutils.IsFreePort(port) {
 		return fmt.Errorf("port %d is not free", port)
 	}
 
@@ -112,7 +113,7 @@ func (pa *portAllocator) getAvailablePorts(numPorts int) []int {
 		}
 
 		// Check if port is actually free on the system
-		if utils.IsFreePort(port) {
+		if netutils.IsFreePort(port) {
 			ports = append(ports, port)
 		}
 	}
@@ -558,6 +559,13 @@ func (a *allocator) Stop(ctx context.Context) error {
 		}
 	}
 
+	for _, ensembleID := range a.getRunningEnsemblesIDs() {
+		err := a.network.DestroySubnet(ensembleID)
+		if err != nil {
+			log.Warnf("destroy subnet %s: %v", ensembleID, err)
+		}
+	}
+
 	// cancel the context to stop the allocator goroutines
 	a.cancel()
 	return nil
@@ -608,6 +616,19 @@ func (a *allocator) GetAllocation(allocationID string) (*jobs.Allocation, error)
 	}
 
 	return allocation, nil
+}
+
+func (a *allocator) getRunningEnsemblesIDs() []string {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	ensembleIDsSet := make(map[string]struct{})
+	for id := range a.allocations {
+		ensembleID := types.EnsembleIDFromAllocationID(id)
+		ensembleIDsSet[ensembleID] = struct{}{}
+	}
+
+	return utils.MapKeysToSlice(ensembleIDsSet)
 }
 
 func (a *allocator) clearCommits() {
