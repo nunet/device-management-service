@@ -92,6 +92,44 @@ func TestValidateSpec(t *testing.T) {
 			errorMsg: "duplicate allocation names found",
 		},
 		{
+			// Duplicate dns_name should be rejected
+			name: "duplicate dns_name",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type":     "service",
+						"dns_name": "shared.example.com",
+					},
+					"alloc2": map[string]any{
+						"type":     "service",
+						"dns_name": "shared.example.com",
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "duplicate dns_name found",
+		},
+		{
+			// Unique dns_name values should pass
+			name: "unique dns_name",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type":     "service",
+						"dns_name": "a.example.com",
+					},
+					"alloc2": map[string]any{
+						"type":     "service",
+						"dns_name": "b.example.com",
+					},
+					"alloc3": map[string]any{
+						"type": "service",
+					}, // missing dns_name is fine
+				},
+			},
+			wantErr: false,
+		},
+		{
 			// When edges exist, nodes field must be present (empty nodes map is valid)
 			// Actual node references will be validated at a later stage
 			name: "edges with empty nodes map",
