@@ -71,7 +71,8 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 	}
 
 	allocationNames := make(map[string]string)
-	for allocName := range allocs {
+	dnsNames := make(map[string]string)
+	for allocName, allocConfigRaw := range allocs {
 		// All allocation names must be fully qualified domain names
 		if !vutils.IsDNSNameValid(allocName) {
 			return fmt.Errorf("invalid allocation name, must be a valid hostname: %s", allocName)
@@ -83,6 +84,20 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 			return fmt.Errorf("duplicate allocation names found: '%s' and '%s'", originalName, allocName)
 		}
 		allocationNames[lowerName] = allocName
+
+		// Check for duplicate dns_name values
+		allocConfig, ok := allocConfigRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+		dnsName, ok := allocConfig["dns_name"].(string)
+		if !ok || dnsName == "" {
+			continue // skip if dns_name is not set or not a string
+		}
+		if existingAlloc, exists := dnsNames[dnsName]; exists {
+			return fmt.Errorf("duplicate dns_name found: '%s' used in allocations '%s' and '%s'", dnsName, existingAlloc, allocName)
+		}
+		dnsNames[dnsName] = allocName
 	}
 
 	// check for cyclic dependencies
