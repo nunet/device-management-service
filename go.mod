@@ -274,7 +274,6 @@ require (
 	github.com/olivere/elastic/v7 v7.0.32
 	go.elastic.co/apm/module/apmgin/v2 v2.6.2
 	go.elastic.co/apm/module/apmhttp v1.15.0
-	go.uber.org/mock v0.5.0
 )
 
 require (
@@ -283,6 +282,7 @@ require (
 	github.com/pion/transport/v3 v3.0.7 // indirect
 	go.elastic.co/apm/module/apmhttp/v2 v2.6.2 // indirect
 	go.elastic.co/apm/v2 v2.6.2 // indirect
+	go.uber.org/mock v0.5.0 // indirect
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
 )
 
