@@ -469,7 +469,7 @@ func (e *Executor) copyKeysToContainer(ctx context.Context,
 	}
 
 	tarPath := filepath.Join(tempDir, "keys.tar")
-	if err := utils.CreateTarArchive(tempDir, tarPath); err != nil {
+	if err := utils.CreateTarArchive(e.fs, tempDir, tarPath); err != nil {
 		return fmt.Errorf("failed to create tar archive: %w", err)
 	}
 
