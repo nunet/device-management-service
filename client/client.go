@@ -67,6 +67,8 @@ type Client struct {
 	dmsHandle actor.Handle
 }
 
+var _ DmsClient = (*Client)(nil)
+
 func NewClientSecurityContext(priv io.Reader, capData io.Reader) (actor.SecurityContext, error) {
 	// Generate ephemeral key pair for this session
 	privk, pubk, err := crypto.GenerateKeyPair(crypto.Ed25519)

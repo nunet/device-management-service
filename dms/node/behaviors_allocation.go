@@ -385,6 +385,29 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
+// AllocationsListResponse represents the response for the allocations list request
+type AllocationsListResponse struct {
+	Allocations []jobs.AllocationInfo `json:"allocations"`
+	Error       string                `json:"error,omitempty"`
+}
+
+// handleAllocationsList returns information about all running allocations
+func (n *Node) handleAllocationsList(msg actor.Envelope) {
+	defer msg.Discard()
+
+	resp := AllocationsListResponse{
+		Allocations: []jobs.AllocationInfo{},
+	}
+
+	allocations := n.allocator.GetAllocations()
+
+	for _, alloc := range allocations {
+		resp.Allocations = append(resp.Allocations, alloc.Info())
+	}
+
+	n.sendReply(msg, resp)
+}
+
 func createExecutor(ctx context.Context, fs afero.Afero, executionType string) (types.Executor, error) {
 	switch executionType {
 	case types.ExecutorTypeDocker.String():
