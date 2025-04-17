@@ -570,7 +570,7 @@ func (e *Executor) newDockerExecutionContainer(
 		&hostConfig,
 		nil,
 		nil,
-		labelExecutionValue(e.ID, params.JobID, params.ExecutionID),
+		params.JobID,
 		!hasImage, // only pull if we don't have the image
 	)
 	if err != nil {

@@ -64,7 +64,7 @@ func (s *ExecutorTestSuite) newExecutionRequest(cmd []string) *types.ExecutionRe
 	engine := docker.NewDockerEngineBuilder(defaultImage).WithCmd(cmd...).Build()
 	execID := fmt.Sprintf("test_execution-%s", uuid.New())
 	return &types.ExecutionRequest{
-		JobID:       "test_job",
+		JobID:       uuid.NewString(),
 		ExecutionID: execID,
 		EngineSpec:  engine,
 		Resources: &types.Resources{

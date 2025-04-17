@@ -17,11 +17,26 @@ import (
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
 	deleteLogsAfter = 30 * time.Minute
 )
+
+// AllocationInfo gathers useful internal information for external callers
+type AllocationInfo struct {
+	ID           string                  `json:"id"`
+	Type         jobtypes.AllocationType `json:"type"`
+	Resources    types.Resources         `json:"resources"`
+	Orchestrator string                  `json:"orchestrator"` // peerID
+	Status       string                  `json:"status"`
+	Executor     string                  `json:"executor"`
+	Container    string                  `json:"container"`
+	UsingPorts   []int                   `json:"using_ports,omitempty"`
+	CreatedAt    time.Time               `json:"created_at"`
+	StartedAt    time.Time               `json:"started_at"`
+}
 
 // Status holds the status of an allocation.
 type Status struct {
@@ -76,6 +91,9 @@ type Allocation struct {
 
 	// selfRelease will use node's releaseAllocation mechanism
 	selfRelease func() error
+
+	createdAt time.Time
+	startedAt time.Time
 }
 
 // NewAllocation creates a new allocation given the actor.
@@ -121,6 +139,7 @@ func NewAllocation(
 			portMapping map[int]int
 		}{},
 		selfRelease: selfRelease,
+		createdAt:   time.Now(),
 	}
 	return allocation, nil
 }
@@ -199,6 +218,7 @@ func (a *Allocation) Run(
 		return fmt.Errorf("start executor: %w", err)
 	}
 
+	a.startedAt = time.Now()
 	a.status = AllocationRunning
 
 	// NEW: Log the resources we've assigned for this run
@@ -542,4 +562,22 @@ func (a *Allocation) SetHealthCheck(f func() error) {
 	defer a.lock.Unlock()
 
 	a.healthcheck = f
+}
+
+func (a *Allocation) Info() AllocationInfo {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	return AllocationInfo{
+		ID:           a.ID,
+		Type:         a.allocType,
+		Orchestrator: a.orchestrator.Address.HostID,
+		Resources:    a.Job.Resources,
+		Status:       string(a.status),
+		Executor:     a.Job.Execution.Type,
+		Container:    a.ID,
+		UsingPorts:   utils.MapKeysToSlice(a.state.portMapping),
+		CreatedAt:    a.createdAt,
+		StartedAt:    a.startedAt,
+	}
 }

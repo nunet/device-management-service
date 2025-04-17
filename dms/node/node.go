@@ -429,6 +429,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.DeploymentShutdownBehavior: {
 			fn: n.handleDeploymentShutdown,
 		},
+		behaviors.AllocationsListBehavior: {
+			fn: n.handleAllocationsList,
+		},
 		behaviors.VerifyEdgeConstraintBehavior: {
 			fn: n.handleVerifyEdgeConstraint,
 		},

@@ -126,6 +126,7 @@ type ActorBehaviorsClient interface {
 	ActorPeersBehaviorClient
 	ActorOnboardingBehaviorClient
 	ActorDeploymentBehaviorClient
+	ActorAllocationsBehaviorClient
 	ActorSubnetBehaviorClient
 	ActorResourcesBehaviorClient
 	ActorHardwareBehaviorClient
@@ -148,7 +149,7 @@ type ActorPublicBehaviorClient interface {
 // ActorPeersBehaviorClient provides methods for peer-related behaviors
 type ActorPeersBehaviorClient interface {
 	// PeersSelf retrieves information about the actor's own peer
-	PeerSelf(ctx context.Context, opts ...Option) (node.PeerAddrInfoResponse, error)
+	PeersSelf(ctx context.Context, opts ...Option) (node.PeerAddrInfoResponse, error)
 
 	// PeersList lists the peers connected to the actor
 	PeersList(ctx context.Context, opts ...Option) (node.PeersListResponse, error)
@@ -181,7 +182,7 @@ type ActorOnboardingBehaviorClient interface {
 // ActorDeploymentBehaviorClient provides methods for deployment
 type ActorDeploymentBehaviorClient interface {
 	// DeploymentList lists deployments
-	DeploymentList(ctx context.Context, opts ...Option) (node.DeploymentListResponse, error)
+	DeploymentList(ctx context.Context, req node.DeploymentListRequest, opts ...Option) (node.DeploymentListResponse, error)
 
 	// DeploymentStatus retrieves the status of a deployment
 	DeploymentStatus(ctx context.Context, req node.DeploymentStatusRequest, opts ...Option) (node.DeploymentStatusResponse, error)
@@ -197,6 +198,11 @@ type ActorDeploymentBehaviorClient interface {
 
 	// DeploymentNew creates a new deployment
 	DeploymentNew(ctx context.Context, req node.NewDeploymentRequest, opts ...Option) (node.NewDeploymentResponse, error)
+}
+
+// ActorAllocationsBehaviorClient provides methods for allocations view
+type ActorAllocationsBehaviorClient interface {
+	AllocationsList(ctx context.Context, opts ...Option) (node.AllocationsListResponse, error)
 }
 
 // ActorSubnetBehaviorClient provides methods for subnet management

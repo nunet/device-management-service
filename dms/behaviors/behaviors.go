@@ -37,6 +37,8 @@ const (
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 
+	AllocationsListBehavior = "/dms/node/allocations/list"
+
 	ResourcesAllocatedBehavior = "/dms/node/resources/allocated"
 	ResourcesFreeBehavior      = "/dms/node/resources/free"
 	ResourcesOnboardedBehavior = "/dms/node/resources/onboarded"

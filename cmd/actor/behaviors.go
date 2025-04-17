@@ -908,6 +908,20 @@ The returned units are in Hz for CPU clock speed, bytes for RAM, VRAM and disk s
 Examples:
 	  nunet actor cmd --context user /dms/node/resources/onboarded`,
 	},
+	behaviors.AllocationsListBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.AllocationsList(cmd.Context(), msgOpts...)
+		},
+		Short: "List allocations",
+		Long: `Invokes the /dms/node/allocations/list behavior on an actor
+
+This behavior retrieves information about all running allocations within your onboarded DMS.
+The information includes allocation ID, status, executor type, container ID, resources, and port mappings.
+
+Examples:
+	  nunet actor cmd --context user /dms/node/allocations/list`,
+	},
 	behaviors.LoggerConfigBehavior: {
 		Payload: func() any { return &node.LoggerConfigRequest{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
