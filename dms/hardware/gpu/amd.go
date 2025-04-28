@@ -115,7 +115,7 @@ func (a *amdGPUConnector) GetGPUs() (types.GPUs, error) {
 		gpu := types.GPU{
 			UUID:       uuid,
 			Model:      boardInfo.ProductName,
-			VRAM:       types.ConvertMibToBytes(float64(vRAM.Total)),
+			VRAM:       types.ConvertMibToBytes(uint64(vRAM.Total)),
 			Vendor:     types.GPUVendorAMDATI,
 			PCIAddress: bdfIDToPCIAddress(bdfID),
 		}
@@ -126,7 +126,7 @@ func (a *amdGPUConnector) GetGPUs() (types.GPUs, error) {
 }
 
 // GetGPUUsage returns the GPU usage for the device with the given UUID.
-func (a *amdGPUConnector) GetGPUUsage(uuid string) (float64, error) {
+func (a *amdGPUConnector) GetGPUUsage(uuid string) (uint64, error) {
 	if len(uuid) == 0 {
 		return 0, fmt.Errorf("no UUID provided")
 	}
@@ -142,7 +142,7 @@ func (a *amdGPUConnector) GetGPUUsage(uuid string) (float64, error) {
 		return 0, fmt.Errorf("get GPU usage: %w", ret.Error())
 	}
 
-	return types.ConvertMibToBytes(float64(vram.Used)), nil
+	return types.ConvertMibToBytes(uint64(vram.Used)), nil
 }
 
 // Shutdown shuts down the AMD SMI library.

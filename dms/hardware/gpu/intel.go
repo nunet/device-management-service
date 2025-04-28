@@ -71,7 +71,7 @@ func (i *intelGPUConnector) loadDevices() error {
 }
 
 // getTotalVRAM returns the total VRAM for the device with the given deviceID.
-func (i *intelGPUConnector) getTotalVRAM(deviceID int32) (float64, error) {
+func (i *intelGPUConnector) getTotalVRAM(deviceID int32) (uint64, error) {
 	deviceProps, ret := xpum.GetDeviceProperties(deviceID)
 	if ret.Code != xpum.ResultOk {
 		return 0, fmt.Errorf("get properties for device %d: %w", deviceID, ret.Error())
@@ -79,7 +79,7 @@ func (i *intelGPUConnector) getTotalVRAM(deviceID int32) (float64, error) {
 
 	for _, prop := range deviceProps {
 		if prop.Name == xpum.DevicePropertyMemoryPhysicalSizeByte {
-			totalMemory, err := strconv.ParseFloat(prop.Value, 64)
+			totalMemory, err := strconv.ParseUint(prop.Value, 10, 64)
 			if err != nil {
 				return 0, fmt.Errorf("parse total memory for device %d: %w", deviceID, err)
 			}
@@ -112,7 +112,7 @@ func (i *intelGPUConnector) GetGPUs() (types.GPUs, error) {
 }
 
 // GetGPUUsage returns the GPU usage for the device with the given UUID.
-func (i *intelGPUConnector) GetGPUUsage(uuid string) (float64, error) {
+func (i *intelGPUConnector) GetGPUUsage(uuid string) (uint64, error) {
 	deviceIndex, ok := i.deviceIndexMap[uuid]
 	if !ok {
 		return 0, fmt.Errorf("intel device with UUID %s not found", uuid)
@@ -127,7 +127,7 @@ func (i *intelGPUConnector) GetGPUUsage(uuid string) (float64, error) {
 	for _, stat := range stats {
 		for _, data := range stat.DataList {
 			if data.MetricsType == xpum.StatsMemoryUsed {
-				usedMemory := float64(data.Value)
+				usedMemory := data.Value
 				return usedMemory, nil
 			}
 		}

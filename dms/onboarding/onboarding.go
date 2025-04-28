@@ -31,7 +31,7 @@ var (
 )
 
 // validateRange validates the actual value is within the min and max range
-func validateRange(actual, minimum, maximum float64) error {
+func validateRange(actual, minimum, maximum uint64) error {
 	if actual < minimum || actual > maximum {
 		return ErrOutOfRange
 	}
@@ -150,7 +150,7 @@ func validateCapacity(onboardedResources, machineResources types.Resources) erro
 		machineResources.RAM.Size*9/10,
 	); err != nil {
 		if errors.Is(err, ErrOutOfRange) {
-			return fmt.Errorf("expected RAM to be between %.2f GB and %.2f GB, got %.2f GB",
+			return fmt.Errorf("expected RAM to be between %d GB and %d GB, got %d GB",
 				machineResources.RAM.SizeInGB()/10,
 				machineResources.RAM.SizeInGB()*9/10,
 				onboardedResources.RAM.SizeInGB(),
@@ -174,7 +174,7 @@ func validateCapacity(onboardedResources, machineResources types.Resources) erro
 			selectedGPU.VRAM*9/10,
 		); err != nil {
 			if errors.Is(err, ErrOutOfRange) {
-				return fmt.Errorf("expected GPU %d VRAM to be between %.2f and %.2f, got %.2f",
+				return fmt.Errorf("expected GPU %d VRAM to be between %d and %d, got %d",
 					gpu.Index,
 					selectedGPU.VRAMInGB()/10,
 					selectedGPU.VRAMInGB()*9/10,
@@ -196,7 +196,7 @@ func validateUsage(onboardedResources, systemFreeResources types.Resources) erro
 	}
 
 	if onboardedResources.RAM.Size > systemFreeResources.RAM.Size {
-		return fmt.Errorf("not enough free RAM available on the system: %.2f GB", systemFreeResources.RAM.SizeInGB())
+		return fmt.Errorf("not enough free RAM available on the system: %d GB", systemFreeResources.RAM.SizeInGB())
 	}
 
 	// TODO: validate disk usage
@@ -208,7 +208,7 @@ func validateUsage(onboardedResources, systemFreeResources types.Resources) erro
 		}
 
 		if gpu.VRAM > selectedGPU.VRAM {
-			return fmt.Errorf("not enough free VRAM available on GPU %s: %.2f GB", gpu.Model, selectedGPU.VRAMInGB())
+			return fmt.Errorf("not enough free VRAM available on GPU %s: %d GB", gpu.Model, selectedGPU.VRAMInGB())
 		}
 	}
 

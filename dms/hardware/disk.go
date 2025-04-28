@@ -34,7 +34,7 @@ func GetDisk() (types.Disk, error) {
 	}
 
 	return types.Disk{
-		Size: float64(totalStorage),
+		Size: totalStorage,
 	}, nil
 }
 
@@ -55,6 +55,6 @@ func GetDiskUsage() (types.Disk, error) {
 	}
 
 	return types.Disk{
-		Size: float64(usedStorage),
+		Size: usedStorage,
 	}, nil
 }

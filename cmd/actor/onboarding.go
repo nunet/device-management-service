@@ -14,12 +14,23 @@ import (
 	"strings"
 
 	"gitlab.com/nunet/device-management-service/dms/hardware"
-	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
+// OnboardingInput used for command line onboarding parameters input
+type OnboardingInput struct {
+	NoGPU    bool
+	GPUsStr  string
+	RAMSize  string
+	DiskSize string
+	CPUCores float32
+	CPUCLock float64
+	GPUs     types.GPUs
+}
+
 func onboardBehaviorPreRun(_ *Command, payload any) error {
-	p, ok := payload.(*node.OnboardRequest)
+	p, ok := payload.(*OnboardingInput)
 	if !ok {
 		return ErrInvalidArgument
 	}
@@ -31,7 +42,7 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 	}
 
 	// Set the CPU clock speed
-	p.Config.OnboardedResources.CPU.ClockSpeed = machineResources.CPU.ClockSpeed
+	p.CPUCLock = machineResources.CPU.ClockSpeed
 
 	if p.NoGPU {
 		fmt.Println("Skipping GPU selection.")
@@ -48,8 +59,8 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 	}
 
 	// Check if GPUs are specified in the command line
-	if p.GPUs != "" {
-		p.Config.OnboardedResources.GPUs, err = commandLineGPUOnboarding(machineResources, p.GPUs)
+	if p.GPUsStr != "" {
+		p.GPUs, err = commandLineGPUOnboarding(machineResources, p.GPUsStr)
 		if err != nil {
 			return fmt.Errorf("onboard GPUs: %w", err)
 		}
@@ -63,7 +74,7 @@ func onboardBehaviorPreRun(_ *Command, payload any) error {
 		return fmt.Errorf("could not get machine resource usage: %w", err)
 	}
 
-	p.Config.OnboardedResources.GPUs, err = interactiveGPUOnboarding(machineResources, machineResourceUsage)
+	p.GPUs, err = interactiveGPUOnboarding(machineResources, machineResourceUsage)
 	if err != nil {
 		return fmt.Errorf("interactive GPU onboarding: %w", err)
 	}
@@ -86,17 +97,15 @@ func commandLineGPUOnboarding(machineResources types.MachineResources, gpuArgs s
 			return nil, fmt.Errorf("invalid GPU index: %w", err)
 		}
 
-		vram, err := strconv.ParseFloat(gpuIndexSplit[1], 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid GPU VRAM: %w", err)
-		}
-
 		gpu, err := machineResources.GPUs.GetWithIndex(index)
 		if err != nil {
 			return nil, fmt.Errorf("invalid GPU index: %w", err)
 		}
 
-		gpu.VRAM = types.ConvertGBToBytes(vram)
+		gpu.VRAM, err = convert.ParseBytesWithDefaultUnit(gpuIndexSplit[1], "GiB")
+		if err != nil {
+			return nil, fmt.Errorf("invalid GPU VRAM: %w", err)
+		}
 		gpus = append(gpus, gpu)
 	}
 
@@ -136,13 +145,13 @@ func interactiveGPUOnboarding(machineResources types.MachineResources, machineRe
 		gpu := gpuMap[gpuName]
 		fmt.Printf("-----------------------------------\n")
 		fmt.Printf("Selected GPU: %s\n", gpuName)
-		fmt.Printf("Total VRAM: %.2f GB\n", gpu.VRAMInGB())
+		fmt.Printf("Total VRAM: %d GB\n", gpu.VRAMInGB())
 		gpuUsage, err := machineResourceUsage.GPUs.GetWithIndex(gpu.Index)
 		if err != nil {
 			return nil, fmt.Errorf("could not get GPU usage: %w", err)
 		}
-		fmt.Printf("Used VRAM: %.2f GB\n", gpuUsage.VRAMInGB())
-		fmt.Printf("Available VRAM: %.2f GB\n", types.ConvertBytesToGB(gpu.VRAM-gpuUsage.VRAM))
+		fmt.Printf("Used VRAM: %d GB\n", gpuUsage.VRAMInGB())
+		fmt.Printf("Available VRAM: %d GB\n", types.ConvertBytesToGB(gpu.VRAM-gpuUsage.VRAM))
 
 		// Prompt for VRAM allocation
 		input, err := prompt("Enter new VRAM allocation in GB", vramValidator)
@@ -152,7 +161,7 @@ func interactiveGPUOnboarding(machineResources types.MachineResources, machineRe
 		fmt.Println("-----------------------------------")
 
 		// Update the GPU with the new VRAM allocation
-		vram, err := strconv.ParseFloat(input, 64)
+		vram, err := strconv.ParseUint(input, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("could not parse VRAM: %w", err)
 		}

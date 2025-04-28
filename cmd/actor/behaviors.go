@@ -26,7 +26,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
-	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
 var ErrInvalidArgument = errors.New("invalid argument")
@@ -332,29 +332,41 @@ Examples:
 	// /dms/node/onboarding/onboard
 	behaviors.OnboardBehavior: {
 		Type:    bInvoke,
-		Payload: func() any { return &node.OnboardRequest{} },
+		Payload: func() any { return &OnboardingInput{} },
 		SetFlags: func(cmd *Command, payload any) {
 			// infer the type of the payload
-			p := payload.(*node.OnboardRequest)
-			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.RAM.Size, "ram", "R", 0, "set the amount of memory in GB to reserve for NuNet")
-			cmd.Flags().Float32VarP(&p.Config.OnboardedResources.CPU.Cores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
-			cmd.Flags().Float64VarP(&p.Config.OnboardedResources.Disk.Size, "disk", "D", 0, "set the amount of disk size in GB to reserve for NuNet")
-			cmd.Flags().StringVarP(&p.GPUs, "gpus", "G", "", "comma-separated list of GPU Index and VRAM in GB (e.g. 0:4,1:8). The gpu index can be obtained from 'nunet gpu list' command")
+			p := payload.(*OnboardingInput)
+			cmd.Flags().StringVarP(&p.RAMSize, "ram", "R", "0GiB", "set the amount of memory to reserve for NuNet (defaults to GiB)")
+			cmd.Flags().Float32VarP(&p.CPUCores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
+			cmd.Flags().StringVarP(&p.DiskSize, "disk", "D", "0GiB", "set the amount of disk size to reserve for NuNet (defaults to GiB)")
+			cmd.Flags().StringVarP(&p.GPUsStr, "gpus", "G", "", "comma-separated list of GPU Index and VRAM in GiB (e.g. 0:4,1:8). The gpu index can be obtained from 'nunet gpu list' command. Unit can be specified for the VRAM but defaults to GiB")
 			cmd.Flags().BoolVarP(&p.NoGPU, "no-gpu", "N", false, "do not reserve any GPU resources")
 			cmd.MarkFlagsOneRequired("ram", "cpu", "disk")
 			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
 		PreRunE: onboardBehaviorPreRun,
 		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
-			req, ok := payload.(*node.OnboardRequest)
+			p, ok := payload.(*OnboardingInput)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
 
-			// convert RAM and Disk from GB to bytes
-			req.Config.OnboardedResources.RAM.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.RAM.Size)
-			req.Config.OnboardedResources.Disk.Size = types.ConvertGBToBytes(req.Config.OnboardedResources.Disk.Size)
-			return cli.Onboard(cmd.Context(), *req, msgOpts...)
+			req := node.OnboardRequest{}
+			req.Config.OnboardedResources.CPU.Cores = p.CPUCores
+			req.NoGPU = p.NoGPU
+
+			var err error
+			// convert RAM and Disk from specified unit to bytes if specified otherwise, default to GiB
+			req.Config.OnboardedResources.RAM.Size, err = convert.ParseBytesWithDefaultUnit(p.RAMSize, "GiB")
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode RAM size. Expected Unit in GiB")
+			}
+			req.Config.OnboardedResources.Disk.Size, err = convert.ParseBytesWithDefaultUnit(p.DiskSize, "GiB")
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode Disk size. Expected Unit in GiB")
+			}
+
+			return cli.Onboard(cmd.Context(), req, msgOpts...)
 		},
 		Short: "Onboard a node to the network",
 		Long: `Invokes the /dms/node/onboarding/onboard behavior on an actor
