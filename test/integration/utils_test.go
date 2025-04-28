@@ -9,6 +9,7 @@
 package itest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,12 +19,19 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/docker/docker/client"
+	"github.com/shirou/gopsutil/v4/process"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shirou/gopsutil/v4/process"
-
+	"gitlab.com/nunet/device-management-service/dms"
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
 type DIDData struct {
@@ -214,11 +222,15 @@ type mockNode struct {
 	dmsDID      string
 	userContext string
 	dmsContext  string
+	capCtx      ucan.CapabilityContext
 
 	shutdownCh chan struct{}
 }
 
-func newMockNode(t *testing.T, config *config.Config, password, rootDir string, index int) *mockNode {
+func newMockNode(
+	t *testing.T, config *config.Config,
+	password, rootDir string, index int,
+) (*mockNode, error) {
 	t.Helper()
 
 	cliHelper := newClient(t, config)
@@ -226,9 +238,14 @@ func newMockNode(t *testing.T, config *config.Config, password, rootDir string, 
 	userContext := fmt.Sprintf("user%d", index)
 	setupKeysAndCaps(t, cliHelper, password, dmsContext, userContext)
 
+	capCtx, err := loadCapCtx(t, cliHelper, password, dmsContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load capability context: %w", err)
+	}
+
 	userDID := cliHelper.getDID(t, fmt.Sprintf("%s.cap", userContext), password)
 	require.NotEmpty(t, userDID)
-	dmsDID := cliHelper.getDID(t, fmt.Sprintf("%s.cap", dmsContext), password)
+	dmsDID := capCtx.DID().String()
 	require.NotEmpty(t, dmsDID)
 
 	return &mockNode{
@@ -241,6 +258,70 @@ func newMockNode(t *testing.T, config *config.Config, password, rootDir string, 
 		dmsDID:      dmsDID,
 		userContext: userContext,
 		dmsContext:  dmsContext,
+		capCtx:      capCtx,
 		shutdownCh:  make(chan struct{}),
+	}, nil
+}
+
+func loadCapCtx(
+	t *testing.T, cliHelper *Client, password, dmsContext string,
+) (ucan.CapabilityContext, error) {
+	t.Helper()
+	fs := afero.NewOsFs()
+
+	keyStoreDir := filepath.Join(
+		cliHelper.cfg.General.UserDir, node.KeystoreDir)
+	keyStore, err := keystore.New(fs, keyStoreDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open keystore: %w", err)
 	}
+
+	privK, err := dms.GetPrivKeyFromKS(keyStore, password, dmsContext)
+	if err != nil {
+		return nil,
+			fmt.Errorf("private key from keystore: %w", err)
+	}
+	pubKey := privK.GetPublic()
+
+	dmsCtxPath := filepath.Join(
+		cliHelper.cfg.General.UserDir, node.CapstoreDir, fmt.Sprintf("%s.cap", dmsContext))
+
+	trustCtx, err := did.NewTrustContextWithPrivateKey(privK)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create trust context: %w", err)
+	}
+
+	capCtx, err := dms.LoadOrCreateCapCtx(
+		fs, dmsCtxPath, trustCtx, dmsContext, pubKey)
+	if err != nil {
+		return nil,
+			fmt.Errorf(
+				"unable to load or create capability context: %w", err)
+	}
+
+	trustCtx.Start(10 * time.Minute)
+	capCtx.Start(5 * time.Minute)
+
+	return capCtx, nil
+}
+
+func isContainerRunning(name string) (bool, error) {
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return false,
+			fmt.Errorf("failed to create Docker Client: %w", err)
+	}
+	defer cli.Close()
+
+	containerInfo, err := cli.ContainerInspect(
+		context.Background(), name)
+	if err != nil {
+		if client.IsErrNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	return containerInfo.State.Running, nil
 }

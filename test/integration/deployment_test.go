@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/spf13/afero"
+
+	cmd "gitlab.com/nunet/device-management-service/cmd/actor"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
@@ -137,4 +140,108 @@ func DeploymentTest(suite *TestSuite) {
 			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
 	})
+
+	suite.Run("must completely assert deployment with nginx", func() {
+		// This test will be a model for other tests. It concerns
+		// with asserting every possible effect, meaning it
+		// tries to be a complete test
+		deployer := suite.nodes[0]
+		bobProvider := suite.nodes[1]
+		aliceProvider := suite.nodes[2]
+
+		suite.assertFreeResourcesFull(bobProvider)
+		suite.assertFreeResourcesFull(aliceProvider)
+
+		suite.assertNoAllocationsRunning(bobProvider)
+		suite.assertNoAllocationsRunning(aliceProvider)
+
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		alloc1 := "nginx1"
+
+		r, err := cmd.ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, ensemblePath)
+		suite.Require().NoError(err)
+		ensembleCfg := r.Ensemble
+
+		// start deployment
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext,
+			deployer.password,
+			ensemblePath,
+		)
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deploymentResult)
+
+		executions := []execution{}
+
+		// defer shutdown and assert its effects
+		defer func() {
+			// Shutdown the nginx deployment.
+			shutdownRes := deployer.client.shutdownDeployment(
+				suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Contains(shutdownRes, `"Error": ""`)
+
+			// wait for the ensemble to be shutdown
+			suite.Require().Eventually(func() bool {
+				status := deployer.client.deploymentStatus(
+					suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+				suite.T().Log("deployment status:", extractStatus(status))
+				return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+			}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+			time.Sleep(3 * time.Second)
+
+			// Ensure no allocations
+			suite.assertNoAllocationsRunning(bobProvider, executions...)
+			suite.assertNoAllocationsRunning(aliceProvider, executions...)
+
+			// Ensure resources are freed.
+			suite.assertFreeResourcesFull(bobProvider)
+			suite.assertFreeResourcesFull(aliceProvider)
+		}()
+
+		// Wait until the deployment status is "Running".
+		suite.Require().Eventually(func() bool {
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.T().Log("Deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+		time.Sleep(2 * time.Second)
+
+		// Assert allocation is running
+		suite.assertOnlyOneAllocationRunning(bobProvider)
+		suite.assertOnlyOneAllocationRunning(aliceProvider)
+
+		// Ensure resources are allocated.
+		alloc, ok := ensembleCfg.Allocation(alloc1)
+		suite.Require().True(ok)
+		suite.assertResourcesAfterDeployment(bobProvider, alloc.Resources)
+		suite.assertResourcesAfterDeployment(aliceProvider, alloc.Resources)
+
+		suite.assertManifestAfterDeployment(
+			deployer, []*mockNode{bobProvider, aliceProvider},
+			ensembleCfg, ensembleID)
+
+		// track executions IDs
+		executions = append(
+			executions, suite.getExecutions(bobProvider)...)
+		executions = append(
+			executions, suite.getExecutions(aliceProvider)...)
+	})
+}
+
+func (s *TestSuite) getExecutions(node *mockNode) []execution {
+	executions := []execution{}
+
+	allocations, err := node.client.allocationsList(
+		node.userContext, node.password)
+	s.Require().NoError(err)
+
+	for _, allocation := range allocations {
+		if allocation.Container != "" {
+			executions = append(executions, execution{
+				executor: allocation.Executor,
+				id:       allocation.Container,
+			})
+		}
+	}
+	return executions
 }

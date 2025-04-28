@@ -38,6 +38,7 @@ func (n *Node) handleAllocatedResources(msg actor.Envelope) {
 	}
 
 	resp.Resources = allocatedResources
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
 
