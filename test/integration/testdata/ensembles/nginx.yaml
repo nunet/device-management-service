@@ -1,3 +1,5 @@
+# Note: keep allocations's resources equal as the assertions
+# are taking that into account
 version: "V1"
 
 allocations:

@@ -11,6 +11,7 @@ package itest
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -24,6 +25,8 @@ import (
 
 	"gitlab.com/nunet/device-management-service/cmd"
 	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/dms/jobs"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
@@ -293,6 +296,82 @@ func (c *Client) deploymentStatus(t *testing.T, context, passphrase, deploymentI
 	return buf.String()
 }
 
+func (c *Client) deploymentManifest(
+	context, passphrase, deploymentID string,
+) (jobtypes.EnsembleManifest, error) {
+	var resp node.DeploymentManifestResponse
+
+	root := c.newCommandCtx()
+
+	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	if err != nil {
+		return jobtypes.EnsembleManifest{}, fmt.Errorf("failed to set env: %w", err)
+	}
+
+	args := []string{
+		"actor", "cmd", "--context",
+		context, "/dms/node/deployment/manifest", "--id", deploymentID,
+	}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	if err != nil {
+		return jobtypes.EnsembleManifest{},
+			fmt.Errorf("failed to execute manifest command: %w", err)
+	}
+
+	err = json.Unmarshal(buf.Bytes(), &resp)
+	if err != nil {
+		return jobtypes.EnsembleManifest{},
+			fmt.Errorf("unmarshal manifest: %w", err)
+	}
+
+	if resp.Error != "" {
+		return jobtypes.EnsembleManifest{},
+			errors.New(resp.Error)
+	}
+
+	return resp.Manifest, nil
+}
+
+func (c *Client) allocationsList(context, passphrase string) ([]jobs.AllocationInfo, error) {
+	var resp node.AllocationsListResponse
+
+	root := c.newCommandCtx()
+
+	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	if err != nil {
+		return []jobs.AllocationInfo{},
+			fmt.Errorf("failed to set env: %w", err)
+	}
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/allocations/list"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	if err != nil {
+		return []jobs.AllocationInfo{},
+			fmt.Errorf("failed to execute allocations list command: %w", err)
+	}
+
+	err = json.Unmarshal(buf.Bytes(), &resp)
+	if err != nil {
+		return []jobs.AllocationInfo{},
+			fmt.Errorf("unmarshal res: %w", err)
+	}
+
+	if resp.Error != "" {
+		return []jobs.AllocationInfo{},
+			errors.New(resp.Error)
+	}
+
+	return resp.Allocations, nil
+}
+
 // nunet actor cmd --context user /dms/node/peers/connect --address /p2p/<peer_id>
 func (c *Client) connect(t *testing.T, context, passphrase, hostID string) string {
 	root := c.newCommandCtx()
@@ -352,20 +431,24 @@ func (c *Client) peers(t *testing.T, context, passphrase string) (node.PeersList
 	return resp, err
 }
 
-func (c *Client) freeResources(t *testing.T, context, passphrase string) (types.Resources, error) {
+func (c *Client) getResources(
+	resourceType, context, passphrase string,
+) (types.Resources, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv("DMS_PASSPHRASE", passphrase)
-	require.NoError(t, err)
+	if err != nil {
+		return types.Resources{}, fmt.Errorf("failed to set env: %w", err)
+	}
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/node/resources/free"}
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/resources/" + resourceType}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
 	root.SetOutput(&buf)
 	err = root.Execute()
 	if err != nil {
-		return types.Resources{}, fmt.Errorf("failed to execute free resources command: %w", err)
+		return types.Resources{}, fmt.Errorf("failed to execute %s resources command: %w", resourceType, err)
 	}
 
 	res := node.ResourcesResponse{}
@@ -374,8 +457,20 @@ func (c *Client) freeResources(t *testing.T, context, passphrase string) (types.
 	}
 
 	if !res.OK {
-		return types.Resources{}, fmt.Errorf("get free resources: %s", res.Error)
+		return types.Resources{}, fmt.Errorf("get %s resources: %s", resourceType, res.Error)
 	}
 
 	return res.Resources, nil
+}
+
+func (c *Client) freeResources(_ *testing.T, context, passphrase string) (types.Resources, error) {
+	return c.getResources("free", context, passphrase)
+}
+
+func (c *Client) onboardedResources(_ *testing.T, context, passphrase string) (types.Resources, error) {
+	return c.getResources("onboarded", context, passphrase)
+}
+
+func (c *Client) allocatedResources(_ *testing.T, context, passphrase string) (types.Resources, error) {
+	return c.getResources("allocated", context, passphrase)
 }

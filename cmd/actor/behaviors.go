@@ -16,12 +16,12 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/client"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
-	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -542,55 +542,10 @@ Examples:
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
 			}
-			data, err := os.ReadFile(req.Config)
+
+			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, req.Config)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read config file: %w", err)
-			}
-
-			cfg := &node.NewDeploymentRequest{}
-			err = parser.Parse(parser.SpecTypeEnsembleV1, data, &cfg.Ensemble)
-			if err != nil {
-				return nil, err
-			}
-
-			for name, script := range cfg.Ensemble.V1.Scripts {
-				fmt.Println(name, string(script))
-				scriptData, err := os.ReadFile(string(script))
-				if err != nil {
-					return nil, fmt.Errorf("failed to read script file: %w", err)
-				}
-				cfg.Ensemble.V1.Scripts[name] = scriptData
-
-			}
-
-			for i, alloc := range cfg.Ensemble.V1.Allocations {
-				if alloc.Volume == nil {
-					continue
-				}
-
-				if alloc.Volume.ClientPrivateKey != "" {
-					pvkeyData, err := os.ReadFile(alloc.Volume.ClientPrivateKey)
-					if err != nil {
-						return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
-					}
-					cfg.Ensemble.V1.Allocations[i].Volume.ClientPrivateKey = string(pvkeyData)
-				}
-
-				if alloc.Volume.ClientPEM != "" {
-					pemData, err := os.ReadFile(alloc.Volume.ClientPEM)
-					if err != nil {
-						return nil, fmt.Errorf("failed to read pem data: %w", err)
-					}
-					cfg.Ensemble.V1.Allocations[i].Volume.ClientPEM = string(pemData)
-				}
-
-				if alloc.Volume.ClientCA != "" {
-					caData, err := os.ReadFile(alloc.Volume.ClientCA)
-					if err != nil {
-						return nil, fmt.Errorf("failed to read ca data: %w", err)
-					}
-					cfg.Ensemble.V1.Allocations[i].Volume.ClientCA = string(caData)
-				}
+				return nil, fmt.Errorf("failed to process config file: %w", err)
 			}
 
 			return cli.DeploymentNew(cmd.Context(), *cfg, msgOpts...)

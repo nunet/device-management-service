@@ -206,6 +206,7 @@ func (o *BasicOrchestrator) newManifest(
 	}
 	for name, node := range cfg.Nodes() {
 		nmf := jtypes.NodeManifest{
+			ID:          name,
 			Allocations: node.Allocations,
 			Peer:        node.Peer,
 		}

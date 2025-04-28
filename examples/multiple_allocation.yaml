@@ -18,7 +18,6 @@ allocations:
             type: docker
             image: kennethreitz/httpbin 
         failure_recovery: rest_for_one
-        depends_on: alloc2
 
     alloc2:
         type: service

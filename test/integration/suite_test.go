@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -57,35 +58,35 @@ func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (suite *TestSuite) startNode(index int) {
-	suite.T().Logf("Starting node%d", index)
-	node, ok := suite.nodes[index]
-	suite.Require().True(ok)
-	suite.Require().NotNil(node)
+func (s *TestSuite) startNode(index int) {
+	s.T().Logf("Starting node%d", index)
+	node, ok := s.nodes[index]
+	s.Require().True(ok)
+	s.Require().NotNil(node)
 
 	// save config to a file
-	configPath := filepath.Join(suite.currentDir, node.rootDir, "dms_config.json")
-	suite.T().Logf("writing config to %s", configPath)
-	suite.T().Logf("config: %+v", node.config)
+	configPath := filepath.Join(s.currentDir, node.rootDir, "dms_config.json")
+	s.T().Logf("writing config to %s", configPath)
+	s.T().Logf("config: %+v", node.config)
 	jsonData, err := json.MarshalIndent(node.config, "", "  ")
-	suite.Require().NoError(err)
+	s.Require().NoError(err)
 	err = os.WriteFile(configPath, jsonData, 0o644)
-	suite.Require().NoError(err)
+	s.Require().NoError(err)
 
-	binaryPath := filepath.Join(suite.currentDir, binaryName)
-	cmd := exec.Command(binaryPath, "run", "--config", filepath.Join(suite.currentDir, node.rootDir, "dms_config.json"), "--context", node.dmsContext)
+	binaryPath := filepath.Join(s.currentDir, binaryName)
+	cmd := exec.Command(binaryPath, "run", "--config", filepath.Join(s.currentDir, node.rootDir, "dms_config.json"), "--context", node.dmsContext)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("GOLOG_LOG_LEVEL=%s", "debug"), fmt.Sprintf("DMS_PASSPHRASE=%s", node.password))
-	prefix := fmt.Sprintf("[%s-node-%d] ", suite.Name, index)
+	prefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
 	cmd.Stdout = &prefixWriter{prefix: prefix, w: os.Stdout}
 	cmd.Stderr = &prefixWriter{prefix: prefix, w: os.Stderr}
 
 	// Start the node process.
 	err = cmd.Start()
-	suite.Require().NoError(err)
+	s.Require().NoError(err)
 
 	// Write the PID file.
-	err = os.WriteFile(filepath.Join(suite.currentDir, node.rootDir, "proc.pid"), []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0o700)
-	suite.Require().NoError(err)
+	err = os.WriteFile(filepath.Join(s.currentDir, node.rootDir, "proc.pid"), []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0o700)
+	s.Require().NoError(err)
 
 	// Start a goroutine to wait for shutdown.
 	go func() {
@@ -93,110 +94,113 @@ func (suite *TestSuite) startNode(index int) {
 		_ = cmd.Process.Kill()
 	}()
 
-	suite.T().Logf("started node %d with pid %d", index, cmd.Process.Pid)
+	s.T().Logf("started node %d with pid %d", index, cmd.Process.Pid)
 
 	err = cmd.Wait()
-	suite.T().Logf("node %d exited with error: %v", index, err)
+	s.T().Logf("node %d exited with error: %v", index, err)
 }
 
 // setupTestNetwork creates a network of nodes and grants mutual access to all nodes.
-func (suite *TestSuite) setupTestNetwork() {
-	suite.T().Logf("%s: setting up %d nodes", suite.Name, suite.numNodes)
-	for i := 0; i < suite.numNodes; i++ {
-		rootDir := fmt.Sprintf("testdata/%s/dms%d", suite.Name, i)
+func (s *TestSuite) setupTestNetwork() {
+	s.T().Logf("%s: setting up %d nodes", s.Name, s.numNodes)
+	for i := 0; i < s.numNodes; i++ {
+		rootDir := fmt.Sprintf("testdata/%s/dms%d", s.Name, i)
 		password := fmt.Sprintf("password%d", i)
-		nodeConfig := createConfig(rootDir, uint32(suite.restPortIndex), fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", suite.p2pPortIndex), []string{})
+		nodeConfig := createConfig(rootDir, uint32(s.restPortIndex), fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", s.p2pPortIndex), []string{})
 		nodeIndex := i
-		suite.nodes[nodeIndex] = newMockNode(suite.T(), nodeConfig, password, rootDir, nodeIndex)
 
-		suite.restPortIndex++
-		suite.p2pPortIndex++
+		var err error
+		s.nodes[nodeIndex], err = newMockNode(s.T(), nodeConfig, password, rootDir, nodeIndex)
+		s.Require().NoError(err)
+
+		s.restPortIndex++
+		s.p2pPortIndex++
 	}
 
-	suite.T().Logf("setting up caps")
+	s.T().Logf("setting up caps")
 
 	// grant mutual access to all nodes in the network.
 	// TODO: lower the time complexity.
-	for i, node := range suite.nodes {
+	for i, node := range s.nodes {
 		// set the root anchor
-		node.client.addRootAnchor(suite.T(), node.dmsContext, node.userDID, node.password)
+		node.client.addRootAnchor(s.T(), node.dmsContext, node.userDID, node.password)
 
 		// grant access to all other nodes
-		for j, otherNode := range suite.nodes {
+		for j, otherNode := range s.nodes {
 			if i == j {
 				continue
 			}
-			nodeGrantToken := node.client.grant(suite.T(), node.dmsContext, otherNode.userDID, node.password)
-			node.client.anchor(suite.T(), nodeGrantToken, node.dmsContext, "require", node.password)
-			otherNode.client.anchor(suite.T(), nodeGrantToken, otherNode.userContext, "provide", otherNode.password)
+			nodeGrantToken := node.client.grant(s.T(), node.dmsContext, otherNode.userDID, node.password)
+			node.client.anchor(s.T(), nodeGrantToken, node.dmsContext, "require", node.password)
+			otherNode.client.anchor(s.T(), nodeGrantToken, otherNode.userContext, "provide", otherNode.password)
 
-			otherNodeGrantToken := otherNode.client.grant(suite.T(), otherNode.dmsContext, node.userDID, otherNode.password)
-			otherNode.client.anchor(suite.T(), otherNodeGrantToken, otherNode.dmsContext, "require", otherNode.password)
-			node.client.anchor(suite.T(), otherNodeGrantToken, node.userContext, "provide", node.password)
+			otherNodeGrantToken := otherNode.client.grant(s.T(), otherNode.dmsContext, node.userDID, otherNode.password)
+			otherNode.client.anchor(s.T(), otherNodeGrantToken, otherNode.dmsContext, "require", otherNode.password)
+			node.client.anchor(s.T(), otherNodeGrantToken, node.userContext, "provide", node.password)
 
-			if suite.grantTokens[node.index] == nil {
-				suite.grantTokens[node.index] = make(map[int]string)
+			if s.grantTokens[node.index] == nil {
+				s.grantTokens[node.index] = make(map[int]string)
 			}
-			if suite.grantTokens[otherNode.index] == nil {
-				suite.grantTokens[otherNode.index] = make(map[int]string)
+			if s.grantTokens[otherNode.index] == nil {
+				s.grantTokens[otherNode.index] = make(map[int]string)
 			}
-			suite.grantTokens[node.index][otherNode.index] = nodeGrantToken
-			suite.grantTokens[otherNode.index][node.index] = otherNodeGrantToken
+			s.grantTokens[node.index][otherNode.index] = nodeGrantToken
+			s.grantTokens[otherNode.index][node.index] = otherNodeGrantToken
 		}
 
 		// delegate to dms
-		delegateToken := node.client.delegate(suite.T(), node.userContext, node.dmsDID, node.password)
-		node.client.anchor(suite.T(), delegateToken, node.dmsContext, "provide", node.password)
+		delegateToken := node.client.delegate(s.T(), node.userContext, node.dmsDID, node.password)
+		node.client.anchor(s.T(), delegateToken, node.dmsContext, "provide", node.password)
 	}
 
-	suite.T().Logf("creating network")
-	for i := 0; i < len(suite.nodes); i++ {
-		node := suite.nodes[i]
-		node.config.BootstrapPeers = suite.bootstrapPeers
+	s.T().Logf("creating network")
+	for i := 0; i < len(s.nodes); i++ {
+		node := s.nodes[i]
+		node.config.BootstrapPeers = s.bootstrapPeers
 
-		go suite.startNode(i)
+		go s.startNode(i)
 		// wait for the node to be ready
 		var (
 			networkStats types.NetworkStats
 			err          error
 		)
-		suite.Require().Eventually(func() bool {
-			networkStats, err = node.client.self(suite.T(), node.dmsContext, node.password)
+		s.Require().Eventually(func() bool {
+			networkStats, err = node.client.self(s.T(), node.dmsContext, node.password)
 			return err == nil && networkStats.ID != ""
 		}, 15*time.Second, 3*time.Second, "Expected node %s to be ready", node.index)
 
 		node.peerID = networkStats.ID
-		suite.T().Logf("node %d peerID: %s", node.index, node.peerID)
+		s.T().Logf("node %d peerID: %s", node.index, node.peerID)
 
 		// We add all the nodes except the last one to the bootstrap peers to ensure that the network is connected.
-		if i != suite.numNodes-1 {
+		if i != s.numNodes-1 {
 			bootstrapAddr := make([]string, 0)
 			addrs := strings.Split(networkStats.ListenAddr, ", ")
 			for _, a := range addrs {
 				bootstrapAddr = append(bootstrapAddr, fmt.Sprintf("%s/p2p/%s", a, networkStats.ID))
 			}
 
-			suite.bootstrapPeers = append(suite.bootstrapPeers, bootstrapAddr...)
+			s.bootstrapPeers = append(s.bootstrapPeers, bootstrapAddr...)
 		}
 	}
 
-	suite.T().Logf("waiting for the network to be ready")
-	suite.Require().Eventually(func() bool {
+	s.T().Logf("waiting for the network to be ready")
+	s.Require().Eventually(func() bool {
 		expectedPeers := make(map[string]struct{})
-		for _, node := range suite.nodes {
+		for _, node := range s.nodes {
 			expectedPeers[node.peerID] = struct{}{}
 		}
 
-		suite.T().Logf("expected peers: %v", expectedPeers)
+		s.T().Logf("expected peers: %v", expectedPeers)
 
-		for _, node := range suite.nodes {
-			resp, err := node.client.peers(suite.T(), node.dmsContext, node.password)
+		for _, node := range s.nodes {
+			resp, err := node.client.peers(s.T(), node.dmsContext, node.password)
 			if err != nil {
-				suite.T().Logf("Error fetching peers for node %d: %v", node.index, err)
+				s.T().Logf("Error fetching peers for node %d: %v", node.index, err)
 				return false
 			}
 
-			suite.T().Logf("peers for node %d: %v", node.index, resp.Peers)
+			s.T().Logf("peers for node %d: %v", node.index, resp.Peers)
 
 			// ensure that it has all peers by checking their peerID
 			peerCount := 0
@@ -206,67 +210,67 @@ func (suite *TestSuite) setupTestNetwork() {
 				}
 			}
 
-			if peerCount != suite.numNodes {
-				suite.T().Logf("Node %d has not found all peers yet", node.index)
+			if peerCount != s.numNodes {
+				s.T().Logf("Node %d has not found all peers yet", node.index)
 				return false
 			}
 		}
 		return true
-	}, 120*time.Second, 2*time.Second, fmt.Sprintf("Expected all %d nodes to have %d peers within timeout", suite.numNodes, suite.numNodes-1))
+	}, 120*time.Second, 2*time.Second, fmt.Sprintf("Expected all %d nodes to have %d peers within timeout", s.numNodes, s.numNodes-1))
 
-	suite.T().Logf("network is ready. Onboarding ...")
-	for _, node := range suite.nodes {
-		node.client.onboard(suite.T(), node.userContext, node.password)
+	s.T().Logf("network is ready. Onboarding ...")
+	for _, node := range s.nodes {
+		node.client.onboard(s.T(), node.userContext, node.password)
 	}
 
-	suite.T().Logf("connecting nodes")
+	s.T().Logf("connecting nodes")
 	// connect all the nodes in the network
 	time.Sleep(5 * time.Second)
-	for i, node := range suite.nodes {
-		for j := i + 1; j < len(suite.nodes); j++ {
-			suite.T().Logf("connecting node %d to node %d", i, j)
-			otherNode := suite.nodes[j]
+	for i, node := range s.nodes {
+		for j := i + 1; j < len(s.nodes); j++ {
+			s.T().Logf("connecting node %d to node %d", i, j)
+			otherNode := s.nodes[j]
 
-			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
-			suite.Require().NoError(err)
+			otherHostID, err := otherNode.client.self(s.T(), otherNode.dmsContext, otherNode.password)
+			s.Require().NoError(err)
 
-			result := node.client.connect(suite.T(), node.userContext, node.password, otherHostID.ID)
-			suite.Contains(result, `"Status": "CONNECTED"`)
+			result := node.client.connect(s.T(), node.userContext, node.password, otherHostID.ID)
+			s.Contains(result, `"Status": "CONNECTED"`)
 		}
 	}
 
-	suite.T().Logf("all nodes are onboarded and connected")
+	s.T().Logf("all nodes are onboarded and connected")
 }
 
 // SetupSuite runs once before the suite starts.
-func (suite *TestSuite) SetupSuite() {
-	suite.grantTokens = make(map[int]map[int]string)
-	suite.nodes = make(map[int]*mockNode)
-	suite.currentDir = getCurrentFileDirectory()
-	suite.testDataDir = filepath.Join(suite.currentDir, "testdata")
-	suite.Require().NotEmpty(suite.currentDir)
+func (s *TestSuite) SetupSuite() {
+	s.grantTokens = make(map[int]map[int]string)
+	s.nodes = make(map[int]*mockNode)
+	s.currentDir = getCurrentFileDirectory()
+	s.testDataDir = filepath.Join(s.currentDir, "testdata")
+	s.Require().NotEmpty(s.currentDir)
 }
 
 // TearDownSuite runs once after all tests are complete.
-func (suite *TestSuite) TearDownSuite() {
-	suite.T().Log("stopping nodes")
-	for _, node := range suite.nodes {
-		data, err := os.ReadFile(filepath.Join(suite.currentDir, node.rootDir, "proc.pid"))
+func (s *TestSuite) TearDownSuite() {
+	s.T().Log("stopping nodes")
+	for _, node := range s.nodes {
+		data, err := os.ReadFile(filepath.Join(s.currentDir, node.rootDir, "proc.pid"))
 		if err != nil {
-			suite.T().Logf("failed to read pid file: %v", err)
+			s.T().Logf("failed to read pid file: %v", err)
 			continue
 		}
 
 		pid, err := strconv.Atoi(string(data))
 		if err != nil {
-			suite.T().Logf("failed to convert pid to int: %v", err)
+			s.T().Logf("failed to convert pid to int: %v", err)
 			continue
 		}
 
 		// Get process handle
 		proc := getProc(int32(pid))
 		if proc == nil {
-			suite.T().Logf("process %d not found", pid)
+			s.T().Logf("process %d not found", pid)
 			continue
 		}
 
@@ -274,7 +278,7 @@ func (suite *TestSuite) TearDownSuite() {
 		node.shutdownCh <- struct{}{}
 
 		// Wait for process to actually terminate with timeout
-		suite.Require().Eventually(func() bool {
+		s.Require().Eventually(func() bool {
 			if exists, _ := proc.IsRunning(); !exists {
 				return true
 			}
@@ -282,31 +286,31 @@ func (suite *TestSuite) TearDownSuite() {
 		}, 10*time.Second, 100*time.Millisecond, fmt.Sprintf("process %d not terminated", pid))
 	}
 
-	suite.T().Logf("cleaning up directories")
-	for _, node := range suite.nodes {
-		err := os.RemoveAll(filepath.Join(suite.currentDir, node.rootDir))
+	s.T().Logf("cleaning up directories")
+	for _, node := range s.nodes {
+		err := os.RemoveAll(filepath.Join(s.currentDir, node.rootDir))
 		if err != nil {
-			suite.T().Logf("failed to remove directory %s: %v", node.rootDir, err)
+			s.T().Logf("failed to remove directory %s: %v", node.rootDir, err)
 		}
 	}
 
-	suite.T().Logf("teardown complete")
+	s.T().Logf("teardown complete")
 }
 
 // TestRevokeToken tests the token revocation.
-func (suite *TestSuite) RevokeTokenTests() {
-	node1 := suite.nodes[0]
+func (s *TestSuite) RevokeTokenTests() {
+	node1 := s.nodes[0]
 
 	// revoke all the tokens granted from node1
-	for _, grantToken := range suite.grantTokens[node1.index] {
-		revokeToken := node1.client.revokeToken(suite.T(), node1.dmsContext, node1.password, grantToken)
-		node1.client.anchorBehaviour(suite.T(), node1.dmsContext, node1.password, revokeToken)
+	for _, grantToken := range s.grantTokens[node1.index] {
+		revokeToken := node1.client.revokeToken(s.T(), node1.dmsContext, node1.password, grantToken)
+		node1.client.anchorBehaviour(s.T(), node1.dmsContext, node1.password, revokeToken)
 	}
 
-	suite.Require().Eventually(func() bool {
+	s.Require().Eventually(func() bool {
 		// try saying hello from node2 to node1
-		node2 := suite.nodes[1]
-		_, err := node2.client.hello(suite.T(), node2.userContext, node2.password, node1.dmsDID)
+		node2 := s.nodes[1]
+		_, err := node2.client.hello(s.T(), node2.userContext, node2.password, node1.dmsDID)
 		return err != nil
 	}, 120*time.Second, 10*time.Second, "Expected request to fail after revoking all tokens")
 }
@@ -316,9 +320,9 @@ func (suite *TestSuite) RevokeTokenTests() {
 // Note: While adding new test cases, we need to ensure we use the suite's Require() method instead of using the direct package level functions.
 // This is because the suite's Require() method will ensure that the test case is marked as failed and the suite's TearDownSuite() method is called.
 // If we use the package level functions, the test case will be marked as PASS but the tests will ultimately FAIL since the suite can't track it.
-func (suite *TestSuite) Test_RunSuite() {
+func (s *TestSuite) Test_RunSuite() {
 	gin.SetMode(gin.DebugMode)
 	os.Setenv("GOLOG_LOG_LEVEL", "debug")
-	suite.setupTestNetwork()
-	suite.runner(suite)
+	s.setupTestNetwork()
+	s.runner(s)
 }

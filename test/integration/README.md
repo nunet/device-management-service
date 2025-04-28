@@ -2,7 +2,9 @@
 
 ## Introduction
 
-This directory contains the test suite for the DMS. The tests in this directory verify the functionality of the DMS by creating a network of nodes and testing their interactions. These tests ensure that the core features of the DMS are working correctly in a multi-node environment.
+This directory contains the test suite for the DMS.
+The tests in this directory verify the functionality of the DMS by creating a network of nodes and testing their interactions
+. These tests ensure that the core features of the DMS are working correctly in a multi-node environment.
 
 ## Prerequisites
 
@@ -14,7 +16,7 @@ Before running the tests, ensure you have the following prerequisites installed:
 
 ### GlusterFS Setup
 
-Ensure GlusterFS is installed and pull the container. 
+Ensure GlusterFS is installed and pull the container.
 
 ```bash
 sudo modprobe fuse
@@ -43,6 +45,7 @@ go test -tags=integration -run TestIntegration/BasicTests
 ```
 
 Available test suites:
+
 - `BasicTests`: Tests basic node communication
 - `DeploymentTests`: Tests deployment functionality
 - `DeploymentWithVolumesTests`: Tests deployment with storage volumes
@@ -85,10 +88,11 @@ To add a test for a new feature in parallel, here's the suggested workflow:
    }
    ```
 3. Add your test to the `TestIntegration` function in `integration_test.go`:
+
    ```go
    t.Run("NewFeatureTests", func(t *testing.T) {
        t.Parallel()
-       
+
        newFeatureTests := &TestSuite{
            numNodes:      3,  // Adjust as needed
            Name:          "new_feature_tests",
@@ -139,3 +143,40 @@ Tests should properly clean up resources:
 - Use `suite.Require().Eventually()` for operations that may take time to complete
 - Set appropriate timeouts based on operation complexity
 - Include descriptive timeout messages
+
+### 7. Assertions
+
+What and how you should assert deployments:
+
+#### Before deploying:
+
+1. (CP): resources
+   1. free resources == onboarded resources
+   2. allocated resources == 0
+2. (CP): allocations/list is empty
+
+#### After deploying:
+
+> Note: it mostly does not apply for transient allocations as
+> we usually use executions of short periods..
+> to assert the following with task allocations,
+> we need to use transients allocations that run for more than 2 minutes
+
+1. (CP) assert allocation running (cmd: /dms/node/allocations)
+   1. (CP) assert container running if possible
+2. (CP) assert resources
+   1. allocated resources increased
+   2. free resources decreased
+3. (Orchestrator) assert deployment status depending on allocations type
+4. (Orchestrator) assert manifest
+5. (CP) assert conn between containers is working for tests with multiple allocations!!!
+
+#### After completed (if only tasks) or shutting it down:
+
+1. (CP) assert allocation NOT listed (cmd: /dms/node/allocations)
+   1. (CP) assert container not running if possible
+2. (CP) assert resources
+   1. allocated resources decreased
+   2. free resources increased
+3. (Orchestrator) assert deployment status depending on allocations types
+4. (CP) assert subnet deleted (including tunneling iface)
