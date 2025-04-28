@@ -15,13 +15,18 @@ import (
 	"time"
 )
 
+const (
+	HealthCheckTypeCommand = "command"
+	HealthCheckTypeHTTP    = "http"
+)
+
 type HealthCheckResponse struct {
-	Type  string `json:"type"`  // type of response
-	Value string `json:"value"` // value of response
+	Type  string `json:"type"` // TODO: examples of types
+	Value string `json:"value"`
 }
 
 type HealthCheckManifest struct {
-	Type     string              `json:"type"`     // type of healthcheck
+	Type     string              `json:"type"`     // type of healthcheck (command, http)
 	Exec     []string            `json:"exec"`     // command to execute
 	Endpoint string              `json:"endpoint"` // endpoint to check
 	Response HealthCheckResponse `json:"response"` // expected response
@@ -30,13 +35,13 @@ type HealthCheckManifest struct {
 
 func NewHealthCheck(mf HealthCheckManifest, fn func(HealthCheckManifest) error) (func() error, error) {
 	switch mf.Type {
-	case "command":
+	case HealthCheckTypeCommand:
 		healthcheck := func() error {
 			return fn(mf)
 		}
 
 		return healthcheck, nil
-	case "http":
+	case HealthCheckTypeHTTP:
 		healthcheck := func() error {
 			res, err := http.Get(mf.Endpoint)
 			if err != nil {
