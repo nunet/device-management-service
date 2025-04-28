@@ -22,12 +22,12 @@ func TestUpdateField(t *testing.T) {
 	// Test case: Updating a field in a struct (not a pointer)
 	modified1, err := UpdateField(types.FreeResources{Resources: types.Resources{RAM: types.RAM{Size: 1}}}, "RAM", types.RAM{Size: 2})
 	assert.NoError(t, err)
-	assert.Equal(t, float64(2), modified1.RAM.Size)
+	assert.Equal(t, uint64(2), modified1.RAM.Size)
 
 	// Test case: Updating a field in a struct (using a pointer)
 	modified2, err := UpdateField(&types.FreeResources{Resources: types.Resources{RAM: types.RAM{Size: 1}}}, "RAM", types.RAM{Size: 2})
 	assert.NoError(t, err)
-	assert.Equal(t, float64(2), modified2.RAM.Size)
+	assert.Equal(t, uint64(2), modified2.RAM.Size)
 
 	// Test case: Attempting to update a non-existent field results in an error
 	_, err = UpdateField(types.FreeResources{Resources: types.Resources{RAM: types.RAM{Size: 1}}}, "WRAM", types.RAM{Size: 2})

@@ -165,7 +165,7 @@ func (n *nvidiaGPUConnector) GetGPUs() (types.GPUs, error) {
 			UUID:       uuid,
 			PCIAddress: pciAddress,
 			Model:      name,
-			VRAM:       float64(memory.Total),
+			VRAM:       memory.Total,
 			Vendor:     types.GPUVendorNvidia,
 		}
 		gpus = append(gpus, gpu)
@@ -175,7 +175,7 @@ func (n *nvidiaGPUConnector) GetGPUs() (types.GPUs, error) {
 }
 
 // GetGPUUsage returns the GPU usage for the device with the given UUID.
-func (n *nvidiaGPUConnector) GetGPUUsage(uuid string) (float64, error) {
+func (n *nvidiaGPUConnector) GetGPUUsage(uuid string) (uint64, error) {
 	deviceIndex, ok := n.deviceCacheIndexMap[uuid]
 	if !ok {
 		return 0, fmt.Errorf("nvidia device with UUID %s not found", uuid)
@@ -187,7 +187,7 @@ func (n *nvidiaGPUConnector) GetGPUUsage(uuid string) (float64, error) {
 		return 0, err
 	}
 
-	return float64(memory.Used), nil
+	return memory.Used, nil
 }
 
 // Shutdown shuts down the NVIDIA Management Library.

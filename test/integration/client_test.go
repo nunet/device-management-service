@@ -141,10 +141,28 @@ func (c *Client) onboard(t *testing.T, context, passphrase string) {
 	hw := hardware.NewHardwareManager()
 	mr, err := hw.GetMachineResources()
 	require.NoError(t, err)
-	args := []string{"actor", "cmd", "--context", context, "/dms/node/onboarding/onboard", "--no-gpu", "--ram", fmt.Sprintf("%.2f", types.ConvertBytesToGB(mr.Resources.RAM.Size*0.2)), "--cpu", fmt.Sprintf("%2f", math.Ceil(float64(mr.Resources.CPU.Cores*0.2))), "--disk", "100"}
+	// onboard with 40% of available ram and cpu
+	ram := types.ConvertBytesToGB(uint64(float64(mr.Resources.RAM.Size) * 0.4))
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/onboarding/onboard", "--no-gpu", "--ram", fmt.Sprintf("%d GB", ram), "--cpu", fmt.Sprintf("%.2f", math.Ceil(float64(mr.Resources.CPU.Cores*0.4))), "--disk", "10GiB"}
 	root.SetArgs(args)
 	err = root.Execute()
 	require.NoError(t, err)
+}
+
+func (c *Client) getOnboarded(t *testing.T, context, passphrase string) string {
+	root := c.newCommandCtx()
+
+	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	require.NoError(t, err)
+
+	onboardedArgs := []string{"actor", "cmd", "--context", context, "/dms/node/resources/onboarded"}
+	root.SetArgs(onboardedArgs)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	require.NoError(t, err)
+	return buf.String()
 }
 
 func (c *Client) broadcast(t *testing.T, context, passphrase string) string {

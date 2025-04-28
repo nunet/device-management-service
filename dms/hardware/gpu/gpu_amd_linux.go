@@ -140,7 +140,7 @@ func (g *gpuManager) GetGPUs() (types.GPUs, error) {
 }
 
 // getGPUUsage a helper function to get the GPU usage based on the vendor
-func (g *gpuManager) getGPUUsage(uuid string, vendor types.GPUVendor) (float64, error) {
+func (g *gpuManager) getGPUUsage(uuid string, vendor types.GPUVendor) (uint64, error) {
 	switch vendor {
 	case types.GPUVendorNvidia:
 		usage, err := g.connectors.nvidia.GetGPUUsage(uuid)

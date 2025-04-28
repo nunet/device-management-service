@@ -19,7 +19,7 @@ func TestGetRAM(t *testing.T) {
 
 	ram, err := GetRAM()
 	require.NoError(t, err)
-	require.Greater(t, ram.Size, float64(0))
+	require.Greater(t, ram.Size, uint64(0))
 }
 
 func TestGetRAMUsage(t *testing.T) {
@@ -27,5 +27,5 @@ func TestGetRAMUsage(t *testing.T) {
 
 	ram, err := GetRAMUsage()
 	require.NoError(t, err)
-	require.Greater(t, ram.Size, float64(0))
+	require.Greater(t, ram.Size, uint64(0))
 }
