@@ -152,9 +152,7 @@ func TestGeoLocator(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewGeoLocator() error = %v", err)
 		}
-		if geo == nil {
-			t.Fatalf("NewGeoLocator() returned nil")
-		}
+
 		if len(geo.coordinates) == 0 {
 			t.Fatalf("NewGeoLocator() returned empty coordinates map")
 		}

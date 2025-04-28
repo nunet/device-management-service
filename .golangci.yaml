@@ -1,27 +1,44 @@
-run:
-  timeout: 5m
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    - misspell
-    - govet
-    - revive
-    - gofumpt
-    - unparam
-    - goconst
-    - prealloc
-    - stylecheck
-    - unconvert
     - errcheck
-    - ineffassign
-    - unused
-    - tparallel
-    - whitespace
-    - staticcheck
-    - gosimple
+    - goconst
     - gocritic
+    - govet
+    - ineffassign
+    - misspell
     - nolintlint
-  gosec:
-    excludes:
-    - G115
+    - prealloc
+    - revive
+    - staticcheck
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      - linters:
+        - staticcheck
+        text: "QF1008:"
+
+formatters:
+  enable:
+    - gofumpt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
