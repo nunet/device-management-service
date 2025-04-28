@@ -503,7 +503,7 @@ func (h *HostKeyManager) saveRecord(hostname string, key string) error {
 	}
 	defer f.Close()
 
-	_, err = f.WriteString(fmt.Sprintf("%s %s\n", hostname, key))
+	_, err = fmt.Fprintf(f, "%s %s\n", hostname, key)
 	if err != nil {
 		return fmt.Errorf("unable to write known_hosts file: %w", err)
 	}
