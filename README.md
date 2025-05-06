@@ -46,7 +46,6 @@
     - [REST Endpoints](#rest-endpoints)
   - [Configuration](#configuration)
     - [Config file](#config-file)
-      - [Run Two DMS Instances Side by Side](#run-two-dms-instances-side-by-side)
   - [Tests](#tests)
   - [Specification](#specification)
     - [Description](#description)
@@ -109,40 +108,44 @@ We currently support Linux and MacOS (Darwin).
 - [git-lfs](https://git-lfs.com/) (for downloading large files)
 
 ##### macOS (Apple Silicon - M1/M2) only:
+
 - [Homebrew installed] (/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")
 - Recommended: iTerm2 for improved CLI experience.
 
 #### MacOS (ARM64 architecture)
 
 Before you begin, ensure that you have the following installed:
-    1. Homebrew: to manage dependencies easily
-       If you don't have Homebrew installed, run:
+
+1. Homebrew: to manage dependencies easily.
+If you don't have Homebrew installed, run:
+
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-    2. Go (Golang): The Go programming language, which is used to build the project.
-       Verify if Go is installed: 
+2. Go (Golang): The Go programming language, which is used to build the project.
+Verify if Go is installed:
 
 ```bash
 go version
 ```
 
-       Install if needed
+Install if needed
 
 ```bash
 brew install go
 ```
 
-    3. Git: To clone the GitLab repository.
-    4. Make: Used for automating the build process.
-       Verify if make is installed
+3. Git: To clone the GitLab repository.
+
+4. Make: Used for automating the build process.
+Verify if make is installed
 
 ```bash
 make --version
 ```
 
-       Install if needed
+Install if needed
 
 ```bash
 xcode-select --install
@@ -151,6 +154,7 @@ xcode-select --install
 #### 🐧 Linux Installation
 
 Install dependencies:
+
 ```shell
 sudo apt update && sudo apt install -y iproute2 build-essential libsystemd-dev gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 ent-service.git
@@ -195,6 +199,7 @@ You can add the compiled binary to a directory in your `$PATH`. See the [Usage](
 
 The following applies _only_ for **compute providers using Linux**. If you're running a client/orchestrator, you do _not_ need to set
 any additional permissions except if you specify for the orchestrator to join the subnet in the ensemble config. If the ensemble contains the following config
+
 ```yml
 subnet:
   join: true
@@ -312,6 +317,7 @@ file builds/dms_darwin_arm64
 ```
 
 ###### Output should include: Mach-O 64-bit executable arm64
+
 Run the CLI:
 
 ```shell
@@ -552,7 +558,6 @@ Once both identities are created, you'll need to set up capabilities. Specifical
    5. Delegate to your DMS the ability to make public invocations using your token.
    6. Add the delegation token as a _provide anchor_ in your DMS.
 
-
 For more on capabilities and behaviors, see the [DMS Capabilities and Behaviors](dms/behaviors/README.md) document. Alternatively, if you installed the DMS using one of the debian packages, there is a man page with descriptions of the capabilities and behaviors you can access with `man nunet`.
 
 ###### Add a root anchor for your DMS context
@@ -680,8 +685,7 @@ and anchoring the token on the require anchor of the orchestrator without having
 the token. This is mainly because this release intends to provide a fine grained control
 to orchestrators on who they allow to run their jobs.
 
-
- Learn how deployments work by following our [Deployments Guide](docs/deployments/README.md).
+Learn how deployments work by following our [Deployments Guide](docs/deployments/README.md).
 
 ### REST Endpoints
 
@@ -700,37 +704,6 @@ The DMS searches for a configuration file `dms_config.json` in the following loc
 The configuration file must be in JSON format and it does **not** support comments. It's recommended that only the parameters that need to be changed are included in the config file so that other parameters can retain their default values.
 
 It's possible to manage configuration using the `config` subcommand as well. `nunet config set` allows setting each parameter individually and `nunet config edit` will open the config file in the default editor from `$EDITOR`
-
-#### Run Two DMS Instances Side by Side
-
-As a developer, you might find yourself needing to run two DMS instances, one acting as an SP (Service Provider) and the other as a CP (Compute Provider).
-
-**Step 1**:
-
-Clone the repository to two different directories. You might want to use descriptive directory names to avoid confusion.
-
-**Step 2**:
-
-You need to modify some configurations so that both DMS instances do not end up trying to listen on the same port and use the same path for storage. For example, ports on `p2p.listen_address`, `rest.port`, `general.user_dir` etc... neeed to be different for two instances on the same host.
-
-The `dms_config.json` file can be used to modify these settings. Here is a sample config file that can be modified to your preference:
-
-```json
-{
-  "p2p": {
-    "listen_address": ["/ip4/0.0.0.0/tcp/9100", "/ip4/0.0.0.0/udp/9100/quic-v1"]
-  },
-  "general": {
-    "user_dir": "/home/user/.config/nunet/dms/",
-    "debug": true
-  },
-  "rest": {
-    "port": 10000
-  }
-}
-```
-
-Prefer to use absolute paths and have a look at the [config structure](https://gitlab.com/nunet/device-management-service/-/blob/main/internal/config/config.go) for more info.
 
 ## Tests
 
@@ -812,4 +785,3 @@ Find additional data models within specific packages.
 ### References
 
 In addition to the relevant links added in the sections above, you can also find useful links here: [NuNet Links](https://www.nunet.io/links).
-
