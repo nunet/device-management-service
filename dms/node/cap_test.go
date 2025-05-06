@@ -1,15 +1,13 @@
 package node
 
 import (
-	"os"
 	"testing"
-
-	"gitlab.com/nunet/device-management-service/lib/did"
-
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
 func TestCap(t *testing.T) {
@@ -88,17 +86,16 @@ func TestCap(t *testing.T) {
 		contextKey := "context"
 		passphrase := "passphrase"
 
-		err := os.Setenv("DMS_PASSPHRASE", passphrase)
-		require.NoError(t, err)
 		createKey(t, afs.Fs, basePath, contextKey, passphrase)
 
-		trustCtx, privKey, err := CreateTrustContextFromKeyStore(afs, contextKey, basePath)
+		trustCtx, privKey, err := CreateTrustContextFromKeyStore(
+			afs, contextKey, passphrase, basePath)
 		require.NoError(t, err)
 		require.NotNil(t, trustCtx)
 		require.NotNil(t, privKey)
 
 		// Get the trust context
-		savedTrustCtx, err := GetTrustContext(afs, contextKey, basePath)
+		savedTrustCtx, err := GetTrustContext(afs, contextKey, passphrase, basePath)
 		require.NoError(t, err)
 		require.NotNil(t, savedTrustCtx)
 	})
@@ -111,11 +108,10 @@ func TestCap(t *testing.T) {
 		contextKey := "context"
 		passphrase := "passphrase"
 
-		err := os.Setenv("DMS_PASSPHRASE", passphrase)
-		require.NoError(t, err)
 		createKey(t, afs.Fs, basePath, contextKey, passphrase)
 
-		trustCtx, privKey, err := CreateTrustContextFromKeyStore(afs, contextKey, basePath)
+		trustCtx, privKey, err := CreateTrustContextFromKeyStore(
+			afs, contextKey, passphrase, basePath)
 		require.NoError(t, err)
 		require.NotNil(t, trustCtx)
 		require.NotNil(t, privKey)

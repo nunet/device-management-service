@@ -18,13 +18,18 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/env"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
 	DefaultUserContextName = "user"
 )
 
-func NewSecurityContext(fs afero.Afero, context string, cfg *config.Config) (actor.SecurityContext, error) {
+func NewSecurityContext(
+	fs afero.Afero, env env.EnvironmentProvider,
+	context string, cfg *config.Config,
+) (actor.SecurityContext, error) {
 	if context == "" {
 		context = DefaultUserContextName
 	}
@@ -35,8 +40,13 @@ func NewSecurityContext(fs afero.Afero, context string, cfg *config.Config) (act
 		return nil, fmt.Errorf("generate ephemeral key pair: %w", err)
 	}
 
+	passphrase, err := GetDMSPassphrase(env, false)
+	if err != nil {
+		return nil, fmt.Errorf("get dms passphrase: %w", err)
+	}
+
 	// Create trust context
-	trustCtx, err := node.GetTrustContext(fs, context, cfg.UserDir)
+	trustCtx, err := node.GetTrustContext(fs, context, passphrase, cfg.UserDir)
 	if err != nil {
 		return nil, fmt.Errorf("create trust context: %w", err)
 	}
@@ -56,4 +66,19 @@ func NewClient(cfg *config.Config, sctx actor.SecurityContext) (*client.Client, 
 		APIPrefix: "/api",
 		Version:   "v1",
 	}, sctx)
+}
+
+func GetDMSPassphrase(
+	env env.EnvironmentProvider, withConfirm bool,
+) (string, error) {
+	var err error
+	passphrase := env.Getenv(node.DMSPassphraseEnv)
+	if passphrase == "" {
+		passphrase, err = utils.PromptForPassphrase(withConfirm)
+		if err != nil {
+			return "", fmt.Errorf("failed to get passphrase: %w", err)
+		}
+	}
+
+	return passphrase, nil
 }

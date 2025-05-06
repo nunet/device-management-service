@@ -9,6 +9,7 @@
 package did
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -50,12 +51,14 @@ func FromString(s string) (DID, error) {
 	if s != "" {
 		parts := strings.Split(s, ":")
 		if len(parts) != 3 {
-			return DID{}, ErrInvalidDID
+			return DID{},
+				fmt.Errorf("%w: %s", ErrInvalidDID, s)
 		}
 
 		for _, part := range parts {
 			if part == "" {
-				return DID{}, ErrInvalidDID
+				return DID{},
+					fmt.Errorf("%w: %s", ErrInvalidDID, s)
 			}
 		}
 

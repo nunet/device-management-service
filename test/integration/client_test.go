@@ -29,6 +29,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -48,13 +49,13 @@ func newClient(t *testing.T, cfg *config.Config) *Client {
 }
 
 func (c *Client) newCommandCtx() *cobra.Command {
-	return cmd.NewRootCMD(c.afero, c.cfg)
+	return cmd.NewRootCMD(c.afero, env.NewOSEnvironment(), c.cfg)
 }
 
 func (c *Client) newKey(t *testing.T, identity, passphrase string) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 	args := []string{"key", "new", identity}
 	root.SetArgs(args)
@@ -63,7 +64,7 @@ func (c *Client) newKey(t *testing.T, identity, passphrase string) {
 }
 
 func (c *Client) getDID(t *testing.T, context, passphrase string) string {
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	did, err := extractURIFromFile(filepath.Join(c.cfg.General.UserDir, "cap", context))
@@ -74,7 +75,7 @@ func (c *Client) getDID(t *testing.T, context, passphrase string) string {
 func (c *Client) newCap(t *testing.T, name, passphrase string) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 	args := []string{"cap", "new", name}
 	root.SetArgs(args)
@@ -85,7 +86,7 @@ func (c *Client) newCap(t *testing.T, name, passphrase string) {
 func (c *Client) addRootAnchor(t *testing.T, context, rootDID, passphrase string) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 	args := []string{"cap", "anchor", "--context", context, "--root", rootDID}
 	root.SetArgs(args)
@@ -96,7 +97,7 @@ func (c *Client) addRootAnchor(t *testing.T, context, rootDID, passphrase string
 func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
 	root.SetArgs(args)
@@ -111,7 +112,7 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
 	root.SetArgs(args)
@@ -126,7 +127,7 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 func (c *Client) anchor(t *testing.T, token, cxt, anchor, passphrase string) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"cap", "anchor", "--context", cxt, "--" + anchor, token}
@@ -138,7 +139,7 @@ func (c *Client) anchor(t *testing.T, token, cxt, anchor, passphrase string) {
 func (c *Client) onboard(t *testing.T, context, passphrase string) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	hw := hardware.NewHardwareManager()
@@ -155,7 +156,7 @@ func (c *Client) onboard(t *testing.T, context, passphrase string) {
 func (c *Client) getOnboarded(t *testing.T, context, passphrase string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	onboardedArgs := []string{"actor", "cmd", "--context", context, "/dms/node/resources/onboarded"}
@@ -171,7 +172,7 @@ func (c *Client) getOnboarded(t *testing.T, context, passphrase string) string {
 func (c *Client) broadcast(t *testing.T, context, passphrase string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/broadcast/hello", "--timeout", "5s"}
@@ -187,7 +188,7 @@ func (c *Client) broadcast(t *testing.T, context, passphrase string) string {
 func (c *Client) hello(t *testing.T, context, passphrase, dest string) (string, error) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/public/hello", "--timeout", "5s", "--dest", dest}
@@ -203,7 +204,7 @@ func (c *Client) hello(t *testing.T, context, passphrase, dest string) (string, 
 func (c *Client) createVolume(t *testing.T, volName, pemFilePath, outputDir, context, passphrase, dest string) (string, error) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/volume/create", "--name", volName, "--client-pem-file", pemFilePath, "--ca-output-dir", outputDir, "--timeout", "5s", "--dest", dest}
@@ -219,7 +220,7 @@ func (c *Client) createVolume(t *testing.T, volName, pemFilePath, outputDir, con
 func (c *Client) startVolume(t *testing.T, volName, context, passphrase, dest string) (string, error) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/volume/start", "--name", volName, "--timeout", "5s", "--dest", dest}
@@ -235,7 +236,7 @@ func (c *Client) startVolume(t *testing.T, volName, context, passphrase, dest st
 func (c *Client) deploy(t *testing.T, context, passphrase, specPath string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/new", "--spec-file", specPath, "--timeout", "2m"}
@@ -251,7 +252,7 @@ func (c *Client) deploy(t *testing.T, context, passphrase, specPath string) stri
 func (c *Client) shutdownDeployment(t *testing.T, context, passphrase, deploymentID string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/shutdown", "--id", deploymentID}
@@ -267,7 +268,7 @@ func (c *Client) shutdownDeployment(t *testing.T, context, passphrase, deploymen
 func (c *Client) revokeToken(t *testing.T, context, passphrase, token string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"cap", "revoke", "--context", context, token}
@@ -284,7 +285,7 @@ func (c *Client) revokeToken(t *testing.T, context, passphrase, token string) st
 func (c *Client) anchorBehaviour(t *testing.T, context, passphrase, token string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/cap/anchor", "--revoke", "--data", strings.TrimSpace(token)}
@@ -301,7 +302,7 @@ func (c *Client) anchorBehaviour(t *testing.T, context, passphrase, token string
 func (c *Client) deploymentStatus(t *testing.T, context, passphrase, deploymentID string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/status", "--id", deploymentID}
@@ -321,7 +322,7 @@ func (c *Client) deploymentManifest(
 
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	if err != nil {
 		return jobtypes.EnsembleManifest{}, fmt.Errorf("failed to set env: %w", err)
 	}
@@ -359,7 +360,7 @@ func (c *Client) allocationsList(context, passphrase string) ([]jobs.AllocationI
 
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	if err != nil {
 		return []jobs.AllocationInfo{},
 			fmt.Errorf("failed to set env: %w", err)
@@ -394,7 +395,7 @@ func (c *Client) allocationsList(context, passphrase string) ([]jobs.AllocationI
 func (c *Client) connect(t *testing.T, context, passphrase, hostID string) string {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/peers/connect", "--address", "/p2p/" + hostID}
@@ -410,7 +411,7 @@ func (c *Client) connect(t *testing.T, context, passphrase, hostID string) strin
 func (c *Client) self(t *testing.T, context, passphrase string) (types.NetworkStats, error) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/peers/self"}
@@ -431,7 +432,7 @@ func (c *Client) self(t *testing.T, context, passphrase string) (types.NetworkSt
 func (c *Client) peers(t *testing.T, context, passphrase string) (node.PeersListResponse, error) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/peers/list"}
@@ -454,7 +455,7 @@ func (c *Client) getResources(
 ) (types.Resources, error) {
 	root := c.newCommandCtx()
 
-	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("failed to set env: %w", err)
 	}

@@ -10,7 +10,6 @@ package cap
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/afero"
@@ -21,11 +20,15 @@ import (
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
-func newNewCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newNewCmd(
+	afs afero.Afero, env env.EnvironmentProvider,
+	cfg *config.Config,
+) *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
@@ -61,7 +64,7 @@ Example:
 					return fmt.Errorf("failed to open keystore: %w", err)
 				}
 
-				passphrase := os.Getenv("DMS_PASSPHRASE")
+				passphrase := env.Getenv(node.DMSPassphraseEnv)
 				if ks.Exists(context) {
 					fmt.Fprintf(cmd.OutOrStdout(), "Using identity at %s/%s.json...\n", keyStoreDir, context)
 					if passphrase == "" {

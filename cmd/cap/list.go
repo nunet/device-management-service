@@ -15,11 +15,13 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
-func newListCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newListCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	var context string
 
 	cmd := &cobra.Command{
@@ -29,7 +31,12 @@ func newListCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
 
 It outputs DIDs and capability tokens set for root, provide, require and revoke anchors.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			trustCtx, err := node.GetTrustContext(afs, context, cfg.UserDir)
+			passphrase, err := utils.GetDMSPassphrase(env, false)
+			if err != nil {
+				return fmt.Errorf("get dms passphrase: %w", err)
+			}
+
+			trustCtx, err := node.GetTrustContext(afs, context, passphrase, cfg.UserDir)
 			if err != nil {
 				return fmt.Errorf("get trust context: %w", err)
 			}

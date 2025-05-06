@@ -31,6 +31,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -47,7 +48,7 @@ type DeploymentNetwork struct {
 	Allocations []Allocation
 }
 
-func newNetworkCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newNetworkCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	gpuCmd := &cobra.Command{
 		Use:   "network <cmd>",
 		Short: "Network Utility Tool",
@@ -58,14 +59,17 @@ func newNetworkCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
 `,
 	}
 
-	gpuCmd.AddCommand(newNetworkListCommand(afs, cfg))
-	gpuCmd.AddCommand(newNetworkShowCommand(afs, cfg))
-	gpuCmd.AddCommand(newNetworkAttachCommand(afs, cfg))
+	gpuCmd.AddCommand(newNetworkListCommand(afs, env, cfg))
+	gpuCmd.AddCommand(newNetworkShowCommand(afs, env, cfg))
+	gpuCmd.AddCommand(newNetworkAttachCommand(afs, env, cfg))
 
 	return gpuCmd
 }
 
-func newNetworkListCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newNetworkListCommand(
+	afs afero.Afero, env env.EnvironmentProvider,
+	cfg *config.Config,
+) *cobra.Command {
 	var contextName string
 	var verbose bool
 
@@ -73,7 +77,7 @@ func newNetworkListCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
 		Use:   "ls",
 		Short: "List all Networks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(afs, contextName, cfg)
+			sctx, err := utils.NewSecurityContext(afs, env, contextName, cfg)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
@@ -128,7 +132,7 @@ func newNetworkListCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	return cmd
 }
 
-func newNetworkShowCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newNetworkShowCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	var contextName string
 	var id string
 
@@ -136,7 +140,7 @@ func newNetworkShowCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
 		Use:   "show",
 		Short: "Show details of a specific Network",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(afs, contextName, cfg)
+			sctx, err := utils.NewSecurityContext(afs, env, contextName, cfg)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
@@ -179,7 +183,7 @@ func newNetworkShowCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	return cmd
 }
 
-func newNetworkAttachCommand(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newNetworkAttachCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	var (
 		fContextName, fID, fAlloc string
 		fShell, fForward          bool
@@ -192,7 +196,7 @@ func newNetworkAttachCommand(afs afero.Afero, cfg *config.Config) *cobra.Command
 		Use:   "attach",
 		Short: "Attach to a specific Network",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(afs, fContextName, cfg)
+			sctx, err := utils.NewSecurityContext(afs, env, fContextName, cfg)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}

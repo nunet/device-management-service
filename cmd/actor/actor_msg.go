@@ -19,9 +19,10 @@ import (
 	"gitlab.com/nunet/device-management-service/client"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
-func newActorMsgCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newActorMsgCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	fnDest := "dest"
 	fnBroadcast := "broadcast"
 	fnTimeout := "timeout"
@@ -52,7 +53,7 @@ Example:
 			payload := args[1]
 
 			// Create security context first
-			sctx, err := utils.NewSecurityContext(afs, contextName, cfg)
+			sctx, err := utils.NewSecurityContext(afs, env, contextName, cfg)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}

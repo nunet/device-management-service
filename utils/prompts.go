@@ -27,6 +27,8 @@ const (
 	confirmPassphrasePrompt = "Please confirm your passphrase"
 )
 
+var ErrOperationCancelled = errors.New("operation cancelled by user")
+
 // PromptReonboard is a wrapper of utils.PromptYesNo with custom prompt that return error if user declines reonboard
 func PromptReonboard(r io.Reader, w io.Writer) error {
 	confirmed, err := PromptYesNo(r, w, reonboardPrompt)

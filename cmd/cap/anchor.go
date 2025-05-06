@@ -15,13 +15,15 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newAnchorCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newAnchorCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	var (
 		context string
 		root    string
@@ -63,7 +65,12 @@ Usage examples:
 
 Note: The --context flag is required to specify the capability context.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			trustCtx, err := node.GetTrustContext(afs, context, cfg.UserDir)
+			passphrase, err := utils.GetDMSPassphrase(env, false)
+			if err != nil {
+				return fmt.Errorf("get dms passphrase: %w", err)
+			}
+
+			trustCtx, err := node.GetTrustContext(afs, context, passphrase, cfg.UserDir)
 			if err != nil {
 				return fmt.Errorf("get trust context: %w", err)
 			}
