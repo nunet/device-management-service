@@ -11,16 +11,16 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
-func newConfigCmd(fs afero.Fs, cfg *config.Config) *cobra.Command {
+func newConfigCmd(fs afero.Fs, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	if fs == nil {
 		cobra.CheckErr("Fs is nil")
 	}
@@ -37,7 +37,7 @@ Search for the configuration file is done in the following locations and order:
 	}
 	cmd.AddCommand(newConfigGetCmd(fs, cfg))
 	cmd.AddCommand(newConfigSetCmd(fs))
-	cmd.AddCommand(newConfigEditCmd(fs))
+	cmd.AddCommand(newConfigEditCmd(fs, env))
 	return cmd
 }
 
@@ -116,7 +116,7 @@ Example:
 	return cmd
 }
 
-func newConfigEditCmd(fs afero.Fs) *cobra.Command {
+func newConfigEditCmd(fs afero.Fs, env env.EnvironmentProvider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "edit",
 		Short: "Edit configuration",
@@ -126,7 +126,7 @@ This command search the configuration file and open it with the default text edi
 It reads the $EDITOR environment variable and it fails if it's not set`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			editor := os.Getenv("EDITOR")
+			editor := env.Getenv("EDITOR")
 			if editor == "" {
 				return fmt.Errorf("$EDITOR not set")
 			}

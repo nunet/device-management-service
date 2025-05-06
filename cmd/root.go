@@ -15,10 +15,14 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/actor"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
 // NewRootCMD returns the cmds
-func NewRootCMD(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func NewRootCMD(
+	afs afero.Afero, env env.EnvironmentProvider,
+	cfg *config.Config,
+) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "nunet",
 		Short: "NuNet Device Management Service",
@@ -34,19 +38,19 @@ func NewRootCMD(afs afero.Afero, cfg *config.Config) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(newRunCmd(cfg))
-	cmd.AddCommand(newKeyCmd(afs, cfg))
-	cmd.AddCommand(cap.NewCapCmd(afs, cfg))
-	cmd.AddCommand(actor.NewActorCmd(afs, cfg))
-	cmd.AddCommand(newConfigCmd(afs.Fs, cfg))
+	cmd.AddCommand(newRunCmd(env, cfg))
+	cmd.AddCommand(newKeyCmd(afs, env, cfg))
+	cmd.AddCommand(cap.NewCapCmd(afs, env, cfg))
+	cmd.AddCommand(actor.NewActorCmd(afs, env, cfg))
+	cmd.AddCommand(newConfigCmd(afs.Fs, env, cfg))
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
 	cmd.AddCommand(newGPUCommand())
-	cmd.AddCommand(newNetworkCommand(afs, cfg))
+	cmd.AddCommand(newNetworkCommand(afs, env, cfg))
 	return cmd
 }
 
 func Execute(cfg *config.Config) {
 	afs := afero.Afero{Fs: afero.NewOsFs()}
-	cobra.CheckErr(NewRootCMD(afs, cfg).Execute())
+	cobra.CheckErr(NewRootCMD(afs, env.NewOSEnvironment(), cfg).Execute())
 }

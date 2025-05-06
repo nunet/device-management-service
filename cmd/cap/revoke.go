@@ -15,12 +15,14 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newRevokeCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func newRevokeCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
 	var context string
 
 	cmd := &cobra.Command{
@@ -33,7 +35,12 @@ Example:
 
 The above command revokes a token`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			trustCtx, err := node.GetTrustContext(afs, context, cfg.UserDir)
+			passphrase, err := utils.GetDMSPassphrase(env, false)
+			if err != nil {
+				return fmt.Errorf("get dms passphrase: %w", err)
+			}
+
+			trustCtx, err := node.GetTrustContext(afs, context, passphrase, cfg.UserDir)
 			if err != nil {
 				return fmt.Errorf("get trust context: %w", err)
 			}

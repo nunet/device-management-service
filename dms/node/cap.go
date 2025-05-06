@@ -21,7 +21,6 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
@@ -29,6 +28,7 @@ const (
 	UserContextName    = "user"
 	KeystoreDir        = "key/"
 	CapstoreDir        = "cap/"
+	DMSPassphraseEnv   = "DMS_PASSPHRASE"
 )
 
 const ledger = "ledger"
@@ -48,20 +48,15 @@ func GetContextKey(context string) string {
 	return parts[1]
 }
 
-func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, keyStorePath string) (did.TrustContext, crypto.PrivKey, error) {
+func CreateTrustContextFromKeyStore(
+	afs afero.Afero, contextKey,
+	passphrase, keyStorePath string,
+) (did.TrustContext, crypto.PrivKey, error) {
 	keyStoreDir := filepath.Join(keyStorePath, KeystoreDir)
 
 	ks, err := keystore.New(afs.Fs, keyStoreDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
-	}
-
-	passphrase := os.Getenv("DMS_PASSPHRASE")
-	if passphrase == "" {
-		passphrase, err = utils.PromptForPassphrase(false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get passphrase: %w", err)
-		}
 	}
 
 	ksPrivKey, err := ks.Get(contextKey, passphrase)
@@ -132,7 +127,9 @@ func SaveCapabilityContext(capCtx ucan.CapabilityContext, capStorePath string) e
 	return nil
 }
 
-func GetTrustContext(fs afero.Afero, context, userDir string) (did.TrustContext, error) {
+func GetTrustContext(
+	fs afero.Afero, context, passphrase, userDir string,
+) (did.TrustContext, error) {
 	if IsLedgerContext(context) {
 		provider, err := did.NewLedgerWalletProvider(0)
 		if err != nil {
@@ -142,6 +139,7 @@ func GetTrustContext(fs afero.Afero, context, userDir string) (did.TrustContext,
 		return did.NewTrustContextWithProvider(provider), nil
 	}
 
-	trustCtx, _, err := CreateTrustContextFromKeyStore(fs, context, userDir)
+	trustCtx, _, err := CreateTrustContextFromKeyStore(
+		fs, context, passphrase, userDir)
 	return trustCtx, err
 }
