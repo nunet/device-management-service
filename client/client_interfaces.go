@@ -132,6 +132,7 @@ type ActorBehaviorsClient interface {
 	ActorHardwareBehaviorClient
 	ActorCapBehaviorClient
 	ActorLoggerBehaviorClient
+	ActorVolumeBehaviorClient
 }
 
 // ActorPublicBehaviorClient provides methods for public behaviors
@@ -272,4 +273,16 @@ type ActorCapBehaviorClient interface {
 type ActorLoggerBehaviorClient interface {
 	// LoggerConfig configures the logger
 	LoggerConfig(ctx context.Context, req node.LoggerConfigRequest, opts ...Option) (node.LoggerConfigResponse, error)
+}
+
+// ActorVolumeBehaviorClient provides methods for volume management
+type ActorVolumeBehaviorClient interface {
+	// CreateVolume creates a new volume
+	CreateVolume(ctx context.Context, req node.CreateVolumeRequest, opts ...Option) (node.CreateVolumeResponse, error)
+
+	// DeleteVolume deletes a volume
+	DeleteVolume(ctx context.Context, req node.DeleteVolumeRequest, opts ...Option) (node.DeleteVolumeResponse, error)
+
+	// StartVolume starts a volume
+	StartVolume(ctx context.Context, req node.StartVolumeRequest, opts ...Option) (node.StartVolumeResponse, error)
 }
