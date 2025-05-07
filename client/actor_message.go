@@ -100,7 +100,7 @@ func (c *Client) SendMessage(ctx context.Context, behavior string, payload any, 
 func (c *Client) SendMessageRaw(ctx context.Context, msg actor.Envelope) (actor.Envelope, error) {
 	// Send message
 	var response actor.Envelope
-	err := c.post(ctx, "/actor/send", nil, msg, &response)
+	err := c.post(ctx, ActorSendMessageEndpoint, nil, msg, &response)
 	if err != nil {
 		return response, fmt.Errorf("send message: %w", err)
 	}
@@ -127,7 +127,7 @@ func (c *Client) InvokeBehavior(ctx context.Context, behavior string, payload an
 func (c *Client) InvokeBehaviorRaw(ctx context.Context, msg actor.Envelope) (actor.Envelope, error) {
 	// Invoke behavior
 	var response actor.Envelope
-	err := c.post(ctx, "/actor/invoke", nil, msg, &response)
+	err := c.post(ctx, ActorInvokeEndpoint, nil, msg, &response)
 	if err != nil {
 		return response, fmt.Errorf("invoke behavior: %w", err)
 	}
@@ -158,7 +158,7 @@ func (c *Client) BroadcastMessage(ctx context.Context, behavior, topic string, p
 func (c *Client) BroadcastMessageRaw(ctx context.Context, msg actor.Envelope) ([]actor.Envelope, error) {
 	// Broadcast message
 	var responses []actor.Envelope
-	err := c.post(ctx, "/actor/broadcast", nil, msg, &responses)
+	err := c.post(ctx, ActorBroadcastEndpoint, nil, msg, &responses)
 	if err != nil {
 		return nil, fmt.Errorf("broadcast message: %w", err)
 	}

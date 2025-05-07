@@ -101,6 +101,15 @@ func NewClientSecurityContext(priv io.Reader, capData io.Reader) (actor.Security
 
 // NewClient creates a new DMS client with the given options
 func NewClient(cfg Config, securityContext actor.SecurityContext) (*Client, error) {
+	// Create transport based on connection type
+	transport, err := createTransport(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transport: %w", err)
+	}
+	return NewClientWithTransport(cfg, transport, securityContext)
+}
+
+func NewClientWithTransport(cfg Config, transport http.RoundTripper, securityContext actor.SecurityContext) (*Client, error) {
 	// Set default values
 	if cfg.ConnectTimeout == 0 {
 		cfg.ConnectTimeout = 10 * time.Second
@@ -110,12 +119,6 @@ func NewClient(cfg Config, securityContext actor.SecurityContext) (*Client, erro
 	}
 	if cfg.Protocol == "" {
 		cfg.Protocol = ConnectionTCP
-	}
-
-	// Create transport based on connection type
-	transport, err := createTransport(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transport: %w", err)
 	}
 
 	// Create HTTP client
