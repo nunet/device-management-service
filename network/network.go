@@ -148,6 +148,8 @@ func NewNetwork(netConfig *types.NetworkConfig, fs afero.Fs) (Network, error) {
 	case types.Libp2pNetwork:
 		ln, err := libp2p.New(&netConfig.Libp2pConfig, fs)
 		return ln, err
+	case types.VirtualNetwork: // in memory network for tests only
+		return NewMemoryNetwork(), nil
 	case types.NATSNetwork:
 		return nil, errors.New("not implemented")
 	default:
