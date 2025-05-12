@@ -46,8 +46,8 @@ func TestProcessEnsembleYaml(t *testing.T) {
 	assert.Empty(t, alloc1.Resources.GPUs)
 	oneGiBInBytes, err := convert.ParseBytesWithDefaultUnit(1, "GiB")
 	require.NoError(t, err)
-	assert.Equal(t, oneGiBInBytes, alloc1.Resources.RAM.Size)
-	assert.Equal(t, oneGiBInBytes, alloc1.Resources.Disk.Size)
+	assert.EqualValues(t, oneGiBInBytes, alloc1.Resources.RAM.Size)
+	assert.EqualValues(t, oneGiBInBytes, alloc1.Resources.Disk.Size)
 	assert.Equal(t, string(jobtypes.ExecutorDocker), alloc1.Execution.Type)
 	assert.Equal(t, "kennethreitz/httpbin", alloc1.Execution.Params["image"])
 
