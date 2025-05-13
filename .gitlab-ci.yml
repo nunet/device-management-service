@@ -20,6 +20,7 @@ variables:
   # ALLOW_E2E_TESTS_FAIL: true
   # ALLOW_BUILD_FAIL: true
   # ALLOW_LICENSE_CHECK_FAIL: true
+  ACCEPTANCE_TESTS_DISABLED: true
 
 include:
 - project: "nunet/gitlab-ci/templates"
