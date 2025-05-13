@@ -23,6 +23,7 @@ type keystoreTestSuite struct {
 }
 
 func newKeystoreTestSuite(t *testing.T) *keystoreTestSuite {
+	t.Helper()
 	fs := afero.NewMemMapFs()
 	keysDir := "/tmp/dms/keystore"
 
@@ -45,9 +46,17 @@ func TestNew(t *testing.T) {
 		expErr  error
 	}{
 		"keysDir empty": {
-			expErr: ErrEmptyKeysDir,
+			fs:      afero.NewMemMapFs(),
+			keysDir: "",
+			expErr:  ErrEmptyKeysDir,
+		},
+		"mkdir error": {
+			fs:      afero.NewReadOnlyFs(afero.NewMemMapFs()),
+			keysDir: "/tmp/dms/keystore",
+			expErr:  ErrCreateKeysDir,
 		},
 		"success": {
+			fs:      afero.NewMemMapFs(),
 			keysDir: "/tmp/dms/keystore",
 		},
 	}
@@ -56,7 +65,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			keystore, err := New(afero.NewMemMapFs(), tt.keysDir)
+			keystore, err := New(tt.fs, tt.keysDir)
 			if tt.expErr != nil {
 				assert.Nil(t, keystore)
 				assert.ErrorIs(t, err, tt.expErr)
@@ -68,15 +77,19 @@ func TestNew(t *testing.T) {
 }
 
 func TestBasicKeyStoreSave(t *testing.T) {
+	t.Parallel()
+
 	suite := newKeystoreTestSuite(t)
 
 	t.Run("invalid passphrase", func(t *testing.T) {
+		t.Parallel()
 		path, err := suite.keystore.Save("id123", []byte("hello world"), "")
 		assert.ErrorIs(t, err, ErrEmptyPassphrase)
 		assert.Empty(t, path)
 	})
 
 	t.Run("valid passphrase", func(t *testing.T) {
+		t.Parallel()
 		path, err := suite.keystore.Save("id123", []byte("hello world"), "1234")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, path)
@@ -88,6 +101,7 @@ func TestBasicKeyStoreSave(t *testing.T) {
 }
 
 func TestBasicKeyStoreGet(t *testing.T) {
+	t.Parallel()
 	suite := newKeystoreTestSuite(t)
 
 	id := "keyid test get"
@@ -99,16 +113,19 @@ func TestBasicKeyStoreGet(t *testing.T) {
 	require.NotEmpty(t, path)
 
 	t.Run("wrong passphrase", func(t *testing.T) {
+		t.Parallel()
 		_, err := suite.keystore.Get(id, "wrong")
 		assert.ErrorIs(t, err, ErrMACMismatch)
 	})
 
 	t.Run("non-existent keyID", func(t *testing.T) {
+		t.Parallel()
 		_, err := suite.keystore.Get("non-existent", passphrase)
 		assert.ErrorIs(t, err, ErrKeyNotFound)
 	})
 
 	t.Run("valid", func(t *testing.T) {
+		t.Parallel()
 		key, err := suite.keystore.Get(id, passphrase)
 		assert.NoError(t, err)
 		assert.NotNil(t, key)
@@ -118,6 +135,7 @@ func TestBasicKeyStoreGet(t *testing.T) {
 }
 
 func TestBasicKeyStoreDelete(t *testing.T) {
+	t.Parallel()
 	suite := newKeystoreTestSuite(t)
 
 	id := "key id test delete"
@@ -129,16 +147,19 @@ func TestBasicKeyStoreDelete(t *testing.T) {
 	require.NotEmpty(t, path)
 
 	t.Run("wrong passphrase", func(t *testing.T) {
+		t.Parallel()
 		err := suite.keystore.Delete(id, "wrong")
 		assert.Error(t, err)
 	})
 
 	t.Run("non-existent keyID", func(t *testing.T) {
+		t.Parallel()
 		err := suite.keystore.Delete("non-existent", passphrase)
 		assert.ErrorIs(t, err, ErrKeyNotFound)
 	})
 
 	t.Run("valid", func(t *testing.T) {
+		t.Parallel()
 		err := suite.keystore.Delete(id, passphrase)
 		assert.NoError(t, err)
 
@@ -149,15 +170,21 @@ func TestBasicKeyStoreDelete(t *testing.T) {
 }
 
 func TestBasicKeyStoreListKeys(t *testing.T) {
+	t.Parallel()
+
 	suite := newKeystoreTestSuite(t)
 
 	t.Run("empty keystore", func(t *testing.T) {
+		t.Parallel()
+
 		keys, err := suite.keystore.ListKeys()
 		assert.NoError(t, err)
 		assert.Empty(t, keys)
 	})
 
 	t.Run("with keys", func(t *testing.T) {
+		t.Parallel()
+
 		ids := []string{"id1", "id2", "id3"}
 		for _, id := range ids {
 			_, err := suite.keystore.Save(id, []byte("data"), "pass")
@@ -168,4 +195,19 @@ func TestBasicKeyStoreListKeys(t *testing.T) {
 		assert.NoError(t, err)
 		assert.ElementsMatch(t, ids, keys)
 	})
+}
+
+func TestBasicKeyStoreExists(t *testing.T) {
+	t.Parallel()
+	suite := newKeystoreTestSuite(t)
+
+	exists := suite.keystore.Exists("nonexistentkey")
+	assert.False(t, exists)
+
+	testKey := "testkey"
+	_, err := suite.keystore.Save(testKey, []byte("testdata"), "pass")
+	assert.NoError(t, err)
+
+	exists = suite.keystore.Exists(testKey)
+	assert.True(t, exists)
 }

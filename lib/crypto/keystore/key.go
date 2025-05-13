@@ -130,7 +130,7 @@ func UnmarshalKey(data []byte, passphrase string) (*Key, error) {
 	}
 	encjson := encryptedKeyJSON{}
 	if err := json.Unmarshal(data, &encjson); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal key data: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrDecodeKey, err)
 	}
 	if encjson.Version != ksVersion {
 		return nil, ErrVersionMismatch
@@ -140,34 +140,34 @@ func UnmarshalKey(data []byte, passphrase string) (*Key, error) {
 	}
 	mac, err := hex.DecodeString(encjson.Crypto.MAC)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode mac: %w", err)
+		return nil, fmt.Errorf("%w: mac: %w", ErrDecodeKey, err)
 	}
 	iv, err := hex.DecodeString(encjson.Crypto.CipherParams.IV)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode cipher params iv: %w", err)
+		return nil, fmt.Errorf("%w: cipher params: %w", ErrDecodeKey, err)
 	}
 	salt, err := hex.DecodeString(encjson.Crypto.KDFParams.Salt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode salt: %w", err)
+		return nil, fmt.Errorf("%w: salt: %w", ErrDecodeKey, err)
 	}
 	ciphertext, err := hex.DecodeString(encjson.Crypto.CipherText)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode cipher text: %w", err)
+		return nil, fmt.Errorf("%w: cipher text: %w", ErrDecodeKey, err)
 	}
 	dk, err := scrypt.Key([]byte(passphrase), salt, encjson.Crypto.KDFParams.N, encjson.Crypto.KDFParams.R, encjson.Crypto.KDFParams.P, encjson.Crypto.KDFParams.DKeyLength)
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive key: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrKeyProcessing, err)
 	}
 	hash, err := crypto.Sha3(dk[32:64], ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash key and ciphertext: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrKeyProcessing, err)
 	}
 	if !bytes.Equal(hash, mac) {
 		return nil, ErrMACMismatch
 	}
 	aesBlock, err := aes.NewCipher(dk[:32])
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher block: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrDecodeKey, err)
 	}
 	stream := cipher.NewCTR(aesBlock, iv)
 	outputkey := make([]byte, len(ciphertext))

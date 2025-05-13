@@ -45,7 +45,7 @@ func New(fs afero.Fs, keysDir string) (*BasicKeyStore, error) {
 	}
 
 	if err := fs.MkdirAll(keysDir, 0o700); err != nil {
-		return nil, fmt.Errorf("failed to create keystore directory: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrCreateKeysDir, err)
 	}
 
 	return &BasicKeyStore{
@@ -72,7 +72,7 @@ func (ks *BasicKeyStore) Save(id string, data []byte, passphrase string) (string
 
 	filename, err := utils.WriteToFile(ks.fs, keyDataJSON, filepath.Join(ks.keysDir, key.ID+".json"))
 	if err != nil {
-		return "", fmt.Errorf("failed to write key to file: %v", err)
+		return "", fmt.Errorf("failed to write key to file: %w", err)
 	}
 
 	return filename, nil
