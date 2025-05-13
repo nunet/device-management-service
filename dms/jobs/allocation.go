@@ -481,6 +481,11 @@ func (a *Allocation) Start() error {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 
+	// start actor
+	if a.actorRunning {
+		return nil
+	}
+
 	allocationBehaviors := map[string]func(actor.Envelope){
 		behaviors.AllocationStartBehavior:       a.handleAllocationStart,
 		behaviors.AllocationRestartBehavior:     a.handleAllocationRestart,
@@ -501,11 +506,6 @@ func (a *Allocation) Start() error {
 		if err != nil {
 			return fmt.Errorf("add allocation start behavior to allocation actor: %w", err)
 		}
-	}
-
-	// start actor
-	if a.actorRunning {
-		return nil
 	}
 
 	err := a.Actor.Start()

@@ -306,6 +306,9 @@ func (a *allocator) Commit(ctx context.Context,
 	numDynamicPorts int,
 	expiry int64,
 ) error {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
 	// Check against the actual hardware usage to ensure dms can guarantee the commitment
 	hasCapacity, err := a.hardware.CheckCapacity(resources.Resources)
 	if err != nil {
@@ -343,9 +346,7 @@ func (a *allocator) Commit(ctx context.Context,
 	}
 
 	// store the commit
-	a.lock.Lock()
 	a.commits[allocationID] = expiry
-	a.lock.Unlock()
 
 	return nil
 }
@@ -382,6 +383,7 @@ func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
 	if job.Volume == nil {
 		return nil
 	}
+	log.Infof("mounting volume %s for allocation %s", job.Volume.Name, allocationID)
 	mounter, err := volume.New(a.volumeTracker, *job.Volume, allocationID)
 	if err != nil {
 		return fmt.Errorf("create volume: %w", err)
@@ -440,10 +442,11 @@ func (a *allocator) Allocate(
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
 	a.lock.Lock()
+	defer a.lock.Unlock()
+
 	if _, ok := a.commits[allocationID]; !ok {
 		return nil, fmt.Errorf("allocation not committed: %s", allocationID)
 	}
-	a.lock.Unlock()
 
 	// Check against the actual hardware usage to ensure dms can guarantee the allocation
 	hasCapacity, err := a.hardware.CheckCapacity(job.Resources)
@@ -489,10 +492,8 @@ func (a *allocator) Allocate(
 	}
 
 	// delete the commit and store the allocation
-	a.lock.Lock()
 	delete(a.commits, allocationID)
 	a.allocations[allocationID] = allocation
-	a.lock.Unlock()
 
 	return allocation, nil
 }
@@ -527,7 +528,6 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 
 	err = a.resources.DeallocateResources(ctx, allocationID)
 	if err != nil {
-		log.Warnf("deallocate resources for allocation id: %s: %v", allocationID, err)
 		return fmt.Errorf("deallocate resources for allocation id: %s: %w", allocationID, err)
 	}
 

@@ -187,8 +187,8 @@ func (s *TestSuite) assertNoAllocationsRunning(
 		node.userContext, node.password)
 	s.Require().NoError(err)
 
-	s.Require().True(
-		len(allocations) == 0, "Expected no allocations to be running")
+	s.Require().Truef(
+		len(allocations) == 0, "Expected no allocations to be running but got %d. Allocs: %+vv", len(allocations), allocations)
 
 	// check if executions is running
 	s.T().Logf("checking if executions are running %v", executions)
@@ -242,7 +242,7 @@ func (s *TestSuite) assertResourcesAfterDeployment(
 	actualAllocated, err := node.client.allocatedResources(s.T(), node.dmsContext, node.password)
 	s.Require().NoError(err, "Failed to get allocated resources")
 	s.Require().True(actualAllocated.Equal(resourcesAllocated),
-		"Allocated resources don't match expected. Got: %v, Expected: %v",
+		"Allocated resources don't match. Got: %+v, Expected: %+v",
 		actualAllocated, resourcesAllocated)
 
 	// 2. Verify free resources = onboarded - allocated
@@ -257,7 +257,7 @@ func (s *TestSuite) assertResourcesAfterDeployment(
 	s.Require().NoError(err, "Failed to subtract allocated from onboarded resources")
 
 	s.Require().True(free.Equal(expectedFree),
-		"Free resources don't match (onboarded - allocated). Free: %v, Expected: %v",
+		"Free resources don't match (onboarded - allocated). Free: %+v, Expected: %+v",
 		free, expectedFree)
 }
 
@@ -270,7 +270,7 @@ func (s *TestSuite) assertFreeResourcesFull(node *mockNode) {
 	s.Require().NoError(err, "Failed to get onboarded resources")
 
 	s.Require().True(free.Equal(onboarded),
-		"Free resources don't match onboarded resources. Free: %v, Onboarded: %v",
+		"Free resources don't match onboarded resources. Free: %+v, Onboarded: %+v",
 		free, onboarded)
 
 	// 2. Verify allocated resources are zero
@@ -280,7 +280,7 @@ func (s *TestSuite) assertFreeResourcesFull(node *mockNode) {
 	// Create empty resources to compare with
 	emptyResources := types.Resources{}
 	s.Require().True(allocated.Equal(emptyResources),
-		"Allocated resources should be zero, but got: %v", allocated)
+		"Allocated resources should be zero, but got: %+v", allocated)
 }
 
 // assertManifestsEqual compares two ensemble manifests and asserts they are equal
