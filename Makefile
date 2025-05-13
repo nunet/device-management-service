@@ -108,6 +108,9 @@ storage_test:
 	make setcapstorage
 	./test/integration/storagetestbinary
 
+run-acceptance:
+	@echo "dummy output for now"
+
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
 
