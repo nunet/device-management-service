@@ -217,7 +217,9 @@ func (g *GlusterFS) Unmount(targetPath string) error {
 	defer g.mu.Unlock()
 
 	if !g.tracker.IsMounted(targetPath) {
-		return fmt.Errorf("%s is not mounted", targetPath)
+		log.Warnf("target path %s is not mounted", targetPath)
+		// no need to unmount if it's not mounted
+		return nil
 	}
 
 	if targetPath == "" {
