@@ -24,12 +24,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/cmd"
-	"gitlab.com/nunet/device-management-service/dms/hardware"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/env"
+	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/types"
 )
 

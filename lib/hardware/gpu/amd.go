@@ -13,7 +13,7 @@ package gpu
 import (
 	"fmt"
 
-	goamdsmi "gitlab.com/nunet/device-management-service/lib/gpu/amdsmi"
+	goamdsmi "gitlab.com/nunet/device-management-service/lib/hardware/gpu/amdsmi"
 	"gitlab.com/nunet/device-management-service/types"
 )
 

@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils/convert"
 )
