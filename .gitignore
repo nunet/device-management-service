@@ -39,3 +39,4 @@ sync_remote.sh
 
 # builds
 builds/
+coverage.out

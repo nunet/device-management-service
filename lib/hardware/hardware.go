@@ -11,8 +11,8 @@ package hardware
 import (
 	"fmt"
 
-	"gitlab.com/nunet/device-management-service/dms/hardware/cpu"
-	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
+	"gitlab.com/nunet/device-management-service/lib/hardware/cpu"
+	"gitlab.com/nunet/device-management-service/lib/hardware/gpu"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )

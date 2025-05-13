@@ -18,7 +18,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
+	"gitlab.com/nunet/device-management-service/lib/hardware/gpu"
 
 	"gitlab.com/nunet/device-management-service/types"
 )

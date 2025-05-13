@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/types"
 )
 

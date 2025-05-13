@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"gitlab.com/nunet/device-management-service/lib/gpu/xpum"
+	"gitlab.com/nunet/device-management-service/lib/hardware/gpu/xpum"
 	"gitlab.com/nunet/device-management-service/types"
 )
 

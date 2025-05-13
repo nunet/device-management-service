@@ -20,6 +20,16 @@ package amdsmi
 #include <stdlib.h>
 #include "amdsmi.h"
 
+// Define constants for Go to use
+const int GO_AMDSMI_PROCESSOR_TYPE_UNKNOWN = AMDSMI_PROCESSOR_TYPE_UNKNOWN;
+const int GO_AMDSMI_PROCESSOR_TYPE_AMD_GPU = AMDSMI_PROCESSOR_TYPE_AMD_GPU;
+const int GO_AMDSMI_PROCESSOR_TYPE_AMD_CPU = AMDSMI_PROCESSOR_TYPE_AMD_CPU;
+const int GO_AMDSMI_PROCESSOR_TYPE_NON_AMD_GPU = AMDSMI_PROCESSOR_TYPE_NON_AMD_GPU;
+const int GO_AMDSMI_PROCESSOR_TYPE_NON_AMD_CPU = AMDSMI_PROCESSOR_TYPE_NON_AMD_CPU;
+const int GO_AMDSMI_PROCESSOR_TYPE_AMD_CPU_CORE = AMDSMI_PROCESSOR_TYPE_AMD_CPU_CORE;
+const int GO_AMDSMI_PROCESSOR_TYPE_AMD_APU = AMDSMI_PROCESSOR_TYPE_AMD_APU;
+const int GO_AMDSMI_GPU_UUID_SIZE = AMDSMI_GPU_UUID_SIZE;
+
 // ========================
 // AMD SMI Function Pointer Definitions
 // ========================
@@ -201,8 +211,19 @@ import (
 )
 
 // ProcessorType is a Go type to represent processor_type_t from C.
-// TODO: Use a Go type instead of C type.
-type ProcessorType C.processor_type_t
+type ProcessorType uint32
+
+var (
+	ProcessorTypeUnknown    = ProcessorType(C.GO_AMDSMI_PROCESSOR_TYPE_UNKNOWN)
+	ProcessorTypeAMDGPU     = ProcessorType(C.GO_AMDSMI_PROCESSOR_TYPE_AMD_GPU)
+	ProcessorTypeAMDCPU     = ProcessorType(C.GO_AMDSMI_PROCESSOR_TYPE_AMD_CPU)
+	ProcessorTypeNonAMDGPU  = ProcessorType(C.GO_AMDSMI_PROCESSOR_TYPE_NON_AMD_GPU)
+	ProcessorTypeNonAMDCPU  = ProcessorType(C.GO_AMDSMI_PROCESSOR_TYPE_NON_AMD_CPU)
+	ProcessorTypeAMDCPUCore = ProcessorType(C.GO_AMDSMI_PROCESSOR_TYPE_AMD_CPU_CORE)
+	ProcessorTypeAMDAPU     = ProcessorType(C.GO_AMDSMI_PROCESSOR_TYPE_AMD_APU)
+
+	GPUUUIDSize = uint(C.GO_AMDSMI_GPU_UUID_SIZE)
+)
 
 // Init initializes the AMD SMI library with GPUs.
 func Init() (Status, error) {
