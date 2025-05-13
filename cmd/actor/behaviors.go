@@ -1063,4 +1063,35 @@ Examples:
   nunet actor cmd --context user /dms/cap/anchor --provide token
   nunet actor cmd --context user /dms/cap/anchor --revoke token`,
 	},
+	// /dms/node/status
+	behaviors.StatusDiscoveryBehavior: {
+		Type: bInvoke,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.Discovery(cmd.Context(), msgOpts...)
+		},
+		Short: "Invoke a 'status discovery' message",
+		Long: `Invoke the /dms/node/status behavior on an actor
+
+This behavior invokes a "status discovery" behavior for fleet discovery.
+
+Examples:
+
+  nunet actor cmd --context user /dms/node/status
+  nunet actor cmd --context user /dms/node/status --dest <did/peer_id/actor_handle>`,
+	},
+	// /broadcast/dms/status
+	behaviors.BroadcastStatusDiscoveryBehavior: {
+		Type: bBroadcast,
+		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+			return cli.DiscoveryBroadcast(cmd.Context(), msgOpts...)
+		},
+		Short: "Broadcast a 'status discovery' message to a topic",
+		Long: `Broadcast the /broadcast/dms/status behavior to nodes in the network
+
+This behavior broadcasts a "status discovery" message to topic /nunet/status for fleet discovery.
+
+Examples:
+
+  nunet actor cmd --context user /broadcast/dms/status`,
+	},
 }
