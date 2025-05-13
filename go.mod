@@ -38,7 +38,6 @@ require (
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
-	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.12.6 // indirect
@@ -184,7 +183,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.43
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.31
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.65.2
-	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible
 )
 
 require (

@@ -379,7 +379,7 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 			fn: n.publicStatusBehavior,
 		},
 		behaviors.BroadcastHelloBehavior: {
-			fn: n.broadcastHelloBehavior,
+			fn: n.handleBroadcastHelloBehavior,
 			opts: []actor.BehaviorOption{
 				actor.WithBehaviorTopic(behaviors.BroadcastHelloTopic),
 			},
@@ -486,6 +486,15 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.VolumeStartBehavior: {
 			fn: n.handleStartVolume,
 		},
+		behaviors.StatusDiscoveryBehavior: {
+			fn: n.handleStatusDiscoveryBehavior,
+		},
+		behaviors.BroadcastStatusDiscoveryBehavior: {
+			fn: n.handleStatusDiscoveryBehavior,
+			opts: []actor.BehaviorOption{
+				actor.WithBehaviorTopic(behaviors.BroadcastStatusDiscoveryTopic),
+			},
+		},
 	}
 
 	return dmsBehaviors
@@ -571,7 +580,11 @@ func (n *Node) Start() error {
 		return fmt.Errorf("start node actor: %w", err)
 	}
 
-	if err := n.subscribe(behaviors.BroadcastHelloTopic, behaviors.BidRequestTopic); err != nil {
+	if err := n.subscribe(
+		behaviors.BroadcastHelloTopic,
+		behaviors.BidRequestTopic,
+		behaviors.BroadcastStatusDiscoveryTopic,
+	); err != nil {
 		_ = n.actor.Stop()
 		return err
 	}

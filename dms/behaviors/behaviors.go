@@ -59,6 +59,10 @@ const (
 	BroadcastHelloBehavior = "/broadcast/hello"
 	BroadcastHelloTopic    = "/nunet/hello"
 
+	StatusDiscoveryBehavior          = "/dms/node/status"
+	BroadcastStatusDiscoveryBehavior = "/broadcast/dms/status"
+	BroadcastStatusDiscoveryTopic    = "/nunet/status"
+
 	EnsembleNamespace     = "/dms/ensemble/%s"
 	AllocationNamespace   = "/dms/allocation"
 	OrchestratorNamespace = "/dms/orchestrator"
