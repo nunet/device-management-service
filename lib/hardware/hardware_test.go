@@ -79,8 +79,10 @@ func TestGetUsage(t *testing.T) {
 }
 
 // TestGetFreeResources verifies that free resources are correctly calculated
+//
+// Note: don't run it in parallel because it might make
+// resources 100% used
 func TestGetFreeResources(t *testing.T) {
-	t.Parallel()
 	hwManager := NewHardwareManager()
 	assert.NotNil(t, hwManager, "Hardware manager should not be nil")
 
@@ -104,8 +106,10 @@ func TestGetFreeResources(t *testing.T) {
 }
 
 // TestCheckCapacity verifies capacity checking logic
+//
+// Note: don't run it in parallel because it might make
+// resources 100% used
 func TestCheckCapacity(t *testing.T) {
-	t.Parallel()
 	hwManager := NewHardwareManager()
 	assert.NotNil(t, hwManager, "Hardware manager should not be nil")
 
