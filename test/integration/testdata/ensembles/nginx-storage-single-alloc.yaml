@@ -28,6 +28,7 @@ allocations:
     volume:
       type: glusterfs
       name: volumenunet123
+      mount_destination: "/home"
       servers: ["host"]
       client_private_key: /client_certs/client_gluster_tls_certs/glusterfs.key
       client_pem: /client_certs/client_gluster_tls_certs/glusterfs.pem

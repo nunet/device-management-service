@@ -192,12 +192,24 @@ func (a *Allocation) Run(
 	}
 
 	if a.Job.Volume != nil {
+		src := ""
+		if a.Job.Volume.Type == "glusterfs" {
+			src = filepath.Join(a.workDir, "volumes", a.ID, a.Job.Volume.Name)
+		} else {
+			src = a.Job.Volume.Src
+		}
+
+		target := a.Job.Volume.MountDestination
+		if target == "" {
+			target = "/" + a.Job.Volume.Name
+		}
+
 		executionRequest.Inputs = []*types.StorageVolumeExecutor{
 			{
 				Type:     "bind",
-				Source:   filepath.Join(a.workDir, "volumes", a.ID, a.Job.Volume.Name),
-				Target:   "/" + a.Job.Volume.Name, // its important to prepend with / as target is expected to be an absolute path
-				ReadOnly: false,
+				Source:   src,
+				Target:   target,
+				ReadOnly: a.Job.Volume.ReadOnly,
 			},
 		}
 	}

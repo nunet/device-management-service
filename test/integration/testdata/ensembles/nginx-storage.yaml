@@ -55,6 +55,7 @@ allocations:
       type: glusterfs
       name: nunet_vol
       servers: ["${hostname}"]
+      mount_destination: "/home"
       client_private_key:
       client_pem:
       client_ca:

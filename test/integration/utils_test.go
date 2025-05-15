@@ -115,7 +115,7 @@ func createConfig(dmsRootDir string, restPort uint32, p2pListenAddr string, boot
 			HostCity:               "Amsterdam",
 			HostContinent:          "Europe",
 			PortAvailableRangeFrom: 1024,
-			PortAvailableRangeTo:   10000,
+			PortAvailableRangeTo:   90000,
 			Debug:                  true,
 		},
 		Rest: config.Rest{

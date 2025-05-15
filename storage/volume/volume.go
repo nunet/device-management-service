@@ -15,7 +15,7 @@ func New(t *storage.VoumeTracker, sc types.VolumeConfig, allocationID string) (t
 	case "glusterfs":
 		return glusterfs.New(t, sc.Servers, sc.Name, sc.ClientPrivateKey, sc.ClientPEM, sc.ClientCA, allocationID)
 	case "local":
-		return localfs.New(sc.Path)
+		return localfs.New(sc.Src)
 	default:
 		return nil, fmt.Errorf("unsupported storage type: %s", sc.Type)
 	}
