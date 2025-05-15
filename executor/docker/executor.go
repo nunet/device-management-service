@@ -523,6 +523,7 @@ func (e *Executor) newDockerExecutionContainer(
 		// Needs to be true for applications such as Jupyter or Gradio to work correctly. See issue #459 for details.
 		Tty:          tty,
 		ExposedPorts: exposes,
+		User:         dockerArgs.User,
 	}
 
 	mounts, err := makeContainerMounts(params.Inputs, params.Outputs, params.ResultsDir)

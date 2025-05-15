@@ -19,6 +19,8 @@ import (
 
 // func TestTLSGlusterGenerator(t *testing.T)
 func TLSGlusterGenerator(t *testing.T) {
+	os.Setenv("GOLOG_LOG_LEVEL", "debug")
+	// func TLSGlusterGenerator(t *testing.T) {
 	password := "password"
 	here := getCurrentFileDirectory()
 
@@ -133,7 +135,7 @@ func TLSGlusterGenerator(t *testing.T) {
 	err = runBinaryInContainer(tlsServerContainerName, "dms", []string{"run", "--context", "dms"}, []string{"DMS_PASSPHRASE=password", "BOOTSTRAP_PEERS=" + strings.Join(bootstrap, ",")}, "/home/dms_log.txt")
 	require.NoError(t, err)
 
-	time.Sleep(7 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	// broadcast
 	result := cli1.broadcast(t, "dms", password)
@@ -163,15 +165,15 @@ func TLSGlusterGenerator(t *testing.T) {
 	err = runGlusterCommands(tlsServerContainerName, commands2)
 	require.NoError(t, err)
 
-	ensemble := filepath.Join(here, rootDir2, "../../", "ensembles", "nginx-storage-single-alloc.yaml")
+	ensemble := filepath.Join(here, rootDir2, "../../", "ensembles", "firefly.yaml")
 	err = copyToContainer(tlsServerContainerName, ensemble, "/home/")
 	require.NoError(t, err)
 
-	err = runBinaryInContainer(tlsServerContainerName, "dms", []string{"actor", "cmd", "--context", "dms", "/dms/node/deployment/new", "--spec-file", "/home/nginx-storage-single-alloc.yaml", "--timeout", "2m"}, []string{"DMS_PASSPHRASE=password"}, "/home/run_ensemble.txt")
+	err = runBinaryInContainer(tlsServerContainerName, "dms", []string{"actor", "cmd", "--context", "dms", "/dms/node/deployment/new", "--spec-file", "/home/firefly.yaml", "--timeout", "2m"}, []string{"DMS_PASSPHRASE=password"}, "/home/run_ensemble.txt")
 	require.NoError(t, err)
 
-	time.Sleep(60 * time.Second)
-	_ = deleteGlusterContainer(tlsServerContainerName)
+	time.Sleep(3 * time.Minute)
+	// _ = deleteGlusterContainer(tlsServerContainerName)
 }
 
 func generateCerts(hostname string, dir string) error {
