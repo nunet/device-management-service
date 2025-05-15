@@ -354,6 +354,7 @@ Examples:
 			req := node.OnboardRequest{}
 			req.Config.OnboardedResources.CPU.Cores = p.CPUCores
 			req.NoGPU = p.NoGPU
+			req.Config.OnboardedResources.GPUs = p.GPUs
 
 			var err error
 			// convert RAM and Disk from specified unit to bytes if specified otherwise, default to GiB
