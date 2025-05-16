@@ -117,7 +117,7 @@ func setDefaultConfig() {
 	v.SetDefault("general.data_dir", fmt.Sprintf("%s/nunet/data", homeDir))
 	v.SetDefault("general.debug", false)
 	v.SetDefault("general.port_available_range_from", 16384)
-	v.SetDefault("general.port_available_range_to", 90000)
+	v.SetDefault("general.port_available_range_to", 65536)
 
 	v.SetDefault("general.storage_ca_directory", fmt.Sprintf("%s/.nunet/storage_ca_directory", homeDir))
 	v.SetDefault("general.storage_bricks_dir", fmt.Sprintf("%s/.nunet/storage_bricks_dir", homeDir))
