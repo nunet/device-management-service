@@ -9,6 +9,8 @@
 package docker
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -432,60 +434,90 @@ func (e *Executor) Exec(ctx context.Context, executionID string, command []strin
 }
 
 // copyKeysToContainer copies the keys from the request to the
-// container, respecting each key's destination path
+// container, respecting each key's destination path when necessary
 func (e *Executor) copyKeysToContainer(ctx context.Context,
-	containerID string, keys []types.AllocationKey,
+	containerID string, keys []types.AllocationKey, user string,
 ) error {
 	if len(keys) == 0 {
+		log.Infof("No keys to copy to container %s", containerID)
 		return nil
 	}
 
-	log.Infof("copying %d keys to container %s", len(keys), containerID)
+	log.Infof("Starting to copy %d keys to container %s", len(keys), containerID)
 
-	tempDir, err := os.MkdirTemp("", "keys-")
-	if err != nil {
-		return fmt.Errorf("failed to create temp directory for keys: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	for _, key := range keys {
-		keyContent, err := os.ReadFile(key.File)
-		if err != nil {
-			return fmt.Errorf("failed to read key file %s: %w", key.File, err)
+	for i, key := range keys {
+		if key.File == "" {
+			return fmt.Errorf("key %d has no file", i)
+		}
+		if key.Type == "" {
+			return fmt.Errorf("key %d has no type", i)
 		}
 
-		destDir := filepath.Dir(key.Dest)
-		fullDestDir := filepath.Join(tempDir, destDir)
-		if err := os.MkdirAll(fullDestDir, 0o755); err != nil {
-			return fmt.Errorf("failed to create destination directory %s: %w", destDir, err)
+		var destination string
+		var buf bytes.Buffer
+		tarF := tar.NewWriter(&buf)
+
+		switch key.Type {
+		case types.KeySSH:
+			if user == "" || user == "root" {
+				destination = "/root"
+			} else {
+				destination = "/home/" + user // extraction will fail if user does not exist
+			}
+
+			if err := tarF.WriteHeader(&tar.Header{
+				// implicitly create .ssh dir
+				// intentionally not creating the preceding path to not attempt to add
+				// a key to a user that does not exist
+				Name: ".ssh/authorized_keys",
+				Mode: 0o600,
+				Size: int64(len(key.File)),
+			}); err != nil {
+				return fmt.Errorf("unable to write tar header for key. Skipping")
+			}
+
+		case types.KeyGPG:
+			if key.Dest == "" {
+				return fmt.Errorf("destination required for key type %s", types.KeyGPG)
+			}
+
+			// write to root and take care of path creating during extraction
+			destination = "/"
+
+			if err := tarF.WriteHeader(&tar.Header{
+				// implicitly create the preceding path for the final file
+				Name: key.Dest,
+				Mode: 0o600,
+				Size: int64(len(key.File)),
+			}); err != nil {
+				return fmt.Errorf("unable to write tar header for key")
+			}
+
+		default:
+			return fmt.Errorf("unknown key type %q", key.Type)
 		}
 
-		destFile := filepath.Join(tempDir, key.Dest)
-		if err := os.WriteFile(destFile, keyContent, 0o600); err != nil {
-			return fmt.Errorf("failed to write key to destination file %s: %w", destFile, err)
+		if _, err := tarF.Write([]byte(key.File)); err != nil {
+			return fmt.Errorf("unable to write key to tar. Skipping")
 		}
 
-		log.Infof("prepared key %s for copying to %s", key.File, key.Dest)
+		if err := tarF.Close(); err != nil {
+			return fmt.Errorf("unable to close tar")
+		}
+
+		if err := e.client.CopyToContainer(
+			ctx,
+			containerID,
+			destination,
+			&buf,
+			container.CopyToContainerOptions{},
+		); err != nil {
+			log.Errorf("Failed to copy key to container %s:%s : %v", containerID, key.Dest, err)
+			return fmt.Errorf("failed to copy key to container %s:%s : %v", containerID, key.Dest, err)
+		}
 	}
 
-	tarPath := filepath.Join(tempDir, "keys.tar")
-	if err := utils.CreateTarArchive(e.fs, tempDir, tarPath); err != nil {
-		return fmt.Errorf("failed to create tar archive: %w", err)
-	}
-
-	tarFile, err := os.Open(tarPath)
-	if err != nil {
-		return fmt.Errorf("failed to open tar file: %w", err)
-	}
-	defer tarFile.Close()
-
-	// Copy the tar file to the container's root directory
-	// This will extract all files to their proper paths
-	if err := e.client.CopyToContainer(ctx, containerID, "/", tarFile, container.CopyToContainerOptions{}); err != nil {
-		return fmt.Errorf("failed to copy keys to container: %w", err)
-	}
-
-	log.Infof("successfully copied keys to container %s", containerID)
+	log.Infof("Successfully copied keys to container %s", containerID)
 	return nil
 }
 
@@ -579,11 +611,10 @@ func (e *Executor) newDockerExecutionContainer(
 	}
 
 	if len(params.Keys) > 0 {
-		if err := e.copyKeysToContainer(ctx, executionContainer, params.Keys); err != nil {
+		if err := e.copyKeysToContainer(ctx, executionContainer, params.Keys, dockerArgs.User); err != nil {
 			log.Warnf("failed to copy SSH keys to container: %v", err)
 		}
 	}
-
 	return executionContainer, nil
 }
 
