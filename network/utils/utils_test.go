@@ -18,44 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDHCPGetRandomCIDR(t *testing.T) {
-	blacklist := []string{"10.0.0.0/8", "172.16.0.0/12", "10.10.0.0/16"} // Example blacklist
-	mask := 8
-	cidr, err := GetRandomCIDR(mask, blacklist)
-	require.NoError(t, err)
-
-	require.NotContains(t, blacklist, cidr)
-
-	cidrParts := strings.Split(cidr, "/")
-	ipParts := strings.Split(cidrParts[0], ".")
-	assert.Equal(t, strings.Join(ipParts[1:], "."), "0.0.0")
-
-	mask = 16
-	cidr, err = GetRandomCIDR(mask, blacklist)
-	require.NoError(t, err)
-
-	require.NotContains(t, blacklist, cidr)
-
-	cidrParts = strings.Split(cidr, "/")
-	ipParts = strings.Split(cidrParts[0], ".")
-	assert.NotEqual(t, ipParts[1], "0")
-	assert.Equal(t, strings.Join(ipParts[2:], "."), "0.0")
-
-	// blacklist all possible /16 networks
-	blacklist = []string{}
-	mask = 16
-	for i := 0; i < 256; i++ {
-		for j := 0; j < 256; j++ {
-			blacklist = append(blacklist, fmt.Sprintf("%d.%d.0.0/16", i, j))
-		}
-	}
-	cidr, err = GetRandomCIDR(mask, blacklist)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "could not find a CIDR after")
-	require.Equal(t, "0.0.0.0/16", cidr)
-}
-
 func TestDHCPGetRandomCIDRInRange(t *testing.T) {
+	t.Parallel()
 	blacklist := []string{"10.0.0.0/16", "10.20.0.0/16", "10.30.0.0/16", "10.200.0.0/16"} // Example blacklist
 	mask := 16
 	start, end := net.ParseIP("10.0.0.0"), net.ParseIP("10.255.255.255")
@@ -109,6 +73,7 @@ func TestDHCPGetRandomCIDRInRange(t *testing.T) {
 }
 
 func TestDHCPNextIP(t *testing.T) {
+	t.Parallel()
 	ip := net.IP{10, 10, 2, 253}
 	mask := 24
 	next := nextIP(ip, mask)
@@ -158,6 +123,7 @@ func TestDHCPNextIP(t *testing.T) {
 }
 
 func TestDHCPGetNextIp(t *testing.T) {
+	t.Parallel()
 	cidr := "10.10.2.0/24"
 	usedIPs := map[string]bool{
 		"10.10.2.1": true,
@@ -206,4 +172,39 @@ func TestDHCPGetNextIp(t *testing.T) {
 	require.Nil(t, ip)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no available IPs in CIDR 10.0.0.0/8")
+}
+
+func TestGetMultipleAvailablePorts(t *testing.T) {
+	tests := []struct {
+		name     string
+		numPorts int
+	}{
+		{
+			name:     "get one port",
+			numPorts: 1,
+		},
+		{
+			name:     "get multiple ports",
+			numPorts: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ports, err := GetMultipleAvailablePorts(tt.numPorts)
+			require.NoError(t, err)
+			assert.Len(t, ports, tt.numPorts)
+
+			// Verify all ports are unique
+			portMap := make(map[int]bool)
+			for _, port := range ports {
+				if _, ok := portMap[port]; ok {
+					assert.Fail(t,
+						"GetMultipleAvailablePorts(%d) returned duplicate port %d",
+						tt.numPorts, port)
+				}
+				portMap[port] = true
+			}
+		})
+	}
 }

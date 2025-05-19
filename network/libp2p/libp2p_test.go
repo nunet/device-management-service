@@ -16,19 +16,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/avast/retry-go"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/observability"
+	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -89,81 +89,95 @@ func TestNew(t *testing.T) {
 }
 
 func TestPingResolveAddress(t *testing.T) {
-	peer1, peer2, _ := createPeers(t, 65512, 65513, 65514)
-	pingResult, err := peer1.Ping(context.TODO(), peer2.Host.ID().String(), 100*time.Millisecond)
-	assert.NoError(t, err)
-	assert.True(t, pingResult.Success)
+	hosts := newNetwork(t, 2, false)
+	require.Len(t, hosts, 2)
+	alice := hosts[0]
+	bob := hosts[1]
+
+	pingResult, err := alice.Ping(context.TODO(), bob.Host.ID().String(), 500*time.Millisecond)
+	require.NoError(t, err)
+	require.True(t, pingResult.Success)
 	zeroMicro, err := time.ParseDuration("0µs")
 	assert.NoError(t, err)
 	assert.Greater(t, pingResult.RTT, zeroMicro)
 
-	addresses, err := peer1.ResolveAddress(context.Background(), peer2.Host.ID().String())
-	assert.NoError(t, err)
-	assert.Greater(t, len(addresses), 0)
-	assert.Contains(t, addresses[0], peer2.Host.ID().String())
+	addresses, err := alice.ResolveAddress(context.Background(), bob.Host.ID().String())
+	require.NoError(t, err)
+	require.Greater(t, len(addresses), 0)
+	assert.Contains(t, addresses[0], bob.Host.ID().String())
 
-	ip := peer1.GetPeerIP(peer2.Host.ID())
+	ip := alice.GetPeerIP(bob.Host.ID())
 	assert.NotEmpty(t, ip)
 }
 
 func TestAdvertiseUnadvertiseQuery(t *testing.T) {
-	// XXX skipping because too flaky
-	t.Skip("flaky test")
-	peer1, peer2, peer3 := createPeers(t, 65515, 65516, 65517)
-	// advertise key
-	err := peer1.Advertise(context.TODO(), "who_am_i", []byte(`{"peer":"peer1"}`))
-	assert.NoError(t, err)
-	err = peer2.Advertise(context.TODO(), "who_am_i", []byte(`{"peer":"peer2"}`))
-	assert.NoError(t, err)
-	err = peer3.Advertise(context.TODO(), "who_am_i", []byte(`{"peer":"peer3"}`))
-	assert.NoError(t, err)
+	hosts := newNetwork(t, 2, false)
+	require.Len(t, hosts, 2)
+	alice := hosts[0]
+	bob := hosts[1]
 
-	time.Sleep(400 * time.Millisecond)
+	const (
+		whoAmIKey      = "who_am_i"
+		aliceValueJSON = `{"peer":"alice"}`
+		bobValueJSON   = `{"peer":"bob"}`
+		carolValueJSON = `{"peer":"carol"}`
+	)
 
-	// get the peers who have the who_am_i key
-	advertisements, err := peer1.Query(context.TODO(), "who_am_i")
-	assert.NoError(t, err)
-	assert.NotNil(t, advertisements)
-	assert.Len(t, advertisements, 3)
+	require.Eventually(t, func() bool {
+		err := alice.Advertise(context.TODO(), whoAmIKey, []byte(aliceValueJSON))
+		return err == nil
+	}, 5*time.Second, 500*time.Millisecond, "failed to advertise")
+
+	require.Eventually(t, func() bool {
+		err := bob.Advertise(context.TODO(), whoAmIKey, []byte(bobValueJSON))
+		return err == nil
+	}, 5*time.Second, 500*time.Millisecond, "failed to advertise")
+
+	advertisements := make([]*commonproto.Advertisement, 0, 2)
+	require.Eventually(t, func() bool {
+		advertisements, err := alice.Query(context.TODO(), whoAmIKey)
+		assert.NoError(t, err)
+
+		return len(advertisements) == 2
+	}, 5*time.Second, 500*time.Millisecond, "Failed to find all 2 advertisements within timeout")
 
 	// check if all peers have returned the correct data
 	for _, v := range advertisements {
 		switch v.PeerId {
-		case peer1.Host.ID().String():
+		case alice.Host.ID().String():
 			{
-				assert.Equal(t, []byte(`{"peer":"peer1"}`), v.Data)
+				assert.Equal(t, []byte(aliceValueJSON), v.Data)
 			}
-		case peer2.Host.ID().String():
+		case bob.Host.ID().String():
 			{
-				assert.Equal(t, []byte(`{"peer":"peer2"}`), v.Data)
-			}
-		case peer3.Host.ID().String():
-			{
-				assert.Equal(t, []byte(`{"peer":"peer3"}`), v.Data)
+				assert.Equal(t, []byte(bobValueJSON), v.Data)
 			}
 		}
 	}
 
-	// peer3 unadvertises
-	err = peer3.Unadvertise(context.TODO(), "who_am_i")
+	// test unadvertise
+	err := bob.Unadvertise(context.TODO(), whoAmIKey)
 	assert.NoError(t, err)
-	time.Sleep(40 * time.Millisecond)
 
-	// get the values again, it should be 2 peers only
-	advertisements, err = peer1.Query(context.TODO(), "who_am_i")
-	assert.NoError(t, err)
-	assert.NotNil(t, advertisements)
-	assert.Len(t, advertisements, 2)
+	// get the values again, it should be 1 now since one was unadvertised
+	require.Eventually(t, func() bool {
+		advertisements, err = alice.Query(context.TODO(), whoAmIKey)
+		assert.NoError(t, err)
+
+		return len(advertisements) == 1
+	}, 5*time.Second, 500*time.Millisecond, "Failed to confirm peer unadvertised within timeout")
 }
 
 func TestPublishSubscribeUnsubscribe(t *testing.T) {
-	peer1, _, _ := createPeers(t, 65518, 65519, 65520)
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
 	// test publish/subscribe
 	// in this test gossipsub messages are not always delivered from peer1 to other peers
 	// and this makes the test flaky. To solve the flakiness we use the peer one for
 	// both publishing and subscribing.
 	subscribeData := make(chan []byte)
-	subID, err := peer1.Subscribe(context.TODO(), "blocks", func(data []byte) {
+	subID, err := alice.Subscribe(context.TODO(), "blocks", func(data []byte) {
 		subscribeData <- data
 	}, nil)
 	assert.NoError(t, err)
@@ -173,7 +187,7 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	// flaky test which will fail
 	go func() {
 		for {
-			err = peer1.Publish(context.TODO(), "blocks", []byte(`{"block":"1"}`))
+			err = alice.Publish(context.TODO(), "blocks", []byte(`{"block":"1"}`))
 		}
 	}()
 
@@ -181,99 +195,114 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	assert.EqualValues(t, []byte(`{"block":"1"}`), receivedData)
 
 	// unsubscribe
-	err = peer1.Unsubscribe("blocks", subID)
+	err = alice.Unsubscribe("blocks", subID)
 	assert.NoError(t, err)
 }
 
 // if we connect to ourselves we deliver the message properlly to the right handler.
 func TestSelfDial(t *testing.T) {
-	peer1, _, _ := createPeers(t, 65524, 65525, 65526)
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
+
 	messageType := types.MessageType("/custom_bytes_callback/1.1.4")
 	messageChannel := make(chan string)
+	const testData = "testing 123"
 
-	err := peer1.RegisterBytesMessageHandler(messageType, func(dt []byte, _ peer.ID) {
+	err := alice.RegisterBytesMessageHandler(messageType, func(dt []byte, _ peer.ID) {
 		messageChannel <- string(dt)
 	})
-	assert.NoError(t, err)
-	err = peer1.SendMessage(context.Background(), peer1.Host.ID().String(),
+	require.NoError(t, err)
+	err = alice.SendMessage(context.Background(), alice.Host.ID().String(),
 		types.MessageEnvelope{
 			Type: messageType,
-			Data: []byte("testing 123"),
+			Data: []byte(testData),
 		},
 		time.Now().Add(readTimeout),
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+
 	// check if we received the data properlly
 	received := <-messageChannel
-	assert.Equal(t, "testing 123", received)
+	require.Equal(t, testData, received)
 }
 
 func TestSendMessageAndHandlers(t *testing.T) {
-	peer1, peer2, _ := createPeers(t, 65521, 65522, 65523)
-	peer1p2pAddrs, err := peer1.GetMultiaddr()
+	hosts := newNetwork(t, 2, true)
+	require.Len(t, hosts, 2)
+	alice := hosts[0]
+	bob := hosts[1]
+	aliceP2pAddrs, err := alice.GetMultiaddr()
 	assert.NoError(t, err)
+
+	// Protocol constants
+	const customMessageProtocol = types.MessageType("/chat/1.1.1")
+	const streamProtocol = types.MessageType("/custom_stream/1.2.3")
+	const bytesCallbackProtocol = types.MessageType("/custom_bytes_callback/1.1.4")
 
 	// test sendmessage and stream functionality
 	// use different test cases to check if communication can be established to remote peers
 	// 1. peer1 is not handling any message types so we try to send a message and get an error
 	// The semantics of send have changed; this test is not applicable
 
-	customMessageProtocol := types.MessageType("/chat/1.1.1")
+	// Using the constant defined above
 	helloWorlPayload := "hello world"
 
-	// 2. peer1 registers the message
+	// 2. alice registers the message
 	payloadReceived := make(chan string)
-	err = peer1.RegisterStreamMessageHandler(customMessageProtocol, func(stream network.Stream) {
+	err = alice.RegisterStreamMessageHandler(customMessageProtocol, func(stream network.Stream) {
 		bytesToRead := make([]byte, len([]byte(helloWorlPayload))+8)
 		_, err = stream.Read(bytesToRead)
 		assert.ErrorIs(t, err, io.EOF)
 		assert.Equal(t, helloWorlPayload, string(bytesToRead[8:]))
 		payloadReceived <- string(bytesToRead[8:])
 	})
-	assert.NoError(t, err)
-	// 3. re-register should be error
-	err = peer1.RegisterStreamMessageHandler(customMessageProtocol, func(_ network.Stream) {})
-	assert.ErrorContains(t, err, "stream with this protocol is already registered")
+	require.NoError(t, err)
 
-	// 4. send message from peer2 and wait to get the response from peer1
-	err = peer2.SendMessage(context.TODO(), peer1.Host.ID().String(),
+	// 3. re-register should be error
+	err = alice.RegisterStreamMessageHandler(customMessageProtocol, func(_ network.Stream) {})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrStreamRegistered)
+
+	// 4. send message from bob and wait to get the response from alice
+	err = bob.SendMessage(context.TODO(), alice.Host.ID().String(),
 		types.MessageEnvelope{Type: customMessageProtocol, Data: []byte(helloWorlPayload)},
 		time.Now().Add(readTimeout))
-	assert.NoError(t, err)
-	peer1MessageContent := <-payloadReceived
-	assert.Equal(t, helloWorlPayload, peer1MessageContent)
+	require.NoError(t, err)
+	aliceMessageContent := <-payloadReceived
+	assert.Equal(t, helloWorlPayload, aliceMessageContent)
 
 	// 5. open stream functionality
 	streamPayloadMessage := "nunet world"
 	streamPayloadReceived := make(chan string)
-	err = peer1.RegisterStreamMessageHandler(types.MessageType("/custom_stream/1.2.3"),
+	err = alice.RegisterStreamMessageHandler(streamProtocol,
 		func(stream network.Stream) {
 			bytesToRead := make([]byte, len([]byte(streamPayloadMessage)))
 			_, err := stream.Read(bytesToRead)
 			assert.NoError(t, err)
 			streamPayloadReceived <- string(bytesToRead)
 		})
-	assert.NoError(t, err)
-	openedStream, err := peer2.OpenStream(context.TODO(), peer1p2pAddrs[0].String(),
-		types.MessageType("/custom_stream/1.2.3"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	openedStream, err := bob.OpenStream(context.TODO(), aliceP2pAddrs[0].String(),
+		streamProtocol)
+	require.NoError(t, err)
 	_, err = openedStream.Write([]byte("nunet world"))
-	assert.NoError(t, err)
-	peer1MessageContent = <-streamPayloadReceived
+	require.NoError(t, err)
+	aliceMessageContent = <-streamPayloadReceived
 	openedStream.Close()
-	assert.Equal(t, "nunet world", peer1MessageContent)
+	assert.Equal(t, "nunet world", aliceMessageContent)
 
 	// 6. register message with bytes handler function
 	secondPayloadReceived := make(chan string)
-	err = peer1.RegisterBytesMessageHandler(
-		types.MessageType("/custom_bytes_callback/1.1.4"), func(dt []byte, _ peer.ID) {
+	err = alice.RegisterBytesMessageHandler(
+		bytesCallbackProtocol, func(dt []byte, _ peer.ID) {
 			secondPayloadReceived <- string(dt)
 		})
-	assert.NoError(t, err)
-	err = peer2.SendMessage(context.TODO(),
-		peer1.Host.ID().String(),
+	require.NoError(t, err)
+	err = bob.SendMessage(context.TODO(),
+		alice.Host.ID().String(),
 		types.MessageEnvelope{
-			Type: types.MessageType("/custom_bytes_callback/1.1.4"),
+			Type: bytesCallbackProtocol,
 			Data: []byte(helloWorlPayload),
 		},
 		time.Now().Add(readTimeout))
@@ -283,221 +312,306 @@ func TestSendMessageAndHandlers(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	peer1, _, _ := createPeers(t, 65527, 65528, 65529)
+	hosts := newNetwork(t, 1, false)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
 
 	// Stop the peer and check for errors
-	err := peer1.Stop()
+	err := alice.Stop()
 	require.NoError(t, err)
 
 	// Ensure that the DHT and Host are closed
-	require.NoError(t, peer1.DHT.Close())
-	require.NoError(t, peer1.Host.Close())
+	require.NoError(t, alice.DHT.Close())
+	require.NoError(t, alice.Host.Close())
 }
 
 func TestStat(t *testing.T) {
-	peer1, _, _ := createPeers(t, 65530, 65531, 65532)
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
 
 	// Get the network stats
-	stats := peer1.Stat()
+	stats := alice.Stat()
 
 	// Check if the ID is correct
-	require.Equal(t, peer1.Host.ID().String(), stats.ID)
+	require.Equal(t, alice.Host.ID().String(), stats.ID)
 
 	// Check if the ListenAddr is correct
-	expectedAddrs := make([]string, 0, len(peer1.Host.Addrs()))
-	for _, addr := range peer1.Host.Addrs() {
+	expectedAddrs := make([]string, 0, len(alice.Host.Addrs()))
+	for _, addr := range alice.Host.Addrs() {
 		expectedAddrs = append(expectedAddrs, addr.String())
 	}
+
 	expectedListenAddr := strings.Join(expectedAddrs, ", ")
 	require.Equal(t, expectedListenAddr, stats.ListenAddr)
 }
 
 func TestSetupBroadcastTopic(t *testing.T) {
-	peer1, _, _ := createPeers(t, 65533, 65534, 65535)
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
 
 	// Test case: topic not subscribed
-	err := peer1.SetupBroadcastTopic("nonexistent_topic", func(_ *Topic) error {
+	err := alice.SetupBroadcastTopic("nonexistent_topic", func(_ *Topic) error {
 		return nil
 	})
-	require.ErrorContains(t, err, "not subscribed to nonexistent_topic")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotSubscribed)
 
 	// Test case: topic subscribed and setup function succeeds
 	topicName := "test_topic"
-	topicHandler, err := peer1.getOrJoinTopicHandler(topicName)
+	topicHandler, err := alice.getOrJoinTopicHandler(topicName)
 	require.NoError(t, err)
-	peer1.pubsubTopics[topicName] = topicHandler
+	alice.pubsubTopics[topicName] = topicHandler
 
-	err = peer1.SetupBroadcastTopic(topicName, func(_ *Topic) error {
+	err = alice.SetupBroadcastTopic(topicName, func(_ *Topic) error {
 		// Simulate setup logic
 		return nil
 	})
 	require.NoError(t, err)
 
 	// Test case: topic subscribed and setup function fails
-	err = peer1.SetupBroadcastTopic(topicName, func(_ *Topic) error {
+	errorMsg := "setup failed"
+	err = alice.SetupBroadcastTopic(topicName, func(_ *Topic) error {
 		// Simulate setup logic failure
-		return fmt.Errorf("setup failed")
+		return fmt.Errorf("%s", errorMsg)
 	})
-	require.ErrorContains(t, err, "setup failed")
+	require.ErrorContains(t, err, errorMsg)
 }
 
 func TestKnownPeers(t *testing.T) {
-	peer1, peer2, peer3 := createPeers(t, 65200, 65201, 65202)
+	hosts := newNetwork(t, 3, true)
+	require.Len(t, hosts, 3)
+	alice := hosts[0]
+	bob := hosts[1]
+	carol := hosts[2]
 
 	// Add peers to the peerstore
-	peer1ID := peer1.Host.ID()
-	peer2ID := peer2.Host.ID()
-	peer3ID := peer3.Host.ID()
+	aliceID := alice.Host.ID()
+	bobID := bob.Host.ID()
+	carolID := carol.Host.ID()
 
-	peer1.Host.Peerstore().AddAddrs(peer2ID, peer2.Host.Addrs(), peerstore.PermanentAddrTTL)
-	peer1.Host.Peerstore().AddAddrs(peer3ID, peer3.Host.Addrs(), peerstore.PermanentAddrTTL)
+	alice.Host.Peerstore().AddAddrs(bobID, bob.Host.Addrs(), peerstore.PermanentAddrTTL)
+	alice.Host.Peerstore().AddAddrs(carolID, carol.Host.Addrs(), peerstore.PermanentAddrTTL)
 
 	// Test KnownPeers method
-	peers, err := peer1.KnownPeers()
+	peers, err := alice.KnownPeers()
 	require.NoError(t, err)
 	require.Len(t, peers, 3)
 
-	expectedPeers := []peer.ID{peer1ID, peer2ID, peer3ID}
+	expectedPeers := []peer.ID{aliceID, bobID, carolID}
 	for _, p := range peers {
 		require.Contains(t, expectedPeers, p.ID)
 	}
 }
 
 func TestVisiblePeers(t *testing.T) {
-	peer1, peer2, peer3 := createPeers(t, 65203, 65204, 65205)
+	hosts := newNetwork(t, 3, true)
+	require.Len(t, hosts, 3)
+	alice := hosts[0]
+	bob := hosts[1]
+	carol := hosts[2]
 
-	// Add discovered peers to peer1
-	peer1.discoveredPeers = []peer.AddrInfo{
-		{ID: peer2.Host.ID(), Addrs: peer2.Host.Addrs()},
-		{ID: peer3.Host.ID(), Addrs: peer3.Host.Addrs()},
+	// Add discovered peers to alice
+	alice.discoveredPeers = []peer.AddrInfo{
+		{ID: bob.Host.ID(), Addrs: bob.Host.Addrs()},
+		{ID: carol.Host.ID(), Addrs: carol.Host.Addrs()},
 	}
 
 	// Test VisiblePeers method
-	visiblePeers := peer1.VisiblePeers()
+	visiblePeers := alice.VisiblePeers()
 	require.Len(t, visiblePeers, 2)
 
-	expectedPeers := []peer.ID{peer2.Host.ID(), peer3.Host.ID()}
+	expectedPeers := []peer.ID{bob.Host.ID(), carol.Host.ID()}
 	for _, p := range visiblePeers {
 		require.Contains(t, expectedPeers, p.ID)
 	}
 }
 
 func TestGetBroadcastScore(t *testing.T) {
-	peer1, _, _ := createPeers(t, 65136, 65137, 65138)
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
 
 	// Initialize some dummy scores
 	dummyScores := map[peer.ID]*PeerScoreSnapshot{
-		peer1.Host.ID(): {
+		alice.Host.ID(): {
 			Score: 10.0,
 		},
 	}
 
 	// Set the dummy scores
-	peer1.broadcastScoreInspect(dummyScores)
+	alice.broadcastScoreInspect(dummyScores)
 
 	// Retrieve the broadcast scores
-	scores := peer1.GetBroadcastScore()
+	scores := alice.GetBroadcastScore()
 
 	// Check if the scores match the dummy scores
 	require.Equal(t, dummyScores, scores)
-	require.Equal(t, 10.0, scores[peer1.Host.ID()].Score)
+	require.Equal(t, 10.0, scores[alice.Host.ID()].Score)
 }
 
 func TestBroadcastScoreInspect(t *testing.T) {
-	peer1, _, _ := createPeers(t, 65139, 65140, 65141)
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
 
 	// Initialize some dummy scores
 	dummyScores := map[peer.ID]*PeerScoreSnapshot{
-		peer1.Host.ID(): {
+		alice.Host.ID(): {
 			Score: 10.0,
 		},
 	}
 
 	// Call broadcastScoreInspect with the dummy scores
-	peer1.broadcastScoreInspect(dummyScores)
+	alice.broadcastScoreInspect(dummyScores)
 
 	// Retrieve the broadcast scores
-	scores := peer1.GetBroadcastScore()
+	scores := alice.GetBroadcastScore()
 
 	// Check if the scores match the dummy scores
 	require.Equal(t, dummyScores, scores)
-	require.Equal(t, 10.0, scores[peer1.Host.ID()].Score)
+	require.Equal(t, 10.0, scores[alice.Host.ID()].Score)
 }
 
-func createPeers(t *testing.T, port1, port2, port3 int) (*Libp2p, *Libp2p, *Libp2p) {
-	// setup peer1
-	cfg := &config.Config{}
+// TestHostPublicIP uses internal variables to inject a public IP address
+// If decided to make all libp2p tests black boxed, this method shall not be tested.
+func TestHostPublicIP(t *testing.T) {
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
 
-	peer1Config := setupPeerConfig(t, port1, []multiaddr.Multiaddr{})
-	peer1, err := New(peer1Config, afero.NewMemMapFs())
-	assert.NoError(t, err)
-	assert.NotNil(t, peer1)
-	err = peer1.Init(cfg)
-	assert.NoError(t, err)
-	err = peer1.Start()
-	assert.NoError(t, err)
+	publicIP := "203.0.113.1"
+	publicMultiaddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/1234", publicIP))
+	require.NoError(t, err)
 
-	// peers of peer1 should be one (itself)
-	assert.Equal(t, peer1.Host.Peerstore().Peers().Len(), 1)
-
-	// setup peer2 to connect to peer 1
-	peer1p2pAddrs, err := peer1.GetMultiaddr()
-	assert.NoError(t, err)
-	peer2Config := setupPeerConfig(t, port2, peer1p2pAddrs)
-	peer2, err := New(peer2Config, afero.NewMemMapFs())
-	assert.NoError(t, err)
-	assert.NotNil(t, peer2)
-
-	err = peer2.Init(cfg)
-	assert.NoError(t, err)
-	err = peer2.Start()
-	assert.NoError(t, err)
-
-	// setup a new peer and advertise specs
-	// peer3 will connect to peer2 in a ring setup.
-	peer2p2pAddrs, err := peer2.GetMultiaddr()
-	assert.NoError(t, err)
-	peer3Config := setupPeerConfig(t, port3, peer2p2pAddrs)
-	peer3, err := New(peer3Config, afero.NewMemMapFs())
-	assert.NoError(t, err)
-	assert.NotNil(t, peer3)
-
-	err = peer3.Init(cfg)
-	assert.NoError(t, err)
-	err = peer3.Start()
-	assert.NoError(t, err)
-
-	// ensure that the peers are connected
-	err = retry.Do(
-		func() error {
-			if peer1.Host.Network().Connectedness(peer2.Host.ID()) != network.Connected {
-				return fmt.Errorf("peer1 is not connected to peer2")
-			}
-
-			if peer2.Host.Network().Connectedness(peer3.Host.ID()) != network.Connected {
-				return fmt.Errorf("peer2 is not connected to peer3")
-			}
-			return nil
-		},
-		retry.Attempts(5),
-		retry.Delay(200*time.Millisecond),
-	)
-	require.NoErrorf(t, err, "could not connect peers")
-
-	return peer1, peer2, peer3
-}
-
-func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr) *types.Libp2pConfig {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
-	assert.NoError(t, err)
-	return &types.Libp2pConfig{
-		PrivateKey:              priv,
-		BootstrapPeers:          bootstrapPeers,
-		Rendezvous:              "nunet-randevouz",
-		Server:                  false,
-		Scheduler:               backgroundtasks.NewScheduler(10),
-		CustomNamespace:         "/nunet-dht-1/",
-		ListenAddress:           []string{fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic-v1/", libp2pPort)},
-		PeerCountDiscoveryLimit: 40,
+	// Inject the observed address to simulate a peer observing our address
+	select {
+	case alice.observedAddrCh <- publicMultiaddr:
+		// Successfully sent the address
+	default:
+		// Channel full, using alternative method
+		alice.mx.Lock()
+		alice.observedAddr = publicMultiaddr
+		alice.mx.Unlock()
 	}
+
+	ip, err := alice.HostPublicIP()
+	require.NoError(t, err)
+	require.Equal(t, publicIP, ip.String())
+}
+
+func TestNotify(t *testing.T) {
+	hosts := newNetwork(t, 3, true)
+	require.Len(t, hosts, 3)
+	alice := hosts[0]
+	bob := hosts[1]
+
+	// Create channels to record callback invocations
+	preconnectedCh := make(chan struct{}, 10)
+	connectedCh := make(chan peer.ID, 10)
+	disconnectedCh := make(chan peer.ID, 10)
+	identifiedCh := make(chan peer.ID, 10)
+	updatedCh := make(chan peer.ID, 10)
+
+	// Setup callback functions
+	preconnectedFn := func(_ peer.ID, _ []protocol.ID, connCount int) {
+		assert.Greater(t, connCount, 0)
+		preconnectedCh <- struct{}{}
+	}
+
+	connectedFn := func(p peer.ID) {
+		connectedCh <- p
+	}
+
+	disconnectedFn := func(p peer.ID) {
+		disconnectedCh <- p
+	}
+
+	identifiedFn := func(p peer.ID, _ []protocol.ID) {
+		identifiedCh <- p
+	}
+
+	updatedFn := func(p peer.ID, _ []protocol.ID) {
+		updatedCh <- p
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := alice.Notify(ctx, preconnectedFn, connectedFn, disconnectedFn, identifiedFn, updatedFn)
+	require.NoError(t, err)
+
+	// Verify preconnected callbacks were made
+	// Since our network is already connected, we should receive preconnected callbacks
+	require.Eventually(t, func() bool {
+		return len(preconnectedCh) > 0
+	}, 5*time.Second, 100*time.Millisecond, "No preconnected callbacks received")
+
+	// Disconnect bob from alice
+	bobConns := alice.Host.Network().ConnsToPeer(bob.Host.ID())
+	require.NotEmpty(t, bobConns)
+	for _, conn := range bobConns {
+		err := conn.Close()
+		require.NoError(t, err)
+	}
+
+	// Verify disconnected callback was called
+	require.Eventually(t, func() bool {
+		select {
+		case peerID := <-disconnectedCh:
+			return peerID == bob.Host.ID()
+		default:
+			return false
+		}
+	}, 5*time.Second, 100*time.Millisecond, "Disconnected callback not called with correct peer ID")
+
+	// Reconnect bob to alice
+	err = alice.Host.Connect(ctx, peer.AddrInfo{
+		ID:    bob.Host.ID(),
+		Addrs: bob.Host.Addrs(),
+	})
+	require.NoError(t, err)
+
+	// Verify connected callback was called
+	require.Eventually(t, func() bool {
+		select {
+		case peerID := <-connectedCh:
+			return peerID == bob.Host.ID()
+		default:
+			return false
+		}
+	}, 5*time.Second, 100*time.Millisecond, "Connected callback not called with correct peer ID")
+
+	// Verify identified callback was called
+	require.Eventually(t, func() bool {
+		select {
+		case peerID := <-identifiedCh:
+			return peerID == bob.Host.ID()
+		default:
+			return false
+		}
+	}, 5*time.Second, 100*time.Millisecond, "Identified callback not called with correct peer ID")
+}
+
+func TestSetBroadcastAppScore(t *testing.T) {
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
+
+	scoreFn := func(_ peer.ID) float64 { return 20.0 }
+
+	alice.SetBroadcastAppScore(scoreFn)
+
+	// Call the broadcastAppScore method to see if our function is used
+	score := alice.broadcastAppScore(alice.Host.ID())
+	require.Equal(t, 20.0, score)
+
+	// Test with a different value to ensure it's dynamic
+	newScoreFn := func(_ peer.ID) float64 {
+		return 30.0
+	}
+	alice.SetBroadcastAppScore(newScoreFn)
+	score = alice.broadcastAppScore(alice.Host.ID())
+	require.Equal(t, 30.0, score)
 }

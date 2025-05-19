@@ -23,17 +23,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/network"
-
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-
 	cid "github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -48,6 +44,7 @@ import (
 
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/observability"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
@@ -199,18 +196,22 @@ func (l *Libp2p) Init(cfg *config.Config) error {
 
 // Start performs network bootstrapping, peer discovery and protocols handling.
 func (l *Libp2p) Start() error {
+	if l.Host == nil {
+		return ErrHostNotInitialized
+	}
+
 	// set stream handlers
 	l.registerStreamHandlers()
 
 	// connect to bootstrap nodes
-	err := l.ConnectToBootstrapNodes(l.ctx)
+	err := l.connectToBootstrapNodes(l.ctx)
 	if err != nil {
 		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
 	}
 	log.Infow("libp2p_bootstrap_success", "labels", string(observability.LabelNode))
 
-	err = l.BootstrapDHT(l.ctx)
+	err = l.bootstrapDHT(l.ctx)
 	if err != nil {
 		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
@@ -236,7 +237,7 @@ func (l *Libp2p) Start() error {
 			log.Infow("libp2p_advertise_rendezvous_success", "labels", string(observability.LabelNode))
 		}
 
-		err = l.DiscoverDialPeers(l.ctx)
+		err = l.discoverDialPeers(l.ctx)
 		if err != nil {
 			log.Warnf("libp2p_peer_discover_failure", "labels", string(observability.LabelNode), "error", err)
 		} else {
@@ -249,7 +250,7 @@ func (l *Libp2p) Start() error {
 		Name:        "Peer Discovery",
 		Description: "Periodic task to discover new peers every 15 minutes",
 		Function: func(_ interface{}) error {
-			return l.DiscoverDialPeers(l.ctx)
+			return l.discoverDialPeers(l.ctx)
 		},
 		Triggers: []bt.Trigger{&bt.PeriodicTrigger{Interval: 15 * time.Minute}},
 	}
@@ -934,7 +935,7 @@ func (l *Libp2p) validate(_ context.Context, _ peer.ID, msg *pubsub.Message) Val
 func (l *Libp2p) SetupBroadcastTopic(topic string, setup func(*Topic) error) error {
 	t, ok := l.pubsubTopics[topic]
 	if !ok {
-		return fmt.Errorf("not subscribed to %s", topic)
+		return fmt.Errorf("%w: %s", ErrNotSubscribed, topic)
 	}
 
 	return setup(t)
@@ -986,14 +987,19 @@ func (l *Libp2p) watchForAddrsChange(ctx context.Context) {
 			return
 		case <-sub.Out():
 			log.Debug("network address changed. trying to be bootstrap again.")
-			if err = l.ConnectToBootstrapNodes(l.ctx); err != nil {
+			if err = l.connectToBootstrapNodes(l.ctx); err != nil {
 				log.Errorf("failed to start network: %v", err)
 			}
 		}
 	}
 }
 
-func (l *Libp2p) Notify(ctx context.Context, preconnected func(peer.ID, []protocol.ID, int), connected, disconnected func(peer.ID), identified, updated func(peer.ID, []protocol.ID)) error {
+func (l *Libp2p) Notify(
+	ctx context.Context,
+	preconnected func(peer.ID, []protocol.ID, int),
+	connected, disconnected func(peer.ID),
+	identified, updated func(peer.ID, []protocol.ID),
+) error {
 	sub, err := l.Host.EventBus().Subscribe([]interface{}{
 		&event.EvtPeerConnectednessChanged{},
 		&event.EvtPeerIdentificationCompleted{},
@@ -1109,7 +1115,7 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 }
 
 func (l *Libp2p) HostPublicIP() (net.IP, error) {
-	addr, err := l.WaitForObservedAddr(l.ctx)
+	addr, err := l.waitForObservedAddr(l.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve observed addr: %w", err)
 	}
@@ -1118,7 +1124,7 @@ func (l *Libp2p) HostPublicIP() (net.IP, error) {
 
 // WaitForObservedAddr waits for the node to confirm its public IP address
 // Returns the observed multiaddress or an error if the context expires
-func (l *Libp2p) WaitForObservedAddr(ctx context.Context) (multiaddr.Multiaddr, error) {
+func (l *Libp2p) waitForObservedAddr(ctx context.Context) (multiaddr.Multiaddr, error) {
 	// if we already have an observed address, return it immediately
 	l.mx.Lock()
 	if l.observedAddr != nil {
@@ -1150,14 +1156,8 @@ func (l *Libp2p) KnownPeers() ([]peer.AddrInfo, error) {
 	return peers, nil
 }
 
-func (l *Libp2p) DumpDHTRoutingTable() ([]kbucket.PeerInfo, error) {
-	rt := l.DHT.RoutingTable()
-	return rt.GetPeerInfos(), nil
-}
-
 func (l *Libp2p) registerStreamHandlers() {
 	l.pingService = ping.NewPingService(l.Host)
-	l.Host.SetStreamHandler(protocol.ID("/ipfs/ping/1.0.0"), l.pingService.PingHandler)
 }
 
 func (l *Libp2p) sign(data []byte) ([]byte, error) {

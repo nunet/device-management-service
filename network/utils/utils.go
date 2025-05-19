@@ -91,38 +91,6 @@ func nextIP(ip net.IP, netmask int) net.IP {
 	return nil
 }
 
-// GetRandomCIDR returns a random CIDR with the given mask
-// and not in the blacklist.
-// If the blacklist is empty, it will return a random CIDR with the given mask.
-// This function supports mask 0, 8, 16, 24.
-// If you need more elaborate masks to get more subnets (i.e: 0<mask<32)
-// refactor this to use bitwise operations on the IP.
-func GetRandomCIDR(mask int, blacklist []string) (string, error) {
-	var cidr string
-	var breakCounter int
-	for {
-		if mask > 0 && breakCounter > 2^mask || mask == 0 && breakCounter > 255 {
-			return fmt.Sprintf("%s/%d", "0.0.0.0", mask), fmt.Errorf("could not find a CIDR after %d attempts", breakCounter)
-		}
-
-		ip := net.IP{byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256))}
-
-		candidate := fmt.Sprintf("%s/%d", ip, mask)
-		if !isOnBlacklist(candidate, blacklist) {
-			cidr = candidate
-			break
-		}
-		breakCounter++
-	}
-
-	_, ip, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return "", nil
-	}
-
-	return ip.String(), nil
-}
-
 // isOnBlacklist returns true if the given CIDR is in the blacklist.
 func isOnBlacklist(cidr string, blacklist []string) bool {
 	for _, blacklistedCIDR := range blacklist {
@@ -186,4 +154,39 @@ func IsFreePort(port int) bool {
 
 	_ = ln.Close()
 	return true
+}
+
+// GetRandomAvailablePort returns a random available port on the system.
+func GetRandomAvailablePort() (int, error) {
+	// Try to find an available port within a reasonable range
+	// Standard ephemeral port range is typically 49152-65535
+	// but we'll use a broader range to increase chances of finding one
+	const (
+		minPort  = 10000
+		maxPort  = 65535
+		maxTries = 100
+	)
+
+	for i := 0; i < maxTries; i++ {
+		port := randRange(minPort, maxPort)
+
+		if IsFreePort(port) {
+			return port, nil
+		}
+	}
+
+	return 0, fmt.Errorf("could not find an available port after %d attempts", maxTries)
+}
+
+// GetMultipleAvailablePorts returns a list of random available ports on the system.
+func GetMultipleAvailablePorts(numPorts int) ([]int, error) {
+	ports := make([]int, 0, numPorts)
+	for i := 0; i < numPorts; i++ {
+		port, err := GetRandomAvailablePort()
+		if err != nil {
+			return nil, err
+		}
+		ports = append(ports, port)
+	}
+	return ports, nil
 }
