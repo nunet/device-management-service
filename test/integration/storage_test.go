@@ -17,23 +17,20 @@ import (
 	"gitlab.com/nunet/device-management-service/dms"
 )
 
-// func TestTLSGlusterGenerator(t *testing.T)
 func TLSGlusterGenerator(t *testing.T) {
 	os.Setenv("GOLOG_LOG_LEVEL", "debug")
-	// func TLSGlusterGenerator(t *testing.T) {
 	password := "password"
 	here := getCurrentFileDirectory()
 
 	rootDir := filepath.Join("testdata", "storage", "dms1")
 	rootDir2 := filepath.Join("testdata", "storage", "dms2")
+	rootDir3 := filepath.Join("testdata", "storage", "dms3")
 
-	err := os.RemoveAll(filepath.Join(here, rootDir))
-	require.NoError(t, err)
-	err = os.RemoveAll(filepath.Join(here, rootDir2))
+	_ = os.RemoveAll(filepath.Join(here, rootDir))
+	_ = os.RemoveAll(filepath.Join(here, rootDir2))
+	_ = os.RemoveAll(filepath.Join(here, rootDir3))
 
-	os.RemoveAll("/tmp/client_gluster_tls_certs")
-
-	require.NoError(t, err)
+	_ = os.RemoveAll("/tmp/client_gluster_tls_certs")
 
 	node1Config := createConfig(rootDir, 9992, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9087), []string{})
 	cli1 := newClient(t, node1Config)
@@ -42,8 +39,14 @@ func TLSGlusterGenerator(t *testing.T) {
 	dms1DID := cli1.getDID(t, fmt.Sprintf("%s.cap", "dms"), password)
 	require.NotEmpty(t, dms1DID)
 
-	node2Config := createConfig(rootDir2, 9994, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9089), []string{})
+	node3Config := createConfig(rootDir3, 9997, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9095), []string{})
+	cli3 := newClient(t, node3Config)
+	cli3.newKey(t, "dms", password)
+	cli3.newCap(t, "dms", password)
+	dms3DID := cli3.getDID(t, fmt.Sprintf("%s.cap", "dms"), password)
+	require.NotEmpty(t, dms3DID)
 
+	node2Config := createConfig(rootDir2, 9994, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9089), []string{})
 	cli2 := newClient(t, node2Config)
 	cli2.newKey(t, "dms", password)
 	cli2.newCap(t, "dms", password)
@@ -52,7 +55,13 @@ func TLSGlusterGenerator(t *testing.T) {
 
 	// anchor them as root together
 	cli1.addRootAnchor(t, "dms", dms2DID, password)
+	cli1.addRootAnchor(t, "dms", dms3DID, password)
+
 	cli2.addRootAnchor(t, "dms", dms1DID, password)
+	cli2.addRootAnchor(t, "dms", dms3DID, password)
+
+	cli3.addRootAnchor(t, "dms", dms1DID, password)
+	cli3.addRootAnchor(t, "dms", dms2DID, password)
 
 	const home = "/home/"
 
@@ -131,18 +140,27 @@ func TLSGlusterGenerator(t *testing.T) {
 		bootstrap = append(bootstrap, v.String())
 	}
 
+	// run third dms
+	node3Config.BootstrapPeers = bootstrap
+	dms3, err := dms.NewDMS(node3Config, password, "dms")
+	require.NoError(t, err)
+	assert.NotNil(t, dms3)
+	err = dms3.Run()
+	require.NoError(t, err)
+	time.Sleep(7 * time.Second)
+
 	// run dms in container
 	err = runBinaryInContainer(tlsServerContainerName, "dms", []string{"run", "--context", "dms"}, []string{"DMS_PASSPHRASE=password", "BOOTSTRAP_PEERS=" + strings.Join(bootstrap, ",")}, "/home/dms_log.txt")
 	require.NoError(t, err)
-
 	time.Sleep(10 * time.Second)
 
 	// broadcast
 	result := cli1.broadcast(t, "dms", password)
-	require.Equal(t, 2, countDIDOccurrences(result))
+	require.Equal(t, 3, countDIDOccurrences(result))
 
 	// onboard
 	cli1.onboard(t, "dms", password)
+	cli3.onboard(t, "dms", password)
 
 	// generate client certs
 	err = generateCerts("clientXyx", "/tmp/client_gluster_tls_certs")
@@ -172,8 +190,8 @@ func TLSGlusterGenerator(t *testing.T) {
 	err = runBinaryInContainer(tlsServerContainerName, "dms", []string{"actor", "cmd", "--context", "dms", "/dms/node/deployment/new", "--spec-file", "/home/firefly.yaml", "--timeout", "2m"}, []string{"DMS_PASSPHRASE=password"}, "/home/run_ensemble.txt")
 	require.NoError(t, err)
 
-	time.Sleep(3 * time.Minute)
-	// _ = deleteGlusterContainer(tlsServerContainerName)
+	time.Sleep(2 * time.Minute)
+	_ = deleteGlusterContainer(tlsServerContainerName)
 }
 
 func generateCerts(hostname string, dir string) error {
