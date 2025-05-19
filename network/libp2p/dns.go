@@ -16,7 +16,7 @@ import (
 	"github.com/miekg/dns"
 )
 
-// ResolveDNS resolves a DNS query using the provided resolver
+// resolveDNS resolves a DNS query using the provided resolver
 func resolveDNS(query *dns.Msg, records map[string]string) *dns.Msg {
 	// Create a response message
 	m := new(dns.Msg)
@@ -48,7 +48,7 @@ func resolveDNS(query *dns.Msg, records map[string]string) *dns.Msg {
 	return m
 }
 
-// HandleDNSQuery handles a DNS query by parsing the UDP packet, resolving the query, and sending a response
+// handleDNSQuery handles a DNS query by parsing the UDP packet, resolving the query, and sending a response
 func handleDNSQuery(packet []byte, records map[string]string) ([]byte, error) {
 	// Parse the UDP packet into a DNS message
 	msg := new(dns.Msg)

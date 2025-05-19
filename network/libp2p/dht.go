@@ -30,14 +30,21 @@ import (
 	multiaddr "github.com/multiformats/go-multiaddr"
 	"google.golang.org/protobuf/proto"
 
+	dmscrypto "gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/observability"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const kadv1 = "/kad/1.0.0"
 
+var (
+	ErrInvalidKeyNamespace     = errors.New("invalid key namespace")
+	ErrValidateEnvelopeByPbkey = errors.New("failed to verify public key")
+)
+
 // Connect to Bootstrap nodes
-func (l *Libp2p) ConnectToBootstrapNodes(ctx context.Context) error {
+func (l *Libp2p) connectToBootstrapNodes(ctx context.Context) error {
 	// bootstrap all nodes at the same time.
 	if len(l.config.BootstrapPeers) > 0 {
 		var wg sync.WaitGroup
@@ -65,7 +72,7 @@ func (l *Libp2p) ConnectToBootstrapNodes(ctx context.Context) error {
 }
 
 // Start dht bootstrapper
-func (l *Libp2p) BootstrapDHT(ctx context.Context) error {
+func (l *Libp2p) bootstrapDHT(ctx context.Context) error {
 	endTrace := observability.StartTrace(ctx, "libp2p_bootstrap_duration")
 	defer endTrace()
 
@@ -232,7 +239,7 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 			"labels", string(observability.LabelNode),
 			"key", key,
 			"error", "invalid key namespace")
-		return errors.New("invalid key namespace")
+		return ErrInvalidKeyNamespace
 	}
 
 	// verify signature
@@ -243,7 +250,7 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 			"labels", string(observability.LabelNode),
 			"key", key,
 			"error", fmt.Sprintf("failed to unmarshal envelope: %v", err))
-		return fmt.Errorf("failed to unmarshal envelope: %w", err)
+		return fmt.Errorf("%w envelope: %w", types.ErrUnmarshal, err)
 	}
 
 	pubKey, err := crypto.UnmarshalSecp256k1PublicKey(envelope.PublicKey)
@@ -252,7 +259,7 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 			"labels", string(observability.LabelNode),
 			"key", key,
 			"error", fmt.Sprintf("failed to unmarshal public key: %v", err))
-		return fmt.Errorf("failed to unmarshal public key: %w", err)
+		return fmt.Errorf("%w: %w", dmscrypto.ErrUnmarshalPublicKey, err)
 	}
 
 	concatenatedBytes := bytes.Join([][]byte{
@@ -267,7 +274,7 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 			"labels", string(observability.LabelNode),
 			"key", key,
 			"error", fmt.Sprintf("failed to verify envelope: %v", err))
-		return fmt.Errorf("failed to verify envelope: %w", err)
+		return fmt.Errorf("%w envelope: %w", ErrValidateEnvelopeByPbkey, err)
 	}
 
 	if !ok {
@@ -275,7 +282,7 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 			"labels", string(observability.LabelNode),
 			"key", key,
 			"error", "public key didn't sign the payload")
-		return errors.New("failed to verify envelope, public key didn't sign payload")
+		return fmt.Errorf("%w, public key didn't sign payload", ErrValidateEnvelopeByPbkey)
 	}
 
 	log.Infow("libp2p_dht_validate_success",

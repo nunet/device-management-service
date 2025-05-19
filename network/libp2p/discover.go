@@ -17,11 +17,12 @@ import (
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+
 	"gitlab.com/nunet/device-management-service/observability"
 )
 
-// DiscoverDialPeers discovers peers using rendezvous point
-func (l *Libp2p) DiscoverDialPeers(ctx context.Context) error {
+// discoverDialPeers discovers peers using rendezvous point
+func (l *Libp2p) discoverDialPeers(ctx context.Context) error {
 	endTrace := observability.StartTrace(ctx, "libp2p_peer_discover_duration")
 	defer endTrace()
 
