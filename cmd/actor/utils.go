@@ -32,7 +32,6 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 	}
 
 	for name, script := range cfg.Ensemble.V1.Scripts {
-		fmt.Println(name, string(script))
 		scriptData, err := fs.ReadFile(string(script))
 		if err != nil {
 			return nil, fmt.Errorf("failed to read script file: %w", err)
@@ -40,33 +39,43 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 		cfg.Ensemble.V1.Scripts[name] = scriptData
 	}
 
-	for i, alloc := range cfg.Ensemble.V1.Allocations {
-		if alloc.Volume == nil {
-			continue
+	for aIdx, alloc := range cfg.Ensemble.V1.Allocations {
+		// handle reading public key files
+		if alloc.Keys != nil {
+			for kIdx, key := range alloc.Keys {
+				keyData, err := fs.ReadFile(key.File)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read key file: %w", err)
+				}
+				cfg.Ensemble.V1.Allocations[aIdx].Keys[kIdx].File = string(keyData)
+			}
 		}
 
-		if alloc.Volume.ClientPrivateKey != "" {
-			pvkeyData, err := fs.ReadFile(alloc.Volume.ClientPrivateKey)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
+		// handle reading client certificate files for volumes
+		if alloc.Volume != nil {
+			if alloc.Volume.ClientPrivateKey != "" {
+				pvkeyData, err := fs.ReadFile(alloc.Volume.ClientPrivateKey)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
+				}
+				cfg.Ensemble.V1.Allocations[aIdx].Volume.ClientPrivateKey = string(pvkeyData)
 			}
-			cfg.Ensemble.V1.Allocations[i].Volume.ClientPrivateKey = string(pvkeyData)
-		}
 
-		if alloc.Volume.ClientPEM != "" {
-			pemData, err := fs.ReadFile(alloc.Volume.ClientPEM)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read pem data: %w", err)
+			if alloc.Volume.ClientPEM != "" {
+				pemData, err := fs.ReadFile(alloc.Volume.ClientPEM)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read pem data: %w", err)
+				}
+				cfg.Ensemble.V1.Allocations[aIdx].Volume.ClientPEM = string(pemData)
 			}
-			cfg.Ensemble.V1.Allocations[i].Volume.ClientPEM = string(pemData)
-		}
 
-		if alloc.Volume.ClientCA != "" {
-			caData, err := fs.ReadFile(alloc.Volume.ClientCA)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read ca data: %w", err)
+			if alloc.Volume.ClientCA != "" {
+				caData, err := fs.ReadFile(alloc.Volume.ClientCA)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read ca data: %w", err)
+				}
+				cfg.Ensemble.V1.Allocations[aIdx].Volume.ClientCA = string(caData)
 			}
-			cfg.Ensemble.V1.Allocations[i].Volume.ClientCA = string(caData)
 		}
 	}
 

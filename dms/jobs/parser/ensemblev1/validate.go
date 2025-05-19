@@ -17,6 +17,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/validate"
+	"gitlab.com/nunet/device-management-service/types"
 	cutils "gitlab.com/nunet/device-management-service/utils/convert"
 	vutils "gitlab.com/nunet/device-management-service/utils/validate"
 )
@@ -264,26 +265,28 @@ func ValidateAllocation(root *map[string]any, data any, path tree.Path) error {
 		for i, keyObj := range keys {
 			keyMap, ok := keyObj.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid key at index %d: must be an object", i)
+				return fmt.Errorf("invalid allocation key spec at index %d: must be a map", i)
 			}
 
 			keyType, ok := keyMap["type"].(string)
 			if !ok || keyType == "" {
-				return fmt.Errorf("key at index %d must have a type", i)
+				return fmt.Errorf("allocation key spec at index %d must have a type", i)
 			}
 
-			if keyType != "ssh" && keyType != "gpg" {
+			if !types.KeySSH.Equal(keyType) && !types.KeyGPG.Equal(keyType) {
 				return fmt.Errorf("key at index %d has invalid type: %s (must be 'ssh' or 'gpg')", i, keyType)
 			}
 
 			keyFile, ok := keyMap["file"].(string)
 			if !ok || keyFile == "" {
-				return fmt.Errorf("key at index %d must have a file", i)
+				return fmt.Errorf("allocation key at index %d is empty", i)
 			}
 
+			// destination not required for ssh keys. However 'user' in execution will be
+			// used if defined. When a user isn't defined, we default to root.
 			keyDest, ok := keyMap["dest"].(string)
-			if !ok || keyDest == "" {
-				return fmt.Errorf("key at index %d must have a dest", i)
+			if (!ok || keyDest == "") && !types.KeySSH.Equal(keyType) {
+				return fmt.Errorf("allocation key at index %d is missing a destination", i)
 			}
 		}
 	}
