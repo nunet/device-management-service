@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/afero"
 )
@@ -63,4 +64,13 @@ func FileExists(fs afero.Fs, filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+// CurrentFileDirectory returns the path of this file
+func CurrentFileDirectory() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	return filepath.Dir(file)
 }
