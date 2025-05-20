@@ -31,6 +31,9 @@ all:
 		make darwin_arm64;\
 	fi
 
+run-acceptance:
+	go test -test.v -test.run "^TestFeatures/" ./test/acceptance/... -tags=acceptance -timeout=10m
+
 linux_amd64:
 	@echo "Building for Linux AMD64..."
 	go mod tidy
@@ -107,9 +110,6 @@ storage_test:
 	make build_storage_tests
 	make setcapstorage
 	./test/integration/storagetestbinary
-
-run-acceptance:
-	@echo "dummy output for now"
 
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common
