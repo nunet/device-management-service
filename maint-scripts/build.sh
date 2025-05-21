@@ -19,8 +19,7 @@ version=$(echo $fullVersion | cut -c 2-)
 
 mkdir -p $outputDir
 
-for arch in amd64 arm64 arm32
-do
+for arch in amd64 arm64 arm32; do
 
     # echo .deb file will be written to: $outputDir
     archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$arch
@@ -56,13 +55,19 @@ do
     dpkg-deb --build --root-owner-group $archDir $outputDir
     rm -r $archDir
 
-    if [[ ! -z ${GITLAB_CI+x} ]]  ; then
-        # upload artifact from build.sh to GitLab Package Registry.
-        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${projectRoot}/dist/nunet-dms_${version}_${arch}.deb ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${arch}.deb
-        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${fullVersion}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${arch}.zip
+    if [[ -n ${GITLAB_CI+x} ]]; then
+        regex='^(release|release\/.+|release-.+|patch\/.+|patch-.+|main)$'
+
+        if [[ $CI_COMMIT_REF_NAME =~ $regex ]]; then
+            echo "Deploying to package registry..."
+            curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${projectRoot}/dist/nunet-dms_${version}_${arch}.deb ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${arch}.deb
+            curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${fullVersion}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${arch}.zip
+        else
+            echo skipping deployment to package registry...
+        fi
     fi
 
-    if [[ ! -z ${NUNETBOT_BUILD_ENDPOINT+x} ]] ; then
+    if [[ -n ${NUNETBOT_BUILD_ENDPOINT+x} ]]; then
         # notify the bot about the build
         curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$fullVersion\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_${arch}.deb\"}" $NUNETBOT_BUILD_ENDPOINT
     fi
