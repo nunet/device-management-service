@@ -591,7 +591,11 @@ func (e *eventEmitterCore) Write(entry zapcore.Entry, fields []zapcore.Field) er
 		Data:      eventData,
 	}
 
-	_ = customEventEmitter.Emit(customEvent)
+	// nil-guard: only emit if the bus is initialised
+	if customEventEmitter != nil {
+		_ = customEventEmitter.Emit(customEvent)
+	}
+
 	return nil
 }
 
