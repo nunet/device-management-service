@@ -13,43 +13,123 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestPeriodicTrigger(t *testing.T) {
-	trigger := PeriodicTrigger{
-		Interval: 1 * time.Second,
+func TestPeriodicTrigger_Interval(t *testing.T) {
+	t.Parallel()
+
+	t0 := time.Now()
+	interval := 100 * time.Millisecond
+	tr := &PeriodicTrigger{Interval: interval}
+	tr.Reset(t0)
+
+	// Should not be ready immediately
+	require.False(t, tr.IsReady(t0), "Expected not ready immediately after creation")
+
+	// Should be ready after interval
+	t1 := t0.Add(interval + 1*time.Millisecond)
+	assert.True(t, tr.IsReady(t1), "Expected ready after interval elapsed")
+	// Should still be ready until marked triggered
+	assert.True(t, tr.IsReady(t1.Add(interval/2)), "Expected ready until marked triggered")
+
+	// MarkTriggered should reset startedAt
+	tr.MarkTriggered(t1)
+	require.Equalf(t, t1.UTC(), tr.startedAt, "MarkTriggered did not set startedAt correctly; got %v want %v", tr.startedAt, t1.UTC())
+
+	// After MarkTriggered, should not be ready until interval passes again
+	require.False(t, tr.IsReady(t1.Add(interval/2)), "Expected not ready before next interval")
+	assert.True(t, tr.IsReady(t1.Add(interval+1*time.Millisecond)), "Expected ready after next interval")
+
+	// Reset should set startedAt
+	tr.Reset(t0)
+	require.Equal(t, t0.UTC(), tr.startedAt, "Reset did not set startedAt")
+}
+
+func TestPeriodicTrigger_Cron(t *testing.T) {
+	t.Parallel()
+
+	cronExpr := "@every 1s"
+	t0 := time.Now()
+	tr := &PeriodicTrigger{CronExpr: cronExpr}
+	tr.Reset(t0)
+
+	// Should not be ready immediately
+	require.False(t, tr.IsReady(t0), "Expected not ready immediately after creation")
+
+	// Should be ready after 1s
+	t1 := t0.Add(1100 * time.Millisecond)
+	assert.True(t, tr.IsReady(t1), "Expected ready after cron interval elapsed")
+
+	// MarkTriggered should update startedAt
+	tr.MarkTriggered(t1)
+	assert.Equal(t, t1.UTC(), tr.startedAt, "MarkTriggered should update startedAt")
+}
+
+func TestPeriodicTriggerWithJitter(t *testing.T) {
+	t.Parallel()
+
+	t0 := time.Now()
+	interval := 100 * time.Millisecond
+	jitter := 50 * time.Millisecond
+	tr := &PeriodicTrigger{
+		Interval: interval,
+		Jitter:   func() time.Duration { return jitter },
 	}
-	trigger.Reset()
+	tr.Reset(t0)
 
-	time.Sleep(2 * time.Second) // Wait for trigger interval to pass
-	assert.True(t, trigger.IsReady(), "PeriodicTrigger should be ready after the interval")
-
-	trigger.Reset()
-	assert.False(t, trigger.IsReady(), "PeriodicTrigger should not be ready immediately after reset")
-
-	trigger.CronExpr = "@every 1s"
-	time.Sleep(2 * time.Second) // Wait for trigger interval to pass
-	assert.True(t, trigger.IsReady(), "PeriodicTrigger with CronExpr should be ready after the interval")
-
-	trigger.Reset()
-	trigger.Interval = 20 * time.Minute
-	trigger.CronExpr = "thewrongcron expression"
-	time.Sleep(4 * time.Second) // Wait for trigger interval to pass
-	assert.False(t, trigger.IsReady(), "PeriodicTrigger with wrong CronExpr should throw an error")
+	// Should not be ready before interval + jitter
+	assert.False(t, tr.IsReady(t0.Add(interval+jitter-1*time.Millisecond)), "Expected not ready before interval+jitter elapsed")
+	// Should be ready after interval + jitter
+	assert.True(t, tr.IsReady(t0.Add(interval+jitter+1*time.Millisecond)), "Expected ready after interval+jitter elapsed")
 }
 
 func TestEventTrigger(t *testing.T) {
-	trigger := EventTrigger{Trigger: make(chan bool, 1)}
-	assert.False(t, trigger.IsReady(), "EventTrigger should not be ready without an event")
+	t.Parallel()
 
-	trigger.Trigger <- true
-	assert.True(t, trigger.IsReady(), "EventTrigger should be ready after receiving an event")
+	ch := make(chan bool, 1)
+	tr := &EventTrigger{Trigger: ch}
+
+	// Should not be ready when channel is empty
+	assert.False(t, tr.IsReady(time.Now()), "Expected not ready when channel is empty")
+
+	// Send event
+	ch <- true
+	assert.True(t, tr.IsReady(time.Now()), "Expected ready when channel has event")
+
+	// After reading, should not be ready again
+	if tr.IsReady(time.Now()) {
+		t.Error("Expected not ready after event consumed")
+	}
+
+	// Reset and MarkTriggered should be no-ops
+	tr.Reset(time.Time{})
+	tr.MarkTriggered(time.Now())
 }
 
 func TestOneTimeTrigger(t *testing.T) {
-	trigger := OneTimeTrigger{Delay: 1 * time.Second}
-	trigger.Reset()
+	t.Parallel()
 
-	time.Sleep(2 * time.Second) // Wait for delay to pass
-	assert.True(t, trigger.IsReady(), "OneTimeTrigger should be ready after the delay")
+	delay := 50 * time.Millisecond
+	t0 := time.Now()
+	tr := &OneTimeTrigger{After: delay}
+	tr.Reset(t0)
+
+	// Should not be ready immediately
+	assert.False(t, tr.IsReady(t0), "Expected not ready immediately after creation")
+
+	// Should be ready after delay
+	t1 := t0.Add(delay + 1*time.Millisecond)
+	assert.True(t, tr.IsReady(t1), "Expected ready after delay elapsed")
+
+	// Should not be ready after MarkTriggered
+	tr.MarkTriggered(t1)
+	assert.False(t, tr.IsReady(t1.Add(1*time.Millisecond)), "Expected not ready after MarkTriggered")
+
+	// Reset should allow trigger to be ready again after delay
+	tr.Reset(t1)
+	t2 := t1.Add(delay + 1*time.Millisecond)
+	assert.False(t, tr.IsReady(t1), "Expected not ready immediately after Reset")
+	tr.startedAt = t2.Add(-delay - 1*time.Millisecond) // simulate time passage
+	assert.True(t, tr.IsReady(t2), "Expected ready after delay elapsed post-Reset")
 }

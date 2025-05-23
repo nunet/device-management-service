@@ -65,7 +65,7 @@ func TestNew(t *testing.T) {
 				BootstrapPeers:          []multiaddr.Multiaddr{},
 				Rendezvous:              "nunet-randevouz",
 				Server:                  false,
-				Scheduler:               backgroundtasks.NewScheduler(1),
+				Scheduler:               backgroundtasks.NewScheduler(1, time.Second),
 				CustomNamespace:         "/nunet-dht-1/",
 				ListenAddress:           []string{"/ip4/localhost/tcp/10209"},
 				PeerCountDiscoveryLimit: 40,
