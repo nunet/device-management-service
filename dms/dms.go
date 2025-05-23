@@ -176,7 +176,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		BootstrapPeers:          bootstrapPeers,
 		Rendezvous:              "nunet-test",
 		Server:                  false,
-		Scheduler:               backgroundtasks.NewScheduler(10),
+		Scheduler:               backgroundtasks.NewScheduler(10, 1*time.Second),
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           gcfg.P2P.ListenAddress,
 		PeerCountDiscoveryLimit: 40,

@@ -146,7 +146,7 @@ func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Mu
 		BootstrapPeers:          bootstrapPeers,
 		Rendezvous:              "nunet-randevouz",
 		Server:                  false,
-		Scheduler:               backgroundtasks.NewScheduler(10),
+		Scheduler:               backgroundtasks.NewScheduler(10, time.Second),
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           []string{fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic-v1/", libp2pPort)},
 		PeerCountDiscoveryLimit: 40,
