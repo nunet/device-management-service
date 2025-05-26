@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDID(t *testing.T) {
@@ -59,4 +60,42 @@ func TestDID(t *testing.T) {
 	// Test DID with more than 3 parts
 	_, err = FromString(tooManyPartsDIDString)
 	assert.Error(t, err, "FromString should have failed for DID with more than 3 parts")
+}
+
+// Test that an *empty string* is accepted and yields a zero-value DID.
+func TestDIDFromStringEmptyString(t *testing.T) {
+	d, err := FromString("")
+	require.NoError(t, err, "empty string must not error")
+	assert.True(t, d.Empty(), "zero DID should be empty")
+	assert.Empty(t, d.String())
+	assert.Equal(t, "", d.Method())
+	assert.Equal(t, "", d.Identifier())
+}
+
+// Verify Method() and Identifier() gracefully fall back to empty strings for
+// various malformed URIs that bypass FromString validation.
+func TestDIDMethodIdentifierInvalidURIs(t *testing.T) {
+	broken := []string{
+		"did:key", // missing identifier
+		"did::",   // empty method + identifier
+		"notaDID", // not even a DID
+	}
+
+	for _, uri := range broken {
+		d := DID{URI: uri}
+		assert.Equalf(t, "", d.Method(), "Method should be blank for %q", uri)
+		assert.Equalf(t, "", d.Identifier(), "Identifier should be blank for %q", uri)
+	}
+}
+
+// Extra checks on Equal(): reflexive, symmetric, and negative cases.
+func TestDIDEqualSymmetricAndReflexive(t *testing.T) {
+	a := DID{URI: "did:key:abc"}
+	b := DID{URI: "did:key:abc"}
+	c := DID{URI: "did:key:def"}
+	//nolint:gocritic // intentional: testing reflexivity of Equal()
+	assert.True(t, a.Equal(a), "reflexivity failed")
+	assert.True(t, a.Equal(b) && b.Equal(a), "symmetry failed for identical URIs")
+	assert.False(t, a.Equal(c))
+	assert.False(t, c.Equal(a))
 }
