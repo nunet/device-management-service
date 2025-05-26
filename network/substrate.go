@@ -176,11 +176,16 @@ func (v *virtualNet) Query(_ context.Context, k string) ([]*common.Advertisement
 }
 
 // Misc stubs (same behaviour as MemoryNet)
-func (*virtualNet) Init(*config.Config) error          { return nil }
-func (*virtualNet) Start() error                       { return nil }
-func (*virtualNet) Stop() error                        { return nil }
-func (v *virtualNet) GetHostID() PeerID                { return v.pid }
-func (*virtualNet) GetPeerPubKey(PeerID) crypto.PubKey { return nil }
+func (*virtualNet) Init(*config.Config) error { return nil }
+func (*virtualNet) Start() error              { return nil }
+func (*virtualNet) Stop() error               { return nil }
+func (v *virtualNet) GetHostID() PeerID       { return v.pid }
+func (v *virtualNet) GetPeerPubKey(_ PeerID) crypto.PubKey {
+	// Generate a dummy key for testing purposes
+	_, pubKey, _ := crypto.GenerateKeyPair(crypto.Ed25519)
+	return pubKey
+}
+
 func (v *virtualNet) Stat() types.NetworkStats {
 	return types.NetworkStats{ID: string(v.pid), ListenAddr: "virtual://" + string(v.pid)}
 }
