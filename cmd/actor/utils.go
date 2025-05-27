@@ -52,29 +52,35 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 		}
 
 		// handle reading client certificate files for volumes
-		if alloc.Volume != nil {
-			if alloc.Volume.ClientPrivateKey != "" {
-				pvkeyData, err := fs.ReadFile(alloc.Volume.ClientPrivateKey)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
+		if len(alloc.Volume) > 0 {
+			for i, v := range alloc.Volume {
+				if v.Type != "glusterfs" {
+					continue
 				}
-				cfg.Ensemble.V1.Allocations[aIdx].Volume.ClientPrivateKey = string(pvkeyData)
-			}
 
-			if alloc.Volume.ClientPEM != "" {
-				pemData, err := fs.ReadFile(alloc.Volume.ClientPEM)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read pem data: %w", err)
+				if v.ClientPrivateKey != "" {
+					pvkeyData, err := fs.ReadFile(v.ClientPrivateKey)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[aIdx].Volume[i].ClientPrivateKey = string(pvkeyData)
 				}
-				cfg.Ensemble.V1.Allocations[aIdx].Volume.ClientPEM = string(pemData)
-			}
 
-			if alloc.Volume.ClientCA != "" {
-				caData, err := fs.ReadFile(alloc.Volume.ClientCA)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read ca data: %w", err)
+				if v.ClientPEM != "" {
+					pemData, err := fs.ReadFile(v.ClientPEM)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read pem data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[aIdx].Volume[i].ClientPEM = string(pemData)
 				}
-				cfg.Ensemble.V1.Allocations[aIdx].Volume.ClientCA = string(caData)
+
+				if v.ClientCA != "" {
+					caData, err := fs.ReadFile(v.ClientCA)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read ca data: %w", err)
+					}
+					cfg.Ensemble.V1.Allocations[aIdx].Volume[i].ClientCA = string(caData)
+				}
 			}
 		}
 	}

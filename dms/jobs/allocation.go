@@ -58,7 +58,7 @@ type Job struct {
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
 	Keys             []types.AllocationKey
-	Volume           *types.VolumeConfig
+	Volume           []types.VolumeConfig
 }
 
 // Allocation represents an allocation
@@ -191,26 +191,29 @@ func (a *Allocation) Run(
 		GatewayIP:           gatewayIP,
 	}
 
-	if a.Job.Volume != nil {
-		src := ""
-		if a.Job.Volume.Type == "glusterfs" {
-			src = filepath.Join(a.workDir, "volumes", a.ID, a.Job.Volume.Name)
-		} else {
-			src = a.Job.Volume.Src
-		}
+	// prepare the directories on host
+	if len(a.Job.Volume) > 0 {
+		executionRequest.Inputs = make([]*types.StorageVolumeExecutor, 0)
 
-		target := a.Job.Volume.MountDestination
-		if target == "" {
-			target = "/" + a.Job.Volume.Name
-		}
+		for _, v := range a.Job.Volume {
+			src := ""
+			if v.Type == "glusterfs" {
+				src = filepath.Join(a.workDir, "volumes", a.ID, v.Name)
+			} else {
+				src = v.Src
+			}
 
-		executionRequest.Inputs = []*types.StorageVolumeExecutor{
-			{
+			target := v.MountDestination
+			if target == "" {
+				target = "/" + v.Name
+			}
+
+			executionRequest.Inputs = append(executionRequest.Inputs, &types.StorageVolumeExecutor{
 				Type:     "bind",
 				Source:   src,
 				Target:   target,
-				ReadOnly: a.Job.Volume.ReadOnly,
-			},
+				ReadOnly: v.ReadOnly,
+			})
 		}
 	}
 
