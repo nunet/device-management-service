@@ -52,13 +52,20 @@ allocations:
         value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
     dns_name: nginxdemo-alloc2
     volume:
-      type: glusterfs
-      name: nunet_vol
-      servers: ["${hostname}"]
-      mount_destination: "/home"
-      client_private_key:
-      client_pem:
-      client_ca:
+      - type: glusterfs
+        name: nunet_vol
+        servers: ["${hostname}"]
+        mount_destination: "/home"
+        client_private_key:
+        client_pem:
+        client_ca:
+      - type: glusterfs
+        name: nunet_vol2
+        servers: ["${hostname}"]
+        mount_destination: "/home"
+        client_private_key:
+        client_pem:
+        client_ca:
 
 nodes:
   node1:

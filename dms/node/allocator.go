@@ -380,42 +380,48 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 }
 
 func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
-	if job.Volume == nil {
+	if len(job.Volume) == 0 {
 		return nil
 	}
-	log.Infof("mounting volume %s for allocation %s", job.Volume.Name, allocationID)
-	mounter, err := volume.New(a.volumeTracker, *job.Volume, allocationID)
-	if err != nil {
-		return fmt.Errorf("create volume: %w", err)
-	}
 
-	desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
-	err = createDirIfNotExists(desginationPath)
-	if err != nil {
-		return fmt.Errorf("mount directory: %w", err)
-	}
+	for _, v := range job.Volume {
+		log.Infof("mounting volume %s for allocation %s", v.Name, allocationID)
+		mounter, err := volume.New(a.volumeTracker, v, allocationID)
+		if err != nil {
+			return fmt.Errorf("create volume: %w", err)
+		}
 
-	err = mounter.Mount(desginationPath, make(map[string]string))
-	if err != nil {
-		return fmt.Errorf("failed to mount volume: %w", err)
+		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, v.Name)
+		err = createDirIfNotExists(desginationPath)
+		if err != nil {
+			return fmt.Errorf("mount directory: %w", err)
+		}
+
+		err = mounter.Mount(desginationPath, make(map[string]string))
+		if err != nil {
+			return fmt.Errorf("failed to mount volume: %w", err)
+		}
 	}
 
 	return nil
 }
 
 func (a *allocator) unmountVolumeOnHost(job jobs.Job, allocationID string) error {
-	if job.Volume == nil {
+	if len(job.Volume) == 0 {
 		return nil
 	}
-	mounter, err := volume.New(a.volumeTracker, *job.Volume, allocationID)
-	if err != nil {
-		return fmt.Errorf("create volume: %w", err)
-	}
 
-	desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
-	err = mounter.Unmount(desginationPath)
-	if err != nil {
-		return fmt.Errorf("failed to unmount volume: %w", err)
+	for _, v := range job.Volume {
+		mounter, err := volume.New(a.volumeTracker, v, allocationID)
+		if err != nil {
+			return fmt.Errorf("create volume unmounter: %w", err)
+		}
+
+		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, v.Name)
+		err = mounter.Unmount(desginationPath)
+		if err != nil {
+			return fmt.Errorf("failed to unmount volume: %w", err)
+		}
 	}
 
 	return nil

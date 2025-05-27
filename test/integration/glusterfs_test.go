@@ -224,6 +224,8 @@ func setupGlusterfsServer(t *testing.T) {
 	commands := [][]string{
 		{"gluster", "volume", "create", "nunet_vol", hostname + ":/data/brick2", "force"},
 		{"gluster", "volume", "start", "nunet_vol"},
+		{"gluster", "volume", "create", "nunet_vol2", hostname + ":/data/brick3", "force"},
+		{"gluster", "volume", "start", "nunet_vol2"},
 	}
 	err = runGlusterCommands(glusterContainerName, commands)
 	require.NoError(t, err)
