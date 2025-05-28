@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -98,11 +99,26 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		contextName = node.DefaultContextName
 	}
 
+	fs := afero.NewOsFs()
+
 	// if bootstrap peers were passed by env var then override them
 	btPeers := os.Getenv("BOOTSTRAP_PEERS")
 	if btPeers != "" {
 		peers := strings.Split(btPeers, ",")
 		gcfg.P2P.BootstrapPeers = peers
+	} else {
+		// force new bootstrap nodes in config if the original config file has not been
+		// edited by the user
+		// TODO: to be removed once we decommission the old nodes: #1089
+		modBootstrapPeers, updateCfg := getBootstrapNodes(gcfg.P2P.BootstrapPeers)
+		if updateCfg {
+			log.Infof("updating config file with new bootstrap peers: %v", modBootstrapPeers)
+			err := config.Set(fs, "p2p.bootstrap_peers", modBootstrapPeers)
+			if err != nil {
+				log.Errorf("unable to update config file with new bootstrap peers: %w", err)
+			}
+			gcfg.P2P.BootstrapPeers = modBootstrapPeers
+		}
 	}
 
 	initialize(gcfg)
@@ -126,8 +142,6 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		return nil, fmt.Errorf("unable to load geoip2 database: %w", err)
 	}
 	log.Debugf("loaded geoip2 database: %v", geoip2db)
-
-	fs := afero.NewOsFs()
 
 	keyStoreDir := filepath.Join(gcfg.UserDir, node.KeystoreDir)
 	keyStore, err := keystore.New(fs, keyStoreDir)
@@ -177,6 +191,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		Rendezvous:              "nunet-test",
 		Server:                  false,
 		Scheduler:               backgroundtasks.NewScheduler(10, 1*time.Second),
+		DHTPrefix:               "/nunet",
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           gcfg.P2P.ListenAddress,
 		PeerCountDiscoveryLimit: 40,
@@ -418,4 +433,41 @@ func LoadOrCreateCapCtx(
 	}
 
 	return capCtx, nil
+}
+
+// getBootstrapNodes is a temporary function to get bootstrap nodes that contain the new
+// bootstrap nodes if the user has not set any custom bootstrap nodes or already has the new
+// nodes in the config.
+// TODO: it should be removed once we decommission the old nodes: #1089
+func getBootstrapNodes(configNodes []string) ([]string, bool) {
+	oldNodes := [3]string{
+		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",
+		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
+		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
+	}
+
+	newNodes := [3]string{
+		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWHzew9HTYzywFuvTHGK5Yzoz7qAhMfxagtCvhvjheoBQ3",
+		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWJMtMN1mTNRfgMqUygT7eSXamVzc9ihpSjeairm9PebmB",
+		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWKjSodxxi7UfRHzuk7eGgUF49MoPUCJvtva9K12TqDDsi",
+	}
+
+	noO := 0
+	for _, node := range configNodes {
+		for _, nN := range newNodes {
+			if strings.Contains(node, nN) {
+				return configNodes, false
+			}
+		}
+
+		if !slices.Contains(oldNodes[:], node) {
+			noO++
+		}
+	}
+
+	if noO == 0 && len(configNodes) != 0 {
+		return slices.Concat(configNodes, newNodes[:]), true
+	}
+
+	return configNodes, false
 }

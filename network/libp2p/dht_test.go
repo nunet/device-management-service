@@ -16,7 +16,7 @@ import (
 	"time"
 
 	dht_pb "github.com/libp2p/go-libp2p-kad-dht/pb"
-	"github.com/libp2p/go-libp2p-record/pb"
+	record_pb "github.com/libp2p/go-libp2p-record/pb"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -33,7 +33,7 @@ import (
 
 func TestDHT_Validate(t *testing.T) {
 	t.Parallel()
-	customNamespace := "test-namespace:"
+	customNamespace := "/test-namespace"
 	validator := dhtValidator{
 		PS:              nil, // Not used in Validate method
 		customNamespace: customNamespace,
@@ -48,14 +48,14 @@ func TestDHT_Validate(t *testing.T) {
 	t.Run("Empty value (deletion case)", func(t *testing.T) {
 		t.Parallel()
 		// Empty value is considered a deletion
-		err := validator.Validate("test-namespace:some-key", []byte{})
+		err := validator.Validate("/test-namespace:some-key", []byte{})
 		assert.NoError(t, err)
 	})
 
 	t.Run("Invalid namespace prefix", func(t *testing.T) {
 		t.Parallel()
 		// Value doesn't matter for this test
-		err := validator.Validate("invalid:some-key", []byte("some-value"))
+		err := validator.Validate("/invalid:some-key", []byte("some-value"))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrInvalidKeyNamespace)
 	})
@@ -63,7 +63,7 @@ func TestDHT_Validate(t *testing.T) {
 	t.Run("Invalid envelope (unmarshal error)", func(t *testing.T) {
 		t.Parallel()
 		// Valid key but invalid envelope bytes
-		err := validator.Validate("test-namespace:some-key", []byte("not-a-valid-protobuf"))
+		err := validator.Validate("/test-namespace:some-key", []byte("not-a-valid-protobuf"))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, types.ErrUnmarshal)
 	})
@@ -82,7 +82,7 @@ func TestDHT_Validate(t *testing.T) {
 		value, err := proto.Marshal(envelope)
 		require.NoError(t, err)
 
-		err = validator.Validate("test-namespace:some-key", value)
+		err = validator.Validate("/test-namespace:some-key", value)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, dmscrypto.ErrUnmarshalPublicKey)
 	})
@@ -100,7 +100,7 @@ func TestDHT_Validate(t *testing.T) {
 		value, err := proto.Marshal(envelope)
 		require.NoError(t, err)
 
-		err = validator.Validate("test-namespace:some-key", value)
+		err = validator.Validate("/test-namespace/some-key", value)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrValidateEnvelopeByPbkey)
 	})
@@ -135,7 +135,7 @@ func TestDHT_Validate(t *testing.T) {
 		value, err := proto.Marshal(envelope)
 		require.NoError(t, err)
 
-		err = validator.Validate("test-namespace:some-key", value)
+		err = validator.Validate("/test-namespace:some-key", value)
 		assert.NoError(t, err)
 	})
 }
