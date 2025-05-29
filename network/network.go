@@ -15,14 +15,13 @@ import (
 	"net"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -149,7 +148,7 @@ func NewNetwork(netConfig *types.NetworkConfig, fs afero.Fs) (Network, error) {
 		ln, err := libp2p.New(&netConfig.Libp2pConfig, fs)
 		return ln, err
 	case types.VirtualNetwork: // in memory network for tests only
-		return NewMemoryNetwork(), nil
+		return NewMemoryNetHost()
 	case types.NATSNetwork:
 		return nil, errors.New("not implemented")
 	default:

@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -41,15 +42,12 @@ const (
 func setupTestNetwork(t *testing.T, substrate *network.Substrate) network.Network {
 	t.Helper()
 	_, pubKey, err := crypto.GenerateKeyPair(crypto.Ed25519)
-	if err != nil {
-		panic(err)
-	}
-	peerID, err := peer.IDFromPublicKey(pubKey)
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 
-	return substrate.MakeNetwork(peerID)
+	peerID, err := peer.IDFromPublicKey(pubKey)
+	require.NoError(t, err)
+
+	return substrate.AddWiredPeer(peerID)
 }
 
 // Helper function to create protocol string from inbox name

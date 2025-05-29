@@ -1,4 +1,12 @@
-// memory_testnet.go — in-memory implementation of network.Network.
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
+// vnet.go — virtual network of in-memory hosts
 // Meant only for tests: no libp2p, no sockets, no goroutine leaks.
 
 package network
@@ -10,334 +18,372 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
-	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
+	common "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// NewMemoryNetwork returns a fresh, fully-initialised test network.
-func NewMemoryNetwork() *MemoryNet {
-	id := peer.ID(uuid.New().String())
-
-	m := &MemoryNet{
-		hostID:         id,
-		msgHandlers:    map[string]func([]byte, peer.ID){},
-		subs:           map[string]map[uint64]func([]byte){},
-		advertisements: map[string][]byte{},
-		peers:          map[PeerID]time.Time{},
-		subnets:        map[string]*subnetInfo{},
-		notifyCbs:      notifyCallbacks{},
-		startTime:      time.Now(),
-	}
-	// register ourselves so Ping(hostID) succeeds
-	m.peers[m.hostID] = time.Now()
-	return m
-}
-
-type subnetInfo struct {
-	routing map[string]string            // host → ip
-	peers   map[string]string            // peerID → ip
-	dns     map[string]string            // name → ip
-	portMap map[string]map[string]string // “srcIP:srcPort” → proto → dst
-}
-
-type notifyCallbacks struct {
-	pre  func(PeerID, []ProtocolID, int)
-	conn func(PeerID)
-	disc func(PeerID)
-	iden func(PeerID, []ProtocolID)
-	upd  func(PeerID, []ProtocolID)
-}
-
-// MemoryNet satisfies network.Network and is 100 % in-memory / goroutine-safe.
-type MemoryNet struct {
-	hostID PeerID
-
+// Substrate (shared “world”) where each host has its own view of
+// the network. Actions are usually done as: hostAlice gets
+// hostBob handler for message XXX, and call the handler.
+//
+// The only global state is the dht for simplicity purposes.
+// And the globalPeers which is used only for connecting new hosts.
+//
+// Improvements:
+// - Make use of real pub-priv key pair and real peerIDs
+// - Some methods should be more realistic: HostPublicIP(),
+// ResolvePeerAddress(), GetPeerIP()...
+// - Notify() implementation may be necessary
+type Substrate struct {
 	mx sync.RWMutex
 
-	// messages & pubsub
-	msgHandlers map[string]func([]byte, peer.ID)
-	subs        map[string]map[uint64]func([]byte)
-	subCount    uint64
-
-	// discovery / statistics / ping
-	peers     map[PeerID]time.Time // last-seen (touch via Notify if you like)
-	startTime time.Time
-
-	// advertisements
-	advertisements map[string][]byte
-
-	// subnets
-	subnets map[string]*subnetInfo
-
-	// callbacks
-	notifyCbs notifyCallbacks
+	dht         map[string]map[string][]byte // key -> peerID -> value
+	globalPeers map[string]*MemoryHost       // used only for connecting new hosts
 }
 
-// Messenger (point-to-point)
-// SendMessage delivers an envelope to the handler registered for its type.
-func (m *MemoryNet) SendMessage(
+// MemoryHost — implements Network, delegates to Substrate
+type MemoryHost struct {
+	pid       peer.ID
+	substrate *Substrate
+
+	// local state
+	mx          sync.RWMutex
+	peers       map[string]*MemoryHost
+	msgHandlers map[string]func([]byte, peer.ID)
+	subs        map[string]map[uint64]func([]byte)
+	score       map[string]*PeerScoreSnapshot
+	nextSubID   uint64
+}
+
+var _ Network = (*MemoryHost)(nil)
+
+func NewSubstrate() *Substrate {
+	return &Substrate{
+		dht:         map[string]map[string][]byte{},
+		globalPeers: map[string]*MemoryHost{},
+	}
+}
+
+// AddWiredPeer adds and returns a host to the substrate connected
+// to all existent peers
+func (substrate *Substrate) AddWiredPeer(id peer.ID) Network {
+	return substrate.AddPeer(id, true)
+}
+
+// AddPeer returns a Network implementation bound to this substrate.
+// If forceConnection is true, the new peer connects to all existing peers.
+func (substrate *Substrate) AddPeer(id peer.ID, forceConnection bool) Network {
+	host := &MemoryHost{
+		pid:         id,
+		substrate:   substrate,
+		peers:       map[string]*MemoryHost{},
+		msgHandlers: map[string]func([]byte, peer.ID){},
+		subs:        map[string]map[uint64]func([]byte){},
+		score:       map[string]*PeerScoreSnapshot{},
+		nextSubID:   0,
+	}
+
+	substrate.mx.Lock()
+	defer substrate.mx.Unlock()
+	if forceConnection {
+		// Connect to all existing peers
+		for peerID, existingHost := range substrate.globalPeers {
+			if existingHost != nil &&
+				peerID != id.String() {
+				connectPeers(host, existingHost)
+			}
+		}
+	} else { //nolint
+		// TODO: implement connecting to x random peers when forceConnection is false
+	}
+
+	substrate.globalPeers[id.String()] = host
+
+	return host
+}
+
+// connectPeers establishes a bidirectional connection between two peers
+func connectPeers(bob, alice *MemoryHost) {
+	bob.mx.Lock()
+	bob.peers[alice.pid.String()] = alice
+	bob.mx.Unlock()
+
+	alice.mx.Lock()
+	alice.peers[bob.pid.String()] = bob
+	alice.mx.Unlock()
+}
+
+// NewMemoryNetHost is a substrate wrapper that simply
+// returns a host who is the only participant of the network.
+//
+// Useful for tests that don't need conn between peers but
+// only a single instance of Network
+func NewMemoryNetHost() (Network, error) {
+	substrate := NewSubstrate()
+	_, pubKey, err := crypto.GenerateKeyPair(crypto.Ed25519)
+	if err != nil {
+		return nil, err
+	}
+	peerID, err := peer.IDFromPublicKey(pubKey)
+	if err != nil {
+		return nil, err
+	}
+	return substrate.AddPeer(peerID, true), nil
+}
+
+// Messenger
+func (h *MemoryHost) SendMessage(
 	_ context.Context,
 	hostID string,
 	env types.MessageEnvelope,
 	_ time.Time,
 ) error {
-	m.mx.RLock()
-	h, ok := m.msgHandlers[string(env.Type)]
-	m.mx.RUnlock()
-	if !ok {
-		return errors.New("no handler registered for message type")
+	// TODO: instead of checking self explicitly
+	// solve the mutex locks
+	if h.pid.String() == hostID {
+		handler, ok := h.msgHandlers[string(env.Type)]
+		if !ok {
+			return errors.New("virtual: no handler for msgType")
+		}
+		handler(env.Data, h.pid)
+		return nil
 	}
 
-	// Forward the payload to the handler, converting hostID → peer.ID.
-	h(env.Data, peer.ID(hostID))
+	h.mx.RLock()
+	targetHost, ok := h.peers[hostID]
+	h.mx.RUnlock()
+	if !ok {
+		return errors.New("virtual: peer not connected")
+	}
+
+	targetHost.mx.RLock()
+	handler, ok := targetHost.msgHandlers[string(env.Type)]
+	targetHost.mx.RUnlock()
+	if !ok {
+		return errors.New("virtual: no handler for msgType")
+	}
+
+	handler(env.Data, h.pid)
 	return nil
 }
 
-// SendMessageSync simply forwards to SendMessage.
-func (m *MemoryNet) SendMessageSync(
+func (h *MemoryHost) SendMessageSync(
 	ctx context.Context,
-	hostID string,
+	host string,
 	env types.MessageEnvelope,
 	exp time.Time,
 ) error {
-	return m.SendMessage(ctx, hostID, env, exp)
+	return h.SendMessage(ctx, host, env, exp)
 }
 
-// Lifecycle / statistics / ping
-func (m *MemoryNet) Init(*config.Config) error { return nil }
-func (m *MemoryNet) Start() error              { return nil }
-func (m *MemoryNet) Stop() error               { return nil }
+// Handlers
+func (h *MemoryHost) HandleMessage(msgType string, handler func([]byte, peer.ID)) error {
+	h.mx.Lock()
+	defer h.mx.Unlock()
 
-func (m *MemoryNet) Stat() types.NetworkStats {
-	m.mx.RLock()
-	defer m.mx.RUnlock()
-	return types.NetworkStats{
-		ID:         string(m.hostID),
-		ListenAddr: "memory://" + string(m.hostID),
+	h.msgHandlers[msgType] = handler
+	return nil
+}
+
+func (h *MemoryHost) UnregisterMessageHandler(msgType string) {
+	h.mx.Lock()
+	defer h.mx.Unlock()
+	delete(h.msgHandlers, msgType)
+}
+
+// PubSub
+func (h *MemoryHost) Publish(_ context.Context, topic string, data []byte) error {
+	for _, destPeer := range h.peers {
+		destPeer.mx.RLock()
+		subs := destPeer.subs[topic]
+		destPeer.mx.RUnlock()
+
+		for _, cb := range subs {
+			go cb(data)
+		}
 	}
+	return nil
 }
 
-func (m *MemoryNet) Ping(_ context.Context, id string, _ time.Duration) (types.PingResult, error) {
-	m.mx.RLock()
-	last, ok := m.peers[PeerID(id)]
-	m.mx.RUnlock()
+func (h *MemoryHost) Subscribe(
+	_ context.Context,
+	topic string,
+	cb func([]byte),
+	_ Validator,
+) (uint64, error) {
+	h.mx.Lock()
+	defer h.mx.Unlock()
+
+	h.nextSubID++
+	if h.subs[topic] == nil {
+		h.subs[topic] = map[uint64]func([]byte){}
+	}
+	h.subs[topic][h.nextSubID] = cb
+	return h.nextSubID, nil
+}
+
+func (h *MemoryHost) Unsubscribe(topic string, id uint64) error {
+	h.mx.Lock()
+	defer h.mx.Unlock()
+	if m := h.subs[topic]; m != nil {
+		delete(m, id)
+		if len(m) == 0 {
+			delete(h.subs, topic)
+		}
+	}
+	return nil
+}
+
+// DHT lookups
+func (h *MemoryHost) Advertise(_ context.Context, k string, d []byte) error {
+	h.substrate.mx.Lock()
+	defer h.substrate.mx.Unlock()
+
+	if h.substrate.dht[k] == nil {
+		h.substrate.dht[k] = map[string][]byte{}
+	}
+	h.substrate.dht[k][h.pid.String()] = d
+	return nil
+}
+
+func (h *MemoryHost) Unadvertise(_ context.Context, k string) error {
+	h.substrate.mx.Lock()
+	defer h.substrate.mx.Unlock()
+
+	if h.substrate.dht[k] != nil {
+		delete(h.substrate.dht[k], h.pid.String())
+		if len(h.substrate.dht[k]) == 0 {
+			delete(h.substrate.dht, k)
+		}
+	}
+	return nil
+}
+
+func (h *MemoryHost) Query(_ context.Context, k string) ([]*common.Advertisement, error) {
+	h.substrate.mx.RLock()
+	defer h.substrate.mx.RUnlock()
+
+	peers, ok := h.substrate.dht[k]
+	if !ok {
+		return nil, nil
+	}
+
+	ads := make([]*common.Advertisement, 0, len(peers))
+	for peerID, data := range peers {
+		ads = append(ads, &common.Advertisement{
+			PeerId:    peerID,
+			Timestamp: time.Now().UnixNano(),
+			Data:      data,
+		})
+	}
+	return ads, nil
+}
+
+func (h *MemoryHost) Ping(_ context.Context, id string, _ time.Duration) (types.PingResult, error) {
+	h.mx.RLock()
+	_, ok := h.peers[id]
+	h.mx.RUnlock()
 
 	if !ok {
 		return types.PingResult{Success: false}, nil
 	}
-	return types.PingResult{Success: true, RTT: time.Since(last)}, nil
+	return types.PingResult{Success: true, RTT: time.Millisecond}, nil
 }
 
-func (m *MemoryNet) GetHostID() PeerID                  { return m.hostID }
-func (m *MemoryNet) GetPeerPubKey(PeerID) crypto.PubKey { return nil }
+func (h *MemoryHost) GetHostID() peer.ID { return h.pid }
 
-// Stream handlers
-func (m *MemoryNet) HandleMessage(t string, h func([]byte, peer.ID)) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	m.msgHandlers[t] = h
-	return nil
+func (h *MemoryHost) GetPeerPubKey(_ peer.ID) crypto.PubKey {
+	// TODO: I think memoryHost should make use of real pub-pvkey-peerIDs
+	_, pubKey, _ := crypto.GenerateKeyPair(crypto.Ed25519)
+	return pubKey
 }
 
-func (m *MemoryNet) UnregisterMessageHandler(t string) {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	delete(m.msgHandlers, t)
-}
+func (h *MemoryHost) Stop() error {
+	h.substrate.mx.Lock()
+	delete(h.substrate.globalPeers, h.pid.String())
+	h.substrate.mx.Unlock()
 
-// Rendez-vous (Advertise / Query)
-func (m *MemoryNet) Advertise(_ context.Context, k string, data []byte) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	m.advertisements[k] = data
-	return nil
-}
-
-func (m *MemoryNet) Unadvertise(_ context.Context, k string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	delete(m.advertisements, k)
-	return nil
-}
-
-func (m *MemoryNet) Query(_ context.Context, k string) ([]*commonproto.Advertisement, error) {
-	m.mx.RLock()
-	defer m.mx.RUnlock()
-	data, ok := m.advertisements[k]
-	if !ok {
-		return nil, nil
+	// Remove this host from all other hosts' peer lists
+	h.mx.Lock()
+	for _, anotherHost := range h.peers {
+		anotherHost.mx.Lock()
+		delete(anotherHost.peers, h.pid.String())
+		anotherHost.mx.Unlock()
 	}
-	return []*commonproto.Advertisement{
-		{
-			PeerId:    string(m.hostID),
-			Timestamp: time.Now().UnixNano(),
-			Data:      data,
-		},
-	}, nil
-}
+	h.mx.Unlock()
 
-// PubSub
-func (m *MemoryNet) Publish(_ context.Context, topic string, data []byte) error {
-	m.mx.RLock()
-	defer m.mx.RUnlock()
-	for _, cb := range m.subs[topic] {
-		cb := cb // copy for goroutine capture
-		go cb(data)
-	}
 	return nil
 }
 
-func (m *MemoryNet) Subscribe(_ context.Context, topic string, cb func([]byte),
-	_ Validator,
-) (uint64, error) {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	m.subCount++
-	if m.subs[topic] == nil {
-		m.subs[topic] = map[uint64]func([]byte){}
-	}
-	m.subs[topic][m.subCount] = cb
-	return m.subCount, nil
+func (h *MemoryHost) Stat() types.NetworkStats {
+	return types.NetworkStats{ID: h.pid.String(), ListenAddr: "virtual://" + string(h.pid)}
 }
 
-func (m *MemoryNet) Unsubscribe(topic string, id uint64) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if subs, ok := m.subs[topic]; ok {
-		delete(subs, id)
-		if len(subs) == 0 {
-			delete(m.subs, topic)
-		}
-	}
-	return nil
-}
-
-// Broadcast scoring (unused in tests – stubbed)
-func (m *MemoryNet) SetupBroadcastTopic(string, func(*Topic) error) error { return nil }
-func (m *MemoryNet) SetBroadcastAppScore(func(PeerID) float64)            {}
-func (m *MemoryNet) GetBroadcastScore() map[PeerID]*PeerScoreSnapshot     { return nil }
-
-// Notify
-
-func (m *MemoryNet) Notify(_ context.Context,
-	pre func(PeerID, []ProtocolID, int),
-	conn func(PeerID),
-	disc func(PeerID),
-	iden func(PeerID, []ProtocolID),
-	upd func(PeerID, []ProtocolID),
-) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	m.notifyCbs = notifyCallbacks{pre, conn, disc, iden, upd}
-	return nil
-}
-
-func (m *MemoryNet) PeerConnected(p PeerID) bool {
-	m.mx.RLock()
-	_, ok := m.peers[p]
-	m.mx.RUnlock()
+func (h *MemoryHost) PeerConnected(p peer.ID) bool {
+	h.mx.RLock()
+	defer h.mx.RUnlock()
+	_, ok := h.peers[p.String()]
 	return ok
 }
 
-// Subnets
-func (m *MemoryNet) CreateSubnet(_ context.Context, id string, rt map[string]string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if _, ok := m.subnets[id]; ok {
-		return errors.New("subnet exists")
-	}
-	m.subnets[id] = &subnetInfo{
-		routing: rt,
-		peers:   map[string]string{},
-		dns:     map[string]string{},
-		portMap: map[string]map[string]string{},
-	}
-	return nil
-}
+// Misc stubs
+func (*MemoryHost) Init(*config.Config) error { return nil }
 
-func (m *MemoryNet) DestroySubnet(id string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	delete(m.subnets, id)
-	return nil
-}
+func (*MemoryHost) Start() error { return nil }
 
-func (m *MemoryNet) AddSubnetPeer(id, peerID, ip string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if sn, ok := m.subnets[id]; ok {
-		sn.peers[peerID] = ip
-	}
-	return nil
-}
+func (*MemoryHost) ResolveAddress(context.Context, string) ([]string, error) { return nil, nil }
 
-func (m *MemoryNet) RemoveSubnetPeer(id, peerID, _ string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if sn, ok := m.subnets[id]; ok {
-		delete(sn.peers, peerID)
-	}
-	return nil
-}
+func (*MemoryHost) SetupBroadcastTopic(string, func(*Topic) error) error { return nil }
 
-func (m *MemoryNet) AcceptSubnetPeer(id, peerID, ip string) error {
-	return m.AddSubnetPeer(id, peerID, ip)
-}
+func (*MemoryHost) SetBroadcastAppScore(func(peer.ID) float64) {}
 
-func (m *MemoryNet) MapPort(id, proto, srcIP, srcPort, dstIP, dstPort string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if sn, ok := m.subnets[id]; ok {
-		key := net.JoinHostPort(srcIP, srcPort)
-		if sn.portMap[key] == nil {
-			sn.portMap[key] = map[string]string{}
+func (h *MemoryHost) GetBroadcastScore() map[peer.ID]*PeerScoreSnapshot {
+	h.mx.RLock()
+	defer h.mx.RUnlock()
+	// Return a copy to avoid race conditions
+	scores := make(map[peer.ID]*PeerScoreSnapshot)
+	for k, v := range h.score {
+		id, err := peer.Decode(k)
+		if err != nil {
+			continue
 		}
-		sn.portMap[key][proto] = net.JoinHostPort(dstIP, dstPort)
+		scores[id] = v
 	}
+	return scores
+}
+
+func (*MemoryHost) Notify(context.Context,
+	func(peer.ID, []ProtocolID, int),
+	func(peer.ID),
+	func(peer.ID),
+	func(peer.ID, []ProtocolID),
+	func(peer.ID, []ProtocolID),
+) error {
 	return nil
 }
 
-func (m *MemoryNet) UnmapPort(id, proto, srcIP, srcPort, _, _ string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if sn, ok := m.subnets[id]; ok {
-		key := net.JoinHostPort(srcIP, srcPort)
-		if pm, ok := sn.portMap[key]; ok {
-			delete(pm, proto)
-			if len(pm) == 0 {
-				delete(sn.portMap, key)
-			}
-		}
-	}
-	return nil
-}
+func (*MemoryHost) GetPeerIP(peer.ID) string { return "" }
 
-func (m *MemoryNet) AddSubnetDNSRecords(id string, rec map[string]string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if sn, ok := m.subnets[id]; ok {
-		for k, v := range rec {
-			sn.dns[k] = v
-		}
-	}
-	return nil
-}
+func (*MemoryHost) HostPublicIP() (net.IP, error) { return nil, nil }
 
-func (m *MemoryNet) RemoveSubnetDNSRecord(id, name string) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if sn, ok := m.subnets[id]; ok {
-		delete(sn.dns, name)
-	}
-	return nil
-}
+func (*MemoryHost) CreateSubnet(context.Context, string, map[string]string) error { return nil }
 
-// Misc
-func (m *MemoryNet) ResolveAddress(context.Context, string) ([]string, error) { return nil, nil }
-func (m *MemoryNet) GetPeerIP(PeerID) string                                  { return "" }
-func (m *MemoryNet) HostPublicIP() (net.IP, error)                            { return nil, nil }
+func (*MemoryHost) DestroySubnet(string) error { return nil }
+
+func (*MemoryHost) AddSubnetPeer(string, string, string) error { return nil }
+
+func (*MemoryHost) RemoveSubnetPeer(string, string, string) error { return nil }
+
+func (*MemoryHost) AcceptSubnetPeer(string, string, string) error { return nil }
+
+func (*MemoryHost) MapPort(string, string, string, string, string, string) error { return nil }
+
+func (*MemoryHost) UnmapPort(string, string, string, string, string, string) error { return nil }
+
+func (*MemoryHost) AddSubnetDNSRecords(string, map[string]string) error { return nil }
+
+func (*MemoryHost) RemoveSubnetDNSRecord(string, string) error { return nil }
