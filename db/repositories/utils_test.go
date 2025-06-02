@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -34,8 +33,21 @@ func TestUpdateField(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test case: Attempting to update with an incompatible value results in an error
-	_, err = UpdateField(types.FreeResources{Resources: types.Resources{RAM: types.RAM{Size: 1}}}, "WRAM", "a")
+	_, err = UpdateField(types.FreeResources{Resources: types.Resources{RAM: types.RAM{Size: 1}}}, "RAM", "a")
 	assert.Error(t, err)
+
+	// Test case: Attempting to update a non-struct value
+	_, err = UpdateField(42, "value", 100)
+	assert.Error(t, err)
+
+	// Test case with a struct that has unexported fields
+	type structWithUnexportedField struct {
+		publicField  string
+		privateField string
+	}
+	_, err = UpdateField(structWithUnexportedField{publicField: "public", privateField: "private"}, "privateField", "new value")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "field not settable")
 }
 
 // TestEmptyValue tests the isEmptyValue function for checking if a struct has non zero value.

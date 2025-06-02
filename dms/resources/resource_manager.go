@@ -20,8 +20,8 @@ import (
 
 // ManagerRepos holds all the repositories needed for resource management
 type ManagerRepos struct {
-	OnboardedResources repositories.OnboardedResources
-	ResourceAllocation repositories.ResourceAllocation
+	OnboardedResources repositories.GenericEntityRepository[types.OnboardedResources]
+	ResourceAllocation repositories.GenericRepository[types.ResourceAllocation]
 }
 
 // DefaultManager implements the ResourceManager interface

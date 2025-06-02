@@ -206,7 +206,53 @@ func TestGenericRepoQueries(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(results))
 
-	// Test LIKE operator: TODO
+	// Test GTE operator
+	query = carRepo.GetQuery()
+	query.Conditions = append(query.Conditions, repositories.GTE("Price", 25000.00))
+	results, err = carRepo.FindAll(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Equal(t, 4, len(results))
+
+	// Test LT operator
+	query = carRepo.GetQuery()
+	query.Conditions = append(query.Conditions, repositories.LT("Price", 25000.00))
+	results, err = carRepo.FindAll(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(results))
+	assert.Equal(t, "Honda", results[0].Brand)
+
+	// Test LIKE operator with regex patterns
+	// CloverDB's LIKE operator uses Go's regexp.MatchString, so we need to use proper regex patterns
+
+	// Test with prefix pattern (equivalent to SQL LIKE 'M%')
+	query = carRepo.GetQuery()
+	query.Conditions = append(query.Conditions, repositories.LIKE("Model", "^M.*"))
+	results, err = carRepo.FindAll(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(results), "Should find cars with models starting with 'M'")
+	// Should match 'Model 3' and 'Mustang'
+	models := make([]string, 0, len(results))
+	for _, car := range results {
+		models = append(models, car.Model)
+	}
+	assert.Contains(t, models, "Model 3")
+	assert.Contains(t, models, "Mustang")
+
+	// Test with suffix pattern (equivalent to SQL LIKE '%a')
+	query = carRepo.GetQuery()
+	query.Conditions = append(query.Conditions, repositories.LIKE("Model", ".*a$"))
+	results, err = carRepo.FindAll(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(results), "Should find cars with models ending with 'a'")
+	assert.Equal(t, "Corolla", results[0].Model)
+
+	// Test with contains pattern (equivalent to SQL LIKE '%iv%')
+	query = carRepo.GetQuery()
+	query.Conditions = append(query.Conditions, repositories.LIKE("Model", ".*iv.*"))
+	results, err = carRepo.FindAll(context.Background(), query)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(results), "Should find cars with 'iv' in model name")
+	assert.Equal(t, "Civic", results[0].Model)
 
 	// Test sorting
 	query = carRepo.GetQuery()

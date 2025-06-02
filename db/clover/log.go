@@ -6,13 +6,10 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package repositories
+package clover
 
 import (
-	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	logging "github.com/ipfs/go-log/v2"
 )
 
-// OrchestratorView represents a repository for CRUD operations on OrchestratorView entities.
-type OrchestratorView interface {
-	GenericRepository[job_types.OrchestratorView]
-}
+var logger = logging.Logger("clover")

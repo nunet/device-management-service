@@ -60,7 +60,7 @@ type Onboarding struct {
 	ResourceManager types.ResourceManager
 	Hardware        types.HardwareManager
 	// ConfigRepo is the db repository to store the onboarding config
-	ConfigRepo repositories.OnboardingConfig
+	ConfigRepo repositories.GenericEntityRepository[types.OnboardingConfig]
 	// Config is the cached onboarding configuration
 	Config types.OnboardingConfig
 	// Lock is the lock to protect the onboarding state
@@ -74,7 +74,7 @@ var _ types.OnboardingManager = (*Onboarding)(nil)
 func New(ctx context.Context,
 	resourceManager types.ResourceManager,
 	hardwareManager types.HardwareManager,
-	configRepo repositories.OnboardingConfig,
+	configRepo repositories.GenericEntityRepository[types.OnboardingConfig],
 ) (*Onboarding, error) {
 	if resourceManager == nil {
 		return nil, fmt.Errorf("resource manager is required")

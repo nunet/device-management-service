@@ -54,9 +54,7 @@ _Files_
 
 _Subpackages_
 
-* [gorm](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/gorm): This folder contains SQlite database implementation using gorm.
-
-* [clover](https://gitlab.com/nunet/device-management-service/-/blob/main/db/repositories/clover): This folder contains CloverDB database implementation.
+* [clover](https://gitlab.com/nunet/device-management-service/-/blob/main/db/clover): This folder contains CloverDB database implementation.
 
 ### Class Diagram
 
@@ -282,23 +280,6 @@ type QueryCondition struct {
 	Value    interface{} // Value is the expected value for the given field.
 }
 ```
-
-`GenericRepository` has been initialised for the following data types:
-
-- `types.DeploymentRequestFlat`
-- `types.VirtualMachine`
-- `types.PeerInfo`
-- `types.Machine`
-- `types.Services`
-- `types.ServiceResourceRequirements`
-- `types.Connection`
-- `types.ElasticToken`
-
-`GenericEntityRepository` has been initialised for the following data types:
-- `types.FreeResources`
-- `types.AvailableResources`
-- `types.Libp2pInfo`
-- `types.MachineUUID`
 
 
 ### Testing

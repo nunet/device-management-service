@@ -31,7 +31,8 @@ import (
 	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
-	clover_db "gitlab.com/nunet/device-management-service/db/repositories/clover"
+	clover_db "gitlab.com/nunet/device-management-service/db/clover"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
@@ -164,18 +165,18 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 
 	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
-		OnboardedResources: clover_db.NewOnboardedResources(db),
-		ResourceAllocation: clover_db.NewResourceAllocation(db),
+		OnboardedResources: clover_db.NewGenericEntityRepository[types.OnboardedResources](db),
+		ResourceAllocation: clover_db.NewGenericRepository[types.ResourceAllocation](db),
 	}
 	resourceManager, err := resources.NewResourceManager(repos, hardwareManager)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create resource manager: %w", err)
 	}
 
-	onboardR := clover_db.NewOnboardingConfig(db)
-	orchestR := clover_db.NewOrchestratorView(db)
+	onboardRepo := clover_db.NewGenericEntityRepository[types.OnboardingConfig](db)
+	orchestratorRepo := clover_db.NewGenericRepository[jobtypes.OrchestratorView](db)
 
-	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardR)
+	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardRepo)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create onboarding manager: %w", err)
 	}
@@ -243,7 +244,7 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
-		orchestR, geoip2db, hostLocation, portConfig, volumeTracker,
+		orchestratorRepo, geoip2db, hostLocation, portConfig, volumeTracker,
 		volumeController,
 	)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/actor"
-	dmsclover "gitlab.com/nunet/device-management-service/db/repositories/clover"
+	cloverDB "gitlab.com/nunet/device-management-service/db/clover"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/resources"
@@ -156,7 +156,7 @@ func newMockNodeWithSender(t *testing.T) (*Node, *actor.BasicActor) {
 	node.network = nNet
 	node.actor = nActor
 
-	db, err := dmsclover.NewMemDB([]string{
+	db, err := cloverDB.NewMemDB([]string{
 		"free_resources",
 		"request_tracker",
 		"onboarded_resources",
@@ -168,8 +168,8 @@ func newMockNodeWithSender(t *testing.T) (*Node, *actor.BasicActor) {
 	require.NoError(t, err)
 
 	repos := resources.ManagerRepos{
-		OnboardedResources: dmsclover.NewOnboardedResources(db),
-		ResourceAllocation: dmsclover.NewResourceAllocation(db),
+		OnboardedResources: cloverDB.NewGenericEntityRepository[types.OnboardedResources](db),
+		ResourceAllocation: cloverDB.NewGenericRepository[types.ResourceAllocation](db),
 	}
 
 	hardwareManager := hardware.NewHardwareManager()
@@ -178,7 +178,7 @@ func newMockNodeWithSender(t *testing.T) (*Node, *actor.BasicActor) {
 	node.resourceManager = resourceMan
 	node.hardware = hardwareManager
 
-	onboardR := dmsclover.NewOnboardingConfig(db)
+	onboardR := cloverDB.NewGenericEntityRepository[types.OnboardingConfig](db)
 
 	onboardingManager, err := onboarding.New(context.Background(), resourceMan, hardwareManager, onboardR)
 	require.NoError(t, err)

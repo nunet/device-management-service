@@ -106,7 +106,7 @@ type Node struct {
 	running      atomic.Bool
 
 	// db state
-	orchestratorRepo repositories.OrchestratorView
+	orchestratorRepo repositories.GenericRepository[jobtypes.OrchestratorView]
 
 	// volume controller
 	volumeController controller.GlusterControllerInterface
@@ -152,7 +152,7 @@ func New(cfg config.Config, fs afero.Afero,
 	resourceManager types.ResourceManager,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
-	orchestratorRepo repositories.OrchestratorView,
+	orchestratorRepo repositories.GenericRepository[jobtypes.OrchestratorView],
 	geoIP types.GeoIPLocator, hostLocation geolocation.Geolocation,
 	portConfig PortConfig, vt *storage.VoumeTracker,
 	volumeController controller.GlusterControllerInterface,
