@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"gitlab.com/nunet/device-management-service/db/repositories/clover"
+	"gitlab.com/nunet/device-management-service/db/clover"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/types"
@@ -53,8 +53,8 @@ func setupDefaultManagerDeps(t *testing.T, multiplier uint32) resManagerDeps {
 		})
 	require.NoError(t, err)
 
-	onboardedRepo := clover.NewOnboardedResources(db)
-	allocRepo := clover.NewResourceAllocation(db)
+	onboardedRepo := clover.NewGenericEntityRepository[types.OnboardedResources](db)
+	allocRepo := clover.NewGenericRepository[types.ResourceAllocation](db)
 
 	// Create resources with proper unit conversions
 	cpuClockSpeed, _ := convert.ParseSIWithDefaultUnit(2.5, "GHz")

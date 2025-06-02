@@ -57,6 +57,7 @@ func teardown(db *clover.DB, path string) {
 }
 
 func TestNewDB(t *testing.T) {
+	t.Parallel()
 	path, err := tempDir()
 	assert.NoError(t, err)
 	defer os.RemoveAll(path)
@@ -79,6 +80,35 @@ func TestNewDB(t *testing.T) {
 	assert.Error(t, err)
 
 	// Close the database
+	err = db.Close()
+	assert.NoError(t, err)
+}
+
+func TestNewMemDB(t *testing.T) {
+	t.Parallel()
+	collections := []string{"test_collection1", "test_collection2"}
+
+	// Create in-memory database
+	db, err := NewMemDB(collections)
+	assert.NoError(t, err)
+	assert.NotNil(t, db)
+
+	// Check if collections were created
+	for _, collection := range collections {
+		exists, err := db.HasCollection(collection)
+		assert.NoError(t, err)
+		assert.True(t, exists, "Collection %s should exist", collection)
+	}
+
+	// Try to create an existing collection
+	err = db.CreateCollection(collections[0])
+	assert.Error(t, err)
+
+	// Test if we can check if a collection exists
+	exists, err := db.HasCollection(collections[0])
+	assert.NoError(t, err)
+	assert.True(t, exists, "Collection should exist")
+
 	err = db.Close()
 	assert.NoError(t, err)
 }
