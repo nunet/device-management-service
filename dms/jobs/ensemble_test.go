@@ -11,7 +11,6 @@
 package jobs
 
 import (
-	"fmt"
 	"testing"
 
 	"gopkg.in/yaml.v2"
@@ -114,12 +113,12 @@ func TestGenerateEnsemble(t *testing.T) {
 		Children:    []jobtypes.SupervisorConfig{{}},
 	}
 
-	yamlData, err := yaml.Marshal(&ens)
+	_, err := yaml.Marshal(&ens)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Log(string(yamlData))
+	// t.Log(string(yamlData))
 
-	fmt.Println(string(yamlData))
+	// fmt.Println(string(yamlData))
 }

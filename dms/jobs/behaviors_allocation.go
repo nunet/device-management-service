@@ -99,38 +99,7 @@ func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 	}
 
 	healthcheck, err := types.NewHealthCheck(request.HealthCheck, func(mf types.HealthCheckManifest) error {
-		exitCode, stdout, stderr, err := a.executor.Exec(context.TODO(), a.executionID, mf.Exec)
-
-		log.Debugw("health_check_command_output",
-			"labels", string(observability.LabelAllocation),
-			"command", mf.Exec,
-			"stdout", stdout,
-			"stderr", stderr)
-		if err != nil {
-			log.Warnw("health_check_command_exec_failure",
-				"labels", string(observability.LabelAllocation),
-				"error", err)
-			return fmt.Errorf("health check command failed: %w", err)
-		}
-
-		if exitCode != 0 {
-			log.Warnw("health_check_command_exitcode_failure",
-				"labels", string(observability.LabelAllocation),
-				"exitCode", exitCode)
-			return fmt.Errorf("health check command failed with exit code %d", exitCode)
-		}
-
-		if !strings.Contains(stdout+stderr, mf.Response.Value) {
-			log.Warnw("health_check_command_unexpected_output",
-				"labels", string(observability.LabelAllocation),
-				"stderr", stderr,
-				"expectedValue", mf.Response.Value)
-			return fmt.Errorf("unexpected health check command output: %s\nstderr: %s", stdout, stderr)
-		}
-
-		log.Debugw("health_check_command_succeeded",
-			"labels", string(observability.LabelAllocation))
-		return nil
+		return a.execHealthCheck(mf)
 	})
 	if err != nil {
 		resp.Error = err.Error()
@@ -178,4 +147,39 @@ func (a *Allocation) handleHealthcheck(msg actor.Envelope) {
 			"labels", string(observability.LabelAllocation),
 			"error", err)
 	}
+}
+
+func (a *Allocation) execHealthCheck(mf types.HealthCheckManifest) error {
+	exitCode, stdout, stderr, err := a.executor.Exec(context.TODO(), a.executionID, mf.Exec)
+
+	log.Debugw("health_check_command_output",
+		"labels", string(observability.LabelAllocation),
+		"command", mf.Exec,
+		"stdout", stdout,
+		"stderr", stderr)
+	if err != nil {
+		log.Warnw("health_check_command_exec_failure",
+			"labels", string(observability.LabelAllocation),
+			"error", err)
+		return fmt.Errorf("health check command failed: %w", err)
+	}
+
+	if exitCode != 0 {
+		log.Warnw("health_check_command_exitcode_failure",
+			"labels", string(observability.LabelAllocation),
+			"exitCode", exitCode)
+		return fmt.Errorf("health check command failed with exit code %d", exitCode)
+	}
+
+	if !strings.Contains(stdout+stderr, mf.Response.Value) {
+		log.Warnw("health_check_command_unexpected_output",
+			"labels", string(observability.LabelAllocation),
+			"stderr", stderr,
+			"expectedValue", mf.Response.Value)
+		return fmt.Errorf("unexpected health check command output: %s\nstderr: %s", stdout, stderr)
+	}
+
+	log.Debugw("health_check_command_succeeded",
+		"labels", string(observability.LabelAllocation))
+	return nil
 }
