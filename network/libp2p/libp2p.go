@@ -922,11 +922,10 @@ func (l *Libp2p) validate(_ context.Context, _ peer.ID, msg *pubsub.Message) Val
 	}
 
 	for _, validator := range validators {
-		result, validatorData := validator(msg.Data, msg.ValidatorData)
+		result, _ := validator(msg.Data, msg.ValidatorData)
 		if result != ValidationAccept {
 			return result
 		}
-		msg.ValidatorData = validatorData
 	}
 
 	return ValidationAccept

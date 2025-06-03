@@ -177,10 +177,19 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	// and this makes the test flaky. To solve the flakiness we use the peer one for
 	// both publishing and subscribing.
 	subscribeData := make(chan []byte)
+
+	// Add a simple validator that accepts all messages
+	validator := func(data []byte, validatorData interface{}) (ValidationResult, interface{}) {
+		if len(data) > 0 {
+			return ValidationAccept, validatorData
+		}
+		return ValidationReject, validatorData
+	}
+
 	subID, err := alice.Subscribe(context.TODO(), "blocks", func(data []byte) {
 		subscribeData <- data
-	}, nil)
-	assert.NoError(t, err)
+	}, validator)
+	require.NoError(t, err)
 
 	// calling one time publish doesnt guarantee that the message has been sent.
 	// without this we might not get a message in the subscribe and we would get
@@ -188,6 +197,7 @@ func TestPublishSubscribeUnsubscribe(t *testing.T) {
 	go func() {
 		for {
 			err = alice.Publish(context.TODO(), "blocks", []byte(`{"block":"1"}`))
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
@@ -309,6 +319,150 @@ func TestSendMessageAndHandlers(t *testing.T) {
 	assert.NoError(t, err)
 	messageFromBytesHandler := <-secondPayloadReceived
 	assert.Equal(t, helloWorlPayload, messageFromBytesHandler)
+}
+
+func TestSendMessageSync(t *testing.T) {
+	hosts := newNetwork(t, 2, true)
+	require.Len(t, hosts, 2)
+	alice := hosts[0]
+	bob := hosts[1]
+
+	t.Run("synchronous message from alice to bob", func(t *testing.T) {
+		const testProtocol = types.MessageType("/test/sync/alice-to-bob/1.0.0")
+		const testMessage = "synchronous test message"
+		messageReceived := make(chan string, 1)
+
+		err := bob.RegisterBytesMessageHandler(testProtocol,
+			func(data []byte, _ peer.ID) {
+				messageReceived <- string(data)
+			})
+		require.NoError(t, err)
+
+		err = alice.SendMessageSync(context.Background(), bob.Host.ID().String(),
+			types.MessageEnvelope{
+				Type: testProtocol,
+				Data: []byte(testMessage),
+			},
+			time.Now().Add(5*time.Second),
+		)
+		require.NoError(t, err)
+
+		select {
+		case msg := <-messageReceived:
+			require.Equal(t, testMessage, msg)
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout waiting for message")
+		}
+	})
+
+	t.Run("sync self message", func(t *testing.T) {
+		const selfProtocol = types.MessageType("/test/sync/self/1.0.0")
+		const selfTestMessage = "self synchronous test"
+		selfMessageReceived := make(chan string, 1)
+
+		err := alice.RegisterBytesMessageHandler(selfProtocol,
+			func(data []byte, _ peer.ID) {
+				selfMessageReceived <- string(data)
+			})
+		require.NoError(t, err)
+
+		err = alice.SendMessageSync(context.Background(), alice.Host.ID().String(),
+			types.MessageEnvelope{
+				Type: selfProtocol,
+				Data: []byte(selfTestMessage),
+			},
+			time.Now().Add(5*time.Second),
+		)
+		require.NoError(t, err)
+
+		select {
+		case msg := <-selfMessageReceived:
+			require.Equal(t, selfTestMessage, msg)
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("timeout waiting for self message")
+		}
+	})
+}
+
+func TestHandlers(t *testing.T) {
+	hosts := newNetwork(t, 1, true)
+	require.Len(t, hosts, 1)
+	alice := hosts[0]
+
+	t.Run("RegisterStreamMessageHandler with empty protocol", func(t *testing.T) {
+		err := alice.RegisterStreamMessageHandler("", func(_ network.Stream) {})
+		require.Error(t, err)
+	})
+
+	t.Run("RegisterBytesMessageHandler with empty protocol", func(t *testing.T) {
+		err := alice.RegisterBytesMessageHandler("", func(_ []byte, _ peer.ID) {})
+		require.Error(t, err)
+	})
+
+	t.Run("RegisterBytesMessageHandler twice", func(t *testing.T) {
+		const testProtocol = types.MessageType("/test/protocol/1.0.0")
+
+		// First registration should succeed
+		err := alice.RegisterBytesMessageHandler(testProtocol, func(_ []byte, _ peer.ID) {})
+		require.NoError(t, err)
+
+		// Second registration should fail with already registered error
+		err = alice.RegisterBytesMessageHandler(testProtocol, func(_ []byte, _ peer.ID) {})
+		require.Error(t, err)
+	})
+
+	t.Run("HandleMessage and UnregisterMessageHandler", func(t *testing.T) {
+		const (
+			testProtocol = "/test/handle/1.0.0"
+			testMsg      = "love and peace"
+		)
+		messageReceived := make(chan string, 1)
+
+		// Register handler
+		err := alice.HandleMessage(testProtocol, func(data []byte, _ peer.ID) {
+			messageReceived <- string(data)
+		})
+		require.NoError(t, err)
+
+		// Send message to self - should succeed
+		err = alice.SendMessage(context.Background(), alice.Host.ID().String(),
+			types.MessageEnvelope{
+				Type: types.MessageType(testProtocol),
+				Data: []byte(testMsg),
+			},
+			time.Now().Add(readTimeout),
+		)
+		require.NoError(t, err)
+
+		// Verify message was received
+		select {
+		case msg := <-messageReceived:
+			require.Equal(t, testMsg, msg)
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout waiting for message")
+		}
+
+		// Unregister handler
+		alice.UnregisterMessageHandler(testProtocol)
+
+		// Try to send message again - should still not error (send doesn't fail if no handler)
+		err = alice.SendMessage(context.Background(), alice.Host.ID().String(),
+			types.MessageEnvelope{
+				Type: types.MessageType(testProtocol),
+				Data: []byte("anything msg"),
+			},
+			time.Now().Add(readTimeout),
+		)
+		require.NoError(t, err)
+
+		// But message should not be received
+		select {
+		case <-messageReceived:
+			t.Fatal("should not have received message after unregistering handler")
+		case <-time.After(100 * time.Millisecond):
+			// Expected timeout
+		}
+	})
 }
 
 func TestStop(t *testing.T) {
