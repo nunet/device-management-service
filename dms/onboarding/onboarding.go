@@ -338,10 +338,10 @@ func (o *Onboarding) Offboard(ctx context.Context) error {
 }
 
 // IsOnboarded checks whether the machine is onboarded or not
-func (o *Onboarding) IsOnboarded() (bool, error) {
+func (o *Onboarding) IsOnboarded() bool {
 	o.Lock.RLock()
 	defer o.Lock.RUnlock()
-	return o.Config.IsOnboarded, nil
+	return o.Config.IsOnboarded
 }
 
 // Info returns the onboarding configuration

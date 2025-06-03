@@ -10,7 +10,7 @@ import (
 )
 
 // New creates a volume implementation based on the provided configuration.
-func New(t *storage.VoumeTracker, sc types.VolumeConfig, allocationID string) (types.Mounter, error) {
+func New(t *storage.VolumeTracker, sc types.VolumeConfig, allocationID string) (types.Mounter, error) {
 	switch sc.Type {
 	case "glusterfs":
 		return glusterfs.New(t, sc.Servers, sc.Name, sc.ClientPrivateKey, sc.ClientPEM, sc.ClientCA, allocationID)

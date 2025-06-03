@@ -88,7 +88,7 @@ The above command emits a self-signed token with the specified capabilities dele
 				return fmt.Errorf("get trust context: %w", err)
 			}
 
-			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg.UserDir)
+			capCtx, err := node.LoadCapabilityContext(afs, trustCtx, context, cfg.UserDir)
 			if err != nil {
 				return fmt.Errorf("failed to load capability context: %w", err)
 			}

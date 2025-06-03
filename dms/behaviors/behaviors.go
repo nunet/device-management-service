@@ -28,7 +28,7 @@ const (
 	VerifyEdgeConstraintBehavior = "/dms/deployment/constraint/edge"
 	CommitDeploymentBehavior     = "/dms/deployment/commit"
 	AllocationDeploymentBehavior = "/dms/deployment/allocate"
-	RevertDeploymentBehavior     = "/dms/deployment/revert"
+	DeploymentRevertBehavior     = "/dms/deployment/revert"
 
 	NewDeploymentBehavior      = "/dms/node/deployment/new"
 	DeploymentListBehavior     = "/dms/node/deployment/list"

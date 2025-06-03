@@ -52,7 +52,7 @@ func NewSecurityContext(
 	}
 
 	// Load capability context
-	capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg.UserDir)
+	capCtx, err := node.LoadCapabilityContext(fs, trustCtx, context, cfg.UserDir)
 	if err != nil {
 		return nil, fmt.Errorf("load capability context: %w", err)
 	}

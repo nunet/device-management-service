@@ -23,7 +23,7 @@ type OnboardingConfig struct {
 
 // OnboardingManager - interface for onboarding
 type OnboardingManager interface {
-	IsOnboarded() (bool, error)
+	IsOnboarded() bool
 	Info(ctx context.Context) (OnboardingConfig, error)
 	Onboard(ctx context.Context, config OnboardingConfig) (OnboardingConfig, error)
 	Offboard(ctx context.Context) error

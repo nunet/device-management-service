@@ -35,16 +35,21 @@ import (
 func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error creating subnet: %s", err)
+		n.sendReply(msg, orchestrator.SubnetCreateResponse{Error: err.Error()})
+	}
+
 	var request orchestrator.SubnetCreateRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling subnet create request: %s", err))
 		return
 	}
 
 	resp := orchestrator.SubnetCreateResponse{}
 	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -80,23 +85,27 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 func (n *Node) handleSubnetJoin(msg actor.Envelope) {
 	defer msg.Discard()
 
+	handleErr := func(err error) {
+		log.Errorf("Error subnet join: %s", err)
+		n.sendReply(msg, orchestrator.SubnetJoinResponse{Error: err.Error()})
+	}
+
 	var request orchestrator.SubnetJoinRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling subnet join: %s", err))
 		return
 	}
 
 	resp := orchestrator.SubnetJoinResponse{}
 	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
 	err = n.network.AddSubnetDNSRecords(request.SubnetID, request.Records)
 	if err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
+		handleErr(err)
 		return
 	}
 
@@ -132,10 +141,15 @@ func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 
 // createAllocation creates an allocation
 func (n *Node) createAllocation(
-	allocationID string, orchestrator actor.Handle,
+	allocationID string,
 	allocType jobtypes.AllocationType,
 	job jobs.Job, supervisor actor.Handle,
 ) (*jobs.Allocation, error) {
+	executor, err := createExecutor(context.Background(), n.fs, job.Execution.Type)
+	if err != nil {
+		return nil, fmt.Errorf("create executor: %w", err)
+	}
+
 	allocActor, err := n.actor.CreateChild(
 		allocationID, supervisor,
 	)
@@ -143,14 +157,9 @@ func (n *Node) createAllocation(
 		return nil, fmt.Errorf("create allocation actor: %w", err)
 	}
 
-	executor, err := createExecutor(context.Background(), n.fs, job.Execution.Type)
-	if err != nil {
-		return nil, fmt.Errorf("create executor: %w", err)
-	}
-
 	allocation, err := n.allocator.Allocate(
 		context.Background(), allocationID,
-		allocType, allocActor, orchestrator,
+		allocType, allocActor, supervisor,
 		job, executor,
 	)
 	if err != nil {
@@ -161,11 +170,20 @@ func (n *Node) createAllocation(
 }
 
 func (n *Node) createAllocations(
-	orchestrator did.DID,
 	ensembleID string,
 	allocations map[string]jobtypes.AllocationDeploymentConfig,
 	supervisor actor.Handle,
 ) (map[string]actor.Handle, error) {
+	if len(allocations) == 0 {
+		log.Errorf("no allocations to create for ensembleID: %s", ensembleID)
+		return nil, fmt.Errorf("no allocations to create for ensembleID: %s", ensembleID)
+	}
+
+	if supervisor.Empty() || supervisor.DID.Empty() {
+		log.Errorf("invalid supervisor handle: %+v", supervisor)
+		return nil, fmt.Errorf("invalid supervisor handle")
+	}
+
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
 	allocationIDs := make([]string, 0, len(allocations))
 	for allocationName, allocationConfig := range allocations {
@@ -174,7 +192,6 @@ func (n *Node) createAllocations(
 
 		allocation, err := n.createAllocation(
 			allocationID,
-			supervisor,
 			allocationConfig.Type,
 			jobs.Job{
 				Resources:        allocationConfig.Resources,
@@ -193,7 +210,7 @@ func (n *Node) createAllocations(
 		allocationIDs = append(allocationIDs, allocation.ID)
 
 		// node grants subnet create/destroy caps to the orchestrator
-		if err := n.actor.Security().Grant(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+		if err := n.actor.Security().Grant(supervisor.DID, n.actor.Handle().DID, []ucan.Capability{
 			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
 		}, grantAllocationCapsFreq); err != nil {
 			return nil, fmt.Errorf("grant node caps: %w", err)
@@ -203,7 +220,7 @@ func (n *Node) createAllocations(
 		if err != nil {
 			return nil, fmt.Errorf("deriving allocation did: %w", err)
 		}
-		if err := n.actor.Security().Grant(orchestrator, allocDID, []ucan.Capability{
+		if err := n.actor.Security().Grant(supervisor.DID, allocDID, []ucan.Capability{
 			behaviors.AllocationNamespace,
 		}, grantAllocationCapsFreq); err != nil {
 			return nil, fmt.Errorf("grant allocation caps: %w", err)
@@ -220,14 +237,14 @@ func (n *Node) createAllocations(
 					return
 				case <-ticker.C:
 					// node grants subnet create/destroy caps to the orchestrator
-					if err := n.actor.Security().Grant(orchestrator, n.actor.Handle().DID, []ucan.Capability{
+					if err := n.actor.Security().Grant(supervisor.DID, n.actor.Handle().DID, []ucan.Capability{
 						ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
 					}, grantAllocationCapsFreq); err != nil {
 						log.Warnf("grant node caps: %v", err)
 					}
 
 					// allocation grants subnet manage caps to the orchestrator
-					if err := n.actor.Security().Grant(orchestrator, allocDID, []ucan.Capability{
+					if err := n.actor.Security().Grant(supervisor.DID, allocDID, []ucan.Capability{
 						behaviors.AllocationNamespace,
 					}, grantAllocationCapsFreq); err != nil {
 						log.Warnf("grant allocation caps: %v", err)
@@ -266,7 +283,6 @@ func (n *Node) handleAllocationDeployment(msg actor.Envelope) {
 	}
 
 	allocations, err := n.createAllocations(
-		msg.From.DID,
 		request.EnsembleID,
 		request.Allocations,
 		msg.From,
@@ -343,7 +359,7 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 
 	var req orchestrator.AllocationLogsRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
-		handleErr(fmt.Errorf("error unmarshalling allocation logs request: %s", err))
+		handleErr(fmt.Errorf("allocation logs request: %w", types.ErrUnmarshal))
 		return
 	}
 
