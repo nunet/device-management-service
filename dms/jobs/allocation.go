@@ -109,9 +109,16 @@ func NewAllocation(
 	executor types.Executor,
 	selfRelease func() error,
 ) (*Allocation, error) {
-	// TODO: add check for nil values
 	if network == nil {
 		return nil, fmt.Errorf("network is nil")
+	}
+
+	if actor == nil {
+		return nil, fmt.Errorf("actor is nil")
+	}
+
+	if executor == nil {
+		return nil, fmt.Errorf("executor is nil")
 	}
 
 	executionID, err := uuid.NewUUID()
@@ -169,6 +176,7 @@ func (a *Allocation) Run(
 		log.Warnw("allocation_already_running",
 			"labels", string(observability.LabelAllocation),
 			"allocationID", a.ID)
+		// TODO: Should we return error instead?
 		return nil
 	}
 
@@ -323,8 +331,8 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 			},
 		})
 	} else if r != nil {
-		// TODO: use switch-cases
-		if r.ExitCode != 0 { //nolint
+		switch {
+		case r.ExitCode != 0:
 			log.Infof("execution exited with exit code: %d", r.ExitCode)
 			a.status = AllocationFailed
 
@@ -334,11 +342,11 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 					Err:      fmt.Errorf("execution exit code != 0, exit code: %d", r.ExitCode),
 				},
 			})
-		} else if r.ExitCode == 0 && !r.Killed {
+		case r.ExitCode == 0 && !r.Killed:
 			log.Infof("execution successfully completed")
 			a.status = AllocationCompleted
 			notifyOrchestrator(behaviors.TaskTerminationNotification{})
-		} else if r.ExitCode == 0 && r.Killed {
+		case r.ExitCode == 0 && r.Killed:
 			log.Infof("execution possibly killed")
 			a.status = AllocationFailed
 			notifyOrchestrator(behaviors.TaskTerminationNotification{
@@ -372,6 +380,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 		return nil
 	}
 
+	// Question: maybe just setting this at the end?
 	a.status = AllocationStopped
 
 	if a.executor == nil {
