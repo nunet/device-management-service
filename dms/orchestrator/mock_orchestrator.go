@@ -222,3 +222,7 @@ func (m *MockOrchestratorRegistry) GetOrchestrator(id string) (Orchestrator, err
 }
 
 func (m *MockOrchestratorRegistry) DeleteOrchestrator(_ string) {}
+
+func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.DeploymentStatus {
+	return make(chan jtypes.DeploymentStatus)
+}
