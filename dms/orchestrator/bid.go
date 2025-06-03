@@ -310,7 +310,6 @@ func (o *BasicOrchestrator) requestBids(
 	); err != nil {
 		return nil, nil, time.Time{}, fmt.Errorf("adding bid behavior: %w", err)
 	}
-
 	// Send broadcast
 	log.Debugf("sending broadcast requests: %+v", broadcastRequests)
 	if len(broadcastRequests) > 0 {
@@ -344,8 +343,9 @@ func (o *BasicOrchestrator) broadcastBid(bidRequest jtypes.EnsembleBidRequest, b
 	}
 
 	if err := o.actor.Publish(msg); err != nil {
-		return fmt.Errorf("publishing bid request: %w", err)
+		return fmt.Errorf("publishing broadcast bid request: %w", err)
 	}
+
 	return nil
 }
 

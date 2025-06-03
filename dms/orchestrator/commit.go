@@ -209,7 +209,7 @@ func (o *BasicOrchestrator) commitDeployment(cfg jtypes.EnsembleConfig, n string
 		wg.Add(1)
 		go func(allocName string) {
 			defer wg.Done()
-			allocation, ok := cfg.V1.Allocations[allocName]
+			allocation, ok := cfg.Allocation(allocName)
 			if !ok {
 				errCh <- fmt.Errorf("allocation %s not found: %w", allocName, ErrDeploymentFailed)
 				return
