@@ -562,6 +562,41 @@ func (l *Libp2p) Stat() types.NetworkStats {
 	}
 }
 
+// Peers returns a list of peers from the peer store
+func (l *Libp2p) Peers() []peer.ID {
+	return l.PS.Peers()
+}
+
+// Connect connects to a peer by its ID and returns an error if any
+func (l *Libp2p) Connect(ctx context.Context, peerID string) error {
+	if peerID == "" {
+		log.Infof("peerID is empty")
+		return ErrPeerIDEmpty
+	}
+
+	log.Infof("Creating multiaddress from peerID: %s", peerID)
+	peerAddr, err := multiaddr.NewMultiaddr(peerID)
+	if err != nil {
+		log.Infof("Invalid multiaddress: %v", err)
+		return fmt.Errorf("invalid multiaddress: %w", err)
+	}
+
+	log.Infof("Resolving peer info from multiaddress")
+	addrInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
+	if err != nil {
+		log.Infof("Could not resolve peer info: %v", err)
+		return fmt.Errorf("could not resolve peer info: %w", err)
+	}
+
+	log.Infof("Connecting to peer: %s", peerID)
+	if err := l.Host.Connect(ctx, *addrInfo); err != nil {
+		log.Infof("Failed to connect to peer %s: %v", peerID, err)
+		return fmt.Errorf("failed to connect to peer %s: %w", peerID, err)
+	}
+
+	return nil
+}
+
 // GetPeerIP gets the ip of the peer from the peer store
 func (l *Libp2p) GetPeerIP(p PeerID) string {
 	addrs := l.Host.Peerstore().Addrs(p)

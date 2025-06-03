@@ -11,14 +11,15 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const pingTimeout = 1 * time.Second
@@ -32,6 +33,8 @@ type PingResponse struct {
 	RTT   int64
 }
 
+var ErrHostEmpty = fmt.Errorf("host is empty")
+
 func (n *Node) handlePeerPing(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -42,7 +45,12 @@ func (n *Node) handlePeerPing(msg actor.Envelope) {
 
 	var request PingRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		log.Debugw("peer_ping_unmarshal_error", "error", err)
+		handleErr(types.ErrUnmarshal)
+		return
+	}
+
+	if request.Host == "" {
+		handleErr(fmt.Errorf("ping request: %w", ErrHostEmpty))
 		return
 	}
 
@@ -68,20 +76,11 @@ type PeersListResponse struct {
 func (n *Node) handlePeersList(msg actor.Envelope) {
 	defer msg.Discard()
 
-	// get the underlying libp2p instance and extract the DHT data
-	libp2pNet, ok := n.network.(*libp2p.Libp2p)
-	if !ok {
-		log.Debug("peers_list_not_libp2p_network")
-		return
-	}
-
 	resp := PeersListResponse{
 		Peers: make([]peer.ID, 0),
 	}
 
-	for _, v := range libp2pNet.PS.Peers() {
-		resp.Peers = append(resp.Peers, v)
-	}
+	resp.Peers = n.network.Peers()
 
 	n.sendReply(msg, resp)
 }
@@ -144,31 +143,14 @@ func (n *Node) handlePeerConnect(msg actor.Envelope) {
 	var request PeerConnectRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Debugw("peer_connect_unmarshal_error", "error", err)
-		return
-	}
-
-	libp2pNet, ok := n.network.(*libp2p.Libp2p)
-	if !ok {
-		log.Debug("peer_connect_not_libp2p_network")
+		handleErr(fmt.Errorf("peer connect: %w", types.ErrUnmarshal))
 		return
 	}
 
 	resp := PeerConnectResponse{}
-
-	peerAddr, err := multiaddr.NewMultiaddr(request.Address)
+	err := n.network.Connect(context.Background(), request.Address)
 	if err != nil {
 		handleErr(err)
-		return
-	}
-	addrInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
-	if err != nil {
-		handleErr(err)
-		return
-	}
-
-	if err := libp2pNet.Host.Connect(context.Background(), *addrInfo); err != nil {
-		resp.Error = err.Error()
-		n.sendReply(msg, resp)
 		return
 	}
 

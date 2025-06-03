@@ -82,7 +82,7 @@ func TestCap(t *testing.T) {
 		t.Parallel()
 
 		basePath := t.TempDir()
-		afs := afero.Afero{Fs: afero.NewOsFs()}
+		afs := afero.Afero{Fs: afero.NewMemMapFs()}
 		contextKey := "context"
 		passphrase := "passphrase"
 
@@ -104,7 +104,7 @@ func TestCap(t *testing.T) {
 		t.Parallel()
 
 		basePath := t.TempDir()
-		afs := afero.Afero{Fs: afero.NewOsFs()}
+		afs := afero.Afero{Fs: afero.NewMemMapFs()}
 		contextKey := "context"
 		passphrase := "passphrase"
 
@@ -126,10 +126,10 @@ func TestCap(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		err = SaveCapabilityContext(capCtx, basePath)
+		err = SaveCapabilityContext(afs, capCtx, basePath)
 		require.NoError(t, err)
 
-		savedCapCtx, err := LoadCapabilityContext(trustCtx, contextKey, basePath)
+		savedCapCtx, err := LoadCapabilityContext(afs, trustCtx, contextKey, basePath)
 		require.NoError(t, err)
 		require.NotNil(t, savedCapCtx)
 		require.Equal(t, capCtx, savedCapCtx)

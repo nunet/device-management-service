@@ -77,11 +77,11 @@ func CreateTrustContextFromKeyStore(
 	return trustCtx, priv, nil
 }
 
-func LoadCapabilityContext(trustCtx did.TrustContext, name string, capStorePath string) (ucan.CapabilityContext, error) {
+func LoadCapabilityContext(fs afero.Afero, trustCtx did.TrustContext, name string, capStorePath string) (ucan.CapabilityContext, error) {
 	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 
-	f, err := os.Open(capStoreFile)
+	f, err := fs.Open(capStoreFile)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open capability context file: %w", err)
 	}
@@ -95,26 +95,26 @@ func LoadCapabilityContext(trustCtx did.TrustContext, name string, capStorePath 
 	return capCtx, nil
 }
 
-func SaveCapabilityContext(capCtx ucan.CapabilityContext, capStorePath string) error {
+func SaveCapabilityContext(fs afero.Afero, capCtx ucan.CapabilityContext, capStorePath string) error {
 	name := capCtx.Name()
 	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capCtxFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 	capCtxBackup := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap.%d", name, time.Now().Unix()))
 
 	// ensure the directory exists
-	if err := os.MkdirAll(capStoreDir, os.FileMode(0o700)); err != nil {
+	if err := fs.MkdirAll(capStoreDir, os.FileMode(0o700)); err != nil {
 		return fmt.Errorf("creating capability context director: %w", err)
 	}
 
 	// first take a backup -- move the current context
-	if _, err := os.Stat(capCtxFile); err == nil {
-		if err := os.Rename(capCtxFile, capCtxBackup); err != nil {
+	if _, err := fs.Stat(capCtxFile); err == nil {
+		if err := fs.Rename(capCtxFile, capCtxBackup); err != nil {
 			return fmt.Errorf("error backing up current capability context: %w", err)
 		}
 	}
 
 	// now open for writing
-	f, err := os.Create(capCtxFile)
+	f, err := fs.Create(capCtxFile)
 	if err != nil {
 		return fmt.Errorf("error creating new capability context file: %w", err)
 	}

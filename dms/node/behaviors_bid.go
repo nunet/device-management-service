@@ -90,15 +90,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		"from", msg.From.Address,
 	)
 
-	onboarded, err := n.onboarding.IsOnboarded()
-	if err != nil {
-		log.Debugw(
-			"onboarding_check_error",
-			"labels", string(observability.LabelDeployment),
-			"error", err,
-		)
-		return
-	}
+	onboarded := n.onboarding.IsOnboarded()
 	if !onboarded {
 		log.Debugw(
 			"node_not_onboarded_ignoring_bid_request",

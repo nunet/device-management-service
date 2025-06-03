@@ -13,5 +13,8 @@ func AllocationNameFromID(id string) string {
 }
 
 func EnsembleIDFromAllocationID(id string) string {
+	if strings.Count(id, "_") == 0 {
+		return id
+	}
 	return id[:strings.LastIndex(id, "_")]
 }

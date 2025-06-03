@@ -49,7 +49,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-//go:embed data/GeoLite2-Country.mmdb
+//go:embed node/data/GeoLite2-Country.mmdb
 var geoLite2Country []byte
 
 type DMS struct {

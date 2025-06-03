@@ -24,9 +24,9 @@ type OnboardRequest struct {
 }
 
 type OnboardResponse struct {
-	Success bool                   `json:"success"`
-	Error   string                 `json:"error,omitempty"`
-	Config  types.OnboardingConfig `json:"config,omitempty"`
+	OK     bool                   `json:"success"`
+	Error  string                 `json:"error,omitempty"`
+	Config types.OnboardingConfig `json:"config,omitempty"`
 }
 
 func (n *Node) handleOnboard(msg actor.Envelope) {
@@ -54,7 +54,7 @@ func (n *Node) handleOnboard(msg actor.Envelope) {
 	}
 
 	resp.Config = config
-	resp.Success = true
+	resp.OK = true
 	n.sendReply(msg, resp)
 }
 
@@ -86,28 +86,14 @@ func (n *Node) handleOffboard(msg actor.Envelope) {
 }
 
 type OnboardStatusResponse struct {
-	Onboarded bool   `json:"onboarded"`
-	Error     string `json:"error,omitempty"`
+	Onboarded bool `json:"onboarded"`
 }
 
 func (n *Node) handleOnboardStatus(msg actor.Envelope) {
 	defer msg.Discard()
 
-	handleErr := func(err error) {
-		log.Errorw("onboard_status_error",
-			"labels", string(observability.LabelNode),
-			"error", err)
-		n.sendReply(msg, OnboardStatusResponse{Error: err.Error()})
-	}
-
 	resp := OnboardStatusResponse{}
 
-	onboarded, err := n.onboarding.IsOnboarded()
-	if err != nil {
-		handleErr(err)
-		return
-	}
-
-	resp.Onboarded = onboarded
+	resp.Onboarded = n.onboarding.IsOnboarded()
 	n.sendReply(msg, resp)
 }

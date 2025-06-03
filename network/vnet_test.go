@@ -2,6 +2,7 @@ package network_test
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -118,6 +119,7 @@ func TestBasicNetworkMethods(t *testing.T) {
 	substrate := network.NewSubstrate()
 	aliceID := createEntity(t)
 	bobID := createEntity(t)
+	carolID := createEntity(t)
 	alice := substrate.AddWiredPeer(aliceID)
 	_ = substrate.AddWiredPeer(bobID)
 
@@ -133,6 +135,16 @@ func TestBasicNetworkMethods(t *testing.T) {
 		assert.True(t, alice.PeerConnected(bobID))
 		randomPeerID := createEntity(t)
 		assert.False(t, alice.PeerConnected(randomPeerID))
+	})
+
+	t.Run("peer connection with Connect", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, alice.PeerConnected(carolID))
+		err := alice.Connect(context.Background(), fmt.Sprintf("invalid-%s", carolID.String()))
+		assert.Error(t, err)
+		err = alice.Connect(context.Background(), carolID.String())
+		assert.NoError(t, err)
+		assert.True(t, alice.PeerConnected(carolID))
 	})
 }
 

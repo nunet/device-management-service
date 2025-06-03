@@ -154,7 +154,7 @@ func New(cfg config.Config, fs afero.Afero,
 	hardware types.HardwareManager,
 	orchestratorRepo repositories.GenericRepository[jobtypes.OrchestratorView],
 	geoIP types.GeoIPLocator, hostLocation geolocation.Geolocation,
-	portConfig PortConfig, vt *storage.VoumeTracker,
+	portConfig PortConfig, vt *storage.VolumeTracker,
 	volumeController controller.GlusterControllerInterface,
 ) (*Node, error) {
 	if onboarding == nil {
@@ -164,7 +164,7 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, errors.New("root capability context is nil")
 	}
 	if hostID == "" {
-		return nil, errors.New("host id is nil")
+		return nil, errors.New("hostID is empty")
 	}
 	if net == nil {
 		return nil, errors.New("network is nil")
@@ -441,8 +441,8 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 				actor.WithBehaviorTopic(behaviors.BidRequestTopic),
 			},
 		},
-		behaviors.RevertDeploymentBehavior: {
-			fn: n.handleRevertDeployment,
+		behaviors.DeploymentRevertBehavior: {
+			fn: n.handleDeploymentRevert,
 		},
 		behaviors.SubnetCreateBehavior.Static: {
 			fn: n.handleSubnetCreate,
@@ -645,9 +645,12 @@ func createEnsembleID(peerID string) (string, error) {
 
 func (n *Node) createOrchestrator(ctx context.Context,
 	ensemble jobtypes.EnsembleConfig,
-	actr actor.Actor, // TODO: unnecessary param, since actr is n.actor
 ) (orchestrator.Orchestrator, error) {
-	ensembleID, err := createEnsembleID(actr.Handle().Address.HostID)
+	if ensemble.V1 == nil {
+		return nil, fmt.Errorf("empty ensemble config")
+	}
+
+	ensembleID, err := createEnsembleID(n.actor.Handle().Address.HostID)
 	if err != nil {
 		return nil, fmt.Errorf("generate ensemble id: %w", err)
 	}

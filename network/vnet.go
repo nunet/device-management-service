@@ -320,6 +320,29 @@ func (h *MemoryHost) Stat() types.NetworkStats {
 	return types.NetworkStats{ID: h.pid.String(), ListenAddr: "virtual://" + string(h.pid)}
 }
 
+func (h *MemoryHost) Peers() []peer.ID {
+	h.mx.RLock()
+	defer h.mx.RUnlock()
+	peers := make([]peer.ID, 0, len(h.peers))
+	for pid := range h.peers {
+		id, err := peer.Decode(pid)
+		if err != nil {
+			continue // skip invalid peer IDs
+		}
+		peers = append(peers, id)
+	}
+	return peers
+}
+
+func (h *MemoryHost) Connect(_ context.Context, peerID string) error {
+	peer, err := peer.Decode(peerID)
+	if err != nil {
+		return errors.New("virtual: invalid peer ID")
+	}
+	_ = h.substrate.AddPeer(peer, true)
+	return nil
+}
+
 func (h *MemoryHost) PeerConnected(p peer.ID) bool {
 	h.mx.RLock()
 	defer h.mx.RUnlock()

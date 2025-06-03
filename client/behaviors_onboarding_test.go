@@ -31,8 +31,8 @@ func TestClient_Onboard(t *testing.T) {
 				Config: types.OnboardingConfig{},
 			},
 			node.OnboardResponse{
-				Success: true,
-				Error:   "",
+				OK:    true,
+				Error: "",
 			},
 			nil,
 			false,
@@ -108,7 +108,6 @@ func TestClient_OnboardStatus(t *testing.T) {
 			"success",
 			node.OnboardStatusResponse{
 				Onboarded: false,
-				Error:     "",
 			},
 			nil,
 			false,

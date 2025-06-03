@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-type VoumeTracker struct {
+type VolumeTracker struct {
 	mu     sync.RWMutex
 	mounts map[string]TrackedVolume
 }
@@ -15,13 +15,13 @@ type TrackedVolume struct {
 	ContainerID  string
 }
 
-func NewVolumeTracker() *VoumeTracker {
-	return &VoumeTracker{
+func NewVolumeTracker() *VolumeTracker {
+	return &VolumeTracker{
 		mounts: map[string]TrackedVolume{},
 	}
 }
 
-func (v *VoumeTracker) TrackMount(targetPath, allocationID, containerID string) {
+func (v *VolumeTracker) TrackMount(targetPath, allocationID, containerID string) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -31,14 +31,14 @@ func (v *VoumeTracker) TrackMount(targetPath, allocationID, containerID string) 
 	}
 }
 
-func (v *VoumeTracker) UntrackMount(targetPath string) {
+func (v *VolumeTracker) UntrackMount(targetPath string) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	delete(v.mounts, targetPath)
 }
 
-func (v *VoumeTracker) IsMounted(targetPath string) bool {
+func (v *VolumeTracker) IsMounted(targetPath string) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -46,7 +46,7 @@ func (v *VoumeTracker) IsMounted(targetPath string) bool {
 	return ok
 }
 
-func (v *VoumeTracker) GetMountInfo(targetPath string) (TrackedVolume, error) {
+func (v *VolumeTracker) GetMountInfo(targetPath string) (TrackedVolume, error) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 

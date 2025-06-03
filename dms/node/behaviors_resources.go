@@ -100,6 +100,7 @@ func (n *Node) handleHardwareUsage(msg actor.Envelope) {
 		return
 	}
 
+	resp.OK = true
 	resp.Resources = hardwareUsage
 	n.sendReply(msg, resp)
 }

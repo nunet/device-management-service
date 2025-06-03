@@ -11,7 +11,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -259,14 +258,14 @@ type allocator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	volumeTracker *storage.VoumeTracker
+	volumeTracker *storage.VolumeTracker
 }
 
 var _ Allocator = (*allocator)(nil)
 
 // newAllocator returns a new default allocator
 func newAllocator(
-	vt *storage.VoumeTracker,
+	vt *storage.VolumeTracker,
 	portAllocator *portAllocator,
 	resourceManager types.ResourceManager,
 	hardwareManager types.HardwareManager,
@@ -392,7 +391,7 @@ func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
 		}
 
 		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, v.Name)
-		err = createDirIfNotExists(desginationPath)
+		err = utils.CreateDirIfNotExists(a.fs, desginationPath)
 		if err != nil {
 			return fmt.Errorf("mount directory: %w", err)
 		}
@@ -424,16 +423,6 @@ func (a *allocator) unmountVolumeOnHost(job jobs.Job, allocationID string) error
 		}
 	}
 
-	return nil
-}
-
-func createDirIfNotExists(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		err := os.MkdirAll(path, 0o777) // Creates parent directories if needed
-		if err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
-		}
-	}
 	return nil
 }
 
@@ -635,6 +624,26 @@ func (a *allocator) getRunningEnsemblesIDs() []string {
 	}
 
 	return utils.MapKeysToSlice(ensembleIDsSet)
+}
+
+func (a *allocator) getCommits() map[string]int64 {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	commits := make(map[string]int64, len(a.commits))
+	for k, v := range a.commits {
+		commits[k] = v
+	}
+
+	return commits
+}
+
+func (a *allocator) getCommit(allocationID string) (int64, bool) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	expiry, ok := a.commits[allocationID]
+	return expiry, ok
 }
 
 func (a *allocator) clearCommits() {

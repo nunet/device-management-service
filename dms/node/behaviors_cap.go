@@ -85,7 +85,7 @@ func (n *Node) handleCapAnchor(msg actor.Envelope) {
 		return
 	}
 
-	if err := SaveCapabilityContext(n.rootCap, n.dmsConfig.WorkDir); err != nil {
+	if err := SaveCapabilityContext(n.fs, n.rootCap, n.dmsConfig.WorkDir); err != nil {
 		handleErr(err)
 		return
 	}

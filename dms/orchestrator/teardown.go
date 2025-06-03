@@ -178,7 +178,7 @@ func (o *BasicOrchestrator) Shutdown() {
 		"orchestratorID", o.id)
 }
 
-type RevertDeploymentMessage struct {
+type DeploymentRevertRequest struct {
 	EnsembleID   string
 	AllocsByName []string
 }
@@ -199,8 +199,8 @@ func (o *BasicOrchestrator) revertNodeDeployment(
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
-		behaviors.RevertDeploymentBehavior,
-		RevertDeploymentMessage{
+		behaviors.DeploymentRevertBehavior,
+		DeploymentRevertRequest{
 			EnsembleID:   o.id,
 			AllocsByName: ncfg.Allocations,
 		},

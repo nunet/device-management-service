@@ -28,7 +28,7 @@ type GlusterFS struct {
 
 	mu sync.Mutex
 
-	tracker          *storage.VoumeTracker
+	tracker          *storage.VolumeTracker
 	allocationID     string
 	clientPrivateKey string
 	clientPEM        string
@@ -38,7 +38,7 @@ type GlusterFS struct {
 var _ types.Mounter = (*GlusterFS)(nil)
 
 // New creates a new GlusterFS mounter with the provided configuration.
-func New(t *storage.VoumeTracker, servers []string, name string, clientPrivateKey, clientPEM, clientCA, allocationID string) (*GlusterFS, error) {
+func New(t *storage.VolumeTracker, servers []string, name string, clientPrivateKey, clientPEM, clientCA, allocationID string) (*GlusterFS, error) {
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("no GlusterFS servers provided")
 	}

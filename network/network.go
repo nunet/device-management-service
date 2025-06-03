@@ -60,6 +60,8 @@ type Network interface {
 	Start() error
 	// Stat returns the network information
 	Stat() types.NetworkStats
+	// Peers returns a list of peers from the peer store
+	Peers() []peer.ID
 	// Ping pings the given address and returns the PingResult
 	Ping(ctx context.Context, address string, timeout time.Duration) (types.PingResult, error)
 	// GetHostID returns the host ID
@@ -98,6 +100,8 @@ type Network interface {
 	// Notify allows the application to receive notifications about peer connections
 	// and disconnecions
 	Notify(ctx context.Context, preconnected func(PeerID, []ProtocolID, int), connected, disconnected func(PeerID), identified, updated func(PeerID, []ProtocolID)) error
+	// Connect connects to the given peer
+	Connect(ctx context.Context, p string) error
 	// PeerConnected returs true if the peer is currently connected
 	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
