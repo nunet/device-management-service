@@ -72,6 +72,9 @@ type Orchestrator interface {
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
 	GetAllocationLogs(name string) (AllocationLogsResponse, error)
 	WriteAllocationLogs(name string, stdout, stderr []byte) (string, error)
+	// SubscribeToStatus returns a channel that receives status updates.
+	// The channel will be closed when the context is done or when the deployment reaches a terminal state.
+	StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus
 }
 
 // TODO: use immutable data structures (there are libraries for that), specially
@@ -96,6 +99,10 @@ type BasicOrchestrator struct {
 	supervisor         *Supervisor
 
 	nonce uint64
+
+	// Status subscribers
+	statusSubscribers     map[chan jtypes.DeploymentStatus]struct{}
+	statusSubscribersLock sync.RWMutex
 }
 
 var _ Orchestrator = (*BasicOrchestrator)(nil)
@@ -123,15 +130,16 @@ func NewOrchestrator(
 	}
 
 	o := &BasicOrchestrator{
-		actor:          oActor,
-		geo:            geo,
-		id:             id,
-		cfg:            cfg,
-		ctx:            ctx,
-		fs:             fs,
-		workDir:        workDir,
-		subnetManifest: subnet,
-		supervisor:     NewSupervisor(ctx, oActor, id),
+		actor:             oActor,
+		geo:               geo,
+		id:                id,
+		cfg:               cfg,
+		ctx:               ctx,
+		fs:                fs,
+		workDir:           workDir,
+		subnetManifest:    subnet,
+		supervisor:        NewSupervisor(ctx, oActor, id),
+		statusSubscribers: make(map[chan jtypes.DeploymentStatus]struct{}),
 	}
 
 	orchestratorBehaviors := map[string]func(actor.Envelope){
@@ -156,7 +164,61 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 		"labels", []string{string(observability.LabelDeployment)},
 		"status", status.String(),
 		"orchestratorID", o.id)
+	oldStatus := o.status
 	o.status = status
+
+	if oldStatus != status {
+		// Notify all subscribers
+		o.statusSubscribersLock.RLock()
+		defer o.statusSubscribersLock.RUnlock()
+		for ch := range o.statusSubscribers {
+			select {
+			case ch <- status:
+			default:
+				// Skip if channel is blocked
+			}
+		}
+	}
+
+	// If we've reached a terminal state, close all subscriber channels
+	if status == jtypes.DeploymentStatusRunning ||
+		status == jtypes.DeploymentStatusFailed ||
+		status == jtypes.DeploymentStatusCompleted {
+		for ch := range o.statusSubscribers {
+			close(ch)
+		}
+		o.statusSubscribers = make(map[chan jtypes.DeploymentStatus]struct{})
+	}
+}
+
+func (o *BasicOrchestrator) StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus {
+	ch := make(chan jtypes.DeploymentStatus, 1)
+
+	// Send initial status
+	select {
+	case ch <- o.Status():
+	case <-ctx.Done():
+		close(ch)
+		return ch
+	}
+
+	o.statusSubscribersLock.Lock()
+	o.statusSubscribers[ch] = struct{}{}
+	o.statusSubscribersLock.Unlock()
+
+	// Clean up when context is done
+	go func() {
+		<-ctx.Done()
+		o.statusSubscribersLock.Lock()
+		delete(o.statusSubscribers, ch)
+		o.statusSubscribersLock.Unlock()
+		_, ok := <-ch
+		if ok {
+			close(ch)
+		}
+	}()
+
+	return ch
 }
 
 func (o *BasicOrchestrator) Deploy(expiry time.Time) error {

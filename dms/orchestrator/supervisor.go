@@ -158,7 +158,7 @@ func (s *Supervisor) registerHealthCheck(allocation jtypes.AllocationManifest, o
 		s.lock.Lock()
 		s.registeredHealthChecks[allocation.ID] = struct{}{}
 		s.lock.Unlock()
-		log.Info("successfully registered healthcheck for allocation: %s", allocation.ID)
+		log.Infof("successfully registered healthcheck for allocation: %s", allocation.ID)
 		return nil
 
 	case <-time.After(RegisterHealthCheckTimeout):
