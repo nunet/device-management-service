@@ -9,35 +9,29 @@
 package cap
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newAnchorCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
-	var (
-		context string
-		root    string
-		provide string
-		require string
-		revoke  string
-	)
+// AnchorOptions holds the command-line options for the anchor command.
+type AnchorOptions struct {
+	Context string
+	Root    string
+	Provide string
+	Require string
+	Revoke  string
+}
 
-	const (
-		fnProvide = "provide"
-		fnRoot    = "root"
-		fnRequire = "require"
-		fnRevoke  = "revoke"
-	)
+func newAnchorCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
+	var opts AnchorOptions
 
 	cmd := &cobra.Command{
 		Use:   "anchor",
@@ -64,83 +58,77 @@ Usage examples:
   nunet cap anchor --context user --revoke '{"another": "revocation", "token": "example"}'
 
 Note: The --context flag is required to specify the capability context.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			passphrase, err := utils.GetDMSPassphrase(env, false)
-			if err != nil {
-				return fmt.Errorf("get dms passphrase: %w", err)
-			}
-
-			trustCtx, err := node.GetTrustContext(afs, context, passphrase, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("get trust context: %w", err)
-			}
-
-			capCtx, err := node.LoadCapabilityContext(afs, trustCtx, context, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("failed to load capability context: %w", err)
-			}
-
-			switch {
-			case root != "":
-				rootDID, err := did.FromString(root)
-				if err != nil {
-					return fmt.Errorf("invalid root DID: %w", err)
-				}
-
-				if err := capCtx.AddRoots([]did.DID{rootDID}, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{}); err != nil {
-					return fmt.Errorf("failed to add root anchors: %w", err)
-				}
-
-			case require != "":
-				var tokens ucan.TokenList
-				if err := json.Unmarshal([]byte(require), &tokens); err != nil {
-					return fmt.Errorf("unmarshal tokens: %w", err)
-				}
-
-				if err := capCtx.AddRoots(nil, tokens, ucan.TokenList{}, ucan.TokenList{}); err != nil {
-					return fmt.Errorf("failed to add require anchors: %w", err)
-				}
-
-			case provide != "":
-				var tokens ucan.TokenList
-				if err := json.Unmarshal([]byte(provide), &tokens); err != nil {
-					return fmt.Errorf("unmarshal tokens: %w", err)
-				}
-
-				if err := capCtx.AddRoots(nil, ucan.TokenList{}, tokens, ucan.TokenList{}); err != nil {
-					return fmt.Errorf("failed to add provide anchors: %w", err)
-				}
-			case revoke != "":
-				var tokens ucan.Token
-				if err := json.Unmarshal([]byte(revoke), &tokens); err != nil {
-					return fmt.Errorf("unmarshal tokens: %w", err)
-				}
-
-				if err := capCtx.AddRoots(nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{Tokens: []*ucan.Token{&tokens}}); err != nil {
-					return fmt.Errorf("failed to add revoke anchors: %w", err)
-				}
-
-			default:
-				return fmt.Errorf("one of --provide, --root, or --require or --revoke must be specified")
-			}
-
-			if err := node.SaveCapabilityContext(afs, capCtx, cfg.UserDir); err != nil {
-				return fmt.Errorf("save capability context: %w", err)
-			}
-
-			return nil
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAnchorCmd(cmd.Context(), dmsCLI, opts, cli.CmdStreams(cmd))
 		},
 	}
 
-	useFlagContext(cmd, &context)
-	useFlagRoot(cmd, &root)
-	useFlagRequire(cmd, &require)
-	useFlagProvide(cmd, &provide)
-	useFlagRevoke(cmd, &revoke)
+	useFlagContext(cmd, &opts.Context)
+	useFlagRoot(cmd, &opts.Root)
+	useFlagRequire(cmd, &opts.Require)
+	useFlagProvide(cmd, &opts.Provide)
+	useFlagRevoke(cmd, &opts.Revoke)
 
 	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire, fnRevoke)
 	cmd.MarkFlagsMutuallyExclusive(fnProvide, fnRoot, fnRequire, fnRevoke)
 
 	return cmd
+}
+
+func runAnchorCmd(_ context.Context, dmsCLI *cli.DmsCLI, opts AnchorOptions, _ cli.Streams) error {
+	capCtx, err := utils.LoadCapabilityContext(dmsCLI, opts.Context)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case opts.Root != "":
+		rootDID, err := did.FromString(opts.Root)
+		if err != nil {
+			return fmt.Errorf("invalid root DID: %w", err)
+		}
+
+		if err := capCtx.AddRoots([]did.DID{rootDID}, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{}); err != nil {
+			return fmt.Errorf("failed to add root anchors: %w", err)
+		}
+
+	case opts.Require != "":
+		var tokens ucan.TokenList
+		if err := json.Unmarshal([]byte(opts.Require), &tokens); err != nil {
+			return fmt.Errorf("unmarshal tokens: %w", err)
+		}
+
+		if err := capCtx.AddRoots(nil, tokens, ucan.TokenList{}, ucan.TokenList{}); err != nil {
+			return fmt.Errorf("failed to add require anchors: %w", err)
+		}
+
+	case opts.Provide != "":
+		var tokens ucan.TokenList
+		if err := json.Unmarshal([]byte(opts.Provide), &tokens); err != nil {
+			return fmt.Errorf("unmarshal tokens: %w", err)
+		}
+
+		if err := capCtx.AddRoots(nil, ucan.TokenList{}, tokens, ucan.TokenList{}); err != nil {
+			return fmt.Errorf("failed to add provide anchors: %w", err)
+		}
+	case opts.Revoke != "":
+		var token ucan.Token
+		if err := json.Unmarshal([]byte(opts.Revoke), &token); err != nil {
+			return fmt.Errorf("unmarshal tokens: %w", err)
+		}
+
+		if err := capCtx.AddRoots(nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{Tokens: []*ucan.Token{&token}}); err != nil {
+			return fmt.Errorf("failed to add revoke anchors: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("one of --provide, --root, or --require or --revoke must be specified")
+	}
+
+	if err := utils.SaveCapabilityContext(dmsCLI, capCtx); err != nil {
+		return err
+	}
+
+	return nil
 }

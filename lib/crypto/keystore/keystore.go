@@ -26,6 +26,7 @@ type KeyStore interface {
 	Get(keyID string, passphrase string) (*Key, error)
 	Delete(keyID string, passphrase string) error
 	ListKeys() ([]string, error)
+	Exists(key string) bool
 }
 
 // BasicKeyStore handles keypair storage.

@@ -13,16 +13,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/client"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
-func newActorMsgCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
+func newActorMsgCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	fnDest := "dest"
 	fnBroadcast := "broadcast"
 	fnTimeout := "timeout"
@@ -53,13 +51,13 @@ Example:
 			payload := args[1]
 
 			// Create security context first
-			sctx, err := utils.NewSecurityContext(afs, env, contextName, cfg)
+			sctx, err := utils.NewSecurityContext(dmsCli, contextName)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			cli, err := utils.NewClient(cfg, sctx)
+			cli, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}

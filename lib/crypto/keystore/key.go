@@ -28,12 +28,36 @@ var (
 	// KDF parameters
 	nameKDF      = "scrypt"
 	scryptKeyLen = 64
-	scryptN      = 1 << 18
-	scryptR      = 8
-	scryptP      = 1
-	ksVersion    = 3
-	ksCipher     = "aes-256-ctr"
+
+	// Default scrypt parameters (production values)
+	defaultScryptN = 1 << 18
+	defaultScryptR = 8
+	defaultScryptP = 1
+
+	// Current scrypt parameters (can be overridden for testing)
+	scryptN = defaultScryptN
+	scryptR = defaultScryptR
+	scryptP = defaultScryptP
+
+	ksVersion = 3
+	ksCipher  = "aes-256-ctr"
 )
+
+// SetTestScryptParams allows overriding scrypt parameters for testing purposes.
+// This significantly speeds up key generation/derivation but reduces security.
+// IMPORTANT: Only use this in test environments.
+func SetTestScryptParams(n, r, p int) {
+	scryptN = n
+	scryptR = r
+	scryptP = p
+}
+
+// ResetScryptParamsToDefaults restores scrypt parameters to their original production values.
+func ResetScryptParamsToDefaults() {
+	scryptN = defaultScryptN
+	scryptR = defaultScryptR
+	scryptP = defaultScryptP
+}
 
 // Key represents a keypair to be stored in a keystore
 type Key struct {

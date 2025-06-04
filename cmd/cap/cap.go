@@ -11,7 +11,7 @@ package cap
 import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/env"
 )
@@ -46,13 +46,15 @@ func NewCapCmd(
 		Long:  `Manage capabilities for the Device Management Service`,
 	}
 
-	cmd.AddCommand(newGrantCmd(afs, env, cfg))
-	cmd.AddCommand(newAnchorCmd(afs, env, cfg))
-	cmd.AddCommand(newRevokeCmd(afs, env, cfg))
-	cmd.AddCommand(newNewCmd(afs, env, cfg))
-	cmd.AddCommand(newDelegateCmd(afs, env, cfg))
-	cmd.AddCommand(newListCmd(afs, env, cfg))
-	cmd.AddCommand(newRemoveCmd(afs, env, cfg))
+	dmsCli := cli.New(cli.WithConfig(cfg), cli.WithEnv(env), cli.WithFS(afs))
+
+	cmd.AddCommand(newGrantCmd(dmsCli))
+	cmd.AddCommand(newAnchorCmd(dmsCli))
+	cmd.AddCommand(newRevokeCmd(dmsCli))
+	cmd.AddCommand(newNewCmd(dmsCli))
+	cmd.AddCommand(newDelegateCmd(dmsCli))
+	cmd.AddCommand(newListCmd(dmsCli))
+	cmd.AddCommand(newRemoveCmd(dmsCli))
 	cmd.AddCommand(newHelpCmd())
 
 	return cmd
