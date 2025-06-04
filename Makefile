@@ -32,7 +32,7 @@ all:
 	fi
 
 run-acceptance:
-	go test -test.v -test.run "^TestFeatures/" ./test/acceptance/... -tags=acceptance -timeout=10m
+	go test -test.v -test.run "^TestFeatures/" ./tests/acceptance/... -tags=acceptance -timeout=10m
 
 linux_amd64:
 	@echo "Building for Linux AMD64..."
@@ -81,35 +81,35 @@ clean:
 	@echo "Cleaning up..."
 	rm -rf builds/
 
-setcap: 
-	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/integration/dms
+setcap_e2e: 
+	sudo setcap cap_net_admin,cap_sys_admin+ep ./tests/e2e/dms
 
-itest:
-	@echo "Running integration tests"
+e2e:
+	@echo "Running e2e tests"
 	@if ! docker image inspect nunet-glusterfs-client >/dev/null 2>&1; then \
 		echo "Docker image nunet-glusterfs-client not found. Building..."; \
 		make build-nunet-glusterfs-client; \
 	fi
-	go build -o ./test/integration/dms -ldflags=$(LDFLAGS)
-	make setcap
-	go test -v ./test/integration/... -tags=integration -timeout=10m
+	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
+	make setcap_e2e
+	go test -v ./tests/e2e/... -tags=e2e -timeout=10m
 
 build-nunet-glusterfs-client:
 	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image
 
 build_storage_tests: 
-	go test -tags storagetst -c ./test/integration/ -o ./test/integration/storagetestbinary
+	go test -tags storagetst -c ./tests/e2e/ -o ./tests/e2e/storagetestbinary
 
 setcapstorage: 
-	sudo setcap cap_net_admin,cap_sys_admin+ep ./test/integration/storagetestbinary
+	sudo setcap cap_net_admin,cap_sys_admin+ep ./tests/e2e/storagetestbinary
  
 storage_test:
 	@echo "Running storage test"
 	make linux_amd64
-	cp builds/dms_linux_amd64 test/integration/dms
+	cp builds/dms_linux_amd64 tests/e2e/dms
 	make build_storage_tests
 	make setcapstorage
-	./test/integration/storagetestbinary
+	./tests/e2e/storagetestbinary
 
 generate:
 	$(PROTOC) --proto_path=$(PROTO_DIR) --go_out=$(GO_OUT_DIR) --go_opt=paths=source_relative $(PROTO_FILES) --go_opt=Mcommon.proto=proto/generated/common

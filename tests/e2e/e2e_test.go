@@ -8,7 +8,7 @@
 // either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-//go:build integration || !unit
+//go:build e2e || !unit
 
 package itest
 
@@ -18,13 +18,13 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// TestIntegration is the entry point for the integration tests.
+// TestE2E is the entry point for the e2e tests.
 //
 // We need to ensure the following while adding more tests
 // 1. Tests should run in parallel
 // 2. portIndex should be unique for each test suite
 // 3. Runner function should be defined in the respective test file and must be passed to the test suite
-func TestIntegration(t *testing.T) {
+func TestE2E(t *testing.T) {
 	t.Parallel()
 	setupGlusterfsServer(t)
 	t.Cleanup(func() {
