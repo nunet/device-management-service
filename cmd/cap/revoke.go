@@ -9,21 +9,25 @@
 package cap
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newRevokeCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
-	var context string
+// RevokeCapOptions holds the command-line options for the revoke command.
+type RevokeCapOptions struct {
+	Context string
+	Token   string
+}
+
+func newRevokeCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
+	var opts RevokeCapOptions
 
 	cmd := &cobra.Command{
 		Use:   "revoke <token>",
@@ -34,50 +38,45 @@ Example:
   nunet cap revoke --context user '{"some": "json", "token": "here"}'
 
 The above command revokes a token`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			passphrase, err := utils.GetDMSPassphrase(env, false)
-			if err != nil {
-				return fmt.Errorf("get dms passphrase: %w", err)
-			}
-
-			trustCtx, err := node.GetTrustContext(afs, context, passphrase, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("get trust context: %w", err)
-			}
-
-			capCtx, err := node.LoadCapabilityContext(afs, trustCtx, context, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("failed to load capability context: %w", err)
-			}
-
-			var tokens ucan.TokenList
-			if err := json.Unmarshal([]byte(args[0]), &tokens); err != nil {
-				return fmt.Errorf("unmarshal tokens: %w", err)
-			}
-
-			var outputJSON []byte
-			for _, token := range tokens.Tokens {
-				revocationTokens, err := capCtx.Revoke(token)
-				if err != nil {
-					return fmt.Errorf("failed to revoke: %w", err)
-				}
-				tokensJSON, err := json.Marshal(revocationTokens)
-				if err != nil {
-					return fmt.Errorf("unable to marshal tokens to json: %w", err)
-				}
-
-				outputJSON = append(outputJSON, tokensJSON...)
-				outputJSON = append(outputJSON, []byte("\n")...)
-			}
-			fmt.Println("Revoked tokens", string(outputJSON))
-			fmt.Fprintln(cmd.OutOrStdout(), string(outputJSON))
-
-			return nil
+			opts.Token = args[0]
+			return runRevokeCap(cmd.Context(), dmsCLI, opts, cli.CmdStreams(cmd))
 		},
 	}
 
-	useFlagContext(cmd, &context)
+	useFlagContext(cmd, &opts.Context)
 	_ = cmd.MarkFlagRequired(fnContext)
 
 	return cmd
+}
+
+func runRevokeCap(_ context.Context, dmsCLI *cli.DmsCLI, opts RevokeCapOptions, streams cli.Streams) error {
+	capCtx, err := utils.LoadCapabilityContext(dmsCLI, opts.Context)
+	if err != nil {
+		return err
+	}
+
+	var tokens ucan.TokenList
+	if err := json.Unmarshal([]byte(opts.Token), &tokens); err != nil {
+		return fmt.Errorf("unmarshal tokens: %w", err)
+	}
+
+	var outputJSON []byte
+	for _, token := range tokens.Tokens {
+		revocationTokens, err := capCtx.Revoke(token)
+		if err != nil {
+			return fmt.Errorf("failed to revoke: %w", err)
+		}
+		tokensJSON, err := json.Marshal(revocationTokens)
+		if err != nil {
+			return fmt.Errorf("unable to marshal tokens to json: %w", err)
+		}
+
+		outputJSON = append(outputJSON, tokensJSON...)
+		outputJSON = append(outputJSON, []byte("\n")...)
+	}
+	fmt.Fprintln(streams.Out, string(outputJSON))
+
+	return nil
 }

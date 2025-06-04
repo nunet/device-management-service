@@ -13,13 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/client"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
 const (
@@ -33,7 +31,7 @@ const (
 	bSend      = "send"
 )
 
-func newActorCmdGroup(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
+func newActorCmdGroup(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cmd",
 		Short: "Invoke a predefined behavior on an actor",
@@ -65,7 +63,7 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 
 	for behavior := range registeredBehaviors {
 		if behaviorCfg, ok := registeredBehaviors[behavior]; ok {
-			cmd.AddCommand(newActorCmdCmd(afs, env, behavior, behaviorCfg, cfg))
+			cmd.AddCommand(newActorCmdCmd(dmsCli, behavior, behaviorCfg))
 		}
 	}
 
@@ -77,7 +75,7 @@ For more information on behaviors, refer to cmd/actor/README.md`,
 	return cmd
 }
 
-func newActorCmdCmd(afs afero.Afero, env env.EnvironmentProvider, behavior string, behaviorCfg behaviorConfig, cfg *config.Config) *cobra.Command {
+func newActorCmdCmd(dmsCli *cli.DmsCLI, behavior string, behaviorCfg behaviorConfig) *cobra.Command {
 	payload := &Payload{val: nil}
 	if behaviorCfg.Payload != nil {
 		payload.val = behaviorCfg.Payload()
@@ -102,20 +100,20 @@ func newActorCmdCmd(afs afero.Afero, env env.EnvironmentProvider, behavior strin
 			dest, _ := cmd.Flags().GetString(fnDest)
 
 			// Create security context first
-			sctx, err := utils.NewSecurityContext(afs, env, contextName, cfg)
+			sctx, err := utils.NewSecurityContext(dmsCli, contextName)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			cli, err := utils.NewClient(cfg, sctx)
+			dmsClient, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}
 
 			res, err := behaviorCfg.Run(
 				cmd,
-				cli,
+				dmsClient,
 				payload.val,
 				client.WithTimeout(timeout),
 				client.WithExpiry(expiry),

@@ -145,6 +145,12 @@ type ActorPublicBehaviorClient interface {
 
 	// Status retrieves the status of the actor
 	Status(ctx context.Context, opts ...Option) (node.PublicStatusResponse, error)
+
+	// Discovery retrieves the discovery information of the actor
+	Discovery(ctx context.Context, opts ...Option) (node.DiscoveryStatusResponse, error)
+
+	// DiscoveryBroadcast broadcasts the discovery information of the actor
+	DiscoveryBroadcast(ctx context.Context, opts ...Option) ([]node.DiscoveryStatusResponse, error)
 }
 
 // ActorPeersBehaviorClient provides methods for peer-related behaviors

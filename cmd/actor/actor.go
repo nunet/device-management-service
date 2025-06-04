@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/env"
 )
@@ -31,10 +32,13 @@ Actors are connected through the libp2p network substrate and communication is a
 
 For more information on the actor system, please refer to actor/README.md`,
 	}
-	cmd.AddCommand(newActorMsgCmd(afs, env, cfg))
+
+	dmsCli := cli.New(cli.WithConfig(cfg), cli.WithEnv(env), cli.WithFS(afs))
+
+	cmd.AddCommand(newActorMsgCmd(dmsCli))
 	cmd.AddCommand(newActorSendCmd(afs, cfg))
 	cmd.AddCommand(newActorInvokeCmd(afs, cfg))
 	cmd.AddCommand(newActorBroadcastCmd(afs, cfg))
-	cmd.AddCommand(newActorCmdGroup(afs, env, cfg))
+	cmd.AddCommand(newActorCmdGroup(dmsCli))
 	return cmd
 }

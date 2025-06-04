@@ -42,7 +42,7 @@ type behaviorConfig struct {
 	Type        string
 	Payload     func() any
 	SetFlags    func(cmd *Command, payload any)
-	Run         func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error)
+	Run         func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error)
 	PreRunE     func(cmd *Command, payload any) error
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
@@ -82,7 +82,7 @@ var registeredBehaviors = map[string]behaviorConfig{
 			_ = cmd.MarkFlagRequired("client-pem")
 			_ = cmd.MarkFlagRequired("ca-output-dir")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*CreateVolumeRequestCmd)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -132,7 +132,7 @@ var registeredBehaviors = map[string]behaviorConfig{
 
 			_ = cmd.MarkFlagRequired("name")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeleteVolumeRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -160,7 +160,7 @@ var registeredBehaviors = map[string]behaviorConfig{
 
 			_ = cmd.MarkFlagRequired("name")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.StartVolumeRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -181,7 +181,7 @@ var registeredBehaviors = map[string]behaviorConfig{
 	// /public/hello
 	behaviors.PublicHelloBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.Hello(cmd.Context(), msgOpts...)
 		},
 		Short: "Invoke a 'hello' message",
@@ -197,7 +197,7 @@ Examples:
 	// /broadcast/hello
 	behaviors.BroadcastHelloBehavior: {
 		Type: bBroadcast,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.BroadcastHello(cmd.Context(), msgOpts...)
 		},
 		Short: "Broadcast a 'hello' message to a topic",
@@ -212,7 +212,7 @@ Examples:
 	// /public/status
 	behaviors.PublicStatusBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.Status(cmd.Context(), msgOpts...)
 		},
 		Short: "Retrieve actor status",
@@ -227,7 +227,7 @@ Examples:
 	// /dms/node/peers/list
 	behaviors.PeersListBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.PeersList(cmd.Context(), msgOpts...)
 		},
 		Short: "List connected peers",
@@ -242,7 +242,7 @@ Examples:
 	// /dms/node/peers/self
 	behaviors.PeerAddrInfoBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.PeersSelf(cmd.Context(), msgOpts...)
 		},
 		Short: "Get peer's ID and addresses",
@@ -264,7 +264,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.Host, "host", "H", "", "host address to ping (required)")
 			_ = cmd.MarkFlagRequired("host")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.PingRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -300,7 +300,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.Address, "address", "a", "", "peer address to connect to (required)")
 			_ = cmd.MarkFlagRequired("address")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.PeerConnectRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -318,7 +318,7 @@ Examples:
 	// /dms/node/peers/score
 	behaviors.PeerScoreBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.PeerScore(cmd.Context(), msgOpts...)
 		},
 		Short: "Retrieves gossipsub broadcast score",
@@ -345,7 +345,7 @@ Examples:
 			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
 		PreRunE: onboardBehaviorPreRun,
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			p, ok := payload.(*OnboardingInput)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
@@ -380,7 +380,7 @@ Examples:
 	// /dms/node/onboarding/offboard
 	behaviors.OffboardBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			req := node.OffboardRequest{}
 			return cli.Offboard(cmd.Context(), req, msgOpts...)
 		},
@@ -396,7 +396,7 @@ Examples:
 	// /dms/node/onboarding/status
 	behaviors.OnboardStatusBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.OnboardStatus(cmd.Context(), msgOpts...)
 		},
 		Short: "Retrieve onboarding status of a node",
@@ -417,7 +417,7 @@ Examples:
 
 			cmd.Flags().StringToStringVarP(&p.Metadata, "filter", "f", nil, "metadata filter to filter deployments (optional)")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentListRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -442,7 +442,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentStatusRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -469,7 +469,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("id")
 			_ = cmd.MarkFlagRequired("allocation")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentLogsRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -495,7 +495,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentManifestRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -520,7 +520,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
 			_ = cmd.MarkFlagRequired("id")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.DeploymentShutdownRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -550,7 +550,7 @@ Examples:
 			p := payload.(*NewDeploymentRequestCmd)
 			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file (required)")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*NewDeploymentRequestCmd)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -574,7 +574,7 @@ Examples:
 			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*orchestrator.SubnetCreateRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -599,7 +599,7 @@ Examples:
 			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
 			_ = cmd.MarkFlagRequired("subnet-id")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*orchestrator.SubnetDestroyRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -628,7 +628,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("peer-id")
 			_ = cmd.MarkFlagRequired("ip")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetAddPeerRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -655,7 +655,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("peer-id")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetRemovePeerRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -684,7 +684,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("peer-id")
 			_ = cmd.MarkFlagRequired("ip")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetAcceptPeerRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -718,7 +718,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("dest-ip")
 			_ = cmd.MarkFlagRequired("dest-port")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetMapPortRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -752,7 +752,7 @@ Examples:
 
 			p.Records = map[string]string{domainName: ip}
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetDNSAddRecordsRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -786,7 +786,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("dest-ip")
 			_ = cmd.MarkFlagRequired("dest-port")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetUnmapPortRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -813,7 +813,7 @@ Examples:
 			_ = cmd.MarkFlagRequired("subnet-id")
 			_ = cmd.MarkFlagRequired("name")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*jobs.SubnetDNSRemoveRecordRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -834,7 +834,7 @@ Examples:
 
 	behaviors.ResourcesAllocatedBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.ResourcesAllocated(cmd.Context(), msgOpts...)
 		},
 		Short: "Get allocated resources",
@@ -849,7 +849,7 @@ Examples:
 
 	behaviors.ResourcesFreeBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.ResourcesFree(cmd.Context(), msgOpts...)
 		},
 		Short: "Get free resources",
@@ -864,7 +864,7 @@ Examples:
 
 	behaviors.ResourcesOnboardedBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.ResourcesOnboarded(cmd.Context(), msgOpts...)
 		},
 		Short: "Get onboarded resources",
@@ -878,7 +878,7 @@ Examples:
 	},
 	behaviors.AllocationsListBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.AllocationsList(cmd.Context(), msgOpts...)
 		},
 		Short: "List allocations",
@@ -918,7 +918,7 @@ Examples:
 			}
 			return nil
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.LoggerConfigRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -942,7 +942,7 @@ Examples:
 	},
 	behaviors.HardwareSpecBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.HardwareSpec(cmd.Context(), msgOpts...)
 		},
 		Short: "Get hardware specifications",
@@ -956,7 +956,7 @@ Examples:
 	},
 	behaviors.HardwareUsageBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.HardwareUsage(cmd.Context(), msgOpts...)
 		},
 		Short: "Get hardware usage",
@@ -975,7 +975,7 @@ Examples:
 			p := payload.(*node.CapListRequest)
 			cmd.Flags().StringVarP(&p.Context, "context", "c", "", "context name")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*node.CapListRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -1001,7 +1001,7 @@ Examples:
 			cmd.Flags().BoolVarP(&p.Revoke, "revoke", "", false, "add revoke anchor")
 			cmd.Flags().StringVarP(&p.Data, "data", "", "", "capability token or DID to anchor")
 		},
-		Run: func(cmd *Command, cli *client.Client, payload any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, payload any, msgOpts ...client.Option) (any, error) {
 			req, ok := payload.(*CapAnchorRequestCmd)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
@@ -1067,7 +1067,7 @@ Examples:
 	// /dms/node/status
 	behaviors.StatusDiscoveryBehavior: {
 		Type: bInvoke,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.Discovery(cmd.Context(), msgOpts...)
 		},
 		Short: "Invoke a 'status discovery' message",
@@ -1083,7 +1083,7 @@ Examples:
 	// /broadcast/dms/status
 	behaviors.BroadcastStatusDiscoveryBehavior: {
 		Type: bBroadcast,
-		Run: func(cmd *Command, cli *client.Client, _ any, msgOpts ...client.Option) (any, error) {
+		Run: func(cmd *Command, cli client.DmsClient, _ any, msgOpts ...client.Option) (any, error) {
 			return cli.DiscoveryBroadcast(cmd.Context(), msgOpts...)
 		},
 		Short: "Broadcast a 'status discovery' message to a topic",

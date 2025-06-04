@@ -49,12 +49,12 @@ func GetContextKey(context string) string {
 }
 
 func CreateTrustContextFromKeyStore(
-	afs afero.Afero, contextKey,
+	fs afero.Fs, contextKey,
 	passphrase, keyStorePath string,
 ) (did.TrustContext, crypto.PrivKey, error) {
 	keyStoreDir := filepath.Join(keyStorePath, KeystoreDir)
 
-	ks, err := keystore.New(afs.Fs, keyStoreDir)
+	ks, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
 	}
@@ -77,7 +77,7 @@ func CreateTrustContextFromKeyStore(
 	return trustCtx, priv, nil
 }
 
-func LoadCapabilityContext(fs afero.Afero, trustCtx did.TrustContext, name string, capStorePath string) (ucan.CapabilityContext, error) {
+func LoadCapabilityContext(trustCtx did.TrustContext, fs afero.Fs, name string, capStorePath string) (ucan.CapabilityContext, error) {
 	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 
@@ -95,7 +95,7 @@ func LoadCapabilityContext(fs afero.Afero, trustCtx did.TrustContext, name strin
 	return capCtx, nil
 }
 
-func SaveCapabilityContext(fs afero.Afero, capCtx ucan.CapabilityContext, capStorePath string) error {
+func SaveCapabilityContext(capCtx ucan.CapabilityContext, fs afero.Fs, capStorePath string) error {
 	name := capCtx.Name()
 	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capCtxFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
@@ -128,7 +128,7 @@ func SaveCapabilityContext(fs afero.Afero, capCtx ucan.CapabilityContext, capSto
 }
 
 func GetTrustContext(
-	fs afero.Afero, context, passphrase, userDir string,
+	fs afero.Fs, context, passphrase, userDir string,
 ) (did.TrustContext, error) {
 	if IsLedgerContext(context) {
 		provider, err := did.NewLedgerWalletProvider(0)

@@ -9,16 +9,23 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
+	"path/filepath"
 
-	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/client"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
+	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/env"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -27,8 +34,8 @@ const (
 )
 
 func NewSecurityContext(
-	fs afero.Afero, env env.EnvironmentProvider,
-	context string, cfg *config.Config,
+	dmsCLI *cli.DmsCLI,
+	context string,
 ) (actor.SecurityContext, error) {
 	if context == "" {
 		context = DefaultUserContextName
@@ -40,24 +47,110 @@ func NewSecurityContext(
 		return nil, fmt.Errorf("generate ephemeral key pair: %w", err)
 	}
 
-	passphrase, err := GetDMSPassphrase(env, false)
-	if err != nil {
-		return nil, fmt.Errorf("get dms passphrase: %w", err)
-	}
-
-	// Create trust context
-	trustCtx, err := node.GetTrustContext(fs, context, passphrase, cfg.UserDir)
-	if err != nil {
-		return nil, fmt.Errorf("create trust context: %w", err)
-	}
-
-	// Load capability context
-	capCtx, err := node.LoadCapabilityContext(fs, trustCtx, context, cfg.UserDir)
+	capCtx, err := LoadCapabilityContext(dmsCLI, context)
 	if err != nil {
 		return nil, fmt.Errorf("load capability context: %w", err)
 	}
 
 	return actor.NewBasicSecurityContext(pubk, privk, capCtx)
+}
+
+func NewCapabilityContext(dmsCLI *cli.DmsCLI, context string) (ucan.CapabilityContext, did.DID, error) {
+	if context == "" {
+		context = DefaultUserContextName
+	}
+
+	var ctxDID did.DID
+
+	cfg, err := dmsCLI.Config()
+	if err != nil {
+		return nil, ctxDID, fmt.Errorf("get config: %w", err)
+	}
+
+	fs := dmsCLI.FS()
+
+	keyStoreDir := filepath.Join(cfg.UserDir, node.KeystoreDir)
+	ks, err := keystore.New(fs, keyStoreDir)
+	if err != nil {
+		return nil, ctxDID, fmt.Errorf("create keystore: %w", err)
+	}
+
+	passphrase, err := dmsCLI.Passphrase(context)
+	if err != nil {
+		return nil, ctxDID, fmt.Errorf("get passphrase: %w", err)
+	}
+
+	priv, err := dms.GenerateAndStorePrivKey(ks, passphrase, context)
+	if err != nil {
+		return nil, ctxDID, fmt.Errorf("generate and store private key: %w", err)
+	}
+
+	ctxDID = did.FromPublicKey(priv.GetPublic())
+
+	trustCtx, err := did.NewTrustContextWithPrivateKey(priv)
+	if err != nil {
+		return nil, ctxDID, fmt.Errorf("create trust context: %w", err)
+	}
+
+	capCtx, err := ucan.NewCapabilityContextWithName(context, trustCtx, ctxDID, nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
+	if err != nil {
+		return nil, ctxDID, fmt.Errorf("create capability context: %w", err)
+	}
+
+	if err := SaveCapabilityContext(dmsCLI, capCtx); err != nil {
+		return nil, ctxDID, fmt.Errorf("save capability context: %w", err)
+	}
+
+	return capCtx, ctxDID, nil
+}
+
+// loadCapabilityContext is a helper function to reduce boilerplate in commands.
+// It handles the common steps of loading a capability context: getting config,
+// retrieving passphrase, loading trust context, and finally loading capability context.
+func LoadCapabilityContext(dmsCLI *cli.DmsCLI, contextName string) (ucan.CapabilityContext, error) {
+	if contextName == "" {
+		contextName = DefaultUserContextName
+	}
+
+	cfg, err := dmsCLI.Config()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get config: %w", err)
+	}
+
+	fs := dmsCLI.FS()
+
+	passphrase, err := dmsCLI.Passphrase(contextName)
+	if err != nil {
+		return nil, fmt.Errorf("get dms passphrase: %w", err)
+	}
+
+	trustCtx, err := node.GetTrustContext(fs, contextName, passphrase, cfg.UserDir)
+	if err != nil {
+		return nil, fmt.Errorf("get trust context: %w", err)
+	}
+
+	capCtx, err := node.LoadCapabilityContext(trustCtx, fs, contextName, cfg.UserDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load capability context: %w", err)
+	}
+
+	return capCtx, nil
+}
+
+// saveCapabilityContext is a helper function to save a capability context
+func SaveCapabilityContext(dmsCLI *cli.DmsCLI, capCtx ucan.CapabilityContext) error {
+	cfg, err := dmsCLI.Config()
+	if err != nil {
+		return fmt.Errorf("unable to get config: %w", err)
+	}
+
+	fs := dmsCLI.FS()
+
+	if err := node.SaveCapabilityContext(capCtx, fs, cfg.UserDir); err != nil {
+		return fmt.Errorf("save capability context: %w", err)
+	}
+
+	return nil
 }
 
 func NewClient(cfg *config.Config, sctx actor.SecurityContext) (*client.Client, error) {
@@ -81,4 +174,20 @@ func GetDMSPassphrase(
 	}
 
 	return passphrase, nil
+}
+
+func ExecuteCommand(
+	command *cobra.Command, args ...string,
+) (stdout, stderr string, err error) {
+	var stdoutBuf, stderrBuf bytes.Buffer
+
+	// Redirect to our buffers
+	command.SetOut(&stdoutBuf)
+	command.SetErr(&stderrBuf)
+
+	// Set args and execute the command
+	command.SetArgs(args)
+	err = command.Execute()
+
+	return stdoutBuf.String(), stderrBuf.String(), err
 }

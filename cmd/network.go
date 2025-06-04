@@ -26,7 +26,8 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 
-	dmsClient "gitlab.com/nunet/device-management-service/client"
+	"gitlab.com/nunet/device-management-service/client"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
@@ -59,17 +60,16 @@ func newNetworkCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config
 `,
 	}
 
-	gpuCmd.AddCommand(newNetworkListCommand(afs, env, cfg))
-	gpuCmd.AddCommand(newNetworkShowCommand(afs, env, cfg))
-	gpuCmd.AddCommand(newNetworkAttachCommand(afs, env, cfg))
+	dmsCli := cli.New(cli.WithConfig(cfg), cli.WithEnv(env), cli.WithFS(afs))
+
+	gpuCmd.AddCommand(newNetworkListCommand(dmsCli))
+	gpuCmd.AddCommand(newNetworkShowCommand(dmsCli))
+	gpuCmd.AddCommand(newNetworkAttachCommand(dmsCli))
 
 	return gpuCmd
 }
 
-func newNetworkListCommand(
-	afs afero.Afero, env env.EnvironmentProvider,
-	cfg *config.Config,
-) *cobra.Command {
+func newNetworkListCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 	var contextName string
 	var verbose bool
 
@@ -77,22 +77,22 @@ func newNetworkListCommand(
 		Use:   "ls",
 		Short: "List all Networks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(afs, env, contextName, cfg)
+			sctx, err := utils.NewSecurityContext(dmsCli, contextName)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			cli, err := utils.NewClient(cfg, sctx)
+			dmsClient, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}
-			ids, err := getDeploymentIDs(cmd.Context(), cli)
+			ids, err := getDeploymentIDs(cmd.Context(), dmsClient)
 			if err != nil {
 				return fmt.Errorf("error getting deployment IDs: %w", err)
 			}
 
-			depNets, err := getNetworkList(cmd.Context(), ids, cli)
+			depNets, err := getNetworkList(cmd.Context(), ids, dmsClient)
 			if err != nil {
 				return fmt.Errorf("error getting network list: %w", err)
 			}
@@ -132,7 +132,7 @@ func newNetworkListCommand(
 	return cmd
 }
 
-func newNetworkShowCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
+func newNetworkShowCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 	var contextName string
 	var id string
 
@@ -140,18 +140,18 @@ func newNetworkShowCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *co
 		Use:   "show",
 		Short: "Show details of a specific Network",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(afs, env, contextName, cfg)
+			sctx, err := utils.NewSecurityContext(dmsCli, contextName)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			cli, err := utils.NewClient(cfg, sctx)
+			dmsClient, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}
 
-			depNet, err := getNetwork(cmd.Context(), id, cli)
+			depNet, err := getNetwork(cmd.Context(), id, dmsClient)
 			if err != nil {
 				return fmt.Errorf("error getting network detail: %w", err)
 			}
@@ -183,7 +183,7 @@ func newNetworkShowCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *co
 	return cmd
 }
 
-func newNetworkAttachCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
+func newNetworkAttachCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 	var (
 		fContextName, fID, fAlloc string
 		fShell, fForward          bool
@@ -196,18 +196,25 @@ func newNetworkAttachCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *
 		Use:   "attach",
 		Short: "Attach to a specific Network",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(afs, env, fContextName, cfg)
+			cfg, err := dmsCli.Config()
+			if err != nil {
+				return fmt.Errorf("unable to get config: %w", err)
+			}
+
+			afs := afero.Afero{Fs: dmsCli.FS()}
+
+			sctx, err := utils.NewSecurityContext(dmsCli, fContextName)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			cli, err := utils.NewClient(cfg, sctx)
+			dmsClient, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}
 
-			depNet, err := getNetwork(cmd.Context(), fID, cli)
+			depNet, err := getNetwork(cmd.Context(), fID, dmsClient)
 			if err != nil {
 				return fmt.Errorf("error getting network detail: %w", err)
 			}
@@ -361,11 +368,11 @@ func newNetworkAttachCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *
 	return cmd
 }
 
-func getDeploymentIDs(ctx context.Context, cli *dmsClient.Client) ([]string, error) {
-	resp, err := cli.DeploymentList(
+func getDeploymentIDs(ctx context.Context, dmsClient client.DmsClient) ([]string, error) {
+	resp, err := dmsClient.DeploymentList(
 		ctx,
 		node.DeploymentListRequest{},
-		dmsClient.WithTimeout(5*time.Second),
+		client.WithTimeout(5*time.Second),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error getting deployment list from client: %w", err)
@@ -383,15 +390,15 @@ func getDeploymentIDs(ctx context.Context, cli *dmsClient.Client) ([]string, err
 	return ids, nil
 }
 
-func getNetworkList(ctx context.Context, ids []string, cli *dmsClient.Client) ([]DeploymentNetwork, error) {
+func getNetworkList(ctx context.Context, ids []string, dmsClient client.DmsClient) ([]DeploymentNetwork, error) {
 	depNet := make([]DeploymentNetwork, 0)
 	for _, i := range ids {
-		resp, err := cli.DeploymentManifest(
+		resp, err := dmsClient.DeploymentManifest(
 			ctx,
 			node.DeploymentManifestRequest{
 				ID: i,
 			},
-			dmsClient.WithTimeout(5*time.Second),
+			client.WithTimeout(5*time.Second),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("unable to get deployment manifest(id=%s) from client: %w", i, err)
@@ -418,13 +425,13 @@ func getNetworkList(ctx context.Context, ids []string, cli *dmsClient.Client) ([
 	return depNet, nil
 }
 
-func getNetwork(ctx context.Context, id string, cli *dmsClient.Client) (DeploymentNetwork, error) {
-	resp, err := cli.DeploymentManifest(
+func getNetwork(ctx context.Context, id string, dmsClient client.DmsClient) (DeploymentNetwork, error) {
+	resp, err := dmsClient.DeploymentManifest(
 		ctx,
 		node.DeploymentManifestRequest{
 			ID: id,
 		},
-		dmsClient.WithTimeout(5*time.Second),
+		client.WithTimeout(5*time.Second),
 	)
 	if err != nil {
 		return DeploymentNetwork{}, fmt.Errorf("unable to get deployment manifest(id=%s) from client: %w", id, err)

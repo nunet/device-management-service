@@ -9,33 +9,35 @@
 package cap
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newDelegateCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
-	var (
-		context    string
-		caps       []string
-		topics     []string
-		audience   string
-		expiry     time.Time
-		duration   time.Duration
-		autoExpire bool
-		depth      uint64
-		selfSign   string
-	)
+// DelegateCapOptions holds the command-line options for the delegate command.
+type DelegateCapOptions struct {
+	Context    string
+	Caps       []string
+	Topics     []string
+	Audience   string
+	Expiry     time.Time
+	Duration   time.Duration
+	AutoExpire bool
+	Depth      uint64
+	SelfSign   string
+	Subject    string
+}
+
+func newDelegateCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
+	var opts DelegateCapOptions
 
 	cmd := &cobra.Command{
 		Use:   "delegate <did>",
@@ -49,89 +51,20 @@ Example:
   nunet cap delegate --context user --cap /public --duration 1h did:key:<some-key>`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			subject := args[0]
-
-			var expirationTime uint64
-			switch {
-			case !expiry.IsZero():
-				expirationTime = uint64(expiry.UnixNano())
-			case duration != 0:
-				expirationTime = uint64(time.Now().Add(duration).UnixNano())
-			case autoExpire:
-				expirationTime = 0
-			default:
-				return fmt.Errorf("either expiration or duration must be specified")
-			}
-
-			subjectDID, err := did.FromString(subject)
-			if err != nil {
-				return fmt.Errorf("invalid subject DID: %w", err)
-			}
-
-			var audienceDID did.DID
-			if audience != "" {
-				audienceDID, err = did.FromString(audience)
-				if err != nil {
-					return fmt.Errorf("invalid audience DID: %w", err)
-				}
-			}
-
-			capabilities := make([]ucan.Capability, len(caps))
-			for i, cap := range caps {
-				capabilities[i] = ucan.Capability(cap)
-			}
-
-			var selfSignMode ucan.SelfSignMode
-			switch selfSign {
-			case "no":
-				selfSignMode = ucan.SelfSignNo
-			case "also":
-				selfSignMode = ucan.SelfSignAlso
-			case "only":
-				selfSignMode = ucan.SelfSignOnly
-			default:
-				return fmt.Errorf("invalid self-sign option: %s", selfSign)
-			}
-
-			passphrase, err := utils.GetDMSPassphrase(env, false)
-			if err != nil {
-				return fmt.Errorf("get dms passphrase: %w", err)
-			}
-
-			trustCtx, err := node.GetTrustContext(afs, context, passphrase, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("get trust context: %w", err)
-			}
-
-			capCtx, err := node.LoadCapabilityContext(afs, trustCtx, context, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("failed to load capability context: %w", err)
-			}
-
-			tokens, err := capCtx.Delegate(subjectDID, audienceDID, topics, expirationTime, depth, capabilities, selfSignMode)
-			if err != nil {
-				return fmt.Errorf("failed to delegate capabilities: %w", err)
-			}
-
-			tokensJSON, err := json.Marshal(tokens)
-			if err != nil {
-				return fmt.Errorf("unable to marshal tokens to json: %w", err)
-			}
-
-			fmt.Fprintln(cmd.OutOrStdout(), string(tokensJSON))
-			return nil
+			opts.Subject = args[0]
+			return runDelegateCap(cmd.Context(), dmsCLI, opts, cli.CmdStreams(cmd))
 		},
 	}
 
-	useFlagContext(cmd, &context)
-	useFlagAudience(cmd, &audience)
-	useFlagCap(cmd, &caps)
-	useFlagTopic(cmd, &topics)
-	useFlagExpiry(cmd, &expiry)
-	useFlagDuration(cmd, &duration)
-	useFlagAutoExpire(cmd, &autoExpire)
-	useFlagDepth(cmd, &depth)
-	cmd.Flags().StringVar(&selfSign, fnSelfSign, "no", "Self-sign option: 'no', 'also', or 'only'")
+	useFlagContext(cmd, &opts.Context)
+	useFlagAudience(cmd, &opts.Audience)
+	useFlagCap(cmd, &opts.Caps)
+	useFlagTopic(cmd, &opts.Topics)
+	useFlagExpiry(cmd, &opts.Expiry)
+	useFlagDuration(cmd, &opts.Duration)
+	useFlagAutoExpire(cmd, &opts.AutoExpire)
+	useFlagDepth(cmd, &opts.Depth)
+	cmd.Flags().StringVar(&opts.SelfSign, fnSelfSign, "no", "Self-sign option: 'no', 'also', or 'only'")
 
 	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnExpiry, fnDuration, fnAutoExpire)
@@ -139,4 +72,66 @@ Example:
 	cmd.MarkFlagsMutuallyExclusive(fnSelfSign, fnAutoExpire)
 
 	return cmd
+}
+
+func runDelegateCap(_ context.Context, dmsCLI *cli.DmsCLI, opts DelegateCapOptions, streams cli.Streams) error {
+	var expirationTime uint64
+	switch {
+	case !opts.Expiry.IsZero():
+		expirationTime = uint64(opts.Expiry.UnixNano())
+	case opts.Duration != 0:
+		expirationTime = uint64(time.Now().Add(opts.Duration).UnixNano())
+	case opts.AutoExpire:
+		expirationTime = 0
+	default:
+		return fmt.Errorf("either expiration or duration must be specified")
+	}
+
+	subjectDID, err := did.FromString(opts.Subject)
+	if err != nil {
+		return fmt.Errorf("invalid subject DID: %w", err)
+	}
+
+	var audienceDID did.DID
+	if opts.Audience != "" {
+		audienceDID, err = did.FromString(opts.Audience)
+		if err != nil {
+			return fmt.Errorf("invalid audience DID: %w", err)
+		}
+	}
+
+	capabilities := make([]ucan.Capability, len(opts.Caps))
+	for i, cap := range opts.Caps {
+		capabilities[i] = ucan.Capability(cap)
+	}
+
+	var selfSignMode ucan.SelfSignMode
+	switch opts.SelfSign {
+	case "no":
+		selfSignMode = ucan.SelfSignNo
+	case "also":
+		selfSignMode = ucan.SelfSignAlso
+	case "only":
+		selfSignMode = ucan.SelfSignOnly
+	default:
+		return fmt.Errorf("invalid self-sign option: %s", opts.SelfSign)
+	}
+
+	capCtx, err := utils.LoadCapabilityContext(dmsCLI, opts.Context)
+	if err != nil {
+		return err
+	}
+
+	tokens, err := capCtx.Delegate(subjectDID, audienceDID, opts.Topics, expirationTime, opts.Depth, capabilities, selfSignMode)
+	if err != nil {
+		return fmt.Errorf("failed to delegate capabilities: %w", err)
+	}
+
+	tokensJSON, err := json.Marshal(tokens)
+	if err != nil {
+		return fmt.Errorf("unable to marshal tokens to json: %w", err)
+	}
+
+	fmt.Fprintln(streams.Out, string(tokensJSON))
+	return nil
 }

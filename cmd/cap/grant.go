@@ -9,31 +9,32 @@
 package cap
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newGrantCmd(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
-	var (
-		context  string
-		caps     []string
-		topics   []string
-		audience string
-		expiry   time.Time
-		duration time.Duration
-		depth    uint64
-	)
+type grantOptions struct {
+	Context  string
+	Caps     []string
+	Topics   []string
+	Audience string
+	Expiry   time.Time
+	Duration time.Duration
+	Depth    uint64
+	Subject  string
+}
+
+func newGrantCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
+	var opts grantOptions
 
 	cmd := &cobra.Command{
 		Use:   "grant <did>",
@@ -44,82 +45,72 @@ It is not necessary to set up a anchor before granting a capability because this
 
 Example:
   nunet cap grant --context user --cap /public --duration 1h did:key:<some-key>
-
-The above command emits a self-signed token with the specified capabilities delegated from 'user' to the sbjects's DID. `,
+`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			subject := args[0]
-
-			var expirationTime uint64
-			switch {
-			case !expiry.IsZero():
-				expirationTime = uint64(expiry.UnixNano())
-			case duration != 0:
-				expirationTime = uint64(time.Now().Add(duration).UnixNano())
-			default:
-				return fmt.Errorf("either expiration or duration must be specified")
-			}
-
-			subjectDID, err := did.FromString(subject)
-			if err != nil {
-				return fmt.Errorf("invalid subject DID: %w", err)
-			}
-
-			var audienceDID did.DID
-			if audience != "" {
-				audienceDID, err = did.FromString(audience)
-				if err != nil {
-					return fmt.Errorf("invalid audience DID: %w", err)
-				}
-			}
-
-			capabilities := make([]ucan.Capability, len(caps))
-			for i, cap := range caps {
-				capabilities[i] = ucan.Capability(cap)
-			}
-
-			passphrase, err := utils.GetDMSPassphrase(env, false)
-			if err != nil {
-				return fmt.Errorf("get dms passphrase: %w", err)
-			}
-
-			trustCtx, err := node.GetTrustContext(afs, context, passphrase, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("get trust context: %w", err)
-			}
-
-			capCtx, err := node.LoadCapabilityContext(afs, trustCtx, context, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("failed to load capability context: %w", err)
-			}
-
-			tokens, err := capCtx.Grant(ucan.Delegate, subjectDID, audienceDID, topics, expirationTime, depth, capabilities)
-			if err != nil {
-				return fmt.Errorf("failed to grant capabilities: %w", err)
-			}
-
-			tokensJSON, err := json.Marshal(tokens)
-			if err != nil {
-				return fmt.Errorf("unable to marshal tokens to json: %w", err)
-			}
-
-			// fmt.Println(string(tokensJSON))
-			fmt.Fprintln(cmd.OutOrStdout(), string(tokensJSON))
-
-			return nil
+			opts.Subject = args[0]
+			return runGrantCmd(cmd.Context(), dmsCLI, opts, cli.CmdStreams(cmd))
 		},
 	}
 
-	useFlagContext(cmd, &context)
-	useFlagAudience(cmd, &audience)
-	useFlagCap(cmd, &caps)
-	useFlagTopic(cmd, &topics)
-	useFlagExpiry(cmd, &expiry)
-	useFlagDuration(cmd, &duration)
-	useFlagDepth(cmd, &depth)
+	useFlagContext(cmd, &opts.Context)
+	useFlagCap(cmd, &opts.Caps)
+	useFlagTopic(cmd, &opts.Topics)
+	useFlagAudience(cmd, &opts.Audience)
+	useFlagExpiry(cmd, &opts.Expiry)
+	useFlagDuration(cmd, &opts.Duration)
+	useFlagDepth(cmd, &opts.Depth)
 
 	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnExpiry, fnDuration)
 
 	return cmd
+}
+
+func runGrantCmd(_ context.Context, dmsCLI *cli.DmsCLI, opts grantOptions, streams cli.Streams) error {
+	var expirationTime uint64
+	switch {
+	case !opts.Expiry.IsZero():
+		expirationTime = uint64(opts.Expiry.UnixNano())
+	case opts.Duration != 0:
+		expirationTime = uint64(time.Now().Add(opts.Duration).UnixNano())
+	default:
+		return fmt.Errorf("either expiration or duration must be specified")
+	}
+
+	subjectDID, err := did.FromString(opts.Subject)
+	if err != nil {
+		return fmt.Errorf("invalid subject DID: %w", err)
+	}
+
+	var audienceDID did.DID
+	if opts.Audience != "" {
+		audienceDID, err = did.FromString(opts.Audience)
+		if err != nil {
+			return fmt.Errorf("invalid audience DID: %w", err)
+		}
+	}
+
+	capabilities := make([]ucan.Capability, len(opts.Caps))
+	for i, cap := range opts.Caps {
+		capabilities[i] = ucan.Capability(cap)
+	}
+
+	capCtx, err := utils.LoadCapabilityContext(dmsCLI, opts.Context)
+	if err != nil {
+		return err
+	}
+
+	tokens, err := capCtx.Grant(ucan.Delegate, subjectDID, audienceDID, opts.Topics, expirationTime, opts.Depth, capabilities)
+	if err != nil {
+		return fmt.Errorf("failed to grant capabilities: %w", err)
+	}
+
+	tokensJSON, err := json.Marshal(tokens)
+	if err != nil {
+		return fmt.Errorf("unable to marshal tokens to json: %w", err)
+	}
+
+	fmt.Fprintln(streams.Out, string(tokensJSON))
+	return nil
 }
