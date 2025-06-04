@@ -35,13 +35,13 @@ sudo make itest
 Using Go:
 
 ```bash
-go test -tags=integration ./...
+go test -tags=e2e ./...
 ```
 
 To run a specific test:
 
 ```bash
-go test -tags=integration -run TestIntegration/BasicTests
+go test -tags=e2e -run TestE2E/BasicTests
 ```
 
 Available test suites:
@@ -55,7 +55,7 @@ Available test suites:
 
 The test suite is organized as follows:
 
-- `integration_test.go`: Entry point for all tests
+- `e2e_test.go`: Entry point for all tests
 - `suite_test.go`: Defines the test suite structure and common functionality
 - `client_test.go`: Client implementation for interacting with DMS nodes
 - `basic_test.go`: Basic communication tests
@@ -80,14 +80,14 @@ Tests should be run in parallel to speed up the test suite.
 
 To add a test for a new feature in parallel, here's the suggested workflow:
 
-1. Create a new test file in the `test/integration` directory.
+1. Create a new test file in the `tests/e2e` directory.
 2. Define a runner function that takes a `*TestSuite` parameter:
    ```go
    func NewFeatureTest(suite *TestSuite) {
        // New feature test implementation
    }
    ```
-3. Add your test to the `TestIntegration` function in `integration_test.go`:
+3. Add your test to the `TestE2E` function in `e2e_test.go`:
 
    ```go
    t.Run("NewFeatureTests", func(t *testing.T) {

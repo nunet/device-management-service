@@ -11,9 +11,10 @@ import (
 	"github.com/lxc/incus/shared/api"
 	"github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
-	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/test/acceptance/config"
 	"golang.org/x/sync/errgroup"
+
+	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
 )
 
 const (

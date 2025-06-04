@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cucumber/godog"
+	"github.com/cucumber/godog/colors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cucumber/godog"
-	"github.com/cucumber/godog/colors"
-	"gitlab.com/nunet/device-management-service/test/acceptance/config"
-	"gitlab.com/nunet/device-management-service/test/acceptance/utils"
+	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
+	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
 	dutils "gitlab.com/nunet/device-management-service/utils"
 )
 

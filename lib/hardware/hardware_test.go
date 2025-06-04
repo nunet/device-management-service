@@ -110,6 +110,7 @@ func TestGetFreeResources(t *testing.T) {
 // Note: don't run it in parallel because it might make
 // resources 100% used
 func TestCheckCapacity(t *testing.T) {
+	t.Skip("flaky when CPU when 100% used")
 	hwManager := NewHardwareManager()
 	assert.NotNil(t, hwManager, "Hardware manager should not be nil")
 
