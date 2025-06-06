@@ -174,9 +174,39 @@ func (e *EnsembleConfig) Nodes() map[string]NodeConfig {
 	return e.V1.Nodes
 }
 
-func (e *EnsembleConfig) Node(nodeID string) (NodeConfig, bool) {
-	n, ok := e.V1.Nodes[nodeID]
+func (e *EnsembleConfig) Node(node string) (NodeConfig, bool) {
+	n, ok := e.V1.Nodes[node]
 	return n, ok
+}
+
+func (e *EnsembleConfig) AllocationsForNode(node string) map[string]AllocationConfig {
+	allocations := make(map[string]AllocationConfig)
+	nodeConfig, ok := e.Node(node)
+	if !ok {
+		return allocations
+	}
+
+	for _, allocName := range nodeConfig.Allocations {
+		if alloc, ok := e.Allocation(allocName); ok {
+			allocations[allocName] = alloc
+		}
+	}
+
+	return allocations
+}
+
+func (e *EnsembleConfig) PortsForAllocation(allocation string) []PortConfig {
+	var ports []PortConfig
+
+	for _, node := range e.Nodes() {
+		for _, port := range node.Ports {
+			if port.Allocation == allocation {
+				ports = append(ports, port)
+			}
+		}
+	}
+
+	return ports
 }
 
 func (e *EnsembleConfig) EdgeConstraints() []EdgeConstraint {

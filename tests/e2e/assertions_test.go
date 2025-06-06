@@ -2,7 +2,6 @@ package itest
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
@@ -12,7 +11,7 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-type execution struct {
+type executionInfo struct {
 	executor string
 	id       string
 }
@@ -181,7 +180,7 @@ func (s *TestSuite) assertManifestAfterDeployment(
 // and checks if execution is not running too
 func (s *TestSuite) assertNoAllocationsRunning(
 	node *mockNode,
-	executions ...execution,
+	executions ...executionInfo,
 ) {
 	allocations, err := node.client.allocationsList(
 		node.userContext, node.password)
@@ -194,7 +193,7 @@ func (s *TestSuite) assertNoAllocationsRunning(
 	s.T().Logf("checking if executions are running %v", executions)
 	for _, e := range executions {
 		switch e.executor {
-		case "docker":
+		case string(types.ExecutorTypeDocker):
 			// IMPROVE: instead, we should be able to filter executions with
 			// ensemble ID
 			containerRunning, err := isContainerRunning(e.id)
@@ -206,31 +205,32 @@ func (s *TestSuite) assertNoAllocationsRunning(
 	}
 }
 
-// assertOnlyOneAllocationRunning relies on `dms/node/allocations/list`
-// and also checks if execution is running (e.g.: docker container)
-//
-// Improve: instead of checking in a general manner, have a func
-// to check for a specified allocation
-func (s *TestSuite) assertOnlyOneAllocationRunning(
-	node *mockNode,
+func (s *TestSuite) assertAllocationsRunning(
+	node *mockNode, ensembleID string,
+	allocationsNames []string,
 ) {
+	if len(allocationsNames) == 0 {
+		return
+	}
+
 	allocations, err := node.client.allocationsList(
 		node.userContext, node.password)
 	s.Require().NoError(err)
 
-	s.Require().Equal(
-		1, len(allocations),
-		fmt.Sprintf(
-			"Expected exactly one allocation to be running, got %d. Allocs: %v",
-			len(allocations), allocations),
-	)
+	expectedAllocsIDs := make(map[string]bool)
+	for _, alloc := range allocationsNames {
+		expectedAllocsIDs[types.ConstructAllocationID(ensembleID, alloc)] = true
+	}
 
-	// check if executions is running
-	if len(allocations) == 1 &&
-		allocations[0].Executor == "docker" {
-		containerRunning, err := isContainerRunning(allocations[0].Container)
-		s.Require().NoError(err)
-		s.Require().True(containerRunning, "Expected container to be running")
+	for _, alloc := range allocations {
+		_, ok := expectedAllocsIDs[alloc.ID]
+		s.Assert().True(ok, "Expected allocation %s to be running", alloc.ID)
+
+		if alloc.Executor == string(types.ExecutorTypeDocker) {
+			containerRunning, err := isContainerRunning(alloc.ExecutionID)
+			s.Assert().NoError(err)
+			s.Assert().True(containerRunning, "Expected container to be running")
+		}
 	}
 }
 
