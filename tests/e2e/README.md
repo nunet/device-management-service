@@ -29,7 +29,10 @@ docker pull ghcr.io/gluster/gluster-containers:fedora
 Using Make:
 
 ```bash
-sudo make itest
+sudo make e2e
+
+# or a specific test
+sudo make e2e-DeploymentTests
 ```
 
 Using Go:

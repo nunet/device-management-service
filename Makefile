@@ -85,14 +85,24 @@ setcap_e2e:
 	sudo setcap cap_net_admin,cap_sys_admin+ep ./tests/e2e/dms
 
 e2e:
-	@echo "Running e2e tests"
+	@echo "Running all e2e tests"
 	@if ! docker image inspect nunet-glusterfs-client >/dev/null 2>&1; then \
 		echo "Docker image nunet-glusterfs-client not found. Building..."; \
 		make build-nunet-glusterfs-client; \
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -v ./tests/e2e/... -tags=e2e -timeout=10m
+	go test -v ./tests/e2e/... -tags=e2e -timeout=10m $(ARGS)
+
+e2e-%:
+	@echo "Running e2e test: TestE2E/$*"
+	@if ! docker image inspect nunet-glusterfs-client >/dev/null 2>&1; then \
+		echo "Docker image nunet-glusterfs-client not found. Building..."; \
+		make build-nunet-glusterfs-client; \
+	fi
+	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
+	make setcap_e2e
+	go test -v ./tests/e2e/... -tags=e2e -timeout=10m -run "TestE2E/$*" $(ARGS)
 
 build-nunet-glusterfs-client:
 	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image

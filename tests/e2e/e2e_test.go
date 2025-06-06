@@ -15,7 +15,10 @@ package itest
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"gitlab.com/nunet/device-management-service/network/utils"
 )
 
 // TestE2E is the entry point for the e2e tests.
@@ -33,14 +36,23 @@ func TestE2E(t *testing.T) {
 		}
 	})
 
+	var (
+		testSuites         = 4
+		totalPortsRequired = 2 * testSuites
+	)
+
+	ports, err := utils.GetMultipleAvailablePorts(totalPortsRequired)
+	require.NoError(t, err)
+	require.Len(t, ports, totalPortsRequired)
+
 	t.Run("BasicTests", func(t *testing.T) {
 		t.Parallel()
 
 		basicTests := &TestSuite{
 			numNodes:      3,
 			Name:          "basic_tests",
-			restPortIndex: 8090,
-			p2pPortIndex:  10689,
+			restPortIndex: ports[0],
+			p2pPortIndex:  ports[1],
 			runner:        BasicTests,
 		}
 		suite.Run(t, basicTests)
@@ -52,8 +64,8 @@ func TestE2E(t *testing.T) {
 		deploymentTests := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_tests",
-			restPortIndex: 8093,
-			p2pPortIndex:  10692,
+			restPortIndex: ports[2],
+			p2pPortIndex:  ports[3],
 			runner:        DeploymentTest,
 		}
 		suite.Run(t, deploymentTests)
@@ -66,10 +78,23 @@ func TestE2E(t *testing.T) {
 		deploymentWithVolumesTests := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_with_volumes_tests",
-			restPortIndex: 8096,
-			p2pPortIndex:  10695,
+			restPortIndex: ports[4],
+			p2pPortIndex:  ports[5],
 			runner:        DeployWithVolumeTest,
 		}
 		suite.Run(t, deploymentWithVolumesTests)
+	})
+
+	t.Run("DeploymentFullAssertion", func(t *testing.T) {
+		t.Parallel()
+
+		deploymentSubnetAssertion := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_assert_subnet",
+			restPortIndex: ports[6],
+			p2pPortIndex:  ports[7],
+			runner:        DeploymentFullAssertion,
+		}
+		suite.Run(t, deploymentSubnetAssertion)
 	})
 }

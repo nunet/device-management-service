@@ -14,6 +14,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testAlloc1 = "alloc1"
+	testAlloc2 = "alloc2"
+	testDNS1   = "dns1"
+	testDNS2   = "dns2"
+	testNode1  = "node1"
+	testNode2  = "node2"
+	testPort1  = 8080
+	testPort2  = 9090
+)
+
 func TestEnsemble(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +168,82 @@ func TestEnsemble(t *testing.T) {
 		clone.V1.Edges = []EdgeConstraint{}
 
 		require.NotEqual(t, ensemble, &clone)
+	})
+
+	t.Run("must be able to get allocations for node", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Allocations: map[string]AllocationConfig{
+					testAlloc1:    {DNSName: testDNS1},
+					testAlloc2:    {DNSName: testDNS2},
+					"randomAlloc": {DNSName: "randomDNS"},
+				},
+				Nodes: map[string]NodeConfig{
+					testNode1: {
+						Allocations: []string{testAlloc1, testAlloc2},
+					},
+					"randomNode": {
+						Allocations: []string{"randomAlloc"},
+					},
+				},
+			},
+		}
+
+		// Test getting allocations for existing node
+		allocs := ensemble.AllocationsForNode(testNode1)
+		require.Len(t, allocs, 2)
+		require.Equal(t, testDNS1, allocs[testAlloc1].DNSName)
+		require.Equal(t, testDNS2, allocs[testAlloc2].DNSName)
+
+		// Test getting allocations for non-existent node
+		require.Empty(t, ensemble.AllocationsForNode("unknown"))
+	})
+
+	t.Run("must be able to get ports for allocation", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Nodes: map[string]NodeConfig{
+					testNode1: {
+						Ports: []PortConfig{
+							{
+								Public:     testPort1,
+								Private:    80,
+								Allocation: testAlloc1,
+							},
+							{
+								Public:     40839,
+								Private:    90,
+								Allocation: "randomAlloc",
+							},
+						},
+					},
+					testNode2: {
+						Ports: []PortConfig{
+							{
+								Public:     testPort2,
+								Private:    90,
+								Allocation: testAlloc1,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		ports := ensemble.PortsForAllocation(testAlloc1)
+		require.Len(t, ports, 2)
+
+		// Verify ports are from both nodes
+		publicPorts := []int{ports[0].Public, ports[1].Public}
+		require.Contains(t, publicPorts, testPort1)
+		require.Contains(t, publicPorts, testPort2)
+
+		// Test getting ports for non-existent allocation
+		require.Empty(t, ensemble.PortsForAllocation("unknown"))
 	})
 }
 

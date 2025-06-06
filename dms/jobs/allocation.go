@@ -32,7 +32,7 @@ type AllocationInfo struct {
 	Orchestrator string                  `json:"orchestrator"` // peerID
 	Status       string                  `json:"status"`
 	Executor     string                  `json:"executor"`
-	Container    string                  `json:"container"`
+	ExecutionID  string                  `json:"execution_id"`
 	UsingPorts   []int                   `json:"using_ports,omitempty"`
 	CreatedAt    time.Time               `json:"created_at"`
 	StartedAt    time.Time               `json:"started_at"`
@@ -599,7 +599,7 @@ func (a *Allocation) Info() AllocationInfo {
 		Resources:    a.Job.Resources,
 		Status:       string(a.status),
 		Executor:     a.Job.Execution.Type,
-		Container:    a.ID,
+		ExecutionID:  a.ID,
 		UsingPorts:   utils.MapKeysToSlice(a.state.portMapping),
 		CreatedAt:    a.createdAt,
 		StartedAt:    a.startedAt,
