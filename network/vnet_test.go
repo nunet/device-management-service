@@ -120,6 +120,7 @@ func TestBasicNetworkMethods(t *testing.T) {
 	aliceID := createEntity(t)
 	bobID := createEntity(t)
 	carolID := createEntity(t)
+	daveID := createEntity(t) // no one connects to dave
 	alice := substrate.AddWiredPeer(aliceID)
 	_ = substrate.AddWiredPeer(bobID)
 
@@ -128,6 +129,14 @@ func TestBasicNetworkMethods(t *testing.T) {
 		result, err := alice.Ping(context.Background(), bobID.String(), time.Second)
 		assert.NoError(t, err)
 		assert.True(t, result.Success)
+	})
+
+	t.Run("peers", func(t *testing.T) {
+		t.Parallel()
+		peers := alice.Peers()
+		assert.NotNil(t, peers)
+		assert.Contains(t, peers, bobID)
+		assert.NotContains(t, peers, daveID)
 	})
 
 	t.Run("peer connection", func(t *testing.T) {

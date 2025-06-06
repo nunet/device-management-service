@@ -567,15 +567,14 @@ func (l *Libp2p) Peers() []peer.ID {
 	return l.PS.Peers()
 }
 
-// Connect connects to a peer by its ID and returns an error if any
-func (l *Libp2p) Connect(ctx context.Context, peerID string) error {
-	if peerID == "" {
-		log.Infof("peerID is empty")
-		return ErrPeerIDEmpty
+// Connect connects to a peer by its multiaddress and returns an error if any
+func (l *Libp2p) Connect(ctx context.Context, peerMultiAddr string) error {
+	if peerMultiAddr == "" {
+		return fmt.Errorf("peer multiaddress is empty")
 	}
 
-	log.Infof("Creating multiaddress from peerID: %s", peerID)
-	peerAddr, err := multiaddr.NewMultiaddr(peerID)
+	log.Infof("Creating multiaddress from peerMultiAddr: %s", peerMultiAddr)
+	peerAddr, err := multiaddr.NewMultiaddr(peerMultiAddr)
 	if err != nil {
 		log.Infof("Invalid multiaddress: %v", err)
 		return fmt.Errorf("invalid multiaddress: %w", err)
@@ -588,10 +587,10 @@ func (l *Libp2p) Connect(ctx context.Context, peerID string) error {
 		return fmt.Errorf("could not resolve peer info: %w", err)
 	}
 
-	log.Infof("Connecting to peer: %s", peerID)
+	log.Infof("Connecting to peer: %s", peerMultiAddr)
 	if err := l.Host.Connect(ctx, *addrInfo); err != nil {
-		log.Infof("Failed to connect to peer %s: %v", peerID, err)
-		return fmt.Errorf("failed to connect to peer %s: %w", peerID, err)
+		log.Infof("Failed to connect to peer %s: %v", peerMultiAddr, err)
+		return fmt.Errorf("failed to connect to peer %s: %w", peerMultiAddr, err)
 	}
 
 	return nil
@@ -1175,19 +1174,6 @@ func (l *Libp2p) waitForObservedAddr(ctx context.Context) (multiaddr.Multiaddr, 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-}
-
-func (l *Libp2p) VisiblePeers() []peer.AddrInfo {
-	return l.discoveredPeers
-}
-
-func (l *Libp2p) KnownPeers() ([]peer.AddrInfo, error) {
-	knownPeers := l.Host.Peerstore().Peers()
-	peers := make([]peer.AddrInfo, 0, len(knownPeers))
-	for _, p := range knownPeers {
-		peers = append(peers, peer.AddrInfo{ID: p})
-	}
-	return peers, nil
 }
 
 func (l *Libp2p) registerStreamHandlers() {

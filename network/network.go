@@ -100,8 +100,8 @@ type Network interface {
 	// Notify allows the application to receive notifications about peer connections
 	// and disconnecions
 	Notify(ctx context.Context, preconnected func(PeerID, []ProtocolID, int), connected, disconnected func(PeerID), identified, updated func(PeerID, []ProtocolID)) error
-	// Connect connects to the given peer
-	Connect(ctx context.Context, p string) error
+	// Connect connects to the given peer address
+	Connect(ctx context.Context, addr string) error
 	// PeerConnected returs true if the peer is currently connected
 	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
