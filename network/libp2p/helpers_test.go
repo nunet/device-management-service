@@ -21,7 +21,6 @@ import (
 
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -36,10 +35,6 @@ func newNetwork(
 
 	require.True(t, numHosts > 0)
 	require.True(t, numHosts <= 10, "do not explode your cpu")
-
-	ports, err := utils.GetMultipleAvailablePorts(numHosts)
-	require.NoError(t, err)
-	require.Len(t, ports, numHosts)
 
 	// Calculate bootstrap peers based on network size
 	var bootstrapPeersNum int
@@ -56,8 +51,8 @@ func newNetwork(
 	bootstrapPeers := make(
 		[]multiaddr.Multiaddr, 0, bootstrapPeersNum*5)
 
-	for i := 0; i < bootstrapPeersNum; i++ {
-		bootstrapCfg := setupPeerConfig(t, ports[i], bootstrapPeers)
+	for range bootstrapPeersNum {
+		bootstrapCfg := setupPeerConfig(t, 0, bootstrapPeers)
 		host := newPeer(t, bootstrapCfg)
 		require.NotNil(t, host)
 
@@ -68,8 +63,8 @@ func newNetwork(
 		hosts = append(hosts, host)
 	}
 
-	for _, port := range ports[bootstrapPeersNum:] {
-		peerCfg := setupPeerConfig(t, port, bootstrapPeers)
+	for i := bootstrapPeersNum; i < numHosts; i++ {
+		peerCfg := setupPeerConfig(t, 0, bootstrapPeers)
 		host := newPeer(t, peerCfg)
 		require.NotNil(t, host)
 		hosts = append(hosts, host)
@@ -82,12 +77,10 @@ func newNetwork(
 		for i, host := range hosts {
 			for j, otherHost := range hosts {
 				if i != j {
-					// TODO: go routine?
 					peerInfo := otherHost.Host.Peerstore().PeerInfo(
 						otherHost.Host.ID())
-					require.NoError(t, err)
 
-					err = host.Host.Connect(host.ctx, peerInfo)
+					err := host.Host.Connect(host.ctx, peerInfo)
 					require.NoError(t, err)
 				}
 			}
@@ -172,4 +165,16 @@ func verifyConnections(t *testing.T, host *Libp2p, minConnections int) {
 	}, timeout, retryInterval,
 		"A host has only %d connections but needs at least %d",
 		len(host.Host.Network().Peers()), minConnections)
+}
+
+func createPeer(t *testing.T, port int) *Libp2p { //nolint
+	t.Helper()
+
+	peerConfig := setupPeerConfig(t, port, []multiaddr.Multiaddr{})
+	peer1, err := New(peerConfig, afero.NewMemMapFs())
+
+	require.NoError(t, err)
+	require.NoError(t, peer1.Init(&config.Config{}))
+
+	return peer1
 }

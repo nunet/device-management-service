@@ -18,12 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/multiformats/go-multiaddr"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
 func TestSubnetCreate(t *testing.T) {
@@ -247,14 +243,4 @@ func TestSubnetDestroy(t *testing.T) {
 	op, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	assert.False(t, strings.Contains(string(op), "0.0.0.0/0"))
-}
-
-func createPeer(t *testing.T, port int) *Libp2p { //nolint
-	peerConfig := setupPeerConfig(t, port, []multiaddr.Multiaddr{})
-	peer1, err := New(peerConfig, afero.NewMemMapFs())
-
-	require.NoError(t, err)
-	require.NoError(t, peer1.Init(&config.Config{}))
-
-	return peer1
 }

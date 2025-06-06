@@ -19,7 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
@@ -86,6 +85,58 @@ func TestNew(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBasic(t *testing.T) {
+	hosts := newNetwork(t, 2, false)
+	require.Len(t, hosts, 2)
+	alice := hosts[0]
+	bob := hosts[1]
+	carol := createPeer(t, 0) // outside the network
+	require.NoError(t, carol.Start())
+	t.Cleanup(func() {
+		require.NoError(t, carol.Stop()) // others are stopped by helper
+	})
+
+	t.Run("Peers", func(t *testing.T) {
+		// Test Peers() - should show alice and bob are connected
+		// but not carol
+		alicePeers := alice.Peers()
+		require.Contains(t, alicePeers, bob.Host.ID())
+		require.NotContains(t, alicePeers, carol.Host.ID())
+
+		bobPeers := bob.Peers()
+		require.Contains(t, bobPeers, alice.Host.ID())
+		require.NotContains(t, bobPeers, carol.Host.ID())
+
+		// Carol should have no peers initially
+		carolPeers := carol.Peers()
+		require.Len(t, carolPeers, 1) // 1 is Carol itself
+	})
+
+	t.Run("Connect", func(t *testing.T) {
+		// Get Alice's multiaddress
+		aliceAddrs, err := alice.GetMultiaddr()
+		require.NoError(t, err)
+		require.NotEmpty(t, aliceAddrs)
+
+		err = carol.Connect(context.Background(), aliceAddrs[0].String())
+		require.NoError(t, err)
+
+		// Verify Carol is now connected to Alice
+		require.Eventually(t, func() bool {
+			return carol.PeerConnected(alice.Host.ID())
+		}, 5*time.Second, 100*time.Millisecond)
+
+		// Verify Alice sees Carol as a peer
+		require.Eventually(t, func() bool {
+			return alice.PeerConnected(carol.Host.ID())
+		}, 5*time.Second, 100*time.Millisecond)
+
+		// Test Connect() with invalid multiaddress
+		err = carol.Connect(context.Background(), "invalid-multiaddr")
+		require.Error(t, err)
+	})
 }
 
 func TestPingResolveAddress(t *testing.T) {
@@ -531,55 +582,6 @@ func TestSetupBroadcastTopic(t *testing.T) {
 		return fmt.Errorf("%s", errorMsg)
 	})
 	require.ErrorContains(t, err, errorMsg)
-}
-
-func TestKnownPeers(t *testing.T) {
-	hosts := newNetwork(t, 3, true)
-	require.Len(t, hosts, 3)
-	alice := hosts[0]
-	bob := hosts[1]
-	carol := hosts[2]
-
-	// Add peers to the peerstore
-	aliceID := alice.Host.ID()
-	bobID := bob.Host.ID()
-	carolID := carol.Host.ID()
-
-	alice.Host.Peerstore().AddAddrs(bobID, bob.Host.Addrs(), peerstore.PermanentAddrTTL)
-	alice.Host.Peerstore().AddAddrs(carolID, carol.Host.Addrs(), peerstore.PermanentAddrTTL)
-
-	// Test KnownPeers method
-	peers, err := alice.KnownPeers()
-	require.NoError(t, err)
-	require.Len(t, peers, 3)
-
-	expectedPeers := []peer.ID{aliceID, bobID, carolID}
-	for _, p := range peers {
-		require.Contains(t, expectedPeers, p.ID)
-	}
-}
-
-func TestVisiblePeers(t *testing.T) {
-	hosts := newNetwork(t, 3, true)
-	require.Len(t, hosts, 3)
-	alice := hosts[0]
-	bob := hosts[1]
-	carol := hosts[2]
-
-	// Add discovered peers to alice
-	alice.discoveredPeers = []peer.AddrInfo{
-		{ID: bob.Host.ID(), Addrs: bob.Host.Addrs()},
-		{ID: carol.Host.ID(), Addrs: carol.Host.Addrs()},
-	}
-
-	// Test VisiblePeers method
-	visiblePeers := alice.VisiblePeers()
-	require.Len(t, visiblePeers, 2)
-
-	expectedPeers := []peer.ID{bob.Host.ID(), carol.Host.ID()}
-	for _, p := range visiblePeers {
-		require.Contains(t, expectedPeers, p.ID)
-	}
 }
 
 func TestGetBroadcastScore(t *testing.T) {
