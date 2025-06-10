@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -406,13 +405,13 @@ func (e *Executor) Cleanup(ctx context.Context) error {
 
 	// Remove all provision scripts used for mounting
 	pattern := initScriptsBaseDir + "*"
-	matches, err := filepath.Glob(pattern)
+	matches, err := afero.Glob(e.fs, pattern)
 	if err != nil {
 		return fmt.Errorf("failed to find init script directories: %w", err)
 	}
 
 	for _, dir := range matches {
-		if err := os.RemoveAll(dir); err != nil {
+		if err := e.fs.RemoveAll(dir); err != nil {
 			log.Warnf("Failed to remove init script directory %s: %v", dir, err)
 		} else {
 			log.Infof("Removed init script directory: %s", dir)
@@ -563,7 +562,7 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to create container mounts: %w", err)
 	}
 
-	initScriptsDir, err := prepareInitScripts(params.ProvisionScripts, params.ExecutionID)
+	initScriptsDir, err := prepareInitScripts(e.fs, params.ProvisionScripts, params.ExecutionID)
 	if err != nil {
 		return "", fmt.Errorf("failed to prepare init scripts: %w", err)
 	}
@@ -619,13 +618,13 @@ func (e *Executor) newDockerExecutionContainer(
 }
 
 // prepareInitScripts creates a shell script that will run all init scripts
-func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
+func prepareInitScripts(fs afero.Afero, scripts map[string][]byte, id string) (string, error) {
 	if len(scripts) == 0 {
 		return "", nil
 	}
 
 	tempDir := initScriptsBaseDir + id
-	err := os.MkdirAll(tempDir, 0o700)
+	err := fs.MkdirAll(tempDir, 0o700)
 	if err != nil {
 		return "", fmt.Errorf("failed to create init scripts base directory: %w", err)
 	}
@@ -633,7 +632,7 @@ func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
 	scriptNames := make([]string, 0, len(scripts))
 	for name, content := range scripts {
 		filename := filepath.Join(tempDir, name)
-		if err := os.WriteFile(filename, content, 0o700); err != nil {
+		if err := fs.WriteFile(filename, content, 0o700); err != nil {
 			return "", fmt.Errorf("failed to write init script %s: %w", name, err)
 		}
 		scriptNames = append(scriptNames, filename)
@@ -647,7 +646,7 @@ func prepareInitScripts(scripts map[string][]byte, id string) (string, error) {
 	}
 
 	wrapperPath := filepath.Join(tempDir, "run_provision_scripts.sh")
-	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0o700); err != nil {
+	if err := fs.WriteFile(wrapperPath, []byte(wrapperContent), 0o700); err != nil {
 		return "", fmt.Errorf("failed to write wrapper script: %w", err)
 	}
 
