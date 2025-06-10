@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -463,10 +464,8 @@ func (c *Client) GetImage(ctx context.Context, imageName string) (image.Summary,
 	}
 
 	for _, image := range images {
-		for _, tag := range image.RepoTags {
-			if tag == imageName {
-				return image, nil
-			}
+		if slices.Contains(image.RepoTags, imageName) {
+			return image, nil
 		}
 	}
 
