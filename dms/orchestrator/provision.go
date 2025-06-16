@@ -21,6 +21,8 @@ import (
 	"gitlab.com/nunet/device-management-service/observability"
 )
 
+var MonitorOnlyTaskManifestInterval = time.Second * 10
+
 func (o *BasicOrchestrator) provision(
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
 ) error {
@@ -57,7 +59,10 @@ func (o *BasicOrchestrator) provisionSubnet(manifest jtypes.EnsembleManifest) er
 		o.subnetManifest.UsedIPs[ip.String()] = true
 
 		if _, ok := manifest.Allocations[allocName]; ok {
-			o.updateAllocationIP(allocName, ip.String())
+			err := o.updateAllocationIP(allocName, ip.String())
+			if err != nil {
+				log.Warnf("error updating allocation ip: %s", err)
+			}
 		}
 	}
 
@@ -215,7 +220,11 @@ func (o *BasicOrchestrator) provisionAllocations(
 			wg.Wait()
 
 			for allocName, status := range allocStatuses {
-				o.updateAllocationStatus(allocName, status)
+				err := o.updateAllocationStatus(allocName, status)
+				if err != nil {
+					log.Warnf("error updating allocation status: %s", err)
+					errCh <- err
+				}
 			}
 
 			close(errCh)
@@ -228,27 +237,31 @@ func (o *BasicOrchestrator) provisionAllocations(
 	return nil
 }
 
-func (o *BasicOrchestrator) updateAllocationStatus(allocName string, s jtypes.AllocationStatus) {
+func (o *BasicOrchestrator) updateAllocationStatus(allocName string, s jtypes.AllocationStatus) error {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 	if alloc, ok := o.manifest.Allocations[allocName]; ok {
 		alloc.Status = s
 		o.manifest.Allocations[allocName] = alloc
-	} else {
-		log.Warnf("allocation %s not found in manifest", allocName)
+		return nil
 	}
+
+	log.Warnf("allocation %s not found in manifest", allocName)
+	return fmt.Errorf("allocation %s not found in manifest", allocName)
 }
 
 // updateAllocationIP
-func (o *BasicOrchestrator) updateAllocationIP(allocName string, ip string) {
+func (o *BasicOrchestrator) updateAllocationIP(allocName string, ip string) error {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 	if alloc, ok := o.manifest.Allocations[allocName]; ok {
 		alloc.PrivAddr = ip
 		o.manifest.Allocations[allocName] = alloc
-	} else {
-		log.Warnf("allocation %s not found in manifest", allocName)
+		return nil
 	}
+
+	log.Warnf("allocation %s not found in manifest", allocName)
+	return fmt.Errorf("allocation %s not found in manifest", allocName)
 }
 
 func (o *BasicOrchestrator) isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
@@ -267,7 +280,7 @@ func (o *BasicOrchestrator) monitorOnlyTaskManifest(m jtypes.EnsembleManifest) {
 		return
 	}
 
-	ticker := time.NewTicker(time.Second * 10)
+	ticker := time.NewTicker(MonitorOnlyTaskManifestInterval)
 	defer ticker.Stop()
 selectLoop:
 	for {

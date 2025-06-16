@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -22,8 +21,8 @@ func TestSupervision(t *testing.T) {
 
 	substrate := network.NewSubstrate()
 
-	orch := MakeDMS(t, substrate)
-	provider := MakeDMS(t, substrate)
+	orch := MakeOrchestrator(t, substrate)
+	provider := MakeProvider(t, substrate)
 
 	// Set up the behaviors first
 	provider.MockDeploymentBehaviors(t)
@@ -62,7 +61,7 @@ func TestSupervision(t *testing.T) {
 				OK: true,
 			})
 			if err != nil {
-				fmt.Printf("Failed to create reply: %v\n", err)
+				log.Errorf("Failed to create reply: %v", err)
 				return
 			}
 
@@ -70,7 +69,7 @@ func TestSupervision(t *testing.T) {
 			reply.From = provider.handle
 
 			if err := allocationActor.Send(reply); err != nil {
-				fmt.Printf("Failed to send subnet add peer response: %v\n", err)
+				log.Errorf("Failed to send subnet add peer response: %v", err)
 				return
 			}
 		}))
@@ -80,7 +79,7 @@ func TestSupervision(t *testing.T) {
 				OK: true,
 			})
 			if err != nil {
-				fmt.Printf("Failed to create reply: %v\n", err)
+				log.Errorf("Failed to create reply: %v", err)
 				return
 			}
 
@@ -88,7 +87,7 @@ func TestSupervision(t *testing.T) {
 			reply.From = provider.handle
 
 			if err := allocationActor.Send(reply); err != nil {
-				fmt.Printf("Failed to send subnet dns add records response: %v\n", err)
+				log.Errorf("Failed to send subnet dns add records response: %v", err)
 				return
 			}
 		}))
@@ -98,7 +97,7 @@ func TestSupervision(t *testing.T) {
 				OK: true,
 			})
 			if err != nil {
-				fmt.Printf("Failed to create reply: %v\n", err)
+				log.Errorf("Failed to create reply: %v", err)
 				return
 			}
 
@@ -106,7 +105,7 @@ func TestSupervision(t *testing.T) {
 			reply.From = provider.handle
 
 			if err := allocationActor.Send(reply); err != nil {
-				fmt.Printf("Failed to send subnet map port response: %v\n", err)
+				log.Errorf("Failed to send subnet map port response: %v", err)
 				return
 			}
 		}))
@@ -122,12 +121,12 @@ func TestSupervision(t *testing.T) {
 				OK: true,
 			})
 			if err != nil {
-				fmt.Printf("Failed to create reply: %v\n", err)
+				log.Errorf("Failed to create reply: %v", err)
 				return
 			}
 
 			if err := allocationActor.Send(reply); err != nil {
-				fmt.Printf("Failed to send healthcheck response: %v\n", err)
+				log.Errorf("Failed to send healthcheck response: %v", err)
 				return
 			}
 		}))
@@ -137,7 +136,7 @@ func TestSupervision(t *testing.T) {
 				OK: true,
 			})
 			if err != nil {
-				fmt.Printf("Failed to create reply: %v\n", err)
+				log.Errorf("Failed to create reply: %v", err)
 				return
 			}
 
@@ -145,7 +144,7 @@ func TestSupervision(t *testing.T) {
 			reply.From = provider.handle
 
 			if err := allocationActor.Send(reply); err != nil {
-				fmt.Printf("Failed to send allocation start response: %v\n", err)
+				log.Errorf("Failed to send allocation start response: %v", err)
 				return
 			}
 		}))
@@ -154,7 +153,7 @@ func TestSupervision(t *testing.T) {
 				OK: true,
 			})
 			if err != nil {
-				fmt.Printf("Failed to create reply: %v\n", err)
+				log.Errorf("Failed to create reply: %v", err)
 				return
 			}
 
@@ -162,7 +161,7 @@ func TestSupervision(t *testing.T) {
 			reply.From = provider.handle
 
 			if err := allocationActor.Send(reply); err != nil {
-				fmt.Printf("Failed to send register healthcheck response: %v\n", err)
+				log.Errorf("Failed to send register healthcheck response: %v", err)
 				return
 			}
 		}))
@@ -179,7 +178,7 @@ func TestSupervision(t *testing.T) {
 				OK: true,
 			})
 			if err != nil {
-				fmt.Printf("Failed to create reply: %v\n", err)
+				log.Errorf("Failed to create reply: %v", err)
 				return
 			}
 
@@ -187,7 +186,7 @@ func TestSupervision(t *testing.T) {
 			reply.From = provider.handle
 
 			if err := allocationActor.Send(reply); err != nil {
-				fmt.Printf("Failed to send healthcheck response: %v\n", err)
+				log.Errorf("Failed to send healthcheck response: %v", err)
 				return
 			}
 		}))
@@ -199,7 +198,7 @@ func TestSupervision(t *testing.T) {
 			Allocations: map[string]actor.Handle{"alloc1": allocationActor.Handle()},
 		})
 		if err != nil {
-			fmt.Printf("Failed to create reply: %v\n", err)
+			log.Errorf("Failed to create reply: %v", err)
 			return
 		}
 
@@ -207,7 +206,7 @@ func TestSupervision(t *testing.T) {
 		reply.From = provider.handle
 
 		if err := provider.actor.Send(reply); err != nil {
-			fmt.Printf("Failed to send allocation deployment response: %v\n", err)
+			log.Errorf("Failed to send allocation deployment response: %v", err)
 			return
 		}
 	}))

@@ -495,8 +495,8 @@ func (o *BasicOrchestrator) makeCandidateDeploymentSmall(
 	// modifying the network structure enough to get meaningful variance in a reasonable
 	// time.
 	nperm := modulus
-	if nperm > MaxPermutations {
-		nperm = MaxPermutations
+	if nperm > int64(MaxPermutations) {
+		nperm = int64(MaxPermutations)
 	}
 	count := int64(0)
 	return func() (map[string]jtypes.Bid, bool) {
@@ -595,8 +595,16 @@ func (o *BasicOrchestrator) checkPermutationEdgeConstraints(
 			continue
 		}
 
-		bidS := candidate[cst.S]
-		bidT := candidate[cst.T]
+		bidS, ok := candidate[cst.S]
+		if !ok {
+			log.Errorf("Bid %s not found in candidate", cst.S)
+			return false
+		}
+		bidT, ok := candidate[cst.T]
+		if !ok {
+			log.Errorf("Bid %s not found in candidate", cst.T)
+			return false
+		}
 
 		locS, err := o.geo.Coordinate(bidS.Location())
 		if err != nil {
@@ -614,7 +622,6 @@ func (o *BasicOrchestrator) checkPermutationEdgeConstraints(
 
 		// in milliseconds
 		minRTT := (distance / geolocation.LightSpeed) * 2 * 1000
-
 		if minRTT > float64(cst.RTT) {
 			log.Debugw("edge constraint not satisfied",
 				"labels", []string{string(observability.LabelDeployment)},
