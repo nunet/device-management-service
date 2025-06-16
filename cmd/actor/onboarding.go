@@ -9,17 +9,19 @@
 package actor
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"gitlab.com/nunet/device-management-service/lib/hardware"
+	"gitlab.com/nunet/device-management-service/client"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
-// OnboardingInput used for command line onboarding parameters input
-type OnboardingInput struct {
+// onboardingInput used for command line onboarding parameters input
+type onboardingInput struct {
 	NoGPU    bool
 	GPUsStr  string
 	RAMSize  string
@@ -29,20 +31,20 @@ type OnboardingInput struct {
 	GPUs     types.GPUs
 }
 
-func onboardBehaviorPreRun(_ *Command, opts actorCmdOptions) error {
-	p, ok := opts.Payload.(*OnboardingInput)
+func processOnboardInput(ctx context.Context, dmsClient client.DmsClient, opts actorCmdOptions) error {
+	p, ok := opts.Payload.(*onboardingInput)
 	if !ok {
 		return ErrInvalidArgument
 	}
 
-	hardwareManager := hardware.NewHardwareManager()
-	machineResources, err := hardwareManager.GetMachineResources()
-	if err != nil {
-		return fmt.Errorf("could not get machine resources: %w", err)
+	r, err := dmsClient.HardwareSpec(ctx, opts.MsgOpts...)
+	if err != nil || !r.OK {
+		return fmt.Errorf("could not get machine resourcs: %w", err)
 	}
+	res := r.Resources
 
 	// Set the CPU clock speed
-	p.CPUCLock = machineResources.CPU.ClockSpeed
+	p.CPUCLock = res.CPU.ClockSpeed
 
 	if p.NoGPU {
 		fmt.Println("Skipping GPU selection.")
@@ -52,7 +54,7 @@ func onboardBehaviorPreRun(_ *Command, opts actorCmdOptions) error {
 	// Handle GPU onboarding
 	//
 	// If no GPUs are found, skip GPU selection
-	if len(machineResources.GPUs) == 0 {
+	if len(res.GPUs) == 0 {
 		fmt.Println("No usable GPUs detected; prerequisites may not be met. Skipping GPU selection.\n" +
 			"Read more: https://gitlab.com/nunet/device-management-service#gpu-machines")
 		return nil
@@ -60,7 +62,7 @@ func onboardBehaviorPreRun(_ *Command, opts actorCmdOptions) error {
 
 	// Check if GPUs are specified in the command line
 	if p.GPUsStr != "" {
-		p.GPUs, err = commandLineGPUOnboarding(machineResources, p.GPUsStr)
+		p.GPUs, err = commandLineGPUOnboarding(res, p.GPUsStr, opts.Streams)
 		if err != nil {
 			return fmt.Errorf("onboard GPUs: %w", err)
 		}
@@ -69,12 +71,13 @@ func onboardBehaviorPreRun(_ *Command, opts actorCmdOptions) error {
 	}
 
 	// Interactive GPU onboarding
-	machineResourceUsage, err := hardwareManager.GetUsage()
-	if err != nil {
+	r, err = dmsClient.HardwareUsage(ctx, opts.MsgOpts...)
+	if err != nil || !r.OK {
 		return fmt.Errorf("could not get machine resource usage: %w", err)
 	}
+	usage := r.Resources
 
-	p.GPUs, err = interactiveGPUOnboarding(machineResources, machineResourceUsage)
+	p.GPUs, err = interactiveGPUOnboarding(res, usage, opts.Streams)
 	if err != nil {
 		return fmt.Errorf("interactive GPU onboarding: %w", err)
 	}
@@ -83,7 +86,7 @@ func onboardBehaviorPreRun(_ *Command, opts actorCmdOptions) error {
 
 // commandLineGPUOnboarding parses the GPU arguments from the command line and allocates VRAM for each selected GPU
 // The GPU arguments are in the format "index:VRAM,index:VRAM,..."
-func commandLineGPUOnboarding(machineResources types.MachineResources, gpuArgs string) (types.GPUs, error) {
+func commandLineGPUOnboarding(machineResources types.Resources, gpuArgs string, _ cli.Streams) (types.GPUs, error) {
 	var gpus types.GPUs
 	gpuIndices := strings.Split(gpuArgs, ",")
 	for _, gpuIndex := range gpuIndices {
@@ -113,7 +116,7 @@ func commandLineGPUOnboarding(machineResources types.MachineResources, gpuArgs s
 }
 
 // interactiveGPUOnboarding prompts the user to select GPUs and allocate VRAM for each selected GPU
-func interactiveGPUOnboarding(machineResources types.MachineResources, machineResourceUsage types.Resources) (types.GPUs, error) {
+func interactiveGPUOnboarding(machineResources types.Resources, machineResourceUsage types.Resources, streams cli.Streams) (types.GPUs, error) {
 	var (
 		gpuMap         = make(map[string]types.GPU)
 		gpuPromptItems = make([]*selectPromptItem, 0)
@@ -127,7 +130,7 @@ func interactiveGPUOnboarding(machineResources types.MachineResources, machineRe
 	}
 
 	// Prompt for GPU selection
-	res, err := selectPrompt("Select GPU", gpuPromptItems)
+	res, err := selectPromptMultiple("Select GPU", gpuPromptItems, streams)
 	if err != nil {
 		return nil, fmt.Errorf("could not select GPU: %w", err)
 	}
@@ -154,7 +157,7 @@ func interactiveGPUOnboarding(machineResources types.MachineResources, machineRe
 		fmt.Printf("Available VRAM: %d GB\n", types.ConvertBytesToGB(gpu.VRAM-gpuUsage.VRAM))
 
 		// Prompt for VRAM allocation
-		input, err := prompt("Enter new VRAM allocation in GB", vramValidator)
+		input, err := prompt("Enter new VRAM allocation in GB", vramValidator, streams)
 		if err != nil {
 			return nil, fmt.Errorf("could not prompt for VRAM: %w", err)
 		}

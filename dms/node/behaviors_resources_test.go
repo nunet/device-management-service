@@ -339,3 +339,35 @@ func TestHandleHardwareUsage(t *testing.T) {
 		assert.Equal(t, uint64(2*1024*1024*1024), resp.Resources.RAM.Size)
 	})
 }
+
+func TestHandleHardwareSpec(t *testing.T) {
+	t.Parallel()
+
+	t.Run("successful", func(t *testing.T) {
+		t.Parallel()
+
+		node, sActor, _ := newMockNodeWithSender(t, behaviors.HardwareSpecBehavior)
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.HardwareSpecBehavior,
+			nil,
+			actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+		)
+		require.NoError(t, err)
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp ResourcesResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.True(t, resp.OK)
+		assert.Empty(t, resp.Error)
+		assert.Equal(t, float32(MockTotalCPU), resp.Resources.CPU.Cores)
+		assert.Equal(t, uint64(MockTotalRAM), resp.Resources.RAM.Size)
+	})
+}
