@@ -14,6 +14,8 @@ import (
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
 )
 
+var orchestratorJoinTimeout = 2 * time.Minute
+
 type SubnetManifest struct {
 	CIDR              string            `json:"cidr"`
 	GatewayIP         string            `json:"gateway_ip"`
@@ -372,7 +374,7 @@ func (o *BasicOrchestrator) orchestratorJoinSubnet(
 		if !response.OK {
 			return fmt.Errorf("error joining orchestrator to subnet: %s: %w", response.Error, ErrDeploymentFailed)
 		}
-	case <-time.After(2 * time.Minute):
+	case <-time.After(orchestratorJoinTimeout):
 		return fmt.Errorf("timeout joining orchestrator to subnet: %w", ErrDeploymentFailed)
 	}
 

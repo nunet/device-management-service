@@ -102,13 +102,18 @@ func (m *MockOrchestrator) newManifest(
 	return manifest
 }
 
-func (m *MockOrchestrator) Shutdown() {
+func (m *MockOrchestrator) Shutdown() error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.status = jtypes.DeploymentStatusCompleted
+	return nil
+}
+
+func (m *MockOrchestrator) Stop() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.status = jtypes.DeploymentStatusCompleted
 }
-
-func (m *MockOrchestrator) Stop() {}
 
 // helper to set status when testing
 func (m *MockOrchestrator) SetStatus(status jtypes.DeploymentStatus) {

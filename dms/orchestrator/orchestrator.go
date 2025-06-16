@@ -28,10 +28,11 @@ import (
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-const (
+// keep as var instead of consts so that we change the values in tests
+var (
 	BidRequestTimeout           = 5 * time.Second
-	VerifyEdgeConstraintTimeout = 5 * time.Second
 	CommitDeploymentTimeout     = 3 * time.Second
+	VerifyEdgeConstraintTimeout = 5 * time.Second
 	AllocationDeploymentTimeout = 5 * time.Second
 
 	// Setting a big timeout as the user might have to
@@ -59,22 +60,20 @@ var (
 	ErrOrchestratorNotFound = errors.New("orchestrator with ID not found")
 )
 
-// Orchestrator manages the lifecycle of an ensemble deployment
+// Orchestrator is the interface for orchestrating deployments
 type Orchestrator interface {
 	Deploy(expiry time.Time) error
-	Shutdown()
+	Shutdown() error
 	Stop()
+	GetAllocationLogs(allocationID string) (AllocationLogsResponse, error)
+	WriteAllocationLogs(allocationID string, stdout, stderr []byte) (string, error)
+	StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus
 	Status() jtypes.DeploymentStatus
 	Manifest() jtypes.EnsembleManifest
 	Config() jtypes.EnsembleConfig
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
-	GetAllocationLogs(name string) (AllocationLogsResponse, error)
-	WriteAllocationLogs(name string, stdout, stderr []byte) (string, error)
-	// SubscribeToStatus returns a channel that receives status updates.
-	// The channel will be closed when the context is done or when the deployment reaches a terminal state.
-	StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus
 }
 
 // TODO: use immutable data structures (there are libraries for that), specially
@@ -87,7 +86,7 @@ type BasicOrchestrator struct {
 	fs      afero.Afero
 	workDir string
 	actor   actor.Actor
-	geo     *geolocation.GeoLocator
+	geo     geolocation.LocationProvider
 
 	id             string
 	cfg            jtypes.EnsembleConfig
@@ -212,8 +211,9 @@ func (o *BasicOrchestrator) StatusChannel(ctx context.Context) <-chan jtypes.Dep
 		o.statusSubscribersLock.Lock()
 		delete(o.statusSubscribers, ch)
 		o.statusSubscribersLock.Unlock()
-		_, ok := <-ch
-		if ok {
+		select {
+		case <-ch:
+		default:
 			close(ch)
 		}
 	}()
@@ -354,6 +354,7 @@ deploy:
 	return ErrDeploymentFailed
 }
 
+// Stop stops the orchestrator
 func (o *BasicOrchestrator) Stop() {
 	// TODO
 
@@ -394,7 +395,7 @@ func (o *BasicOrchestrator) GetAllocationLogs(name string) (AllocationLogsRespon
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		allocNodeHandle,
-		fmt.Sprintf(behaviors.AllocationLogsBehavior, o.manifest.ID),
+		fmt.Sprintf(behaviors.AllocationLogsBehavior.DynamicTemplate, o.manifest.ID),
 		AllocationLogsRequest{
 			AllocName: name,
 		},

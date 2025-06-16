@@ -73,23 +73,23 @@ type HealthCheckResponse struct {
 }
 
 type TaskTerminationNotification struct {
-	AllocationID string
-	Status       string
+	AllocationID string `json:"allocation_id"`
+	Status       string `json:"status"`
 
-	Error TerminationError
+	Error TerminationError `json:"error"`
 
-	Stdout []byte
-	Stderr []byte
+	Stdout []byte `json:"stdout"`
+	Stderr []byte `json:"stderr"`
 }
 
 // TerminationError holds information necessary to handle
 // failure recovery given retry policies.
 type TerminationError struct {
-	Err      error
-	ExitCode int
+	Err      string `json:"err"`
+	ExitCode int    `json:"exit_code"`
 	// Killed is used to identify if the application was killed
 	// by external means, rather than app exiting itself
-	Killed bool
+	Killed bool `json:"killed"`
 }
 
 type AllocationRestartResponse struct {

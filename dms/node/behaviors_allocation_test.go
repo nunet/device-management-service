@@ -693,7 +693,7 @@ func TestHandleAllocationShutdown(t *testing.T) {
 
 	observability.SetNoOpMode(true)
 	ensembleID := "test-ensemble-id"
-	allocationShutdownBehavior := fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID)
+	allocationShutdownBehavior := fmt.Sprintf(behaviors.AllocationShutdownBehavior.DynamicTemplate, ensembleID)
 
 	t.Run("invalid request message format", func(t *testing.T) {
 		t.Parallel()
@@ -957,7 +957,7 @@ func TestHandleAllocationsList(t *testing.T) {
 func TestHandleAllocationLogs(t *testing.T) {
 	t.Parallel()
 	ensembleID := "test-subnet-ensemble"
-	allocationLogsBehavior := fmt.Sprintf(behaviors.AllocationLogsBehavior, ensembleID)
+	allocationLogsBehavior := fmt.Sprintf(behaviors.AllocationLogsBehavior.DynamicTemplate, ensembleID)
 
 	t.Run("wrong request", func(t *testing.T) {
 		t.Parallel()
