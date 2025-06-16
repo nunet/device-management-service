@@ -465,6 +465,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.HardwareUsageBehavior: {
 			fn: n.handleHardwareUsage,
 		},
+		behaviors.HardwareSpecBehavior: {
+			fn: n.handleHardwareSpec,
+		},
 		behaviors.CapListBehavior: {
 			fn: n.handleCapList,
 		},

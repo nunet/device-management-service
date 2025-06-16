@@ -48,8 +48,8 @@ type behaviorConfig struct {
 	Behavior    string
 	Action      BehaviorAction
 	SetFlags    func(cmd *Command, payload any)
-	RunFn       func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error)
-	PreRunFn    func(cmd *Command, opts actorCmdOptions) error
+	RunFn       func(ctx context.Context, dmsCli *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error)
+	PreRunFn    func(cmd *Command, dmsCli *cli.DmsCLI, opts actorCmdOptions) error
 	ValidArgsFn func(cmd *Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 	Args        cobra.PositionalArgs
 	Long        string
@@ -393,10 +393,10 @@ Examples:
 	// /dms/node/onboarding/onboard
 	behaviors.OnboardBehavior: {
 		Action:  bInvoke,
-		Payload: func() any { return &OnboardingInput{} },
+		Payload: func() any { return &onboardingInput{} },
 		SetFlags: func(cmd *Command, payload any) {
 			// infer the type of the payload
-			p := payload.(*OnboardingInput)
+			p := payload.(*onboardingInput)
 			cmd.Flags().StringVarP(&p.RAMSize, "ram", "R", "0GiB", "set the amount of memory to reserve for NuNet (defaults to GiB)")
 			cmd.Flags().Float32VarP(&p.CPUCores, "cpu", "C", 0, "set the number of CPU cores to reserve for NuNet")
 			cmd.Flags().StringVarP(&p.DiskSize, "disk", "D", "0GiB", "set the amount of disk size to reserve for NuNet (defaults to GiB)")
@@ -405,15 +405,19 @@ Examples:
 			cmd.MarkFlagsOneRequired("ram", "cpu", "disk")
 			cmd.MarkFlagsRequiredTogether("ram", "cpu", "disk")
 		},
-		PreRunFn: onboardBehaviorPreRun,
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			p, ok := opts.Payload.(*OnboardingInput)
+			p, ok := opts.Payload.(*onboardingInput)
 			if !ok {
 				return nil, fmt.Errorf("failed to encode payload")
 			}
 
+			if err := processOnboardInput(ctx, dmsClient, opts); err != nil {
+				return nil, err
+			}
+
 			req := node.OnboardRequest{}
 			req.Config.OnboardedResources.CPU.Cores = p.CPUCores
+			req.Config.OnboardedResources.CPU.ClockSpeed = p.CPUCLock
 			req.NoGPU = p.NoGPU
 			req.Config.OnboardedResources.GPUs = p.GPUs
 
@@ -958,7 +962,7 @@ Examples:
 			cmd.Flags().StringVar(&p.APMURL, "apm-url", "", "APM Server URL")
 			cmd.Flags().Bool("enable-elastic", false, "Enable Elasticsearch logging")
 		},
-		PreRunFn: func(cmd *cobra.Command, opts actorCmdOptions) error {
+		PreRunFn: func(cmd *cobra.Command, _ *cli.DmsCLI, opts actorCmdOptions) error {
 			p, ok := opts.Payload.(*node.LoggerConfigRequest)
 			if !ok {
 				return fmt.Errorf("failed to decode payload")
