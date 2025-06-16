@@ -58,12 +58,7 @@ func TestNewCapCmd(t *testing.T) {
 	t.Parallel()
 
 	dmsCli := newTestCli()
-	cfg, err := dmsCli.Config()
-	assert.NoError(t, err)
-
-	afs := afero.Afero{Fs: dmsCli.FS()}
-
-	cmd := NewCapCmd(afs, dmsCli.Env(), cfg)
-	_, _, err = utils.ExecuteCommand(cmd)
+	cmd := NewCapCmd(dmsCli)
+	_, _, err := utils.ExecuteCommand(cmd)
 	assert.NoError(t, err)
 }

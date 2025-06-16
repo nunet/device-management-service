@@ -29,8 +29,8 @@ type OnboardingInput struct {
 	GPUs     types.GPUs
 }
 
-func onboardBehaviorPreRun(_ *Command, payload any) error {
-	p, ok := payload.(*OnboardingInput)
+func onboardBehaviorPreRun(_ *Command, opts actorCmdOptions) error {
+	p, ok := opts.Payload.(*OnboardingInput)
 	if !ok {
 		return ErrInvalidArgument
 	}

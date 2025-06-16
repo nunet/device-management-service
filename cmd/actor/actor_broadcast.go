@@ -9,18 +9,17 @@
 package actor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 )
 
-func newActorBroadcastCmd(_ afero.Afero, cfg *config.Config) *cobra.Command {
+func newActorBroadcastCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "broadcast <msg>",
 		Short: "Broadcast a message",
@@ -29,29 +28,44 @@ func newActorBroadcastCmd(_ afero.Afero, cfg *config.Config) *cobra.Command {
 If a topic is specified in the message's payload, the message will be published to all subscribers of that topic.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var msg actor.Envelope
-
-			if err := json.Unmarshal([]byte(args[0]), &msg); err != nil {
-				return fmt.Errorf("could not unmarshal message: %w", err)
-			}
-
-			cli, err := utils.NewClient(cfg, nil)
-			if err != nil {
-				return fmt.Errorf("could not create client: %w", err)
-			}
-
-			res, err := cli.BroadcastMessageRaw(cmd.Context(), msg)
-			if err != nil {
-				return fmt.Errorf("could not broadcast message: %w", err)
-			}
-
-			for _, r := range res {
-				if err := displayResponse(cmd, r); err != nil {
-					return err
-				}
-			}
-			return nil
+			return runActorBroadcastCmd(
+				cmd.Context(),
+				dmsCLI,
+				args[0],
+				cli.CmdStreams(cmd),
+			)
 		},
 	}
 	return cmd
+}
+
+// runActorBroadcastCmd is the testable core logic for the broadcast command
+func runActorBroadcastCmd(
+	ctx context.Context,
+	dmsCLI *cli.DmsCLI,
+	msgArg string,
+	streams cli.Streams,
+) error {
+	var msg actor.Envelope
+	if err := json.Unmarshal([]byte(msgArg), &msg); err != nil {
+		return fmt.Errorf("could not unmarshal message: %w", err)
+	}
+
+	client, err := dmsCLI.NewClient(nil)
+	if err != nil {
+		return fmt.Errorf("could not create client: %w", err)
+	}
+
+	res, err := client.BroadcastMessageRaw(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("could not broadcast message: %w", err)
+	}
+
+	for _, r := range res {
+		if err := displayResponse(streams.Out, r); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

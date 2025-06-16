@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -153,12 +154,35 @@ func SaveCapabilityContext(dmsCLI *cli.DmsCLI, capCtx ucan.CapabilityContext) er
 	return nil
 }
 
-func NewClient(cfg *config.Config, sctx actor.SecurityContext) (*client.Client, error) {
+func NewClient(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient, error) {
 	return client.NewClient(client.Config{
 		Host:      fmt.Sprintf("%s:%d", cfg.Rest.Addr, cfg.Rest.Port),
 		APIPrefix: "/api",
 		Version:   "v1",
 	}, sctx)
+}
+
+func NewTestCli(opts ...func(*cli.DmsCLI)) *cli.DmsCLI {
+	defaults := []func(*cli.DmsCLI){}
+
+	env := env.NewMockEnvironment()
+	err := env.Setenv("DMS_PASSPHRASE", "pass")
+	if err == nil {
+		defaults = append(defaults, cli.WithEnv(env))
+	}
+
+	fs := afero.NewMemMapFs()
+	cfg := &config.Config{General: config.General{
+		UserDir: "/tmp/nunet/user",
+		WorkDir: "/tmp/nunet/work",
+		DataDir: "/tmp/nunet/data",
+	}}
+
+	defaults = append(defaults, cli.WithFS(fs), cli.WithConfig(cfg))
+
+	dmsCli := cli.New(append(defaults, opts...)...)
+
+	return dmsCli
 }
 
 func GetDMSPassphrase(

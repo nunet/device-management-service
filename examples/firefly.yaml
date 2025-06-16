@@ -23,7 +23,7 @@ allocations:
     keys: []
     provision: []
     dns_name: rnode.bootstrap
-    volume:
+    volumes:
       - type: glusterfs
         read_only: false
         name: firefly_bootstrap
@@ -55,7 +55,7 @@ allocations:
     keys: []
     provision: []
     dns_name: rnode.validator1
-    volume:
+    volumes:
       - type: glusterfs
         read_only: false
         name: firefly_validator

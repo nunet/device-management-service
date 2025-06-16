@@ -9,9 +9,8 @@
 package actor
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,13 +19,15 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 )
 
+type actorMsgOptions struct {
+	Context  string
+	Behavior string
+	Payload  string
+	MsgOpts  client.MessageOptions
+}
+
 func newActorMsgCmd(dmsCli *cli.DmsCLI) *cobra.Command {
-	fnDest := "dest"
-	fnBroadcast := "broadcast"
-	fnTimeout := "timeout"
-	fnExpiry := "expiry"
-	fnInvoke := "invoke"
-	fnContextName := "context"
+	var opts actorMsgOptions
 
 	cmd := &cobra.Command{
 		Use:   "msg <behavior> <payload>",
@@ -40,57 +41,39 @@ Example:
 
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			destStr, _ := cmd.Flags().GetString(fnDest)
-			topic, _ := cmd.Flags().GetString(fnBroadcast)
-			timeout, _ := cmd.Flags().GetDuration(fnTimeout)
-			expiry, _ := utils.GetTime(cmd.Flags(), fnExpiry)
-			invocation, _ := cmd.Flags().GetBool(fnInvoke)
-			contextName, _ := cmd.Flags().GetString(fnContextName)
+			opts.Context, _ = cmd.Flags().GetString(fnContext)
 
-			behavior := args[0]
-			payload := args[1]
+			opts.Behavior = args[0]
+			opts.Payload = args[1]
 
-			// Create security context first
-			sctx, err := utils.NewSecurityContext(dmsCli, contextName)
-			if err != nil {
-				return fmt.Errorf("could not create security context: %w", err)
+			for _, opt := range getNewMsgOpts(cmd) {
+				opt(&opts.MsgOpts)
 			}
 
-			// Now call newClient with the correct arguments
-			cli, err := dmsCli.NewClient(sctx)
-			if err != nil {
-				return fmt.Errorf("could not create client: %w", err)
-			}
-
-			msg, err := cli.NewActorMessage(cmd.Context(), behavior, payload, client.MessageOptions{
-				Destination:  destStr,
-				Topic:        topic,
-				Timeout:      timeout,
-				Expiry:       expiry,
-				IsInvocation: invocation,
-			})
-			if err != nil {
-				return fmt.Errorf("could not create message: %w", err)
-			}
-
-			msgData, err := json.Marshal(msg)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(msgData))
-
-			return nil
+			return runActorMsgCmd(cmd.Context(), dmsCli, opts, cli.CmdStreams(cmd))
 		},
 	}
-	cmd.Flags().StringP(fnDest, "d", "", "destination handle")
-	cmd.Flags().StringP(fnBroadcast, "b", "", "broadcast topic")
-	cmd.Flags().BoolP(fnInvoke, "i", false, "construct an invocation")
-	cmd.Flags().StringP(fnContextName, "c", "", "capability context name")
-	cmd.Flags().DurationP(fnTimeout, "t", 0, "timeout duration")
-	cmd.Flags().VarP(utils.NewTimeValue(&time.Time{}), fnExpiry, "e", "expiration time")
 
-	cmd.MarkFlagsMutuallyExclusive(fnDest, fnBroadcast)
-	cmd.MarkFlagsMutuallyExclusive(fnInvoke, fnBroadcast)
-	cmd.MarkFlagsMutuallyExclusive(fnTimeout, fnExpiry)
+	useNewMsgOptsFlags(cmd, false)
+
 	return cmd
+}
+
+func runActorMsgCmd(ctx context.Context, dmsCli *cli.DmsCLI, opts actorMsgOptions, streams cli.Streams) error {
+	sctx, err := utils.NewSecurityContext(dmsCli, opts.Context)
+	if err != nil {
+		return fmt.Errorf("could not create security context: %w", err)
+	}
+
+	cli, err := dmsCli.NewClient(sctx)
+	if err != nil {
+		return fmt.Errorf("could not create client: %w", err)
+	}
+
+	msg, err := cli.NewActorMessage(ctx, opts.Behavior, opts.Payload, opts.MsgOpts)
+	if err != nil {
+		return fmt.Errorf("could not create message: %w", err)
+	}
+
+	return displayResponse(streams.Out, msg)
 }
