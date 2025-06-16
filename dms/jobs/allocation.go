@@ -327,7 +327,7 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		notifyOrchestrator(behaviors.TaskTerminationNotification{
 			Error: behaviors.TerminationError{
 				ExitCode: exitCode,
-				Err:      fmt.Errorf("general execution failure: %w", err),
+				Err:      fmt.Sprintf("general execution failure: %v", err),
 			},
 		})
 	} else if r != nil {
@@ -339,7 +339,7 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 			notifyOrchestrator(behaviors.TaskTerminationNotification{
 				Error: behaviors.TerminationError{
 					ExitCode: r.ExitCode,
-					Err:      fmt.Errorf("execution exit code != 0, exit code: %d", r.ExitCode),
+					Err:      fmt.Sprintf("execution exit code != 0, exit code: %d", r.ExitCode),
 				},
 			})
 		case r.ExitCode == 0 && !r.Killed:
@@ -352,7 +352,7 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 			notifyOrchestrator(behaviors.TaskTerminationNotification{
 				Error: behaviors.TerminationError{
 					ExitCode: r.ExitCode,
-					Err:      fmt.Errorf("execution possibly killed"),
+					Err:      "execution possibly killed",
 					Killed:   true,
 				},
 			})

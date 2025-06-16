@@ -28,6 +28,10 @@ var cities5000 string
 
 const LightSpeed = 299792.458 // in km/s
 
+type LocationProvider interface {
+	Coordinate(loc jtypes.Location) (Coordinate, error)
+}
+
 type Coordinate struct {
 	lat  float64
 	long float64
