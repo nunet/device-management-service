@@ -302,7 +302,7 @@ func (o *BasicOrchestrator) allocate(cfg jtypes.EnsembleConfig, n string, h acto
 			Execution:        acfg.Execution,
 			ProvisionScripts: provisionScripts,
 			Keys:             acfg.Keys,
-			Volume:           acfg.Volume,
+			Volumes:          acfg.Volumes,
 		}
 	}
 

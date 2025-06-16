@@ -9,11 +9,8 @@
 package cap
 
 import (
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"gitlab.com/nunet/device-management-service/cmd/cli"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
 const (
@@ -36,17 +33,12 @@ const (
 )
 
 // NewCapCmd returns the cap command that adds other commands
-func NewCapCmd(
-	afs afero.Afero, env env.EnvironmentProvider,
-	cfg *config.Config,
-) *cobra.Command {
+func NewCapCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cap",
 		Short: "Manage capabilities",
 		Long:  `Manage capabilities for the Device Management Service`,
 	}
-
-	dmsCli := cli.New(cli.WithConfig(cfg), cli.WithEnv(env), cli.WithFS(afs))
 
 	cmd.AddCommand(newGrantCmd(dmsCli))
 	cmd.AddCommand(newAnchorCmd(dmsCli))

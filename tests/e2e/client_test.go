@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/cmd"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
@@ -49,7 +50,12 @@ func newClient(t *testing.T, cfg *config.Config) *Client {
 }
 
 func (c *Client) newCommandCtx() *cobra.Command {
-	return cmd.NewRootCMD(c.afero, env.NewOSEnvironment(), c.cfg)
+	dmsCLI := cli.New(
+		cli.WithConfig(c.cfg),
+		cli.WithFS(c.afero),
+		cli.WithEnv(env.NewOSEnvironment()),
+	)
+	return cmd.NewRootCMD(dmsCLI)
 }
 
 func (c *Client) newKey(t *testing.T, identity, passphrase string) {
