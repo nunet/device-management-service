@@ -31,8 +31,6 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -49,7 +47,7 @@ type DeploymentNetwork struct {
 	Allocations []Allocation
 }
 
-func newNetworkCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
+func newNetworkCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 	gpuCmd := &cobra.Command{
 		Use:   "network <cmd>",
 		Short: "Network Utility Tool",
@@ -60,8 +58,6 @@ func newNetworkCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config
 `,
 	}
 
-	dmsCli := cli.New(cli.WithConfig(cfg), cli.WithEnv(env), cli.WithFS(afs))
-
 	gpuCmd.AddCommand(newNetworkListCommand(dmsCli))
 	gpuCmd.AddCommand(newNetworkShowCommand(dmsCli))
 	gpuCmd.AddCommand(newNetworkAttachCommand(dmsCli))
@@ -69,30 +65,33 @@ func newNetworkCommand(afs afero.Afero, env env.EnvironmentProvider, cfg *config
 	return gpuCmd
 }
 
-func newNetworkListCommand(dmsCli *cli.DmsCLI) *cobra.Command {
-	var contextName string
-	var verbose bool
+type networkListOpts struct {
+	Context string
+	Verbose bool
+}
 
+func newNetworkListCommand(dmsCli *cli.DmsCLI) *cobra.Command {
+	opts := networkListOpts{}
 	cmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List all Networks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(dmsCli, contextName)
+			sctx, err := utils.NewSecurityContext(dmsCli, opts.Context)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			dmsClient, err := dmsCli.NewClient(sctx)
+			client, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}
-			ids, err := getDeploymentIDs(cmd.Context(), dmsClient)
+			ids, err := getDeploymentIDs(cmd.Context(), client)
 			if err != nil {
 				return fmt.Errorf("error getting deployment IDs: %w", err)
 			}
 
-			depNets, err := getNetworkList(cmd.Context(), ids, dmsClient)
+			depNets, err := getNetworkList(cmd.Context(), ids, client)
 			if err != nil {
 				return fmt.Errorf("error getting network list: %w", err)
 			}
@@ -107,7 +106,7 @@ func newNetworkListCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 			for _, dn := range depNets {
 				fmt.Fprintf(cmd.OutOrStdout(), "ID: %s\n", dn.ID)
 				fmt.Fprintf(cmd.OutOrStdout(), "    Allocations in Network=%d\n", len(dn.Allocations))
-				if verbose {
+				if opts.Verbose {
 					for _, a := range dn.Allocations {
 						fmt.Fprintf(cmd.OutOrStdout(), "    Alloc: %s\n", a.Alloc)
 						fmt.Fprintf(cmd.OutOrStdout(), "        IP: %s\n", a.IP)
@@ -122,8 +121,8 @@ func newNetworkListCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&contextName, "context", "c", node.DefaultContextName, "specify a capability context")
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	cmd.Flags().StringVarP(&opts.Context, "context", "c", node.DefaultContextName, "specify a capability context")
+	cmd.Flags().BoolVarP(&opts.Verbose, "verbose", "v", false, "verbose output")
 	err := cmd.MarkFlagRequired("context")
 	if err != nil {
 		log.Fatalf("unable to mark flag 'context' as required: %v", err)
@@ -132,26 +131,30 @@ func newNetworkListCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 	return cmd
 }
 
+type networkShowOpts struct {
+	Context string
+	ID      string
+}
+
 func newNetworkShowCommand(dmsCli *cli.DmsCLI) *cobra.Command {
-	var contextName string
-	var id string
+	opts := networkShowOpts{}
 
 	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Show details of a specific Network",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			sctx, err := utils.NewSecurityContext(dmsCli, contextName)
+			sctx, err := utils.NewSecurityContext(dmsCli, opts.Context)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			dmsClient, err := dmsCli.NewClient(sctx)
+			client, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}
 
-			depNet, err := getNetwork(cmd.Context(), id, dmsClient)
+			depNet, err := getNetwork(cmd.Context(), opts.ID, client)
 			if err != nil {
 				return fmt.Errorf("error getting network detail: %w", err)
 			}
@@ -170,8 +173,8 @@ func newNetworkShowCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&contextName, "context", "c", node.DefaultContextName, "Capability Context")
-	cmd.Flags().StringVarP(&id, "id", "i", "", "Deployment ID")
+	cmd.Flags().StringVarP(&opts.Context, "context", "c", node.DefaultContextName, "Capability Context")
+	cmd.Flags().StringVarP(&opts.ID, "id", "i", "", "Deployment ID")
 	err := cmd.MarkFlagRequired("context")
 	if err != nil {
 		log.Fatalf("unable to mark flag 'context' as required: %v", err)
@@ -183,19 +186,28 @@ func newNetworkShowCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 	return cmd
 }
 
+type networkAttachOpts struct {
+	Context  string
+	ID       string
+	Alloc    string
+	Shell    bool
+	Forward  bool
+	Username string
+	Identity string
+	Port     string
+	PortMap  string
+}
+
 func newNetworkAttachCommand(dmsCli *cli.DmsCLI) *cobra.Command {
-	var (
-		fContextName, fID, fAlloc string
-		fShell, fForward          bool
-		fUsername, fIdentity      string
-		fPort                     string
-		fPortMap                  string
-	)
+	opts := networkAttachOpts{}
 
 	cmd := &cobra.Command{
 		Use:   "attach",
 		Short: "Attach to a specific Network",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			streams := cli.CmdStreams(cmd)
+
 			cfg, err := dmsCli.Config()
 			if err != nil {
 				return fmt.Errorf("unable to get config: %w", err)
@@ -203,33 +215,33 @@ func newNetworkAttachCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 
 			afs := afero.Afero{Fs: dmsCli.FS()}
 
-			sctx, err := utils.NewSecurityContext(dmsCli, fContextName)
+			sctx, err := utils.NewSecurityContext(dmsCli, opts.Context)
 			if err != nil {
 				return fmt.Errorf("could not create security context: %w", err)
 			}
 
 			// Now call newClient with the correct arguments
-			dmsClient, err := dmsCli.NewClient(sctx)
+			client, err := dmsCli.NewClient(sctx)
 			if err != nil {
 				return fmt.Errorf("could not create client: %w", err)
 			}
 
-			depNet, err := getNetwork(cmd.Context(), fID, dmsClient)
+			depNet, err := getNetwork(ctx, opts.ID, client)
 			if err != nil {
 				return fmt.Errorf("error getting network detail: %w", err)
 			}
 
 			targetAlloc := Allocation{}
 			for _, a := range depNet.Allocations {
-				if a.Alloc == fAlloc {
+				if a.Alloc == opts.Alloc {
 					targetAlloc = a
 					break
 				}
 			}
 
 			switch {
-			case fShell:
-				key, err := afs.ReadFile(fIdentity)
+			case opts.Shell:
+				key, err := afs.ReadFile(opts.Identity)
 				if err != nil {
 					return fmt.Errorf("unable to read identity priv key file: %w", err)
 				}
@@ -256,14 +268,14 @@ func newNetworkAttachCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 				}
 
 				sshCliConfig := &ssh.ClientConfig{
-					User: fUsername,
+					User: opts.Username,
 					Auth: []ssh.AuthMethod{
 						ssh.PublicKeys(signer),
 					},
 					HostKeyCallback: hostKeyManager.HostKeyCallback(cmd.OutOrStdout()),
 				}
 
-				client, err := ssh.Dial("tcp", targetAlloc.IP+":"+fPort, sshCliConfig)
+				client, err := ssh.Dial("tcp", targetAlloc.IP+":"+opts.Port, sshCliConfig)
 				if err != nil {
 					return fmt.Errorf("unable to dial: %w", err)
 				}
@@ -290,9 +302,9 @@ func newNetworkAttachCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 					return fmt.Errorf("unable to request pseudo terminal: %w", err)
 				}
 				// set input and output
-				session.Stdout = os.Stdout
-				session.Stdin = os.Stdin
-				session.Stderr = os.Stderr
+				session.Stdout = streams.Out
+				session.Stdin = streams.In
+				session.Stderr = streams.Err
 
 				if err := session.Shell(); err != nil {
 					return fmt.Errorf("unable to start shell: %w", err)
@@ -330,7 +342,7 @@ func newNetworkAttachCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 					return fmt.Errorf("unable to wait: %w", err)
 				}
 
-			case fForward:
+			case opts.Forward:
 			// TODO #957
 			default:
 				fmt.Fprintf(cmd.OutOrStderr(), "unknown action flag")
@@ -339,15 +351,15 @@ func newNetworkAttachCommand(dmsCli *cli.DmsCLI) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&fContextName, "context", "c", node.DefaultContextName, "Capability Context")
-	cmd.Flags().StringVarP(&fID, "id", "i", "", "Deployment ID")
-	cmd.Flags().BoolVar(&fShell, "shell", false, "Attach a Shell")
-	cmd.Flags().BoolVar(&fForward, "forward", false, "Attach a Forwarder")
-	cmd.Flags().StringVarP(&fAlloc, "alloc", "a", "", "Allocation Name")
-	cmd.Flags().StringVarP(&fUsername, "username", "u", "", "Username for SSH Shell")
-	cmd.Flags().StringVarP(&fIdentity, "identity", "I", "", "SSH Private Key for SSH Shell")
-	cmd.Flags().StringVarP(&fPort, "port", "p", "22", "Port for SSH Shell")
-	cmd.Flags().StringVarP(&fPortMap, "portmap", "P", "", "Port Mapping <host:alloc> for Forwarder")
+	cmd.Flags().StringVarP(&opts.Context, "context", "c", node.DefaultContextName, "Capability Context")
+	cmd.Flags().StringVarP(&opts.ID, "id", "i", "", "Deployment ID")
+	cmd.Flags().BoolVar(&opts.Shell, "shell", false, "Attach a Shell")
+	cmd.Flags().BoolVar(&opts.Forward, "forward", false, "Attach a Forwarder")
+	cmd.Flags().StringVarP(&opts.Alloc, "alloc", "a", "", "Allocation Name")
+	cmd.Flags().StringVarP(&opts.Username, "username", "u", "", "Username for SSH Shell")
+	cmd.Flags().StringVarP(&opts.Identity, "identity", "I", "", "SSH Private Key for SSH Shell")
+	cmd.Flags().StringVarP(&opts.Port, "port", "p", "22", "Port for SSH Shell")
+	cmd.Flags().StringVarP(&opts.PortMap, "portmap", "P", "", "Port Mapping <host:alloc> for Forwarder")
 
 	err := cmd.MarkFlagRequired("context")
 	if err != nil {

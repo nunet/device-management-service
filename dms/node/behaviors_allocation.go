@@ -198,7 +198,7 @@ func (n *Node) createAllocations(
 				Execution:        allocationConfig.Execution,
 				ProvisionScripts: allocationConfig.ProvisionScripts,
 				Keys:             allocationConfig.Keys,
-				Volume:           allocationConfig.Volume,
+				Volume:           allocationConfig.Volumes,
 			},
 			supervisor,
 		)

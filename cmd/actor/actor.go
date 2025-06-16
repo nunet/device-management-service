@@ -9,18 +9,13 @@
 package actor
 
 import (
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-
 	"gitlab.com/nunet/device-management-service/cmd/cli"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
 // NewActorCmd is a constructor for `actor` parent command
 func NewActorCmd(
-	afs afero.Afero, env env.EnvironmentProvider,
-	cfg *config.Config,
+	dmsCli *cli.DmsCLI,
 ) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "actor",
@@ -33,12 +28,10 @@ Actors are connected through the libp2p network substrate and communication is a
 For more information on the actor system, please refer to actor/README.md`,
 	}
 
-	dmsCli := cli.New(cli.WithConfig(cfg), cli.WithEnv(env), cli.WithFS(afs))
-
 	cmd.AddCommand(newActorMsgCmd(dmsCli))
-	cmd.AddCommand(newActorSendCmd(afs, cfg))
-	cmd.AddCommand(newActorInvokeCmd(afs, cfg))
-	cmd.AddCommand(newActorBroadcastCmd(afs, cfg))
+	cmd.AddCommand(newActorSendCmd(dmsCli))
+	cmd.AddCommand(newActorInvokeCmd(dmsCli))
+	cmd.AddCommand(newActorBroadcastCmd(dmsCli))
 	cmd.AddCommand(newActorCmdGroup(dmsCli))
 	return cmd
 }
