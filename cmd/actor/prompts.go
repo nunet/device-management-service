@@ -10,8 +10,10 @@ package actor
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/manifoldco/promptui"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 )
 
 type selectPromptItem struct {
@@ -19,37 +21,49 @@ type selectPromptItem struct {
 	Selected bool
 }
 
-func selectPrompt(label string, items []*selectPromptItem) ([]string, error) {
-	// Always prepend a "Done" item to the slice if it doesn't
-	// already exist.
+type writerCloser struct {
+	io.Writer
+}
+
+func (wc *writerCloser) Close() error {
+	return nil
+}
+
+func runSelectPrompt(label string, items []*selectPromptItem, multiple bool, streams cli.Streams) ([]string, error) {
 	const doneLabel = "Done"
-	if len(items) > 0 && items[0].Label != doneLabel {
+	if multiple && len(items) > 0 && items[0].Label != doneLabel {
 		items = append([]*selectPromptItem{{Label: doneLabel}}, items...)
 	}
 
 	template := &promptui.SelectTemplates{
 		Label:    "{{ .Label }}",
-		Active:   "{{ if .Selected }}{{ \"✔\" | green }} {{ end }}→ {{ .Label | cyan | bold }}",
-		Inactive: "{{ if .Selected }}{{ \"✔\" | green }} {{ end }}  {{ .Label | faint }}",
+		Active:   "{{ if .Selected }}{{ \"✓\" | green }} {{ end }}→ {{ .Label | cyan | bold }}",
+		Inactive: "{{ if .Selected }}{{ \"✓\" | green }} {{ end }}  {{ .Label | faint }}",
 		Selected: "{{ .Label | green | bold }}",
 	}
 
 	p := promptui.Select{
-		Label:     label,
-		Items:     items,
-		Templates: template,
-		Size:      len(items),
+		Label:        label,
+		Items:        items,
+		Templates:    template,
+		HideSelected: true,
+		Size:         len(items),
+		Stdin:        io.NopCloser(streams.In),
+		Stdout:       &writerCloser{streams.Out},
 	}
 
-	index, _, err := p.Run()
-	if err != nil {
-		return nil, fmt.Errorf("prompt failed %w", err)
-	}
-
-	selectedItem := items[index]
-	if selectedItem.Label != doneLabel {
-		selectedItem.Selected = !selectedItem.Selected
-		return selectPrompt(label, items)
+	for done := false; !done; {
+		index, _, err := p.Run()
+		if err != nil {
+			return nil, fmt.Errorf("prompt failed %w", err)
+		}
+		selectedItem := items[index]
+		if multiple && selectedItem.Label != doneLabel {
+			selectedItem.Selected = !selectedItem.Selected
+			done = false
+		} else {
+			done = true
+		}
 	}
 
 	var selected []string
@@ -62,10 +76,19 @@ func selectPrompt(label string, items []*selectPromptItem) ([]string, error) {
 	return selected, nil
 }
 
-func prompt(label string, validate func(string) error) (string, error) {
+func selectPromptMultiple(label string, items []*selectPromptItem, streams cli.Streams) ([]string, error) {
+	return runSelectPrompt(label, items, true, streams)
+}
+
+func prompt(label string, validate func(string) error, streams cli.Streams) (string, error) {
 	p := promptui.Prompt{
-		Label:    label,
+		Label: label,
+		Templates: &promptui.PromptTemplates{
+			Valid: "{{ \"✓\" | green }} {{ . }} {{ \":\" | bold}} ",
+		},
 		Validate: validate,
+		Stdin:    io.NopCloser(streams.In),
+		Stdout:   &writerCloser{streams.Out},
 	}
 
 	result, err := p.Run()

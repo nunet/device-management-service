@@ -104,3 +104,24 @@ func (n *Node) handleHardwareUsage(msg actor.Envelope) {
 	resp.Resources = hardwareUsage
 	n.sendReply(msg, resp)
 }
+
+func (n *Node) handleHardwareSpec(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling hardware spec: %s", err)
+		n.sendReply(msg, ResourcesResponse{Error: err.Error()})
+	}
+
+	resp := ResourcesResponse{}
+
+	hardwareSpec, err := n.hardware.GetMachineResources()
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	resp.OK = true
+	resp.Resources = hardwareSpec.Resources
+	n.sendReply(msg, resp)
+}

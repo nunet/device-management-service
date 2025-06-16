@@ -51,6 +51,7 @@ type actorCmdOptions struct {
 	Payload any
 	Args    []string
 	MsgOpts []client.Option
+	Streams cli.Streams
 }
 
 func newActorCmdCmd(dmsCli *cli.DmsCLI, behavior string, behaviorCfg *behaviorConfig) *cobra.Command {
@@ -67,14 +68,15 @@ func newActorCmdCmd(dmsCli *cli.DmsCLI, behavior string, behaviorCfg *behaviorCo
 		Args:              behaviorCfg.Args,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			opts.Args = args
+			opts.Context, _ = cmd.Flags().GetString(fnContext)
+			opts.MsgOpts = getBehaviorMsgOpts(cmd)
+			opts.Streams = cli.CmdStreams(cmd)
 			if behaviorCfg.PreRunFn != nil {
-				return behaviorCfg.PreRunFn(cmd, opts)
+				return behaviorCfg.PreRunFn(cmd, dmsCli, opts)
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts.Context, _ = cmd.Flags().GetString(fnContext)
-			opts.MsgOpts = getBehaviorMsgOpts(cmd)
 			return behaviorCfg.Run(cmd.Context(), dmsCli, opts, cli.CmdStreams(cmd))
 		},
 	}

@@ -11,6 +11,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"github.com/spf13/afero"
@@ -214,4 +215,21 @@ func ExecuteCommand(
 	err = command.Execute()
 
 	return stdoutBuf.String(), stderrBuf.String(), err
+}
+
+func ExecuteCommandWithInput(command *cobra.Command, input [][]byte, args ...string) (stdout, stderr string, err error) {
+	if len(input) > 0 {
+		in, out := io.Pipe()
+		command.SetIn(in)
+
+		go func() {
+			for _, input := range input {
+				_, err := out.Write(input)
+				if err != nil {
+					return
+				}
+			}
+		}()
+	}
+	return ExecuteCommand(command, args...)
 }
