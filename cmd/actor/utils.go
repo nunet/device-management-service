@@ -3,16 +3,16 @@ package actor
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
 	"gitlab.com/nunet/device-management-service/dms/node"
 )
 
-func displayResponse(cmd *cobra.Command, resp any) error {
-	encoder := json.NewEncoder(cmd.OutOrStdout())
+func displayResponse(w io.Writer, resp any) error {
+	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(resp)
 }
@@ -52,8 +52,8 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 		}
 
 		// handle reading client certificate files for volumes
-		if len(alloc.Volume) > 0 {
-			for i, v := range alloc.Volume {
+		if len(alloc.Volumes) > 0 {
+			for i, v := range alloc.Volumes {
 				if v.Type != "glusterfs" {
 					continue
 				}
@@ -63,7 +63,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
 					}
-					cfg.Ensemble.V1.Allocations[aIdx].Volume[i].ClientPrivateKey = string(pvkeyData)
+					cfg.Ensemble.V1.Allocations[aIdx].Volumes[i].ClientPrivateKey = string(pvkeyData)
 				}
 
 				if v.ClientPEM != "" {
@@ -71,7 +71,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read pem data: %w", err)
 					}
-					cfg.Ensemble.V1.Allocations[aIdx].Volume[i].ClientPEM = string(pemData)
+					cfg.Ensemble.V1.Allocations[aIdx].Volumes[i].ClientPEM = string(pemData)
 				}
 
 				if v.ClientCA != "" {
@@ -79,7 +79,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read ca data: %w", err)
 					}
-					cfg.Ensemble.V1.Allocations[aIdx].Volume[i].ClientCA = string(caData)
+					cfg.Ensemble.V1.Allocations[aIdx].Volumes[i].ClientCA = string(caData)
 				}
 			}
 		}
