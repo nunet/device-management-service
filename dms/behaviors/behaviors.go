@@ -81,9 +81,6 @@ const (
 	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
 
 	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
-
-	AllocationLogsBehavior     = EnsembleNamespace + "/allocation/logs"
-	AllocationShutdownBehavior = EnsembleNamespace + "/allocation/shutdown"
 )
 
 var (
@@ -98,5 +95,14 @@ var (
 	SubnetJoinBehavior = types.Behavior{
 		DynamicTemplate: EnsembleNamespace + "/node/subnet/join",
 		Static:          NodeNamespace + "/subnet/join",
+	}
+
+	AllocationLogsBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/allocation/logs",
+		Static:          "undefined",
+	}
+	AllocationShutdownBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/allocation/shutdown",
+		Static:          "undefined",
 	}
 )

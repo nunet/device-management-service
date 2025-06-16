@@ -104,8 +104,4 @@ func TestGenerateEnsemble(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// t.Log(string(yamlData))
-
-	// fmt.Println(string(yamlData))
 }

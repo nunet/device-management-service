@@ -444,7 +444,11 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 		return
 	}
 
-	o.Shutdown()
+	err = o.Shutdown()
+	if err != nil {
+		handleErr(err)
+		return
+	}
 	resp.OK = true
 	n.sendReply(msg, resp)
 }

@@ -16,8 +16,11 @@ import (
 
 const (
 	RegisterHealthCheckTimeout = 5 * time.Second
-	HealthCheckTimeout         = 5 * time.Second
-	FailureEscalationTimeout   = 2 * time.Minute
+)
+
+var (
+	HealthCheckTimeout       = 5 * time.Second
+	FailureEscalationTimeout = 2 * time.Minute
 )
 
 // Supervisor encapsulates supervision logic.
@@ -198,7 +201,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 		}
 
 		if !resp.OK {
-			log.Errorf("error in healthcheck: %s", resp.Error)
+			log.Errorf("error in healthcheck for allocation %s: %s", allocation.ID, resp.Error)
 
 			s.lock.Lock()
 			s.failures[allocation.ID]++
@@ -226,7 +229,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 			return nil
 		}
 
-		log.Warnf("timeout waiting for supervisor reply")
+		log.Warnf("timeout waiting for supervisor reply for allocation %s", allocation.ID)
 		s.lock.Lock()
 		s.failures[allocation.ID]++
 		v := s.failures[allocation.ID]
@@ -280,9 +283,19 @@ func (s *Supervisor) escalateFailure(allocation jtypes.AllocationManifest) error
 	case reply := <-replyCh:
 		defer reply.Discard()
 
+		var resp behaviors.AllocationRestartResponse
+		if err := json.Unmarshal(reply.Message, &resp); err != nil {
+			return fmt.Errorf("unmarshalling supervisor reply: %w", err)
+		}
+
+		if !resp.OK {
+			return fmt.Errorf("error restarting allocation: %s", resp.Error)
+		}
+
 		s.lock.Lock()
 		defer s.lock.Unlock()
 		s.escalations[allocation.ID]++
+		s.failures[allocation.ID] = 0
 		return nil
 	case <-time.After(FailureEscalationTimeout):
 		return fmt.Errorf("timeout waiting for supervisor reply")
@@ -325,7 +338,10 @@ func (s *Supervisor) Update(manifest jtypes.EnsembleManifest) {
 	}
 
 	// 2. Update the manifest
-	// TODO: we need to merge the manifest instead of replacing it
+	s.lock.Lock()
+	s.manifest = manifestCopy
+	s.lock.Unlock()
+	wg.Wait()
 }
 
 func (s *Supervisor) getAllocation(name string) (jtypes.AllocationManifest, bool) {

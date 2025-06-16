@@ -124,10 +124,10 @@ func (n *Node) addEnsembleBehaviors(ensembleID string) error {
 		fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
 			fn: n.handleSubnetDestroy,
 		},
-		fmt.Sprintf(behaviors.AllocationLogsBehavior, ensembleID): {
+		fmt.Sprintf(behaviors.AllocationLogsBehavior.DynamicTemplate, ensembleID): {
 			fn: n.handleAllocationLogs,
 		},
-		fmt.Sprintf(behaviors.AllocationShutdownBehavior, ensembleID): {
+		fmt.Sprintf(behaviors.AllocationShutdownBehavior.DynamicTemplate, ensembleID): {
 			fn: n.handleAllocationShutdown,
 		},
 	}
