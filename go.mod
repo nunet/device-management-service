@@ -269,7 +269,6 @@ require (
 	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
 	github.com/pion/transport/v3 v3.0.7 // indirect
 	github.com/pkg/sftp v1.13.6 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/zitadel/oidc/v2 v2.12.0 // indirect
 	go.elastic.co/apm/module/apmhttp/v2 v2.6.2 // indirect
 	go.elastic.co/apm/v2 v2.6.2 // indirect
