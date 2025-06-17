@@ -72,7 +72,11 @@ func (g *GlusterFS) Mount(targetPath string, _ map[string]string) error {
 		return fmt.Errorf("target path cannot be empty")
 	}
 
-	return g.runGlusterfsClient(targetPath)
+	if err := g.runGlusterfsClient(targetPath); err != nil {
+		return fmt.Errorf("failed to run glusterfs client: %w", err)
+	}
+
+	return nil
 }
 
 func (g *GlusterFS) runGlusterfsClient(targetPath string) error {
