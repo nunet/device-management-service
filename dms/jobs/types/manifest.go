@@ -10,6 +10,7 @@ package jobtypes
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/types"
@@ -72,4 +73,12 @@ func (mf *EnsembleManifest) IsTerminatedTask(name string) bool {
 		return true
 	}
 	return false
+}
+
+func (mf *EnsembleManifest) JSON() ([]byte, error) {
+	data, err := json.MarshalIndent(mf, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal manifest: %w", err)
+	}
+	return data, nil
 }

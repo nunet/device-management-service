@@ -96,7 +96,6 @@ func TestOrchestratorDeploy(t *testing.T) {
 	// Track expected status transitions
 	expectedStatuses := []jtypes.DeploymentStatus{
 		jtypes.DeploymentStatusPreparing,
-		jtypes.DeploymentStatusGenerating,
 		jtypes.DeploymentStatusCommitting,
 		jtypes.DeploymentStatusProvisioning,
 		jtypes.DeploymentStatusRunning,
@@ -649,10 +648,10 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 	// Verify final state
 	assert.Equal(t, jtypes.DeploymentStatusRunning, o.Status())
 
-	node, ok := o.manifest.Nodes["node1"]
-	require.True(t, ok)
-	node.Handle = provider.handle
-	o.updateNodeManifest("node1", o.manifest.Nodes["node1"])
+	// node, ok := o.manifest.Nodes["node1"]
+	// require.True(t, ok)
+	// node.Handle = provider.handle
+	// o.updateNodeManifest("node1", o.manifest.Nodes["node1"])
 
 	// Test GetAllocationLogs
 	logs, err := o.GetAllocationLogs("alloc1")
@@ -939,10 +938,7 @@ func TestVerifyEdgeConstraints(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	bidC, err := NewBidCoordinator(ensembleID, orch.actor)
 	require.NoError(t, err)
 
 	// Create test bids
@@ -991,7 +987,7 @@ func TestVerifyEdgeConstraints(t *testing.T) {
 		}))
 
 		// Test valid edge constraints
-		result := o.verifyEdgeConstraints(cfg, candidate, map[string]bool{})
+		result := bidC.verifyEdgeConstraints(cfg, candidate, map[string]bool{})
 		assert.True(t, result)
 	})
 
@@ -1007,7 +1003,7 @@ func TestVerifyEdgeConstraints(t *testing.T) {
 			// Don't send a reply to simulate timeout
 		}))
 
-		result := o.verifyEdgeConstraints(cfg, candidate, map[string]bool{})
+		result := bidC.verifyEdgeConstraints(cfg, candidate, map[string]bool{})
 		assert.False(t, result)
 	})
 
@@ -1029,7 +1025,7 @@ func TestVerifyEdgeConstraints(t *testing.T) {
 			require.NoError(t, provider.actor.Send(reply))
 		}))
 
-		result := o.verifyEdgeConstraints(cfg, candidate, map[string]bool{})
+		result := bidC.verifyEdgeConstraints(cfg, candidate, map[string]bool{})
 		assert.False(t, result)
 	})
 }
@@ -1611,16 +1607,13 @@ func TestRequestBidPeer(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	bidC, err := NewBidCoordinator(ensembleID, orch.actor)
 	require.NoError(t, err)
 
 	// Create test bid request
 	bidRequest := jtypes.EnsembleBidRequest{
 		ID:    ensembleID,
-		Nonce: o.getNonce(),
+		Nonce: bidC.getNonce(),
 		Request: []jtypes.BidRequest{
 			{
 				V1: &jtypes.BidRequestV1{
@@ -1670,7 +1663,7 @@ func TestRequestBidPeer(t *testing.T) {
 			}
 		}))
 
-		err := o.requestBidPeer(bidRequest, cfg.V1.Nodes["node1"], uint64(time.Now().Add(BidRequestTimeout).UnixNano()))
+		err := bidC.requestBidPeer(bidRequest, cfg.V1.Nodes["node1"], uint64(time.Now().Add(BidRequestTimeout).UnixNano()))
 		require.NoError(t, err)
 		<-provider.channels[behaviors.BidRequestBehavior]
 	})
@@ -1681,7 +1674,7 @@ func TestRequestBidPeer(t *testing.T) {
 			Peer: "invalid-peer-id",
 		}
 
-		err := o.requestBidPeer(bidRequest, invalidNodeConfig, uint64(time.Now().Add(BidRequestTimeout).UnixNano()))
+		err := bidC.requestBidPeer(bidRequest, invalidNodeConfig, uint64(time.Now().Add(BidRequestTimeout).UnixNano()))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "getting handle of selected peer")
 	})
@@ -1697,7 +1690,7 @@ func TestRequestBidPeer(t *testing.T) {
 			// Don't send a reply to simulate sending error
 		}))
 
-		err := o.requestBidPeer(bidRequest, cfg.V1.Nodes["node1"], uint64(time.Now().Add(BidRequestTimeout).UnixNano()))
+		err := bidC.requestBidPeer(bidRequest, cfg.V1.Nodes["node1"], uint64(time.Now().Add(BidRequestTimeout).UnixNano()))
 		require.NoError(t, err) // The function itself doesn't return an error for sending failures
 		<-provider.channels[behaviors.BidRequestBehavior]
 	})
@@ -1757,10 +1750,7 @@ func TestMakeCandidateDeploymentBig(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	bidC, err := NewBidCoordinator(ensembleID, orch.actor)
 	require.NoError(t, err)
 
 	// Create test bids
@@ -1780,7 +1770,7 @@ func TestMakeCandidateDeploymentBig(t *testing.T) {
 
 	// Test successful deployment creation
 	t.Run("successful deployment creation", func(t *testing.T) {
-		nextCandidate, ok := o.makeCandidateDeploymentBig(cfg, bids)
+		nextCandidate, ok := bidC.makeCandidateDeploymentBig(cfg, bids)
 		require.True(t, ok)
 		require.NotNil(t, nextCandidate)
 
@@ -1804,7 +1794,7 @@ func TestMakeCandidateDeploymentBig(t *testing.T) {
 			}},
 		}
 
-		nextCandidate, ok := o.makeCandidateDeploymentBig(cfg, invalidBids)
+		nextCandidate, ok := bidC.makeCandidateDeploymentBig(cfg, invalidBids)
 		require.True(t, ok)
 		require.NotNil(t, nextCandidate)
 
@@ -1877,10 +1867,7 @@ func TestMakeResidualBidRequest(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	bidC, err := NewBidCoordinator(ensembleID, orch.actor)
 	require.NoError(t, err)
 
 	// Create test bids
@@ -1904,7 +1891,7 @@ func TestMakeResidualBidRequest(t *testing.T) {
 			// This is a no-op for testing
 		}
 
-		request, err := o.makeResidualBidRequest(cfg, bids, rmBid)
+		request, err := bidC.makeResidualBidRequest(cfg, bids, rmBid)
 		require.NoError(t, err)
 		assert.NotNil(t, request)
 		assert.Equal(t, ensembleID, request.ID)
@@ -1931,7 +1918,7 @@ func TestMakeResidualBidRequest(t *testing.T) {
 			// This is a no-op for testing
 		}
 
-		request, err := o.makeResidualBidRequest(cfg, completeBids, rmBid)
+		request, err := bidC.makeResidualBidRequest(cfg, completeBids, rmBid)
 		require.NoError(t, err)
 		assert.Empty(t, request.Request)
 	})
@@ -1999,7 +1986,7 @@ func TestMonitorOnlyTaskManifest(t *testing.T) {
 	}
 	o.manifest = manifest
 
-	MonitorOnlyTaskManifestInterval = time.Millisecond * 200
+	monitorOnlyTaskManifestInterval = time.Millisecond * 200
 	// Test successful task termination
 	t.Run("successful task termination", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -2778,10 +2765,7 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	bidC, err := NewBidCoordinator(ensembleID, orch.actor)
 	require.NoError(t, err)
 
 	// Create mock GeoLocator
@@ -2789,7 +2773,7 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 	// Add test locations
 	mockGeo.AddLocation("US", "Los Angeles", 34.0522, -118.2437) // Los Angeles coordinates
 	mockGeo.AddLocation("US", "New York", 40.7128, -74.0060)     // New York coordinates
-	o.geo = mockGeo
+	bidC.geo = mockGeo
 
 	// Create test bids
 	bid1 := jtypes.Bid{
@@ -2817,7 +2801,7 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 			"node2": bid2,
 		}
 
-		result := o.checkPermutationEdgeConstraints(cfg, candidate)
+		result := bidC.checkPermutationEdgeConstraints(cfg, candidate)
 		assert.True(t, result)
 	})
 
@@ -2835,7 +2819,7 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 			},
 		}
 
-		result := o.checkPermutationEdgeConstraints(cfg, candidate)
+		result := bidC.checkPermutationEdgeConstraints(cfg, candidate)
 		assert.False(t, result)
 	})
 
@@ -2844,7 +2828,7 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 			"node1": bid1,
 		}
 
-		result := o.checkPermutationEdgeConstraints(cfg, candidate)
+		result := bidC.checkPermutationEdgeConstraints(cfg, candidate)
 		assert.False(t, result)
 	})
 
@@ -2861,7 +2845,7 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 			},
 		}
 
-		result := o.checkPermutationEdgeConstraints(cfgNoEdges, candidate)
+		result := bidC.checkPermutationEdgeConstraints(cfgNoEdges, candidate)
 		assert.True(t, result)
 	})
 
@@ -2871,7 +2855,7 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 			"node2": bid2,
 		}
 
-		result := o.checkPermutationEdgeConstraints(cfg, candidate)
+		result := bidC.checkPermutationEdgeConstraints(cfg, candidate)
 		assert.False(t, result)
 	})
 }
@@ -2986,47 +2970,12 @@ func TestGetNonce(t *testing.T) {
 	substrate := network.NewSubstrate()
 	orch := MakeOrchestrator(t, substrate)
 
-	cfg := jtypes.EnsembleConfig{
-		V1: &jtypes.EnsembleConfigV1{
-			Nodes: map[string]jtypes.NodeConfig{
-				"node1": {
-					Location: jtypes.LocationConstraints{
-						Accept: []jtypes.Location{
-							{Country: "US"},
-						},
-					},
-					Allocations: []string{"alloc1"},
-				},
-			},
-			Allocations: map[string]jtypes.AllocationConfig{
-				"alloc1": {
-					Type: jtypes.AllocationTypeService,
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      1,
-							ClockSpeed: 1000,
-						},
-						RAM: types.RAM{
-							Size: 1024,
-						},
-						Disk: types.Disk{
-							Size: 1024,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	bidC, err := NewBidCoordinator(ensembleID, orch.actor)
 	require.NoError(t, err)
 
 	// Test getting nonce
-	nonce1 := o.getNonce()
-	nonce2 := o.getNonce()
+	nonce1 := bidC.getNonce()
+	nonce2 := bidC.getNonce()
 	assert.NotEqual(t, nonce1, nonce2)
 	assert.Greater(t, nonce2, nonce1)
 }

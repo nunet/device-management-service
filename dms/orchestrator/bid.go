@@ -31,13 +31,36 @@ import (
 
 var ErrCandidateNotFound = errors.New("candidate not found")
 
+// BidCoordinator handles the bidding process for ensemble deployment
+type BidCoordinator struct {
+	eid   string // ensembleID
+	actor actor.Actor
+	geo   geolocation.LocationProvider
+	nonce uint64
+}
+
+// NewBidCoordinator creates a new BidCoordinator instance given a ensemble config copy
+func NewBidCoordinator(
+	eid string, actor actor.Actor,
+) (*BidCoordinator, error) {
+	geo, err := geolocation.NewGeoLocator()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create geolocator: %w", err)
+	}
+
+	return &BidCoordinator{
+		eid:   eid,
+		actor: actor,
+		geo:   geo,
+	}, nil
+}
+
 // bid handles the bid process from beginning to end
 //
-// Note: do not rely on `o.cfg` orchestrator state. A parametrized config should be used
-//
-// TODO: maybe create a bid struct with the following methods so that it becomes impossible
-// to mess with orchestrator state
-func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (map[string]jtypes.Bid, error) {
+// TODO: update deployment status when Generating
+func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, expiry time.Time) (map[string]jtypes.Bid, error) {
+	cfg := cfgReader.Read() // read cfg copy
+
 	candidate := make(map[string]jtypes.Bid)
 	edgeConstraintCache := make(map[string]bool)
 
@@ -53,9 +76,9 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 	// 1. Create bid requests for nodes
 	log.Debugw("creating initial bid request",
 		"labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", o.id,
-		"nodes: ", o.cfg.Nodes())
-	bidrq, err := o.makeInitialBidRequest(cfg)
+		"orchestratorID", b.eid,
+		"nodes: ", cfg.Nodes())
+	bidrq, err := b.makeInitialBidRequest(cfg)
 	if err != nil {
 		return candidate, fmt.Errorf("creating bid request: %w", err)
 	}
@@ -63,7 +86,7 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 	// 2. Collect bids
 	log.Debugw("collecting bids",
 		"labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", o.id)
+		"orchestratorID", b.eid)
 
 	bidMap := make(map[string][]jtypes.Bid)
 	peerExclusion := make(map[string]struct{})
@@ -144,24 +167,24 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 		}
 	}
 
-	bidCh, bidDoneCh, bidExpiryTime, err := o.requestBids(cfg, bidrq, expiry)
+	bidCh, bidDoneCh, bidExpiryTime, err := b.requestBids(cfg, bidrq, expiry)
 	if err != nil {
 		return candidate, fmt.Errorf("request bids: %w", err)
 	}
 
 	maxBids := MaxBidMultiplier * len(cfg.Nodes())
-	o.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
+	b.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
 
 	// 3. Create a candidate deployment
 	log.Debugw("creating candidate deployments",
 		"labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", o.id)
+		"orchestratorID", b.eid)
 	var (
 		nextCandidate func() (map[string]jtypes.Bid, bool)
 		ok            bool
 	)
 	for time.Now().Before(expiry) {
-		nextCandidate, ok = o.makeCandidateDeployments(cfg, bidMap)
+		nextCandidate, ok = b.makeCandidateDeployments(cfg, bidMap)
 		if ok {
 			break
 		}
@@ -172,25 +195,25 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 		//       can drop some of the original bids
 		log.Debugw("not enough bids for all nodes, making residual request",
 			"labels", []string{string(observability.LabelDeployment)},
-			"orchestratorID", o.id)
-		bidrq, err := o.makeResidualBidRequest(cfg, bidMap, rmBid)
+			"orchestratorID", b.eid)
+		bidrq, err := b.makeResidualBidRequest(cfg, bidMap, rmBid)
 		if err != nil {
 			return candidate, fmt.Errorf("creating residual bid request: %w", err)
 		}
 
-		bidCh, bidDoneCh, bidExpiryTime, err := o.requestBids(cfg, bidrq, expiry)
+		bidCh, bidDoneCh, bidExpiryTime, err := b.requestBids(cfg, bidrq, expiry)
 		if err != nil {
 			return candidate, fmt.Errorf("collecting residual bids: %w", err)
 		}
 
 		maxBids := MaxBidMultiplier * (len(cfg.Nodes()) - len(bidMap))
-		o.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
+		b.collectBids(bidCh, bidDoneCh, bidExpiryTime, addBid, maxBids)
 	}
 
 	if !ok {
 		log.Debugw("failed to create candidate deployments, retrying",
 			"labels", []string{string(observability.LabelDeployment)},
-			"orchestratorID", o.id)
+			"orchestratorID", b.eid)
 		return candidate,
 			fmt.Errorf("%w: failed to create candidate deployments - trying again",
 				ErrCandidateNotFound)
@@ -205,8 +228,6 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 
 	// 4. Iterate through the candidates trying to find one that satisfies the
 	//    edge constraints
-	o.setStatus(jtypes.DeploymentStatusGenerating)
-
 	log.Debugf("generating candidate deployment")
 	for time.Now().Before(expiry) {
 		candidate, ok = nextCandidate()
@@ -217,7 +238,7 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 		}
 
 		log.Debugf("candidate deployment: %+v", candidate)
-		if ok := o.verifyEdgeConstraints(cfg, candidate, edgeConstraintCache); !ok {
+		if ok := b.verifyEdgeConstraints(cfg, candidate, edgeConstraintCache); !ok {
 			log.Debugf("candidate does not satisfy edge constraints")
 			continue
 		}
@@ -228,7 +249,7 @@ func (o *BasicOrchestrator) bid(cfg jtypes.EnsembleConfig, expiry time.Time) (ma
 	return candidate, nil
 }
 
-func (o *BasicOrchestrator) requestBids(
+func (b *BidCoordinator) requestBids(
 	cfg jtypes.EnsembleConfig,
 	bidRequest jtypes.EnsembleBidRequest, expiry time.Time,
 ) (chan jtypes.Bid, chan struct{}, time.Time, error) {
@@ -274,7 +295,7 @@ func (o *BasicOrchestrator) requestBids(
 			Request:       []jtypes.BidRequest{req},
 			PeerExclusion: bidRequest.PeerExclusion,
 		}
-		err := o.requestBidPeer(targetedReq, nodeConfig, bidExpiry)
+		err := b.requestBidPeer(targetedReq, nodeConfig, bidExpiry)
 		if err != nil {
 			return nil, nil, time.Time{}, fmt.Errorf("requesting bid to targeted peer: %w", err)
 		}
@@ -283,7 +304,7 @@ func (o *BasicOrchestrator) requestBids(
 	// create reply behavior for this specific ensemble bid request
 	bidCh := make(chan jtypes.Bid)
 	bidDoneCh := make(chan struct{})
-	if err := o.actor.AddBehavior(
+	if err := b.actor.AddBehavior(
 		behaviors.BidReplyBehavior,
 		func(msg actor.Envelope) {
 			defer msg.Discard()
@@ -319,7 +340,7 @@ func (o *BasicOrchestrator) requestBids(
 			Request:       broadcastRequests,
 			PeerExclusion: bidRequest.PeerExclusion,
 		}
-		err := o.broadcastBid(broadcastReq, bidExpiry)
+		err := b.broadcastBid(broadcastReq, bidExpiry)
 		if err != nil {
 			return nil, nil, time.Time{}, fmt.Errorf("broadcasting bid request: %w", err)
 		}
@@ -328,9 +349,9 @@ func (o *BasicOrchestrator) requestBids(
 	return bidCh, bidDoneCh, bidExpiryTime, nil
 }
 
-func (o *BasicOrchestrator) broadcastBid(bidRequest jtypes.EnsembleBidRequest, bidExpiry uint64) error {
+func (b *BidCoordinator) broadcastBid(bidRequest jtypes.EnsembleBidRequest, bidExpiry uint64) error {
 	msg, err := actor.Message(
-		o.actor.Handle(),
+		b.actor.Handle(),
 		actor.Handle{},
 		behaviors.BidRequestBehavior,
 		bidRequest,
@@ -342,14 +363,14 @@ func (o *BasicOrchestrator) broadcastBid(bidRequest jtypes.EnsembleBidRequest, b
 		return fmt.Errorf("creating broadcast bid message: %w", err)
 	}
 
-	if err := o.actor.Publish(msg); err != nil {
+	if err := b.actor.Publish(msg); err != nil {
 		return fmt.Errorf("publishing broadcast bid request: %w", err)
 	}
 
 	return nil
 }
 
-func (o *BasicOrchestrator) requestBidPeer(
+func (b *BidCoordinator) requestBidPeer(
 	targetedReq jtypes.EnsembleBidRequest, nodeConfig jtypes.NodeConfig, bidExpiry uint64,
 ) error {
 	destHandle, err := actor.HandleFromPeerID(nodeConfig.Peer)
@@ -359,7 +380,7 @@ func (o *BasicOrchestrator) requestBidPeer(
 
 	log.Infof("sending direct peer request to %s: %+v", nodeConfig.Peer, targetedReq)
 	msg, err := actor.Message(
-		o.actor.Handle(),
+		b.actor.Handle(),
 		destHandle,
 		behaviors.BidRequestBehavior,
 		targetedReq,
@@ -373,15 +394,15 @@ func (o *BasicOrchestrator) requestBidPeer(
 	log.Infow("requesting bid from targeted peer",
 		"labels", []string{string(observability.LabelDeployment)},
 		"peerID", nodeConfig.Peer,
-		"orchestratorID", o.id)
-	if err := o.actor.Send(msg); err != nil {
+		"orchestratorID", b.eid)
+	if err := b.actor.Send(msg); err != nil {
 		return fmt.Errorf("sending targeted bid request: %w", err)
 	}
 
 	return nil
 }
 
-func (o *BasicOrchestrator) collectBids(
+func (b *BidCoordinator) collectBids(
 	bidCh chan jtypes.Bid, bidDoneCh chan struct{}, bidExpiryTime time.Time,
 	addBid func(jtypes.Bid) bool, maxBids int,
 ) {
@@ -411,10 +432,10 @@ func (o *BasicOrchestrator) collectBids(
 					"error", err)
 				continue
 			}
-			if bid.EnsembleID() != o.id {
+			if bid.EnsembleID() != b.eid {
 				log.Debugw("bid for unexpected ensemble id",
 					"labels", []string{string(observability.LabelDeployment)},
-					"expectedID", o.id,
+					"expectedID", b.eid,
 					"gotID", bid.EnsembleID())
 				continue
 			}
@@ -430,7 +451,7 @@ func (o *BasicOrchestrator) collectBids(
 	}
 }
 
-func (o *BasicOrchestrator) makeCandidateDeployments(
+func (b *BidCoordinator) makeCandidateDeployments(
 	cfg jtypes.EnsembleConfig, bids map[string][]jtypes.Bid,
 ) (func() (map[string]jtypes.Bid, bool), bool) {
 	// immediate satisfaction check: we need a bid for every node
@@ -453,13 +474,13 @@ func (o *BasicOrchestrator) makeCandidateDeployments(
 	}
 
 	if bits > 63 {
-		return o.makeCandidateDeploymentBig(cfg, bids)
+		return b.makeCandidateDeploymentBig(cfg, bids)
 	}
 
-	return o.makeCandidateDeploymentSmall(cfg, bids)
+	return b.makeCandidateDeploymentSmall(cfg, bids)
 }
 
-func (o *BasicOrchestrator) makeCandidateDeploymentSmall(
+func (b *BidCoordinator) makeCandidateDeploymentSmall(
 	cfg jtypes.EnsembleConfig, bids map[string][]jtypes.Bid,
 ) (func() (map[string]jtypes.Bid, bool), bool) {
 	// fix the order of permutation
@@ -506,7 +527,7 @@ func (o *BasicOrchestrator) makeCandidateDeploymentSmall(
 			nextPerm := rand.Int63n(nperm)
 			perm := getPermutation(nextPerm)
 
-			if !o.checkPermutationEdgeConstraints(cfg, perm) {
+			if !b.checkPermutationEdgeConstraints(cfg, perm) {
 				continue
 			}
 
@@ -517,7 +538,7 @@ func (o *BasicOrchestrator) makeCandidateDeploymentSmall(
 	}, true
 }
 
-func (o *BasicOrchestrator) makeCandidateDeploymentBig(
+func (b *BidCoordinator) makeCandidateDeploymentBig(
 	cfg jtypes.EnsembleConfig, bids map[string][]jtypes.Bid,
 ) (func() (map[string]jtypes.Bid, bool), bool) {
 	// Note: this is the same as above with bignums
@@ -576,7 +597,7 @@ func (o *BasicOrchestrator) makeCandidateDeploymentBig(
 			nextPerm := new(big.Int).SetBytes(bytes)
 			perm := getPermutation(nextPerm)
 
-			if !o.checkPermutationEdgeConstraints(cfg, perm) {
+			if !b.checkPermutationEdgeConstraints(cfg, perm) {
 				continue
 			}
 
@@ -587,7 +608,7 @@ func (o *BasicOrchestrator) makeCandidateDeploymentBig(
 	}, true
 }
 
-func (o *BasicOrchestrator) checkPermutationEdgeConstraints(
+func (b *BidCoordinator) checkPermutationEdgeConstraints(
 	cfg jtypes.EnsembleConfig, candidate map[string]jtypes.Bid,
 ) bool {
 	for _, cst := range cfg.EdgeConstraints() {
@@ -606,13 +627,13 @@ func (o *BasicOrchestrator) checkPermutationEdgeConstraints(
 			return false
 		}
 
-		locS, err := o.geo.Coordinate(bidS.Location())
+		locS, err := b.geo.Coordinate(bidS.Location())
 		if err != nil {
 			log.Errorf("Failed to get location for bid %s: %v", bidS.NodeID(), err)
 			continue
 		}
 
-		locT, err := o.geo.Coordinate(bidT.Location())
+		locT, err := b.geo.Coordinate(bidT.Location())
 		if err != nil {
 			log.Errorf("Failed to get location for bid %s: %v", bidT.NodeID(), err)
 			continue
@@ -638,7 +659,7 @@ func (o *BasicOrchestrator) checkPermutationEdgeConstraints(
 	return true
 }
 
-func (o *BasicOrchestrator) verifyEdgeConstraints(
+func (b *BidCoordinator) verifyEdgeConstraints(
 	cfg jtypes.EnsembleConfig, candidate map[string]jtypes.Bid, cache map[string]bool,
 ) bool {
 	var mx sync.Mutex
@@ -668,7 +689,7 @@ func (o *BasicOrchestrator) verifyEdgeConstraints(
 	for _, cst := range toVerify {
 		go func(cst jtypes.EdgeConstraint) {
 			defer wg.Done()
-			result := o.verifyEdgeConstraint(candidate, cst)
+			result := b.verifyEdgeConstraint(candidate, cst)
 			bidS := candidate[cst.S]
 			bidT := candidate[cst.T]
 			key := bidS.Peer() + ":" + bidT.Peer()
@@ -695,7 +716,7 @@ type VerifyEdgeConstraintResponse struct {
 	Error string
 }
 
-func (o *BasicOrchestrator) verifyEdgeConstraint(candidate map[string]jtypes.Bid, cst jtypes.EdgeConstraint) bool {
+func (b *BidCoordinator) verifyEdgeConstraint(candidate map[string]jtypes.Bid, cst jtypes.EdgeConstraint) bool {
 	bidS := candidate[cst.S]
 	bidT := candidate[cst.T]
 	key := bidS.Peer() + ":" + bidT.Peer()
@@ -707,11 +728,11 @@ func (o *BasicOrchestrator) verifyEdgeConstraint(candidate map[string]jtypes.Bid
 
 	handle := bidS.Handle()
 	msg, err := actor.Message(
-		o.actor.Handle(),
+		b.actor.Handle(),
 		handle,
 		behaviors.VerifyEdgeConstraintBehavior,
 		VerifyEdgeConstraintRequest{
-			EnsembleID: o.id,
+			EnsembleID: b.eid,
 			S:          bidS.Peer(),
 			T:          bidT.Peer(),
 			RTT:        cst.RTT,
@@ -727,7 +748,7 @@ func (o *BasicOrchestrator) verifyEdgeConstraint(candidate map[string]jtypes.Bid
 		return false
 	}
 
-	replyCh, err := o.actor.Invoke(msg)
+	replyCh, err := b.actor.Invoke(msg)
 	if err != nil {
 		log.Warnw("invoke constraint check error",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -808,11 +829,11 @@ func acceptPeerLocation(
 	return true
 }
 
-func (o *BasicOrchestrator) makeInitialBidRequest(cfg jtypes.EnsembleConfig) (jtypes.EnsembleBidRequest, error) {
-	return o.ensembleConfigToBidRequest(&cfg)
+func (b *BidCoordinator) makeInitialBidRequest(cfg jtypes.EnsembleConfig) (jtypes.EnsembleBidRequest, error) {
+	return b.ensembleConfigToBidRequest(&cfg)
 }
 
-func (o *BasicOrchestrator) makeResidualBidRequest(
+func (b *BidCoordinator) makeResidualBidRequest(
 	cfg jtypes.EnsembleConfig,
 	candidate map[string][]jtypes.Bid, rmbid func(jtypes.Bid),
 ) (jtypes.EnsembleBidRequest, error) {
@@ -870,7 +891,7 @@ func (o *BasicOrchestrator) makeResidualBidRequest(
 		}
 	}
 
-	result, err := o.ensembleConfigToBidRequest(&residualConfig)
+	result, err := b.ensembleConfigToBidRequest(&residualConfig)
 	if err != nil {
 		return result, err
 	}
@@ -882,17 +903,17 @@ func (o *BasicOrchestrator) makeResidualBidRequest(
 	return result, nil
 }
 
-func (o *BasicOrchestrator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfig) (jtypes.EnsembleBidRequest, error) {
+func (b *BidCoordinator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfig) (jtypes.EnsembleBidRequest, error) {
 	v1Config := config.V1
 
 	ensembleBidRequest := jtypes.EnsembleBidRequest{
-		ID:    o.id,
-		Nonce: o.getNonce(),
+		ID:    b.eid,
+		Nonce: b.getNonce(),
 	}
 
 	log.Infow("generating bid request",
 		"labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", o.id,
+		"orchestratorID", b.eid,
 		"nodes", v1Config.Nodes)
 	for nodeID, nodeConfig := range v1Config.Nodes {
 		bidRequest := jtypes.BidRequest{
@@ -958,9 +979,9 @@ func (o *BasicOrchestrator) ensembleConfigToBidRequest(config *jtypes.EnsembleCo
 	return ensembleBidRequest, nil
 }
 
-func (o *BasicOrchestrator) getNonce() uint64 {
-	atomic.AddUint64(&o.nonce, 1)
-	return o.nonce
+func (b *BidCoordinator) getNonce() uint64 {
+	atomic.AddUint64(&b.nonce, 1)
+	return b.nonce
 }
 
 func containsExecutor(executors []jtypes.AllocationExecutor, executor jtypes.AllocationExecutor) bool {

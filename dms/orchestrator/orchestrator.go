@@ -22,7 +22,6 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
@@ -76,8 +75,6 @@ type Orchestrator interface {
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
 }
 
-// TODO: use immutable data structures (there are libraries for that), specially
-// for EnsembleManifest and EnsembleConfig
 type BasicOrchestrator struct {
 	lock   sync.Mutex
 	ctx    context.Context
@@ -86,7 +83,6 @@ type BasicOrchestrator struct {
 	fs      afero.Afero
 	workDir string
 	actor   actor.Actor
-	geo     geolocation.LocationProvider
 
 	id             string
 	cfg            jtypes.EnsembleConfig
@@ -96,8 +92,6 @@ type BasicOrchestrator struct {
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
 	supervisor         *Supervisor
-
-	nonce uint64
 
 	// Status subscribers
 	statusSubscribers     map[chan jtypes.DeploymentStatus]struct{}
@@ -118,11 +112,6 @@ func NewOrchestrator(
 		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
 	}
 
-	geo, err := geolocation.NewGeoLocator()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create geolocator: %w", err)
-	}
-
 	subnet, err := newSubnetManifest()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create subnet manifest: %w", err)
@@ -130,7 +119,6 @@ func NewOrchestrator(
 
 	o := &BasicOrchestrator{
 		actor:             oActor,
-		geo:               geo,
 		id:                id,
 		cfg:               cfg,
 		ctx:               ctx,
@@ -302,7 +290,12 @@ deploy:
 		}
 
 		// 1. bid
-		candidateDeployment, err := o.bid(cfg, expiry)
+		bidCoordinator, err := NewBidCoordinator(o.id, o.actor)
+		if err != nil {
+			return fmt.Errorf("failed to create bidder: %w", err)
+		}
+
+		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), expiry)
 		if err != nil {
 			if errors.Is(err, ErrCandidateNotFound) {
 				log.Warnf("candidate deployment not found, redeploying: %v", err)
@@ -315,24 +308,43 @@ deploy:
 
 		// 2. Commit the deployment
 		o.deploymentSnapshot.Candidates = candidateDeployment
-		manifest, err := o.commit(cfg, partialManifest, candidateDeployment)
+		o.setStatus(jtypes.DeploymentStatusCommitting)
+
+		committer := NewCommitter(o.ctx, o.id, o.actor)
+
+		manifestAfterCommit, err := committer.commit(
+			jtypes.NewEnsembleCfgReader(cfg),
+			jtypes.NewManifestReader(partialManifest),
+			candidateDeployment,
+		)
 		if err != nil {
 			log.Warnw("failed to commit deployment",
 				"labels", []string{string(observability.LabelDeployment)},
 				"orchestratorID", o.id,
 				"error", err)
+
+			for nodeName, n := range manifestAfterCommit.Nodes {
+				o.revertNodeDeployment(cfg, nodeName, n.Handle)
+			}
 			continue deploy
 		}
 
+		o.updateManifest(manifestAfterCommit)
+
 		// 3. provision the network and start the allocations
-		if err := o.provision(cfg, manifest); err != nil {
+		mnfJSON, err := manifestAfterCommit.JSON()
+		if err != nil {
+			return fmt.Errorf("failed to marshal manifest: %w", err)
+		}
+		log.Debugf("manifest after commit:\n", string(mnfJSON))
+		if err := o.provision(cfg, manifestAfterCommit); err != nil {
 			log.Errorw("provisioning failed",
 				"labels", []string{string(observability.LabelDeployment)},
 				"error", err,
 				"orchestratorID", o.id)
 
 			o.lock.Lock()
-			o.revert(cfg, manifest)
+			o.revert(cfg, manifestAfterCommit)
 			o.lock.Unlock()
 			continue deploy
 		}
@@ -464,4 +476,12 @@ func (o *BasicOrchestrator) DeploymentSnapshot() jtypes.DeploymentSnapshot {
 	defer o.lock.Unlock()
 
 	return o.deploymentSnapshot
+}
+
+func (o *BasicOrchestrator) updateManifest(m jtypes.EnsembleManifest) {
+	o.lock.Lock()
+	// cloning since the orchestrator original manifest state
+	// might inherit map references of partial updates
+	o.manifest = m.Clone()
+	o.lock.Unlock()
 }

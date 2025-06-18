@@ -21,7 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/observability"
 )
 
-var MonitorOnlyTaskManifestInterval = time.Second * 10
+var monitorOnlyTaskManifestInterval = time.Second * 10
 
 func (o *BasicOrchestrator) provision(
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
@@ -280,7 +280,7 @@ func (o *BasicOrchestrator) monitorOnlyTaskManifest(m jtypes.EnsembleManifest) {
 		return
 	}
 
-	ticker := time.NewTicker(MonitorOnlyTaskManifestInterval)
+	ticker := time.NewTicker(monitorOnlyTaskManifestInterval)
 	defer ticker.Stop()
 selectLoop:
 	for {
