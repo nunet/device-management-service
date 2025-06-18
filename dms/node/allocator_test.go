@@ -216,54 +216,44 @@ func TestPortAllocator(t *testing.T) {
 func TestAllocatorCommit(t *testing.T) {
 	t.Parallel()
 
-	t.Run("must start the allocator", func(t *testing.T) {
+	const testAllocID = "test-alloc"
+	ctx := context.Background()
+	subs := network.NewSubstrate()
+
+	inRangeResources := types.CommittedResources{
+		AllocationID: testAllocID,
+		Resources: types.Resources{
+			CPU: types.CPU{Cores: 1},
+			RAM: types.RAM{Size: 1},
+		},
+	}
+	beyondRangeResources := types.CommittedResources{
+		AllocationID: testAllocID,
+		Resources: types.Resources{
+			CPU:  types.CPU{Cores: MockTotalCPU + 1},
+			RAM:  types.RAM{Size: MockTotalRAM + 1},
+			Disk: types.Disk{Size: MockTotalDisk + 1},
+		},
+	}
+
+	portsInRange := map[int]int{
+		portRangeFrom + 1: portRangeFrom + 1,
+		portRangeTo - 1:   portRangeTo - 1,
+	}
+	portsOutOfRange := map[int]int{
+		portRangeFrom - 100: portRangeFrom - 100,
+		portRangeTo + 100:   portRangeTo + 100,
+	}
+
+	t.Run("successful", func(t *testing.T) {
 		t.Parallel()
 
-		const testAllocID = "test-alloc" // Scoped constant for this test
-
-		ctx := context.Background()
-
-		subs := network.NewSubstrate()
 		alloc, _, _ := newMockAllocator(t, subs)
-
-		err := alloc.Run()
-		require.NoError(t, err, "Run should not return an error")
-		defer func() {
-			err := alloc.Stop(ctx)
-			assert.NoError(t, err, "Stop should not return an error")
-		}()
-
-		inRangeCommit := types.CommittedResources{
-			AllocationID: testAllocID,
-			Resources: types.Resources{
-				CPU: types.CPU{Cores: 1},
-				RAM: types.RAM{Size: 1},
-			},
-		}
-		beyondRangeCommit := types.CommittedResources{
-			AllocationID: testAllocID,
-			Resources: types.Resources{
-				CPU:  types.CPU{Cores: MockTotalCPU + 1},
-				RAM:  types.RAM{Size: MockTotalRAM + 1},
-				Disk: types.Disk{Size: MockTotalDisk + 1},
-			},
-		}
-
-		portsInRange := map[int]int{
-			portRangeFrom + 1: portRangeFrom + 1,
-			portRangeTo - 1:   portRangeTo - 1,
-		}
-		portsOutOfRange := map[int]int{
-			portRangeFrom - 100: portRangeFrom - 100,
-			portRangeTo + 100:   portRangeTo + 100,
-		}
 
 		// no commits on start
 		assert.Empty(t, alloc.getCommits(), "commits should be empty on start")
 
-		// test committing resources within range
-		err = alloc.Commit(ctx, testAllocID, inRangeCommit, portsInRange, 0, 0)
-
+		err := alloc.Commit(ctx, testAllocID, inRangeResources, portsInRange, 0, 0)
 		assert.NoError(t, err, "commit should not return an error")
 
 		expiry, exists := alloc.getCommit(testAllocID)
@@ -276,46 +266,73 @@ func TestAllocatorCommit(t *testing.T) {
 		_, exists = alloc.getCommit(testAllocID)
 		assert.False(t, exists, "commit should not exist after uncommit")
 		assert.Empty(t, alloc.getCommits(), "commits should be empty after uncommit")
+	})
 
+	t.Run("uncommitting non-existent allocation", func(t *testing.T) {
+		t.Parallel()
+
+		alloc, _, _ := newMockAllocator(t, subs)
 		// test uncommitting a non-existent allocation
-		err = alloc.Uncommit(ctx, "non-existent-alloc")
+		err := alloc.Uncommit(ctx, "non-existent-alloc")
 		assert.NoError(t, err, "uncommit should not return an error for non-existent allocation")
-		_, exists = alloc.getCommit("non-existent-alloc")
+		_, exists := alloc.getCommit("non-existent-alloc")
 		assert.False(t, exists, "commit should not exist for non-existent allocation")
+	})
 
+	t.Run("re-committing an already committed allocation", func(t *testing.T) {
+		t.Parallel()
+
+		alloc, _, _ := newMockAllocator(t, subs)
 		// test committing an already committed allocation with 5 dynamic ports
-		err = alloc.Commit(ctx, testAllocID, inRangeCommit, nil, 5, 0)
+		err := alloc.Commit(ctx, testAllocID, inRangeResources, nil, 5, 0)
 		assert.NoError(t, err, "commit should not return an error")
-		err = alloc.Commit(ctx, testAllocID, inRangeCommit, nil, 0, 0)
+		err = alloc.Commit(ctx, testAllocID, inRangeResources, nil, 0, 0)
 		assert.Error(t, err, "commit should return an error for already committed allocation")
-		_, exists = alloc.getCommit(testAllocID)
+		_, exists := alloc.getCommit(testAllocID)
 		assert.True(t, exists, "commit should exist after re-commit")
 		err = alloc.Uncommit(ctx, testAllocID)
 		assert.NoError(t, err, "uncommit should not return an error")
 		_, exists = alloc.getCommit(testAllocID)
 		assert.False(t, exists, "commit should not exist after uncommit")
+	})
 
-		// test committing resources beyond range
-		err = alloc.Commit(ctx, testAllocID, beyondRangeCommit, portsInRange, 0, 0)
+	t.Run("committing resources beyond range", func(t *testing.T) {
+		t.Parallel()
+
+		alloc, _, _ := newMockAllocator(t, subs)
+		// with resources beyond range
+		err := alloc.Commit(ctx, testAllocID, beyondRangeResources, portsInRange, 0, 0)
 		assert.Error(t, err, "commit should return an error for resources beyond range")
-		_, exists = alloc.getCommit(testAllocID)
+		_, exists := alloc.getCommit(testAllocID)
 		assert.False(t, exists, "commit should not exist after failed commit")
 		err = alloc.Uncommit(ctx, testAllocID)
 		assert.NoError(t, err, "uncommit should not return an error for non-existent allocation")
 		_, exists = alloc.getCommit(testAllocID)
 		assert.False(t, exists, "commit should not exist after uncommit")
+		isResourceCommitted, err := alloc.resources.IsCommitted(testAllocID)
+		assert.NoError(t, err, "IsCommitted should not return an error")
+		assert.False(t, isResourceCommitted, "resources should not be committed after failed commit")
+		assert.False(t,
+			alloc.ports.isAllocated([]int{portRangeFrom + 1, portRangeTo - 1}),
+			"ports should not be allocated after failed commit")
 
-		// test committing resources with out-of-range ports
-		err = alloc.Commit(ctx, testAllocID, inRangeCommit, portsOutOfRange, 0, 0)
+		// with out-of-range ports
+		err = alloc.Commit(ctx, testAllocID, inRangeResources, portsOutOfRange, 0, 0)
 		assert.Error(t, err, "commit should return an error for out-of-range ports")
 		_, exists = alloc.getCommit(testAllocID)
 		assert.False(t, exists, "commit should not exist after failed commit")
+		assert.Empty(t, alloc.ports.allocations, "ports allocations should be empty after failed commit")
 
-		// test committing resources with out-of-range dynamic ports
-		err = alloc.Commit(ctx, testAllocID, inRangeCommit, portsInRange, 999999, 0)
+		// with out-of-range dynamic ports
+		err = alloc.Commit(ctx, testAllocID, inRangeResources, portsInRange, 999999, 0)
 		assert.Error(t, err, "commit should return an error for out-of-range dynamic ports")
 		_, exists = alloc.getCommit(testAllocID)
 		assert.False(t, exists, "commit should not exist after failed commit")
+		isResourceCommitted, err = alloc.resources.IsCommitted(testAllocID)
+		assert.NoError(t, err, "IsCommitted should not return an error")
+		assert.False(t, isResourceCommitted, "resources should not be committed after failed commit")
+		assert.Empty(t, alloc.ports.allocations, "ports allocations should be empty")
+		assert.Empty(t, alloc.ports.reserved, "ports reserved should be empty")
 	})
 }
 
