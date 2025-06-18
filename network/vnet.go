@@ -11,6 +11,7 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -139,6 +140,10 @@ func (h *MemoryHost) SendMessage(
 	env types.MessageEnvelope,
 	_ time.Time,
 ) error {
+	if hostID == "" {
+		return errors.New("virtual: empty hostID")
+	}
+
 	// TODO: instead of checking self explicitly
 	// solve the mutex locks
 	if h.pid.String() == hostID {
@@ -154,7 +159,7 @@ func (h *MemoryHost) SendMessage(
 	targetHost, ok := h.peers[hostID]
 	h.mx.RUnlock()
 	if !ok {
-		return errors.New("virtual: peer not connected")
+		return fmt.Errorf("virtual: peer %s not conneced", hostID)
 	}
 
 	targetHost.mx.RLock()
