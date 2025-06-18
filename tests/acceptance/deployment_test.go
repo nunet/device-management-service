@@ -23,12 +23,6 @@ import (
 	dutils "gitlab.com/nunet/device-management-service/utils"
 )
 
-type (
-	nodesCtxKey    struct{}
-	nodeMapCtxKey  struct{}
-	ensembleCtxKey struct{}
-)
-
 var opts = godog.Options{
 	Output:        colors.Colored(os.Stdout),
 	Concurrency:   4,
@@ -59,9 +53,11 @@ func TestFeatures(t *testing.T) {
 
 func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (context.Context, error) {
 	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
 
-	nodes, ok := ctx.Value(nodesCtxKey{}).([]*utils.Node)
-	assert.True(t, ok)
+	nodes, err := tc.Nodes()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
 	spName = strings.ToLower(spName)
 	cpName = strings.ToLower(cpName)
@@ -77,7 +73,7 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	cp := nodeMap[cpName]
 	org := nodeMap[orgName]
 
-	ctx = context.WithValue(ctx, nodeMapCtxKey{}, nodeMap)
+	tc = tc.WithNodeMap(nodeMap)
 
 	// only Bob (compute provider) needs Docker
 	// launch goroutine while setting up capabilities
@@ -108,7 +104,7 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 		orgName: org,
 	}
 	// update ctx after nodes have been updated with capability contexts
-	ctx = context.WithValue(ctx, nodeMapCtxKey{}, nodeMap)
+	tc = tc.WithNodeMap(nodeMap)
 
 	spGrant, err := spUserCtx.Grant(orgCtx.DID)
 	assert.NoError(t, err, "sp failed to grant org", spGrant)
@@ -190,22 +186,23 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	ensembleID, err := spDmsCtx.Deploy(spEnsemble)
 	assert.NoError(t, err)
 
-	ctx = context.WithValue(ctx, ensembleCtxKey{}, ensembleID)
-	return ctx, nil
+	tc = tc.WithEnsembleID(ensembleID)
+	return tc.Unwrap(), nil
 }
 
 func deploymentIsCompleted(ctx context.Context, spName string) (context.Context, error) {
 	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, ok := ctx.Value(nodeMapCtxKey{}).(map[string]*utils.Node)
-	assert.True(t, ok)
+	nodeMap, err := tc.NodeMap()
+	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
 	spName = strings.ToLower(spName)
 	sp := nodeMap[spName]
 
-	ensembleID, ok := ctx.Value(ensembleCtxKey{}).(string)
-	assert.True(t, ok)
+	ensembleID, err := tc.EnsembleID()
+	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	require.Eventually(t, func() bool {
@@ -216,21 +213,22 @@ func deploymentIsCompleted(ctx context.Context, spName string) (context.Context,
 		return status == "Completed"
 	}, 20*time.Second, 1*time.Second)
 
-	return ctx, nil
+	return tc.Unwrap(), nil
 }
 
 func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, ok := ctx.Value(nodeMapCtxKey{}).(map[string]*utils.Node)
-	assert.True(t, ok)
+	nodeMap, err := tc.NodeMap()
+	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
 	spName = strings.ToLower(spName)
 	sp := nodeMap[spName]
 
-	ensembleID, ok := ctx.Value(ensembleCtxKey{}).(string)
-	assert.True(t, ok)
+	ensembleID, err := tc.EnsembleID()
+	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
@@ -306,16 +304,20 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 		}
 
 		fmt.Printf("finished setting up nodes, time elapsed: %.1fs\n", time.Since(start).Seconds())
-		ctx = context.WithValue(ctx, nodesCtxKey{}, nodes)
-		ctx = context.WithValue(ctx, ensembleCtxKey{}, "")
-		return ctx, nil
+
+		tc := utils.NewTestCtx(ctx)
+		tc = tc.WithNodes(nodes)
+		tc = tc.WithEnsembleID("")
+		return tc.Unwrap(), nil
 	})
 
 	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		tc := utils.NewTestCtx(ctx)
+
 		fmt.Println("test finished. destroying machines...")
 		start := time.Now()
 
-		nodes, _ := ctx.Value(nodesCtxKey{}).([]*utils.Node)
+		nodes, _ := tc.Nodes()
 		g := new(errgroup.Group)
 		for _, n := range nodes {
 			g.Go(func() error {
@@ -327,8 +329,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 		}
 
 		fmt.Printf("teardown done! time elapsed: %.1fs\n", time.Since(start).Seconds())
-		ctx = context.WithValue(ctx, nodesCtxKey{}, nil)
-		return ctx, nil
+		tc = tc.WithNodes(nil)
+		return tc.Unwrap(), nil
 	})
 
 	ctx.Step(`^"([^"]*)" has deployed docker_hello\.yaml on "([^"]*)"$`, hasDeployedDockerHelloOn)
