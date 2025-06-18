@@ -323,6 +323,13 @@ func (a *allocator) Commit(ctx context.Context,
 		return fmt.Errorf("commit resources: %w", err)
 	}
 
+	// revert in case of a failure in following steps
+	revertResourceCommit := func() {
+		if err := a.resources.UncommitResources(ctx, allocationID); err != nil {
+			log.Warnf("failed to revert resource commit for allocation %s: %v", allocationID, err)
+		}
+	}
+
 	// commit the ports
 	if len(ports) > 0 {
 		staticPorts := make([]int, 0, len(ports))
@@ -332,6 +339,7 @@ func (a *allocator) Commit(ctx context.Context,
 
 		err := a.ports.Allocate(allocationID, staticPorts)
 		if err != nil {
+			revertResourceCommit()
 			return fmt.Errorf("allocate port: %w", err)
 		}
 	}
@@ -340,6 +348,10 @@ func (a *allocator) Commit(ctx context.Context,
 	if numDynamicPorts > 0 {
 		_, err := a.ports.AllocateRandom(allocationID, numDynamicPorts)
 		if err != nil {
+			// uncommit the resources
+			revertResourceCommit()
+			// release the static ports if they were allocated
+			a.ports.Release(allocationID)
 			return fmt.Errorf("failed to allocate ports: %w", err)
 		}
 	}
