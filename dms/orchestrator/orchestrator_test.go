@@ -648,11 +648,6 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 	// Verify final state
 	assert.Equal(t, jtypes.DeploymentStatusRunning, o.Status())
 
-	// node, ok := o.manifest.Nodes["node1"]
-	// require.True(t, ok)
-	// node.Handle = provider.handle
-	// o.updateNodeManifest("node1", o.manifest.Nodes["node1"])
-
 	// Test GetAllocationLogs
 	logs, err := o.GetAllocationLogs("alloc1")
 	require.NoError(t, err)
@@ -1994,7 +1989,7 @@ func TestMonitorOnlyTaskManifest(t *testing.T) {
 		o.cancel = cancel
 		defer cancel()
 
-		go o.monitorOnlyTaskManifest(manifest)
+		go o.monitorOnlyTaskManifest()
 		time.Sleep(250 * time.Millisecond)
 		assert.NotEqual(t, jtypes.DeploymentStatusCompleted, o.Status())
 
@@ -2027,7 +2022,7 @@ func TestMonitorOnlyTaskManifest(t *testing.T) {
 
 		done := make(chan struct{})
 		go func() {
-			o.monitorOnlyTaskManifest(manifest)
+			o.monitorOnlyTaskManifest()
 			close(done)
 		}()
 
@@ -2069,7 +2064,7 @@ func TestMonitorOnlyTaskManifest(t *testing.T) {
 		}
 
 		o.manifest = serviceManifest
-		go o.monitorOnlyTaskManifest(serviceManifest)
+		go o.monitorOnlyTaskManifest()
 
 		time.Sleep(250 * time.Millisecond)
 		assert.NotEqual(t, jtypes.DeploymentStatusCompleted, o.Status())
@@ -2148,6 +2143,8 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
 	require.NoError(t, err)
 
+	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest)
+
 	// Prepare routing table and DNS records
 	indexRoutingTable := map[string]string{"orchestrator": "10.0.0.2"}
 	dnsRecords := map[string]string{"orchestrator": "10.0.0.2"}
@@ -2178,7 +2175,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 			},
 		}
 
-		err = o.orchestratorJoinSubnet(indexRoutingTable, dnsRecords)
+		err = p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
 		assert.NoError(t, err)
 		<-ch
 	})
@@ -2195,7 +2192,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 			require.NoError(t, orch.actor.Send(reply))
 		}))
 
-		err := o.orchestratorJoinSubnet(indexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "join failed")
 	})
@@ -2208,7 +2205,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 		}))
 		orchestratorJoinTimeout = 1 * time.Second
 
-		err := o.orchestratorJoinSubnet(indexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "timeout joining orchestrator to subnet")
 	})
@@ -2409,7 +2406,7 @@ func TestSupervisorUpdate(t *testing.T) {
 	}
 
 	// Start supervisor with initial manifest
-	go o.supervisor.Supervise(initialManifest)
+	go o.supervisor.Supervise(jtypes.NewManifestReader(initialManifest))
 
 	// Updated manifest with new allocation
 	updatedManifest := jtypes.EnsembleManifest{
@@ -2480,7 +2477,7 @@ func TestSupervisorUpdate(t *testing.T) {
 		assert.False(t, ok)
 
 		// Update supervisor with new manifest
-		o.supervisor.Update(updatedManifest)
+		o.supervisor.Update(jtypes.NewManifestReader(updatedManifest))
 
 		// Wait for healthcheck registration
 		select {
@@ -2527,7 +2524,7 @@ func TestSupervisorUpdate(t *testing.T) {
 		}
 
 		// Update supervisor with removed allocation
-		o.supervisor.Update(removedManifest)
+		o.supervisor.Update(jtypes.NewManifestReader(removedManifest))
 
 		// Verify alloc2 is no longer in manifest
 		_, ok := o.supervisor.getAllocation("alloc2")
@@ -2860,112 +2857,6 @@ func TestCheckPermutationEdgeConstraints(t *testing.T) {
 	})
 }
 
-func TestUpdateAllocationStatus(t *testing.T) {
-	substrate := network.NewSubstrate()
-	orch := MakeOrchestrator(t, substrate)
-
-	cfg := jtypes.EnsembleConfig{
-		V1: &jtypes.EnsembleConfigV1{
-			Nodes: map[string]jtypes.NodeConfig{
-				"node1": {
-					Location: jtypes.LocationConstraints{
-						Accept: []jtypes.Location{
-							{Country: "US"},
-						},
-					},
-					Allocations: []string{"alloc1"},
-				},
-			},
-			Allocations: map[string]jtypes.AllocationConfig{
-				"alloc1": {
-					Type: jtypes.AllocationTypeService,
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      1,
-							ClockSpeed: 1000,
-						},
-						RAM: types.RAM{
-							Size: 1024,
-						},
-						Disk: types.Disk{
-							Size: 1024,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
-	require.NoError(t, err)
-
-	// Initialize manifest
-	o.manifest = o.newManifest(cfg)
-
-	// Test updating allocation status
-	require.NoError(t, o.updateAllocationStatus("alloc1", jtypes.AllocationRunning))
-	assert.Equal(t, jtypes.AllocationRunning, o.manifest.Allocations["alloc1"].Status)
-
-	// Test updating non-existent allocation
-	require.Error(t, o.updateAllocationStatus("nonexistent", jtypes.AllocationRunning))
-}
-
-func TestUpdateAllocationIP(t *testing.T) {
-	substrate := network.NewSubstrate()
-	orch := MakeOrchestrator(t, substrate)
-
-	cfg := jtypes.EnsembleConfig{
-		V1: &jtypes.EnsembleConfigV1{
-			Nodes: map[string]jtypes.NodeConfig{
-				"node1": {
-					Location: jtypes.LocationConstraints{
-						Accept: []jtypes.Location{
-							{Country: "US"},
-						},
-					},
-					Allocations: []string{"alloc1"},
-				},
-			},
-			Allocations: map[string]jtypes.AllocationConfig{
-				"alloc1": {
-					Type: jtypes.AllocationTypeService,
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      1,
-							ClockSpeed: 1000,
-						},
-						RAM: types.RAM{
-							Size: 1024,
-						},
-						Disk: types.Disk{
-							Size: 1024,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
-	require.NoError(t, err)
-
-	// Initialize manifest
-	o.manifest = o.newManifest(cfg)
-
-	// Test updating allocation IP
-	require.NoError(t, o.updateAllocationIP("alloc1", "192.168.1.1"))
-	assert.Equal(t, "192.168.1.1", o.manifest.Allocations["alloc1"].PrivAddr)
-
-	// Test updating non-existent allocation
-	require.Error(t, o.updateAllocationIP("nonexistent", "192.168.1.1"))
-}
-
 func TestGetNonce(t *testing.T) {
 	substrate := network.NewSubstrate()
 	orch := MakeOrchestrator(t, substrate)
@@ -2988,46 +2879,13 @@ func TestProvisionSubnet(t *testing.T) {
 
 	provider.MockDeploymentBehaviors(t)
 
-	cfg := jtypes.EnsembleConfig{
-		V1: &jtypes.EnsembleConfigV1{
-			Nodes: map[string]jtypes.NodeConfig{
-				"node1": {
-					Location: jtypes.LocationConstraints{
-						Accept: []jtypes.Location{
-							{Country: "US"},
-						},
-					},
-					Allocations: []string{"alloc1"},
-				},
-			},
-			Allocations: map[string]jtypes.AllocationConfig{
-				"alloc1": {
-					Type: jtypes.AllocationTypeService,
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      1,
-							ClockSpeed: 1000,
-						},
-						RAM: types.RAM{
-							Size: 1024,
-						},
-						Disk: types.Disk{
-							Size: 1024,
-						},
-					},
-				},
-			},
-		},
-	}
+	ctx, cancel := context.WithCancel(context.Background())
 
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	subnetManifest, err := newSubnetManifest()
 	require.NoError(t, err)
+	p := NewProvisioner(ctx, cancel, orch.actor, subnetManifest)
 
-	// Initialize manifest
-	o.manifest = o.newManifest(cfg)
+	const ensembleID = "test-ensemble"
 
 	// Test provisioning subnet
 	subReqs := []subnetRequest{
@@ -3042,9 +2900,9 @@ func TestProvisionSubnet(t *testing.T) {
 		"peer1": "10.0.0.2",
 	}
 	subCreateHandles := []actor.Handle{provider.handle}
-	err = o.createSubnet(subReqs, routingTable, subCreateHandles)
+	err = p.createSubnet(ensembleID, subReqs, routingTable, subCreateHandles)
 	require.NoError(t, err)
-	<-provider.channels[fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "test-ensemble")]
+	<-provider.channels[fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID)]
 }
 
 func TestIsOnlyTaskManifest(t *testing.T) {
@@ -3085,7 +2943,6 @@ func TestIsOnlyTaskManifest(t *testing.T) {
 
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
-
 	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
 	require.NoError(t, err)
 
@@ -3093,7 +2950,7 @@ func TestIsOnlyTaskManifest(t *testing.T) {
 	o.manifest = o.newManifest(cfg)
 
 	// Test manifest with only tasks
-	assert.True(t, o.isOnlyTaskManifest(o.manifest))
+	assert.True(t, isOnlyTaskManifest(o.manifest))
 
 	// Add a service allocation
 	cfg.V1.Allocations["alloc2"] = jtypes.AllocationConfig{
@@ -3114,7 +2971,7 @@ func TestIsOnlyTaskManifest(t *testing.T) {
 	o.manifest = o.newManifest(cfg)
 
 	// Test manifest with mixed allocations
-	assert.False(t, o.isOnlyTaskManifest(o.manifest))
+	assert.False(t, isOnlyTaskManifest(o.manifest))
 }
 
 func TestSubnetAddPeer(t *testing.T) {
@@ -3162,6 +3019,12 @@ func TestSubnetAddPeer(t *testing.T) {
 	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
 	require.NoError(t, err)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	subnetManifest, err := newSubnetManifest()
+	require.NoError(t, err)
+	p := NewProvisioner(ctx, cancel, orch.actor, subnetManifest)
+
 	// Initialize manifest
 	o.manifest = o.newManifest(cfg)
 
@@ -3174,7 +3037,7 @@ func TestSubnetAddPeer(t *testing.T) {
 			ports:  map[int]int{8080: 8080},
 		},
 	}
-	err = o.subnetAddPeer(subReqs)
+	err = p.subnetAddPeer(o.manifest.ID, subReqs)
 	require.NoError(t, err)
 	<-provider.channels[behaviors.SubnetAddPeerBehavior]
 }
@@ -3224,6 +3087,8 @@ func TestAddDNSRecords(t *testing.T) {
 	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
 	require.NoError(t, err)
 
+	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest)
+
 	// Initialize manifest
 	o.manifest = o.newManifest(cfg)
 
@@ -3239,7 +3104,7 @@ func TestAddDNSRecords(t *testing.T) {
 	dnsRecords := map[string]string{
 		"alloc1.internal": "10.0.0.2",
 	}
-	err = o.addDNSRecords(subReqs, dnsRecords)
+	err = p.addDNSRecords(o.manifest.ID, subReqs, dnsRecords)
 	require.NoError(t, err)
 	<-provider.channels[behaviors.SubnetDNSAddRecordsBehavior]
 }
@@ -3289,6 +3154,8 @@ func TestMapPorts(t *testing.T) {
 	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
 	require.NoError(t, err)
 
+	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest)
+
 	// Initialize manifest
 	o.manifest = o.newManifest(cfg)
 
@@ -3301,7 +3168,7 @@ func TestMapPorts(t *testing.T) {
 			ports:  map[int]int{8080: 8080},
 		},
 	}
-	err = o.mapPorts(subReqs)
+	err = p.mapPorts(o.manifest.ID, subReqs)
 	require.NoError(t, err)
 	<-provider.channels[behaviors.SubnetMapPortBehavior]
 }
