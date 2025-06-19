@@ -57,9 +57,11 @@ func (o *BasicOrchestrator) Shutdown() error {
 		o.lock.Unlock()
 		// set alloc statuses
 		for allocName, status := range allocStatuses {
-			err := o.updateAllocationStatus(allocName, status)
+			err := o.manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
+				alloc.Status = status
+			})
 			if err != nil {
-				log.Warnf("error updating allocation status: %s", err)
+				log.Errorf("failed to update allocation manifest %s status: %v", allocName, err)
 			}
 		}
 		// set orchestrator status

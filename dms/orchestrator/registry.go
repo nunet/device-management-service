@@ -94,6 +94,8 @@ func restoreDeployment(
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	o := &BasicOrchestrator{
 		id:                 id,
 		actor:              actr,
@@ -102,6 +104,8 @@ func restoreDeployment(
 		deploymentSnapshot: restoreInfo,
 		supervisor:         NewSupervisor(context.TODO(), actr, id),
 		subnetManifest:     subnet,
+		ctx:                ctx,
+		cancel:             cancel,
 	}
 
 	// TODO: manifest.Empty()
@@ -127,22 +131,28 @@ func restoreDeployment(
 			"labels", []string{string(observability.LabelDeployment)},
 			"orchestratorID", id,
 		)
-		if err := o.provision(cfg, manifest); err != nil {
+		provisioner := NewProvisioner(ctx, cancel, actr, subnet)
+		manifestAfterProvision, err := provisioner.Provision(
+			jtypes.NewEnsembleCfgReader(cfg),
+			jtypes.NewManifestReader(manifest))
+		if err != nil {
 			log.Errorf("failed to provision network: %s", err)
+			o.lock.Lock()
 			o.revert(cfg, manifest)
+			o.lock.Unlock()
 			return o, o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
 		}
 
+		o.updateManifest(manifestAfterProvision)
+
 		o.setStatus(jtypes.DeploymentStatusRunning)
 	}
-
-	o.ctx, o.cancel = context.WithCancel(context.Background())
 
 	allocations := make(map[string]actor.Handle, len(manifest.Allocations))
 	for _, allocation := range manifest.Allocations {
 		allocations[allocation.ID] = allocation.Handle
 	}
-	go o.supervisor.Supervise(o.manifest)
+	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 
 	return o, nil
 }
