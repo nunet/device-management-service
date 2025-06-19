@@ -11,13 +11,19 @@ package jobtypes
 import (
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-
-	"gitlab.com/nunet/device-management-service/lib/did"
-
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/types"
+)
+
+const (
+	allocName       = "a"
+	origDNSName     = "orig"
+	modifiedDNSName = "mutated"
 )
 
 func getMockActorHandle(t *testing.T) actor.Handle {
@@ -117,5 +123,65 @@ func TestManifest(t *testing.T) {
 			require.Equal(t, node.Location, cloneNode.Location)
 			require.Equal(t, node.Allocations, cloneNode.Allocations)
 		}
+	})
+}
+
+func TestUpdateAllocation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("update existing allocation", func(t *testing.T) {
+		t.Parallel()
+		manifest := EnsembleManifest{
+			Allocations: map[string]AllocationManifest{
+				allocName: {
+					DNSName: origDNSName,
+					Status:  AllocationRunning,
+				},
+			},
+		}
+
+		err := manifest.UpdateAllocation(allocName, func(alloc *AllocationManifest) {
+			alloc.DNSName = modifiedDNSName
+			alloc.Status = AllocationStopped
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, modifiedDNSName, manifest.Allocations[allocName].DNSName)
+		assert.Equal(t, AllocationStopped, manifest.Allocations[allocName].Status)
+	})
+
+	t.Run("update non-existent allocation", func(t *testing.T) {
+		t.Parallel()
+		manifest := EnsembleManifest{
+			Allocations: map[string]AllocationManifest{},
+		}
+
+		err := manifest.UpdateAllocation("non-existent", func(alloc *AllocationManifest) {
+			alloc.DNSName = modifiedDNSName
+		})
+
+		assert.Error(t, err)
+		assert.Equal(t, ErrAllocationNotFound, err)
+	})
+
+	t.Run("update does not affect other allocations", func(t *testing.T) {
+		t.Parallel()
+		const otherAllocName = "other"
+		const otherDNSName = "other-dns"
+
+		manifest := EnsembleManifest{
+			Allocations: map[string]AllocationManifest{
+				allocName:      {DNSName: origDNSName},
+				otherAllocName: {DNSName: otherDNSName},
+			},
+		}
+
+		err := manifest.UpdateAllocation(allocName, func(alloc *AllocationManifest) {
+			alloc.DNSName = modifiedDNSName
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, modifiedDNSName, manifest.Allocations[allocName].DNSName)
+		assert.Equal(t, otherDNSName, manifest.Allocations[otherAllocName].DNSName)
 	})
 }
