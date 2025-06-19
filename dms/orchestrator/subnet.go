@@ -86,7 +86,8 @@ func newSubnetManifest() (SubnetManifest, error) {
 	}, nil
 }
 
-func (o *BasicOrchestrator) createSubnet(
+func (p *Provisioner) createSubnet(
+	manifestID string,
 	subReqs []subnetRequest, routingTable map[string]string,
 	subCreateHandles []actor.Handle,
 ) error {
@@ -98,11 +99,11 @@ func (o *BasicOrchestrator) createSubnet(
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
-				o.actor.Handle(),
+				p.actor.Handle(),
 				handle,
-				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, o.manifest.ID),
+				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, manifestID),
 				SubnetCreateRequest{
-					SubnetID:     o.manifest.ID,
+					SubnetID:     manifestID,
 					RoutingTable: routingTable,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -112,7 +113,7 @@ func (o *BasicOrchestrator) createSubnet(
 				return
 			}
 
-			replyCh, err := o.actor.Invoke(msg)
+			replyCh, err := p.actor.Invoke(msg)
 			if err != nil {
 				errCh <- fmt.Errorf("error invoking subnet message: %w", err)
 				return
@@ -149,7 +150,7 @@ func (o *BasicOrchestrator) createSubnet(
 
 // TODO: this step should be together with subnet creation, we have
 // to refactor the SubnetCreate handle
-func (o *BasicOrchestrator) subnetAddPeer(subReqs []subnetRequest) error {
+func (p *Provisioner) subnetAddPeer(manifestID string, subReqs []subnetRequest) error {
 	// 1.b create and plug IPs
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(subReqs))
@@ -159,11 +160,11 @@ func (o *BasicOrchestrator) subnetAddPeer(subReqs []subnetRequest) error {
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
-				o.actor.Handle(),
+				p.actor.Handle(),
 				req.handle,
 				behaviors.SubnetAddPeerBehavior,
 				behaviors.SubnetAddPeerRequest{
-					SubnetID: o.manifest.ID,
+					SubnetID: manifestID,
 					IP:       req.ip,
 					PeerID:   req.peerID,
 				},
@@ -174,7 +175,7 @@ func (o *BasicOrchestrator) subnetAddPeer(subReqs []subnetRequest) error {
 				return
 			}
 
-			replyCh, err := o.actor.Invoke(msg)
+			replyCh, err := p.actor.Invoke(msg)
 			if err != nil {
 				errCh <- fmt.Errorf("error invoking subnet add-peer message: %w", err)
 				return
@@ -210,7 +211,8 @@ func (o *BasicOrchestrator) subnetAddPeer(subReqs []subnetRequest) error {
 	return aggregateErrors(errCh)
 }
 
-func (o *BasicOrchestrator) addDNSRecords(
+func (p *Provisioner) addDNSRecords(
+	manifestID string,
 	subReqs []subnetRequest, dnsRecords map[string]string,
 ) error {
 	wg := sync.WaitGroup{}
@@ -221,11 +223,11 @@ func (o *BasicOrchestrator) addDNSRecords(
 		go func() {
 			defer wg.Done()
 			msg, err := actor.Message(
-				o.actor.Handle(),
+				p.actor.Handle(),
 				req.handle,
 				behaviors.SubnetDNSAddRecordsBehavior,
 				behaviors.SubnetDNSAddRecordsRequest{
-					SubnetID: o.manifest.ID,
+					SubnetID: manifestID,
 					Records:  dnsRecords,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -235,7 +237,7 @@ func (o *BasicOrchestrator) addDNSRecords(
 				return
 			}
 
-			replyCh, err := o.actor.Invoke(msg)
+			replyCh, err := p.actor.Invoke(msg)
 			if err != nil {
 				errCh <- fmt.Errorf("error invoking subnet add-dns-records message: %w", err)
 				return
@@ -272,7 +274,7 @@ func (o *BasicOrchestrator) addDNSRecords(
 	return aggregateErrors(errCh)
 }
 
-func (o *BasicOrchestrator) mapPorts(subReqs []subnetRequest) error {
+func (p *Provisioner) mapPorts(manifestID string, subReqs []subnetRequest) error {
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(subReqs))
 	for _, req := range subReqs {
@@ -281,11 +283,11 @@ func (o *BasicOrchestrator) mapPorts(subReqs []subnetRequest) error {
 			go func() {
 				defer wg.Done()
 				msg, err := actor.Message(
-					o.actor.Handle(),
+					p.actor.Handle(),
 					req.handle,
 					behaviors.SubnetMapPortBehavior,
 					behaviors.SubnetMapPortRequest{
-						SubnetID:   o.manifest.ID,
+						SubnetID:   manifestID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
 						SourcePort: strconv.Itoa(pubPort),
@@ -299,7 +301,7 @@ func (o *BasicOrchestrator) mapPorts(subReqs []subnetRequest) error {
 					return
 				}
 
-				replyCh, err := o.actor.Invoke(msg)
+				replyCh, err := p.actor.Invoke(msg)
 				if err != nil {
 					errCh <- fmt.Errorf("error invoking subnet MapPort message: %w", err)
 					return
@@ -337,17 +339,18 @@ func (o *BasicOrchestrator) mapPorts(subReqs []subnetRequest) error {
 }
 
 // TODO: maybe this hsould go to the createSubnet method
-func (o *BasicOrchestrator) orchestratorJoinSubnet(
+func (p *Provisioner) orchestratorJoinSubnet(
+	manifestID string,
 	indexRoutingTable map[string]string, dnsRecords map[string]string,
 ) error {
 	msg, err := actor.Message(
-		o.actor.Handle(),
-		o.actor.Supervisor(),
-		fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, o.manifest.ID),
+		p.actor.Handle(),
+		p.actor.Supervisor(),
+		fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, manifestID),
 		SubnetJoinRequest{
-			SubnetID: o.manifest.ID,
+			SubnetID: manifestID,
 			IP:       indexRoutingTable[orchSubnetName],
-			PeerID:   o.actor.Handle().Address.HostID,
+			PeerID:   p.actor.Handle().Address.HostID,
 			Records:  dnsRecords,
 		},
 		actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
@@ -356,7 +359,7 @@ func (o *BasicOrchestrator) orchestratorJoinSubnet(
 		return fmt.Errorf("error creating subnet join message: %w", err)
 	}
 
-	replyCh, err := o.actor.Invoke(msg)
+	replyCh, err := p.actor.Invoke(msg)
 	if err != nil {
 		return fmt.Errorf("error invoking subnet join message: %w", err)
 	}

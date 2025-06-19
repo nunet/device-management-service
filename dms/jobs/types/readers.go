@@ -8,8 +8,6 @@
 
 package jobtypes
 
-// TODO: tests
-
 // EnsembleCfgReader provides read-only access to an EnsembleConfig
 type EnsembleCfgReader struct {
 	cfg EnsembleConfig

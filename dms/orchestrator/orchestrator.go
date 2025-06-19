@@ -48,8 +48,6 @@ var (
 	MaxPermutations  = 1_000_000
 
 	grantOrchestratorCapsFrequency = 5 * time.Minute
-
-	orchSubnetName = "orchestrator"
 )
 
 var (
@@ -228,7 +226,7 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 
 	log.Infof("deployment successful, starting supervisor",
 		"orchestratorID", o.id)
-	go o.supervisor.Supervise(o.manifest)
+	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 	return nil
 }
 
@@ -270,7 +268,11 @@ func (o *BasicOrchestrator) newManifest(
 
 // TODO (dynamic ensemble PR): documentation on how updates
 // and revert handle manifest changes
-// TODO: provision/commit should not update o.manifest by themselves
+//
+// IMPORTANT: when passing the manifest and config down the stack,
+// use the readers (`jobs/types/readers.go`) to guarantee the immutability
+// of these objects. (that is not to solve race condition problems but
+// to manage the state of the orchestrator in a safer way)
 func (o *BasicOrchestrator) deploy(
 	cfg jtypes.EnsembleConfig,
 	partialManifest jtypes.EnsembleManifest,
@@ -331,13 +333,20 @@ deploy:
 
 		o.updateManifest(manifestAfterCommit)
 
-		// 3. provision the network and start the allocations
 		mnfJSON, err := manifestAfterCommit.JSON()
 		if err != nil {
 			return fmt.Errorf("failed to marshal manifest: %w", err)
 		}
 		log.Debugf("manifest after commit:\n", string(mnfJSON))
-		if err := o.provision(cfg, manifestAfterCommit); err != nil {
+
+		// 3. provision the network and start the allocations
+		o.setStatus(jtypes.DeploymentStatusProvisioning)
+
+		provisioner := NewProvisioner(o.ctx, o.cancel, o.actor, o.subnetManifest)
+		manifestAfterProvision, err := provisioner.Provision(
+			jtypes.NewEnsembleCfgReader(cfg),
+			jtypes.NewManifestReader(manifestAfterCommit))
+		if err != nil {
 			log.Errorw("provisioning failed",
 				"labels", []string{string(observability.LabelDeployment)},
 				"error", err,
@@ -348,6 +357,9 @@ deploy:
 			o.lock.Unlock()
 			continue deploy
 		}
+
+		go o.monitorOnlyTaskManifest()
+		o.updateManifest(manifestAfterProvision)
 
 		o.lock.Lock()
 		o.ctx, o.cancel = context.WithCancel(context.Background())
@@ -484,4 +496,50 @@ func (o *BasicOrchestrator) updateManifest(m jtypes.EnsembleManifest) {
 	// might inherit map references of partial updates
 	o.manifest = m.Clone()
 	o.lock.Unlock()
+}
+
+// monitorOnlyTaskManifest will be responsible for tearing down
+// the orchestrator after all tasks are terminated when
+// the ensemble is composed *ONLY* by tasks
+func (o *BasicOrchestrator) monitorOnlyTaskManifest() {
+	if !isOnlyTaskManifest(o.manifest) {
+		return
+	}
+
+	ticker := time.NewTicker(monitorOnlyTaskManifestInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			o.lock.Lock()
+			allTerminated := true
+			for name := range o.manifest.Allocations {
+				if !o.manifest.IsTerminatedTask(name) {
+					allTerminated = false
+					break
+				}
+			}
+			o.lock.Unlock()
+
+			if !allTerminated {
+				continue
+			}
+
+			log.Infof("All tasks are terminated, shutting down orchestrator.")
+			o.setStatus(jtypes.DeploymentStatusCompleted)
+			o.cancel()
+			return
+		}
+	}
+}
+
+func isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
+	for _, a := range m.Allocations {
+		if a.Type != jtypes.AllocationTypeTask {
+			return false
+		}
+	}
+	return true
 }
