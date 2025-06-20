@@ -5,12 +5,17 @@ import (
 	"fmt"
 )
 
+// These are the keys stored into the Context
+// We could use a map directly, but empty struct
+// has a better performance if it grows too large
 type (
 	nodesCtxKey    struct{}
 	nodeMapCtxKey  struct{}
 	ensembleCtxKey struct{}
 )
 
+// TestCtx is a wrapper of Context
+// It allows for some type safety and it's more elegant
 type TestCtx struct {
 	ctx context.Context
 }
@@ -19,6 +24,7 @@ func NewTestCtx(ctx context.Context) *TestCtx {
 	return &TestCtx{ctx: ctx}
 }
 
+// Call this method if needed to return a Context value
 func (t *TestCtx) Unwrap() context.Context {
 	return t.ctx
 }
