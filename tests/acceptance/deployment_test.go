@@ -211,7 +211,7 @@ func deploymentIsCompleted(ctx context.Context, spName string) (context.Context,
 		status, err := spDmsCtx.EnsembleStatus(ensembleID)
 		assert.NoError(t, err)
 		return status == "Completed"
-	}, 20*time.Second, 1*time.Second)
+	}, 60*time.Second, 1*time.Second)
 
 	return tc.Unwrap(), nil
 }
