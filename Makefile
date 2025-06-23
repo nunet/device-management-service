@@ -32,7 +32,7 @@ all:
 	fi
 
 run-acceptance:
-	go test -test.v -test.run "^TestFeatures/" ./tests/acceptance/... -tags=acceptance -timeout=10m
+	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m
 
 linux_amd64:
 	@echo "Building for Linux AMD64..."
