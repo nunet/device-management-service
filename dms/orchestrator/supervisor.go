@@ -16,8 +16,11 @@ import (
 
 const (
 	RegisterHealthCheckTimeout = 5 * time.Second
-	HealthCheckTimeout         = 5 * time.Second
-	FailureEscalationTimeout   = 2 * time.Minute
+)
+
+var (
+	HealthCheckTimeout       = 5 * time.Second
+	FailureEscalationTimeout = 2 * time.Minute
 )
 
 // Supervisor encapsulates supervision logic.
@@ -51,17 +54,17 @@ func NewSupervisor(ctx context.Context, actor actor.Actor, id string) *Superviso
 }
 
 // Supervise runs the supervision loop, including registration and periodic healthchecks.
-func (s *Supervisor) Supervise(manifest jtypes.EnsembleManifest) {
+func (s *Supervisor) Supervise(manifestReader jtypes.ManifestReader) {
 	log.Debugw("supervisor started for orchestrator",
 		"labels", string(observability.LabelDeployment),
 		"supervisorID", s.id,
 		"allocations", s.manifest.Allocations)
 
-	manifestCopy := manifest.Clone()
+	manifest := manifestReader.Read()
 
 	wg := sync.WaitGroup{}
 	// Registration Phase – register allocations that have a defined healthcheck.
-	for _, allocation := range manifestCopy.Allocations {
+	for _, allocation := range manifest.Allocations {
 		if allocation.Healthcheck.Type == "" {
 			continue
 		}
@@ -79,7 +82,7 @@ func (s *Supervisor) Supervise(manifest jtypes.EnsembleManifest) {
 
 	// Update the manifest
 	s.lock.Lock()
-	s.manifest = manifestCopy
+	s.manifest = manifest
 	s.lock.Unlock()
 
 	// Supervision Phase – start the supervision loop
@@ -158,7 +161,7 @@ func (s *Supervisor) registerHealthCheck(allocation jtypes.AllocationManifest, o
 		s.lock.Lock()
 		s.registeredHealthChecks[allocation.ID] = struct{}{}
 		s.lock.Unlock()
-		log.Info("successfully registered healthcheck for allocation: %s", allocation.ID)
+		log.Infof("successfully registered healthcheck for allocation: %s", allocation.ID)
 		return nil
 
 	case <-time.After(RegisterHealthCheckTimeout):
@@ -198,7 +201,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 		}
 
 		if !resp.OK {
-			log.Errorf("error in healthcheck: %s", resp.Error)
+			log.Errorf("error in healthcheck for allocation %s: %s", allocation.ID, resp.Error)
 
 			s.lock.Lock()
 			s.failures[allocation.ID]++
@@ -226,7 +229,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 			return nil
 		}
 
-		log.Warnf("timeout waiting for supervisor reply")
+		log.Warnf("timeout waiting for supervisor reply for allocation %s", allocation.ID)
 		s.lock.Lock()
 		s.failures[allocation.ID]++
 		v := s.failures[allocation.ID]
@@ -280,9 +283,19 @@ func (s *Supervisor) escalateFailure(allocation jtypes.AllocationManifest) error
 	case reply := <-replyCh:
 		defer reply.Discard()
 
+		var resp behaviors.AllocationRestartResponse
+		if err := json.Unmarshal(reply.Message, &resp); err != nil {
+			return fmt.Errorf("unmarshalling supervisor reply: %w", err)
+		}
+
+		if !resp.OK {
+			return fmt.Errorf("error restarting allocation: %s", resp.Error)
+		}
+
 		s.lock.Lock()
 		defer s.lock.Unlock()
 		s.escalations[allocation.ID]++
+		s.failures[allocation.ID] = 0
 		return nil
 	case <-time.After(FailureEscalationTimeout):
 		return fmt.Errorf("timeout waiting for supervisor reply")
@@ -292,8 +305,8 @@ func (s *Supervisor) escalateFailure(allocation jtypes.AllocationManifest) error
 // Update updates the supervisor with a new ensemble manifest.
 // TODO: this is just a placeholder implementation to demonstrate the update concept which is needed for #793.
 // TODO: unit tests
-func (s *Supervisor) Update(manifest jtypes.EnsembleManifest) {
-	manifestCopy := manifest.Clone()
+func (s *Supervisor) Update(manifestReader jtypes.ManifestReader) {
+	manifest := manifestReader.Read()
 
 	// We need to handle 3 scenarios
 	// 1. Registering the healthchecks for new allocations
@@ -304,7 +317,7 @@ func (s *Supervisor) Update(manifest jtypes.EnsembleManifest) {
 
 	// 1. Registering the healthchecks for just the new allocations
 	var wg sync.WaitGroup
-	for _, allocation := range manifestCopy.Allocations {
+	for _, allocation := range manifest.Allocations {
 		if allocation.Healthcheck.Type == "" {
 			continue
 		}
@@ -325,7 +338,10 @@ func (s *Supervisor) Update(manifest jtypes.EnsembleManifest) {
 	}
 
 	// 2. Update the manifest
-	// TODO: we need to merge the manifest instead of replacing it
+	s.lock.Lock()
+	s.manifest = manifest
+	s.lock.Unlock()
+	wg.Wait()
 }
 
 func (s *Supervisor) getAllocation(name string) (jtypes.AllocationManifest, bool) {

@@ -1,0 +1,64 @@
+# - keep allocations's resources equal as the assertions are taking that into account
+# - TODO: should we use GetRandomMultiplePorts and replace here?
+version: "V1"
+
+nginx_wrapper: &nginx_service
+    type: service
+    executor: docker
+    resources:
+        cpu:
+            cores: 1
+        gpus: []
+        ram:
+            size: 1
+        disk:
+            size: 1
+    execution:
+        type: docker
+        image: nginxdemos/hello:plain-text
+        working_directory: /
+    keys: []
+    provision: []
+    healthcheck:
+        type: command
+        exec: ["nginx", "-t"]
+        response:
+            type: string
+            value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
+
+allocations:
+    nginx-nodeA: *nginx_service
+    nginx-nodeC: *nginx_service
+    nginx-nodeB: *nginx_service 
+    nginx-B-nodeB: *nginx_service 
+
+nodes:
+    nodeA:
+        allocations:
+            - nginx-nodeA
+        ports:
+            - private: 80
+              public: 50001
+              allocation: nginx-nodeA
+    nodeB:
+        allocations:
+            - nginx-nodeB
+            - nginx-B-nodeB
+        ports:
+            - private: 80
+              public: 50002
+              allocation: nginx-nodeB
+            - private: 80
+              public: 50003
+              allocation: nginx-B-nodeB
+
+    nodeC:
+        allocations:
+            - nginx-nodeC
+        ports:
+            - private: 80
+              public: 50004
+              allocation: nginx-nodeC
+
+subnet:
+    join: true

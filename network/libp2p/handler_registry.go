@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -47,7 +48,7 @@ func (r *HandlerRegistry) RegisterHandlerWithStreamCallback(messageType types.Me
 	protoID := protocol.ID(messageType)
 	_, ok := r.handlers[protoID]
 	if ok {
-		return errors.New("stream with this protocol is already registered")
+		return ErrStreamRegistered
 	}
 
 	r.handlers[protoID] = handler

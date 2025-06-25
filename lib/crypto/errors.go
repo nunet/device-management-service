@@ -14,6 +14,6 @@ import (
 
 var (
 	ErrUnsupportedKeyType = errors.New("unsupported key type")
-
-	ErrTODO = errors.New("TODO")
+	ErrUnmarshalPublicKey = errors.New("failed to unmarshal public key")
+	ErrTODO               = errors.New("TODO")
 )

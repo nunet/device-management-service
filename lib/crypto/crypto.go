@@ -18,6 +18,9 @@ import (
 
 // RandomEntropy bytes from rand.Reader
 func RandomEntropy(length int) ([]byte, error) {
+	if length < 0 {
+		return nil, errors.New("length must be non-negative")
+	}
 	buf := make([]byte, length)
 	n, err := io.ReadFull(rand.Reader, buf)
 	if err != nil || n != length {

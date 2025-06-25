@@ -15,14 +15,13 @@ import (
 	"net"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/lib/crypto"
-
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -61,6 +60,8 @@ type Network interface {
 	Start() error
 	// Stat returns the network information
 	Stat() types.NetworkStats
+	// Peers returns a list of peers from the peer store
+	Peers() []peer.ID
 	// Ping pings the given address and returns the PingResult
 	Ping(ctx context.Context, address string, timeout time.Duration) (types.PingResult, error)
 	// GetHostID returns the host ID
@@ -99,6 +100,8 @@ type Network interface {
 	// Notify allows the application to receive notifications about peer connections
 	// and disconnecions
 	Notify(ctx context.Context, preconnected func(PeerID, []ProtocolID, int), connected, disconnected func(PeerID), identified, updated func(PeerID, []ProtocolID)) error
+	// Connect connects to the given peer address
+	Connect(ctx context.Context, addr string) error
 	// PeerConnected returs true if the peer is currently connected
 	PeerConnected(p PeerID) bool
 	// Stop stops the network including any existing advertisements and subscriptions
@@ -148,6 +151,8 @@ func NewNetwork(netConfig *types.NetworkConfig, fs afero.Fs) (Network, error) {
 	case types.Libp2pNetwork:
 		ln, err := libp2p.New(&netConfig.Libp2pConfig, fs)
 		return ln, err
+	case types.VirtualNetwork: // in memory network for tests only
+		return NewMemoryNetHost()
 	case types.NATSNetwork:
 		return nil, errors.New("not implemented")
 	default:

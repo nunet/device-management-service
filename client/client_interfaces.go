@@ -126,11 +126,13 @@ type ActorBehaviorsClient interface {
 	ActorPeersBehaviorClient
 	ActorOnboardingBehaviorClient
 	ActorDeploymentBehaviorClient
+	ActorAllocationsBehaviorClient
 	ActorSubnetBehaviorClient
 	ActorResourcesBehaviorClient
 	ActorHardwareBehaviorClient
 	ActorCapBehaviorClient
 	ActorLoggerBehaviorClient
+	ActorVolumeBehaviorClient
 }
 
 // ActorPublicBehaviorClient provides methods for public behaviors
@@ -143,12 +145,18 @@ type ActorPublicBehaviorClient interface {
 
 	// Status retrieves the status of the actor
 	Status(ctx context.Context, opts ...Option) (node.PublicStatusResponse, error)
+
+	// Discovery retrieves the discovery information of the actor
+	Discovery(ctx context.Context, opts ...Option) (node.DiscoveryStatusResponse, error)
+
+	// DiscoveryBroadcast broadcasts the discovery information of the actor
+	DiscoveryBroadcast(ctx context.Context, opts ...Option) ([]node.DiscoveryStatusResponse, error)
 }
 
 // ActorPeersBehaviorClient provides methods for peer-related behaviors
 type ActorPeersBehaviorClient interface {
 	// PeersSelf retrieves information about the actor's own peer
-	PeerSelf(ctx context.Context, opts ...Option) (node.PeerAddrInfoResponse, error)
+	PeersSelf(ctx context.Context, opts ...Option) (node.PeerAddrInfoResponse, error)
 
 	// PeersList lists the peers connected to the actor
 	PeersList(ctx context.Context, opts ...Option) (node.PeersListResponse, error)
@@ -181,7 +189,7 @@ type ActorOnboardingBehaviorClient interface {
 // ActorDeploymentBehaviorClient provides methods for deployment
 type ActorDeploymentBehaviorClient interface {
 	// DeploymentList lists deployments
-	DeploymentList(ctx context.Context, opts ...Option) (node.DeploymentListResponse, error)
+	DeploymentList(ctx context.Context, req node.DeploymentListRequest, opts ...Option) (node.DeploymentListResponse, error)
 
 	// DeploymentStatus retrieves the status of a deployment
 	DeploymentStatus(ctx context.Context, req node.DeploymentStatusRequest, opts ...Option) (node.DeploymentStatusResponse, error)
@@ -197,6 +205,11 @@ type ActorDeploymentBehaviorClient interface {
 
 	// DeploymentNew creates a new deployment
 	DeploymentNew(ctx context.Context, req node.NewDeploymentRequest, opts ...Option) (node.NewDeploymentResponse, error)
+}
+
+// ActorAllocationsBehaviorClient provides methods for allocations view
+type ActorAllocationsBehaviorClient interface {
+	AllocationsList(ctx context.Context, opts ...Option) (node.AllocationsListResponse, error)
 }
 
 // ActorSubnetBehaviorClient provides methods for subnet management
@@ -266,4 +279,16 @@ type ActorCapBehaviorClient interface {
 type ActorLoggerBehaviorClient interface {
 	// LoggerConfig configures the logger
 	LoggerConfig(ctx context.Context, req node.LoggerConfigRequest, opts ...Option) (node.LoggerConfigResponse, error)
+}
+
+// ActorVolumeBehaviorClient provides methods for volume management
+type ActorVolumeBehaviorClient interface {
+	// CreateVolume creates a new volume
+	CreateVolume(ctx context.Context, req node.CreateVolumeRequest, opts ...Option) (node.CreateVolumeResponse, error)
+
+	// DeleteVolume deletes a volume
+	DeleteVolume(ctx context.Context, req node.DeleteVolumeRequest, opts ...Option) (node.DeleteVolumeResponse, error)
+
+	// StartVolume starts a volume
+	StartVolume(ctx context.Context, req node.StartVolumeRequest, opts ...Option) (node.StartVolumeResponse, error)
 }

@@ -9,25 +9,28 @@
 package cap
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
-func newRemoveCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
-	var (
-		context string
-		root    string
-		provide string
-		require string
-	)
+// RemoveCapOptions holds the command-line options for the remove command.
+type RemoveCapOptions struct {
+	Context string
+	Root    string
+	Provide string
+	Require string
+}
+
+func newRemoveCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
+	var opts RemoveCapOptions
 
 	const (
 		fnProvide = "provide"
@@ -45,62 +48,61 @@ One capability anchor must be specified at a time.
 Example:
   nunet cap remove --context user --root did:key:abcd1234
   nunet cap remove --context user --require '<the-token>'`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			trustCtx, err := node.GetTrustContext(afs, context, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("get trust context: %w", err)
-			}
-
-			capCtx, err := node.LoadCapabilityContext(trustCtx, context, cfg.UserDir)
-			if err != nil {
-				return fmt.Errorf("failed to load capability context: %w", err)
-			}
-
-			switch {
-			case root != "":
-				rootDID, err := did.FromString(root)
-				if err != nil {
-					return fmt.Errorf("invalid root DID: %w", err)
-				}
-
-				capCtx.RemoveRoots([]did.DID{rootDID}, ucan.TokenList{}, ucan.TokenList{})
-
-			case require != "":
-				var token ucan.Token
-				if err := json.Unmarshal([]byte(require), &token); err != nil {
-					return fmt.Errorf("unmarshal tokens: %w", err)
-				}
-
-				capCtx.RemoveRoots(nil, ucan.TokenList{Tokens: []*ucan.Token{&token}}, ucan.TokenList{})
-
-			case provide != "":
-				var token ucan.Token
-				if err := json.Unmarshal([]byte(provide), &token); err != nil {
-					return fmt.Errorf("unmarshal tokens: %w", err)
-				}
-
-				capCtx.RemoveRoots(nil, ucan.TokenList{}, ucan.TokenList{Tokens: []*ucan.Token{&token}})
-
-			default:
-				return fmt.Errorf("one of --provide, --root, or --require must be specified")
-			}
-
-			if err := node.SaveCapabilityContext(capCtx, cfg.UserDir); err != nil {
-				return fmt.Errorf("save capability context: %w", err)
-			}
-
-			return nil
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runRemoveCap(cmd.Context(), dmsCLI, opts, cli.CmdStreams(cmd))
 		},
 	}
 
-	useFlagContext(cmd, &context)
-	useFlagRoot(cmd, &root)
-	useFlagRequire(cmd, &require)
-	useFlagProvide(cmd, &provide)
+	useFlagContext(cmd, &opts.Context)
+	useFlagRoot(cmd, &opts.Root)
+	useFlagRequire(cmd, &opts.Require)
+	useFlagProvide(cmd, &opts.Provide)
 
 	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire)
 	cmd.MarkFlagsMutuallyExclusive(fnProvide, fnRoot, fnRequire)
 
 	return cmd
+}
+
+func runRemoveCap(_ context.Context, dmsCLI *cli.DmsCLI, opts RemoveCapOptions, _ cli.Streams) error {
+	capCtx, err := utils.LoadCapabilityContext(dmsCLI, opts.Context)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case opts.Root != "":
+		rootDID, err := did.FromString(opts.Root)
+		if err != nil {
+			return fmt.Errorf("invalid root DID: %w", err)
+		}
+
+		capCtx.RemoveRoots([]did.DID{rootDID}, ucan.TokenList{}, ucan.TokenList{})
+
+	case opts.Require != "":
+		var token ucan.Token
+		if err := json.Unmarshal([]byte(opts.Require), &token); err != nil {
+			return fmt.Errorf("unmarshal tokens: %w", err)
+		}
+
+		capCtx.RemoveRoots(nil, ucan.TokenList{Tokens: []*ucan.Token{&token}}, ucan.TokenList{})
+
+	case opts.Provide != "":
+		var token ucan.Token
+		if err := json.Unmarshal([]byte(opts.Provide), &token); err != nil {
+			return fmt.Errorf("unmarshal tokens: %w", err)
+		}
+
+		capCtx.RemoveRoots(nil, ucan.TokenList{}, ucan.TokenList{Tokens: []*ucan.Token{&token}})
+
+	default:
+		return fmt.Errorf("one of --provide, --root, or --require must be specified")
+	}
+
+	if err := utils.SaveCapabilityContext(dmsCLI, capCtx); err != nil {
+		return err
+	}
+
+	return nil
 }

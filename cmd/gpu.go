@@ -13,13 +13,12 @@ import (
 	"fmt"
 	"os"
 
-	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/observability"
-
 	"github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/dms/hardware/gpu"
 
+	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/lib/hardware/gpu"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -33,23 +32,19 @@ func newGPUCommand() *cobra.Command {
 `,
 	}
 
-	// Add subcommands
-	gpuManager := gpu.NewGPUManager()
-	dockerClient, err := docker.NewDockerClient()
-	if err != nil {
-		panic(fmt.Sprintf("error creating docker client: %v", err))
-	}
-	gpuCmd.AddCommand(newGPUListCommand(gpuManager))
-	gpuCmd.AddCommand(newGPUTestCommand(gpuManager, dockerClient))
+	gpuCmd.AddCommand(newGPUListCommand())
+	gpuCmd.AddCommand(newGPUTestCommand())
 
 	return gpuCmd
 }
 
-func newGPUListCommand(gpuManager types.GPUManager) *cobra.Command {
+func newGPUListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List all available GPUs",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			gpuManager := gpu.NewGPUManager()
+
 			gpus, err := gpuManager.GetGPUs()
 			if err != nil {
 				return fmt.Errorf("get gpus: %w", err)
@@ -71,7 +66,7 @@ func newGPUListCommand(gpuManager types.GPUManager) *cobra.Command {
 
 			fmt.Println("GPU Details:")
 			for i, g := range gpus {
-				fmt.Printf("Model: %s, Total VRAM: %.2f GB, Used VRAM: %.2f GB, Vendor: %s, PCI Address: %s, UUID: %s, Index: %d\n",
+				fmt.Printf("Model: %s, Total VRAM: %d GB, Used VRAM: %d GB, Vendor: %s, PCI Address: %s, UUID: %s, Index: %d\n",
 					g.Model, g.VRAMInGB(), gpuUsage[i].VRAMInGB(), g.Vendor, g.PCIAddress, g.UUID, g.Index)
 			}
 			return nil
@@ -79,12 +74,17 @@ func newGPUListCommand(gpuManager types.GPUManager) *cobra.Command {
 	}
 }
 
-func newGPUTestCommand(gpuManager types.GPUManager, dockerClient docker.ClientInterface) *cobra.Command {
+func newGPUTestCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "test",
 		Short: "Test GPU deployment by running a Docker container with GPU resources",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			gpus, err := gpuManager.GetGPUs()
+			dockerClient, err := docker.NewDockerClient()
+			if err != nil {
+				return fmt.Errorf("new docker client: %w", err)
+			}
+
+			gpus, err := gpu.NewGPUManager().GetGPUs()
 			if err != nil {
 				return fmt.Errorf("get gpus: %w", err)
 			}

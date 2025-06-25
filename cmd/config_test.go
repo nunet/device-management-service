@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
 func ExecuteCommand(root *cobra.Command, args ...string) (output string, err error) {
@@ -184,7 +185,7 @@ func TestConfigEditCmd(t *testing.T) {
 				os.Unsetenv("EDITOR")
 			}
 
-			cmd := newConfigEditCmd(afero.NewMemMapFs())
+			cmd := newConfigEditCmd(afero.NewMemMapFs(), env.NewOSEnvironment())
 			_, err := ExecuteCommand(cmd)
 
 			if tt.wantErr {

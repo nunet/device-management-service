@@ -26,7 +26,6 @@ func SyncMapFromMap[K comparable, V any](m map[K]V) *SyncMap[K, V] {
 	for k, v := range m {
 		ret.Put(k, v)
 	}
-
 	return ret
 }
 
@@ -58,7 +57,7 @@ func (m *SyncMap[K, V]) Iter(ranger func(key K, value V) bool) {
 
 // Keys returns a slice containing all the keys present in the map.
 func (m *SyncMap[K, V]) Keys() []K {
-	var keys []K
+	keys := make([]K, 0)
 	m.Iter(func(key K, _ V) bool {
 		keys = append(keys, key)
 		return true
@@ -70,12 +69,19 @@ func (m *SyncMap[K, V]) Keys() []K {
 func (m *SyncMap[K, V]) String() string {
 	// Use a strings.Builder for efficient string concatenation.
 	var sb strings.Builder
-	sb.Write([]byte(`{`))
+	sb.WriteString("{")
+
+	first := true
 	m.Range(func(key, value any) bool {
-		// Append each key-value pair to the string builder.
-		sb.Write([]byte(fmt.Sprintf(`%s=%s`, key, value)))
+		if !first {
+			sb.WriteString(" ")
+		}
+		first = false
+		// Properly format the key-value pair
+		sb.WriteString(fmt.Sprintf("%v=%v", key, value))
 		return true
 	})
-	sb.Write([]byte(`}`))
+
+	sb.WriteString("}")
 	return sb.String()
 }

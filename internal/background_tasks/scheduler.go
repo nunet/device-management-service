@@ -16,24 +16,26 @@ import (
 
 // Scheduler orchestrates the execution of tasks based on their triggers and priority.
 type Scheduler struct {
-	tasks           map[int]*Task // Map of tasks by their ID.
-	runningTasks    map[int]bool  // Map to keep track of running tasks.
-	ticker          *time.Ticker  // Ticker for periodic checks of task triggers.
-	stopChan        chan struct{} // Channel to signal stopping the scheduler.
-	maxRunningTasks int           // Maximum number of tasks that can run concurrently.
-	lastTaskID      int           // Counter for assigning unique IDs to tasks.
-	mu              sync.Mutex    // Mutex to protect access to task maps.
+	tasks        []*Task        // List of tasks.
+	pollInterval time.Duration  // Ticker for periodic checks of task triggers.
+	stopChan     chan struct{}  // Channel to signal stopping the scheduler.
+	taskSem      chan struct{}  // Semaphore to limit the number of running tasks.
+	nextTaskID   int            // Counter for assigning unique IDs to tasks.
+	mu           sync.Mutex     // Mutex to protect access to task maps.
+	taskWg       sync.WaitGroup // Wait group to wait for all tasks to finish.
 }
 
 // NewScheduler creates a new Scheduler with a specified limit on running tasks.
-func NewScheduler(maxRunningTasks int) *Scheduler {
+func NewScheduler(maxRunningTasks int, pollInterval time.Duration) *Scheduler {
+	if pollInterval <= 0 {
+		pollInterval = 1 * time.Second
+	}
 	return &Scheduler{
-		tasks:           make(map[int]*Task),
-		runningTasks:    make(map[int]bool),
-		ticker:          time.NewTicker(1 * time.Second),
-		stopChan:        make(chan struct{}),
-		maxRunningTasks: maxRunningTasks,
-		lastTaskID:      0,
+		tasks:        make([]*Task, 0),
+		taskSem:      make(chan struct{}, maxRunningTasks),
+		stopChan:     make(chan struct{}),
+		pollInterval: pollInterval,
+		nextTaskID:   0,
 	}
 }
 
@@ -42,103 +44,125 @@ func (s *Scheduler) AddTask(task *Task) *Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	task.ID = s.lastTaskID
-	task.Enabled = true
-
 	for _, trigger := range task.Triggers {
-		trigger.Reset()
+		trigger.Reset(time.Now().UTC())
 	}
-
-	s.tasks[task.ID] = task
-	s.lastTaskID++
+	task.Enabled = true
+	task.ID = s.nextTaskID
+	s.nextTaskID++
+	s.tasks = append(s.tasks, task)
 
 	return task
 }
 
-func (s *Scheduler) GetTasks() map[int]*Task {
-	// create a copy of s.tasks and return the copy
+func (s *Scheduler) GetTask(taskID int) (*Task, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tasks := make(map[int]*Task)
-	for k, v := range s.tasks {
-		tasks[k] = v
+	for _, task := range s.tasks {
+		if task.ID == taskID {
+			return task, true
+		}
 	}
-	return tasks
-}
-
-func (s *Scheduler) GetTask(taskID int) (Task, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	task, exists := s.tasks[taskID]
-	return *task, exists
+	return nil, false
 }
 
 // RemoveTask removes a task from the scheduler.
 func (s *Scheduler) RemoveTask(taskID int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.tasks, taskID)
+
+	for i, task := range s.tasks {
+		if task.ID == taskID {
+			s.tasks = append(s.tasks[:i], s.tasks[i+1:]...)
+			return
+		}
+	}
 }
 
 // Start begins the scheduler's task execution loop.
 func (s *Scheduler) Start() {
+	ticker := time.NewTicker(s.pollInterval)
 	go func() {
 		for {
 			select {
 			case <-s.stopChan:
 				return
-			case <-s.ticker.C:
-				s.runTasks()
+			case now := <-ticker.C:
+				s.checkAndDispatchTasks(now.UTC())
 			}
 		}
 	}()
 }
 
-// runningTasksCount returns the count of running tasks.
-func (s *Scheduler) runningTasksCount() int {
+func (s *Scheduler) checkAndDispatchTasks(currentTime time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	count := 0
-	for _, isRunning := range s.runningTasks {
-		if isRunning {
-			count++
-		}
-	}
-	return count
-}
+	tasksToCheck := make([]*Task, len(s.tasks))
+	copy(tasksToCheck, s.tasks)
 
-// runTasks checks and runs tasks based on their triggers and priority.
-func (s *Scheduler) runTasks() {
-	// Sort tasks by priority.
-	tasks := s.GetTasks()
-	sortedTasks := make([]*Task, 0, len(tasks))
-	for _, task := range tasks {
-		sortedTasks = append(sortedTasks, task)
-	}
-	sort.Slice(sortedTasks, func(i, j int) bool {
-		return sortedTasks[i].Priority > sortedTasks[j].Priority
+	sort.SliceStable(tasksToCheck, func(i, j int) bool {
+		if tasksToCheck[i].Priority != tasksToCheck[j].Priority {
+			return tasksToCheck[i].Priority < tasksToCheck[j].Priority
+		}
+		return tasksToCheck[i].ID < tasksToCheck[j].ID
 	})
 
-	for _, task := range sortedTasks {
-		if !task.Enabled || s.runningTasks[task.ID] {
+	for _, task := range tasksToCheck {
+		if !task.Enabled {
 			continue
 		}
-
-		if len(task.Triggers) == 0 {
-			s.RemoveTask(task.ID)
-			continue
-		}
-
 		for _, trigger := range task.Triggers {
-			if trigger.IsReady() && s.runningTasksCount() < s.maxRunningTasks {
-				s.runningTasks[task.ID] = true
-				go s.runTask(task.ID)
-				trigger.Reset()
-				break
+			if trigger.IsReady(currentTime) {
+				s.dispatchTask(task, trigger)
 			}
+		}
+	}
+}
+
+func (s *Scheduler) dispatchTask(task *Task, trigger Trigger) {
+	s.taskWg.Add(1)
+	select {
+	case s.taskSem <- struct{}{}:
+		trigger.MarkTriggered(time.Now().UTC())
+		go s.executeTask(task)
+	case <-s.stopChan:
+		s.taskWg.Done()
+	}
+}
+
+func (s *Scheduler) executeTask(task *Task) {
+	defer func() {
+		<-s.taskSem
+		s.taskWg.Done()
+	}()
+
+	for retries := 0; retries <= task.RetryPolicy.MaxRetries; retries++ {
+		execution := Execution{
+			StartedAt: time.Now().UTC(),
+		}
+
+		err := task.Function(task.Args)
+
+		execution.EndedAt = time.Now().UTC()
+		if err != nil {
+			execution.Error = err.Error()
+			s.mu.Lock()
+			task.ExecutionHist = append(task.ExecutionHist, execution)
+			s.mu.Unlock()
+			if retries < task.RetryPolicy.MaxRetries {
+				select {
+				case <-s.stopChan:
+					return
+				case <-time.After(task.RetryPolicy.Delay):
+				}
+			}
+		} else {
+			s.mu.Lock()
+			task.ExecutionHist = append(task.ExecutionHist, execution)
+			s.mu.Unlock()
+			return
 		}
 	}
 }
@@ -146,54 +170,5 @@ func (s *Scheduler) runTasks() {
 // Stop signals the scheduler to stop running tasks.
 func (s *Scheduler) Stop() {
 	close(s.stopChan)
-}
-
-// runTask executes a task and manages its lifecycle and retry policy.
-func (s *Scheduler) runTask(taskID int) {
-	defer func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.runningTasks[taskID] = false
-	}()
-
-	task, ok := s.GetTask(taskID)
-	if !ok {
-		return
-	}
-
-	execution := Execution{StartedAt: time.Now()}
-
-	defer func() {
-		s.mu.Lock()
-		task.ExecutionHist = append(task.ExecutionHist, execution)
-		s.tasks[taskID] = &task
-		s.mu.Unlock()
-	}()
-
-	for i := 0; i < task.RetryPolicy.MaxRetries+1; i++ {
-		err := runTaskWithRetry(task.Function, task.Args, task.RetryPolicy.Delay)
-		if err == nil {
-			execution.Status = "SUCCESS"
-			execution.EndedAt = time.Now()
-			return
-		}
-		execution.Error = err.Error()
-	}
-
-	execution.Status = "FAILED"
-	execution.EndedAt = time.Now()
-}
-
-// runTaskWithRetry attempts to execute a task with a retry policy.
-func runTaskWithRetry(
-	fn func(args interface{}) error,
-	args []interface{},
-	delay time.Duration,
-) error {
-	err := fn(args)
-	if err != nil {
-		time.Sleep(delay)
-		return err
-	}
-	return nil
+	s.taskWg.Wait()
 }

@@ -18,8 +18,7 @@ version="$(echo $fullVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')-${noCommits}"
 
 mkdir -p $outputDir
 
-for arch in arm64 # amd64
-do
+for arch in arm64; do # amd64
     archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_$arch
     cp -r $projectRoot/maint-scripts/nunet-dms $archDir
 
@@ -38,12 +37,18 @@ do
     chmod -R 755 $archDir
     rm -r $archDir
 
-    if [[ ! -z ${GITLAB_CI+x} ]]  ; then
-        # upload artifact from build.sh to GitLab Package Registry.
-        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${version}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_darwin_${arch}.zip
+    if [[ -n ${GITLAB_CI+x} ]]; then
+        regex='^(release|release\/.+|release-.+|patch\/.+|patch-.+|main)$'
+
+        if [[ $CI_COMMIT_REF_NAME =~ $regex ]]; then
+            echo "Deploying to package registry..."
+            curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${version}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_darwin_${arch}.zip
+        else
+            echo skipping deployment to package registry...
+        fi
     fi
 
-    if [[ ! -z ${NUNETBOT_BUILD_ENDPOINT+x} ]] ; then
+    if [[ -n ${NUNETBOT_BUILD_ENDPOINT+x} ]]; then
         # notify the bot about the build
         curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$version\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${version}/nunet-dms_${version}_${arch}.zip\"}" $NUNETBOT_BUILD_ENDPOINT
     fi

@@ -9,24 +9,29 @@
 package cap
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
-func newNewCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
-	var force bool
+type NewCapOptions struct {
+	Force   bool
+	Context string
+}
+
+func newNewCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
+	var opts NewCapOptions
 
 	cmd := &cobra.Command{
 		Use:   "new <name>",
@@ -38,114 +43,125 @@ Example:
   nunet cap new ledger:user  # if using ledger`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			context := node.UserContextName
+			opts.Context = node.UserContextName
 			if len(args) > 0 {
-				context = args[0]
+				opts.Context = args[0]
 			}
 
-			var trustCtx did.TrustContext
-			var rootDID did.DID
-			if node.IsLedgerContext(context) {
-				provider, err := did.NewLedgerWalletProvider(0)
-				if err != nil {
-					return err
-				}
-
-				trustCtx = did.NewTrustContextWithProvider(provider)
-				rootDID = provider.DID()
-				context = node.GetContextKey(context)
-			} else {
-				keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
-				ks, err := keystore.New(afs.Fs, keyStoreDir)
-				if err != nil {
-					return fmt.Errorf("failed to open keystore: %w", err)
-				}
-
-				passphrase := os.Getenv("DMS_PASSPHRASE")
-				if ks.Exists(context) {
-					fmt.Fprintf(cmd.OutOrStdout(), "Using identity at %s/%s.json...\n", keyStoreDir, context)
-					if passphrase == "" {
-						passphrase, err = dmsUtils.PromptForPassphrase(false)
-						if err != nil {
-							return fmt.Errorf("failed to get passphrase: %w", err)
-						}
-					}
-				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "A new identity will be created for '%s' context...\n", context)
-					if passphrase == "" {
-						passphrase, err = dmsUtils.PromptForPassphrase(true)
-						if err != nil {
-							return fmt.Errorf("failed to get passphrase: %w", err)
-						}
-					}
-
-					_, err = dms.GenerateAndStorePrivKey(ks, passphrase, context)
-					if err != nil {
-						return fmt.Errorf("failed to create new key: %w", err)
-					}
-				}
-
-				key, err := ks.Get(context, passphrase)
-				if err != nil {
-					return fmt.Errorf("failed to get key from keystore: %w", err)
-				}
-
-				priv, err := key.PrivKey()
-				if err != nil {
-					return fmt.Errorf("unable to convert key from keystore to private key: %w", err)
-				}
-
-				trustCtx, err = did.NewTrustContextWithPrivateKey(priv)
-				if err != nil {
-					return fmt.Errorf("unable to create trust context: %w", err)
-				}
-
-				rootDID = did.FromPublicKey(priv.GetPublic())
-			}
-
-			capStoreDir := filepath.Join(cfg.General.UserDir, node.CapstoreDir)
-			capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", context))
-
-			fileExists, err := afs.Exists(capStoreFile)
-			if err != nil {
-				return fmt.Errorf("unable to check if capability context file exists: %w", err)
-			}
-
-			if fileExists && !force {
-				confirmed, err := dmsUtils.PromptYesNo(
-					cmd.InOrStdin(),
-					cmd.OutOrStdout(),
-					fmt.Sprintf(
-						"WARNING: A capability context file already exists at %s. Creating a new one will overwrite the existing context. Do you want to proceed?",
-						capStoreFile,
-					),
-				)
-				if err != nil {
-					return fmt.Errorf("failed to get user confirmation: %w", err)
-				}
-				if !confirmed {
-					return fmt.Errorf("operation cancelled by user")
-				}
-			} else {
-				if err := afs.MkdirAll(capStoreDir, 0o700); err != nil {
-					return fmt.Errorf("unable to create capability store directory: %w", err)
-				}
-			}
-
-			capCtx, err := ucan.NewCapabilityContextWithName(context, trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
-			if err != nil {
-				return fmt.Errorf("unable to create capability context: %w", err)
-			}
-
-			if err := node.SaveCapabilityContext(capCtx, cfg.UserDir); err != nil {
-				return fmt.Errorf("save capability context: %w", err)
-			}
-
-			return nil
+			return runNewCap(cmd.Context(), dmsCLI, opts, cli.CmdStreams(cmd))
 		},
 	}
 
-	cmd.Flags().BoolVarP(&force, fnForce, "f", false, "force overwrite of existing context")
+	cmd.Flags().BoolVarP(&opts.Force, fnForce, "f", false, "force overwrite of existing context")
 
 	return cmd
+}
+
+func runNewCap(_ context.Context, dmsCLI *cli.DmsCLI, opts NewCapOptions, streams cli.Streams) error {
+	var trustCtx did.TrustContext
+	var rootDID did.DID
+
+	fs := dmsCLI.FS()
+
+	if node.IsLedgerContext(opts.Context) {
+		provider, err := did.NewLedgerWalletProvider(0)
+		if err != nil {
+			return err
+		}
+
+		trustCtx = did.NewTrustContextWithProvider(provider)
+		rootDID = provider.DID()
+		opts.Context = node.GetContextKey(opts.Context)
+	} else {
+		cfg, err := dmsCLI.Config()
+		if err != nil {
+			return fmt.Errorf("unable to get config: %w", err)
+		}
+		keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
+		ks, err := keystore.New(fs, keyStoreDir)
+		if err != nil {
+			return fmt.Errorf("failed to open keystore: %w", err)
+		}
+
+		passphrase := ""
+		if ks.Exists(opts.Context) {
+			fmt.Fprintf(streams.Out, "Using identity at %s/%s.json...\n", keyStoreDir, opts.Context)
+			passphrase, err = dmsCLI.Passphrase(opts.Context)
+			if err != nil {
+				return fmt.Errorf("failed to get passphrase: %w", err)
+			}
+		} else {
+			fmt.Fprintf(streams.Out, "A new identity will be created for '%s' context...\n", opts.Context)
+			passphrase, err = dmsCLI.NewPassphrase(opts.Context)
+			if err != nil {
+				return fmt.Errorf("failed to create new passphrase: %w", err)
+			}
+
+			_, err = dms.GenerateAndStorePrivKey(ks, passphrase, opts.Context)
+			if err != nil {
+				return fmt.Errorf("failed to create new key: %w", err)
+			}
+		}
+
+		key, err := ks.Get(opts.Context, passphrase)
+		if err != nil {
+			return fmt.Errorf("failed to get key from keystore: %w", err)
+		}
+
+		priv, err := key.PrivKey()
+		if err != nil {
+			return fmt.Errorf("unable to convert key from keystore to private key: %w", err)
+		}
+
+		trustCtx, err = did.NewTrustContextWithPrivateKey(priv)
+		if err != nil {
+			return fmt.Errorf("unable to create trust context: %w", err)
+		}
+
+		rootDID = did.FromPublicKey(priv.GetPublic())
+	}
+
+	cfg, err := dmsCLI.Config()
+	if err != nil {
+		return fmt.Errorf("unable to get config: %w", err)
+	}
+	capStoreDir := filepath.Join(cfg.General.UserDir, node.CapstoreDir)
+	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", opts.Context))
+
+	fileExists, err := afero.Exists(fs, capStoreFile)
+	if err != nil {
+		return fmt.Errorf("unable to check if capability context file exists: %w", err)
+	}
+
+	if fileExists && !opts.Force {
+		confirmed, err := dmsUtils.PromptYesNo(
+			streams.In,
+			streams.Out,
+			fmt.Sprintf(
+				"WARNING: A capability context file already exists at %s. Creating a new one will overwrite the existing context. Do you want to proceed?",
+				capStoreFile,
+			),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to get user confirmation: %w", err)
+		}
+		if !confirmed {
+			return fmt.Errorf("operation cancelled by user")
+		}
+	} else {
+		if err := fs.MkdirAll(capStoreDir, 0o700); err != nil {
+			return fmt.Errorf("unable to create capability store directory: %w", err)
+		}
+	}
+
+	capCtx, err := ucan.NewCapabilityContextWithName(opts.Context, trustCtx, rootDID, nil, ucan.TokenList{}, ucan.TokenList{}, ucan.TokenList{})
+	if err != nil {
+		return fmt.Errorf("unable to create capability context: %w", err)
+	}
+
+	if err := node.SaveCapabilityContext(capCtx, fs, cfg.UserDir); err != nil {
+		return fmt.Errorf("save capability context: %w", err)
+	}
+
+	return nil
 }

@@ -9,46 +9,59 @@
 package actor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 )
 
 // NewActorInvokeCmd is a constructor for `actor invoke` subcommand
-func newActorInvokeCmd(_ afero.Afero, cfg *config.Config) *cobra.Command {
+func newActorInvokeCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "invoke <msg>",
 		Short: "Invoke a behaviour in an actor and return the result",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var msg actor.Envelope
-
-			if err := json.Unmarshal([]byte(args[0]), &msg); err != nil {
-				return fmt.Errorf("could not unmarshal message: %w", err)
-			}
-
-			if msg.Options.ReplyTo == "" {
-				return fmt.Errorf("missing replyTo field in message")
-			}
-
-			cli, err := utils.NewClient(cfg, nil)
-			if err != nil {
-				return fmt.Errorf("could not create client: %w", err)
-			}
-
-			res, err := cli.InvokeBehaviorRaw(cmd.Context(), msg)
-			if err != nil {
-				return fmt.Errorf("could not invoke behaviour: %w", err)
-			}
-
-			return displayResponse(cmd, res.Message)
+			return runActorInvokeCmd(
+				cmd.Context(),
+				dmsCli,
+				args[0],
+				cli.CmdStreams(cmd),
+			)
 		},
 	}
 	return cmd
+}
+
+func runActorInvokeCmd(
+	ctx context.Context,
+	dmsCli *cli.DmsCLI,
+	msgArg string,
+	streams cli.Streams,
+) error {
+	var msg actor.Envelope
+
+	if err := json.Unmarshal([]byte(msgArg), &msg); err != nil {
+		return fmt.Errorf("could not unmarshal message: %w", err)
+	}
+
+	if msg.Options.ReplyTo == "" {
+		return fmt.Errorf("missing replyTo field in message")
+	}
+
+	cli, err := dmsCli.NewClient(nil)
+	if err != nil {
+		return fmt.Errorf("could not create client: %w", err)
+	}
+
+	res, err := cli.InvokeBehaviorRaw(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("could not invoke behaviour: %w", err)
+	}
+
+	return displayResponse(streams.Out, json.RawMessage(res.Message))
 }

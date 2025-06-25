@@ -13,3 +13,11 @@ type AllocationKey struct {
 	File string            `json:"file"` // source path to file
 	Dest string            `json:"dest"` // destination path
 }
+
+func (t AllocationKeyType) Equal(other string) bool {
+	return string(t) == other
+}
+
+func (t AllocationKeyType) String() string {
+	return string(t)
+}

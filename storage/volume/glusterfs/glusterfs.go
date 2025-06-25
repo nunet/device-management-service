@@ -28,7 +28,7 @@ type GlusterFS struct {
 
 	mu sync.Mutex
 
-	tracker          *storage.VoumeTracker
+	tracker          *storage.VolumeTracker
 	allocationID     string
 	clientPrivateKey string
 	clientPEM        string
@@ -38,7 +38,7 @@ type GlusterFS struct {
 var _ types.Mounter = (*GlusterFS)(nil)
 
 // New creates a new GlusterFS mounter with the provided configuration.
-func New(t *storage.VoumeTracker, servers []string, name string, clientPrivateKey, clientPEM, clientCA, allocationID string) (*GlusterFS, error) {
+func New(t *storage.VolumeTracker, servers []string, name string, clientPrivateKey, clientPEM, clientCA, allocationID string) (*GlusterFS, error) {
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("no GlusterFS servers provided")
 	}
@@ -72,7 +72,11 @@ func (g *GlusterFS) Mount(targetPath string, _ map[string]string) error {
 		return fmt.Errorf("target path cannot be empty")
 	}
 
-	return g.runGlusterfsClient(targetPath)
+	if err := g.runGlusterfsClient(targetPath); err != nil {
+		return fmt.Errorf("failed to run glusterfs client: %w", err)
+	}
+
+	return nil
 }
 
 func (g *GlusterFS) runGlusterfsClient(targetPath string) error {
@@ -217,7 +221,9 @@ func (g *GlusterFS) Unmount(targetPath string) error {
 	defer g.mu.Unlock()
 
 	if !g.tracker.IsMounted(targetPath) {
-		return fmt.Errorf("%s is not mounted", targetPath)
+		log.Warnf("target path %s is not mounted", targetPath)
+		// no need to unmount if it's not mounted
+		return nil
 	}
 
 	if targetPath == "" {

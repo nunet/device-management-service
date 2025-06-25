@@ -92,6 +92,44 @@ func TestValidateSpec(t *testing.T) {
 			errorMsg: "duplicate allocation names found",
 		},
 		{
+			// Duplicate dns_name should be rejected
+			name: "duplicate dns_name",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type":     "service",
+						"dns_name": "shared.example.com",
+					},
+					"alloc2": map[string]any{
+						"type":     "service",
+						"dns_name": "shared.example.com",
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "duplicate dns_name found",
+		},
+		{
+			// Unique dns_name values should pass
+			name: "unique dns_name",
+			spec: map[string]any{
+				"allocations": map[string]any{
+					"alloc1": map[string]any{
+						"type":     "service",
+						"dns_name": "a.example.com",
+					},
+					"alloc2": map[string]any{
+						"type":     "service",
+						"dns_name": "b.example.com",
+					},
+					"alloc3": map[string]any{
+						"type": "service",
+					}, // missing dns_name is fine
+				},
+			},
+			wantErr: false,
+		},
+		{
 			// When edges exist, nodes field must be present (empty nodes map is valid)
 			// Actual node references will be validated at a later stage
 			name: "edges with empty nodes map",
@@ -436,6 +474,139 @@ func TestValidateAllocation(t *testing.T) {
 				"resources":        map[string]any{},
 				"failure_recovery": defaultAllocationFailureStrategy,
 				"keys":             []any{},
+			},
+			wantErr: false,
+		},
+		{
+			// wrong data for key
+			name: "wrong data for key",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys": []any{
+					"not a map",
+					"another not a map",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "must be a map",
+		},
+		{
+			// key type not specified
+			name: "key type not specified",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys": []any{
+					map[string]any{
+						"file": "keyfile",
+						"dest": "keydest",
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "must have a type",
+		},
+		{
+			// unknown key type
+			name: "unknown key type",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys": []any{
+					map[string]any{
+						"type": "invalid-type",
+						"file": "keyfile",
+						"dest": "keydest",
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "has invalid type",
+		},
+		{
+			// empty key file path
+			name: "empty key file path",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys": []any{
+					map[string]any{
+						"type": "ssh",
+						"file": "",
+						"dest": "keydest",
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "is empty",
+		},
+		{
+			// no key dest when type isn't ssh
+			name: "no key dest and no execution user specified",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys": []any{
+					map[string]any{
+						"type": "gpg",
+						"file": "/key/file/path",
+						"dest": "",
+					},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "missing a destination",
+		},
+		{
+			// key destination specified
+			name: "not ssh key but key destination specified",
+			root: map[string]any{},
+			alloc: map[string]any{
+				"type": "task",
+				"execution": map[string]any{
+					"type": "docker",
+				},
+				"executor":         "docker",
+				"resources":        map[string]any{},
+				"failure_recovery": defaultAllocationFailureStrategy,
+				"keys": []any{
+					map[string]any{
+						"type": "gpg",
+						"file": "/key/file/path",
+						"dest": "/destination/path",
+					},
+				},
 			},
 			wantErr: false,
 		},

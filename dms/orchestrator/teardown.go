@@ -38,8 +38,13 @@ type AllocationStopResponse struct {
 	Error string
 }
 
-func (o *BasicOrchestrator) Shutdown() {
+func (o *BasicOrchestrator) Shutdown() error {
 	allocStatuses := make(map[string]jtypes.AllocationStatus)
+
+	if o.status == jtypes.DeploymentStatusCompleted || o.status == jtypes.DeploymentStatusShuttingDown {
+		log.Error("orchestrator already shutting down or completed")
+		return nil
+	}
 
 	o.setStatus(jtypes.DeploymentStatusShuttingDown)
 	o.lock.Lock()
@@ -52,7 +57,12 @@ func (o *BasicOrchestrator) Shutdown() {
 		o.lock.Unlock()
 		// set alloc statuses
 		for allocName, status := range allocStatuses {
-			o.updateAllocationStatus(allocName, status)
+			err := o.manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
+				alloc.Status = status
+			})
+			if err != nil {
+				log.Errorf("failed to update allocation manifest %s status: %v", allocName, err)
+			}
 		}
 		// set orchestrator status
 		o.setStatus(jtypes.DeploymentStatusCompleted)
@@ -70,6 +80,7 @@ func (o *BasicOrchestrator) Shutdown() {
 		destroyHandles["orchestrator"] = o.actor.Supervisor()
 	}
 
+	errCh1 := make(chan error, len(destroyHandles))
 	wg := sync.WaitGroup{}
 	for id, handle := range destroyHandles {
 		wg.Add(1)
@@ -87,6 +98,7 @@ func (o *BasicOrchestrator) Shutdown() {
 			)
 			if err != nil {
 				log.Errorf("error creating stop message for %s/%s: %s", o.manifest.ID, id, err)
+				errCh1 <- err
 				return
 			}
 
@@ -94,6 +106,7 @@ func (o *BasicOrchestrator) Shutdown() {
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
 				log.Errorf("error invoking stop message for %s/%s: %s", o.manifest.ID, id, err)
+				errCh1 <- err
 				return
 			}
 
@@ -105,15 +118,18 @@ func (o *BasicOrchestrator) Shutdown() {
 				var resp SubnetDestroyResponse
 				if err := json.Unmarshal(reply.Message, &resp); err != nil {
 					log.Errorf("error unmarshalling subnet destroy response: %v", err)
+					errCh1 <- err
 					return
 				}
 				if !resp.OK {
 					log.Errorf("failed to destroy subnet %s/%s: %v", o.manifest.ID, id, resp.Error)
+					errCh1 <- fmt.Errorf("failed to destroy subnet %s/%s: %v", o.manifest.ID, id, resp.Error)
 					return
 				}
 
 			case <-time.After(SubnetDestroyTimeout):
 				log.Errorf("timeout destroying subnet %s", o.manifest.ID)
+				errCh1 <- fmt.Errorf("timeout destroying subnet %s", o.manifest.ID)
 				return
 			}
 
@@ -122,7 +138,9 @@ func (o *BasicOrchestrator) Shutdown() {
 	}
 
 	wg.Wait()
+	close(errCh1)
 
+	errCh2 := make(chan error, len(o.manifest.Allocations))
 	wg = sync.WaitGroup{}
 	for allocName, alloc := range o.manifest.Allocations {
 		wg.Add(1)
@@ -131,7 +149,7 @@ func (o *BasicOrchestrator) Shutdown() {
 			msg, err := actor.Message(
 				o.actor.Handle(),
 				h,
-				fmt.Sprintf(behaviors.AllocationShutdownBehavior, o.manifest.ID),
+				fmt.Sprintf(behaviors.AllocationShutdownBehavior.DynamicTemplate, o.manifest.ID),
 				AllocationStopRequest{
 					AllocationID: allocID,
 				},
@@ -139,6 +157,7 @@ func (o *BasicOrchestrator) Shutdown() {
 			)
 			if err != nil {
 				log.Errorf("error creating stop message for alloc: %s: %v", allocID, err)
+				errCh2 <- err
 				return
 			}
 
@@ -146,6 +165,7 @@ func (o *BasicOrchestrator) Shutdown() {
 			replyCh, err := o.actor.Invoke(msg)
 			if err != nil {
 				log.Errorf("error invoking stop message for %s: %v", allocID, err)
+				errCh2 <- err
 				return
 			}
 
@@ -157,28 +177,39 @@ func (o *BasicOrchestrator) Shutdown() {
 				var resp AllocationStopResponse
 				if err := json.Unmarshal(reply.Message, &resp); err != nil {
 					log.Errorf("error unmarshalling stop allocation response: %s", err)
+					errCh2 <- err
 					return
 				}
 				if !resp.OK {
 					log.Errorf("failed to stop allocation %s", allocID)
+					errCh2 <- fmt.Errorf("failed to stop allocation %s", allocID)
 					return
 				}
 			case <-time.After(AllocationShutdownTimeout):
 				log.Errorf("timeout stopping allocation %s", allocID)
+				errCh2 <- fmt.Errorf("timeout stopping allocation %s", allocID)
 				return
 			}
 			log.Infof("allocation %s stopped", allocID)
 			allocStatuses[allocName] = jtypes.AllocationCompleted
 		}(o.manifest.Nodes[alloc.NodeID].Handle, alloc.ID)
 	}
-
 	wg.Wait()
 	log.Infow("orchestrator_shutdown_complete",
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", o.id)
+
+	close(errCh2)
+
+	err1 := aggregateErrors(errCh1)
+	err2 := aggregateErrors(errCh2)
+	if err1 != nil || err2 != nil {
+		return fmt.Errorf("errors occurred during shutdown: %w, %w", err1, err2)
+	}
+	return nil
 }
 
-type RevertDeploymentMessage struct {
+type DeploymentRevertRequest struct {
 	EnsembleID   string
 	AllocsByName []string
 }
@@ -199,8 +230,8 @@ func (o *BasicOrchestrator) revertNodeDeployment(
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
-		behaviors.RevertDeploymentBehavior,
-		RevertDeploymentMessage{
+		behaviors.DeploymentRevertBehavior,
+		DeploymentRevertRequest{
 			EnsembleID:   o.id,
 			AllocsByName: ncfg.Allocations,
 		},

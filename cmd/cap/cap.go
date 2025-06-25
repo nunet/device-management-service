@@ -9,9 +9,8 @@
 package cap
 
 import (
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 )
 
 const (
@@ -34,20 +33,20 @@ const (
 )
 
 // NewCapCmd returns the cap command that adds other commands
-func NewCapCmd(afs afero.Afero, cfg *config.Config) *cobra.Command {
+func NewCapCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cap",
 		Short: "Manage capabilities",
 		Long:  `Manage capabilities for the Device Management Service`,
 	}
 
-	cmd.AddCommand(newGrantCmd(afs, cfg))
-	cmd.AddCommand(newAnchorCmd(afs, cfg))
-	cmd.AddCommand(newRevokeCmd(afs, cfg))
-	cmd.AddCommand(newNewCmd(afs, cfg))
-	cmd.AddCommand(newDelegateCmd(afs, cfg))
-	cmd.AddCommand(newListCmd(afs, cfg))
-	cmd.AddCommand(newRemoveCmd(afs, cfg))
+	cmd.AddCommand(newGrantCmd(dmsCli))
+	cmd.AddCommand(newAnchorCmd(dmsCli))
+	cmd.AddCommand(newRevokeCmd(dmsCli))
+	cmd.AddCommand(newNewCmd(dmsCli))
+	cmd.AddCommand(newDelegateCmd(dmsCli))
+	cmd.AddCommand(newListCmd(dmsCli))
+	cmd.AddCommand(newRemoveCmd(dmsCli))
 	cmd.AddCommand(newHelpCmd())
 
 	return cmd

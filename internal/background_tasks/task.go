@@ -20,12 +20,9 @@ type RetryPolicy struct {
 
 // Execution records the execution details of a task.
 type Execution struct {
-	StartedAt time.Time   // Start time of the execution.
-	EndedAt   time.Time   // End time of the execution.
-	Status    string      // Status of the execution (e.g., "SUCCESS", "FAILED").
-	Error     string      // Error message if the execution failed.
-	Event     interface{} // Event associated with the execution.
-	Results   interface{} // Results of the execution.
+	StartedAt time.Time // Start time of the execution.
+	EndedAt   time.Time // End time of the execution.
+	Error     string    // Error message if the execution failed.
 }
 
 // Task represents a schedulable task.

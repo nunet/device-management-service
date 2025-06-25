@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	Libp2pNetwork NetworkType = "libp2p"
-	NATSNetwork   NetworkType = "nats"
+	Libp2pNetwork  NetworkType = "libp2p"
+	NATSNetwork    NetworkType = "nats"
+	VirtualNetwork NetworkType = "memory" // test-only
 )
 
 type MessageType string

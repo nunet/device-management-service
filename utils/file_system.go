@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/afero"
 )
@@ -63,4 +64,23 @@ func FileExists(fs afero.Fs, filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+func CreateDirIfNotExists(fs afero.Afero, path string) error {
+	if _, err := fs.Stat(path); os.IsNotExist(err) {
+		err := fs.MkdirAll(path, 0o777) // Creates parent directories if needed
+		if err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+	return nil
+}
+
+// CurrentFileDirectory returns the path of this file
+func CurrentFileDirectory() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	return filepath.Dir(file)
 }

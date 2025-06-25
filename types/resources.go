@@ -10,8 +10,11 @@ package types
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
+
+var ErrNoFreeResources = errors.New("no free resources")
 
 // Resources represents the resources of the machine
 type Resources struct {

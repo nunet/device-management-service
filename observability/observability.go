@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -37,9 +38,6 @@ var (
 	atomicLevel      zap.AtomicLevel = zap.NewAtomicLevel()
 	log                              = logging.Logger("observability")
 	didID            did.DID
-
-	// Track ES disabled state if repeated errors or init fails
-	esDisabled bool
 )
 
 // CustomEvent represents a custom event structure
@@ -47,6 +45,16 @@ type CustomEvent struct {
 	Name      string
 	Timestamp time.Time
 	Data      map[string]interface{}
+}
+
+var esDisabledFlag int32 // 0 => false, 1 => true
+
+func disableES() {
+	atomic.StoreInt32(&esDisabledFlag, 1)
+}
+
+func isESDisabled() bool {
+	return atomic.LoadInt32(&esDisabledFlag) == 1
 }
 
 // Initialize sets up the logger, tracing, and event bus
@@ -90,7 +98,6 @@ func initLogger(observabilityConfig config.Observability) error {
 	// Acquire the lock only briefly
 	mutex.Lock()
 	localNoOp := noOpMode
-	localEsDisabled := esDisabled
 	mutex.Unlock()
 
 	// If we're in no-op mode, do nothing and return
@@ -121,13 +128,11 @@ func initLogger(observabilityConfig config.Observability) error {
 	fileCore := createFileCore(observabilityConfig, atomicLevel)
 
 	var esCore zapcore.Core
-	if observabilityConfig.ElasticsearchEnabled && !localEsDisabled {
+	if observabilityConfig.ElasticsearchEnabled && !isESDisabled() {
 		esCore, err = createElasticsearchCore(observabilityConfig, atomicLevel)
 		if err != nil {
 			log.Warn("Unable to create Elasticsearch logger (will disable ES logging).", zap.Error(err))
-			mutex.Lock()
-			esDisabled = true
-			mutex.Unlock()
+			disableES()
 			esCore = nil
 		}
 	}
@@ -417,9 +422,10 @@ func (b *bufferedElasticsearchSyncer) Sync() error {
 	return nil
 }
 
-// Flush sends the buffered log entries to Elasticsearch with advanced routing,
+// Flush sends the buffered log entries to Elasticsearch with advanced routing
 // but never sends the same log to both the override index and the default index.
 func (b *bufferedElasticsearchSyncer) Flush() {
+	// Lock only the buffer mutex
 	b.bufferMutex.Lock()
 	defer b.bufferMutex.Unlock()
 
@@ -448,12 +454,12 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 			continue
 		}
 
-		// If "es_skip" is true, do not send to ES at all
+		// Skip if "es_skip" == true
 		if skipVal, ok := record["es_skip"].(bool); ok && skipVal {
 			continue
 		}
 
-		// If "es_index" is set, store in that override index only
+		// If "es_index" is set, store in that index
 		if overrideIndex, ok := record["es_index"].(string); ok && overrideIndex != "" {
 			req := elastic.NewBulkIndexRequest().Index(overrideIndex).Doc(record)
 			bulkRequest = bulkRequest.Add(req)
@@ -469,11 +475,9 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 	_, err := bulkRequest.Do(flushCtx)
 	if err != nil {
-		// If it’s a 401, disable ES immediately
+		// If it’s a 401, disable ES immediately (atomic, no global lock)
 		if esErr, ok := err.(*elastic.Error); ok && esErr.Status == 401 {
-			mutex.Lock()
-			esDisabled = true
-			mutex.Unlock()
+			disableES()
 			return
 		}
 
@@ -488,9 +492,7 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 		// If it fails too many times in a short window, disable ES
 		if b.errorCount >= 3 {
-			mutex.Lock()
-			esDisabled = true
-			mutex.Unlock()
+			disableES()
 		}
 	} else {
 		b.errorCount = 0
@@ -589,9 +591,11 @@ func (e *eventEmitterCore) Write(entry zapcore.Entry, fields []zapcore.Field) er
 		Data:      eventData,
 	}
 
-	if err := customEventEmitter.Emit(customEvent); err != nil {
-		log.Debug("Error emitting event", zap.Error(err))
+	// nil-guard: only emit if the bus is initialised
+	if customEventEmitter != nil {
+		_ = customEventEmitter.Emit(customEvent)
 	}
+
 	return nil
 }
 

@@ -10,29 +10,20 @@ package actor
 
 import (
 	"fmt"
-	"strings"
-	"time"
 
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/client"
-	"gitlab.com/nunet/device-management-service/cmd/utils"
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 )
 
-const (
-	fnTimeout     = "timeout"
-	fnExpiry      = "expiry"
-	fnContextName = "context"
-	fnDest        = "dest"
+func newActorCmdGroup(dmsCli *cli.DmsCLI) *cobra.Command {
+	// Create a slice of valid arguments from behavior map keys
+	validArgs := make([]string, 0, len(registeredBehaviors))
+	for behavior := range registeredBehaviors {
+		validArgs = append(validArgs, behavior)
+	}
 
-	bBroadcast = "broadcast"
-	bInvoke    = "invoke"
-	bSend      = "send"
-)
-
-func newActorCmdGroup(afs afero.Afero, cfg *config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cmd",
 		Short: "Invoke a predefined behavior on an actor",
@@ -44,42 +35,29 @@ Example:
 Adding the --dest flag will cause the behavior to be invoked on the specified actor.
 
 For more information on behaviors, refer to cmd/actor/README.md`,
-		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
-			if len(args) > 0 {
-				return nil, cobra.ShellCompDirectiveDefault
-			}
-			var completions []string
-			for k := range registeredBehaviors {
-				completions = append(completions, strings.Split(k, "/")[2])
-			}
-			return completions, cobra.ShellCompDirectiveNoFileComp
-		},
-		Run: func(cmd *cobra.Command, _ []string) {
-			err := cmd.Help()
-			if err != nil {
-				cmd.Println(err)
-			}
-		},
+		ValidArgs: validArgs,
 	}
 
-	for behavior := range registeredBehaviors {
-		if behaviorCfg, ok := registeredBehaviors[behavior]; ok {
-			cmd.AddCommand(newActorCmdCmd(afs, behavior, behaviorCfg, cfg))
-		}
+	for behavior, behaviorCfg := range registeredBehaviors {
+		cmd.AddCommand(newActorCmdCmd(dmsCli, behavior, behaviorCfg))
 	}
 
-	cmd.PersistentFlags().StringP(fnContextName, "c", "", "capability context name")
-	cmd.PersistentFlags().DurationP(fnTimeout, "t", 0, "timeout duration")
-	cmd.PersistentFlags().VarP(utils.NewTimeValue(&time.Time{}), fnExpiry, "e", "expiration time")
-	cmd.PersistentFlags().StringP(fnDest, "d", "", "destination DMS DID, peer ID or handle")
-	cmd.MarkFlagsMutuallyExclusive(fnTimeout, fnExpiry)
+	useMessageOptsFlags(cmd, true)
 	return cmd
 }
 
-func newActorCmdCmd(afs afero.Afero, behavior string, behaviorCfg behaviorConfig, cfg *config.Config) *cobra.Command {
-	payload := &Payload{val: nil}
+type actorCmdOptions struct {
+	Context string
+	Payload any
+	Args    []string
+	MsgOpts []client.Option
+	Streams cli.Streams
+}
+
+func newActorCmdCmd(dmsCli *cli.DmsCLI, behavior string, behaviorCfg *behaviorConfig) *cobra.Command {
+	opts := actorCmdOptions{}
 	if behaviorCfg.Payload != nil {
-		payload.val = behaviorCfg.Payload()
+		opts.Payload = behaviorCfg.Payload()
 	}
 
 	cmd := &cobra.Command{
@@ -88,48 +66,23 @@ func newActorCmdCmd(afs afero.Afero, behavior string, behaviorCfg behaviorConfig
 		Long:              behaviorCfg.Long,
 		ValidArgsFunction: behaviorCfg.ValidArgsFn,
 		Args:              behaviorCfg.Args,
-		PreRunE: func(cmd *cobra.Command, _ []string) error {
-			if behaviorCfg.PreRunE != nil {
-				return behaviorCfg.PreRunE(cmd, payload.val)
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			opts.Args = args
+			opts.Context, _ = cmd.Flags().GetString(fnContext)
+			opts.MsgOpts = getBehaviorMsgOpts(cmd)
+			opts.Streams = cli.CmdStreams(cmd)
+			if behaviorCfg.PreRunFn != nil {
+				return behaviorCfg.PreRunFn(cmd, dmsCli, opts)
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			timeout, _ := cmd.Flags().GetDuration(fnTimeout)
-			expiry, _ := utils.GetTime(cmd.Flags(), fnExpiry)
-			contextName, _ := cmd.Flags().GetString(fnContextName)
-			dest, _ := cmd.Flags().GetString(fnDest)
-
-			// Create security context first
-			sctx, err := utils.NewSecurityContext(afs, contextName, cfg)
-			if err != nil {
-				return fmt.Errorf("could not create security context: %w", err)
-			}
-
-			// Now call newClient with the correct arguments
-			cli, err := utils.NewClient(cfg, sctx)
-			if err != nil {
-				return fmt.Errorf("could not create client: %w", err)
-			}
-
-			res, err := behaviorCfg.Run(
-				cmd,
-				cli,
-				payload.val,
-				client.WithTimeout(timeout),
-				client.WithExpiry(expiry),
-				client.WithDestination(dest),
-			)
-			if err != nil {
-				return err
-			}
-
-			return displayResponse(cmd, res)
+			return behaviorCfg.Run(cmd.Context(), dmsCli, opts, cli.CmdStreams(cmd))
 		},
 	}
 
 	if behaviorCfg.SetFlags != nil {
-		behaviorCfg.SetFlags(cmd, payload.val)
+		behaviorCfg.SetFlags(cmd, opts.Payload)
 	}
 
 	return cmd

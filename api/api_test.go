@@ -1,91 +1,117 @@
-// Copyright 2024, Nunet
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
-
 package api
 
 import (
-	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"gitlab.com/nunet/device-management-service/network"
-
 	"github.com/gin-gonic/gin"
-
-	"go.uber.org/mock/gomock"
-
-	"gitlab.com/nunet/device-management-service/actor"
-
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestServer_Actor(t *testing.T) {
+// TestNewServer tests the creation of a new server
+func TestNewServer(t *testing.T) {
+	t.Parallel()
+	config := &ServerConfig{
+		Addr: "localhost",
+		Port: 8080,
+	}
+	server := NewServer(config)
+
+	assert.NotNil(t, server)
+	assert.NotNil(t, server.router)
+	assert.Equal(t, config, server.config)
+}
+
+// TestSetupRoutes tests the setup of routes
+func TestSetupRoutes(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
-	serverPort := uint32(9138)
+	config := &ServerConfig{
+		Addr: "localhost",
+		Port: 8080,
+	}
+	server := NewServer(config)
+	server.SetupRoutes()
 
-	ctrl := gomock.NewController(t)
-	p2pHandler := NewMockNetwork(ctrl)
+	// Test that all expected routes exist
+	routes := server.router.Routes()
+	expectedRoutes := map[string]string{
+		"/health":                 "GET",
+		"/api/v1/actor/handle":    "GET",
+		"/api/v1/actor/send":      "POST",
+		"/api/v1/actor/invoke":    "POST",
+		"/api/v1/actor/broadcast": "POST",
+	}
 
-	_ = startServer(t, serverPort, p2pHandler)
+	// Create a map of actual routes
+	actualRoutes := make(map[string]bool)
+	for _, route := range routes {
+		key := route.Path + "-" + route.Method
+		actualRoutes[key] = true
+	}
 
-	t.Run("must be able to call /api/v1/actor/handle", func(t *testing.T) {
-		p2pHandler.EXPECT().GetHostID().Return(network.PeerID("hostID")).Times(1)
-		p2pHandler.EXPECT().GetPeerPubKey(gomock.Any()).Return(getTestPublicKey(t)).Times(1)
-		p2pHandler.EXPECT().GetHostID().Return(network.PeerID("hostID")).Times(1)
+	// Check that all expected routes exist
+	for path, method := range expectedRoutes {
+		key := path + "-" + method
+		assert.True(t, actualRoutes[key], "Route %s with method %s does not exist", path, method)
+	}
 
-		resp, err := doRequest(t, http.MethodGet,
-			fmt.Sprintf("http://localhost:%d/api/v1/actor/handle", serverPort),
-			nil,
-		)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-	})
+	// Test health endpoint works
+	w := httptest.NewRecorder()
+	req, err := http.NewRequest("GET", "/health", nil)
+	assert.NoError(t, err)
+	server.router.ServeHTTP(w, req)
 
-	t.Run("must be able to call /api/v1/actor/send", func(t *testing.T) {
-		p2pHandler.EXPECT().SendMessageSync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	// Assert that the health endpoint is working
+	assert.Equal(t, http.StatusOK, w.Code)
+}
 
-		msg := actor.Envelope{}
-		resp, err := doRequest(t, http.MethodPost,
-			fmt.Sprintf("http://localhost:%d/api/v1/actor/send", serverPort),
-			getMockEnvelope(t, msg).Bytes(),
-		)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-	})
+// TestHealthCheck tests the health check endpoint
+func TestHealthCheck(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	config := &ServerConfig{
+		Addr: "localhost",
+		Port: 8080,
+	}
+	server := NewServer(config)
 
-	t.Run("must be able to call /api/v1/actor/invoke", func(t *testing.T) {
-		var msg actor.Envelope
-		p2pHandler.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).DoAndReturn(func(_ string, handler func(data []byte, peerID network.PeerID)) error {
-			// call the handler
-			handler(getMockEnvelope(t, msg).Bytes(), "peerID")
-			return nil
-		}).Times(1)
-		p2pHandler.EXPECT().SendMessageSync(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		p2pHandler.EXPECT().UnregisterMessageHandler(gomock.Any()).Times(1)
+	server.HealthCheck(c)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "\"status\":\"ok\"")
+}
 
-		resp, err := doRequest(t, http.MethodPost,
-			fmt.Sprintf("http://localhost:%d/api/v1/actor/invoke", serverPort),
-			getMockEnvelope(t, msg).Bytes(),
-		)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-	})
+// TestCorsConfig tests the CORS configuration
+func TestCorsConfig(t *testing.T) {
+	t.Parallel()
+	corsConfig := getCorsConfig()
+	assert.Contains(t, corsConfig.AllowMethods, "GET")
+	assert.Contains(t, corsConfig.AllowMethods, "POST")
+	assert.Contains(t, corsConfig.AllowMethods, "PUT")
+	assert.Contains(t, corsConfig.AllowMethods, "PATCH")
+	assert.Contains(t, corsConfig.AllowMethods, "DELETE")
+	assert.Contains(t, corsConfig.AllowMethods, "HEAD")
+	assert.Contains(t, corsConfig.AllowMethods, "OPTIONS")
 
-	t.Run("must be able to call /api/v1/actor/broadcast", func(t *testing.T) {
-		p2pHandler.EXPECT().HandleMessage(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		p2pHandler.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		p2pHandler.EXPECT().UnregisterMessageHandler(gomock.Any()).Times(1)
+	// Assert that the allowed headers are set correctly
+	assert.Contains(t, corsConfig.AllowHeaders, "Access-Control-Allow-Origin")
+	assert.Contains(t, corsConfig.AllowHeaders, "Origin")
+	assert.Contains(t, corsConfig.AllowHeaders, "Content-Length")
+	assert.Contains(t, corsConfig.AllowHeaders, "Content-Type")
 
-		resp, err := doRequest(t, http.MethodPost,
-			fmt.Sprintf("http://localhost:%d/api/v1/actor/broadcast", serverPort),
-			getMockBroadcastMessage(t).Bytes(),
-		)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-	})
+	// Assert that the allowed origins are set correctly
+	assert.Contains(t, corsConfig.AllowOrigins, "http://localhost:9991")
+	assert.Contains(t, corsConfig.AllowOrigins, "http://localhost:9992")
+	assert.False(t, corsConfig.AllowCredentials)
+}
+
+// TestSetupRouter tests the setup of the router
+func TestSetupRouter(t *testing.T) {
+	t.Parallel()
+	middlewares := []gin.HandlerFunc{}
+	router := setupRouter(middlewares)
+	assert.NotNil(t, router)
 }

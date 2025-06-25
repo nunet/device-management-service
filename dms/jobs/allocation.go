@@ -17,11 +17,26 @@ import (
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
 	deleteLogsAfter = 30 * time.Minute
 )
+
+// AllocationInfo gathers useful internal information for external callers
+type AllocationInfo struct {
+	ID           string                  `json:"id"`
+	Type         jobtypes.AllocationType `json:"type"`
+	Resources    types.Resources         `json:"resources"`
+	Orchestrator string                  `json:"orchestrator"` // peerID
+	Status       string                  `json:"status"`
+	Executor     string                  `json:"executor"`
+	ExecutionID  string                  `json:"execution_id"`
+	UsingPorts   []int                   `json:"using_ports,omitempty"`
+	CreatedAt    time.Time               `json:"created_at"`
+	StartedAt    time.Time               `json:"started_at"`
+}
 
 // Status holds the status of an allocation.
 type Status struct {
@@ -43,7 +58,7 @@ type Job struct {
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
 	Keys             []types.AllocationKey
-	Volume           *types.VolumeConfig
+	Volume           []types.VolumeConfig
 }
 
 // Allocation represents an allocation
@@ -76,6 +91,9 @@ type Allocation struct {
 
 	// selfRelease will use node's releaseAllocation mechanism
 	selfRelease func() error
+
+	createdAt time.Time
+	startedAt time.Time
 }
 
 // NewAllocation creates a new allocation given the actor.
@@ -91,9 +109,16 @@ func NewAllocation(
 	executor types.Executor,
 	selfRelease func() error,
 ) (*Allocation, error) {
-	// TODO: add check for nil values
 	if network == nil {
 		return nil, fmt.Errorf("network is nil")
+	}
+
+	if actor == nil {
+		return nil, fmt.Errorf("actor is nil")
+	}
+
+	if executor == nil {
+		return nil, fmt.Errorf("executor is nil")
 	}
 
 	executionID, err := uuid.NewUUID()
@@ -121,6 +146,7 @@ func NewAllocation(
 			portMapping map[int]int
 		}{},
 		selfRelease: selfRelease,
+		createdAt:   time.Now(),
 	}
 	return allocation, nil
 }
@@ -150,6 +176,7 @@ func (a *Allocation) Run(
 		log.Warnw("allocation_already_running",
 			"labels", string(observability.LabelAllocation),
 			"allocationID", a.ID)
+		// TODO: Should we return error instead?
 		return nil
 	}
 
@@ -172,14 +199,29 @@ func (a *Allocation) Run(
 		GatewayIP:           gatewayIP,
 	}
 
-	if a.Job.Volume != nil {
-		executionRequest.Inputs = []*types.StorageVolumeExecutor{
-			{
+	// prepare the directories on host
+	if len(a.Job.Volume) > 0 {
+		executionRequest.Inputs = make([]*types.StorageVolumeExecutor, 0)
+
+		for _, v := range a.Job.Volume {
+			src := ""
+			if v.Type == "glusterfs" {
+				src = filepath.Join(a.workDir, "volumes", a.ID, v.Name)
+			} else {
+				src = v.Src
+			}
+
+			target := v.MountDestination
+			if target == "" {
+				target = "/" + v.Name
+			}
+
+			executionRequest.Inputs = append(executionRequest.Inputs, &types.StorageVolumeExecutor{
 				Type:     "bind",
-				Source:   filepath.Join(a.workDir, "volumes", a.ID, a.Job.Volume.Name),
-				Target:   "/" + a.Job.Volume.Name, // its important to prepend with / as target is expected to be an absolute path
-				ReadOnly: false,
-			},
+				Source:   src,
+				Target:   target,
+				ReadOnly: v.ReadOnly,
+			})
 		}
 	}
 
@@ -199,6 +241,7 @@ func (a *Allocation) Run(
 		return fmt.Errorf("start executor: %w", err)
 	}
 
+	a.startedAt = time.Now()
 	a.status = AllocationRunning
 
 	// NEW: Log the resources we've assigned for this run
@@ -284,32 +327,32 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		notifyOrchestrator(behaviors.TaskTerminationNotification{
 			Error: behaviors.TerminationError{
 				ExitCode: exitCode,
-				Err:      fmt.Errorf("general execution failure: %w", err),
+				Err:      fmt.Sprintf("general execution failure: %v", err),
 			},
 		})
 	} else if r != nil {
-		// TODO: use switch-cases
-		if r.ExitCode != 0 { //nolint
+		switch {
+		case r.ExitCode != 0:
 			log.Infof("execution exited with exit code: %d", r.ExitCode)
 			a.status = AllocationFailed
 
 			notifyOrchestrator(behaviors.TaskTerminationNotification{
 				Error: behaviors.TerminationError{
 					ExitCode: r.ExitCode,
-					Err:      fmt.Errorf("execution exit code != 0, exit code: %d", r.ExitCode),
+					Err:      fmt.Sprintf("execution exit code != 0, exit code: %d", r.ExitCode),
 				},
 			})
-		} else if r.ExitCode == 0 && !r.Killed {
+		case r.ExitCode == 0 && !r.Killed:
 			log.Infof("execution successfully completed")
 			a.status = AllocationCompleted
 			notifyOrchestrator(behaviors.TaskTerminationNotification{})
-		} else if r.ExitCode == 0 && r.Killed {
+		case r.ExitCode == 0 && r.Killed:
 			log.Infof("execution possibly killed")
 			a.status = AllocationFailed
 			notifyOrchestrator(behaviors.TaskTerminationNotification{
 				Error: behaviors.TerminationError{
 					ExitCode: r.ExitCode,
-					Err:      fmt.Errorf("execution possibly killed"),
+					Err:      "execution possibly killed",
 					Killed:   true,
 				},
 			})
@@ -337,6 +380,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 		return nil
 	}
 
+	// Question: maybe just setting this at the end?
 	a.status = AllocationStopped
 
 	if a.executor == nil {
@@ -461,6 +505,11 @@ func (a *Allocation) Start() error {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 
+	// start actor
+	if a.actorRunning {
+		return nil
+	}
+
 	allocationBehaviors := map[string]func(actor.Envelope){
 		behaviors.AllocationStartBehavior:       a.handleAllocationStart,
 		behaviors.AllocationRestartBehavior:     a.handleAllocationRestart,
@@ -481,11 +530,6 @@ func (a *Allocation) Start() error {
 		if err != nil {
 			return fmt.Errorf("add allocation start behavior to allocation actor: %w", err)
 		}
-	}
-
-	// start actor
-	if a.actorRunning {
-		return nil
 	}
 
 	err := a.Actor.Start()
@@ -542,4 +586,22 @@ func (a *Allocation) SetHealthCheck(f func() error) {
 	defer a.lock.Unlock()
 
 	a.healthcheck = f
+}
+
+func (a *Allocation) Info() AllocationInfo {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	return AllocationInfo{
+		ID:           a.ID,
+		Type:         a.allocType,
+		Orchestrator: a.orchestrator.Address.HostID,
+		Resources:    a.Job.Resources,
+		Status:       string(a.status),
+		Executor:     a.Job.Execution.Type,
+		ExecutionID:  a.ID,
+		UsingPorts:   utils.MapKeysToSlice(a.state.portMapping),
+		CreatedAt:    a.createdAt,
+		StartedAt:    a.startedAt,
+	}
 }

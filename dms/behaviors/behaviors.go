@@ -28,7 +28,7 @@ const (
 	VerifyEdgeConstraintBehavior = "/dms/deployment/constraint/edge"
 	CommitDeploymentBehavior     = "/dms/deployment/commit"
 	AllocationDeploymentBehavior = "/dms/deployment/allocate"
-	RevertDeploymentBehavior     = "/dms/deployment/revert"
+	DeploymentRevertBehavior     = "/dms/deployment/revert"
 
 	NewDeploymentBehavior      = "/dms/node/deployment/new"
 	DeploymentListBehavior     = "/dms/node/deployment/list"
@@ -36,6 +36,8 @@ const (
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
+
+	AllocationsListBehavior = "/dms/node/allocations/list"
 
 	ResourcesAllocatedBehavior = "/dms/node/resources/allocated"
 	ResourcesFreeBehavior      = "/dms/node/resources/free"
@@ -57,6 +59,10 @@ const (
 	BroadcastHelloBehavior = "/broadcast/hello"
 	BroadcastHelloTopic    = "/nunet/hello"
 
+	StatusDiscoveryBehavior          = "/dms/node/status"
+	BroadcastStatusDiscoveryBehavior = "/broadcast/dms/status"
+	BroadcastStatusDiscoveryTopic    = "/nunet/status"
+
 	EnsembleNamespace     = "/dms/ensemble/%s"
 	AllocationNamespace   = "/dms/allocation"
 	OrchestratorNamespace = "/dms/orchestrator"
@@ -75,9 +81,6 @@ const (
 	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
 
 	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
-
-	AllocationLogsBehavior     = EnsembleNamespace + "/allocation/logs"
-	AllocationShutdownBehavior = EnsembleNamespace + "/allocation/shutdown"
 )
 
 var (
@@ -92,5 +95,14 @@ var (
 	SubnetJoinBehavior = types.Behavior{
 		DynamicTemplate: EnsembleNamespace + "/node/subnet/join",
 		Static:          NodeNamespace + "/subnet/join",
+	}
+
+	AllocationLogsBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/allocation/logs",
+		Static:          "undefined",
+	}
+	AllocationShutdownBehavior = types.Behavior{
+		DynamicTemplate: EnsembleNamespace + "/allocation/shutdown",
+		Static:          "undefined",
 	}
 )

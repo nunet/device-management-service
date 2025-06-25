@@ -17,6 +17,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/validate"
+	"gitlab.com/nunet/device-management-service/types"
 	cutils "gitlab.com/nunet/device-management-service/utils/convert"
 	vutils "gitlab.com/nunet/device-management-service/utils/validate"
 )
@@ -71,7 +72,8 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 	}
 
 	allocationNames := make(map[string]string)
-	for allocName := range allocs {
+	dnsNames := make(map[string]string)
+	for allocName, allocConfigRaw := range allocs {
 		// All allocation names must be fully qualified domain names
 		if !vutils.IsDNSNameValid(allocName) {
 			return fmt.Errorf("invalid allocation name, must be a valid hostname: %s", allocName)
@@ -83,6 +85,20 @@ func ValidateSpec(_ *map[string]any, data any, _ tree.Path) error {
 			return fmt.Errorf("duplicate allocation names found: '%s' and '%s'", originalName, allocName)
 		}
 		allocationNames[lowerName] = allocName
+
+		// Check for duplicate dns_name values
+		allocConfig, ok := allocConfigRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+		dnsName, ok := allocConfig["dns_name"].(string)
+		if !ok || dnsName == "" {
+			continue // skip if dns_name is not set or not a string
+		}
+		if existingAlloc, exists := dnsNames[dnsName]; exists {
+			return fmt.Errorf("duplicate dns_name found: '%s' used in allocations '%s' and '%s'", dnsName, existingAlloc, allocName)
+		}
+		dnsNames[dnsName] = allocName
 	}
 
 	// check for cyclic dependencies
@@ -249,26 +265,28 @@ func ValidateAllocation(root *map[string]any, data any, path tree.Path) error {
 		for i, keyObj := range keys {
 			keyMap, ok := keyObj.(map[string]any)
 			if !ok {
-				return fmt.Errorf("invalid key at index %d: must be an object", i)
+				return fmt.Errorf("invalid allocation key spec at index %d: must be a map", i)
 			}
 
 			keyType, ok := keyMap["type"].(string)
 			if !ok || keyType == "" {
-				return fmt.Errorf("key at index %d must have a type", i)
+				return fmt.Errorf("allocation key spec at index %d must have a type", i)
 			}
 
-			if keyType != "ssh" && keyType != "gpg" {
+			if !types.KeySSH.Equal(keyType) && !types.KeyGPG.Equal(keyType) {
 				return fmt.Errorf("key at index %d has invalid type: %s (must be 'ssh' or 'gpg')", i, keyType)
 			}
 
 			keyFile, ok := keyMap["file"].(string)
 			if !ok || keyFile == "" {
-				return fmt.Errorf("key at index %d must have a file", i)
+				return fmt.Errorf("allocation key at index %d is empty", i)
 			}
 
+			// destination not required for ssh keys. However 'user' in execution will be
+			// used if defined. When a user isn't defined, we default to root.
 			keyDest, ok := keyMap["dest"].(string)
-			if !ok || keyDest == "" {
-				return fmt.Errorf("key at index %d must have a dest", i)
+			if (!ok || keyDest == "") && !types.KeySSH.Equal(keyType) {
+				return fmt.Errorf("allocation key at index %d is missing a destination", i)
 			}
 		}
 	}

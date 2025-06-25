@@ -10,21 +10,25 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	dmsUtils "gitlab.com/nunet/device-management-service/utils"
 )
 
-func newKeyCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
+func newKeyCmd(
+	fs afero.Afero, env env.EnvironmentProvider,
+	cfg *config.Config,
+) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "key",
 		Short: "Manage cryptographic keys",
@@ -33,13 +37,16 @@ func newKeyCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
 This command provides subcommands for creating new keys and retrieving Decentralized Identifiers (DIDs) associated with existing keys.`,
 	}
 
-	cmd.AddCommand(newKeyNewCmd(fs, cfg))
-	cmd.AddCommand(newKeyDIDCmd(fs, cfg))
+	cmd.AddCommand(newKeyNewCmd(fs, env, cfg))
+	cmd.AddCommand(newKeyDIDCmd(fs, env, cfg))
 
 	return cmd
 }
 
-func newKeyNewCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
+func newKeyNewCmd(
+	fs afero.Afero, env env.EnvironmentProvider,
+	cfg *config.Config,
+) *cobra.Command {
 	return &cobra.Command{
 		Use:   "new <name>",
 		Short: "Generate a key pair",
@@ -62,12 +69,7 @@ Example:
 				keyID = args[0]
 			}
 
-			keys, err := ks.ListKeys()
-			if err != nil {
-				return fmt.Errorf("failed to list keys: %w", err)
-			}
-
-			if dmsUtils.SliceContains(keys, keyID) {
+			if ks.Exists(keyID) {
 				confirmed, err := dmsUtils.PromptYesNo(
 					cmd.InOrStdin(),
 					cmd.OutOrStdout(),
@@ -77,31 +79,31 @@ Example:
 					return fmt.Errorf("failed to get user confirmation: %w", err)
 				}
 				if !confirmed {
-					return fmt.Errorf("operation cancelled by user")
+					return dmsUtils.ErrOperationCancelled
 				}
 			}
 
-			passphrase := os.Getenv("DMS_PASSPHRASE")
-			if passphrase == "" {
-				passphrase, err = dmsUtils.PromptForPassphrase(true)
-				if err != nil {
-					return fmt.Errorf("failed to get passphrase: %w", err)
-				}
+			passphrase, err := utils.GetDMSPassphrase(env, true)
+			if err != nil {
+				return fmt.Errorf("get dms passphrase: %w", err)
 			}
 
 			priv, err := dms.GenerateAndStorePrivKey(ks, passphrase, keyID)
 			if err != nil {
-				return fmt.Errorf("failed to generate and store new private key")
+				return fmt.Errorf("failed to generate and store new private key: %w", err)
 			}
 
 			did := did.FromPublicKey(priv.GetPublic())
-			fmt.Println(did)
+			fmt.Fprintln(cmd.OutOrStdout(), did)
 			return nil
 		},
 	}
 }
 
-func newKeyDIDCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
+func newKeyDIDCmd(
+	fs afero.Afero, env env.EnvironmentProvider,
+	cfg *config.Config,
+) *cobra.Command {
 	return &cobra.Command{
 		Use:   "did <name>",
 		Short: "Get a key's DID",
@@ -115,7 +117,7 @@ Example:
   nunet key did user
   nunet key did ledger # if using ledger`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			keyName := args[0]
 
 			if keyName == "ledger" {
@@ -134,12 +136,9 @@ Example:
 				return fmt.Errorf("failed to open keystore: %w", err)
 			}
 
-			passphrase := os.Getenv("DMS_PASSPHRASE")
-			if passphrase == "" {
-				passphrase, err = dmsUtils.PromptForPassphrase(false)
-				if err != nil {
-					return fmt.Errorf("failed to get passphrase: %w", err)
-				}
+			passphrase, err := utils.GetDMSPassphrase(env, false)
+			if err != nil {
+				return fmt.Errorf("get dms passphrase: %w", err)
 			}
 
 			key, err := ks.Get(keyName, passphrase)
@@ -153,7 +152,7 @@ Example:
 			}
 
 			did := did.FromPublicKey(priv.GetPublic())
-			fmt.Println(did)
+			fmt.Fprintln(cmd.OutOrStdout(), did)
 			return nil
 		},
 	}

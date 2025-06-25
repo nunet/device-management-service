@@ -1155,7 +1155,7 @@ func TestHardware_RAM(t *testing.T) {
 		tests := []struct {
 			name string
 			ram  RAM
-			want float64
+			want uint64
 		}{
 			{
 				name: "lower value",
@@ -1190,7 +1190,7 @@ func TestHardware_Disk(t *testing.T) {
 		tests := []struct {
 			name string
 			disk Disk
-			want float64
+			want uint64
 		}{
 			{
 				name: "lower value",

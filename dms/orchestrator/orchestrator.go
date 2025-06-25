@@ -22,16 +22,16 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-const (
+// keep as var instead of consts so that we change the values in tests
+var (
 	BidRequestTimeout           = 5 * time.Second
-	VerifyEdgeConstraintTimeout = 5 * time.Second
 	CommitDeploymentTimeout     = 3 * time.Second
+	VerifyEdgeConstraintTimeout = 5 * time.Second
 	AllocationDeploymentTimeout = 5 * time.Second
 
 	// Setting a big timeout as the user might have to
@@ -48,8 +48,6 @@ const (
 	MaxPermutations  = 1_000_000
 
 	grantOrchestratorCapsFrequency = 5 * time.Minute
-
-	orchSubnetName = "orchestrator"
 )
 
 var (
@@ -59,23 +57,22 @@ var (
 	ErrOrchestratorNotFound = errors.New("orchestrator with ID not found")
 )
 
-// Orchestrator manages the lifecycle of an ensemble deployment
+// Orchestrator is the interface for orchestrating deployments
 type Orchestrator interface {
 	Deploy(expiry time.Time) error
-	Shutdown()
+	Shutdown() error
 	Stop()
+	GetAllocationLogs(allocationID string) (AllocationLogsResponse, error)
+	WriteAllocationLogs(allocationID string, stdout, stderr []byte) (string, error)
+	StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus
 	Status() jtypes.DeploymentStatus
 	Manifest() jtypes.EnsembleManifest
 	Config() jtypes.EnsembleConfig
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
-	GetAllocationLogs(name string) (AllocationLogsResponse, error)
-	WriteAllocationLogs(name string, stdout, stderr []byte) (string, error)
 }
 
-// TODO: use immutable data structures (there are libraries for that), specially
-// for EnsembleManifest and EnsembleConfig
 type BasicOrchestrator struct {
 	lock   sync.Mutex
 	ctx    context.Context
@@ -84,7 +81,6 @@ type BasicOrchestrator struct {
 	fs      afero.Afero
 	workDir string
 	actor   actor.Actor
-	geo     *geolocation.GeoLocator
 
 	id             string
 	cfg            jtypes.EnsembleConfig
@@ -95,7 +91,9 @@ type BasicOrchestrator struct {
 	deploymentSnapshot jtypes.DeploymentSnapshot
 	supervisor         *Supervisor
 
-	nonce uint64
+	// Status subscribers
+	statusSubscribers     map[chan jtypes.DeploymentStatus]struct{}
+	statusSubscribersLock sync.RWMutex
 }
 
 var _ Orchestrator = (*BasicOrchestrator)(nil)
@@ -112,26 +110,21 @@ func NewOrchestrator(
 		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
 	}
 
-	geo, err := geolocation.NewGeoLocator()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create geolocator: %w", err)
-	}
-
 	subnet, err := newSubnetManifest()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create subnet manifest: %w", err)
 	}
 
 	o := &BasicOrchestrator{
-		actor:          oActor,
-		geo:            geo,
-		id:             id,
-		cfg:            cfg,
-		ctx:            ctx,
-		fs:             fs,
-		workDir:        workDir,
-		subnetManifest: subnet,
-		supervisor:     NewSupervisor(ctx, oActor, id),
+		actor:             oActor,
+		id:                id,
+		cfg:               cfg,
+		ctx:               ctx,
+		fs:                fs,
+		workDir:           workDir,
+		subnetManifest:    subnet,
+		supervisor:        NewSupervisor(ctx, oActor, id),
+		statusSubscribers: make(map[chan jtypes.DeploymentStatus]struct{}),
 	}
 
 	orchestratorBehaviors := map[string]func(actor.Envelope){
@@ -156,7 +149,62 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 		"labels", []string{string(observability.LabelDeployment)},
 		"status", status.String(),
 		"orchestratorID", o.id)
+	oldStatus := o.status
 	o.status = status
+
+	if oldStatus != status {
+		// Notify all subscribers
+		o.statusSubscribersLock.RLock()
+		defer o.statusSubscribersLock.RUnlock()
+		for ch := range o.statusSubscribers {
+			select {
+			case ch <- status:
+			default:
+				// Skip if channel is blocked
+			}
+		}
+	}
+
+	// If we've reached a terminal state, close all subscriber channels
+	if status == jtypes.DeploymentStatusRunning ||
+		status == jtypes.DeploymentStatusFailed ||
+		status == jtypes.DeploymentStatusCompleted {
+		for ch := range o.statusSubscribers {
+			close(ch)
+		}
+		o.statusSubscribers = make(map[chan jtypes.DeploymentStatus]struct{})
+	}
+}
+
+func (o *BasicOrchestrator) StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus {
+	ch := make(chan jtypes.DeploymentStatus, 1)
+
+	// Send initial status
+	select {
+	case ch <- o.Status():
+	case <-ctx.Done():
+		close(ch)
+		return ch
+	}
+
+	o.statusSubscribersLock.Lock()
+	o.statusSubscribers[ch] = struct{}{}
+	o.statusSubscribersLock.Unlock()
+
+	// Clean up when context is done
+	go func() {
+		<-ctx.Done()
+		o.statusSubscribersLock.Lock()
+		delete(o.statusSubscribers, ch)
+		o.statusSubscribersLock.Unlock()
+		select {
+		case <-ch:
+		default:
+			close(ch)
+		}
+	}()
+
+	return ch
 }
 
 func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
@@ -178,7 +226,7 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 
 	log.Infof("deployment successful, starting supervisor",
 		"orchestratorID", o.id)
-	go o.supervisor.Supervise(o.manifest)
+	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 	return nil
 }
 
@@ -206,6 +254,7 @@ func (o *BasicOrchestrator) newManifest(
 	}
 	for name, node := range cfg.Nodes() {
 		nmf := jtypes.NodeManifest{
+			ID:          name,
 			Allocations: node.Allocations,
 			Peer:        node.Peer,
 		}
@@ -219,7 +268,11 @@ func (o *BasicOrchestrator) newManifest(
 
 // TODO (dynamic ensemble PR): documentation on how updates
 // and revert handle manifest changes
-// TODO: provision/commit should not update o.manifest by themselves
+//
+// IMPORTANT: when passing the manifest and config down the stack,
+// use the readers (`jobs/types/readers.go`) to guarantee the immutability
+// of these objects. (that is not to solve race condition problems but
+// to manage the state of the orchestrator in a safer way)
 func (o *BasicOrchestrator) deploy(
 	cfg jtypes.EnsembleConfig,
 	partialManifest jtypes.EnsembleManifest,
@@ -239,7 +292,12 @@ deploy:
 		}
 
 		// 1. bid
-		candidateDeployment, err := o.bid(cfg, expiry)
+		bidCoordinator, err := NewBidCoordinator(o.id, o.actor)
+		if err != nil {
+			return fmt.Errorf("failed to create bidder: %w", err)
+		}
+
+		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), expiry)
 		if err != nil {
 			if errors.Is(err, ErrCandidateNotFound) {
 				log.Warnf("candidate deployment not found, redeploying: %v", err)
@@ -252,27 +310,56 @@ deploy:
 
 		// 2. Commit the deployment
 		o.deploymentSnapshot.Candidates = candidateDeployment
-		manifest, err := o.commit(cfg, partialManifest, candidateDeployment)
+		o.setStatus(jtypes.DeploymentStatusCommitting)
+
+		committer := NewCommitter(o.ctx, o.id, o.actor)
+
+		manifestAfterCommit, err := committer.commit(
+			jtypes.NewEnsembleCfgReader(cfg),
+			jtypes.NewManifestReader(partialManifest),
+			candidateDeployment,
+		)
 		if err != nil {
 			log.Warnw("failed to commit deployment",
 				"labels", []string{string(observability.LabelDeployment)},
 				"orchestratorID", o.id,
 				"error", err)
+
+			for nodeName, n := range manifestAfterCommit.Nodes {
+				o.revertNodeDeployment(cfg, nodeName, n.Handle)
+			}
 			continue deploy
 		}
 
+		o.updateManifest(manifestAfterCommit)
+
+		mnfJSON, err := manifestAfterCommit.JSON()
+		if err != nil {
+			return fmt.Errorf("failed to marshal manifest: %w", err)
+		}
+		log.Debugf("manifest after commit:\n", string(mnfJSON))
+
 		// 3. provision the network and start the allocations
-		if err := o.provision(cfg, manifest); err != nil {
+		o.setStatus(jtypes.DeploymentStatusProvisioning)
+
+		provisioner := NewProvisioner(o.ctx, o.cancel, o.actor, o.subnetManifest)
+		manifestAfterProvision, err := provisioner.Provision(
+			jtypes.NewEnsembleCfgReader(cfg),
+			jtypes.NewManifestReader(manifestAfterCommit))
+		if err != nil {
 			log.Errorw("provisioning failed",
 				"labels", []string{string(observability.LabelDeployment)},
 				"error", err,
 				"orchestratorID", o.id)
 
 			o.lock.Lock()
-			o.revert(cfg, manifest)
+			o.revert(cfg, manifestAfterCommit)
 			o.lock.Unlock()
 			continue deploy
 		}
+
+		go o.monitorOnlyTaskManifest()
+		o.updateManifest(manifestAfterProvision)
 
 		o.lock.Lock()
 		o.ctx, o.cancel = context.WithCancel(context.Background())
@@ -291,6 +378,7 @@ deploy:
 	return ErrDeploymentFailed
 }
 
+// Stop stops the orchestrator
 func (o *BasicOrchestrator) Stop() {
 	// TODO
 
@@ -331,7 +419,7 @@ func (o *BasicOrchestrator) GetAllocationLogs(name string) (AllocationLogsRespon
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		allocNodeHandle,
-		fmt.Sprintf(behaviors.AllocationLogsBehavior, o.manifest.ID),
+		fmt.Sprintf(behaviors.AllocationLogsBehavior.DynamicTemplate, o.manifest.ID),
 		AllocationLogsRequest{
 			AllocName: name,
 		},
@@ -400,4 +488,58 @@ func (o *BasicOrchestrator) DeploymentSnapshot() jtypes.DeploymentSnapshot {
 	defer o.lock.Unlock()
 
 	return o.deploymentSnapshot
+}
+
+func (o *BasicOrchestrator) updateManifest(m jtypes.EnsembleManifest) {
+	o.lock.Lock()
+	// cloning since the orchestrator original manifest state
+	// might inherit map references of partial updates
+	o.manifest = m.Clone()
+	o.lock.Unlock()
+}
+
+// monitorOnlyTaskManifest will be responsible for tearing down
+// the orchestrator after all tasks are terminated when
+// the ensemble is composed *ONLY* by tasks
+func (o *BasicOrchestrator) monitorOnlyTaskManifest() {
+	if !isOnlyTaskManifest(o.manifest) {
+		return
+	}
+
+	ticker := time.NewTicker(monitorOnlyTaskManifestInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			o.lock.Lock()
+			allTerminated := true
+			for name := range o.manifest.Allocations {
+				if !o.manifest.IsTerminatedTask(name) {
+					allTerminated = false
+					break
+				}
+			}
+			o.lock.Unlock()
+
+			if !allTerminated {
+				continue
+			}
+
+			log.Infof("All tasks are terminated, shutting down orchestrator.")
+			o.setStatus(jtypes.DeploymentStatusCompleted)
+			o.cancel()
+			return
+		}
+	}
+}
+
+func isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
+	for _, a := range m.Allocations {
+		if a.Type != jtypes.AllocationTypeTask {
+			return false
+		}
+	}
+	return true
 }
