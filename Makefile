@@ -133,7 +133,7 @@ generate-glusterfs-client-certs:
 	@echo "Generating client certificates"
 	mkdir glusterfs_certificates
 	openssl genrsa -out glusterfs_certificates/glusterfs.key 2048
-	openssl req -new -x509 -key glusterfs_certificates/glusterfs.key -subj "/CN=$(CN)" -out glusterfs_certificates/glusterfs.pem
+	openssl req -new -x509 -key glusterfs_certificates/glusterfs.key -subj "/CN=$(CN)" -out glusterfs_certificates/glusterfs.pem -days 365
 	
 
 LICENSE_FLAGS := -v \
