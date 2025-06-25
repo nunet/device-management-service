@@ -21,7 +21,6 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const (
@@ -29,6 +28,7 @@ const (
 	UserContextName    = "user"
 	KeystoreDir        = "key/"
 	CapstoreDir        = "cap/"
+	DMSPassphraseEnv   = "DMS_PASSPHRASE"
 )
 
 const ledger = "ledger"
@@ -48,20 +48,15 @@ func GetContextKey(context string) string {
 	return parts[1]
 }
 
-func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, keyStorePath string) (did.TrustContext, crypto.PrivKey, error) {
+func CreateTrustContextFromKeyStore(
+	fs afero.Fs, contextKey,
+	passphrase, keyStorePath string,
+) (did.TrustContext, crypto.PrivKey, error) {
 	keyStoreDir := filepath.Join(keyStorePath, KeystoreDir)
 
-	ks, err := keystore.New(afs.Fs, keyStoreDir)
+	ks, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
-	}
-
-	passphrase := os.Getenv("DMS_PASSPHRASE")
-	if passphrase == "" {
-		passphrase, err = utils.PromptForPassphrase(false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get passphrase: %w", err)
-		}
 	}
 
 	ksPrivKey, err := ks.Get(contextKey, passphrase)
@@ -82,11 +77,11 @@ func CreateTrustContextFromKeyStore(afs afero.Afero, contextKey string, keyStore
 	return trustCtx, priv, nil
 }
 
-func LoadCapabilityContext(trustCtx did.TrustContext, name string, capStorePath string) (ucan.CapabilityContext, error) {
+func LoadCapabilityContext(trustCtx did.TrustContext, fs afero.Fs, name string, capStorePath string) (ucan.CapabilityContext, error) {
 	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 
-	f, err := os.Open(capStoreFile)
+	f, err := fs.Open(capStoreFile)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open capability context file: %w", err)
 	}
@@ -100,26 +95,26 @@ func LoadCapabilityContext(trustCtx did.TrustContext, name string, capStorePath 
 	return capCtx, nil
 }
 
-func SaveCapabilityContext(capCtx ucan.CapabilityContext, capStorePath string) error {
+func SaveCapabilityContext(capCtx ucan.CapabilityContext, fs afero.Fs, capStorePath string) error {
 	name := capCtx.Name()
 	capStoreDir := filepath.Join(capStorePath, CapstoreDir)
 	capCtxFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", name))
 	capCtxBackup := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap.%d", name, time.Now().Unix()))
 
 	// ensure the directory exists
-	if err := os.MkdirAll(capStoreDir, os.FileMode(0o700)); err != nil {
+	if err := fs.MkdirAll(capStoreDir, os.FileMode(0o700)); err != nil {
 		return fmt.Errorf("creating capability context director: %w", err)
 	}
 
 	// first take a backup -- move the current context
-	if _, err := os.Stat(capCtxFile); err == nil {
-		if err := os.Rename(capCtxFile, capCtxBackup); err != nil {
+	if _, err := fs.Stat(capCtxFile); err == nil {
+		if err := fs.Rename(capCtxFile, capCtxBackup); err != nil {
 			return fmt.Errorf("error backing up current capability context: %w", err)
 		}
 	}
 
 	// now open for writing
-	f, err := os.Create(capCtxFile)
+	f, err := fs.Create(capCtxFile)
 	if err != nil {
 		return fmt.Errorf("error creating new capability context file: %w", err)
 	}
@@ -132,7 +127,9 @@ func SaveCapabilityContext(capCtx ucan.CapabilityContext, capStorePath string) e
 	return nil
 }
 
-func GetTrustContext(fs afero.Afero, context, userDir string) (did.TrustContext, error) {
+func GetTrustContext(
+	fs afero.Fs, context, passphrase, userDir string,
+) (did.TrustContext, error) {
 	if IsLedgerContext(context) {
 		provider, err := did.NewLedgerWalletProvider(0)
 		if err != nil {
@@ -142,6 +139,7 @@ func GetTrustContext(fs afero.Afero, context, userDir string) (did.TrustContext,
 		return did.NewTrustContextWithProvider(provider), nil
 	}
 
-	trustCtx, _, err := CreateTrustContextFromKeyStore(fs, context, userDir)
+	trustCtx, _, err := CreateTrustContextFromKeyStore(
+		fs, context, passphrase, userDir)
 	return trustCtx, err
 }

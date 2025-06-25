@@ -184,12 +184,13 @@ We can run an allocation with storage now:
         value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
     dns_name: nginxdemo-alloc2
     volume:
-      type: glusterfs
-      name: nunet_vol
-      servers: ["${hostname}"]
-      client_private_key: ""
-      client_pem: ""
-      client_ca: ""
+      - type: glusterfs
+        name: nunet_vol2
+        servers: ["${hostname}"]
+        mount_destination: "/home"
+        client_private_key:
+        client_pem:
+        client_ca:
 ```
 
 The `volume` shows the requirements.

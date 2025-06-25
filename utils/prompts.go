@@ -21,11 +21,17 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	reonboardPrompt         = "Looks like your machine is already onboarded. Proceed with reonboarding?"
+	passphrasePrompt        = "Passphrase"
+	confirmPassphrasePrompt = "Please confirm your passphrase"
+)
+
+var ErrOperationCancelled = errors.New("operation cancelled by user")
+
 // PromptReonboard is a wrapper of utils.PromptYesNo with custom prompt that return error if user declines reonboard
 func PromptReonboard(r io.Reader, w io.Writer) error {
-	prompt := "Looks like your machine is already onboarded. Proceed with reonboarding?"
-
-	confirmed, err := PromptYesNo(r, w, prompt)
+	confirmed, err := PromptYesNo(r, w, reonboardPrompt)
 	if err != nil {
 		return fmt.Errorf("could not confirm reonboarding: %w", err)
 	}
@@ -51,8 +57,8 @@ func PromptForPassphrase(confirm bool) (string, error) {
 	go func() {
 		defer close(done)
 		var bytePassphrase, byteConfirmation []byte
-		for i := 0; i < maxTries; i++ {
-			fmt.Print("Passphrase: ")
+		for range maxTries {
+			fmt.Printf("%s: ", passphrasePrompt)
 			bytePassphrase, err = term.ReadPassword(int(os.Stdin.Fd()))
 			if err != nil {
 				err = fmt.Errorf("failed to read passphrase: %w", err)
@@ -61,7 +67,7 @@ func PromptForPassphrase(confirm bool) (string, error) {
 			fmt.Println("") // new line after passphrase input
 
 			if confirm {
-				fmt.Print("Please confirm your passphrase: ")
+				fmt.Printf("%s: ", confirmPassphrasePrompt)
 				byteConfirmation, err = term.ReadPassword(int(os.Stdin.Fd()))
 				if err != nil {
 					err = fmt.Errorf("failed to read passphrase confirmation: %w", err)
@@ -107,9 +113,10 @@ func PromptYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
 
 		response = strings.ToLower(strings.TrimSpace(response))
 
-		if response == "y" || response == "yes" {
+		switch response {
+		case "y", "yes":
 			return true, nil
-		} else if response == "n" || response == "no" {
+		case "n", "no":
 			return false, nil
 		}
 	}

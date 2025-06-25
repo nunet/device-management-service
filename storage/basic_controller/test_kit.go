@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	cloverRepo "gitlab.com/nunet/device-management-service/db/repositories/clover"
+	cloverDB "gitlab.com/nunet/device-management-service/db/clover"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -33,7 +33,7 @@ func SetupVolumeControllerTestKit(basePath string, volumes map[string]*types.Sto
 	// S3 are calling this SetupVolControllerTestSuite, so it's one way to initialize telemetry
 	// for basic controller
 
-	db, err := cloverRepo.NewMemDB(
+	db, err := cloverDB.NewMemDB(
 		[]string{
 			"storage_volume",
 		},
@@ -49,7 +49,7 @@ func SetupVolumeControllerTestKit(basePath string, volumes map[string]*types.Sto
 		return nil, fmt.Errorf("failed to create base path: %w", err)
 	}
 
-	repo := cloverRepo.NewStorageVolume(db)
+	repo := cloverDB.NewGenericRepository[types.StorageVolume](db)
 	vc, err := NewDefaultVolumeController(repo, basePath, fs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create volume controller: %w", err)

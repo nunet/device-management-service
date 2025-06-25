@@ -11,14 +11,12 @@
 package jobs
 
 import (
-	"fmt"
 	"testing"
 
 	"gopkg.in/yaml.v2"
 
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/executor/firecracker"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -36,7 +34,7 @@ func TestGenerateEnsemble(t *testing.T) {
 
 	specdock := docker.NewDockerEngineBuilder("image1").WithWorkingDirectory("/").WithCmd("withCMD").WithEntrypoint("WithEntrypoint").WithEnvironment("env1").Build()
 
-	ens.Allocations["alloc1"] = jobtypes.AllocationConfig{
+	allocCfg := jobtypes.AllocationConfig{
 		Executor: jobtypes.ExecutorDocker,
 		Type:     jobtypes.AllocationTypeService,
 		Resources: types.Resources{
@@ -56,20 +54,8 @@ func TestGenerateEnsemble(t *testing.T) {
 		FailureRecovery: jobtypes.AllocationFailureRecoveryOneForAll,
 	}
 
-	firecrackerspec := firecracker.NewFirecrackerEngineBuilder("/").WithInitrd("WithInitrd").WithKernelImage("WithInitrd").WithRootFileSystem("/").Build()
-	ens.Allocations["alloc2"] = jobtypes.AllocationConfig{
-		Executor: jobtypes.ExecutorFirecracker,
-		Type:     jobtypes.AllocationTypeService,
-		Resources: types.Resources{
-			CPU:  types.CPU{ClockSpeed: 2, Cores: 2, Threads: 2, Architecture: ""},
-			RAM:  types.RAM{Size: 4, ClockSpeed: 3, Type: ""},
-			Disk: types.Disk{Size: 20},
-			GPUs: make(types.GPUs, 0),
-		},
-		Execution:       *firecrackerspec,
-		DNSName:         "myfirecracker",
-		FailureRecovery: jobtypes.AllocationFailureRecoveryOneForAll,
-	}
+	ens.Allocations["alloc1"] = allocCfg
+	ens.Allocations["alloc2"] = allocCfg
 
 	peerID := "peeridhere"
 
@@ -114,12 +100,8 @@ func TestGenerateEnsemble(t *testing.T) {
 		Children:    []jobtypes.SupervisorConfig{{}},
 	}
 
-	yamlData, err := yaml.Marshal(&ens)
+	_, err := yaml.Marshal(&ens)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	t.Log(string(yamlData))
-
-	fmt.Println(string(yamlData))
 }

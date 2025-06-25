@@ -12,11 +12,11 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/network"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
 

@@ -21,7 +21,7 @@ type AllocationDeploymentConfig struct {
 	Execution        types.SpecConfig
 	ProvisionScripts map[string][]byte
 	Keys             []types.AllocationKey
-	Volume           *types.VolumeConfig
+	Volumes          []types.VolumeConfig
 }
 
 type AllocationDeploymentResponse struct {

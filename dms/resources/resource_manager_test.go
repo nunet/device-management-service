@@ -6,7 +6,7 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package resources
+package resources_test
 
 import (
 	"context"
@@ -15,1480 +15,602 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
-	"gitlab.com/nunet/device-management-service/db/repositories"
-	cloverRepo "gitlab.com/nunet/device-management-service/db/repositories/clover"
-	"gitlab.com/nunet/device-management-service/dms/hardware"
+	"gitlab.com/nunet/device-management-service/db/clover"
+	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
-func TestNewResourceManager(t *testing.T) {
-	t.Parallel()
+const (
+	// Allocation IDs for tests
+	stableDiffusionAlloc = "stable-diffusion"
+	llmInferenceAlloc    = "llm-inference"
+	videoTranscodeAlloc  = "video-transcode"
+	nginxAlloc           = "nginx"
+)
 
-	mockDB, err := cloverRepo.NewMemDB(
+// Define a struct to hold the resource manager dependencies
+type resManagerDeps struct {
+	repos    resources.ManagerRepos
+	hardware types.HardwareManager
+}
+
+// setupDefaultManagerDeps creates a new DefaultManager with in-memory repositories for testing
+// multiplier is used to scale the resources for the mock hardware manager
+func setupDefaultManagerDeps(t *testing.T, multiplier uint32) resManagerDeps {
+	t.Helper()
+
+	if multiplier == 0 {
+		multiplier = 1 // Default to 1 if not specified
+	}
+
+	db, err := clover.NewMemDB(
 		[]string{
 			"onboarded_resources",
 			"resource_allocation",
+		})
+	require.NoError(t, err)
+
+	onboardedRepo := clover.NewGenericEntityRepository[types.OnboardedResources](db)
+	allocRepo := clover.NewGenericRepository[types.ResourceAllocation](db)
+
+	// Create resources with proper unit conversions
+	cpuClockSpeed, _ := convert.ParseSIWithDefaultUnit(2.5, "GHz")
+	ramSize, _ := convert.ParseBytesWithDefaultUnit(8*multiplier, "GiB")
+	diskSize, _ := convert.ParseBytesWithDefaultUnit(100*multiplier, "GiB")
+
+	machineResources := types.MachineResources{
+		Resources: types.Resources{
+			CPU: types.CPU{
+				Cores:      4 * float32(multiplier),
+				ClockSpeed: cpuClockSpeed,
+			},
+			RAM: types.RAM{
+				Size: ramSize,
+			},
+			Disk: types.Disk{
+				Size: diskSize,
+			},
+			GPUs: types.GPUs{}, // No GPUs
 		},
+	}
+
+	freeResources := machineResources.Resources
+
+	mockHW := hardware.NewMockHardwareManager(
+		machineResources,
+		freeResources,
+		types.Resources{}, // No usage initially
 	)
-	require.NoError(t, err)
-	defer mockDB.Close()
 
-	repos := setupManagerRepos(mockDB)
+	// Create manager repos
+	repos := resources.ManagerRepos{
+		OnboardedResources: onboardedRepo,
+		ResourceAllocation: allocRepo,
+	}
 
-	hm := hardware.NewHardwareManager()
-	rm, err := NewResourceManager(repos, hm)
-	require.NotNil(t, rm)
-	require.NoError(t, err)
+	return resManagerDeps{
+		repos:    repos,
+		hardware: mockHW,
+	}
 }
 
-func TestDefaultManager_CommitResources(t *testing.T) {
+func TestNewResourceManager(t *testing.T) {
 	t.Parallel()
+	// Test with valid hardware manager
+	deps := setupDefaultManagerDeps(t, 1)
+	manager, err := resources.NewResourceManager(deps.repos, deps.hardware)
+	require.NoError(t, err)
+	require.NotNil(t, manager)
 
-	t.Run("Must be able to commit the resources when there is an availability", func(t *testing.T) {
-		t.Parallel()
+	// Test with nil hardware manager
+	repos := resources.ManagerRepos{}
+	nilManager, err := resources.NewResourceManager(repos, nil)
+	require.Error(t, err)
+	require.Nil(t, nilManager)
+}
 
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
+func TestUpdateAndGetOnboardedResources(t *testing.T) {
+	t.Parallel()
+	deps := setupDefaultManagerDeps(t, 1)
+	manager, err := resources.NewResourceManager(deps.repos, deps.hardware)
+	require.NoError(t, err)
+	ctx := context.Background()
 
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
+	// Define base resources
+	cpuClockSpeed, _ := convert.ParseSIWithDefaultUnit(2.5, "GHz")
+	ramSize, _ := convert.ParseBytesWithDefaultUnit(8, "GiB")
+	diskSize, _ := convert.ParseBytesWithDefaultUnit(100, "GiB")
+
+	onboardedResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      4,
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: ramSize,
+		},
+		Disk: types.Disk{
+			Size: diskSize,
+		},
+	}
+
+	// Update onboarded resources
+	err = manager.UpdateOnboardedResources(ctx, onboardedResources)
+	require.NoError(t, err)
+
+	// Verify onboarded resources were updated
+	onboarded, err := manager.GetOnboardedResources(ctx)
+	require.NoError(t, err)
+	require.True(t, onboarded.Resources.Equal(onboardedResources))
+
+	// Verify free resources match onboarded resources (no allocations yet)
+	free, err := manager.GetFreeResources(ctx)
+	require.NoError(t, err)
+	require.True(t, free.Resources.Equal(onboardedResources))
+}
+
+func TestCommitAndAllocateResources(t *testing.T) {
+	t.Parallel()
+	deps := setupDefaultManagerDeps(t, 1)
+	manager, err := resources.NewResourceManager(deps.repos, deps.hardware)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	// Define base resources and update onboarded resources
+	cpuClockSpeed, _ := convert.ParseSIWithDefaultUnit(2.5, "GHz")
+	ramSize, _ := convert.ParseBytesWithDefaultUnit(8, "GiB")
+	diskSize, _ := convert.ParseBytesWithDefaultUnit(100, "GiB")
+
+	onboardedResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      4,
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: ramSize,
+		},
+		Disk: types.Disk{
+			Size: diskSize,
+		},
+	}
+	err = manager.UpdateOnboardedResources(ctx, onboardedResources)
+	require.NoError(t, err)
+
+	// Define smaller resources for commitment
+	smallRAMSize, _ := convert.ParseBytesWithDefaultUnit(2, "GiB")
+	smallDiskSize, _ := convert.ParseBytesWithDefaultUnit(20, "GiB")
+	smallResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      1,
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: smallRAMSize,
+		},
+		Disk: types.Disk{
+			Size: smallDiskSize,
+		},
+	}
+
+	// Test committing resources
+	commitment := types.CommittedResources{
+		AllocationID: nginxAlloc,
+		Resources:    smallResources,
+	}
+	err = manager.CommitResources(ctx, commitment)
+	require.NoError(t, err)
+
+	// Verify resources are committed
+	committed, err := manager.IsCommitted(nginxAlloc)
+	require.NoError(t, err)
+	require.True(t, committed)
+
+	// Verify free resources are reduced
+	free, err := manager.GetFreeResources(ctx)
+	require.NoError(t, err)
+
+	expectedFree := onboardedResources
+	err = expectedFree.Subtract(smallResources)
+	require.NoError(t, err)
+	require.True(t, free.Resources.Equal(expectedFree))
+
+	// Test allocating resources
+	err = manager.AllocateResources(ctx, nginxAlloc)
+	require.NoError(t, err)
+
+	// Verify resources are allocated
+	allocated, err := manager.IsAllocated(nginxAlloc)
+	require.NoError(t, err)
+	require.True(t, allocated)
+
+	// Verify resources are no longer committed
+	committed, err = manager.IsCommitted(nginxAlloc)
+	require.NoError(t, err)
+	require.False(t, committed)
+
+	// Verify total allocation
+	totalAllocation, err := manager.GetTotalAllocation()
+	require.NoError(t, err)
+	require.True(t, totalAllocation.Equal(smallResources))
+
+	// Test deallocating resources
+	err = manager.DeallocateResources(ctx, nginxAlloc)
+	require.NoError(t, err)
+
+	// Verify resources are no longer allocated
+	allocated, err = manager.IsAllocated(nginxAlloc)
+	require.NoError(t, err)
+	require.False(t, allocated)
+
+	// Verify total allocation is back to zero
+	totalAllocation, err = manager.GetTotalAllocation()
+	require.NoError(t, err)
+	require.True(t, totalAllocation.Equal(types.Resources{}))
+}
+
+func TestResourceManagerErrorCases(t *testing.T) {
+	deps := setupDefaultManagerDeps(t, 1)
+	manager, err := resources.NewResourceManager(deps.repos, deps.hardware)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	// Define base resources and update onboarded resources
+	cpuClockSpeed, _ := convert.ParseSIWithDefaultUnit(2.5, "GHz")
+	ramSize, _ := convert.ParseBytesWithDefaultUnit(8, "GiB")
+	diskSize, _ := convert.ParseBytesWithDefaultUnit(100, "GiB")
+
+	onboardedResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      4,
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: ramSize,
+		},
+		Disk: types.Disk{
+			Size: diskSize,
+		},
+	}
+	err = manager.UpdateOnboardedResources(ctx, onboardedResources)
+	require.NoError(t, err)
+
+	t.Run("Test committing resources with invalid allocation ID", func(t *testing.T) {
+		// Test committing resources with empty allocation ID
+		invalidCommitment := types.CommittedResources{
+			AllocationID: "", // Empty allocation ID
+			Resources:    onboardedResources,
 		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.CommittedResources{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1024},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-
-		err = rm.CommitResources(context.Background(), demand)
-		require.NoError(t, err)
-
-		// Check if the committed resources are stored in the map
-		demandFromMap, ok := rm.store.committedResources[demand.AllocationID]
-		require.True(t, ok)
-		assertResources(t, demand.Resources, demandFromMap.Resources)
-
-		isCommitted, err := rm.IsCommitted(demand.AllocationID)
-		require.NoError(t, err)
-		require.True(t, isCommitted)
+		err = manager.CommitResources(ctx, invalidCommitment)
+		require.Error(t, err)
 	})
 
-	t.Run("Must return an error when resources are already committed for the allocation", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
+	t.Run("Test committing resources beyond capacity", func(t *testing.T) {
+		largeCPUCores := float32(10)
+		largeRAMSize, _ := convert.ParseBytesWithDefaultUnit(16, "GiB")
+		largeDiskSize, _ := convert.ParseBytesWithDefaultUnit(200, "GiB")
+
+		largeResources := types.Resources{
+			CPU: types.CPU{
+				Cores:      largeCPUCores,
+				ClockSpeed: cpuClockSpeed,
 			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		demand := types.CommittedResources{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM: types.RAM{Size: 1024},
+			RAM: types.RAM{
+				Size: largeRAMSize,
+			},
+			Disk: types.Disk{
+				Size: largeDiskSize,
 			},
 		}
-		rm.store.withCommittedLock(func() {
-			rm.store.committedResources[demand.AllocationID] = &types.CommittedResources{
-				Resources:    demand.Resources,
-				AllocationID: demand.AllocationID,
+
+		largeCommitment := types.CommittedResources{
+			AllocationID: stableDiffusionAlloc,
+			Resources:    largeResources,
+		}
+		err = manager.CommitResources(ctx, largeCommitment)
+		require.Error(t, err)
+		require.ErrorIs(t, err, types.ErrNoFreeResources)
+	})
+
+	t.Run("Allocate/Committing operations with unknown allocation", func(t *testing.T) {
+		// Test allocating resources that aren't committed
+		err = manager.AllocateResources(ctx, "unknown-allocation")
+		require.Error(t, err)
+		require.ErrorIs(t, err, resources.ErrResourcesNotCommitted)
+
+		// Test deallocating resources that aren't allocated
+		err = manager.DeallocateResources(ctx, "unknown-allocation")
+		require.Error(t, err)
+		require.ErrorIs(t, err, resources.ErrResourcesNotAllocated)
+
+		// Test uncommitting resources that aren't committed
+		err = manager.UncommitResources(ctx, "unknown-allocation")
+		require.Error(t, err)
+		require.ErrorIs(t, err, resources.ErrResourcesNotCommitted)
+	})
+
+	t.Run("Test committing duplicate resources", func(t *testing.T) {
+		smallRAMSize, _ := convert.ParseBytesWithDefaultUnit(2, "GiB")
+		smallDiskSize, _ := convert.ParseBytesWithDefaultUnit(20, "GiB")
+		smallResources := types.Resources{
+			CPU: types.CPU{
+				Cores:      1,
+				ClockSpeed: cpuClockSpeed,
+			},
+			RAM: types.RAM{
+				Size: smallRAMSize,
+			},
+			Disk: types.Disk{
+				Size: smallDiskSize,
+			},
+		}
+
+		// Commit resources first time
+		commitment := types.CommittedResources{
+			AllocationID: llmInferenceAlloc,
+			Resources:    smallResources,
+		}
+		err = manager.CommitResources(ctx, commitment)
+		require.NoError(t, err)
+
+		// Test committing the same resources again - should fail
+		err = manager.CommitResources(ctx, commitment)
+		require.Error(t, err)
+		require.ErrorIs(t, err, resources.ErrResourcesAlreadyCommitted)
+
+		// Test uncommit resources - happy path
+		err = manager.UncommitResources(ctx, llmInferenceAlloc)
+		require.NoError(t, err)
+
+		// Verify resources are no longer committed
+		committed, err := manager.IsCommitted(llmInferenceAlloc)
+		require.NoError(t, err)
+		require.False(t, committed)
+	})
+}
+
+// TestUnableToDecreaseOnboardedResources caller can not decrease
+// onboarded resources if it's being used by allocations
+func TestUnableToDecreaseOnboardedResources(t *testing.T) {
+	t.Parallel()
+	deps := setupDefaultManagerDeps(t, 1)
+	manager, err := resources.NewResourceManager(deps.repos, deps.hardware)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	// Define initial resources and update onboarded resources
+	cpuClockSpeed, _ := convert.ParseSIWithDefaultUnit(2.5, "GHz")
+	initialRAMSize, _ := convert.ParseBytesWithDefaultUnit(8, "GiB")
+	initialDiskSize, _ := convert.ParseBytesWithDefaultUnit(100, "GiB")
+
+	onboardedResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      4,
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: initialRAMSize,
+		},
+		Disk: types.Disk{
+			Size: initialDiskSize,
+		},
+	}
+	err = manager.UpdateOnboardedResources(ctx, onboardedResources)
+	require.NoError(t, err)
+
+	// Commit and allocate some resources
+	smallRAMSize, _ := convert.ParseBytesWithDefaultUnit(2, "GiB")
+	smallDiskSize, _ := convert.ParseBytesWithDefaultUnit(20, "GiB")
+	allocatedResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      2,
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: smallRAMSize,
+		},
+		Disk: types.Disk{
+			Size: smallDiskSize,
+		},
+	}
+
+	commitment := types.CommittedResources{
+		AllocationID: videoTranscodeAlloc,
+		Resources:    allocatedResources,
+	}
+	err = manager.CommitResources(ctx, commitment)
+	require.NoError(t, err)
+
+	err = manager.AllocateResources(ctx, videoTranscodeAlloc)
+	require.NoError(t, err)
+
+	// Try to update onboarded resources to less than what's already allocated
+	smallerRAMSize, _ := convert.ParseBytesWithDefaultUnit(1, "GiB")
+	smallerResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      1, // Less than allocated
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: smallerRAMSize, // Less than allocated
+		},
+		Disk: types.Disk{
+			Size: smallDiskSize, // Same as allocated
+		},
+	}
+
+	// This should fail because we can't reduce resources below what's already allocated
+	err = manager.UpdateOnboardedResources(ctx, smallerResources)
+	require.Error(t, err)
+
+	// Verify onboarded resources haven't changed
+	onboarded, err := manager.GetOnboardedResources(ctx)
+	require.NoError(t, err)
+	require.True(t, onboarded.Resources.Equal(onboardedResources))
+}
+
+// TestConcurrency tests a mix of concurrent operations (commit, allocate, deallocate)
+func TestConcurrency(t *testing.T) {
+	t.Parallel()
+	deps := setupDefaultManagerDeps(t, 1000) // Use a larger multiplier for concurrency tests
+	manager, err := resources.NewResourceManager(deps.repos, deps.hardware)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	// Get machine resources from the hardware manager
+	machineResources, err := deps.hardware.GetMachineResources()
+	require.NoError(t, err)
+
+	// Use the machine resources as onboarded resources
+	onboardedResources := machineResources.Resources
+	err = manager.UpdateOnboardedResources(ctx, onboardedResources)
+	require.NoError(t, err)
+
+	// Define smaller resources for allocation
+	cpuClockSpeed, _ := convert.ParseSIWithDefaultUnit(2.5, "GHz")
+	smallRAMSize, _ := convert.ParseBytesWithDefaultUnit(1, "GiB")
+	smallDiskSize, _ := convert.ParseBytesWithDefaultUnit(2, "GiB")
+	smallResources := types.Resources{
+		CPU: types.CPU{
+			Cores:      1,
+			ClockSpeed: cpuClockSpeed,
+		},
+		RAM: types.RAM{
+			Size: smallRAMSize,
+		},
+		Disk: types.Disk{
+			Size: smallDiskSize,
+		},
+	}
+
+	// Number of concurrent operations per type
+	numConcurrent := 10
+
+	// Create allocation IDs for each operation type
+	commitIDs := make([]string, numConcurrent)
+	allocateIDs := make([]string, numConcurrent)
+	deallocateIDs := make([]string, numConcurrent)
+
+	for i := 0; i < numConcurrent; i++ {
+		commitIDs[i] = fmt.Sprintf("commit-alloc-%d", i)
+		allocateIDs[i] = fmt.Sprintf("allocate-alloc-%d", i)
+		deallocateIDs[i] = fmt.Sprintf("deallocate-alloc-%d", i)
+	}
+
+	// Pre-commit resources for allocate operations
+	for _, id := range allocateIDs {
+		commitment := types.CommittedResources{
+			AllocationID: id,
+			Resources:    smallResources,
+		}
+		err = manager.CommitResources(ctx, commitment)
+		require.NoError(t, err)
+	}
+
+	// Pre-allocate resources for deallocate operations
+	for _, id := range deallocateIDs {
+		commitment := types.CommittedResources{
+			AllocationID: id,
+			Resources:    smallResources,
+		}
+		err = manager.CommitResources(ctx, commitment)
+		require.NoError(t, err)
+
+		err = manager.AllocateResources(ctx, id)
+		require.NoError(t, err)
+	}
+
+	// Use a WaitGroup to wait for all goroutines to finish
+	var wg sync.WaitGroup
+	wg.Add(numConcurrent * 3) // 3 types of operations
+
+	// Track errors from goroutines
+	errChan := make(chan error, numConcurrent*3)
+
+	// Launch concurrent commit operations
+	for i, id := range commitIDs {
+		go func(idx int, allocID string) {
+			defer wg.Done()
+
+			commitment := types.CommittedResources{
+				AllocationID: allocID,
+				Resources:    smallResources,
 			}
-		})
 
-		err = rm.CommitResources(context.Background(), demand)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "resources already committed for allocation")
-	})
-
-	t.Run("Must return an error when there are insufficient resources to commit", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		// Table tests for insufficient resources
-		tests := []struct {
-			name   string
-			demand types.CommittedResources
-			error  bool
-		}{
-			{
-				name: "CPU allocations exceeds",
-				demand: types.CommittedResources{
-					AllocationID: "alloc1",
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      6,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 512},
-					},
-				},
-				error: true,
-			},
-			{
-				name: "RAM allocations exceeds",
-				demand: types.CommittedResources{
-					AllocationID: "alloc1",
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      3,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 4096},
-						Disk: types.Disk{Size: 512},
-					},
-				},
-				error: true,
-			},
-			{
-				name: "Disk allocations exceeds",
-				demand: types.CommittedResources{
-					AllocationID: "alloc1",
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      3,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 2048},
-					},
-				},
-				error: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				err := rm.CommitResources(context.Background(), tt.demand)
-				if tt.error {
-					require.Error(t, err)
-					require.Contains(t, err.Error(), "no free resources: error subtracting")
-				} else {
-					require.NoError(t, err)
-				}
-			})
-		}
-	})
-
-	t.Run("Must be able to update the free resources after committing resources", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.CommittedResources{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1024},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-
-		err = rm.CommitResources(context.Background(), demand)
-		require.NoError(t, err)
-
-		// Check if the free resources are updated in the store
-		updatedFreeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		err = onboardedResources.Resources.Subtract(demand.Resources)
-		require.NoError(t, err)
-		expectedFreeResources := types.FreeResources{
-			Resources: onboardedResources.Resources,
-		}
-		require.NoError(t, err)
-		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
-	})
-
-	t.Run("must validate the commitment of resources", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.CommittedResources{
-			AllocationID: "", // invalid allocation ID
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1024},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-
-		err = rm.CommitResources(context.Background(), demand)
-		require.Error(t, err)
-		require.ErrorContains(t, err, "validating commitment")
-	})
-}
-
-func TestDefaultManager_ReleaseCommittedResources(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Must be able to release the resources and update free resources", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.CommittedResources{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1024},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-		err = rm.CommitResources(context.Background(), demand)
-		require.NoError(t, err)
-
-		err = rm.UncommitResources(context.Background(), demand.AllocationID)
-
-		require.NoError(t, err)
-
-		// Check if the committed resources were removed from the map
-		_, ok := rm.store.committedResources[demand.AllocationID]
-		require.False(t, ok)
-
-		// check if the resources are added back to the free resources
-		freeResourcesFromDB, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, onboardedResources.Resources, freeResourcesFromDB.Resources)
-	})
-
-	t.Run("Must return an error when resources are not pre-allocated for the allocation", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		err = rm.UncommitResources(context.Background(), "alloc1")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "resources not committed for allocation")
-	})
-}
-
-func TestDefaultManager_AllocateResources(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Must be able to allocate the resources when there is an availability", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-				"resource_allocation",
-			},
-		)
-		require.NoError(t, err)
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 2048},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.ResourceAllocation{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      1,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 512},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-		err = rm.CommitResources(context.Background(), types.CommittedResources{
-			AllocationID: demand.AllocationID,
-			Resources:    demand.Resources,
-		})
-		require.NoError(t, err)
-
-		err = rm.AllocateResources(context.Background(), demand.AllocationID)
-		require.NoError(t, err)
-
-		// Check if the allocations is stored in the map
-		demandFromMap, ok := rm.store.allocations[demand.AllocationID]
-		require.True(t, ok)
-		assertResources(t, demand.Resources, demandFromMap.Resources)
-
-		isAllocated, err := rm.IsAllocated(demand.AllocationID)
-		require.NoError(t, err)
-		require.True(t, isAllocated)
-	})
-
-	t.Run("Must return an error when resources are already allocated for the allocation", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{"resource_allocation", "onboarded_resources"},
-		)
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			ctrl.Finish()
-			mockDB.Close()
-		})
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 2048},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.ResourceAllocation{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      1,
-					ClockSpeed: 10000,
-				},
-				RAM: types.RAM{Size: 1024},
-			},
-		}
-		err = rm.CommitResources(context.Background(), types.CommittedResources{
-			AllocationID: demand.AllocationID,
-			Resources:    demand.Resources,
-		})
-		require.NoError(t, err)
-		rm.store.withAllocationsLock(func() {
-			rm.store.allocations[demand.AllocationID] = demand
-		})
-
-		err = rm.AllocateResources(context.Background(), demand.AllocationID)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "resources already allocated for allocation")
-	})
-
-	t.Run("Must be able to update the free resources after allocating resources", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-				"resource_allocation",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.ResourceAllocation{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1024},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-
-		err = rm.CommitResources(context.Background(), types.CommittedResources{Resources: demand.Resources, AllocationID: demand.AllocationID})
-		require.NoError(t, err)
-
-		err = rm.AllocateResources(context.Background(), demand.AllocationID)
-		require.NoError(t, err)
-
-		// Check if the free resources are updated in the store
-		updatedFreeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		err = onboardedResources.Resources.Subtract(demand.Resources)
-		require.NoError(t, err)
-		expectedFreeResources := types.FreeResources{
-			Resources: onboardedResources.Resources,
-		}
-		require.NoError(t, err)
-		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
-	})
-}
-
-func TestDefaultManager_DeallocateResources(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Must be able to deallocate the resources and update free resources", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-				"resource_allocation",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.ResourceAllocation{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1024},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-		err = rm.CommitResources(context.Background(), types.CommittedResources{Resources: demand.Resources, AllocationID: demand.AllocationID})
-		require.NoError(t, err)
-		err = rm.AllocateResources(context.Background(), demand.AllocationID)
-		require.NoError(t, err)
-
-		err = rm.DeallocateResources(context.Background(), demand.AllocationID)
-		require.NoError(t, err)
-
-		// Check if the allocations is removed from the map
-		_, ok := rm.store.allocations[demand.AllocationID]
-		require.False(t, ok)
-
-		// check if the resources are added back to the free resources
-		freeResourcesFromDB, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, onboardedResources.Resources, freeResourcesFromDB.Resources)
-	})
-
-	t.Run("Must return an error when resources are not allocated for the allocation", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{}, // no database used in deallocation only in-mem store
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		err = rm.DeallocateResources(context.Background(), "alloc1")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "resources not allocated for allocation")
-	})
-}
-
-func TestDefaultManager_OnboardedResources(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	t.Cleanup(func() {
-		ctrl.Finish()
-	})
-
-	t.Run("Must be able to get onboarded resources", func(t *testing.T) {
-		t.Parallel()
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM: types.RAM{Size: 2048},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		onboardedResourcesFromManager, err := rm.GetOnboardedResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, onboardedResources.Resources, onboardedResourcesFromManager.Resources)
-	})
-
-	t.Run("Must be able to update onboarded resources both in store and db", func(t *testing.T) {
-		t.Parallel()
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM: types.RAM{Size: 2048},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		newOnboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      6,
-					ClockSpeed: 10000,
-				},
-				RAM: types.RAM{Size: 3072},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), newOnboardedResources.Resources)
-		require.NoError(t, err)
-
-		// Check if the onboarded resources are updated in the database
-		onboardedResourcesFromDB := getOnboardedResourcesFromDB(repos.OnboardedResources, t)
-		assertResources(t, newOnboardedResources.Resources, onboardedResourcesFromDB.Resources)
-
-		// Check if the onboarded resources are updated in the store
-		onboardedResourcesFromStore := rm.store.onboardedResources
-		require.NotNil(t, onboardedResourcesFromStore)
-		assertResources(t, newOnboardedResources.Resources, onboardedResourcesFromStore.Resources)
-	})
-
-	t.Run("Must be able to get onboarded resources from DB if not in store", func(t *testing.T) {
-		t.Parallel()
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM: types.RAM{Size: 2048},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		// Set the onboarded resources in the store to nil
-		_ = rm.store.withOnboardedLock(func() error {
-			rm.store.onboardedResources = nil
-			return nil
-		})
-
-		onboardedResourcesFromManager, err := rm.GetOnboardedResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, onboardedResources.Resources, onboardedResourcesFromManager.Resources)
-	})
-}
-
-func TestDefaultManager_FreeResources(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Must be able to get free resources", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-		freeResources := types.FreeResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-
-		updatedFreeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, freeResources.Resources, updatedFreeResources.Resources)
-	})
-
-	t.Run("Must be able to update free resources", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-				"resource_allocation",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      5,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demand := types.ResourceAllocation{
-			AllocationID: "alloc1",
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      3,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1024},
-				Disk: types.Disk{Size: 512},
-			},
-		}
-		err = rm.CommitResources(context.Background(), types.CommittedResources{Resources: demand.Resources, AllocationID: demand.AllocationID})
-		require.NoError(t, err)
-		err = rm.AllocateResources(context.Background(), demand.AllocationID)
-		require.NoError(t, err)
-
-		updatedFreeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-
-		err = onboardedResources.Resources.Subtract(demand.Resources)
-		expectedFreeResources := types.FreeResources{
-			Resources: onboardedResources.Resources,
-		}
-		require.NoError(t, err)
-		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
-
-		// Check if the free resources are updated in the store
-		assertResources(t, expectedFreeResources.Resources, updatedFreeResources.Resources)
-	})
-}
-
-func TestDefaultManager_GetTotalAllocation(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Must be able to get total allocations", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-				"resource_allocation",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      7,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 3064},
-				Disk: types.Disk{Size: 2048},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demands := []types.ResourceAllocation{
-			{
-				AllocationID: "alloc1",
-				Resources: types.Resources{
-					CPU: types.CPU{
-						Cores:      3,
-						ClockSpeed: 10000,
-					},
-					RAM:  types.RAM{Size: 1024},
-					Disk: types.Disk{Size: 512},
-				},
-			},
-			{
-				AllocationID: "alloc2",
-				Resources: types.Resources{
-					CPU: types.CPU{
-						Cores:      2,
-						ClockSpeed: 10000,
-					},
-					RAM:  types.RAM{Size: 1024},
-					Disk: types.Disk{Size: 1024},
-				},
-			},
-		}
-
-		var totalDemand types.Resources
-		for _, demand := range demands {
-			err = rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
-			require.NoError(t, err)
-
-			err = rm.AllocateResources(context.Background(), demand.AllocationID)
-			require.NoErrorf(t, err, "failed to allocate resources for allocation %s", demand.AllocationID)
-
-			err = totalDemand.Add(demand.Resources)
-			require.NoError(t, err)
-		}
-
-		actualDemand, err := rm.GetTotalAllocation()
-		require.NoError(t, err)
-		assertResources(t, totalDemand, actualDemand)
-	})
-
-	t.Run("Must be able to get total allocations from DB", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		mockDB, err := cloverRepo.NewMemDB(
-			[]string{
-				"onboarded_resources",
-				"resource_allocation",
-			},
-		)
-		require.NoError(t, err)
-		defer mockDB.Close()
-
-		repos := setupManagerRepos(mockDB)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      7,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 3064},
-				Disk: types.Disk{Size: 2048},
-			},
-		}
-
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		demands := []types.ResourceAllocation{
-			{
-				AllocationID: "alloc1",
-				Resources: types.Resources{
-					CPU: types.CPU{
-						Cores:      3,
-						ClockSpeed: 10000,
-					},
-					RAM:  types.RAM{Size: 1024},
-					Disk: types.Disk{Size: 512},
-				},
-			},
-			{
-				AllocationID: "alloc2",
-				Resources: types.Resources{
-					CPU: types.CPU{
-						Cores:      2,
-						ClockSpeed: 10000,
-					},
-					RAM:  types.RAM{Size: 1024},
-					Disk: types.Disk{Size: 1024},
-				},
-			},
-		}
-
-		var totalDemand types.Resources
-		for _, demand := range demands {
-			err = rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
-			require.NoError(t, err)
-
-			err = rm.AllocateResources(context.Background(), demand.AllocationID)
-			require.NoErrorf(t, err, "failed to allocate resources for allocation %s", demand.AllocationID)
-
-			err = totalDemand.Add(demand.Resources)
-			require.NoError(t, err)
-		}
-
-		actualDemand, err := rm.GetTotalAllocation()
-		require.NoError(t, err)
-		assertResources(t, totalDemand, actualDemand)
-	})
-}
-
-func TestDefaultManager_Concurrency(t *testing.T) {
-	t.Parallel()
-	const numGoroutines = 25
-
-	t.Run("Allocate resources then deallocate them", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
-		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
-
-		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      50,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-
-		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil)
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		var (
-			wg    sync.WaitGroup
-			mutex sync.Mutex
-		)
-		for i := 0; i < numGoroutines; i++ {
-			wg.Add(1)
-			index := i
-			go func() {
-				defer wg.Done()
-				demand := types.ResourceAllocation{
-					AllocationID: fmt.Sprintf("alloc%d", index),
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      0.1,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 10},
-						Disk: types.Disk{Size: 10},
-					},
-				}
-				err := rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
-				require.NoError(t, err)
-
-				mutex.Lock()
-				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil)
-				mutex.Unlock()
-				err = rm.AllocateResources(context.Background(), demand.AllocationID)
-				require.NoError(t, err)
-			}()
-		}
-
-		wg.Wait()
-
-		// Check if the resources are allocated for all the allocations
-		for i := 0; i < numGoroutines; i++ {
-			allocationID := fmt.Sprintf("alloc%d", i)
-			demand, ok := rm.store.allocations[allocationID]
-			require.True(t, ok)
-			require.Equal(t, allocationID, demand.AllocationID)
-		}
-
-		// Check if the free resources are updated correctly
-		freeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		expectedFreeResources := types.FreeResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      50 - 0.1*numGoroutines,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048 - 10*numGoroutines},
-				Disk: types.Disk{Size: 1024 - 10*numGoroutines},
-			},
-		}
-		assertResources(t, expectedFreeResources.Resources, freeResources.Resources)
-		// Deallocate the resources
-		for i := 0; i < numGoroutines; i++ {
-			allocationID := fmt.Sprintf("alloc%d", i)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				mutex.Lock()
-				resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{})
-				resourceAllocationRepo.EXPECT().Find(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query repositories.Query[types.ResourceAllocation]) (types.ResourceAllocation, error) {
-					return types.ResourceAllocation{
-						BaseDBModel: types.BaseDBModel{
-							ID: query.Conditions[0].Value.(string),
-						},
-					}, nil
-				})
-				resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil)
-				mutex.Unlock()
-				err := rm.DeallocateResources(context.Background(), allocationID)
-				require.NoError(t, err)
-			}()
-		}
-
-		wg.Wait()
-
-		// Check if the resources are deallocated for all the allocations
-		for i := 0; i < numGoroutines; i++ {
-			allocationID := fmt.Sprintf("alloc%d", i)
-			_, ok := rm.store.allocations[allocationID]
-			require.False(t, ok)
-		}
-
-		// Check if the free resources are updated correctly
-		freeResources, err = rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, onboardedResources.Resources, freeResources.Resources)
-	})
-
-	t.Run("Concurrent allocation and deallocation", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
-		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
-
-		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      50,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil).Times(1)
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		var wg sync.WaitGroup
-		var mutex sync.Mutex
-		for i := 0; i < numGoroutines; i++ {
-			wg.Add(1)
-			index := i
-			go func() {
-				defer wg.Done()
-				demand := types.ResourceAllocation{
-					AllocationID: fmt.Sprintf("alloc%d", index),
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      0.1,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 10},
-						Disk: types.Disk{Size: 10},
-					},
-				}
-
-				err := rm.CommitResources(context.Background(), types.CommittedResources{AllocationID: demand.AllocationID, Resources: demand.Resources})
-				require.NoError(t, err)
-
-				mutex.Lock()
-				// allocate expectations
-				resourceAllocationRepo.EXPECT().Create(gomock.Any(), demand).Return(demand, nil).Times(1)
-
-				// deallocate expectations
-				resourceAllocationRepo.EXPECT().GetQuery().Return(repositories.Query[types.ResourceAllocation]{}).Times(1)
-				resourceAllocationRepo.EXPECT().Find(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query repositories.Query[types.ResourceAllocation]) (types.ResourceAllocation, error) {
-					return types.ResourceAllocation{
-						BaseDBModel: types.BaseDBModel{
-							ID: query.Conditions[0].Value.(string),
-						},
-					}, nil
-				}).Times(1)
-				resourceAllocationRepo.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-				mutex.Unlock()
-
-				err = rm.AllocateResources(context.Background(), demand.AllocationID)
-				require.NoError(t, err)
-
-				// Deallocate the resources
-				err = rm.DeallocateResources(context.Background(), demand.AllocationID)
-				require.NoError(t, err)
-			}()
-		}
-
-		wg.Wait()
-
-		// Check if the resources are deallocated for all the allocations
-		for i := 0; i < numGoroutines; i++ {
-			allocID := fmt.Sprintf("allocation%d", i)
-			_, ok := rm.store.allocations[allocID]
-			require.False(t, ok)
-		}
-
-		// Check if the free resources are updated correctly
-		freeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, onboardedResources.Resources, freeResources.Resources)
-	})
-
-	t.Run("Commit resources then uncommit them", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
-		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
-
-		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      50,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048},
-				Disk: types.Disk{Size: 1024},
-			},
-		}
-
-		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil)
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		var wg sync.WaitGroup
-		for i := 0; i < numGoroutines; i++ {
-			wg.Add(1)
-			index := i
-			go func() {
-				defer wg.Done()
-				demand := types.CommittedResources{
-					AllocationID: fmt.Sprintf("alloc%d", index),
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      0.1,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 10},
-						Disk: types.Disk{Size: 10},
-					},
-				}
-				err := rm.CommitResources(context.Background(), demand)
-				require.NoError(t, err)
-			}()
-		}
-
-		wg.Wait()
-
-		// Check if the resources are committed for all the allocations
-		for i := 0; i < numGoroutines; i++ {
-			allocID := fmt.Sprintf("alloc%d", i)
-			demand, ok := rm.store.committedResources[allocID]
-			require.True(t, ok)
-			require.Equal(t, allocID, demand.AllocationID)
-		}
-
-		// Check if the free resources are updated correctly
-		freeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		expectedFreeResources := types.FreeResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      50 - 0.1*numGoroutines,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 2048 - 10*numGoroutines},
-				Disk: types.Disk{Size: 1024 - 10*numGoroutines},
-			},
-		}
-		assertResources(t, expectedFreeResources.Resources, freeResources.Resources)
-		// Uncommit the resources
-		for i := 0; i < numGoroutines; i++ {
-			allocID := fmt.Sprintf("alloc%d", i)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				err := rm.UncommitResources(context.Background(), allocID)
-				require.NoError(t, err)
-			}()
-		}
-
-		wg.Wait()
-
-		// Check if the resources are uncommitted for all the allocations
-		for i := 0; i < numGoroutines; i++ {
-			allocID := fmt.Sprintf("alloc%d", i)
-			_, ok := rm.store.allocations[allocID]
-			require.False(t, ok)
-		}
-	})
-
-	t.Run("Concurrent commit and uncommit", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		t.Cleanup(func() {
-			ctrl.Finish()
-		})
-		onboardedResourcesRepo := NewMockGenericEntityRepository[types.OnboardedResources](ctrl)
-		resourceAllocationRepo := NewMockGenericRepository[types.ResourceAllocation](ctrl)
-
-		repos := newMockManagerRepos(t, onboardedResourcesRepo, resourceAllocationRepo)
-		hm := NewMockHardwareManager(ctrl)
-		rm, err := NewResourceManager(repos, hm)
-		require.NoError(t, err)
-
-		onboardedResources := types.OnboardedResources{
-			Resources: types.Resources{
-				CPU: types.CPU{
-					Cores:      50,
-					ClockSpeed: 10000,
-				},
-				RAM:  types.RAM{Size: 1000000},
-				Disk: types.Disk{Size: 1000000},
-			},
-		}
-		onboardedResourcesRepo.EXPECT().Save(gomock.Any(), onboardedResources).Return(onboardedResources, nil).Times(1)
-		err = rm.UpdateOnboardedResources(context.Background(), onboardedResources.Resources)
-		require.NoError(t, err)
-
-		var wg sync.WaitGroup
-		for i := 0; i < numGoroutines; i++ {
-			wg.Add(1)
-			index := i
-			go func() {
-				defer wg.Done()
-				demand := types.CommittedResources{
-					AllocationID: fmt.Sprintf("alloc%d", index),
-					Resources: types.Resources{
-						CPU: types.CPU{
-							Cores:      0.1,
-							ClockSpeed: 10000,
-						},
-						RAM:  types.RAM{Size: 1},
-						Disk: types.Disk{Size: 1},
-					},
-				}
-
-				err := rm.CommitResources(context.Background(), demand)
-				require.NoError(t, err)
-
-				// Deallocate the resources
-				err = rm.UncommitResources(context.Background(), demand.AllocationID)
-				require.NoError(t, err)
-			}()
-		}
-
-		wg.Wait()
-
-		// Check if the resources are uncommitted for all the allocations
-		for i := 0; i < numGoroutines; i++ {
-			allocID := fmt.Sprintf("alloc%d", i)
-			_, ok := rm.store.committedResources[allocID]
-			require.False(t, ok)
-		}
-
-		// Check if the free resources are updated correctly
-		freeResources, err := rm.GetFreeResources(context.Background())
-		require.NoError(t, err)
-		assertResources(t, onboardedResources.Resources, freeResources.Resources)
-	})
+			if err := manager.CommitResources(ctx, commitment); err != nil {
+				errChan <- fmt.Errorf("commit goroutine %d failed: %w", idx, err)
+				return
+			}
+		}(i, id)
+	}
+
+	// Launch concurrent allocate operations
+	for i, id := range allocateIDs {
+		go func(idx int, allocID string) {
+			defer wg.Done()
+
+			if err := manager.AllocateResources(ctx, allocID); err != nil {
+				errChan <- fmt.Errorf("allocate goroutine %d failed: %w", idx, err)
+				return
+			}
+		}(i, id)
+	}
+
+	// Launch concurrent deallocate operations
+	for i, id := range deallocateIDs {
+		go func(idx int, allocID string) {
+			defer wg.Done()
+
+			if err := manager.DeallocateResources(ctx, allocID); err != nil {
+				errChan <- fmt.Errorf("deallocate goroutine %d failed: %w", idx, err)
+				return
+			}
+		}(i, id)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors
+	errs := make([]error, 0, numConcurrent*3)
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+	require.Empty(t, errs, "concurrent mixed operations failed: %v", errs)
+
+	// Verify final state
+	// 1. All commit operations should have succeeded
+	for _, id := range commitIDs {
+		committed, err := manager.IsCommitted(id)
+		require.NoError(t, err)
+		require.True(t, committed, "ID %s should be committed", id)
+	}
+
+	// 2. All allocate operations should have succeeded
+	for _, id := range allocateIDs {
+		allocated, err := manager.IsAllocated(id)
+		require.NoError(t, err)
+		require.True(t, allocated, "ID %s should be allocated", id)
+	}
+
+	// 3. All deallocate operations should have succeeded
+	for _, id := range deallocateIDs {
+		allocated, err := manager.IsAllocated(id)
+		require.NoError(t, err)
+		require.False(t, allocated, "ID %s should not be allocated", id)
+	}
+
+	// Clean up - uncommit and deallocate remaining resources
+	for _, id := range commitIDs {
+		err = manager.UncommitResources(ctx, id)
+		require.NoError(t, err)
+	}
+
+	for _, id := range allocateIDs {
+		err = manager.DeallocateResources(ctx, id)
+		require.NoError(t, err)
+	}
 }

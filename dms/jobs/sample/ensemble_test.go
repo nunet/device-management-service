@@ -56,7 +56,7 @@ func TestEnsemble(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, float32(2), worker1.Resources.CPU.Cores, "Worker1 should have correct CPU cores")
-	assert.Equal(t, float64(expectedRAM), worker1.Resources.RAM.Size, "Worker1 should have correct RAM")
+	assert.Equal(t, expectedRAM, worker1.Resources.RAM.Size, "Worker1 should have correct RAM")
 	assert.Equal(t, "docker", string(worker1.Executor), "Worker1 should have correct executor")
 	assert.Equal(t, "docker", worker1.Execution.Type, "Worker1 should have correct execution type")
 	assert.Equal(t, "ubuntu:22.04", worker1.Execution.Params["image"], "Worker1 should have correct image")

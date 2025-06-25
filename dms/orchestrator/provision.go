@@ -9,6 +9,7 @@
 package orchestrator
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -21,49 +22,85 @@ import (
 	"gitlab.com/nunet/device-management-service/observability"
 )
 
-func (o *BasicOrchestrator) provision(
-	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
-) error {
-	o.setStatus(jtypes.DeploymentStatusProvisioning)
+const orchSubnetName = "orchestrator"
+
+var monitorOnlyTaskManifestInterval = time.Second * 10
+
+// Provisioner handles the provisioning process for ensemble deployment
+type Provisioner struct {
+	ctx            context.Context
+	cancel         context.CancelFunc
+	actor          actor.Actor
+	subnetManifest SubnetManifest
+}
+
+// NewProvisioner creates a new Provisioner instance
+func NewProvisioner(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	actor actor.Actor,
+	subnetManifest SubnetManifest,
+) *Provisioner {
+	return &Provisioner{
+		ctx:            ctx,
+		cancel:         cancel,
+		actor:          actor,
+		subnetManifest: subnetManifest,
+	}
+}
+
+// Provision handles the provisioning process and returns the updated manifest
+func (p *Provisioner) Provision(
+	cfgReader jtypes.EnsembleCfgReader,
+	manifestReader jtypes.ManifestReader,
+) (jtypes.EnsembleManifest, error) {
+	cfg := cfgReader.Read()
+	manifest := manifestReader.Read()
+
 	log.Infow("provisioning ensemble manifest",
 		"labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", o.id,
+		"orchestratorID", manifest.ID,
 	)
 
 	// 1. provision subnet
-	err := o.provisionSubnet(manifest)
+	manifest, err := p.provisionSubnet(manifest)
 	if err != nil {
-		return fmt.Errorf("provisioning subnet: %w", err)
+		return manifest, fmt.Errorf("provisioning subnet: %w", err)
 	}
 
 	// 2. start allocations
-	err = o.provisionAllocations(cfg, manifest)
+	manifest, err = p.provisionAllocations(cfg, manifest)
 	if err != nil {
-		return fmt.Errorf("provisioning allocations: %w", err)
+		return manifest, fmt.Errorf("provisioning allocations: %w", err)
 	}
 
-	return nil
+	return manifest, nil
 }
 
-func (o *BasicOrchestrator) provisionSubnet(manifest jtypes.EnsembleManifest) error {
+func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.EnsembleManifest, error) {
 	for allocName, allocManifest := range manifest.Allocations {
-		ip, err := netutils.GetNextIP(o.subnetManifest.CIDR, o.subnetManifest.UsedIPs)
+		ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
 		log.Debug("Generated IP", ip, "for alllocation", allocName)
 		if err != nil {
-			return fmt.Errorf("error getting next IP: %w", err)
+			return manifest, fmt.Errorf("error getting next IP: %w", err)
 		}
-		o.subnetManifest.RoutingTable[ip.String()] = manifest.Nodes[allocManifest.NodeID].Peer
-		o.subnetManifest.IndexRoutingTable[allocName] = ip.String()
-		o.subnetManifest.UsedIPs[ip.String()] = true
+		p.subnetManifest.RoutingTable[ip.String()] = manifest.Nodes[allocManifest.NodeID].Peer
+		p.subnetManifest.IndexRoutingTable[allocName] = ip.String()
+		p.subnetManifest.UsedIPs[ip.String()] = true
 
 		if _, ok := manifest.Allocations[allocName]; ok {
-			o.updateAllocationIP(allocName, ip.String())
+			err := manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
+				alloc.PrivAddr = ip.String()
+			})
+			if err != nil {
+				return manifest, fmt.Errorf("error updating allocation manifest: %w", err)
+			}
 		}
 	}
 
 	dnsRecords := make(map[string]string)
 	for allocName, allocManifest := range manifest.Allocations {
-		dnsRecords[allocManifest.DNSName] = o.subnetManifest.IndexRoutingTable[allocName]
+		dnsRecords[allocManifest.DNSName] = p.subnetManifest.IndexRoutingTable[allocName]
 	}
 
 	// handles to request subnetcreate
@@ -77,71 +114,67 @@ func (o *BasicOrchestrator) provisionSubnet(manifest jtypes.EnsembleManifest) er
 	for allocName, allocManifest := range manifest.Allocations {
 		subReqs = append(subReqs, subnetRequest{
 			handle: allocManifest.Handle,
-			ip:     o.subnetManifest.IndexRoutingTable[allocName],
+			ip:     p.subnetManifest.IndexRoutingTable[allocName],
 			peerID: manifest.Nodes[allocManifest.NodeID].Peer,
 			ports:  allocManifest.Ports,
 		})
 	}
 
 	if manifest.Subnet.Join { // orchestrator should join the subnet
-		ip, err := netutils.GetNextIP(o.subnetManifest.CIDR, o.subnetManifest.UsedIPs)
+		ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
 		log.Debug("Generated IP %s for orchestrator", ip)
 		if err != nil {
-			return fmt.Errorf("error getting next IP: %w", err)
+			return manifest, fmt.Errorf("error getting next IP: %w", err)
 		}
-		o.subnetManifest.RoutingTable[ip.String()] = o.actor.Handle().Address.HostID
-		o.subnetManifest.IndexRoutingTable[orchSubnetName] = ip.String()
-		o.subnetManifest.UsedIPs[ip.String()] = true
+		p.subnetManifest.RoutingTable[ip.String()] = p.actor.Handle().Address.HostID
+		p.subnetManifest.IndexRoutingTable[orchSubnetName] = ip.String()
+		p.subnetManifest.UsedIPs[ip.String()] = true
 
-		subCreateHandles = append(subCreateHandles, o.actor.Supervisor())
-		dnsRecords[orchSubnetName] = o.subnetManifest.IndexRoutingTable[orchSubnetName]
+		subCreateHandles = append(subCreateHandles, p.actor.Supervisor())
+		dnsRecords[orchSubnetName] = p.subnetManifest.IndexRoutingTable[orchSubnetName]
 	}
 
 	// 1.a create subnet in each peer
-	err := o.createSubnet(subReqs, o.subnetManifest.RoutingTable, subCreateHandles)
+	err := p.createSubnet(manifest.ID, subReqs, p.subnetManifest.RoutingTable, subCreateHandles)
 	if err != nil {
-		return fmt.Errorf("error creating subnet: %w", err)
+		return manifest, fmt.Errorf("error creating subnet: %w", err)
 	}
 
 	// if orchestrator should join subnet, setup with one behavior
 	// this doesn't look very good but let's address with #893
 	if manifest.Subnet.Join {
-		err := o.orchestratorJoinSubnet(o.subnetManifest.IndexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(manifest.ID, p.subnetManifest.IndexRoutingTable, dnsRecords)
 		if err != nil {
-			return fmt.Errorf("error joining subnet: %w", err)
+			return manifest, fmt.Errorf("error joining subnet: %w", err)
 		}
 	}
 
 	// 1.b create and plug IPs
-	err = o.subnetAddPeer(subReqs)
+	err = p.subnetAddPeer(manifest.ID, subReqs)
 	if err != nil {
-		return fmt.Errorf("error adding peers to subnet: %w", err)
+		return manifest, fmt.Errorf("error adding peers to subnet: %w", err)
 	}
 
 	// 1.c configure DNS
-	err = o.addDNSRecords(subReqs, dnsRecords)
+	err = p.addDNSRecords(manifest.ID, subReqs, dnsRecords)
 	if err != nil {
-		return fmt.Errorf("error adding dns records to subnet: %w", err)
+		return manifest, fmt.Errorf("error adding dns records to subnet: %w", err)
 	}
 
 	// 1.d configure port mapping
-	err = o.mapPorts(subReqs)
+	err = p.mapPorts(manifest.ID, subReqs)
 	if err != nil {
-		return fmt.Errorf("error adding port mappings to subnet: %w", err)
+		return manifest, fmt.Errorf("error adding port mappings to subnet: %w", err)
 	}
 
-	return nil
+	return manifest, nil
 }
 
-func (o *BasicOrchestrator) provisionAllocations(
+func (p *Provisioner) provisionAllocations(
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
-) error {
+) (jtypes.EnsembleManifest, error) {
 	var wg sync.WaitGroup
 	var aggErr error
-
-	if o.isOnlyTaskManifest(manifest) {
-		go o.monitorOnlyTaskManifest(manifest)
-	}
 
 	interim := map[string][]string{} // a map of verteces to edges (their dependencies)
 	for allocName, allocCfg := range cfg.Allocations() {
@@ -150,7 +183,7 @@ func (o *BasicOrchestrator) provisionAllocations(
 
 	orderedAllocs, err := orderByDependency(interim)
 	if err != nil {
-		return err
+		return manifest, err
 	}
 
 	allocStatuses := make(map[string]jtypes.AllocationStatus)
@@ -163,12 +196,12 @@ func (o *BasicOrchestrator) provisionAllocations(
 				defer wg.Done()
 
 				msg, err := actor.Message(
-					o.actor.Handle(),
+					p.actor.Handle(),
 					allocManifest.Handle,
 					behaviors.AllocationStartBehavior,
 					behaviors.AllocationStartRequest{
-						SubnetIP:    o.subnetManifest.IndexRoutingTable[allocName],
-						GatewayIP:   o.subnetManifest.GatewayIP,
+						SubnetIP:    p.subnetManifest.IndexRoutingTable[allocName],
+						GatewayIP:   p.subnetManifest.GatewayIP,
 						PortMapping: allocManifest.Ports,
 					},
 					actor.WithMessageExpiry(actor.MakeExpiry(AllocationStartTimeout)),
@@ -178,7 +211,7 @@ func (o *BasicOrchestrator) provisionAllocations(
 					return
 				}
 
-				replyCh, err := o.actor.Invoke(msg)
+				replyCh, err := p.actor.Invoke(msg)
 				if err != nil {
 					errCh <- fmt.Errorf("error invoking allocation start: %w", err)
 					return
@@ -215,76 +248,20 @@ func (o *BasicOrchestrator) provisionAllocations(
 			wg.Wait()
 
 			for allocName, status := range allocStatuses {
-				o.updateAllocationStatus(allocName, status)
+				err := manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
+					alloc.Status = status
+				})
+				if err != nil {
+					aggErr = err
+				}
 			}
 
 			close(errCh)
 			if aggregateErrors(errCh) != nil {
-				return aggErr
+				return manifest, aggErr
 			}
 		}
 	}
 
-	return nil
-}
-
-func (o *BasicOrchestrator) updateAllocationStatus(allocName string, s jtypes.AllocationStatus) {
-	o.lock.Lock()
-	defer o.lock.Unlock()
-	if alloc, ok := o.manifest.Allocations[allocName]; ok {
-		alloc.Status = s
-		o.manifest.Allocations[allocName] = alloc
-	} else {
-		log.Warnf("allocation %s not found in manifest", allocName)
-	}
-}
-
-// updateAllocationIP
-func (o *BasicOrchestrator) updateAllocationIP(allocName string, ip string) {
-	o.lock.Lock()
-	defer o.lock.Unlock()
-	if alloc, ok := o.manifest.Allocations[allocName]; ok {
-		alloc.PrivAddr = ip
-		o.manifest.Allocations[allocName] = alloc
-	} else {
-		log.Warnf("allocation %s not found in manifest", allocName)
-	}
-}
-
-func (o *BasicOrchestrator) isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
-	for _, a := range m.Allocations {
-		if a.Type != jtypes.AllocationTypeTask {
-			return false
-		}
-	}
-	return true
-}
-
-// monitorOnlyTaskManifest will be responsible for tearing down
-// the orchestrator after all tasks are terminated.
-func (o *BasicOrchestrator) monitorOnlyTaskManifest(m jtypes.EnsembleManifest) {
-	if !o.isOnlyTaskManifest(m) {
-		return
-	}
-
-	ticker := time.NewTicker(time.Second * 10)
-	defer ticker.Stop()
-selectLoop:
-	for {
-		select {
-		case <-o.ctx.Done():
-			return
-		case <-ticker.C:
-			for name := range m.Allocations {
-				if !m.IsTerminatedTask(name) {
-					continue selectLoop
-				}
-			}
-			log.Infof("All tasks are terminated, shutting down orchestrator.")
-
-			o.setStatus(jtypes.DeploymentStatusCompleted)
-			o.cancel()
-			return
-		}
-	}
+	return manifest, nil
 }

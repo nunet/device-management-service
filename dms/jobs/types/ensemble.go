@@ -66,7 +66,7 @@ type AllocationConfig struct {
 	Keys            []types.AllocationKey     `json:"keys,omitempty"`             // names of the authorized ssh keys for the allocation
 	Provision       []string                  `json:"provision,omitempty"`        // names of provisioning scripts to run (in order)
 	HealthCheck     types.HealthCheckManifest `json:"healthcheck,omitempty"`      // name of the health check script
-	Volume          *types.VolumeConfig       `json:"volume,omitempty"`           // unified storage configuration (optional)
+	Volumes         []types.VolumeConfig      `json:"volumes,omitempty"`          // unified storage configuration (optional)
 	FailureRecovery AllocationFailureRecovery `json:"failure_recovery,omitempty"` // failure recovery (stay_down|one_for_one|one_for_all|rest_for_one)
 	DependsOn       []string                  `json:"depends_on,omitempty"`       // list of allocations that this allocation depends on
 }
@@ -174,9 +174,39 @@ func (e *EnsembleConfig) Nodes() map[string]NodeConfig {
 	return e.V1.Nodes
 }
 
-func (e *EnsembleConfig) Node(nodeID string) (NodeConfig, bool) {
-	n, ok := e.V1.Nodes[nodeID]
+func (e *EnsembleConfig) Node(node string) (NodeConfig, bool) {
+	n, ok := e.V1.Nodes[node]
 	return n, ok
+}
+
+func (e *EnsembleConfig) AllocationsForNode(node string) map[string]AllocationConfig {
+	allocations := make(map[string]AllocationConfig)
+	nodeConfig, ok := e.Node(node)
+	if !ok {
+		return allocations
+	}
+
+	for _, allocName := range nodeConfig.Allocations {
+		if alloc, ok := e.Allocation(allocName); ok {
+			allocations[allocName] = alloc
+		}
+	}
+
+	return allocations
+}
+
+func (e *EnsembleConfig) PortsForAllocation(allocation string) []PortConfig {
+	var ports []PortConfig
+
+	for _, node := range e.Nodes() {
+		for _, port := range node.Ports {
+			if port.Allocation == allocation {
+				ports = append(ports, port)
+			}
+		}
+	}
+
+	return ports
 }
 
 func (e *EnsembleConfig) EdgeConstraints() []EdgeConstraint {

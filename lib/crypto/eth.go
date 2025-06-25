@@ -45,7 +45,7 @@ func (k *EthPublicKey) Verify(data []byte, sigStr []byte) (success bool, err err
 
 	hasher := sha3.NewLegacyKeccak256()
 	hasher.Write(ethSignMagic)
-	hasher.Write([]byte(fmt.Sprintf("%d", len(data))))
+	fmt.Fprintf(hasher, "%d", len(data))
 	hasher.Write(data)
 
 	hash := hasher.Sum(nil)

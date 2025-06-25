@@ -36,16 +36,18 @@ func (o *BasicOrchestrator) handleTaskTermination(msg actor.Envelope) {
 	o.manifest.Allocations[allocName] = a
 	o.lock.Unlock()
 
-	if req.Error.Err != nil {
+	if req.Error.Err != "" {
 		log.Errorf(
 			"allocation task %s yielded error: %v",
 			req.AllocationID, req.Error,
 		)
+		return
 	}
 
 	allocDir, err := o.WriteAllocationLogs(allocName, req.Stdout, req.Stderr)
 	if err != nil {
 		log.Errorf("failed to write logs for allocation %s: %v", allocName, err)
+		return
 	}
 
 	log.Infof("allocation logs for %s written to %s (ensemble: %s)", allocName, allocDir, o.id)

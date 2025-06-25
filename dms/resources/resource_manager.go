@@ -20,8 +20,8 @@ import (
 
 // ManagerRepos holds all the repositories needed for resource management
 type ManagerRepos struct {
-	OnboardedResources repositories.OnboardedResources
-	ResourceAllocation repositories.ResourceAllocation
+	OnboardedResources repositories.GenericEntityRepository[types.OnboardedResources]
+	ResourceAllocation repositories.GenericRepository[types.ResourceAllocation]
 }
 
 // DefaultManager implements the ResourceManager interface
@@ -66,7 +66,7 @@ func (d *DefaultManager) CommitResources(ctx context.Context, commitment types.C
 		_, ok = d.store.committedResources[commitment.AllocationID]
 	})
 	if ok {
-		return fmt.Errorf("resources already committed for allocation %s", commitment.AllocationID)
+		return fmt.Errorf("%w: for allocation %s", ErrResourcesAlreadyCommitted, commitment.AllocationID)
 	}
 
 	d.committedLock.Lock()
@@ -98,7 +98,7 @@ func (d *DefaultManager) UncommitResources(_ context.Context, allocationID strin
 		_, ok = d.store.committedResources[allocationID]
 	})
 	if !ok {
-		return fmt.Errorf("resources not committed for allocation %s", allocationID)
+		return fmt.Errorf("%w: for allocation %s", ErrResourcesNotCommitted, allocationID)
 	}
 
 	// Release the committed resources
@@ -132,7 +132,7 @@ func (d *DefaultManager) AllocateResources(ctx context.Context, allocationID str
 		allocation, ok = d.store.committedResources[allocationID]
 	})
 	if !ok {
-		return fmt.Errorf("resources not committed for allocation %s", allocationID)
+		return fmt.Errorf("%w: for allocation %s", ErrResourcesNotCommitted, allocationID)
 	}
 
 	// Check if resources are already allocated for the allocation
@@ -140,7 +140,7 @@ func (d *DefaultManager) AllocateResources(ctx context.Context, allocationID str
 		_, ok = d.store.allocations[allocation.AllocationID]
 	})
 	if ok {
-		return fmt.Errorf("resources already allocated for allocation %s", allocation.AllocationID)
+		return fmt.Errorf("%w: for allocation %s", ErrResourcesAlreadyAllocated, allocation.AllocationID)
 	}
 
 	allocatedResource := types.ResourceAllocation{AllocationID: allocationID, Resources: allocation.Resources}
@@ -168,7 +168,7 @@ func (d *DefaultManager) DeallocateResources(ctx context.Context, allocationID s
 		_, ok = d.store.allocations[allocationID]
 	})
 	if !ok {
-		return fmt.Errorf("resources not allocated for allocation %s", allocationID)
+		return fmt.Errorf("%w: for allocation %s", ErrResourcesNotAllocated, allocationID)
 	}
 
 	if err := d.deleteAllocation(ctx, allocationID); err != nil {
@@ -319,7 +319,7 @@ func (d *DefaultManager) checkCapacity(ctx context.Context, resources types.Reso
 
 	// Check if there are enough free resources in dms resource pool to allocate
 	if err := freeResources.Subtract(resources); err != nil {
-		return fmt.Errorf("no free resources: %w", err)
+		return types.ErrNoFreeResources
 	}
 
 	return nil

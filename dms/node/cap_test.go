@@ -1,19 +1,20 @@
 package node
 
 import (
-	"os"
+	"path/filepath"
 	"testing"
-
-	"gitlab.com/nunet/device-management-service/lib/did"
-
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
 func TestCap(t *testing.T) {
 	t.Parallel()
+
+	userDir := "/tmp/dms/user"
 
 	t.Run("must be able to identify a ledger context", func(t *testing.T) {
 		tests := []struct {
@@ -83,22 +84,21 @@ func TestCap(t *testing.T) {
 	t.Run("must be able to create and get trust context", func(t *testing.T) {
 		t.Parallel()
 
-		basePath := t.TempDir()
-		afs := afero.Afero{Fs: afero.NewOsFs()}
+		fs := afero.NewMemMapFs()
+		keysDir := filepath.Join(userDir, KeystoreDir)
+
 		contextKey := "context"
 		passphrase := "passphrase"
 
-		err := os.Setenv("DMS_PASSPHRASE", passphrase)
-		require.NoError(t, err)
-		createKey(t, afs.Fs, basePath, contextKey, passphrase)
+		createKey(t, fs, keysDir, contextKey, passphrase)
 
-		trustCtx, privKey, err := CreateTrustContextFromKeyStore(afs, contextKey, basePath)
+		trustCtx, privKey, err := CreateTrustContextFromKeyStore(fs, contextKey, passphrase, keysDir)
 		require.NoError(t, err)
 		require.NotNil(t, trustCtx)
 		require.NotNil(t, privKey)
 
 		// Get the trust context
-		savedTrustCtx, err := GetTrustContext(afs, contextKey, basePath)
+		savedTrustCtx, err := GetTrustContext(fs, contextKey, passphrase, keysDir)
 		require.NoError(t, err)
 		require.NotNil(t, savedTrustCtx)
 	})
@@ -106,16 +106,17 @@ func TestCap(t *testing.T) {
 	t.Run("must be able to save and load capability context", func(t *testing.T) {
 		t.Parallel()
 
-		basePath := t.TempDir()
-		afs := afero.Afero{Fs: afero.NewOsFs()}
+		fs := afero.NewMemMapFs()
+		keysDir := filepath.Join(userDir, KeystoreDir)
+		capsDir := filepath.Join(userDir, CapstoreDir)
+
 		contextKey := "context"
 		passphrase := "passphrase"
 
-		err := os.Setenv("DMS_PASSPHRASE", passphrase)
-		require.NoError(t, err)
-		createKey(t, afs.Fs, basePath, contextKey, passphrase)
+		createKey(t, fs, keysDir, contextKey, passphrase)
 
-		trustCtx, privKey, err := CreateTrustContextFromKeyStore(afs, contextKey, basePath)
+		trustCtx, privKey, err := CreateTrustContextFromKeyStore(
+			fs, contextKey, passphrase, keysDir)
 		require.NoError(t, err)
 		require.NotNil(t, trustCtx)
 		require.NotNil(t, privKey)
@@ -130,10 +131,10 @@ func TestCap(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		err = SaveCapabilityContext(capCtx, basePath)
+		err = SaveCapabilityContext(capCtx, fs, capsDir)
 		require.NoError(t, err)
 
-		savedCapCtx, err := LoadCapabilityContext(trustCtx, contextKey, basePath)
+		savedCapCtx, err := LoadCapabilityContext(trustCtx, fs, contextKey, capsDir)
 		require.NoError(t, err)
 		require.NotNil(t, savedCapCtx)
 		require.Equal(t, capCtx, savedCapCtx)

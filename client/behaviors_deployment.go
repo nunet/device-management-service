@@ -9,7 +9,10 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node"
 )
 
-func (c *Client) DeploymentList(ctx context.Context, req node.DeploymentListRequest, opts ...Option) (node.DeploymentListResponse, error) {
+func (c *Client) DeploymentList(
+	ctx context.Context, req node.DeploymentListRequest,
+	opts ...Option,
+) (node.DeploymentListResponse, error) {
 	var response node.DeploymentListResponse
 
 	resp, err := c.InvokeBehavior(
@@ -19,7 +22,8 @@ func (c *Client) DeploymentList(ctx context.Context, req node.DeploymentListRequ
 		opts...,
 	)
 	if err != nil {
-		return response, fmt.Errorf("%s: %w", behaviors.DeploymentListBehavior, err)
+		return response,
+			fmt.Errorf("%s: %w", behaviors.DeploymentListBehavior, err)
 	}
 
 	err = c.unmarshalResponse(resp, &response)

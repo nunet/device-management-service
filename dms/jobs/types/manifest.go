@@ -10,10 +10,14 @@ package jobtypes
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+var ErrAllocationNotFound = errors.New("allocation not found")
 
 type EnsembleManifest struct {
 	ID           string                        `json:"id"`                 // ensemble globally unique id
@@ -61,6 +65,17 @@ func (mf *EnsembleManifest) Clone() EnsembleManifest {
 	return clone
 }
 
+// UpdateAllocation applies the provided updater function to the specified allocation.
+func (mf *EnsembleManifest) UpdateAllocation(name string, update func(*AllocationManifest)) error {
+	if alloc, ok := mf.Allocations[name]; ok {
+		update(&alloc)
+		mf.Allocations[name] = alloc
+	} else {
+		return ErrAllocationNotFound
+	}
+	return nil
+}
+
 func (mf *EnsembleManifest) IsTerminatedTask(name string) bool {
 	a, ok := mf.Allocations[name]
 	if !ok {
@@ -72,4 +87,12 @@ func (mf *EnsembleManifest) IsTerminatedTask(name string) bool {
 		return true
 	}
 	return false
+}
+
+func (mf *EnsembleManifest) JSON() ([]byte, error) {
+	data, err := json.MarshalIndent(mf, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal manifest: %w", err)
+	}
+	return data, nil
 }

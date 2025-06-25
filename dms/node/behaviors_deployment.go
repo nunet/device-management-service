@@ -186,7 +186,7 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	}
 
 	childCtx := context.WithoutCancel(n.ctx)
-	orch, err := n.createOrchestrator(childCtx, request.Ensemble, n.actor)
+	orch, err := n.createOrchestrator(childCtx, request.Ensemble)
 	if err != nil {
 		log.Warnw("orchestrator_creation_failure",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -444,15 +444,19 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 		return
 	}
 
-	o.Shutdown()
+	err = o.Shutdown()
+	if err != nil {
+		handleErr(err)
+		return
+	}
 	resp.OK = true
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) handleRevertDeployment(msg actor.Envelope) {
+func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request orchestrator.RevertDeploymentMessage
+	var request orchestrator.DeploymentRevertRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Debugw("revert_deployment_unmarshal_error",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -487,7 +491,7 @@ func (n *Node) handleRevertDeployment(msg actor.Envelope) {
 					"error", err)
 			}
 		} else {
-			if err := n.allocator.Uncommit(context.Background(), allocID); err != nil {
+			if err := n.allocator.Uncommit(context.Background(), allocName); err != nil {
 				log.Errorw("revert_deployment_uncommit_failure",
 					"labels", []string{string(observability.LabelDeployment)},
 					"ensembleID", ensembleID,

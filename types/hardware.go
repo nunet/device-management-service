@@ -20,6 +20,7 @@ type HardwareManager interface {
 	GetUsage() (Resources, error)
 	GetFreeResources() (Resources, error)
 	CheckCapacity(resources Resources) (bool, error)
+	Shutdown() error
 }
 
 // GPUManager defines the interface for managing GPU resources.
@@ -32,7 +33,7 @@ type GPUManager interface {
 // GPUConnector vendor-specific adapter that interacts with actual GPU hardware by using vendor-specific libraries
 type GPUConnector interface {
 	GetGPUs() (GPUs, error)
-	GetGPUUsage(uuid string) (float64, error)
+	GetGPUUsage(uuid string) (uint64, error)
 	Shutdown() error
 }
 
@@ -83,8 +84,7 @@ type GPU struct {
 	// Model represents the GPU model name, e.g., "Tesla T4", "A100"
 	Model string `json:"model" description:"GPU model, e.g., Tesla T4, A100"`
 	// VRAM is the total amount of VRAM on the device
-	// TODO: uint64!!
-	VRAM float64 `json:"vram" description:"Total amount of VRAM on the device"`
+	VRAM uint64 `json:"vram" description:"Total amount of VRAM on the device"`
 	// UUID is the unique identifier of the device
 	UUID string `json:"uuid" description:"Unique identifier of the device"`
 }
@@ -144,7 +144,7 @@ func (g *GPU) Equal(other GPU) bool {
 }
 
 // VRAMInGB returns the VRAM in gigabytes
-func (g *GPU) VRAMInGB() float64 {
+func (g *GPU) VRAMInGB() uint64 {
 	return ConvertBytesToGB(g.VRAM)
 }
 
@@ -380,8 +380,7 @@ func (c *CPU) ClockSpeedInGHz() float64 {
 // RAM represents the RAM information
 type RAM struct {
 	// Size in bytes
-	// TODO: uint64!!!
-	Size float64 `json:"size" description:"Size of the RAM in bytes"`
+	Size uint64 `json:"size" description:"Size of the RAM in bytes"`
 
 	// TODO: capture the below fields if required
 	// Clock speed in Hz
@@ -425,15 +424,14 @@ func (r *RAM) Subtract(other RAM) error {
 }
 
 // SizeInGB returns the size in gigabytes
-func (r *RAM) SizeInGB() float64 {
+func (r *RAM) SizeInGB() uint64 {
 	return ConvertBytesToGB(r.Size)
 }
 
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
-	// float64 is used instead of uint64 because float64 can hold larger values
-	Size float64 `json:"size" description:"Size of the disk in bytes"`
+	Size uint64 `json:"size" description:"Size of the disk in bytes"`
 
 	// TODO: capture the below fields if required
 	// Model represents the disk model, e.g., "Samsung 970 EVO Plus", "Western Digital Blue SN550"
@@ -488,7 +486,7 @@ func (d *Disk) Subtract(other Disk) error {
 }
 
 // SizeInGB returns the size in gigabytes
-func (d *Disk) SizeInGB() float64 {
+func (d *Disk) SizeInGB() uint64 {
 	return ConvertBytesToGB(d.Size)
 }
 
@@ -503,17 +501,17 @@ type NetworkInfo struct {
 }
 
 // ConvertBytesToGB converts bytes to gigabytes
-func ConvertBytesToGB(bytes float64) float64 {
+func ConvertBytesToGB(bytes uint64) uint64 {
 	return bytes / 1e9
 }
 
 // ConvertGBToBytes converts gigabytes to bytes
-func ConvertGBToBytes(gb float64) float64 {
+func ConvertGBToBytes(gb uint64) uint64 {
 	return gb * 1e9
 }
 
 // ConvertMibToBytes converts mebibytes to bytes
-func ConvertMibToBytes(mib float64) float64 {
+func ConvertMibToBytes(mib uint64) uint64 {
 	return mib * 1024 * 1024
 }
 

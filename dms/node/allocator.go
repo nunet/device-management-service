@@ -11,7 +11,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -22,10 +21,11 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/network"
-	"gitlab.com/nunet/device-management-service/network/utils"
+	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 var (
@@ -72,7 +72,7 @@ func (pa *portAllocator) allocate(port int) error {
 		return fmt.Errorf("port %d is already reserved", port)
 	}
 
-	if !utils.IsFreePort(port) {
+	if !netutils.IsFreePort(port) {
 		return fmt.Errorf("port %d is not free", port)
 	}
 
@@ -112,7 +112,7 @@ func (pa *portAllocator) getAvailablePorts(numPorts int) []int {
 		}
 
 		// Check if port is actually free on the system
-		if utils.IsFreePort(port) {
+		if netutils.IsFreePort(port) {
 			ports = append(ports, port)
 		}
 	}
@@ -258,14 +258,14 @@ type allocator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	volumeTracker *storage.VoumeTracker
+	volumeTracker *storage.VolumeTracker
 }
 
 var _ Allocator = (*allocator)(nil)
 
 // newAllocator returns a new default allocator
 func newAllocator(
-	vt *storage.VoumeTracker,
+	vt *storage.VolumeTracker,
 	portAllocator *portAllocator,
 	resourceManager types.ResourceManager,
 	hardwareManager types.HardwareManager,
@@ -305,6 +305,9 @@ func (a *allocator) Commit(ctx context.Context,
 	numDynamicPorts int,
 	expiry int64,
 ) error {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
 	// Check against the actual hardware usage to ensure dms can guarantee the commitment
 	hasCapacity, err := a.hardware.CheckCapacity(resources.Resources)
 	if err != nil {
@@ -320,6 +323,13 @@ func (a *allocator) Commit(ctx context.Context,
 		return fmt.Errorf("commit resources: %w", err)
 	}
 
+	// revert in case of a failure in following steps
+	revertResourceCommit := func() {
+		if err := a.resources.UncommitResources(ctx, allocationID); err != nil {
+			log.Warnf("failed to revert resource commit for allocation %s: %v", allocationID, err)
+		}
+	}
+
 	// commit the ports
 	if len(ports) > 0 {
 		staticPorts := make([]int, 0, len(ports))
@@ -329,6 +339,7 @@ func (a *allocator) Commit(ctx context.Context,
 
 		err := a.ports.Allocate(allocationID, staticPorts)
 		if err != nil {
+			revertResourceCommit()
 			return fmt.Errorf("allocate port: %w", err)
 		}
 	}
@@ -337,14 +348,16 @@ func (a *allocator) Commit(ctx context.Context,
 	if numDynamicPorts > 0 {
 		_, err := a.ports.AllocateRandom(allocationID, numDynamicPorts)
 		if err != nil {
+			// uncommit the resources
+			revertResourceCommit()
+			// release the static ports if they were allocated
+			a.ports.Release(allocationID)
 			return fmt.Errorf("failed to allocate ports: %w", err)
 		}
 	}
 
 	// store the commit
-	a.lock.Lock()
 	a.commits[allocationID] = expiry
-	a.lock.Unlock()
 
 	return nil
 }
@@ -378,53 +391,50 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 }
 
 func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
-	if job.Volume == nil {
+	if len(job.Volume) == 0 {
 		return nil
 	}
-	mounter, err := volume.New(a.volumeTracker, *job.Volume, allocationID)
-	if err != nil {
-		return fmt.Errorf("create volume: %w", err)
-	}
 
-	desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
-	err = createDirIfNotExists(desginationPath)
-	if err != nil {
-		return fmt.Errorf("mount directory: %w", err)
-	}
+	for _, v := range job.Volume {
+		log.Infof("mounting volume %s for allocation %s", v.Name, allocationID)
+		mounter, err := volume.New(a.volumeTracker, v, allocationID)
+		if err != nil {
+			return fmt.Errorf("create volume: %w", err)
+		}
 
-	err = mounter.Mount(desginationPath, make(map[string]string))
-	if err != nil {
-		return fmt.Errorf("failed to mount volume: %w", err)
+		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, v.Name)
+		err = utils.CreateDirIfNotExists(a.fs, desginationPath)
+		if err != nil {
+			return fmt.Errorf("mount directory: %w", err)
+		}
+
+		err = mounter.Mount(desginationPath, make(map[string]string))
+		if err != nil {
+			return fmt.Errorf("failed to mount volume: %w", err)
+		}
 	}
 
 	return nil
 }
 
 func (a *allocator) unmountVolumeOnHost(job jobs.Job, allocationID string) error {
-	if job.Volume == nil {
+	if len(job.Volume) == 0 {
 		return nil
 	}
-	mounter, err := volume.New(a.volumeTracker, *job.Volume, allocationID)
-	if err != nil {
-		return fmt.Errorf("create volume: %w", err)
-	}
 
-	desginationPath := filepath.Join(a.workDir, "volumes", allocationID, job.Volume.Name)
-	err = mounter.Unmount(desginationPath)
-	if err != nil {
-		return fmt.Errorf("failed to unmount volume: %w", err)
-	}
-
-	return nil
-}
-
-func createDirIfNotExists(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		err := os.MkdirAll(path, 0o777) // Creates parent directories if needed
+	for _, v := range job.Volume {
+		mounter, err := volume.New(a.volumeTracker, v, allocationID)
 		if err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
+			return fmt.Errorf("create volume unmounter: %w", err)
+		}
+
+		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, v.Name)
+		err = mounter.Unmount(desginationPath)
+		if err != nil {
+			return fmt.Errorf("failed to unmount volume: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -439,10 +449,11 @@ func (a *allocator) Allocate(
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
 	a.lock.Lock()
+	defer a.lock.Unlock()
+
 	if _, ok := a.commits[allocationID]; !ok {
 		return nil, fmt.Errorf("allocation not committed: %s", allocationID)
 	}
-	a.lock.Unlock()
 
 	// Check against the actual hardware usage to ensure dms can guarantee the allocation
 	hasCapacity, err := a.hardware.CheckCapacity(job.Resources)
@@ -488,10 +499,8 @@ func (a *allocator) Allocate(
 	}
 
 	// delete the commit and store the allocation
-	a.lock.Lock()
 	delete(a.commits, allocationID)
 	a.allocations[allocationID] = allocation
-	a.lock.Unlock()
 
 	return allocation, nil
 }
@@ -526,7 +535,6 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 
 	err = a.resources.DeallocateResources(ctx, allocationID)
 	if err != nil {
-		log.Warnf("deallocate resources for allocation id: %s: %v", allocationID, err)
 		return fmt.Errorf("deallocate resources for allocation id: %s: %w", allocationID, err)
 	}
 
@@ -555,6 +563,13 @@ func (a *allocator) Stop(ctx context.Context) error {
 		err := a.Uncommit(context.Background(), allocationID)
 		if err != nil {
 			log.Warnf("uncommit allocation %s: %v", allocationID, err)
+		}
+	}
+
+	for _, ensembleID := range a.getRunningEnsemblesIDs() {
+		err := a.network.DestroySubnet(ensembleID)
+		if err != nil {
+			log.Warnf("destroy subnet %s: %v", ensembleID, err)
 		}
 	}
 
@@ -608,6 +623,39 @@ func (a *allocator) GetAllocation(allocationID string) (*jobs.Allocation, error)
 	}
 
 	return allocation, nil
+}
+
+func (a *allocator) getRunningEnsemblesIDs() []string {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	ensembleIDsSet := make(map[string]struct{})
+	for id := range a.allocations {
+		ensembleID := types.EnsembleIDFromAllocationID(id)
+		ensembleIDsSet[ensembleID] = struct{}{}
+	}
+
+	return utils.MapKeysToSlice(ensembleIDsSet)
+}
+
+func (a *allocator) getCommits() map[string]int64 {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	commits := make(map[string]int64, len(a.commits))
+	for k, v := range a.commits {
+		commits[k] = v
+	}
+
+	return commits
+}
+
+func (a *allocator) getCommit(allocationID string) (int64, bool) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	expiry, ok := a.commits[allocationID]
+	return expiry, ok
 }
 
 func (a *allocator) clearCommits() {

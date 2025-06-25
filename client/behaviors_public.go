@@ -69,3 +69,45 @@ func (c *Client) Status(ctx context.Context, msgOpts ...Option) (node.PublicStat
 	err = c.unmarshalResponse(resp, &response)
 	return response, err
 }
+
+func (c *Client) Discovery(ctx context.Context, msgOpts ...Option) (node.DiscoveryStatusResponse, error) {
+	var response node.DiscoveryStatusResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.StatusDiscoveryBehavior,
+		nil,
+		msgOpts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.BroadcastStatusDiscoveryBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) DiscoveryBroadcast(ctx context.Context, msgOpts ...Option) ([]node.DiscoveryStatusResponse, error) {
+	resp, err := c.BroadcastMessage(
+		ctx,
+		behaviors.BroadcastStatusDiscoveryBehavior,
+		behaviors.BroadcastStatusDiscoveryTopic,
+		nil,
+		msgOpts...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", behaviors.BroadcastStatusDiscoveryBehavior, err)
+	}
+
+	response := make([]node.DiscoveryStatusResponse, 0, len(resp))
+
+	for _, r := range resp {
+		var msg node.DiscoveryStatusResponse
+		if err = c.unmarshalResponse(r, &msg); err != nil {
+			return nil, err
+		}
+
+		response = append(response, msg)
+	}
+	return response, err
+}

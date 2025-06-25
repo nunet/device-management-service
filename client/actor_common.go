@@ -11,13 +11,20 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 )
 
+const (
+	ActorHandleEndpoint      = "/actor/handle"
+	ActorSendMessageEndpoint = "/actor/send"
+	ActorInvokeEndpoint      = "/actor/invoke"
+	ActorBroadcastEndpoint   = "/actor/broadcast"
+)
+
 // GetDMSHandle retrieves the DMS handle from the server
 func (c *Client) GetDMSHandle(ctx context.Context) (actor.Handle, error) {
 	if !c.dmsHandle.Empty() {
 		return c.dmsHandle, nil
 	}
 
-	err := c.get(ctx, "/actor/handle", nil, &c.dmsHandle)
+	err := c.get(ctx, ActorHandleEndpoint, nil, &c.dmsHandle)
 	if err != nil {
 		return actor.Handle{}, fmt.Errorf("get source handle: %w", err)
 	}

@@ -16,14 +16,17 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	dmsUtils "gitlab.com/nunet/device-management-service/utils"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
-func newRunCmd(gcfg *config.Config) *cobra.Command {
+func newRunCmd(
+	env env.EnvironmentProvider, gcfg *config.Config,
+) *cobra.Command {
 	var context string
 	pprof := gcfg.Profiler.Enabled
 	pprofAddr := gcfg.Profiler.Addr
@@ -42,20 +45,9 @@ By default, DMS listens on port 9999. For more information on configuration, see
 
 Or manually create a dms_config.json file and refer to the README for available settings.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			passphrase := os.Getenv("DMS_PASSPHRASE")
-
-			var err error
-			if passphrase == "" {
-				fmt.Print("Please enter the DMS passphrase. This will be used to encrypt/decrypt the keystore containing necessary secrets for DMS:\n")
-				passphrase, err = dmsUtils.PromptForPassphrase(false)
-				if err != nil {
-					return fmt.Errorf("error reading passphrase from stdin: %w", err)
-				}
-
-				// TODO: validate passphrase (minimum x characters)
-				if passphrase == "" {
-					return fmt.Errorf("invalid passphrase")
-				}
+			passphrase, err := utils.GetDMSPassphrase(env, false)
+			if err != nil {
+				return fmt.Errorf("get dms passphrase: %w", err)
 			}
 
 			if pprof {

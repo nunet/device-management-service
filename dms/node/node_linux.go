@@ -15,18 +15,9 @@ import (
 
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/docker"
-	"gitlab.com/nunet/device-management-service/executor/firecracker"
 )
 
 func (n *Node) initSupportedExecutors(ctx context.Context) error {
-	executor, err := firecracker.NewExecutor(ctx, "root")
-	if err == nil {
-		n.executors[string(job_types.ExecutorFirecracker)] = executorMetadata{
-			executor:      executor,
-			executionType: job_types.ExecutorFirecracker,
-		}
-	}
-
 	dockerExec, err := docker.NewExecutor(ctx, n.fs, "root")
 	if err == nil {
 		n.executors[string(job_types.ExecutorDocker)] = executorMetadata{

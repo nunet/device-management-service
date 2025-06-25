@@ -9,6 +9,7 @@
 package docker_test
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/google/uuid"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
@@ -160,7 +162,7 @@ func (s *ClientTestSuite) TestFollowLogs() {
 	// Create command that prints first word, sleeps, then prints second word
 	id := s.createTestContainer(defaultImage, []string{
 		"sh", "-c",
-		fmt.Sprintf("echo '%s'; sleep 3; echo '%s'", wordBeforeSleep, wordAfterSleep),
+		fmt.Sprintf("echo '%s'; sleep %d; echo '%s'", wordBeforeSleep, baseSleep, wordAfterSleep),
 	})
 	s.NotEmpty(id)
 
@@ -186,14 +188,213 @@ func (s *ClientTestSuite) TestFollowLogs() {
 	}()
 
 	// Check for first message
-	time.Sleep(1 * time.Second)
-	stdoutStr := stdoutBuf.String()
-	s.Contains(stdoutStr, wordBeforeSleep, "First message should appear when starting container")
-	s.NotContains(stdoutStr, wordAfterSleep, "Second message should not appear yet")
+	s.Require().EventuallyWithT(func(c *assert.CollectT) {
+		stdoutStr := stdoutBuf.String()
+		assert.Contains(c, stdoutStr, wordBeforeSleep, "First message should appear when starting container")
+		assert.NotContains(c, stdoutStr, wordAfterSleep, "Second message should not appear yet")
+	}, baseTimeout-1, 100*time.Millisecond)
 
 	// Check for second message
-	time.Sleep(3 * time.Second)
-	stdoutStr = stdoutBuf.String()
-	s.Contains(stdoutStr, wordBeforeSleep, "First message should appear when starting container")
-	s.Contains(stdoutStr, wordAfterSleep, "Second message should appear after ~3 seconds")
+	s.Require().EventuallyWithT(func(c *assert.CollectT) {
+		stdoutStr := stdoutBuf.String()
+		assert.Contains(c, stdoutStr, wordBeforeSleep, "First message should appear when starting container")
+		assert.Contains(c, stdoutStr, wordAfterSleep, "Second message should appear after ~2 seconds")
+	}, baseTimeout, 100*time.Millisecond)
+}
+
+// TestPullImage tests the PullImage method of the Docker client.
+func (s *ClientTestSuite) TestPullImage() {
+	testImage := "alpine:latest"
+
+	digest, err := s.client.PullImage(context.Background(), testImage)
+	s.NoError(err)
+	s.NotEmpty(digest)
+
+	image, err := s.client.GetImage(context.Background(), testImage)
+	s.NoError(err)
+	s.Contains(image.RepoTags, testImage)
+}
+
+// TestGetOutputStream tests the GetOutputStream method of the Docker client.
+func (s *ClientTestSuite) TestGetOutputStream() {
+	const msg = "test output"
+	id := s.createTestContainer(defaultImage, []string{"echo", msg})
+	s.Require().NotEmpty(id)
+
+	err := s.client.StartContainer(context.Background(), id)
+	s.Require().NoError(err)
+
+	waitCh, errCh := s.client.WaitContainer(context.Background(), id)
+	select {
+	case <-waitCh:
+	case err := <-errCh:
+		s.Require().NoError(err)
+	case <-time.After(baseTimeout + 3):
+		s.Fail("Container did not finish in time")
+	}
+
+	stream, err := s.client.GetOutputStream(context.Background(), id, "", false)
+	s.NoError(err)
+	defer stream.Close()
+
+	output, err := io.ReadAll(stream)
+	s.NoError(err)
+	s.Contains(string(output), msg)
+}
+
+// TestWaitContainer tests the WaitContainer method of the Docker client.
+func (s *ClientTestSuite) TestWaitContainer() {
+	id := s.createTestContainer(defaultImage, []string{"sleep", fmt.Sprintf("%d", baseSleep-1)})
+	s.Require().NotEmpty(id)
+
+	err := s.client.StartContainer(context.Background(), id)
+	s.Require().NoError(err)
+
+	waitCh, errCh := s.client.WaitContainer(context.Background(), id)
+
+	select {
+	case result := <-waitCh:
+		s.Equal(int64(0), result.StatusCode)
+	case err := <-errCh:
+		s.Require().NoError(err)
+	case <-time.After(baseTimeout * 5):
+		s.Fail("Container did not finish in time")
+	}
+}
+
+// TestFindContainer tests the FindContainer method of the Docker client.
+func (s *ClientTestSuite) TestFindContainer() {
+	testLabel := "nunet-test-label"
+	testValue := uuid.New().String()
+
+	config := &container.Config{
+		Image: defaultImage,
+		Cmd:   transientCmd,
+		Labels: map[string]string{
+			testLabel: testValue,
+		},
+	}
+
+	id, err := s.client.CreateContainer(
+		context.Background(),
+		config,
+		&container.HostConfig{},
+		&network.NetworkingConfig{},
+		&v1.Platform{},
+		fmt.Sprintf("nunet_test_container-%s", uuid.New()),
+		false,
+	)
+	s.NoError(err)
+	s.T().Cleanup(func() {
+		_ = s.client.RemoveContainer(context.Background(), id)
+	})
+
+	foundID, err := s.client.FindContainer(context.Background(), testLabel, testValue)
+	s.NoError(err)
+	s.Equal(id, foundID)
+
+	// Test non-existent container
+	_, err = s.client.FindContainer(context.Background(), "non-existent", "value")
+	s.Error(err)
+}
+
+// TestRemoveObjectsWithLabel tests the RemoveObjectsWithLabel method of the Docker client.
+func (s *ClientTestSuite) TestRemoveObjectsWithLabel() {
+	testLabel := "nunet-test-cleanup"
+	testValue := uuid.New().String()
+
+	// Create multiple containers with the same label
+	for i := range 3 {
+		config := &container.Config{
+			Image: defaultImage,
+			Cmd:   transientCmd,
+			Labels: map[string]string{
+				testLabel: testValue,
+			},
+		}
+
+		_, err := s.client.CreateContainer(
+			context.Background(),
+			config,
+			&container.HostConfig{},
+			&network.NetworkingConfig{},
+			&v1.Platform{},
+			fmt.Sprintf("nunet_test_container-%s-%d", uuid.New(), i),
+			false,
+		)
+		s.NoError(err)
+	}
+
+	// Remove all containers with the label
+	err := s.client.RemoveObjectsWithLabel(context.Background(), testLabel, testValue)
+	s.NoError(err)
+
+	// Verify containers are removed
+	_, err = s.client.FindContainer(context.Background(), testLabel, testValue)
+	s.Error(err)
+}
+
+// TestExec tests the Exec method of the Docker client.
+func (s *ClientTestSuite) TestExec() {
+	id := s.createTestContainer(defaultImage, persistentCmd)
+	s.Require().NotEmpty(id)
+
+	err := s.client.StartContainer(context.Background(), id)
+	s.Require().NoError(err)
+
+	// Execute a simple command
+	const msg = "exec test"
+	exitCode, stdout, stderr, err := s.client.Exec(context.Background(), id, []string{"echo", msg})
+	s.NoError(err)
+	s.Equal(0, exitCode)
+	s.Contains(stdout, msg)
+	s.Empty(stderr)
+
+	// Execute a command that fails
+	exitCode, _, _, err = s.client.Exec(context.Background(), id, []string{"sh", "-c", "exit 1"})
+	s.NoError(err)
+	s.Equal(1, exitCode)
+}
+
+// TestCopyToContainer tests the CopyToContainer method of the Docker client.
+func (s *ClientTestSuite) TestCopyToContainer() {
+	id := s.createTestContainer(defaultImage, persistentCmd)
+	s.Require().NotEmpty(id)
+
+	err := s.client.StartContainer(context.Background(), id)
+	s.Require().NoError(err)
+
+	// Create test content
+	testContent := "test file content"
+	testFileName := "test.txt"
+
+	// Create TAR archive in memory
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	// Add file to TAR archive
+	header := &tar.Header{
+		Name: testFileName,
+		Mode: 0o644,
+		Size: int64(len(testContent)),
+	}
+
+	err = tw.WriteHeader(header)
+	s.Require().NoError(err)
+
+	_, err = tw.Write([]byte(testContent))
+	s.Require().NoError(err)
+
+	err = tw.Close()
+	s.Require().NoError(err)
+
+	// Copy TAR archive to container
+	err = s.client.CopyToContainer(context.Background(), id, "/tmp", &buf, container.CopyToContainerOptions{})
+	s.NoError(err)
+
+	// Verify file was copied
+	exitCode, stdout, _, err := s.client.Exec(context.Background(), id, []string{"cat", "/tmp/" + testFileName})
+	s.NoError(err)
+	s.Equal(0, exitCode)
+	s.Equal(testContent, stdout)
 }

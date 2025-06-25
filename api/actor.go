@@ -16,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/network"
-
 	"github.com/gin-gonic/gin"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -25,12 +23,17 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 // log is the logger for the actor API package
 var log = logging.Logger("actor-api")
+
+const (
+	ErrHostNotInitialized = "host node hasn't yet been initialized"
+)
 
 // ActorHandle godoc
 //
@@ -47,8 +50,8 @@ func (rs *Server) ActorHandle(c *gin.Context) {
 	defer endTrace()
 
 	if rs.config.P2P == nil {
-		log.Errorw("actor_handle_retrieve_failure", "error", "host node hasn't yet been initialized")
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
+		log.Errorw("actor_handle_retrieve_failure", "error", ErrHostNotInitialized)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": ErrHostNotInitialized})
 		return
 	}
 
@@ -104,8 +107,8 @@ func (rs *Server) ActorSendMessage(c *gin.Context) {
 
 	p2p := rs.config.P2P
 	if p2p == nil {
-		log.Errorw("actor_send_message_failure", "error", "host node hasn't yet been initialized")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
+		log.Errorw("actor_send_message_failure", "error", ErrHostNotInitialized)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrHostNotInitialized})
 		return
 	}
 
@@ -148,8 +151,8 @@ func (rs *Server) ActorInvoke(c *gin.Context) {
 
 	p2p := rs.config.P2P
 	if p2p == nil {
-		log.Errorw("actor_invoke_failure", "error", "host node hasn't yet been initialized")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
+		log.Errorw("actor_invoke_failure", "error", ErrHostNotInitialized)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrHostNotInitialized})
 		return
 	}
 
@@ -223,8 +226,8 @@ func (rs *Server) ActorBroadcast(c *gin.Context) {
 
 	p2p := rs.config.P2P
 	if p2p == nil {
-		log.Errorw("actor_broadcast_failure", "error", "host node hasn't yet been initialized")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "host node hasn't yet been initialized"})
+		log.Errorw("actor_broadcast_failure", "error", ErrHostNotInitialized)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrHostNotInitialized})
 		return
 	}
 
@@ -278,7 +281,7 @@ func (rs *Server) ActorBroadcast(c *gin.Context) {
 	case <-c.Request.Context().Done():
 		// request context done
 	}
-	log.Debugw("actor_broadcast_success", "fromAddress", msg.From.Address.HostID, "responsesCount", len(messages))
+	log.Infow("actor_broadcast_success", "fromAddress", msg.From.Address.HostID, "responsesCount", len(messages))
 	c.JSON(http.StatusOK, messages)
 }
 

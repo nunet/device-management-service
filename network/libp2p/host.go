@@ -75,7 +75,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	var libp2pOpts []libp2p.Option
 	dhtOpts := []dht.Option{
 		dht.ProtocolPrefix(protocol.ID(config.DHTPrefix)),
-		dht.NamespacedValidator(strings.ReplaceAll(config.CustomNamespace, "/", ""), dhtValidator{PS: ps}),
+		dht.NamespacedValidator(strings.ReplaceAll(config.CustomNamespace, "/", ""), dhtValidator{PS: ps, customNamespace: config.CustomNamespace}),
 		dht.Mode(dht.ModeAutoServer),
 	}
 
@@ -176,6 +176,30 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		return nil, nil, nil, err
 	}
 
+	// dht with old prefix for backward compatibility
+	// TODO: deprecate this once enough nodes are updated to use the new prefix #1089
+	bwDHTOpts := []dht.Option{
+		dht.ProtocolPrefix(protocol.ID("")), // no prefix
+		dht.NamespacedValidator(strings.ReplaceAll(config.CustomNamespace, "/", ""), dhtValidator{PS: ps, customNamespace: config.DHTPrefix}),
+		dht.Mode(dht.ModeAutoServer),
+	}
+	bwDHT, err := dht.New(ctx, host, bwDHTOpts...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	err = bwDHT.Bootstrap(ctx)
+	if err != nil {
+		log.Errorw("failed to bootstrap backward dht",
+			"labels", string(observability.LabelNode),
+			"error", err,
+		)
+	} else {
+		log.Infow("backward dht bootstrap completed",
+			"labels", string(observability.LabelNode),
+		)
+	}
+
 	go watchForNewPeers(ctx, host, newPeer)
 
 	optsPS := []pubsub.Option{
@@ -219,7 +243,6 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.AddrInfo) {
 	sub, err := host.EventBus().Subscribe([]interface{}{
 		&event.EvtPeerIdentificationCompleted{},
-		&event.EvtPeerProtocolsUpdated{},
 	})
 	if err != nil {
 		log.Errorw("failed to subscribe to peer identification events",
@@ -240,15 +263,27 @@ func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.Add
 		}
 
 		if ev, ok := ev.(event.EvtPeerIdentificationCompleted); ok {
-			var publicAddrs []ma.Multiaddr
-			for _, addr := range ev.ListenAddrs {
-				if manet.IsPublicAddr(addr) {
-					publicAddrs = append(publicAddrs, addr)
-				}
+			var identPeer peer.AddrInfo
+			identPeer.ID = ev.Peer
+			copy(identPeer.Addrs, ev.ListenAddrs)
+			go handleNewPeers(ctx, identPeer, newPeer)
+		}
+	}
+}
+
+func handleNewPeers(ctx context.Context, identifiedPeer peer.AddrInfo, newPeer chan peer.AddrInfo) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		var publicAddrs []ma.Multiaddr
+		for _, addr := range identifiedPeer.Addrs {
+			if manet.IsPublicAddr(addr) {
+				publicAddrs = append(publicAddrs, addr)
 			}
-			if len(publicAddrs) > 0 {
-				newPeer <- peer.AddrInfo{ID: ev.Peer, Addrs: publicAddrs}
-			}
+		}
+		if len(publicAddrs) > 0 {
+			newPeer <- peer.AddrInfo{ID: identifiedPeer.ID, Addrs: publicAddrs}
 		}
 	}
 }
