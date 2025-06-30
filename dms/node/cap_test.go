@@ -11,10 +11,12 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
 
+const testUserDir = "/tmp/dms/user"
+
 func TestCap(t *testing.T) {
 	t.Parallel()
 
-	userDir := "/tmp/dms/user"
+	userDir := testUserDir
 
 	t.Run("must be able to identify a ledger context", func(t *testing.T) {
 		tests := []struct {

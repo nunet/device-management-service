@@ -219,3 +219,25 @@ func TestGetKeyDIDNonExistentKey(t *testing.T) {
 	err = didCmd.Execute()
 	assert.Error(t, err)
 }
+
+// Ensure `nunet key ledger-alias set <alias> <index>` writes the alias file and
+// that ResolveLedgerIndex picks it up.
+func TestLedgerAliasSetCommand(t *testing.T) {
+	t.Parallel()
+
+	deps := newKeyCmdDependencies(t)
+
+	var stdout bytes.Buffer
+	aliasCmd := newKeyLedgerAliasCmd(deps.fs, deps.cfg)
+	aliasCmd.SetOut(&stdout)
+	aliasCmd.SetArgs([]string{"set", "biz", "5"})
+
+	require.NoError(t, aliasCmd.Execute())
+
+	idx, err := node.ResolveLedgerIndex(deps.fs, deps.cfg.General.UserDir, "biz")
+	require.NoError(t, err)
+	require.Equal(t, 5, idx)
+
+	require.Contains(t, stdout.String(), `Alias "biz"`)
+	require.Contains(t, stdout.String(), "account 5")
+}

@@ -127,11 +127,24 @@ func SaveCapabilityContext(capCtx ucan.CapabilityContext, fs afero.Fs, capStoreP
 	return nil
 }
 
+// GetTrustContext returns a DID TrustContext for the given logical context
+// name. For ledger-backed contexts it now supports:
+//
+//   - “ledger”                 → account index 0
+//   - “ledger:<index>”         → explicit ledger account index
+//   - “ledger:<alias>”         → alias resolved via ledger_aliases.json
 func GetTrustContext(
-	fs afero.Fs, context, passphrase, userDir string,
+	fs afero.Fs,
+	context, passphrase, userDir string,
 ) (did.TrustContext, error) {
+	// Ledger path
 	if IsLedgerContext(context) {
-		provider, err := did.NewLedgerWalletProvider(0)
+		idx, err := ResolveLedgerIndex(fs, userDir, GetContextKey(context))
+		if err != nil {
+			return nil, err
+		}
+
+		provider, err := did.NewLedgerWalletProvider(idx)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +152,9 @@ func GetTrustContext(
 		return did.NewTrustContextWithProvider(provider), nil
 	}
 
+	// Keystore path
 	trustCtx, _, err := CreateTrustContextFromKeyStore(
-		fs, context, passphrase, userDir)
+		fs, context, passphrase, userDir,
+	)
 	return trustCtx, err
 }
