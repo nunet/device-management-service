@@ -40,7 +40,9 @@ func newNewCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
 
 Example:
   nunet cap new user
-  nunet cap new ledger:user  # if using ledger`,
+  nunet cap new ledger             # ledger account 0
+  nunet cap new ledger:3           # ledger account 3
+  nunet cap new ledger:finance     # ledger alias “finance”`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Context = node.UserContextName
@@ -64,14 +66,29 @@ func runNewCap(_ context.Context, dmsCLI *cli.DmsCLI, opts NewCapOptions, stream
 	fs := dmsCLI.FS()
 
 	if node.IsLedgerContext(opts.Context) {
-		provider, err := did.NewLedgerWalletProvider(0)
+		// need userDir for the resolver
+		cfg, err := dmsCLI.Config()
+		if err != nil {
+			return fmt.Errorf("unable to get config: %w", err)
+		}
+
+		idx, err := node.ResolveLedgerIndex(
+			dmsCLI.FS(),
+			cfg.General.UserDir,
+			node.GetContextKey(opts.Context),
+		)
+		if err != nil {
+			return err
+		}
+
+		provider, err := did.NewLedgerWalletProvider(idx)
 		if err != nil {
 			return err
 		}
 
 		trustCtx = did.NewTrustContextWithProvider(provider)
 		rootDID = provider.DID()
-		opts.Context = node.GetContextKey(opts.Context)
+		opts.Context = node.GetContextKey(opts.Context) // normalize context name
 	} else {
 		cfg, err := dmsCLI.Config()
 		if err != nil {

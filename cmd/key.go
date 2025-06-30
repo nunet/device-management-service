@@ -11,6 +11,7 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -39,6 +40,7 @@ This command provides subcommands for creating new keys and retrieving Decentral
 
 	cmd.AddCommand(newKeyNewCmd(fs, env, cfg))
 	cmd.AddCommand(newKeyDIDCmd(fs, env, cfg))
+	cmd.AddCommand(newKeyLedgerAliasCmd(fs, cfg))
 
 	return cmd
 }
@@ -109,19 +111,28 @@ func newKeyDIDCmd(
 		Short: "Get a key's DID",
 		Long: `Get the DID (Decentralized Identifier) for a specified key.
 
-This command retrieves the DID associated with either a key stored in the local keystore or a hardware ledger.
+This command retrieves the DID associated with either a key stored in the local keystore
+or a hardware ledger.  For the ledger you can now supply an account index or a named alias.
 
-For keys in the local keystore, the user will be prompted for the passphrase to decrypt the key. To avoid passphrase prompting, it's possible to set a DMS_PASSPHRASE environment variable. For the ledger option, it uses the first account (index 0) on the connected hardware wallet.
-
-Example:
-  nunet key did user
-  nunet key did ledger # if using ledger`,
+Examples:
+  nunet key did user                 # key from keystore
+  nunet key did ledger               # ledger account 0 (default)
+  nunet key did ledger:3             # ledger account 3
+  nunet key did ledger:business      # ledger alias "business"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			keyName := args[0]
 
-			if keyName == "ledger" {
-				provider, err := did.NewLedgerWalletProvider(0)
+			// Ledger branch
+			if node.IsLedgerContext(keyName) {
+				idx, err := node.ResolveLedgerIndex(
+					fs, cfg.General.UserDir, node.GetContextKey(keyName),
+				)
+				if err != nil {
+					return err
+				}
+
+				provider, err := did.NewLedgerWalletProvider(idx)
 				if err != nil {
 					return err
 				}
@@ -153,6 +164,40 @@ Example:
 
 			did := did.FromPublicKey(priv.GetPublic())
 			fmt.Fprintln(cmd.OutOrStdout(), did)
+			return nil
+		},
+	}
+}
+
+func newKeyLedgerAliasCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ledger-alias",
+		Short: "Manage aliases for Ledger accounts",
+	}
+	cmd.AddCommand(newKeyLedgerAliasSetCmd(fs, cfg))
+	return cmd
+}
+
+// Child: `nunet key ledger-alias set <alias> <index>`
+func newKeyLedgerAliasSetCmd(fs afero.Afero, cfg *config.Config) *cobra.Command {
+	return &cobra.Command{
+		Use:   "set <alias> <index>",
+		Short: "Create or update a Ledger alias",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			alias := args[0]
+			idx, err := strconv.Atoi(args[1])
+			if err != nil || idx < 0 {
+				return fmt.Errorf("index must be a non-negative integer")
+			}
+
+			if err := node.SetLedgerAlias(fs, cfg.General.UserDir, alias, idx); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(),
+				"Alias %q → account %d saved\n",
+				alias, idx)
 			return nil
 		},
 	}
