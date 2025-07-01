@@ -31,9 +31,6 @@ all:
 		make darwin_arm64;\
 	fi
 
-run-acceptance:
-	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m
-
 linux_amd64:
 	@echo "Building for Linux AMD64..."
 	go mod tidy
@@ -103,6 +100,9 @@ e2e-%:
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
 	go test -v ./tests/e2e/... -tags=e2e -timeout=10m -run "TestE2E/$*" $(ARGS)
+
+run-acceptance: linux_amd64
+	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m
 
 build-nunet-glusterfs-client:
 	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image

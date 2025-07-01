@@ -9,6 +9,13 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node"
 )
 
+// Context represents a named context within a node
+type Context struct {
+	Name string
+	DID  string
+	node *Node
+}
+
 func (c *Context) Grant(did string) (token string, err error) {
 	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap grant --context %s --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-30 %s",
 		c.Name, did))

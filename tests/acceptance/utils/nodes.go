@@ -10,13 +10,6 @@ import (
 // DefaultDMSSuffix is the suffix added to DMS context names
 const DefaultDMSSuffix = "-dms"
 
-// Context represents a named context within a node
-type Context struct {
-	Name string
-	DID  string
-	node *Node
-}
-
 // Node represents a container instance.
 type Node struct {
 	Name     string
@@ -156,13 +149,21 @@ func (n *Node) GetOnboardingResources() (ramGB float64, cpuCores float64, diskGB
 	return ramGB, cpuCores, diskGB, nil
 }
 
+func (n *Node) IsDMSRunning(port int) bool {
+	out, err := n.RunCMD([]string{"ss", "-tnlp"})
+	if err != nil {
+		return false
+	}
+	return strings.Contains(out, fmt.Sprintf(":%d", port))
+}
+
 // InitialCaps creates user and DMS contexts with proper capabilities
 func (n *Node) InitialCaps(name string) (userCtx, dmsCtx *Context, err error) {
 	userCtx, err = n.CreateContext(name)
 	if err != nil {
 		return nil, nil, err
 	}
-	dmsCtx, err = n.CreateContext(name + "-dms")
+	dmsCtx, err = n.CreateContext(name + DefaultDMSSuffix)
 	if err != nil {
 		return nil, nil, err
 	}
