@@ -2,7 +2,6 @@ package steps
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -12,9 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
-	dutils "gitlab.com/nunet/device-management-service/utils"
 	"golang.org/x/sync/errgroup"
 )
+
+const orgName = "org"
 
 // Deployment registers all step definitions for deployment feature
 func Deployment(ctx *godog.ScenarioContext) {
@@ -40,7 +40,6 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 
 	spName = strings.ToLower(spName)
 	cpName = strings.ToLower(cpName)
-	orgName := "org"
 
 	nodeMap := map[string]*utils.Node{
 		spName:  nodes[0],
@@ -72,7 +71,7 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	assert.NotNil(t, cpUserCtx)
 	assert.NotNil(t, cpDmsCtx)
 
-	orgCtx, err := org.CreateContext("org")
+	orgCtx, err := org.CreateContext(orgName)
 	assert.NoError(t, err, "could not create org")
 	assert.NotNil(t, orgCtx)
 
@@ -85,36 +84,18 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	// update ctx after nodes have been updated with capability contexts
 	tc = tc.WithNodeMap(nodeMap)
 
-	spGrant, err := spUserCtx.Grant(orgCtx.DID)
-	assert.NoError(t, err, "sp failed to grant org", spGrant)
-	assert.NotEmpty(t, spGrant)
+	err = utils.SetupPrivateNetwork(spUserCtx, spDmsCtx, orgCtx)
+	assert.NoError(t, err)
 
-	cpGrant, err := cpUserCtx.Grant(orgCtx.DID)
-	assert.NoError(t, err, "cp failed to grant org", cpGrant)
-	assert.NotEmpty(t, cpGrant)
-
-	orgGrantToAlice, err := orgCtx.Grant(spUserCtx.DID)
-	assert.NoError(t, err, "org failed to grant sp", spGrant)
-	assert.NotEmpty(t, orgGrantToAlice)
-
-	orgGrantToBob, err := orgCtx.Grant(cpUserCtx.DID)
-	assert.NoError(t, err, "org failed to grant cp", spGrant)
-	assert.NotEmpty(t, orgGrantToBob)
-
-	err = spUserCtx.JoinOrg(spDmsCtx, orgCtx.DID, orgGrantToAlice)
-	assert.NoError(t, err, "sp could not join the org")
-
-	err = cpUserCtx.JoinOrg(cpDmsCtx, orgCtx.DID, orgGrantToBob)
-	assert.NoError(t, err, "cp could not join the org")
+	err = utils.SetupPrivateNetwork(cpUserCtx, cpDmsCtx, orgCtx)
+	assert.NoError(t, err)
 
 	err = spDmsCtx.Run()
 	assert.NoError(t, err)
 
-	// wait for dms to start
+	// wait for dms to start on sp
 	require.Eventually(t, func() bool {
-		out, err := sp.RunCMD([]string{"ss", "-tnlp"})
-		assert.NoError(t, err)
-		return strings.Contains(out, ":9999")
+		return sp.IsDMSRunning(9999)
 	}, 20*time.Second, 500*time.Millisecond)
 
 	// check if Docker was installed successfully
@@ -123,11 +104,9 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	err = cpDmsCtx.Run()
 	assert.NoError(t, err)
 
-	// wait for dms to start
+	// wait for dms to start on cp
 	require.Eventually(t, func() bool {
-		out, err := cp.RunCMD([]string{"ss", "-tnlp"})
-		assert.NoError(t, err)
-		return strings.Contains(out, ":9999")
+		return cp.IsDMSRunning(9999)
 	}, 20*time.Second, 500*time.Millisecond)
 
 	spInfo, err := spDmsCtx.PeerAddr()
@@ -148,22 +127,13 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	err = cpDmsCtx.Onboard()
 	assert.NoError(t, err)
 
-	// upload ensemble configuration to VM
-	here := dutils.CurrentFileDirectory()
-	localEnsemble := filepath.Join(here, "..", "examples", "docker_hello.yaml")
-	spEnsemble := "/root/docker_hello.yaml"
-
-	err = sp.UploadFile(localEnsemble, spEnsemble, 0o755)
+	ensemble, err := utils.UploadEnsemble(sp, "docker_hello.yaml", cpInfo.ID)
 	assert.NoError(t, err)
+	assert.NotEmpty(t, ensemble)
 
-	// update the ensemble configuration to specify compute provider peer ID
-	updateCmd := fmt.Sprintf("sed -i 's/failure_recovery: stay_down/failure_recovery: stay_down\\n        peer: %s/' %s",
-		cpInfo.ID, spEnsemble)
-	_, err = sp.RunCMD([]string{"sh", "-c", updateCmd})
+	ensembleID, err := spDmsCtx.Deploy(ensemble)
 	assert.NoError(t, err)
-
-	ensembleID, err := spDmsCtx.Deploy(spEnsemble)
-	assert.NoError(t, err)
+	assert.NotEmpty(t, ensembleID)
 
 	tc = tc.WithEnsembleID(ensembleID)
 	return tc.Unwrap(), nil
