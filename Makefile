@@ -102,7 +102,7 @@ e2e-%:
 	go test -v ./tests/e2e/... -tags=e2e -timeout=10m -run "TestE2E/$*" $(ARGS)
 
 run-acceptance: linux_amd64
-	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m
+	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m -godog.tags="~@wip"
 
 build-nunet-glusterfs-client:
 	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image
