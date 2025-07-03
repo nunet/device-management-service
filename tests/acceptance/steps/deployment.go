@@ -22,6 +22,10 @@ func Deployment(ctx *godog.ScenarioContext) {
 		return hooks.SetupNodes(ctx, 3)
 	})
 	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		err := hooks.SaveLogs(ctx)
+		if err != nil {
+			return ctx, err
+		}
 		return hooks.TeardownNodes(ctx)
 	})
 

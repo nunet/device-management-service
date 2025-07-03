@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -96,4 +97,33 @@ func TeardownNodes(ctx context.Context) (context.Context, error) {
 	fmt.Printf("teardown done! time elapsed: %.1fs\n", time.Since(start).Seconds())
 	tc = tc.WithNodes(nil)
 	return tc.Unwrap(), nil
+}
+
+// SaveLogs saves all DMS logs locally to help debugging
+func SaveLogs(ctx context.Context) error {
+	fmt.Println("saving logs...")
+	tc := utils.NewTestCtx(ctx)
+
+	nodes, _ := tc.Nodes()
+	for i, n := range nodes {
+		logs, err := n.RunCMD([]string{"cat", "dms-logs.txt"})
+		if err != nil {
+			continue
+		}
+
+		dest := filepath.Join(dutils.CurrentFileDirectory(), "..", "tests", "acceptance", "testdata")
+		err = os.MkdirAll(dest, 0o755)
+		if err != nil {
+			return err
+		}
+
+		filename := fmt.Sprintf("dms_logs_node_%d.txt", i)
+		path := filepath.Join(dest, filename)
+
+		err = os.WriteFile(path, []byte(logs), 0o644)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
