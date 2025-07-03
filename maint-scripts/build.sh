@@ -19,13 +19,18 @@ version=$(echo $fullVersion | cut -c 2-)
 
 mkdir -p $outputDir
 
-for arch in amd64 arm64 arm32; do
+for arch in amd64 arm64 arm32_v6l arm32_v7l; do
 
-    # echo .deb file will be written to: $outputDir
-    archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$arch
+    debarch=$arch
+    if [[ $arch == "arm32_v6l" ]]; then
+        debarch="armel"
+    elif [[ $arch == "arm32_v7l" ]]; then
+        debarch="armhf"
+    fi
+    archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$debarch
     cp -r $projectRoot/maint-scripts/nunet-dms $archDir
     sed -i "s/Version:.*/Version: $version/g" $archDir/DEBIAN/control
-    sed -i "s/Architecture:.*/Architecture: $arch/g" $archDir/DEBIAN/control
+    sed -i "s/Architecture:.*/Architecture: $debarch/g" $archDir/DEBIAN/control
 
     go version # redundant check of go version
     make linux_$arch
