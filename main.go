@@ -10,7 +10,6 @@ package main
 
 import (
 	"gitlab.com/nunet/device-management-service/cmd"
-	"gitlab.com/nunet/device-management-service/internal/config"
 )
 
 //	@title			Device Management Service
@@ -31,10 +30,5 @@ import (
 //
 // @BasePath	/api/v1
 func main() {
-	// Parse flags and initialize config before creating root command
-	config.SetupConfig()
-
-	// Get the loaded config and proceed with command execution
-	cfg := config.GetConfig()
-	cmd.Execute(cfg)
+	cmd.Execute()
 }

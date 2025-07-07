@@ -88,8 +88,7 @@ func newLibp2pNetwork(t *testing.T, mockFs afero.Fs, bootstrap []multiaddr.Multi
 	t.Helper()
 
 	// config
-	dcfg := config.GetConfig()
-
+	dcfg := config.DefaultConfig
 	dcfg.Observability.ElasticsearchEnabled = false
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
@@ -119,7 +118,7 @@ func newLibp2pNetwork(t *testing.T, mockFs afero.Fs, bootstrap []multiaddr.Multi
 	require.NoError(t, err)
 	require.NotNil(t, p2pNet)
 
-	err = p2pNet.Init(dcfg)
+	err = p2pNet.Init(&dcfg)
 	require.NoError(t, err)
 
 	err = p2pNet.Start()
@@ -231,7 +230,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	mockFs := afero.Afero{Fs: afero.NewMemMapFs()}
 
 	// config
-	dcfg := config.GetConfig()
+	dcfg := config.DefaultConfig
 	dcfg.Observability.ElasticsearchEnabled = false
 
 	// mock database
@@ -330,7 +329,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	node.bids = make(map[string]*bidState)
 	node.answeredBids = make(map[string][]uint64)
 	node.peers = make(map[peer.ID]*peerState)
-	node.dmsConfig = *dcfg
+	node.dmsConfig = dcfg
 	node.ctx, node.cancel = context.WithCancel(context.Background())
 	node.executors = make(map[string]executorMetadata)
 	node.executors[string(jobtypes.ExecutorDocker)] = executorMetadata{

@@ -41,6 +41,7 @@ import (
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
@@ -58,10 +59,8 @@ type DMS struct {
 	RestServer *api.Server
 }
 
-func initialize(gcfg *config.Config) {
-	fs := afero.NewOsFs()
-
-	workDir := gcfg.WorkDir
+func initialize(fs afero.Fs, cfg *config.Config, env env.EnvironmentProvider) {
+	workDir := cfg.WorkDir
 	if workDir != "" {
 		err := fs.MkdirAll(workDir, os.FileMode(0o700))
 		if err != nil {
@@ -69,7 +68,7 @@ func initialize(gcfg *config.Config) {
 		}
 	}
 
-	dataDir := gcfg.DataDir
+	dataDir := cfg.DataDir
 	if dataDir != "" {
 		err := fs.MkdirAll(dataDir, os.FileMode(0o700))
 		if err != nil {
@@ -77,7 +76,7 @@ func initialize(gcfg *config.Config) {
 		}
 	}
 
-	userDir := gcfg.UserDir
+	userDir := cfg.UserDir
 	if userDir != "" {
 		err := fs.MkdirAll(userDir, os.FileMode(0o700))
 		if err != nil {
@@ -85,7 +84,7 @@ func initialize(gcfg *config.Config) {
 		}
 	}
 
-	libp2pLogging := os.Getenv("DMS_CONN_LOGS")
+	libp2pLogging := env.Getenv("DMS_CONN_LOGS")
 	if libp2pLogging == "false" || libp2pLogging == "" {
 		err := silenceConnLogs()
 		if err != nil {
@@ -94,16 +93,14 @@ func initialize(gcfg *config.Config) {
 	}
 }
 
-func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error) {
+func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPassphrase, contextName string) (*DMS, error) {
 	log.Debugf("starting dms with config: %v", gcfg)
 	if contextName == "" {
 		contextName = node.DefaultContextName
 	}
 
-	fs := afero.NewOsFs()
-
 	// if bootstrap peers were passed by env var then override them
-	btPeers := os.Getenv("BOOTSTRAP_PEERS")
+	btPeers := env.Getenv("BOOTSTRAP_PEERS")
 	if btPeers != "" {
 		peers := strings.Split(btPeers, ",")
 		gcfg.P2P.BootstrapPeers = peers
@@ -114,15 +111,18 @@ func NewDMS(gcfg *config.Config, ksPassphrase, contextName string) (*DMS, error)
 		modBootstrapPeers, updateCfg := getBootstrapNodes(gcfg.P2P.BootstrapPeers)
 		if updateCfg {
 			log.Infof("updating config file with new bootstrap peers: %v", modBootstrapPeers)
-			err := config.Set(fs, "p2p.bootstrap_peers", modBootstrapPeers)
-			if err != nil {
-				log.Errorf("unable to update config file with new bootstrap peers: %w", err)
+
+			ldr := config.NewLoader(config.WithFS(fs), config.WithConfig(gcfg)) // singleton loader
+
+			if err := ldr.Set("p2p.bootstrap_peers", modBootstrapPeers); err != nil {
+				log.Errorf("unable to update config file with new bootstrap peers: %v", err)
 			}
+
 			gcfg.P2P.BootstrapPeers = modBootstrapPeers
 		}
 	}
 
-	initialize(gcfg)
+	initialize(fs, gcfg, env)
 
 	var volumeController *controller.GlusterController
 

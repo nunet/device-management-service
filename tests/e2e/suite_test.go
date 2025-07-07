@@ -34,6 +34,7 @@ type TestSuite struct {
 
 	restPortIndex int
 	p2pPortIndex  int
+	homeDir       string
 }
 
 type prefixWriter struct {
@@ -65,7 +66,8 @@ func (s *TestSuite) startNode(index int) {
 	s.Require().NotNil(node)
 
 	// save config to a file
-	configPath := filepath.Join(s.currentDir, node.rootDir, "dms_config.json")
+	configPath := filepath.Join(node.config.General.UserDir, "dms_config.json")
+	_ = os.MkdirAll(filepath.Dir(configPath), 0o755)
 	s.T().Logf("writing config to %s", configPath)
 	s.T().Logf("config: %+v", node.config)
 	jsonData, err := json.MarshalIndent(node.config, "", "  ")
@@ -74,7 +76,7 @@ func (s *TestSuite) startNode(index int) {
 	s.Require().NoError(err)
 
 	binaryPath := filepath.Join(s.currentDir, binaryName)
-	cmd := exec.Command(binaryPath, "run", "--config", filepath.Join(s.currentDir, node.rootDir, "dms_config.json"), "--context", node.dmsContext)
+	cmd := exec.Command(binaryPath, "run", "--config", configPath, "--context", node.dmsContext)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("GOLOG_LOG_LEVEL=%s", "debug"), fmt.Sprintf("DMS_PASSPHRASE=%s", node.password))
 	prefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
 	cmd.Stdout = &prefixWriter{prefix: prefix, w: os.Stdout}
@@ -85,7 +87,7 @@ func (s *TestSuite) startNode(index int) {
 	s.Require().NoError(err)
 
 	// Write the PID file.
-	err = os.WriteFile(filepath.Join(s.currentDir, node.rootDir, "proc.pid"), []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0o700)
+	err = os.WriteFile(filepath.Join(node.config.General.UserDir, "proc.pid"), []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0o700)
 	s.Require().NoError(err)
 
 	// Start a goroutine to wait for shutdown.
@@ -103,10 +105,19 @@ func (s *TestSuite) startNode(index int) {
 // setupTestNetwork creates a network of nodes and grants mutual access to all nodes.
 func (s *TestSuite) setupTestNetwork() {
 	s.T().Logf("%s: setting up %d nodes", s.Name, s.numNodes)
+	// Start from a clean per‑suite sandbox, **never** the real $HOME
+	_ = os.RemoveAll(filepath.Join(s.homeDir, ".nunet"))
 	for i := 0; i < s.numNodes; i++ {
 		rootDir := fmt.Sprintf("testdata/%s/dms%d", s.Name, i)
 		password := fmt.Sprintf("password%d", i)
-		nodeConfig := createConfig(rootDir, uint32(s.restPortIndex), fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", s.p2pPortIndex), []string{})
+		userDir := filepath.Join(s.homeDir, rootDir)
+		_ = os.RemoveAll(userDir)
+		nodeConfig := createConfig(
+			userDir,
+			uint32(s.restPortIndex),
+			fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", s.p2pPortIndex),
+			[]string{},
+		)
 		nodeIndex := i
 
 		var err error
@@ -244,18 +255,25 @@ func (s *TestSuite) setupTestNetwork() {
 
 // SetupSuite runs once before the suite starts.
 func (s *TestSuite) SetupSuite() {
+	// one private sandbox per suite
+	dir, err := os.MkdirTemp("", "dms-e2e-"+s.Name+"-*")
+	s.Require().NoError(err)
+	s.homeDir = dir // save
+	// All helpers use $HOME, so repoint it to the sandbox
+	_ = os.Setenv("HOME", s.homeDir)
+	_ = os.MkdirAll(filepath.Join(dir, ".nunet", "cap"), 0o755)
+
 	s.grantTokens = make(map[int]map[int]string)
 	s.nodes = make(map[int]*mockNode)
 	s.currentDir = getCurrentFileDirectory()
 	s.testDataDir = filepath.Join(s.currentDir, "testdata")
-	s.Require().NotEmpty(s.currentDir)
 }
 
 // TearDownSuite runs once after all tests are complete.
 func (s *TestSuite) TearDownSuite() {
 	s.T().Log("stopping nodes")
 	for _, node := range s.nodes {
-		data, err := os.ReadFile(filepath.Join(s.currentDir, node.rootDir, "proc.pid"))
+		data, err := os.ReadFile(filepath.Join(node.config.General.UserDir, "proc.pid"))
 		if err != nil {
 			s.T().Logf("failed to read pid file: %v", err)
 			continue

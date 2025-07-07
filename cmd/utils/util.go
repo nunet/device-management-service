@@ -178,13 +178,12 @@ func NewTestCli(opts ...func(*cli.DmsCLI)) *cli.DmsCLI {
 	}
 
 	fs := afero.NewMemMapFs()
-	cfg := &config.Config{General: config.General{
-		UserDir: "/tmp/nunet/user",
-		WorkDir: "/tmp/nunet/work",
-		DataDir: "/tmp/nunet/data",
-	}}
+	cfg := config.DefaultConfig
+	cfg.General.UserDir = "/tmp/nunet/user"
+	cfg.General.WorkDir = "/tmp/nunet/work"
+	cfg.General.DataDir = "/tmp/nunet/data"
 
-	defaults = append(defaults, cli.WithFS(fs), cli.WithConfig(cfg))
+	defaults = append(defaults, cli.WithFS(fs), cli.WithConfig(&cfg))
 
 	dmsCli := cli.New(append(defaults, opts...)...)
 
