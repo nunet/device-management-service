@@ -103,20 +103,23 @@ func extractStatus(input string) string {
 	return matches[1]
 }
 
-func createConfig(dmsRootDir string, restPort uint32, p2pListenAddr string, bootstrap []string) *config.Config {
-	currentDir := getCurrentFileDirectory()
-
+func createConfig(userDir string, restPort uint32,
+	p2pListenAddr string, bootstrap []string,
+) *config.Config {
 	return &config.Config{
 		General: config.General{
-			UserDir:                filepath.Join(currentDir, dmsRootDir),
-			WorkDir:                filepath.Join(currentDir, dmsRootDir, "work_dir"),
-			DataDir:                filepath.Join(currentDir, dmsRootDir, "data_dir"),
+			UserDir:                userDir,
+			WorkDir:                filepath.Join(userDir, "work_dir"),
+			DataDir:                filepath.Join(userDir, "data_dir"),
+			Debug:                  true,
 			HostCountry:            "NL",
 			HostCity:               "Amsterdam",
 			HostContinent:          "Europe",
 			PortAvailableRangeFrom: 1024,
 			PortAvailableRangeTo:   90000,
-			Debug:                  true,
+			StorageMode:            false,
+			StorageCADirectory:     filepath.Join(userDir, "storage_ca_directory"),
+			StorageBricksDir:       filepath.Join(userDir, "storage_bricks_dir"),
 		},
 		Rest: config.Rest{
 			Addr: "localhost",
@@ -132,13 +135,17 @@ func createConfig(dmsRootDir string, restPort uint32, p2pListenAddr string, boot
 			FileDescriptors: 10444,
 		},
 		Observability: config.Observability{
-			FlushInterval:        3,
-			ElasticsearchEnabled: false,
+			LogLevel:             "debug",
+			LogFile:              filepath.Join(userDir, "logs.txt"),
+			MaxSize:              100,
+			MaxBackups:           3,
+			MaxAge:               28,
 			ElasticsearchURL:     "https://telemetry.nunet.io",
 			ElasticsearchIndex:   "nunet-dms",
-			LogLevel:             "debug",
+			FlushInterval:        3,
+			ElasticsearchEnabled: false,
 			ElasticsearchAPIKey:  os.Getenv("ES_API"),
-			LogFile:              filepath.Join(currentDir, dmsRootDir, "logs.txt"),
+			InsecureSkipVerify:   true,
 		},
 		Profiler: config.Profiler{
 			Enabled: false,
@@ -146,8 +153,8 @@ func createConfig(dmsRootDir string, restPort uint32, p2pListenAddr string, boot
 		APM: config.APM{
 			ServerURL:   "https://apm.telemetry.nunet.io",
 			ServiceName: "nunet-dms",
-			APIKey:      os.Getenv("ES_API"),
 			Environment: "production",
+			APIKey:      os.Getenv("ES_API"),
 		},
 	}
 }

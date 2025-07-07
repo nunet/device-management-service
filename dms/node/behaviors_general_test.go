@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
-	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 func TestHandleLoggerConfig(t *testing.T) {
@@ -60,9 +60,10 @@ func TestHandleLoggerConfig(t *testing.T) {
 		assert.Empty(t, resp.Error)
 
 		// confirm config
-		cfg := config.GetConfig()
-		assert.Equal(t, flushInterval, cfg.Observability.FlushInterval)
-		assert.Equal(t, elasticURL, cfg.Observability.ElasticsearchURL)
-		assert.Equal(t, logLevel, cfg.Observability.LogLevel)
+		observabilityConfig := observability.ObservabilityCfg
+		assert.Equal(t, flushInterval, observabilityConfig.FlushInterval)
+		assert.Equal(t, elasticURL, observabilityConfig.ElasticsearchURL)
+		assert.Equal(t, logLevel, observabilityConfig.LogLevel)
+		assert.Equal(t, apiKey, observabilityConfig.ElasticsearchAPIKey)
 	})
 }

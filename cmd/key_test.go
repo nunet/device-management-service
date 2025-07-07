@@ -6,72 +6,30 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cmdUtils "gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
-const (
-	passphrase = "testpass"
-)
-
-// keyCmdDependencies holds all the necessary components for key command tests
-type keyCmdDependencies struct {
-	fs  afero.Afero
-	cfg *config.Config
-	env *env.MockEnvironment
-}
-
-// newKeyCmdDependencies creates a new test dependencies and returns it
-func newKeyCmdDependencies(t *testing.T) *keyCmdDependencies {
-	fs := afero.Afero{Fs: afero.NewMemMapFs()}
-	cfg := &config.Config{
-		General: config.General{
-			UserDir: "/test/user",
-		},
-	}
-
-	err := fs.MkdirAll(filepath.Join(cfg.General.UserDir, node.KeystoreDir), 0o755)
-	require.NoError(t, err)
-
-	mockEnv := env.NewMockEnvironment()
-
-	deps := &keyCmdDependencies{
-		fs:  fs,
-		cfg: cfg,
-		env: mockEnv,
-	}
-
-	return deps
-}
-
 func TestGenerateNewKey(t *testing.T) {
 	t.Parallel()
-	deps := newKeyCmdDependencies(t)
 
-	var stdout, stdin bytes.Buffer
-	cmd := newKeyNewCmd(deps.fs, deps.env, deps.cfg)
-	cmd.SetOut(&stdout)
-	cmd.SetIn(&stdin)
+	dmsCli := cmdUtils.NewTestCli()
+	cfg, err := dmsCli.Config()
+	require.NoError(t, err)
+	fs := dmsCli.FS()
 
+	cmd := newKeyNewCmd(dmsCli)
 	testKeyName := "testkey"
-
-	cmd.SetArgs([]string{testKeyName})
-
-	err := deps.env.Setenv(node.DMSPassphraseEnv, passphrase)
+	out, _, err := cmdUtils.ExecuteCommand(cmd, testKeyName)
 	require.NoError(t, err)
 
-	err = cmd.Execute()
-	require.NoError(t, err)
-
-	ks, err := keystore.New(deps.fs, filepath.Join(deps.cfg.General.UserDir,
+	ks, err := keystore.New(fs, filepath.Join(cfg.General.UserDir,
 		node.KeystoreDir))
 	require.NoError(t, err)
 
@@ -79,47 +37,30 @@ func TestGenerateNewKey(t *testing.T) {
 	assert.True(t, ok)
 
 	// Verify DID output
-	didOutput := strings.TrimSpace(stdout.String())
+	didOutput := strings.TrimSpace(out)
 	_, err = did.FromString(didOutput)
 	require.NoError(t, err, "did should be valid")
 }
 
 func TestOverwriteExistingKeyWithConfirmation(t *testing.T) {
 	t.Parallel()
-	deps := newKeyCmdDependencies(t)
+
+	dmsCli := cmdUtils.NewTestCli()
 
 	// Create a key first
-	var stdout1, stdin1 bytes.Buffer
-	cmd1 := newKeyNewCmd(deps.fs, deps.env, deps.cfg)
-	cmd1.SetOut(&stdout1)
-	cmd1.SetIn(&stdin1)
-
+	cmd1 := newKeyNewCmd(dmsCli)
 	existingKeyName := "existingkey"
-
-	cmd1.SetArgs([]string{existingKeyName})
-
-	err := deps.env.Setenv(node.DMSPassphraseEnv, passphrase)
+	out1, _, err := cmdUtils.ExecuteCommand(cmd1, existingKeyName)
 	require.NoError(t, err)
 
-	err = cmd1.Execute()
-	require.NoError(t, err)
-	firstDID := strings.TrimSpace(stdout1.String())
+	firstDID := strings.TrimSpace(out1)
 
 	// Now try to create another key with the same name
-	var stdout2, stdin2 bytes.Buffer
-	// Provide "y" to the confirmation prompt
-	stdin2.WriteString("y\n")
-
-	cmd2 := newKeyNewCmd(deps.fs, deps.env, deps.cfg)
-	cmd2.SetOut(&stdout2)
-	cmd2.SetIn(&stdin2)
-	cmd2.SetArgs([]string{existingKeyName})
-
-	// Execute command again with the same key name
-	err = cmd2.Execute()
+	cmd2 := newKeyNewCmd(dmsCli)
+	out2, _, err := cmdUtils.ExecuteCommandWithInput(cmd2, [][]byte{[]byte("y\n")}, existingKeyName)
 	require.NoError(t, err)
 
-	secondDID := strings.TrimSpace(stdout2.String())
+	secondDID := strings.TrimSpace(out2)
 
 	// The DIDs should be different since we generated a new key
 	assert.NotEqual(t, firstDID, secondDID)
@@ -127,96 +68,59 @@ func TestOverwriteExistingKeyWithConfirmation(t *testing.T) {
 
 func TestCancelOverwriteOfExistingKey(t *testing.T) {
 	t.Parallel()
-	deps := newKeyCmdDependencies(t)
+
+	dmsCli := cmdUtils.NewTestCli()
 
 	// Create a key first
-	var stdout1, stdin1 bytes.Buffer
-	cmd1 := newKeyNewCmd(deps.fs, deps.env, deps.cfg)
-	cmd1.SetOut(&stdout1)
-	cmd1.SetIn(&stdin1)
-
+	cmd1 := newKeyNewCmd(dmsCli)
 	cancelKeyName := "cancelkey"
 
-	cmd1.SetArgs([]string{cancelKeyName})
-
-	err := deps.env.Setenv(node.DMSPassphraseEnv, passphrase)
-	require.NoError(t, err)
-
-	err = cmd1.Execute()
+	_, _, err := cmdUtils.ExecuteCommand(cmd1, cancelKeyName)
 	require.NoError(t, err)
 
 	// Now try to create another key with the same name
-	var stdout2, stdin2 bytes.Buffer
-	// Provide "n" to the confirmation prompt
-	stdin2.WriteString("n\n")
-
-	cmd2 := newKeyNewCmd(deps.fs, deps.env, deps.cfg)
-	cmd2.SetOut(&stdout2)
-	cmd2.SetIn(&stdin2)
-	cmd2.SetArgs([]string{cancelKeyName})
-
-	// Execute command again with the same key name
-	err = cmd2.Execute()
+	cmd2 := newKeyNewCmd(dmsCli)
+	_, _, err = cmdUtils.ExecuteCommandWithInput(cmd2, [][]byte{[]byte("n\n")}, cancelKeyName)
 	assert.Error(t, err, "expected an error when user cancels overwrite")
 	assert.ErrorIs(t, err, utils.ErrOperationCancelled)
 }
 
 func TestGetKeyDID(t *testing.T) {
 	t.Parallel()
-	deps := newKeyCmdDependencies(t)
+
+	dmsCli := cmdUtils.NewTestCli()
 
 	// First create a key
-	var newStdout, newStdin bytes.Buffer
-	newCmd := newKeyNewCmd(deps.fs, deps.env, deps.cfg)
-	newCmd.SetOut(&newStdout)
-	newCmd.SetIn(&newStdin)
-
+	newCmd := newKeyNewCmd(dmsCli)
 	testKeyName := "testdidkey"
 
-	newCmd.SetArgs([]string{testKeyName})
-	err := deps.env.Setenv(node.DMSPassphraseEnv, passphrase)
-	require.NoError(t, err)
-
-	err = newCmd.Execute()
+	newOut, _, err := cmdUtils.ExecuteCommand(newCmd, testKeyName)
 	require.NoError(t, err)
 
 	// Get the DID from the output of the new command
-	expectedDID := strings.TrimSpace(newStdout.String())
+	expectedDID := strings.TrimSpace(newOut)
 	require.NotEmpty(t, expectedDID)
 
 	// Now test the DID command
-	var didStdout, didStdin bytes.Buffer
-	didCmd := newKeyDIDCmd(deps.fs, deps.env, deps.cfg)
-	didCmd.SetOut(&didStdout)
-	didCmd.SetIn(&didStdin)
+	didCmd := newKeyDIDCmd(dmsCli)
 
-	didCmd.SetArgs([]string{testKeyName})
-
-	err = didCmd.Execute()
+	didOut, _, err := cmdUtils.ExecuteCommand(didCmd, testKeyName)
 	require.NoError(t, err)
 
 	// Verify the output matches the expected DID
-	actualDID := strings.TrimSpace(didStdout.String())
+	actualDID := strings.TrimSpace(didOut)
 	assert.Equal(t, expectedDID, actualDID)
 }
 
 func TestGetKeyDIDNonExistentKey(t *testing.T) {
 	t.Parallel()
-	deps := newKeyCmdDependencies(t)
 
-	var didStdout, didStdin bytes.Buffer
-	didCmd := newKeyDIDCmd(deps.fs, deps.env, deps.cfg)
-	didCmd.SetOut(&didStdout)
-	didCmd.SetIn(&didStdin)
+	dmsCli := cmdUtils.NewTestCli()
+
+	didCmd := newKeyDIDCmd(dmsCli)
 
 	nonExistentKeyName := "nonexistentkey"
-
-	err := deps.env.Setenv(node.DMSPassphraseEnv, passphrase)
-	require.NoError(t, err)
-	didCmd.SetArgs([]string{nonExistentKeyName})
-
-	// Execute the DID command with a non-existent key
-	err = didCmd.Execute()
+	_, _, err := cmdUtils.ExecuteCommand(didCmd, nonExistentKeyName)
 	assert.Error(t, err)
 }
 
@@ -225,16 +129,19 @@ func TestGetKeyDIDNonExistentKey(t *testing.T) {
 func TestLedgerAliasSetCommand(t *testing.T) {
 	t.Parallel()
 
-	deps := newKeyCmdDependencies(t)
+	dmsCli := cmdUtils.NewTestCli()
 
 	var stdout bytes.Buffer
-	aliasCmd := newKeyLedgerAliasCmd(deps.fs, deps.cfg)
+	aliasCmd := newKeyLedgerAliasCmd(dmsCli)
 	aliasCmd.SetOut(&stdout)
 	aliasCmd.SetArgs([]string{"set", "biz", "5"})
 
 	require.NoError(t, aliasCmd.Execute())
 
-	idx, err := node.ResolveLedgerIndex(deps.fs, deps.cfg.General.UserDir, "biz")
+	cfg, err := dmsCli.Config()
+	require.NoError(t, err)
+
+	idx, err := node.ResolveLedgerIndex(dmsCli.FS(), cfg.General.UserDir, "biz")
 	require.NoError(t, err)
 	require.Equal(t, 5, idx)
 

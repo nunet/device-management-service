@@ -90,7 +90,7 @@ func (s *ExecutorTestSuite) TestStartJob() {
 }
 
 func (s *ExecutorTestSuite) TestRemoveContainer() {
-	request := s.newExecutionRequest(transientCmd)
+	request := s.newExecutionRequest(persistentCmd)
 	err := s.executor.Start(context.Background(), request)
 	s.NoError(err)
 

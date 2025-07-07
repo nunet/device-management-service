@@ -16,21 +16,20 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/nunet/device-management-service/cmd/utils"
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal"
-	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
+type RunOptions struct {
+	Context string
+}
+
 func newRunCmd(
-	env env.EnvironmentProvider, gcfg *config.Config,
+	dmsCli *cli.DmsCLI,
 ) *cobra.Command {
-	var context string
-	pprof := gcfg.Profiler.Enabled
-	pprofAddr := gcfg.Profiler.Addr
-	pprofPort := gcfg.Profiler.Port
+	var opts RunOptions
 
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -45,17 +44,22 @@ By default, DMS listens on port 9999. For more information on configuration, see
 
 Or manually create a dms_config.json file and refer to the README for available settings.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			passphrase, err := utils.GetDMSPassphrase(env, false)
+			passphrase, err := dmsCli.Passphrase(opts.Context)
 			if err != nil {
 				return fmt.Errorf("get dms passphrase: %w", err)
 			}
 
-			if pprof {
+			cfg, err := dmsCli.Config()
+			if err != nil {
+				return fmt.Errorf("get dms config: %w", err)
+			}
+
+			if cfg.Profiler.Enabled {
 				go func() {
 					pprofMux := http.DefaultServeMux
 					http.DefaultServeMux = http.NewServeMux()
 
-					profilerAddr := fmt.Sprintf("%s:%d", pprofAddr, pprofPort)
+					profilerAddr := fmt.Sprintf("%s:%d", cfg.Profiler.Addr, cfg.Profiler.Port)
 					log.Infof("Starting profiler on %s\n", profilerAddr)
 					// #nosec
 					if err := http.ListenAndServe(profilerAddr, pprofMux); err != nil {
@@ -64,7 +68,7 @@ Or manually create a dms_config.json file and refer to the README for available 
 				}()
 			}
 
-			dmsInstance, err := dms.NewDMS(gcfg, passphrase, context)
+			dmsInstance, err := dms.NewDMS(dmsCli.FS(), cfg, dmsCli.Env(), passphrase, opts.Context)
 			if err != nil {
 				return fmt.Errorf("failed to initialize dms: %w", err)
 			}
@@ -86,9 +90,7 @@ Or manually create a dms_config.json file and refer to the README for available 
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&pprof, "pprof", pprof, "enable profiling")
-	cmd.Flags().StringVar(&pprofAddr, "pprof-addr", pprofAddr, "enable profiling")
-	cmd.Flags().Uint32Var(&pprofPort, "pprof-port", pprofPort, "enable profiling")
-	cmd.Flags().StringVarP(&context, "context", "c", node.DefaultContextName, "specify a capability context")
+
+	cmd.Flags().StringVarP(&opts.Context, "context", "c", node.DefaultContextName, "specify a capability context")
 	return cmd
 }

@@ -32,6 +32,8 @@ var (
 	customEventEmitter event.Emitter
 
 	noOpMode         bool
+	ObservabilityCfg config.Observability = config.DefaultConfig.Observability
+	ApmCfg           config.APM           = config.DefaultConfig.APM
 	mutex            sync.RWMutex
 	combinedCore     zapcore.Core
 	esSyncerInstance *bufferedElasticsearchSyncer
@@ -59,6 +61,11 @@ func isESDisabled() bool {
 
 // Initialize sets up the logger, tracing, and event bus
 func Initialize(host host.Host, did did.DID, cfg *config.Config) error {
+	mutex.Lock()
+	ObservabilityCfg = cfg.Observability
+	ApmCfg = cfg.APM
+	mutex.Unlock()
+
 	if IsNoOpMode() {
 		return nil
 	}
@@ -71,14 +78,14 @@ func Initialize(host host.Host, did did.DID, cfg *config.Config) error {
 	}
 
 	// Initialize the logger with configurations
-	if err := initLogger(cfg.Observability); err != nil {
+	if err := initLogger(ObservabilityCfg); err != nil {
 		// Non-fatal: we log a warning and proceed
 		log.Warn("Failed to initialize logger", zap.Error(err))
 	}
 
 	// Initialize Elastic APM tracing only if the APM URL is provided
-	if cfg.APM.ServerURL != "" {
-		initTracing(cfg.APM)
+	if ApmCfg.ServerURL != "" {
+		initTracing(ApmCfg)
 	} else {
 		log.Warn("APM Server URL not provided, tracing will be disabled")
 	}
@@ -519,11 +526,10 @@ func (b *bufferedElasticsearchSyncer) setFlushInterval(interval time.Duration) {
 // SetElasticsearchEndpoint updates the Elasticsearch URL and reinitializes the logger.
 func SetElasticsearchEndpoint(url string) error {
 	mutex.Lock()
-	cfg := config.GetConfig()
-	cfg.Observability.ElasticsearchURL = url
+	ObservabilityCfg.ElasticsearchURL = url
 	mutex.Unlock()
 
-	err := initLogger(cfg.Observability)
+	err := initLogger(ObservabilityCfg)
 	if err != nil {
 		return fmt.Errorf("failed to reinitialize logger after updating ES endpoint: %v", err)
 	}
@@ -613,8 +619,7 @@ func SetLogLevel(level string) error {
 		return fmt.Errorf("invalid log level: %w", err)
 	}
 
-	cfg := config.GetConfig()
-	cfg.Observability.LogLevel = level
+	ObservabilityCfg.LogLevel = level
 	atomicLevel.SetLevel(logLevel)
 
 	return nil
@@ -623,8 +628,7 @@ func SetLogLevel(level string) error {
 // SetFlushInterval sets the flush interval for Elasticsearch logging dynamically
 func SetFlushInterval(seconds int) error {
 	mutex.Lock()
-	cfg := config.GetConfig()
-	cfg.Observability.FlushInterval = seconds
+	ObservabilityCfg.FlushInterval = seconds
 	localEsSyncer := esSyncerInstance
 	mutex.Unlock()
 
@@ -689,8 +693,7 @@ func SetNoOpMode(enabled bool) {
 		// If in no-op mode, set the log level to a very high threshold
 		atomicLevel.SetLevel(zapcore.Level(100))
 	} else {
-		cfg := config.GetConfig()
-		logLevel, err := parseLogLevel(cfg.Observability.LogLevel)
+		logLevel, err := parseLogLevel(ObservabilityCfg.LogLevel)
 		if err != nil {
 			logLevel = zapcore.InfoLevel
 		}
@@ -709,19 +712,18 @@ func IsNoOpMode() bool {
 // SetAPIKey updates the API key for both Elasticsearch and APM.
 func SetAPIKey(apiKey string) error {
 	mutex.Lock()
-	cfg := config.GetConfig()
-	cfg.Observability.ElasticsearchAPIKey = apiKey
-	cfg.APM.APIKey = apiKey
+	ObservabilityCfg.ElasticsearchAPIKey = apiKey
+	ApmCfg.APIKey = apiKey
 	mutex.Unlock()
 
 	// Reinit logger outside the lock
-	err := initLogger(cfg.Observability)
+	err := initLogger(ObservabilityCfg)
 	if err != nil {
 		return fmt.Errorf("failed to reinitialize logger: %v", err)
 	}
 
-	if cfg.APM.ServerURL != "" {
-		initTracing(cfg.APM)
+	if ApmCfg.ServerURL != "" {
+		initTracing(ApmCfg)
 	}
 
 	return nil
@@ -734,12 +736,11 @@ func SetAPMURL(url string) error {
 		mutex.Unlock()
 		return nil
 	}
-	cfg := config.GetConfig()
-	cfg.APM.ServerURL = url
+	ApmCfg.ServerURL = url
 	mutex.Unlock()
 
-	if cfg.APM.ServerURL != "" {
-		initTracing(cfg.APM)
+	if ApmCfg.ServerURL != "" {
+		initTracing(ApmCfg)
 	} else {
 		ShutdownTracer()
 	}
@@ -749,12 +750,11 @@ func SetAPMURL(url string) error {
 // EnableElasticsearchLogging enables or disables Elasticsearch logging dynamically.
 func EnableElasticsearchLogging(enabled bool) error {
 	mutex.Lock()
-	cfg := config.GetConfig()
-	cfg.Observability.ElasticsearchEnabled = enabled
+	ObservabilityCfg.ElasticsearchEnabled = enabled
 	mutex.Unlock()
 
 	// Attempt reinit
-	err := initLogger(cfg.Observability)
+	err := initLogger(ObservabilityCfg)
 	if err != nil {
 		return fmt.Errorf("failed to reinitialize logger: %v", err)
 	}

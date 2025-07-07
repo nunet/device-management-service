@@ -31,7 +31,8 @@ func CmdStreams(cmd *cobra.Command) Streams {
 type DmsCLI struct {
 	env                env.EnvironmentProvider
 	fs                 afero.Fs
-	cfgProvider        *config.Provider
+	defaultConfig      *config.Config
+	configLoader       *config.Loader
 	passphraseProvider passphrase.Provider
 	clientFn           func(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient, error)
 }
@@ -44,8 +45,12 @@ func (c *DmsCLI) FS() afero.Fs {
 	return c.fs
 }
 
+func (c *DmsCLI) ConfigLoader() *config.Loader {
+	return c.configLoader
+}
+
 func (c *DmsCLI) Config() (*config.Config, error) {
-	return c.cfgProvider.GetConfig()
+	return c.configLoader.GetConfig()
 }
 
 func (c *DmsCLI) Passphrase(key string) (string, error) {
@@ -75,8 +80,12 @@ func New(opts ...func(*DmsCLI)) *DmsCLI {
 		cli.fs = afero.NewOsFs()
 	}
 
-	if cli.cfgProvider == nil {
-		cli.cfgProvider = config.DefaultProvider()
+	if cli.configLoader == nil {
+		cli.configLoader = config.NewLoader(config.WithFS(cli.fs))
+	}
+
+	if cli.defaultConfig != nil {
+		cli.configLoader.SetConfig(*cli.defaultConfig)
 	}
 
 	if cli.env == nil {
@@ -114,7 +123,7 @@ func WithFS(fs afero.Fs) func(*DmsCLI) {
 
 func WithConfig(cfg *config.Config) func(*DmsCLI) {
 	return func(cli *DmsCLI) {
-		cli.cfgProvider = config.NewProvider(config.WithConfig(cfg))
+		cli.defaultConfig = cfg
 	}
 }
 

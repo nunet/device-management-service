@@ -12,18 +12,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
-func newConfigCmd(fs afero.Fs, env env.EnvironmentProvider, cfg *config.Config) *cobra.Command {
-	if fs == nil {
-		cobra.CheckErr("Fs is nil")
-	}
+func newConfigCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Manage configuration file",
@@ -35,13 +34,13 @@ Search for the configuration file is done in the following locations and order:
 2. "$HOME/.nunet"
 3. "/etc/nunet"`,
 	}
-	cmd.AddCommand(newConfigGetCmd(fs, cfg))
-	cmd.AddCommand(newConfigSetCmd(fs))
-	cmd.AddCommand(newConfigEditCmd(fs, env))
+	cmd.AddCommand(newConfigGetCmd(dmsCli))
+	cmd.AddCommand(newConfigSetCmd(dmsCli))
+	cmd.AddCommand(newConfigEditCmd(dmsCli))
 	return cmd
 }
 
-func newConfigGetCmd(fs afero.Fs, cfg *config.Config) *cobra.Command {
+func newConfigGetCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <key>",
 		Short: "Display configuration",
@@ -53,28 +52,31 @@ Example:
   nunet config get rest.port`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := config.CreateConfigFileIfNotExists(fs)
+			ldr := dmsCli.ConfigLoader()
+			_ = ensureConfigFile(dmsCli.FS(), ldr)
+			cfg, err := ldr.GetConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config file: %w", err)
+				return fmt.Errorf("failed to load config: %w", err)
 			}
-			cmd.Println("Found config file at:", config.GetPath())
 
+			cmd.Println("Found config file at:", ldr.ConfigFile())
+
+			// No key  print the whole struct as JSON
 			if len(args) == 0 {
-				info, err := json.MarshalIndent(cfg, "", "    ")
+				all, err := json.MarshalIndent(cfg, "", "    ")
 				if err != nil {
-					return fmt.Errorf("failed to indent config JSON: %w", err)
+					return fmt.Errorf("indent config JSON: %w", err)
 				}
-				cmd.Println(string(info))
+				cmd.Println(string(all))
 				return nil
 			}
-			value, err := config.Get(args[0])
-			if err != nil {
-				return fmt.Errorf("could not get key's value: %w", err)
+
+			val, found := ldr.GetValue(strings.ToLower(args[0]))
+			if !found {
+				return fmt.Errorf("key %q not found", args[0])
 			}
-			pretty, err := json.MarshalIndent(value, "", "    ")
-			if err != nil {
-				return fmt.Errorf("failed to indent JSON: %w", err)
-			}
+
+			pretty, _ := json.MarshalIndent(val, "", "    ")
 			cmd.Println(string(pretty))
 			return nil
 		},
@@ -82,21 +84,28 @@ Example:
 	return cmd
 }
 
-func newConfigSetCmd(fs afero.Fs) *cobra.Command {
+func newConfigSetCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set <key> <value>",
 		Short: "Update configuration",
-		Long: `Set value for a configuration key
+		Long: `Set value for a configuration key.
 
-It creates a configuration file if does not exists, otherwise it updates the existing file
+Creates the configuration file if it does not yet exist.
 
-Example:
-  nunet config set rest.port 4444`,
+Examples:
+  nunet config set rest.port 4444
+  nunet config set general.work_dir ~/.config/dms`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			exists, err := config.FileExists(fs)
+			key := strings.ToLower(args[0])
+			raw := args[1]
+
+			ldr := dmsCli.ConfigLoader()
+			_ = ensureConfigFile(dmsCli.FS(), ldr)
+
+			exists, err := afero.Exists(dmsCli.FS(), ldr.ConfigFile())
 			if err != nil {
-				return fmt.Errorf("failed to check if config file exists: %w", err)
+				return fmt.Errorf("stat config file: %w", err)
 			}
 			if !exists {
 				cmd.Println("Config file did not exist. Creating new file...")
@@ -104,43 +113,41 @@ Example:
 				cmd.Println("Updating existing config file...")
 			}
 
-			if err := config.Set(fs, args[0], args[1]); err != nil {
+			// Parse numeric and bool literals, keep string otherwise.
+			value := parseLiteral(raw)
+
+			if err := ldr.Set(key, value); err != nil {
 				return fmt.Errorf("failed to set config: %w", err)
 			}
 
 			cmd.Println("Applied changes.")
-
 			return nil
 		},
 	}
 	return cmd
 }
 
-func newConfigEditCmd(fs afero.Fs, env env.EnvironmentProvider) *cobra.Command {
+func newConfigEditCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "edit",
 		Short: "Edit configuration",
-		Long: `Open configuration file with default text editor
+		Long: `Open configuration file with the default text editor.
 
-This command search the configuration file and open it with the default text editor
-It reads the $EDITOR environment variable and it fails if it's not set`,
+The command reads the $EDITOR environment variable and fails if it is unset.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			editor := env.Getenv("EDITOR")
+			editor := dmsCli.Env().Getenv("EDITOR")
 			if editor == "" {
 				return fmt.Errorf("$EDITOR not set")
 			}
 
-			err := config.CreateConfigFileIfNotExists(fs)
-			if err != nil {
-				return fmt.Errorf("failed to create config file: %w", err)
-			}
-			cmd.Printf("Text editor: %s\n", editor)
-			cmd.Printf("Config path: %s\n", config.GetPath())
+			ldr := dmsCli.ConfigLoader()
+			_ = ensureConfigFile(dmsCli.FS(), ldr)
 
-			// do we need better sanitization?
-			// do we check if editor is valid?
-			proc := exec.Command(editor, config.GetPath())
+			cmd.Printf("Text editor: %s\n", editor)
+			cmd.Printf("Config path: %s\n", ldr.ConfigFile())
+
+			proc := exec.Command(editor, ldr.ConfigFile())
 			proc.Stdout = cmd.OutOrStdout()
 			proc.Stdin = cmd.InOrStdin()
 			proc.Stderr = cmd.OutOrStderr()
@@ -149,4 +156,24 @@ It reads the $EDITOR environment variable and it fails if it's not set`,
 		},
 	}
 	return cmd
+}
+
+// Helpers
+func ensureConfigFile(fs afero.Fs, ldr *config.Loader) error {
+	if path := ldr.ConfigFile(); path != "" {
+		if ok, err := afero.Exists(fs, path); err == nil && ok {
+			return nil
+		}
+	}
+	return ldr.Write()
+}
+
+func parseLiteral(s string) interface{} {
+	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return int(i)
+	}
+	if b, err := strconv.ParseBool(s); err == nil {
+		return b
+	}
+	return s
 }

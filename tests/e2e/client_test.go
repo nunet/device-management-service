@@ -35,24 +35,24 @@ import (
 )
 
 type Client struct {
-	afero afero.Afero
-	cfg   *config.Config
+	fs  afero.Fs
+	cfg *config.Config
+	env env.EnvironmentProvider
 }
 
 func newClient(t *testing.T, cfg *config.Config) *Client {
 	t.Helper()
-	afs := afero.Afero{Fs: afero.NewOsFs()}
-
 	return &Client{
-		afero: afs,
-		cfg:   cfg,
+		fs:  afero.NewOsFs(),
+		cfg: cfg,
+		env: env.NewOSEnvironment(),
 	}
 }
 
 func (c *Client) newCommandCtx() *cobra.Command {
 	dmsCLI := cli.New(
 		cli.WithConfig(c.cfg),
-		cli.WithFS(c.afero),
+		cli.WithFS(c.fs),
 		cli.WithEnv(env.NewOSEnvironment()),
 	)
 	return cmd.NewRootCMD(dmsCLI)

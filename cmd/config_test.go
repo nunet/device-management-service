@@ -9,36 +9,16 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
 
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/env"
 )
-
-func ExecuteCommand(root *cobra.Command, args ...string) (output string, err error) {
-	_, output, err = ExecuteCommandC(root, args...)
-	return output, err
-}
-
-func ExecuteCommandC(root *cobra.Command, args ...string) (c *cobra.Command, output string, err error) {
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs(args)
-
-	c, err = root.ExecuteC()
-
-	return c, buf.String(), err
-}
 
 func TestConfigGetCmd(t *testing.T) {
 	tests := []struct {
@@ -70,8 +50,9 @@ func TestConfigGetCmd(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := newConfigGetCmd(afero.NewMemMapFs(), nil)
-			out, err := ExecuteCommand(cmd, tt.args...)
+			dmsCli := utils.NewTestCli()
+			cmd := newConfigGetCmd(dmsCli)
+			out, _, err := utils.ExecuteCommand(cmd, tt.args...)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -143,8 +124,9 @@ func TestConfigSetCmd(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := newConfigSetCmd(afero.NewMemMapFs())
-			_, err := ExecuteCommand(cmd, tt.args...)
+			dmsCli := utils.NewTestCli()
+			cmd := newConfigSetCmd(dmsCli)
+			_, _, err := utils.ExecuteCommand(cmd, tt.args...)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -179,14 +161,11 @@ func TestConfigEditCmd(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			// Set the EDITOR environment variable for the test
-			if tt.editor != "" {
-				t.Setenv("EDITOR", tt.editor)
-			} else {
-				os.Unsetenv("EDITOR")
-			}
+			dmsCli := utils.NewTestCli()
+			_ = dmsCli.Env().Setenv("EDITOR", tt.editor)
 
-			cmd := newConfigEditCmd(afero.NewMemMapFs(), env.NewOSEnvironment())
-			_, err := ExecuteCommand(cmd)
+			cmd := newConfigEditCmd(dmsCli)
+			_, _, err := utils.ExecuteCommand(cmd)
 
 			if tt.wantErr {
 				assert.Error(t, err)

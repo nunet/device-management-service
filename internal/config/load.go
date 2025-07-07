@@ -1,11 +1,3 @@
-// Copyright 2024, Nunet
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
-
 package config
 
 import (
@@ -13,269 +5,394 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"reflect"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
 
-	logging "github.com/ipfs/go-log/v2"
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfg            Config
 	homeDir, _     = os.UserHomeDir()
-	defaultcfgName = "dms_config"
+	defaultCfgName = "dms_config"
 	defaultCfgExt  = "json"
-	defaultCfgPath = "."
+	validate       = validator.New()
 )
 
-var log = logging.Logger("config")
-
-func SetupConfig() {
-	v := viper.GetViper()
-	fs := pflag.NewFlagSet("", pflag.ContinueOnError)
-	var cfgFile string
-
-	fs.StringVar(&cfgFile, "config", "", "config file")
-	setupFlags(fs)
-
-	pflag.CommandLine.AddFlagSet(fs)
-	fs.Usage = func() {}
-
-	err := fs.Parse(os.Args)
-	if err != nil && err != pflag.ErrHelp {
-		// we can ignore flags intended for other commands
-		log.Warnf("error parsing command line flags: %s", err)
-	}
-
-	if cfgFile != "" {
-		v.SetConfigFile(cfgFile)
-	}
+var DefaultConfig = Config{
+	General: General{
+		UserDir:                fmt.Sprintf("%s/.nunet", homeDir),
+		WorkDir:                fmt.Sprintf("%s/nunet", homeDir),
+		DataDir:                fmt.Sprintf("%s/nunet/data", homeDir),
+		Debug:                  false,
+		PortAvailableRangeFrom: 16384,
+		PortAvailableRangeTo:   65536,
+		StorageCADirectory:     fmt.Sprintf("%s/.nunet/storage_ca_directory", homeDir),
+		StorageBricksDir:       fmt.Sprintf("%s/.nunet/storage_bricks_dir", homeDir),
+	},
+	Rest: Rest{
+		Addr: "127.0.0.1",
+		Port: 9999,
+	},
+	Profiler: Profiler{
+		Enabled: true,
+		Addr:    "127.0.0.1",
+		Port:    6060,
+	},
+	P2P: P2P{
+		ListenAddress: []string{
+			"/ip4/0.0.0.0/tcp/9000",
+			"/ip4/0.0.0.0/udp/9000/quic-v1",
+		},
+		BootstrapPeers: []string{
+			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",
+			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
+			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
+			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWHzew9HTYzywFuvTHGK5Yzoz7qAhMfxagtCvhvjheoBQ3",
+			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWJMtMN1mTNRfgMqUygT7eSXamVzc9ihpSjeairm9PebmB",
+			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWKjSodxxi7UfRHzuk7eGgUF49MoPUCJvtva9K12TqDDsi",
+		},
+		Memory:          1024,
+		FileDescriptors: 512,
+	},
+	Observability: Observability{
+		Logging: Logging{
+			Level: "INFO",
+			File:  fmt.Sprintf("%s/nunet/logs/nunet-dms.log", homeDir),
+			Rotation: Rotation{
+				MaxSizeMB:  100,
+				MaxBackups: 3,
+				MaxAgeDays: 28,
+			},
+		},
+		Elastic: Elastic{
+			URL:                "http://localhost:9200",
+			Index:              "nunet-dms",
+			FlushInterval:      5,
+			Enabled:            false,
+			APIKey:             "",
+			InsecureSkipVerify: true,
+		},
+	},
+	APM: APM{
+		ServerURL:   "http://apm.telemetry.nunet.io",
+		ServiceName: "nunet-dms",
+		Environment: "production",
+		APIKey:      "",
+	},
+	Job: Job{
+		AllowPrivilegedDocker: false,
+	},
 }
 
-func init() {
-	v := viper.GetViper()
-	v.SetConfigName(defaultcfgName)
+// Loader encapsulates Viper, the loaded Config, and an abstract filesystem.
+type Loader struct {
+	v       *viper.Viper
+	cfg     *Config
+	fs      afero.Fs
+	cfgMu   sync.RWMutex
+	once    sync.Once
+	cfgFile *string
+}
+
+// Option configures a Loader (functional-options pattern).
+type Option func(*Loader)
+
+// WithFS swaps the filesystem (defaults to OS FS).
+func WithFS(fs afero.Fs) Option { return func(l *Loader) { l.fs = fs } }
+
+// WithConfig swaps the default config (defaults to DefaultConfig).
+func WithConfig(cfg *Config) Option { return func(l *Loader) { l.cfg = cfg } }
+
+// NewLoader creates a Loader with sane defaults (does not read files).
+func NewLoader(opts ...Option) *Loader {
+	l := &Loader{
+		v:   viper.New(),
+		fs:  afero.NewOsFs(),
+		cfg: &Config{},
+	}
+
+	*l.cfg = DefaultConfig
+
+	for _, opt := range opts {
+		opt(l)
+	}
+
+	l.init()
+	return l
+}
+
+// tryReadConfig mirrors v.ReadInConfig() but falls back for custom filesystems.
+func tryReadConfig(vip *viper.Viper, fs afero.Fs) error {
+	if err := vip.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			name := defaultCfgName + "." + defaultCfgExt // dms_config.json
+			rel := "./" + name                           // ./dms_config.json
+			for _, cand := range []string{rel, name} {   // test & prod cases
+				if ok, _ := afero.Exists(fs, cand); ok {
+					raw, _ := afero.ReadFile(fs, cand)
+					vip.SetConfigFile(cand)
+					return vip.ReadConfig(bytes.NewReader(raw))
+				}
+			}
+		} else {
+			return err // syntax / permission errors, etc.
+		}
+	}
+	return nil
+}
+
+func (l *Loader) init() {
+	v := l.v
+	v.SetFs(l.fs)
+
+	v.SetConfigName(defaultCfgName)
 	v.SetConfigType(defaultCfgExt)
-	v.AddConfigPath(defaultCfgPath)                    // config file reading order starts with current working directory
-	v.AddConfigPath(fmt.Sprintf("%s/.nunet", homeDir)) // then home directory
-	v.AddConfigPath("/etc/nunet/")                     // finally system directory
+	v.AddConfigPath("./")
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		v.AddConfigPath(fmt.Sprintf("%s/.nunet", homeDir)) // $HOME
+	}
+	if configDir, err := os.UserConfigDir(); err == nil {
+		v.AddConfigPath(fmt.Sprintf("%s/nunet", configDir)) // $CONFIG
+	}
+	if runtime.GOOS != "windows" {
+		v.AddConfigPath("/etc/nunet/") // system
+	}
 
-	setDefaultConfig()
+	_ = l.setConfig(*l.cfg, true)
 
+	v.SetEnvPrefix("DMS")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 }
 
-// setupFlags sets up the command line flags and binds them to viper
-func setupFlags(flagSet *pflag.FlagSet) {
-	v := viper.GetViper()
-
-	flags := []struct {
-		name      string
-		viperKey  string
-		shorthand string
-		usage     string
-		valueType string
-		hidden    bool
-	}{
-		{"rest-addr", "rest.addr", "", "REST API host", "string", false},
-		{"rest-port", "rest.port", "", "REST API port", "int", false},
-		{"user-dir", "general.user_dir", "", "user directory", "string", false},
-		{"work-dir", "general.work_dir", "", "work directory", "string", false},
-		{"data-dir", "general.data_dir", "", "data directory", "string", false},
-		{"debug", "general.debug", "", "debug mode", "bool", false},
-		{"profiler-port", "profiler.port", "", "profiler port", "int", false},
-	}
-
-	for _, flag := range flags {
-		switch flag.valueType {
-		case "string":
-			flagSet.StringP(flag.name, flag.shorthand, v.GetString(flag.viperKey), flag.usage)
-		case "int":
-			flagSet.IntP(flag.name, flag.shorthand, v.GetInt(flag.viperKey), flag.usage)
-		case "bool":
-			flagSet.BoolP(flag.name, flag.shorthand, v.GetBool(flag.viperKey), flag.usage)
-		}
-		if flag.hidden {
-			if err := flagSet.MarkHidden(flag.name); err != nil {
-				log.Debugf("failed to mark flag %s as hidden: %s", flag.name, err)
-			}
-		}
-
-		// bind flags to viper
-		if err := v.BindPFlag(flag.viperKey, flagSet.Lookup(flag.name)); err != nil {
-			log.Errorf("failed to bind flag %s to viper: %v", flag.name, err)
-		}
-	}
+// Public Loader API
+// Get reads the config file (if any), overlays env & flags, validates, and
+// stores the result. Subsequent calls are cheap no-ops.
+func (l *Loader) Load() (*Config, error) {
+	var err error
+	l.once.Do(func() { err = l.readAndUnmarshal() })
+	return l.cfg, err
 }
 
-// setDefaultConfig sets default values for configuration
-func setDefaultConfig() {
-	v := viper.GetViper()
-	v.SetDefault("general.user_dir", fmt.Sprintf("%s/.nunet", homeDir))
-	v.SetDefault("general.work_dir", fmt.Sprintf("%s/nunet", homeDir))
-	v.SetDefault("general.data_dir", fmt.Sprintf("%s/nunet/data", homeDir))
-	v.SetDefault("general.debug", false)
-	v.SetDefault("general.port_available_range_from", 16384)
-	v.SetDefault("general.port_available_range_to", 65536)
-
-	v.SetDefault("general.storage_ca_directory", fmt.Sprintf("%s/.nunet/storage_ca_directory", homeDir))
-	v.SetDefault("general.storage_bricks_dir", fmt.Sprintf("%s/.nunet/storage_bricks_dir", homeDir))
-
-	v.SetDefault("rest.addr", "127.0.0.1")
-	v.SetDefault("rest.port", 9999)
-	v.SetDefault("profiler.enabled", true)
-	v.SetDefault("profiler.addr", "127.0.0.1")
-	v.SetDefault("profiler.port", 6060)
-	v.SetDefault("p2p.listen_address", []string{
-		"/ip4/0.0.0.0/tcp/9000",
-		"/ip4/0.0.0.0/udp/9000/quic-v1",
-	})
-	v.SetDefault("p2p.bootstrap_peers", []string{
-		// nodes to be possibly deprecated by August 2025 #1089
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
-
-		// new nodes added in 2025
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWHzew9HTYzywFuvTHGK5Yzoz7qAhMfxagtCvhvjheoBQ3",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWJMtMN1mTNRfgMqUygT7eSXamVzc9ihpSjeairm9PebmB",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWKjSodxxi7UfRHzuk7eGgUF49MoPUCJvtva9K12TqDDsi",
-	})
-	v.SetDefault("p2p.memory", 1024)
-	v.SetDefault("p2p.fd", 512)
-
-	// default observability settings
-	v.SetDefault("observability.log_level", "INFO")
-	v.SetDefault("observability.log_file", fmt.Sprintf("%s/nunet/logs/nunet-dms.log", homeDir))
-	v.SetDefault("observability.max_size", 100) // megabytes
-	v.SetDefault("observability.max_backups", 3)
-	v.SetDefault("observability.max_age", 28) // days
-	v.SetDefault("observability.elasticsearch_url", "http://localhost:9200")
-	v.SetDefault("observability.elasticsearch_index", "nunet-dms")
-	v.SetDefault("observability.flush_interval", 5) // Default flush interval is 5 seconds
-	v.SetDefault("observability.elasticsearch_enabled", false)
-	v.SetDefault("observability.elasticsearch_api_key", "")
-	v.SetDefault("observability.insecure_skip_verify", true) // Default to insecure TLS connections for now
-
-	// default APM settings
-	v.SetDefault("apm.server_url", "http://apm.telemetry.nunet.io")
-	v.SetDefault("apm.service_name", "nunet-dms")
-	v.SetDefault("apm.environment", "production")
-	v.SetDefault("apm.api_key", v.GetString("observability.elasticsearch_api_key"))
-
-	// jobs
-	v.SetDefault("job.allow_privileged_docker", false)
+func (l *Loader) ConfigFile() string {
+	return l.v.ConfigFileUsed()
 }
 
-func LoadConfig() error {
-	v := viper.GetViper()
-	if err := v.ReadInConfig(); err != nil {
-		if err := v.UnmarshalExact(&cfg); err != nil {
-			return fmt.Errorf("failed to unmarshal default config: %w", err)
-		}
-		return nil
+// Reload forces a fresh read; useful for SIGHUP hot-reload.
+func (l *Loader) Reload() error {
+	l.cfgMu.Lock()
+	defer l.cfgMu.Unlock()
+	return l.readAndUnmarshal()
+}
+
+func (l *Loader) SetConfig(c Config) {
+	l.cfgMu.Lock()
+	*l.cfg = c
+	l.cfgMu.Unlock()
+	_ = l.setConfig(c, false)
+}
+
+func (l *Loader) setConfig(cfg Config, def bool) error {
+	l.cfgMu.Lock()
+	defer l.cfgMu.Unlock()
+
+	tmp := viper.New()
+	tmp.SetConfigType("json")
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return err
 	}
-	if err := v.UnmarshalExact(&cfg); err != nil {
-		return fmt.Errorf("failed to unmarshal config: %w", err)
+	if err = tmp.ReadConfig(bytes.NewReader(raw)); err != nil {
+		return err
+	}
+	for _, k := range tmp.AllKeys() {
+		v := tmp.Get(k)
+		if def {
+			l.v.SetDefault(k, v)
+		} else {
+			l.v.Set(k, v)
+		}
 	}
 	return nil
 }
 
-func GetConfig() *Config {
-	if reflect.DeepEqual(cfg, Config{}) {
-		if err := LoadConfig(); err != nil {
-			return &cfg
-		}
-	}
-	return &cfg
+func (l *Loader) GetConfig() (*Config, error) {
+	l.cfgMu.Lock()
+	defer l.cfgMu.Unlock()
+	return l.cfg, nil
 }
 
-func Get(key string) (interface{}, error) {
-	v := viper.GetViper()
-	loadedConfig, err := json.Marshal(GetConfig())
-	if err != nil {
-		return nil, fmt.Errorf("could not marshal config: %w", err)
+// Update sets a single dotted key, validates the struct, then writes to disk.
+func (l *Loader) Set(key string, value interface{}) error {
+	key = strings.ToLower(key)
+
+	tmp := viper.New()
+	tmp.SetConfigType("json")
+	if err := tmp.MergeConfigMap(l.v.AllSettings()); err != nil {
+		return err
 	}
-	if err := v.ReadConfig(bytes.NewReader(loadedConfig)); err != nil {
-		return nil, fmt.Errorf("could not read config: %w", err)
+	tmp.Set(key, value)
+
+	var probe Config
+	if err := tmp.UnmarshalExact(&probe); err != nil {
+		return err // reject: unknown key or wrong type
 	}
-	if !v.IsSet(key) {
-		return nil, fmt.Errorf("key '%s' not found in configuration", key)
+
+	if err := l.v.MergeConfigMap(map[string]any{key: value}); err != nil {
+		return err
 	}
-	return v.Get(key), nil
+
+	l.cfgMu.Lock()
+	*l.cfg = probe
+	l.cfgMu.Unlock()
+
+	return l.Write()
 }
 
-func Set(fs afero.Fs, key string, value interface{}) error {
-	v := viper.GetViper()
-	v.SetFs(fs)
+// Write persists the current in-memory config to disk atomically.
+// • Creates the file (and parent directories) on first run.
+// • Uses a temp-file + rename so it can’t be truncated on crash.
+func (l *Loader) Write() error {
+	l.cfgMu.RLock()
+	defer l.cfgMu.RUnlock()
 
-	// get the current config for backup
-	currentConfig, err := json.Marshal(GetConfig())
+	cfgPath := l.v.ConfigFileUsed()
+	if cfgPath == "" {
+		// First run – default to "./dms_config.json" (same as search path 1)
+		cfgPath = fmt.Sprintf("./%s.%s", defaultCfgName, defaultCfgExt)
+		l.v.SetConfigFile(cfgPath)
+	}
+
+	// Ensure directory hierarchy exists.
+	if err := l.fs.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
+	}
+
+	raw, err := json.Marshal(l.cfg)
 	if err != nil {
-		return fmt.Errorf("could not read the current config: %w", err)
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return fmt.Errorf("unmarshal map: %w", err)
+	}
+	if err := l.v.MergeConfigMap(m); err != nil {
+		return fmt.Errorf("merge into viper: %w", err)
 	}
 
-	// update the config
-	err = v.MergeConfigMap(map[string]any{key: value})
-	if err != nil {
-		return fmt.Errorf("failed to set %s: %w", key, err)
-	}
+	tmpPath := strings.TrimSuffix(cfgPath, filepath.Ext(cfgPath)) + ".tmp" + filepath.Ext(cfgPath)
 
-	// update config struct
-	if err := v.UnmarshalExact(&cfg); err != nil {
-		_ = v.ReadConfig(bytes.NewReader(currentConfig))
-		return fmt.Errorf("invalid config key: %s", key)
-	}
+	// Always try to clean up the temp file If Rename succeeds the file
+	// no longer exists so this is a harmless no-op
+	defer func() { _ = l.fs.Remove(tmpPath) }()
 
-	// Write updated config to file
-	if err := v.WriteConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// Config file does not exist, create it.
-			return v.SafeWriteConfig()
-		}
-		return fmt.Errorf("failed to write config: %w", err)
+	if err := l.v.WriteConfigAs(tmpPath); err != nil {
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	if err := l.fs.Rename(tmpPath, cfgPath); err != nil {
+		return fmt.Errorf("atomic rename failed: %w", err)
 	}
 
 	return nil
 }
 
-func FileExists(fs afero.Fs) (bool, error) {
-	v := viper.GetViper()
+// BindFlags attaches CLI flags to the Loader’s Viper instance.
+func (l *Loader) BindFlags(fs *pflag.FlagSet) {
+	v := l.v
 
-	v.SetFs(fs)
+	// --config is special: record its value, do NOT bind to Viper.
+	cfgFile := new(string)
+	fs.StringVar(cfgFile, "config", "", "config file (override search paths)")
+	l.cfgFile = cfgFile
 
-	if cfgFile := v.ConfigFileUsed(); cfgFile != "" {
-		return afero.Exists(fs, cfgFile)
+	type flag struct {
+		name, key, short, usage string
+		isBool, isInt           bool
 	}
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			return false, nil
+	flags := []flag{
+		{"rest-addr", "rest.addr", "", "REST API host", false, false},
+		{"rest-port", "rest.port", "", "REST API port", false, true},
+		{"user-dir", "general.user_dir", "", "user directory", false, false},
+		{"work-dir", "general.work_dir", "", "work directory", false, false},
+		{"data-dir", "general.data_dir", "", "data directory", false, false},
+		{"debug", "general.debug", "", "debug mode", true, false},
+		{"profiler-enabled", "profiler.enabled", "", "enable profiler", true, false},
+		{"profiler-addr", "profiler.addr", "", "profiler address", false, false},
+		{"profiler-port", "profiler.port", "", "profiler port", false, true},
+	}
+
+	for _, f := range flags {
+		switch {
+		case f.isBool:
+			fs.BoolP(f.name, f.short, v.GetBool(f.key), f.usage)
+		case f.isInt:
+			fs.IntP(f.name, f.short, v.GetInt(f.key), f.usage)
+		default:
+			fs.StringP(f.name, f.short, v.GetString(f.key), f.usage)
 		}
-		return false, fmt.Errorf("could not read config file: %w", err)
+		_ = v.BindPFlag(f.key, fs.Lookup(f.name))
 	}
-	return true, nil
 }
 
-func GetPath() string {
-	v := viper.GetViper()
-	if err := v.ReadInConfig(); err != nil {
-		return v.ConfigFileUsed()
+func (l *Loader) readAndUnmarshal() error {
+	// honour --config flag if supplied
+	if l.cfgFile != nil && *l.cfgFile != "" {
+		l.v.SetConfigFile(*l.cfgFile)
 	}
-	return v.ConfigFileUsed()
-}
 
-func CreateConfigFileIfNotExists(fs afero.Fs) error {
-	exists, err := FileExists(fs)
-	if err != nil {
-		return fmt.Errorf("failed to check if config file exists: %w", err)
+	if err := tryReadConfig(l.v, l.fs); err != nil {
+		return fmt.Errorf("read config: %w", err)
 	}
-	if !exists {
-		v := viper.GetViper()
-		v.SetFs(fs)
-		if err := v.SafeWriteConfig(); err != nil {
-			return fmt.Errorf("failed to create config file: %w", err)
-		}
+
+	if err := l.v.UnmarshalExact(l.cfg); err != nil {
+		return fmt.Errorf("unmarshal config: %w", err)
+	}
+
+	migrateLegacyObservability(l.cfg)
+
+	if err := validate.Struct(l.cfg); err != nil {
+		return fmt.Errorf("validate config: %w", err)
 	}
 	return nil
+}
+
+// GetValue fetches a value by dotted key. second return is false if unset.
+func (l *Loader) GetValue(key string) (interface{}, bool) {
+	key = strings.ToLower(key)
+	if !l.v.IsSet(key) {
+		return nil, false
+	}
+	return l.v.Get(key), true
+}
+
+// migrateLegacyObservability copies values from the deprecated flat
+// observability keys into the new nested structure IF, AND ONLY IF, the
+// nested fields have not been set  This lets old and new config files
+// work side-by-side and means we can remove the flat keys in a later
+// release without breaking users
+func migrateLegacyObservability(cfg *Config) {
+	o := &cfg.Observability
+
+	if o.Logging.Level == "" && o.LogLevel != "" {
+		o.Logging.Level = o.LogLevel
+	}
+	if o.Logging.File == "" && o.LogFile != "" {
+		o.Logging.File = o.LogFile
+	}
+	if o.Logging.Rotation.MaxSizeMB == 0 && o.MaxSize != 0 {
+		o.Logging.Rotation.MaxSizeMB = o.MaxSize
+	}
+	if o.Logging.Rotation.MaxBackups == 0 && o.MaxBackups != 0 {
+		o.Logging.Rotation.MaxBackups = o.MaxBackups
+	}
+	if o.Logging.Rotation.MaxAgeDays == 0 && o.MaxAge != 0 {
+		o.Logging.Rotation.MaxAgeDays = o.MaxAge
+	}
+	// NOTE: elastic flat keys are still valid and left untouched - they'll
+	// be removed in a later major version once users have migrated
 }

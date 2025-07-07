@@ -104,8 +104,10 @@ func TestNew(t *testing.T) {
 	require.NotNil(t, privK)
 	_, basicCap, _, _ := newActor(t, privK, vNet)
 	// basicCap := ucan.NewCapabilityContext()
-	dcfg := config.GetConfig()
-	dcfg.Observability.ElasticsearchEnabled = false
+
+	// dcfg := config.DefaultConfig
+	// dcfg.Observability.ElasticsearchEnabled = false
+
 	db, err := cloverDB.NewMemDB([]string{})
 	require.NoError(t, err)
 	repos := resources.ManagerRepos{

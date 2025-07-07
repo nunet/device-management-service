@@ -47,7 +47,6 @@ func TestE2E(t *testing.T) {
 
 	t.Run("BasicTests", func(t *testing.T) {
 		t.Parallel()
-
 		basicTests := &TestSuite{
 			numNodes:      3,
 			Name:          "basic_tests",
@@ -60,7 +59,6 @@ func TestE2E(t *testing.T) {
 
 	t.Run("DeploymentTests", func(t *testing.T) {
 		t.Parallel()
-
 		deploymentTests := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_tests",
@@ -87,7 +85,6 @@ func TestE2E(t *testing.T) {
 
 	t.Run("DeploymentFullAssertion", func(t *testing.T) {
 		t.Parallel()
-
 		deploymentSubnetAssertion := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_assert_subnet",
