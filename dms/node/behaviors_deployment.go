@@ -27,7 +27,10 @@ import (
 )
 
 // MinDeploymentTime minimum time for deployment
-const MinDeploymentTime = time.Minute - time.Second
+const (
+	MinDeploymentTime       = time.Minute - time.Second
+	MinUpdateDeploymentTime = 2 * (time.Minute - time.Second) // TODO: tune this
+)
 
 var (
 	ErrDeploymentNotFound     = errors.New("deployment not found")
@@ -503,4 +506,67 @@ func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 	log.Infow("deployment_reverted",
 		"labels", []string{string(observability.LabelDeployment)},
 		"ensembleID", ensembleID)
+}
+
+type UpdateDeploymentRequest struct {
+	EnsembleID string
+	Ensemble   jobtypes.EnsembleConfig
+}
+
+type UpdateDeploymentResponse struct {
+	OK    bool
+	Error string `json:",omitempty"`
+}
+
+func (n *Node) handleDeploymentUpdate(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("deployment update error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		n.sendReply(msg, UpdateDeploymentResponse{Error: err.Error()})
+	}
+
+	if time.Until(msg.Expiry()) < MinUpdateDeploymentTime {
+		handleErr(fmt.Errorf("requested deployment update time too short"))
+		return
+	}
+
+	var request UpdateDeploymentRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("unmarshal update deployment request: %s", err))
+		return
+	}
+
+	orch, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	if orch.Status() != jobs.DeploymentStatusRunning {
+		handleErr(errors.Join(fmt.Errorf("deployment %s is not running(status=%v), cannot update", request.EnsembleID, orch.Status()), ErrorDeploymentNotRunning))
+		return
+	}
+
+	log.Infof("updating ensemble: %s", orch.ID())
+	if err := orch.Update(request.Ensemble, msg.Expiry().Add(-orchestrator.MinEnsembleUpdateTimeout)); err != nil {
+		handleErr(fmt.Errorf("error updating ensemble: %s", err))
+		return
+	}
+
+	n.sendReply(msg, UpdateDeploymentResponse{
+		OK: true,
+	})
+
+	// update the deployment in db
+	if err := n.updateDeployment(orch); err != nil {
+		log.Errorf("error saving deployment %s: %s", orch.ID(), err)
+	}
+}
+
+func (n *Node) updateDeployment(_ orchestrator.Orchestrator) error {
+	// TODO
+	return nil
 }

@@ -129,7 +129,7 @@ These too are associate with allocations and are granted to orchestrators once a
     - Description: Unmap a port in a subnet.
 - **SubnetDNSAddRecordsBehavior**: `/dms/allocation/subnet/dns/add-records`
     - Description: Add DNS records to a subnet. Normally these records identify the allocations within the subnet. Each Allocation can have a dns_name parameter that can be used to identify the allocation but if not provided, the allocation name will be used instead. DNS names have a .internal suffix but can be used without them since the resolver within the executor will add it automatically if it supports it.
-- **SubnetDNSRemoveRecordBehavior**: `/dms/allocation/subnet/dns/remove-record`
+- **SubnetDNSRemoveRecordsBehavior**: `/dms/allocation/subnet/dns/remove-record`
     - Description: Remove a DNS record from a subnet.
 
 ### Ensemble Capabilities

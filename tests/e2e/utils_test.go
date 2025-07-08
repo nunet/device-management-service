@@ -32,6 +32,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 type DIDData struct {
@@ -175,8 +176,6 @@ func getProc(pid int32) *process.Process {
 
 // setupKeysAndCaps creates keys and capabilities for the given CLI instance.
 func setupKeysAndCaps(t *testing.T, cli *Client, pass, keyType1, keyType2 string) {
-	cli.newKey(t, keyType1, pass)
-	cli.newKey(t, keyType2, pass)
 	cli.newCap(t, keyType1, pass)
 	cli.newCap(t, keyType2, pass)
 }
@@ -331,4 +330,61 @@ func isContainerRunning(name string) (bool, error) {
 	}
 
 	return containerInfo.State.Running, nil
+}
+
+// checkResourcesDecreased verifies that resources have decreased on a node
+func checkResourcesDecreased(t *testing.T, node *mockNode, before types.Resources) bool {
+	after, err := node.client.freeResources(t, node.dmsContext, node.password)
+	if err != nil {
+		t.Logf("Error getting free resources: %v", err)
+		return false
+	}
+
+	comparison, err := after.Compare(before)
+	if err != nil {
+		t.Logf("Error comparing resources: %v", err)
+		return false
+	}
+
+	result := comparison == types.Worse
+	if !result {
+		t.Logf("Expected %s, but got %v. Before: %v, After: %v", types.Worse, comparison, before, after)
+	}
+	return result
+}
+
+// checkResourcesIncreased verifies that resources have increased on a node
+func checkResourcesIncreased(t *testing.T, node *mockNode, before types.Resources) bool {
+	after, err := node.client.freeResources(t, node.dmsContext, node.password)
+	if err != nil {
+		t.Logf("Error getting free resources: %v", err)
+		return false
+	}
+
+	comparison, err := after.Compare(before)
+	if err != nil {
+		t.Logf("Error comparing resources: %v", err)
+		return false
+	}
+
+	result := comparison == types.Better
+	if !result {
+		t.Logf("Expected %s, but got %v. Before: %v, After: %v", types.Better, comparison, before, after)
+	}
+	return result
+}
+
+// checkResourcesEqual verifies that resources are equal on a node
+func checkResourcesEqual(t *testing.T, node *mockNode, expected types.Resources) bool {
+	actual, err := node.client.freeResources(t, node.dmsContext, node.password)
+	if err != nil {
+		t.Logf("Error getting free resources: %v", err)
+		return false
+	}
+
+	result := actual.Equal(expected)
+	if !result {
+		t.Logf("Expected resources to be equal, but got %v", actual)
+	}
+	return result
 }

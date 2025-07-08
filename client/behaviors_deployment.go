@@ -118,3 +118,23 @@ func (c *Client) DeploymentNew(ctx context.Context, req node.NewDeploymentReques
 	err = c.unmarshalResponse(resp, &response)
 	return response, err
 }
+
+func (c *Client) DeploymentUpdate(
+	ctx context.Context, req node.UpdateDeploymentRequest,
+	opts ...Option,
+) (node.UpdateDeploymentResponse, error) {
+	var response node.UpdateDeploymentResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentUpdateBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentUpdateBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}

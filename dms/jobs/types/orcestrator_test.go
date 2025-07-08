@@ -44,6 +44,11 @@ func TestDeploymentStatus(t *testing.T) {
 			want: "Running",
 		},
 		{
+			name: "Updating",
+			d:    DeploymentStatusUpdating,
+			want: "Updating",
+		},
+		{
 			name: "Failed",
 			d:    DeploymentStatusFailed,
 			want: "Failed",

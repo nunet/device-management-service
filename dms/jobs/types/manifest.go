@@ -89,6 +89,16 @@ func (mf *EnsembleManifest) IsTerminatedTask(name string) bool {
 	return false
 }
 
+func (mf *EnsembleManifest) Allocation(id string) (AllocationManifest, bool) {
+	a, ok := mf.Allocations[id]
+	return a, ok
+}
+
+func (mf *EnsembleManifest) Node(name string) (NodeManifest, bool) {
+	n, ok := mf.Nodes[name]
+	return n, ok
+}
+
 func (mf *EnsembleManifest) JSON() ([]byte, error) {
 	data, err := json.MarshalIndent(mf, "", "  ")
 	if err != nil {

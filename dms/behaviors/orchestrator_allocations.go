@@ -32,6 +32,16 @@ type SubnetDNSAddRecordsResponse struct {
 	Error string
 }
 
+type SubnetDNSRemoveRecordsRequest struct {
+	SubnetID    string
+	DomainNames []string
+}
+
+type SubnetDNSRemoveRecordsResponse struct {
+	OK    bool
+	Error string
+}
+
 type SubnetMapPortRequest struct {
 	SubnetID   string
 	Protocol   string
@@ -42,6 +52,40 @@ type SubnetMapPortRequest struct {
 }
 
 type SubnetMapPortResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetUnmapPortRequest struct {
+	SubnetID   string
+	Protocol   string
+	SourceIP   string
+	SourcePort string
+	DestIP     string
+	DestPort   string
+}
+
+type SubnetUnmapPortResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetAcceptPeersRequest struct {
+	SubnetID            string
+	PartialRoutingTable map[string]string // ip -> peerID
+}
+
+type SubnetAcceptPeersResponse struct {
+	OK    bool
+	Error string
+}
+
+type SubnetRemovePeersRequest struct {
+	SubnetID            string
+	PartialRoutingTable map[string]string // ip -> peerID
+}
+
+type SubnetRemovePeersResponse struct {
 	OK    bool
 	Error string
 }

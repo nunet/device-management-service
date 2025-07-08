@@ -32,6 +32,8 @@ type Provisioner struct {
 	cancel         context.CancelFunc
 	actor          actor.Actor
 	subnetManifest SubnetManifest
+
+	lock sync.Mutex
 }
 
 // NewProvisioner creates a new Provisioner instance
@@ -78,29 +80,19 @@ func (p *Provisioner) Provision(
 }
 
 func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.EnsembleManifest, error) {
-	for allocName, allocManifest := range manifest.Allocations {
-		ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
-		log.Debug("Generated IP", ip, "for alllocation", allocName)
+	for allocName := range manifest.Allocations {
+		err := p.addAllocationToSubnet(manifest, allocName)
 		if err != nil {
-			return manifest, fmt.Errorf("error getting next IP: %w", err)
+			return manifest,
+				fmt.Errorf("error adding allocation %s to subnet: %w", allocName, err)
 		}
-		p.subnetManifest.RoutingTable[ip.String()] = manifest.Nodes[allocManifest.NodeID].Peer
-		p.subnetManifest.IndexRoutingTable[allocName] = ip.String()
-		p.subnetManifest.UsedIPs[ip.String()] = true
 
-		if _, ok := manifest.Allocations[allocName]; ok {
-			err := manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
-				alloc.PrivAddr = ip.String()
-			})
-			if err != nil {
-				return manifest, fmt.Errorf("error updating allocation manifest: %w", err)
-			}
+		err = manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
+			alloc.PrivAddr = p.subnetManifest.IndexRoutingTable[allocName]
+		})
+		if err != nil {
+			return manifest, fmt.Errorf("error updating allocation %s: %w", allocName, err)
 		}
-	}
-
-	dnsRecords := make(map[string]string)
-	for allocName, allocManifest := range manifest.Allocations {
-		dnsRecords[allocManifest.DNSName] = p.subnetManifest.IndexRoutingTable[allocName]
 	}
 
 	// handles to request subnetcreate
@@ -131,7 +123,7 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.
 		p.subnetManifest.UsedIPs[ip.String()] = true
 
 		subCreateHandles = append(subCreateHandles, p.actor.Supervisor())
-		dnsRecords[orchSubnetName] = p.subnetManifest.IndexRoutingTable[orchSubnetName]
+		p.subnetManifest.DNSRecords[orchSubnetName] = p.subnetManifest.IndexRoutingTable[orchSubnetName]
 	}
 
 	// 1.a create subnet in each peer
@@ -143,7 +135,7 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.
 	// if orchestrator should join subnet, setup with one behavior
 	// this doesn't look very good but let's address with #893
 	if manifest.Subnet.Join {
-		err := p.orchestratorJoinSubnet(manifest.ID, p.subnetManifest.IndexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(manifest.ID, p.subnetManifest.IndexRoutingTable, p.subnetManifest.DNSRecords)
 		if err != nil {
 			return manifest, fmt.Errorf("error joining subnet: %w", err)
 		}
@@ -156,7 +148,7 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.
 	}
 
 	// 1.c configure DNS
-	err = p.addDNSRecords(manifest.ID, subReqs, dnsRecords)
+	err = p.addDNSRecords(manifest.ID, subReqs, p.subnetManifest.DNSRecords)
 	if err != nil {
 		return manifest, fmt.Errorf("error adding dns records to subnet: %w", err)
 	}

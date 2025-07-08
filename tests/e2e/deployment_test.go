@@ -18,7 +18,7 @@ import (
 
 func DeploymentTest(suite *TestSuite) {
 	suite.Run("must be able to deploy nginx demo with storage", func() {
-		// deploy nginx.yaml to node1 using node2's orchestrator
+		// deploy nginx.yaml to node1 using deployer's orchestrator
 		node1 := suite.nodes[0]
 		hostname, err := os.Hostname()
 		suite.Require().NoError(err)
@@ -32,15 +32,17 @@ func DeploymentTest(suite *TestSuite) {
 		freeResourcesBefore, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
 		suite.Require().NoError(err)
 
-		// Deploy nginx.yaml from node2's orchestrator.
-		node2 := suite.nodes[1]
-		deploymentResult := node2.client.deploy(suite.T(), node2.userContext, node2.password, filepath.Join(node1.config.WorkDir, "nginx-storage.yaml"))
+		// Deploy nginx.yaml from deployer's orchestrator.
+		deployer := suite.nodes[1]
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(node1.config.WorkDir, "nginx-storage.yaml"))
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deploymentResult)
 
 		// Wait until the deployment status is "Running".
 		suite.Require().Eventually(func() bool {
-			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
 			suite.T().Log("Deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
@@ -54,12 +56,12 @@ func DeploymentTest(suite *TestSuite) {
 		// TODO: check port mapping
 
 		// Shutdown the nginx deployment.
-		shutdownRes := node2.client.shutdownDeployment(suite.T(), node2.userContext, node2.password, manifestID)
+		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, manifestID)
 		suite.Contains(shutdownRes, `"Error": ""`)
 
 		// wait for the ensemble to be shutdown
 		suite.Require().Eventually(func() bool {
-			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
+			status := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, manifestID)
 			suite.T().Log("deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
@@ -71,27 +73,27 @@ func DeploymentTest(suite *TestSuite) {
 	})
 
 	suite.Run("allocation of type TASK: deploy docker hello-world", func() {
-		node2 := suite.nodes[1]
-		deployment2Result := node2.client.deploy(
-			suite.T(), node2.userContext, node2.password,
+		deployer := suite.nodes[1]
+		deployment2Result := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "ensembles", "hello.yaml"),
 		)
 		suite.Contains(deployment2Result, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deployment2Result)
 
 		suite.Require().Eventually(func() bool {
-			status := node2.client.deploymentStatus(suite.T(), node2.userContext, node2.password, manifestID)
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
 			suite.T().Log("Second deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Hello-world deployment did not reach Running status")
 
 		// Shutdown the hello-world deployment.
-		shutdownRes := node2.client.shutdownDeployment(suite.T(), node2.dmsContext, node2.password, manifestID)
+		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.dmsContext, deployer.password, manifestID)
 		suite.Require().Contains(shutdownRes, `"Error": ""`)
 
 		// wait for the ensemble to be shutdown
 		suite.Require().Eventually(func() bool {
-			status := node2.client.deploymentStatus(suite.T(), node2.dmsContext, node2.password, manifestID)
+			status := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, manifestID)
 			suite.T().Log("deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
@@ -125,9 +127,8 @@ func DeploymentFullAssertion(suite *TestSuite) {
 	ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "multiple_nginx.yaml")
 
 	// process ensemble cfg as a helper for later assertions
-	r, err := cmd.ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, ensemblePath)
+	ensembleCfg, err := cmd.ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, ensemblePath)
 	suite.Require().NoError(err)
-	ensembleCfg := r.Ensemble
 
 	// 2. start deployment
 	deploymentResult := deployer.client.deploy(
@@ -171,7 +172,7 @@ func DeploymentFullAssertion(suite *TestSuite) {
 
 	//  3. assert running phase:
 	providers := []*mockNode{bobProvider, aliceProvider, carlProvider}
-	suite.assertRunningPhase(ensembleCfg, ensembleID, deployer, providers)
+	suite.assertRunningPhase(*ensembleCfg, ensembleID, deployer, providers)
 
 	// track executions IDs so that we cna check if it was shutdown
 	for _, provider := range providers {
@@ -393,4 +394,154 @@ func curlExecution(t *testing.T, client, server allocExecution) error {
 	}
 
 	return nil
+}
+
+func DeploymentUpdates(suite *TestSuite) {
+	// testRemoveNode tests removing a node from a multi-node ensemble
+	suite.Run("RemoveNode", func() {
+		// Deploy initial ensemble with multiple nodes
+		deployer := suite.nodes[0]
+		aliceProvider := suite.nodes[1]
+		bobProvider := suite.nodes[2]
+
+		// Get initial free resources to compare later
+		aliceResourcesBefore, err := aliceProvider.client.freeResources(suite.T(), aliceProvider.dmsContext, aliceProvider.password)
+		suite.Require().NoError(err)
+		bobResourcesBefore, err := bobProvider.client.freeResources(suite.T(), bobProvider.dmsContext, bobProvider.password)
+		suite.Require().NoError(err)
+
+		// deploy
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "multiple.yaml"),
+		)
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deploymentResult)
+
+		defer func() {
+			// Clean up and test shutdown, and if resources were freed
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Contains(shutdownRes, `"Error": ""`)
+
+			suite.Require().Eventually(func() bool {
+				return checkResourcesEqual(suite.T(), aliceProvider, aliceResourcesBefore)
+			}, 30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Alice")
+
+			suite.Require().Eventually(func() bool {
+				return checkResourcesEqual(suite.T(), bobProvider, bobResourcesBefore)
+			}, 30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Bob")
+		}()
+
+		// 	// wait for deployment running
+		suite.Require().Eventually(func() bool {
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.T().Log("Initial deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
+
+		bobResourcesAfterDeployment, err := bobProvider.client.freeResources(
+			suite.T(), bobProvider.dmsContext, bobProvider.password,
+		)
+		suite.NoError(err)
+		aliceResourcesAfterDeployment, err := aliceProvider.client.freeResources(
+			suite.T(), aliceProvider.dmsContext, aliceProvider.password,
+		)
+		suite.NoError(err)
+
+		// Verify free resources decreased on at least one node after deployment
+		suite.True(checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) ||
+			checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore))
+
+		// Update the ensemble by removing a node
+		updateResult := deployer.client.update(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "remove_node.yaml"), ensembleID,
+		)
+		suite.Require().Contains(updateResult, `"OK": true`)
+
+		// Deployment status should still be "Running"
+		status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().Equal(extractStatus(status), jobtypes.DeploymentStatusRunning.String())
+
+		suite.Require().Eventually(func() bool {
+			aliceIncreased := checkResourcesIncreased(suite.T(), aliceProvider, aliceResourcesAfterDeployment)
+			bobIncreased := checkResourcesIncreased(suite.T(), bobProvider, bobResourcesAfterDeployment)
+			return aliceIncreased || bobIncreased
+		}, 30*time.Second, 5*time.Second, "Free resources were not increased on any node after removing a node")
+	})
+
+	// testAddNode tests adding a node to a single-node ensemble
+	suite.Run("AddNode", func() {
+		// Deploy initial ensemble with a single node
+		deployer := suite.nodes[0]
+		aliceProvider := suite.nodes[1]
+		bobProvider := suite.nodes[2]
+
+		// Get initial free resources to compare later
+		aliceResourcesBefore, err := aliceProvider.client.freeResources(
+			suite.T(), aliceProvider.dmsContext, aliceProvider.password,
+		)
+		suite.Require().NoError(err)
+
+		bobResourcesBefore, err := bobProvider.client.freeResources(
+			suite.T(), bobProvider.dmsContext, bobProvider.password,
+		)
+		suite.Require().NoError(err)
+
+		// Deploy the initial ensemble with a single node
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "single_node.yaml"),
+		)
+		suite.Require().Contains(deploymentResult, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deploymentResult)
+
+		defer func() {
+			// cleanup: shutdown and check if resources were freed
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Require().Contains(shutdownRes, `"Error": ""`)
+
+			suite.Require().Eventually(func() bool {
+				return checkResourcesEqual(suite.T(), aliceProvider, aliceResourcesBefore) &&
+					checkResourcesEqual(suite.T(), bobProvider, bobResourcesBefore)
+			}, 30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Alice and Bob")
+		}()
+
+		// wait until deploymnet is runnning
+		suite.Require().Eventually(func() bool {
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.T().Log("Initial deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
+
+		// Verify resources were decreased on at least one node after initial deployment
+		suite.Require().True(
+			checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) ||
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore),
+		)
+
+		// Update the ensemble by adding a node
+		updateResult := deployer.client.update(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "add_node.yaml"), ensembleID,
+		)
+		suite.Require().Contains(updateResult, `"OK": true`)
+
+		suite.Require().Eventually(func() bool {
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.T().Log("Initial deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
+
+		// Deployment status should still be "Running"
+		status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().Equal(extractStatus(status), jobtypes.DeploymentStatusRunning.String())
+
+		// Validate both nodes have decreased resources after the update
+		suite.Require().Eventually(func() bool {
+			return checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) &&
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore)
+		}, 30*time.Second, 5*time.Second,
+			"free resources should be decreased in relation with the initial state (for both nodes)")
+	})
 }

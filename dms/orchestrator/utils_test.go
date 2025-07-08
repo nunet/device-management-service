@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -83,5 +84,41 @@ func TestOrderByDependency(t *testing.T) {
 		require.Len(t, order, 2)
 		require.ElementsMatch(t, order[0], []string{"vertex2", "vertex3", "vertex4"})
 		require.ElementsMatch(t, order[1], []string{"vertex1"})
+	})
+}
+
+func TestAggregateErrors(t *testing.T) {
+	// Define test error strings
+	testError1 := "error 1"
+	testError2 := "error 2"
+	testCombinedErrors := testError1 + "\n" + testError2
+
+	t.Run("no errors", func(t *testing.T) {
+		errCh := make(chan error)
+		close(errCh)
+
+		err := aggregateErrors(errCh)
+		require.NoError(t, err)
+	})
+
+	t.Run("single error", func(t *testing.T) {
+		errCh := make(chan error, 1)
+		errCh <- errors.New(testError1)
+		close(errCh)
+
+		err := aggregateErrors(errCh)
+		require.Error(t, err)
+		require.Equal(t, testError1, err.Error())
+	})
+
+	t.Run("multiple errors", func(t *testing.T) {
+		errCh := make(chan error, 2)
+		errCh <- errors.New(testError1)
+		errCh <- errors.New(testError2)
+		close(errCh)
+
+		err := aggregateErrors(errCh)
+		require.Error(t, err)
+		require.Equal(t, testCombinedErrors, err.Error())
 	})
 }

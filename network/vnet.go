@@ -401,9 +401,9 @@ func (*MemoryHost) DestroySubnet(string) error { return nil }
 
 func (*MemoryHost) AddSubnetPeer(string, string, string) error { return nil }
 
-func (*MemoryHost) RemoveSubnetPeer(string, string, string) error { return nil }
+func (*MemoryHost) RemoveSubnetPeers(string, map[string]string) error { return nil }
 
-func (*MemoryHost) AcceptSubnetPeer(string, string, string) error { return nil }
+func (*MemoryHost) AcceptSubnetPeers(string, map[string]string) error { return nil }
 
 func (*MemoryHost) MapPort(string, string, string, string, string, string) error { return nil }
 

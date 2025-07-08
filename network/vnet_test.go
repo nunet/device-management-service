@@ -370,8 +370,10 @@ func TestMiscNetworkMethods(t *testing.T) {
 
 		// Add/remove peers
 		assert.NoError(t, alice.AddSubnetPeer(subnetID, charlieID.String(), charlieIP))
-		assert.NoError(t, alice.RemoveSubnetPeer(subnetID, charlieID.String(), charlieIP))
-		assert.NoError(t, alice.AcceptSubnetPeer(subnetID, daveID.String(), daveIP))
+		assert.NoError(t, alice.RemoveSubnetPeers(
+			subnetID, map[string]string{charlieID.String(): charlieIP}))
+		assert.NoError(t, alice.AcceptSubnetPeers(subnetID,
+			map[string]string{daveID.String(): daveIP}))
 
 		// Port mapping
 		assert.NoError(t, alice.MapPort(subnetID, "tcp", aliceIP, srcPort, bobIP, dstPort))
