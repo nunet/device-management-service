@@ -23,9 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
-	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/utils/convert"
@@ -77,6 +75,11 @@ func (b *behaviorConfig) Run(ctx context.Context, dmsCli *cli.DmsCLI, opts actor
 
 type NewDeploymentRequestCmd struct {
 	Config string
+}
+
+type UpdateDeploymentRequestCmd struct {
+	NewDeploymentRequestCmd
+	EnsembleID string
 }
 
 type CapAnchorRequestCmd struct {
@@ -614,281 +617,66 @@ Examples:
 		Payload: func() any { return &NewDeploymentRequestCmd{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*NewDeploymentRequestCmd)
-			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file (required)")
+			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file")
 		},
 		RunFn: func(ctx context.Context, dmsCli *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*NewDeploymentRequestCmd)
+			reqCmd, ok := opts.Payload.(*NewDeploymentRequestCmd)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
 			}
 
-			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: dmsCli.FS()}, req.Config)
+			req := &node.NewDeploymentRequest{}
+
+			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: dmsCli.FS()}, reqCmd.Config)
 			if err != nil {
-				return nil, fmt.Errorf("failed to process config file: %w", err)
+				return nil, fmt.Errorf("failed to process ensemble config file: %w", err)
 			}
 
-			return dmsClient.DeploymentNew(ctx, *cfg, opts.MsgOpts...)
+			req.Ensemble = *cfg
+
+			return dmsClient.DeploymentNew(ctx, *req, opts.MsgOpts...)
 		},
 	},
 
-	behaviors.SubnetCreateBehavior.Static: {
-		Payload: func() any { return &orchestrator.SubnetCreateRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*orchestrator.SubnetCreateRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringToStringVarP(&p.RoutingTable, "routing-table", "r", nil, "subnet routing table (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*orchestrator.SubnetCreateRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetCreate(ctx, *req, opts.MsgOpts...)
-		},
+	// /dms/node/deployment/update
+	behaviors.DeploymentUpdateBehavior: {
 		Action: bInvoke,
-		Short:  "Create a subnet",
-		Long: `Invokes the /dms/node/subnet/create behavior on an actor
+		Short:  "Updates an existing deployment",
+		Long: `Invokes the /dms/node/deployment/update behavior on an actor
 
-This behavior creates a new subnet with the specified subnet ID, IP address, and routing table.
+This behavior updates an existing deployment.
 
 Examples:
-  nunet actor cmd --context user /dms/node/subnet/create --subnet-id <subnet_id> --ip <ip> --routing-table <routing_table>`,
-	},
-
-	behaviors.SubnetDestroyBehavior.Static: {
-		Payload: func() any { return &orchestrator.SubnetDestroyRequest{} },
+  nunet actor cmd --context user /dms/node/deployment/update --spec-file <path to ensemble specification file> --id <ensemble_id>`,
+		Payload: func() any { return &UpdateDeploymentRequestCmd{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*orchestrator.SubnetDestroyRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
+			p := payload.(*UpdateDeploymentRequestCmd)
+			cmd.Flags().StringVarP(&p.Config, "spec-file", "f", "ensemble.yaml", "path of the ensemble specification file")
+			cmd.Flags().StringVarP(&p.EnsembleID, "id", "i", "", "id of the ensemble to update (required)")
+			_ = cmd.MarkFlagRequired("id")
 		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*orchestrator.SubnetDestroyRequest)
+		RunFn: func(
+			ctx context.Context, dmsCli *cli.DmsCLI,
+			dmsClient client.DmsClient, opts actorCmdOptions,
+		) (any, error) {
+			reqCmd, ok := opts.Payload.(*UpdateDeploymentRequestCmd)
 			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetDestroy(ctx, *req, opts.MsgOpts...)
-		},
-		Action: bInvoke,
-		Short:  "Destroy a subnet",
-		Long: `Invokes the /dms/node/subnet/destroy behavior on an actor
-
-This behavior destroys the specified subnet.
-
-Examples:
-  nunet actor cmd --context user /dms/node/subnet/destroy --subnet-id <subnet_id>`,
-	},
-
-	behaviors.SubnetAddPeerBehavior: {
-		Payload: func() any { return &jobs.SubnetAddPeerRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetAddPeerRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
-			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "peer IP address (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
-			_ = cmd.MarkFlagRequired("peer-id")
-			_ = cmd.MarkFlagRequired("ip")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*jobs.SubnetAddPeerRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetAddPeer(ctx, *req, opts.MsgOpts...)
-		},
-		Action: bInvoke,
-		Short:  "Add a peer to a subnet",
-		Long: `Invokes the /dms/node/subnet/add-peer behavior on an actor
-
-This behavior adds a peer to the specified subnet.
-
-Examples:
-  nunet actor cmd --context user /dms/node/subnet/add-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
-	},
-
-	behaviors.SubnetRemovePeerBehavior: {
-		Payload: func() any { return &jobs.SubnetRemovePeerRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetRemovePeerRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
-			_ = cmd.MarkFlagRequired("peer-id")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*jobs.SubnetRemovePeerRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetRemovePeer(ctx, *req, opts.MsgOpts...)
-		},
-		Action: bInvoke,
-		Short:  "Remove a peer from a subnet",
-		Long: `Invokes the /dms/node/subnet/remove-peer behavior on an actor
-
-This behavior removes a peer from the specified subnet.
-
-Examples:
-  nunet actor cmd --context user /dms/node/subnet/remove-peer --subnet-id <subnet_id> --peer-id <peer_id>`,
-	},
-
-	behaviors.SubnetAcceptPeerBehavior: {
-		Payload: func() any { return &jobs.SubnetAcceptPeerRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetAcceptPeerRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringVarP(&p.PeerID, "peer-id", "p", "", "peer ID (required)")
-			cmd.Flags().StringVarP(&p.IP, "ip", "i", "", "peer IP address (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
-			_ = cmd.MarkFlagRequired("peer-id")
-			_ = cmd.MarkFlagRequired("ip")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*jobs.SubnetAcceptPeerRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetAcceptPeer(ctx, *req, opts.MsgOpts...)
-		},
-		Action: bInvoke,
-		Short:  "Accept a peer to a subnet",
-		Long: `Invokes the /dms/node/subnet/accept-peer behavior on an actor
-
-This behavior accepts a peer to the specified subnet.
-
-Examples:
-  nunet actor cmd --context user /dms/node/subnet/accept-peer --subnet-id <subnet_id> --peer-id <peer_id> --ip <ip>`,
-	},
-
-	behaviors.SubnetMapPortBehavior: {
-		Payload: func() any { return &jobs.SubnetMapPortRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetMapPortRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "i", "", "subnet-id (required)")
-			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
-			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
-			cmd.Flags().StringVarP(&p.SourcePort, "source-port", "o", "", "source port (required)")
-			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "D", "", "destination IP address (required)")
-			cmd.Flags().StringVarP(&p.DestPort, "dest-port", "n", "", "destination port (required)")
-			_ = cmd.MarkFlagRequired("protocol")
-			_ = cmd.MarkFlagRequired("source-ip")
-			_ = cmd.MarkFlagRequired("source-port")
-			_ = cmd.MarkFlagRequired("dest-ip")
-			_ = cmd.MarkFlagRequired("dest-port")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*jobs.SubnetMapPortRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetMapPort(ctx, *req, opts.MsgOpts...)
-		},
-		Action: bInvoke,
-		Short:  "Map a port",
-		Long: `Invokes the /dms/node/subnet/map-port behavior on an actor
-
-This behavior maps a port from the source to the destination.
-
-Examples:
-  nunet actor cmd --context user /dms/node/subnet/map-port --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
-	},
-
-	behaviors.SubnetDNSAddRecordsBehavior: {
-		Payload: func() any { return &jobs.SubnetDNSAddRecordsRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetDNSAddRecordsRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringToStringVarP(&p.Records, "records", "r", nil, "A record name (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
-			_ = cmd.MarkFlagRequired("records")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*jobs.SubnetDNSAddRecordsRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetDNSAddRecords(ctx, *req, opts.MsgOpts...)
-		},
-		Action: bInvoke,
-		Short:  "Add a DNS record",
-		Long: `Invokes the /dms/node/subnet/dns/add-record behavior on an actor
-This behavior adds a DNS record to the local resolver.
-
-Examples:
-  nunet actor cmd --context user /dms/node/subnet/dns/add-record --subnet-id <subnet_id> --name <record_name> --ip <ip>`,
-	},
-
-	behaviors.SubnetUnmapPortBehavior: {
-		Payload: func() any { return &jobs.SubnetUnmapPortRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetUnmapPortRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "i", "", "subnet-id (required)")
-			cmd.Flags().StringVarP(&p.Protocol, "protocol", "p", "", "protocol (required)")
-			cmd.Flags().StringVarP(&p.SourceIP, "source-ip", "s", "", "source IP address (required)")
-			cmd.Flags().StringVarP(&p.SourcePort, "source-port", "o", "", "source port (required)")
-			cmd.Flags().StringVarP(&p.DestIP, "dest-ip", "D", "", "destination IP address (required)")
-			cmd.Flags().StringVarP(&p.DestPort, "dest-port", "n", "", "destination port (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
-			_ = cmd.MarkFlagRequired("protocol")
-			_ = cmd.MarkFlagRequired("source-ip")
-			_ = cmd.MarkFlagRequired("source-port")
-			_ = cmd.MarkFlagRequired("dest-ip")
-			_ = cmd.MarkFlagRequired("dest-port")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*jobs.SubnetUnmapPortRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.SubnetUnmapPort(ctx, *req, opts.MsgOpts...)
-		},
-		Action: bInvoke,
-		Short:  "Unmap a port",
-		Long: `Invokes the /dms/node/subnet/unmap-port behavior on an actor
-
-This behavior removes a port mapping.
-
-Examples:
-  nunet actor cmd --context user /dms/node/subnet/unmap-port --subnet-id <subnet_id> --protocol <protocol> --source-ip <source_ip> --source-port <source_port> --dest-ip <dest_ip> --dest-port <dest_port>`,
-	},
-
-	behaviors.SubnetDNSRemoveRecordBehavior: {
-		Payload: func() any { return &jobs.SubnetDNSRemoveRecordRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*jobs.SubnetDNSRemoveRecordRequest)
-
-			cmd.Flags().StringVarP(&p.SubnetID, "subnet-id", "s", "", "subnet ID (required)")
-			cmd.Flags().StringVarP(&p.DomainName, "domain-name", "n", "", "A record name (required)")
-			_ = cmd.MarkFlagRequired("subnet-id")
-			_ = cmd.MarkFlagRequired("name")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*jobs.SubnetDNSRemoveRecordRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
+				return nil, fmt.Errorf("failed to encode payload")
 			}
 
-			return dmsClient.SubnetDNSRemoveRecord(ctx, *req, opts.MsgOpts...)
+			req := &node.UpdateDeploymentRequest{
+				EnsembleID: reqCmd.EnsembleID,
+			}
+
+			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: dmsCli.FS()}, reqCmd.Config)
+			if err != nil {
+				return nil, fmt.Errorf("failed to process ensemble config file: %w", err)
+			}
+
+			req.Ensemble = *cfg
+
+			return dmsClient.DeploymentUpdate(ctx, *req, opts.MsgOpts...)
 		},
-		Action: bInvoke,
-		Short:  "Remove a DNS record",
-		Long: `Invokes the /dms/node/subnet/dns/remove-record behavior on an actor
-
-This behavior removes a DNS record from the local resolver.
-
-Examples:
-
-  nunet actor cmd --context user /dms/node/subnet/dns/remove-record --subnet-id <subnet_id> --name <record_name>`,
 	},
 
 	behaviors.ResourcesAllocatedBehavior: {

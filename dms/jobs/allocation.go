@@ -511,17 +511,17 @@ func (a *Allocation) Start() error {
 	}
 
 	allocationBehaviors := map[string]func(actor.Envelope){
-		behaviors.AllocationStartBehavior:       a.handleAllocationStart,
-		behaviors.AllocationRestartBehavior:     a.handleAllocationRestart,
-		behaviors.SubnetAddPeerBehavior:         a.handleSubnetAddPeer,
-		behaviors.SubnetRemovePeerBehavior:      a.handleSubnetRemovePeer,
-		behaviors.SubnetAcceptPeerBehavior:      a.handleSubnetAcceptPeer,
-		behaviors.SubnetMapPortBehavior:         a.handleSubnetMapPort,
-		behaviors.SubnetUnmapPortBehavior:       a.handleSubnetUnmapPort,
-		behaviors.SubnetDNSAddRecordsBehavior:   a.handleSubnetDNSAddRecords,
-		behaviors.SubnetDNSRemoveRecordBehavior: a.handleSubnetDNSRemoveRecord,
-		behaviors.RegisterHealthcheckBehavior:   a.handleRegisterHealthcheck,
-		actor.HealthCheckBehavior:               a.handleHealthcheck,
+		behaviors.AllocationStartBehavior:        a.handleAllocationStart,
+		behaviors.AllocationRestartBehavior:      a.handleAllocationRestart,
+		behaviors.SubnetAddPeerBehavior:          a.handleSubnetAddPeer,
+		behaviors.SubnetRemovePeersBehavior:      a.handleSubnetRemovePeers,
+		behaviors.SubnetAcceptPeersBehavior:      a.handleSubnetAcceptPeers,
+		behaviors.SubnetMapPortBehavior:          a.handleSubnetMapPort,
+		behaviors.SubnetUnmapPortBehavior:        a.handleSubnetUnmapPort,
+		behaviors.SubnetDNSAddRecordsBehavior:    a.handleSubnetDNSAddRecords,
+		behaviors.SubnetDNSRemoveRecordsBehavior: a.handleSubnetDNSRemoveRecords,
+		behaviors.RegisterHealthcheckBehavior:    a.handleRegisterHealthcheck,
+		actor.HealthCheckBehavior:                a.handleHealthcheck,
 	}
 
 	// add allocation behaviours to actor

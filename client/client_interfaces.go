@@ -5,9 +5,7 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/node"
-	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 )
 
 // MessageOptions contains common options for actor message operations
@@ -127,7 +125,6 @@ type ActorBehaviorsClient interface {
 	ActorOnboardingBehaviorClient
 	ActorDeploymentBehaviorClient
 	ActorAllocationsBehaviorClient
-	ActorSubnetBehaviorClient
 	ActorResourcesBehaviorClient
 	ActorHardwareBehaviorClient
 	ActorCapBehaviorClient
@@ -205,44 +202,14 @@ type ActorDeploymentBehaviorClient interface {
 
 	// DeploymentNew creates a new deployment
 	DeploymentNew(ctx context.Context, req node.NewDeploymentRequest, opts ...Option) (node.NewDeploymentResponse, error)
+
+	// DeploymentUpdate updates a running deployment
+	DeploymentUpdate(ctx context.Context, req node.UpdateDeploymentRequest, opts ...Option) (node.UpdateDeploymentResponse, error)
 }
 
 // ActorAllocationsBehaviorClient provides methods for allocations view
 type ActorAllocationsBehaviorClient interface {
 	AllocationsList(ctx context.Context, opts ...Option) (node.AllocationsListResponse, error)
-}
-
-// ActorSubnetBehaviorClient provides methods for subnet management
-type ActorSubnetBehaviorClient interface {
-	// SubnetCreate creates a new subnet
-	SubnetCreate(ctx context.Context, req orchestrator.SubnetCreateRequest, opts ...Option) (orchestrator.SubnetCreateResponse, error)
-
-	// SubnetDestroy destroys a subnet
-	SubnetDestroy(ctx context.Context, req orchestrator.SubnetDestroyRequest, opts ...Option) (orchestrator.SubnetDestroyResponse, error)
-
-	// SubnetJoin joins a subnet
-	SubnetJoin(ctx context.Context, req orchestrator.SubnetJoinRequest, opts ...Option) (orchestrator.SubnetJoinResponse, error)
-
-	// SubnetAddPeer adds a peer to a subnet
-	SubnetAddPeer(ctx context.Context, req jobs.SubnetAddPeerRequest, opts ...Option) (jobs.SubnetAddPeerResponse, error)
-
-	// SubnetRemovePeer removes a peer from a subnet
-	SubnetRemovePeer(ctx context.Context, req jobs.SubnetRemovePeerRequest, opts ...Option) (jobs.SubnetRemovePeerResponse, error)
-
-	// SubnetAcceptPeer accepts a peer in a subnet
-	SubnetAcceptPeer(ctx context.Context, req jobs.SubnetAcceptPeerRequest, opts ...Option) (jobs.SubnetAcceptPeerResponse, error)
-
-	// SubnetMapPort maps a port in a subnet
-	SubnetMapPort(ctx context.Context, req jobs.SubnetMapPortRequest, opts ...Option) (jobs.SubnetMapPortResponse, error)
-
-	// SubnetUnmapPort unmaps a port in a subnet
-	SubnetUnmapPort(ctx context.Context, req jobs.SubnetUnmapPortRequest, opts ...Option) (jobs.SubnetUnmapPortResponse, error)
-
-	// SubnetDNSAddRecords adds DNS records to a subnet
-	SubnetDNSAddRecords(ctx context.Context, req jobs.SubnetDNSAddRecordsRequest, opts ...Option) (jobs.SubnetDNSAddRecordsResponse, error)
-
-	// SubnetDNSRemoveRecord removes a DNS record from a subnet
-	SubnetDNSRemoveRecord(ctx context.Context, req jobs.SubnetDNSRemoveRecordRequest, opts ...Option) (jobs.SubnetDNSRemoveRecordResponse, error)
 }
 
 // ActorResourcesBehaviorClient provides methods for resource management

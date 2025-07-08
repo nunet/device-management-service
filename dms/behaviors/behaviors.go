@@ -31,6 +31,7 @@ const (
 	DeploymentRevertBehavior     = "/dms/deployment/revert"
 
 	NewDeploymentBehavior      = "/dms/node/deployment/new"
+	DeploymentUpdateBehavior   = "/dms/node/deployment/update"
 	DeploymentListBehavior     = "/dms/node/deployment/list"
 	DeploymentLogsBehavior     = "/dms/node/deployment/logs"
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
@@ -72,13 +73,13 @@ const (
 	AllocationRestartBehavior   = "/dms/allocation/restart"
 	RegisterHealthcheckBehavior = "/dms/actor/healthcheck/register"
 
-	SubnetAddPeerBehavior         = AllocationNamespace + "/subnet/add-peer"
-	SubnetRemovePeerBehavior      = AllocationNamespace + "/subnet/remove-peer"
-	SubnetAcceptPeerBehavior      = AllocationNamespace + "/subnet/accept-peer"
-	SubnetMapPortBehavior         = AllocationNamespace + "/subnet/map-port"
-	SubnetUnmapPortBehavior       = AllocationNamespace + "/subnet/unmap-port"
-	SubnetDNSAddRecordsBehavior   = AllocationNamespace + "/subnet/dns/add-records"
-	SubnetDNSRemoveRecordBehavior = AllocationNamespace + "/subnet/dns/remove-record"
+	SubnetAddPeerBehavior          = AllocationNamespace + "/subnet/add-peer"
+	SubnetRemovePeersBehavior      = AllocationNamespace + "/subnet/remove-peers"
+	SubnetAcceptPeersBehavior      = AllocationNamespace + "/subnet/accept-peers"
+	SubnetMapPortBehavior          = AllocationNamespace + "/subnet/map-port"
+	SubnetUnmapPortBehavior        = AllocationNamespace + "/subnet/unmap-port"
+	SubnetDNSAddRecordsBehavior    = AllocationNamespace + "/subnet/dns/add-records"
+	SubnetDNSRemoveRecordsBehavior = AllocationNamespace + "/subnet/dns/remove-records"
 
 	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
 )

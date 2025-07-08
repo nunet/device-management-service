@@ -13,6 +13,7 @@ import (
 	"errors"
 
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 type (
@@ -38,15 +39,16 @@ type EnsembleConfig struct {
 
 // EnsembleConfigV1 is version 1 of the configuration for an ensemble
 type EnsembleConfigV1 struct {
-	Metadata           map[string]string           `json:"metadata,omitempty"`   // metadata
-	EscalationStrategy EscalationStrategy          `json:"escalation_strategy"`  // escalation strategy (redeploy|teardown)
-	Allocations        map[string]AllocationConfig `json:"allocations"`          // (named) allocations in the ensemble
-	Nodes              map[string]NodeConfig       `json:"nodes"`                // (named) nodes in the ensemble
-	Edges              []EdgeConstraint            `json:"edges,omitempty"`      // network edge constraints
-	Supervisor         SupervisorConfig            `json:"supervisor,omitempty"` // supervision structure
-	Keys               map[string]string           `json:"keys,omitempty"`       // (named) ssh public keys relevant to the allocation
-	Scripts            map[string][]byte           `json:"scripts,omitempty"`    // (named) provisioning scripts
-	Subnet             SubnetConfig                `json:"subnet,omitempty"`     // subnet config
+	EscalationStrategy EscalationStrategy          `json:"escalation_strategy"`     // escalation strategy (redeploy|teardown)
+	Allocations        map[string]AllocationConfig `json:"allocations"`             // (named) allocations in the ensemble
+	Nodes              map[string]NodeConfig       `json:"nodes"`                   // (named) nodes in the ensemble
+	Edges              []EdgeConstraint            `json:"edges,omitempty"`         // network edge constraints
+	Supervisor         SupervisorConfig            `json:"supervisor,omitempty"`    // supervision structure
+	Keys               map[string]string           `json:"keys,omitempty"`          // (named) ssh public keys relevant to the allocation
+	Scripts            map[string][]byte           `json:"scripts,omitempty"`       // (named) provisioning scripts
+	Subnet             SubnetConfig                `json:"subnet,omitempty"`        // subnet config
+	ExcludePeers       []string                    `json:"exclude_peers,omitempty"` // list of peers to not deploy on
+	Metadata           map[string]string           `json:"metadata,omitempty"`      // metadata (arbitrary key-value pairs)
 }
 
 type EscalationStrategy string
@@ -165,8 +167,8 @@ func (e *EnsembleConfig) Allocations() map[string]AllocationConfig {
 	return e.V1.Allocations
 }
 
-func (e *EnsembleConfig) Allocation(allocID string) (AllocationConfig, bool) {
-	a, ok := e.V1.Allocations[allocID]
+func (e *EnsembleConfig) Allocation(name string) (AllocationConfig, bool) {
+	a, ok := e.V1.Allocations[name]
 	return a, ok
 }
 
@@ -215,6 +217,30 @@ func (e *EnsembleConfig) EdgeConstraints() []EdgeConstraint {
 
 func (e *EnsembleConfig) Subnet() SubnetConfig {
 	return e.V1.Subnet
+}
+
+func (e *EnsembleConfig) AddNodeAndAllocations(
+	name string, node NodeConfig,
+	allocs map[string]AllocationConfig,
+) {
+	e.V1.Nodes[name] = node
+
+	for k, v := range allocs {
+		if utils.SliceContains(node.Allocations, k) {
+			e.V1.Allocations[k] = v
+		}
+	}
+}
+
+func (e *EnsembleConfig) RemoveNodeAndAllocations(
+	nodeName string,
+) {
+	if nodeCfg, ok := e.Node(nodeName); ok {
+		delete(e.V1.Nodes, nodeName)
+		for _, alloc := range nodeCfg.Allocations {
+			delete(e.V1.Allocations, alloc)
+		}
+	}
 }
 
 func (e *EnsembleConfig) Clone() EnsembleConfig {

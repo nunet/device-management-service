@@ -90,6 +90,12 @@ func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, expiry time.Tim
 
 	bidMap := make(map[string][]jtypes.Bid)
 	peerExclusion := make(map[string]struct{})
+
+	// do not bid peers excluded from config
+	for _, peerID := range cfg.V1.ExcludePeers {
+		peerExclusion[peerID] = struct{}{}
+	}
+
 	addBid := func(bid jtypes.Bid) bool {
 		// if peer is already specified on another node, ignore the bid
 		if _, ok := nodeForTargetPeer[bid.Peer()]; ok {

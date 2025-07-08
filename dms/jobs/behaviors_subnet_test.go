@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 )
 
 func TestAllocation_handleSubnetAddPeer(t *testing.T) {
@@ -13,7 +15,7 @@ func TestAllocation_handleSubnetAddPeer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, alloc)
 
-	req := SubnetAddPeerRequest{
+	req := behaviors.SubnetAddPeerRequest{
 		SubnetID: "test-subnet-id",
 		PeerID:   "test-peer-id",
 		IP:       "192.168.1.10",
@@ -33,7 +35,7 @@ func TestAllocation_handleSubnetAddPeer(t *testing.T) {
 	sent := noopActor.GetSentMessages()
 	require.Len(t, sent, 1)
 
-	var resp SubnetAddPeerResponse
+	var resp behaviors.SubnetAddPeerResponse
 	err = json.Unmarshal(sent[0].Message, &resp)
 	require.NoError(t, err)
 
@@ -46,17 +48,18 @@ func TestAllocation_handleSubnetAcceptPeer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, alloc)
 
-	req := SubnetAcceptPeerRequest{
+	req := behaviors.SubnetAcceptPeersRequest{
 		SubnetID: "test-subnet-id",
-		PeerID:   "test-peer-id",
-		IP:       "192.168.1.10",
+		PartialRoutingTable: map[string]string{
+			"test-peer-id": "192.168.1.10",
+		},
 	}
 
 	reqBytes, err := json.Marshal(req)
 	require.NoError(t, err)
 
 	envelope := createTestEnvelope(t, reqBytes)
-	alloc.handleSubnetAcceptPeer(envelope)
+	alloc.handleSubnetAcceptPeers(envelope)
 
 	// check actor behavior
 	noopActor, ok := alloc.Actor.(*actor.NoopActor)
@@ -66,7 +69,7 @@ func TestAllocation_handleSubnetAcceptPeer(t *testing.T) {
 	sent := noopActor.GetSentMessages()
 	require.Len(t, sent, 1)
 
-	var resp SubnetAcceptPeerResponse
+	var resp behaviors.SubnetAcceptPeersResponse
 	err = json.Unmarshal(sent[0].Message, &resp)
 	require.NoError(t, err)
 
@@ -79,7 +82,7 @@ func TestAllocation_handleSubnetMapPort(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, alloc)
 
-	req := SubnetMapPortRequest{
+	req := behaviors.SubnetMapPortRequest{
 		SubnetID:   "test-subnet-id",
 		Protocol:   "tcp",
 		SourceIP:   "192.168.1.10",
@@ -102,7 +105,7 @@ func TestAllocation_handleSubnetMapPort(t *testing.T) {
 	sent := noopActor.GetSentMessages()
 	require.Len(t, sent, 1)
 
-	var resp SubnetMapPortResponse
+	var resp behaviors.SubnetMapPortResponse
 	err = json.Unmarshal(sent[0].Message, &resp)
 	require.NoError(t, err)
 
@@ -115,7 +118,7 @@ func TestAllocation_handleSubnetDNSAddRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, alloc)
 
-	req := SubnetDNSAddRecordsRequest{
+	req := behaviors.SubnetDNSAddRecordsRequest{
 		SubnetID: "test-subnet-id",
 		Records: map[string]string{
 			"test.local":    "192.168.1.10",
@@ -137,7 +140,7 @@ func TestAllocation_handleSubnetDNSAddRecords(t *testing.T) {
 	sent := noopActor.GetSentMessages()
 	require.Len(t, sent, 1)
 
-	var resp SubnetDNSAddRecordsResponse
+	var resp behaviors.SubnetDNSAddRecordsResponse
 	err = json.Unmarshal(sent[0].Message, &resp)
 	require.NoError(t, err)
 
@@ -150,7 +153,7 @@ func TestAllocation_handleSubnetUnmapPort(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, alloc)
 
-	req := SubnetUnmapPortRequest{
+	req := behaviors.SubnetUnmapPortRequest{
 		SubnetID:   "test-subnet-id",
 		Protocol:   "tcp",
 		SourceIP:   "192.168.1.10",
@@ -173,7 +176,7 @@ func TestAllocation_handleSubnetUnmapPort(t *testing.T) {
 	sent := noopActor.GetSentMessages()
 	require.Len(t, sent, 1)
 
-	var resp SubnetUnmapPortResponse
+	var resp behaviors.SubnetUnmapPortResponse
 	err = json.Unmarshal(sent[0].Message, &resp)
 	require.NoError(t, err)
 
@@ -186,16 +189,16 @@ func TestAllocation_handleSubnetDNSRemoveRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, alloc)
 
-	req := SubnetDNSRemoveRecordRequest{
-		SubnetID:   "test-subnet-id",
-		DomainName: "test.local",
+	req := behaviors.SubnetDNSRemoveRecordsRequest{
+		SubnetID:    "test-subnet-id",
+		DomainNames: []string{"a"},
 	}
 
 	reqBytes, err := json.Marshal(req)
 	require.NoError(t, err)
 
 	envelope := createTestEnvelope(t, reqBytes)
-	alloc.handleSubnetDNSRemoveRecord(envelope)
+	alloc.handleSubnetDNSRemoveRecords(envelope)
 
 	// check actor behavior
 	noopActor, ok := alloc.Actor.(*actor.NoopActor)
@@ -205,7 +208,7 @@ func TestAllocation_handleSubnetDNSRemoveRecord(t *testing.T) {
 	sent := noopActor.GetSentMessages()
 	require.Len(t, sent, 1)
 
-	var resp SubnetDNSRemoveRecordResponse
+	var resp behaviors.SubnetDNSRemoveRecordsResponse
 	err = json.Unmarshal(sent[0].Message, &resp)
 	require.NoError(t, err)
 
@@ -213,22 +216,21 @@ func TestAllocation_handleSubnetDNSRemoveRecord(t *testing.T) {
 	require.Empty(t, resp.Error)
 }
 
-func TestAllocation_handleSubnetRemovePeer(t *testing.T) {
+func TestAllocation_handleSubnetRemovePeers(t *testing.T) {
 	alloc, err := createTestAllocation(t)
 	require.NoError(t, err)
 	require.NotNil(t, alloc)
 
-	req := SubnetRemovePeerRequest{
-		IP:       "192.168.1.10",
-		SubnetID: "test-subnet-id",
-		PeerID:   "test-peer-id",
+	req := behaviors.SubnetRemovePeersRequest{
+		SubnetID:            "test-subnet-id",
+		PartialRoutingTable: map[string]string{},
 	}
 
 	reqBytes, err := json.Marshal(req)
 	require.NoError(t, err)
 
 	envelope := createTestEnvelope(t, reqBytes)
-	alloc.handleSubnetRemovePeer(envelope)
+	alloc.handleSubnetRemovePeers(envelope)
 
 	// check actor behavior
 	noopActor, ok := alloc.Actor.(*actor.NoopActor)
@@ -238,7 +240,7 @@ func TestAllocation_handleSubnetRemovePeer(t *testing.T) {
 	sent := noopActor.GetSentMessages()
 	require.Len(t, sent, 1)
 
-	var resp SubnetRemovePeerResponse
+	var resp behaviors.SubnetRemovePeersResponse
 	err = json.Unmarshal(sent[0].Message, &resp)
 	require.NoError(t, err)
 

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"gitlab.com/nunet/device-management-service/dms/node"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
 // TestProcessEnsembleYaml tests the ProcessEnsembleYaml function using different ensemble configurations.
@@ -68,7 +68,7 @@ scripts:
 		filePath string
 		files    map[string]string
 		wantErr  bool
-		validate func(*testing.T, *node.NewDeploymentRequest)
+		validate func(*testing.T, *jobtypes.EnsembleConfig)
 	}{
 		{
 			name:     "invalid yaml format",
@@ -109,15 +109,15 @@ scripts:
 				"/etc/client_pem":            "client_pem",
 				"/etc/client_ca":             "client_ca",
 			},
-			validate: func(t *testing.T, result *node.NewDeploymentRequest) {
+			validate: func(t *testing.T, result *jobtypes.EnsembleConfig) {
 				require.NotNil(t, result)
-				require.NotNil(t, result.Ensemble.V1)
+				require.NotNil(t, result.V1)
 
-				assert.Len(t, result.Ensemble.V1.Allocations, 1)
-				assert.Len(t, result.Ensemble.V1.Allocations["alloc1"].Volumes, 1)
-				assert.Len(t, result.Ensemble.V1.Allocations["alloc1"].Keys, 1)
-				assert.Len(t, result.Ensemble.V1.Nodes, 1)
-				assert.Len(t, result.Ensemble.V1.Scripts, 1)
+				assert.Len(t, result.V1.Allocations, 1)
+				assert.Len(t, result.V1.Allocations["alloc1"].Volumes, 1)
+				assert.Len(t, result.V1.Allocations["alloc1"].Keys, 1)
+				assert.Len(t, result.V1.Nodes, 1)
+				assert.Len(t, result.V1.Scripts, 1)
 			},
 		},
 	}

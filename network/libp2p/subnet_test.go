@@ -63,7 +63,12 @@ func TestSubnetAddRemovePeer(t *testing.T) {
 
 	assert.Equal(t, peer1.Host.ID(), peerID)
 
-	err = peer1.RemoveSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
+	err = peer1.RemoveSubnetPeers(
+		"subnet1",
+		map[string]string{
+			"10.0.0.2": peer1.Host.ID().String(),
+		},
+	)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(peer1.subnets))

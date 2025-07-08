@@ -123,10 +123,14 @@ type Network interface {
 	AddSubnetPeer(subnetID, peerID, ip string) error
 
 	// RemoveSubnetPeer removes a peer from the subnet
-	RemoveSubnetPeer(subnetID, peerID, ip string) error
+	//
+	// partialRoutingTable: ip -> peerID
+	RemoveSubnetPeers(subnetID string, partialRoutingTable map[string]string) error
 
 	// AcceptSubnetPeer accepts a peer to the subnet
-	AcceptSubnetPeer(subnetID, peerID, ip string) error
+	//
+	// partialRoutingTable: ip -> peerID
+	AcceptSubnetPeers(subnetID string, partialRoutingTable map[string]string) error
 
 	// MapPort maps a sourceIp:sourcePort to destIP:destPort
 	MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error

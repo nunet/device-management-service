@@ -11,7 +11,16 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
+	"gitlab.com/nunet/device-management-service/utils"
+)
+
+type recordsModificationType int
+
+const (
+	add recordsModificationType = iota
+	remove
 )
 
 var orchestratorJoinTimeout = 2 * time.Minute
@@ -21,8 +30,9 @@ type SubnetManifest struct {
 	GatewayIP         string            `json:"gateway_ip"`
 	BroadcastIP       string            `json:"broadcast_ip"`
 	UsedIPs           map[string]bool   `json:"used_ips"`
-	RoutingTable      map[string]string `json:"routing_table"`
+	RoutingTable      map[string]string `json:"routing_table"` // ip -> peerID
 	IndexRoutingTable map[string]string `json:"index_routing_table"`
+	DNSRecords        map[string]string `json:"dns_records"`
 }
 
 type subnetRequest struct {
@@ -83,7 +93,117 @@ func newSubnetManifest() (SubnetManifest, error) {
 		UsedIPs:           usedIPs,
 		RoutingTable:      make(map[string]string),
 		IndexRoutingTable: make(map[string]string),
+		DNSRecords:        make(map[string]string),
 	}, nil
+}
+
+func (p *Provisioner) addAllocationToSubnet(mf jtypes.EnsembleManifest, allocName string) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	if _, ok := p.subnetManifest.IndexRoutingTable[allocName]; ok {
+		log.Debugf("allocation %s already in subnet", allocName)
+		return nil
+	}
+
+	ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
+	if err != nil {
+		return fmt.Errorf("error getting next IP: %w", err)
+	}
+	allocManifest, ok := mf.Allocations[allocName]
+	if !ok {
+		return fmt.Errorf("allocation %s not found in manifest", allocName)
+	}
+
+	p.subnetManifest.RoutingTable[ip.String()] = mf.Nodes[allocManifest.NodeID].Peer
+	p.subnetManifest.IndexRoutingTable[allocName] = ip.String()
+	p.subnetManifest.DNSRecords[allocManifest.DNSName] = ip.String()
+	p.subnetManifest.UsedIPs[ip.String()] = true
+
+	log.Debugf("Added allocation %s with IP %s to subnet", allocName, ip)
+
+	return nil
+}
+
+func (o *BasicOrchestrator) removeAllocationsFromSubnet(
+	mf jtypes.EnsembleManifest, allocsNames []string,
+) error {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	for _, allocName := range allocsNames {
+		// Get the allocation from the manifest
+		allocManifest, ok := mf.Allocations[allocName]
+		if !ok {
+			log.Warnf(
+				"skipping subnet removal: allocation %s not found in manifest",
+				allocName,
+			)
+			continue
+		}
+
+		// Get the IP address for this allocation
+		ip, ok := o.subnetManifest.IndexRoutingTable[allocName]
+		if !ok {
+			log.Warnf(
+				"skipping subnet removal: allocation %s not found in index routing table",
+				allocName,
+			)
+			continue
+		}
+
+		// Remove the IP from the used IPs map
+		delete(o.subnetManifest.UsedIPs, ip)
+
+		// Remove the routing table entry
+		delete(o.subnetManifest.RoutingTable, ip)
+
+		// Remove the index routing table entry
+		delete(o.subnetManifest.IndexRoutingTable, allocName)
+
+		// Remove any DNS records associated with this allocation
+		if allocManifest.DNSName != "" {
+			delete(o.subnetManifest.DNSRecords, allocManifest.DNSName)
+		}
+
+		log.Debugf("Removed allocation %s with IP %s from subnet", allocName, ip)
+	}
+
+	return nil
+}
+
+func (o *BasicOrchestrator) getAllocIP(allocName string) (string, bool) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	ip, ok := o.subnetManifest.IndexRoutingTable[allocName]
+	if !ok {
+		return "", false
+	}
+	return ip, true
+}
+
+// TODO: make it as a method of subnetManifest
+// to be tackled here: https://gitlab.com/nunet/device-management-service/-/issues/909
+func (p *Provisioner) newSubnetRequests(mf jtypes.EnsembleManifest) ([]subnetRequest, error) {
+	// subnet config requests (add peer, dns, port map)
+	subReqs := []subnetRequest{}
+	for allocName, allocManifest := range mf.Allocations {
+		ip, ok := p.subnetManifest.IndexRoutingTable[allocName]
+		if !ok {
+			return nil, fmt.Errorf("ip not found for allocation %s", allocName)
+		}
+		nmf, ok := mf.Nodes[allocManifest.NodeID]
+		if !ok {
+			return nil, fmt.Errorf("node not found for allocation %s", allocName)
+		}
+		subReqs = append(subReqs, subnetRequest{
+			handle: allocManifest.Handle,
+			ip:     ip,
+			peerID: nmf.Peer,
+			ports:  allocManifest.Ports,
+		})
+	}
+
+	return subReqs, nil
 }
 
 func (p *Provisioner) createSubnet(
@@ -274,6 +394,69 @@ func (p *Provisioner) addDNSRecords(
 	return aggregateErrors(errCh)
 }
 
+func (p *Provisioner) removeDNSRecords(
+	manifestID string,
+	subReqs []subnetRequest, domainNames []string,
+) error {
+	wg := sync.WaitGroup{}
+	errCh := make(chan error, len(subReqs))
+
+	for _, req := range subReqs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			msg, err := actor.Message(
+				p.actor.Handle(),
+				req.handle,
+				behaviors.SubnetDNSRemoveRecordsBehavior,
+				behaviors.SubnetDNSRemoveRecordsRequest{
+					SubnetID:    manifestID,
+					DomainNames: domainNames,
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating subnet remove-dns-records message: %w", err)
+				return
+			}
+
+			replyCh, err := p.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking subnet remove-dns-records message: %w", err)
+				return
+			}
+
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response behaviors.SubnetDNSRemoveRecordsResponse
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling subnet remove-peer response: %w", err)
+					return
+				}
+
+				if !response.OK {
+					errCh <- fmt.Errorf("error sending dns records to be removed from peer: %s: %w", response.Error, ErrDeploymentFailed)
+					return
+				}
+
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("timeout removing dns records from subnet: %w", ErrDeploymentFailed)
+				return
+			}
+
+			log.Info("DNS records successfully removed from subnet on peer", req.handle)
+		}()
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	return aggregateErrors(errCh)
+}
+
 func (p *Provisioner) mapPorts(manifestID string, subReqs []subnetRequest) error {
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(subReqs))
@@ -385,16 +568,154 @@ func (p *Provisioner) orchestratorJoinSubnet(
 	return nil
 }
 
-// TODO: maybe use uber multierr
-func aggregateErrors(errCh chan error) error {
-	var aggErr error
-	for err := range errCh {
-		if aggErr == nil {
-			aggErr = err
-			continue
-		} else if err != nil {
-			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
-		}
+// It invokes an subnet update behavior on every peer within the subnet
+// with updates on:
+//  1. routing table
+//  2. dns records
+//
+// Usually used when allocations are added or removed
+func (p *Provisioner) updateSubnetAllocations(
+	mf jtypes.EnsembleManifest,
+	newDNSRecords, additionsRoutingTable map[string]string,
+) error {
+	subReqs, err := p.newSubnetRequests(mf)
+	if err != nil {
+		return fmt.Errorf("error creating subnet requests: %w", err)
 	}
-	return aggErr
+
+	// 1. send extend routing table with acceptPeersBehavior
+	err = p.acceptPeersSubnetBehavior(mf.ID, subReqs, additionsRoutingTable)
+	if err != nil {
+		return fmt.Errorf("error adding peers to subnet: %w", err)
+	}
+
+	// 2. dns records
+	err = p.addDNSRecords(mf.ID, subReqs, newDNSRecords)
+	if err != nil {
+		return fmt.Errorf("error adding dns records: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Provisioner) acceptPeersSubnetBehavior(
+	mfID string,
+	subReqs []subnetRequest, routingTable map[string]string,
+) error {
+	return p.modifyRoutingTableAllocations(mfID, add, subReqs, routingTable)
+}
+
+func (p *Provisioner) removePeersSubnetBehavior(
+	mfID string,
+	subReqs []subnetRequest, routingTable map[string]string,
+) error {
+	return p.modifyRoutingTableAllocations(mfID, remove, subReqs, routingTable)
+}
+
+func (p *Provisioner) modifyRoutingTableAllocations(
+	mfID string, modificationType recordsModificationType,
+	subReqs []subnetRequest, routingTable map[string]string,
+) error {
+	var (
+		behavior       string
+		operationName  string
+		errorMsgPrefix string
+		timeoutMsg     string
+		successMsg     string
+	)
+
+	switch modificationType {
+	case add:
+		behavior = behaviors.SubnetAcceptPeersBehavior
+		operationName = "accept-peer"
+		errorMsgPrefix = "adding new peers to subnet"
+		timeoutMsg = "timeout adding new peers to subnet"
+		successMsg = "new peers added to subnet"
+	case remove:
+		behavior = behaviors.SubnetRemovePeersBehavior
+		operationName = "remove-peer"
+		errorMsgPrefix = "removing peers from subnet"
+		timeoutMsg = "timeout removing peers from subnet"
+		successMsg = "peers removed from subnet"
+	}
+
+	wg := sync.WaitGroup{}
+	errCh := make(chan error, len(subReqs))
+
+	for _, req := range subReqs {
+		wg.Add(1)
+		go func(request subnetRequest) {
+			defer wg.Done()
+			msg, err := actor.Message(
+				p.actor.Handle(),
+				request.handle,
+				behavior,
+				behaviors.SubnetAcceptPeersRequest{ // Add/remove payload are equal
+					SubnetID:            mfID,
+					PartialRoutingTable: routingTable,
+				},
+				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+			)
+			if err != nil {
+				errCh <- fmt.Errorf("error creating subnet %s message: %w", operationName, err)
+				return
+			}
+
+			replyCh, err := p.actor.Invoke(msg)
+			if err != nil {
+				errCh <- fmt.Errorf("error invoking subnet %s message: %w", operationName, err)
+				return
+			}
+
+			var reply actor.Envelope
+			select {
+			case reply = <-replyCh:
+				defer reply.Discard()
+
+				var response behaviors.SubnetAcceptPeersResponse
+				if err := json.Unmarshal(reply.Message, &response); err != nil {
+					errCh <- fmt.Errorf("error unmarshalling subnet %s response: %w", operationName, err)
+					return
+				}
+
+				if !response.OK {
+					errCh <- fmt.Errorf("error %s: %s: %w", errorMsgPrefix, response.Error, ErrDeploymentFailed)
+					return
+				}
+
+			case <-time.After(2 * time.Minute):
+				errCh <- fmt.Errorf("%s: %w", timeoutMsg, ErrDeploymentFailed)
+				return
+			}
+
+			log.Info(successMsg, request.handle)
+		}(req)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	return aggregateErrors(errCh)
+}
+
+func (p *Provisioner) revertSubnetAllocationsUpdate(
+	mf jtypes.EnsembleManifest,
+	dnsRecords, partialRountingTable map[string]string,
+) {
+	subReqs, err := p.newSubnetRequests(mf)
+	if err != nil {
+		log.Errorf("Reverting subnet allocations update: error creating subnet requests: %w", err)
+	}
+
+	// 1. remove from routing table
+	err = p.removePeersSubnetBehavior(mf.ID, subReqs, partialRountingTable)
+	if err != nil {
+		log.Errorf("Reverting subnet allocations update: error removing peers from subnet: %w", err)
+	}
+
+	// 2. remove DNS records
+	err = p.removeDNSRecords(mf.ID, subReqs, utils.MapKeysToSlice(dnsRecords))
+	if err != nil {
+		log.Errorf("Reverting subnet allocations update: error removing dns records: %w", err)
+	}
 }

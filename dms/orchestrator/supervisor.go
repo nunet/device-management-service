@@ -169,6 +169,12 @@ func (s *Supervisor) registerHealthCheck(allocation jtypes.AllocationManifest, o
 	}
 }
 
+func (s *Supervisor) unregisterHealthCheck(allocationID string) {
+	s.lock.Lock()
+	delete(s.registeredHealthChecks, allocationID)
+	s.lock.Unlock()
+}
+
 func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) error {
 	if s.manifest.IsTerminatedTask(types.AllocationNameFromID(allocation.ID)) {
 		return nil
@@ -303,17 +309,16 @@ func (s *Supervisor) escalateFailure(allocation jtypes.AllocationManifest) error
 }
 
 // Update updates the supervisor with a new ensemble manifest.
-// TODO: this is just a placeholder implementation to demonstrate the update concept which is needed for #793.
-// TODO: unit tests
+//
+//  1. register new healthchecks and start healthchecking
+//  2. unregister healthchecks for removed allocations
+//  3. update manifest
+//
+// For 1. and 2., the updates will already be reflected on
+// the next ticker.
 func (s *Supervisor) Update(manifestReader jtypes.ManifestReader) {
 	manifest := manifestReader.Read()
-
-	// We need to handle 3 scenarios
-	// 1. Registering the healthchecks for new allocations
-	// 2. Update the manifest
-	// 3. Removing healthchecks for allocations that are no longer present
-	//
-	// 3 Will be taken care by 2 automatically on the next ticker.
+	log.Debug("updating supervisor")
 
 	// 1. Registering the healthchecks for just the new allocations
 	var wg sync.WaitGroup
@@ -332,16 +337,18 @@ func (s *Supervisor) Update(manifestReader jtypes.ManifestReader) {
 					log.Errorf("failed to register healthcheck for allocation: %s", err)
 				}
 			}(allocation)
+		} else {
+			// 2. unregister healthcheck if it is no longer present
+			s.unregisterHealthCheck(allocation.ID)
 		}
-
-		// TODO: unregister healthcheck if it is no longer present
 	}
 
-	// 2. Update the manifest
+	wg.Wait()
+
+	// 3. Update the manifest
 	s.lock.Lock()
 	s.manifest = manifest
 	s.lock.Unlock()
-	wg.Wait()
 }
 
 func (s *Supervisor) getAllocation(name string) (jtypes.AllocationManifest, bool) {

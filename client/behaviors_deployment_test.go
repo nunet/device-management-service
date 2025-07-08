@@ -264,3 +264,45 @@ func TestClient_DeploymentNew(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_DeploymentUpdate(t *testing.T) {
+	expectedPath := client.ActorInvokeEndpoint
+	expectedBehavior := behaviors.DeploymentUpdateBehavior
+	tests := []struct {
+		name    string
+		req     node.UpdateDeploymentRequest
+		resp    node.UpdateDeploymentResponse
+		opts    []client.Option
+		wantErr bool
+	}{
+		{
+			"success",
+			node.UpdateDeploymentRequest{
+				EnsembleID: "",
+				Ensemble:   jobtypes.EnsembleConfig{},
+			},
+			node.UpdateDeploymentResponse{
+				OK:    true,
+				Error: "",
+			},
+			nil,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _, err := makeMockBehaviorClient(t, expectedPath, func(t *testing.T, envelope *actor.Envelope) (int, any) {
+				assert.Equal(t, envelope.Behavior, expectedBehavior)
+				return 200, tt.resp
+			})
+			assert.NoError(t, err, "create client")
+
+			result, err := c.DeploymentUpdate(context.Background(), tt.req, tt.opts...)
+			if tt.wantErr {
+				assert.Error(t, err)
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, result, tt.resp)
+		})
+	}
+}

@@ -156,6 +156,9 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 	return nil
 }
 
+// TODO: This method isn't doing what its name implies.
+// This is basically Creating the subnet, not adding adding a peer to the subnet.
+// Move all this business logic to the CreateSubnet.
 func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	s, ok := l.subnets[subnetID]
 	if !ok {
@@ -230,7 +233,17 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	return nil
 }
 
-func (l *Libp2p) RemoveSubnetPeer(subnetID, peerID, ip string) error {
+func (l *Libp2p) RemoveSubnetPeers(subnetID string, partialRoutinTable map[string]string) error {
+	for ip, peerID := range partialRoutinTable {
+		err := l.removeSubnetPeer(subnetID, peerID, ip)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *Libp2p) removeSubnetPeer(subnetID, peerID, ip string) error {
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -269,7 +282,17 @@ delete_iface:
 	return nil
 }
 
-func (l *Libp2p) AcceptSubnetPeer(subnetID, peerID, ip string) error {
+func (l *Libp2p) AcceptSubnetPeers(subnetID string, partialRoutingTable map[string]string) error {
+	for ip, peerID := range partialRoutingTable {
+		err := l.acceptSubnetPeer(subnetID, peerID, ip)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *Libp2p) acceptSubnetPeer(subnetID, peerID, ip string) error {
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -285,8 +308,11 @@ func (l *Libp2p) AcceptSubnetPeer(subnetID, peerID, ip string) error {
 		return fmt.Errorf("failed to decode peer ID %s: %w", peerID, err)
 	}
 
-	s.info.rtable.Add(peerIDObj, ip)
+	if _, ok := s.info.rtable.Get(peerIDObj); ok {
+		return nil
+	}
 
+	s.info.rtable.Add(peerIDObj, ip)
 	return nil
 }
 

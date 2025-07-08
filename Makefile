@@ -119,7 +119,7 @@ e2e:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -v ./tests/e2e/... -tags=e2e -timeout=10m $(ARGS)
+	go test -v ./tests/e2e/... -tags=e2e -timeout=15m $(ARGS)
 
 e2e-%:
 	@echo "Running e2e test: TestE2E/$*"
@@ -129,7 +129,7 @@ e2e-%:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -v ./tests/e2e/... -tags=e2e -timeout=10m -run "TestE2E/$*" $(ARGS)
+	go test -v ./tests/e2e/... -tags=e2e -timeout=15m -run "TestE2E/$*" $(ARGS)
 
 run-acceptance: linux_amd64
 	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m -godog.tags="~@wip"

@@ -136,6 +136,82 @@ func TestEnsemble(t *testing.T) {
 		require.Equal(t, ensemble.V1.Edges, edges)
 	})
 
+	t.Run("must be able to get subnet", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Subnet: SubnetConfig{
+					Join: true,
+				},
+			},
+		}
+
+		subnet := ensemble.Subnet()
+		require.Equal(t, ensemble.V1.Subnet, subnet)
+	})
+
+	t.Run("must be able to add node allocations", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Allocations: map[string]AllocationConfig{
+					"alloc1": {
+						DNSName: "dns1",
+					},
+				},
+				Nodes: map[string]NodeConfig{
+					"node1": {
+						Allocations: []string{"alloc1"},
+					},
+				},
+			},
+		}
+
+		ensemble.AddNodeAndAllocations(
+			"node1",
+			NodeConfig{
+				Allocations: []string{"alloc2"},
+			},
+			map[string]AllocationConfig{
+				"alloc2": {
+					DNSName: "dns2",
+				},
+			},
+		)
+
+		require.Len(t, ensemble.V1.Allocations, 2)
+		require.Len(t, ensemble.V1.Nodes, 1)
+		require.Len(t, ensemble.V1.Nodes["node1"].Allocations, 1)
+		require.Equal(t, "alloc2", ensemble.V1.Nodes["node1"].Allocations[0])
+		require.Equal(t, "dns2", ensemble.V1.Allocations["alloc2"].DNSName)
+	})
+
+	t.Run("must be able to remove node and it's allocations", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Allocations: map[string]AllocationConfig{
+					"alloc1": {
+						DNSName: "dns1",
+					},
+				},
+				Nodes: map[string]NodeConfig{
+					"node1": {
+						Allocations: []string{"alloc1"},
+					},
+				},
+			},
+		}
+
+		ensemble.RemoveNodeAndAllocations("node1")
+
+		require.Empty(t, ensemble.V1.Allocations)
+		require.Empty(t, ensemble.V1.Nodes)
+	})
+
 	t.Run("must be able to clone ensemble", func(t *testing.T) {
 		t.Parallel()
 
