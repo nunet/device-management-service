@@ -38,6 +38,7 @@ include:
           - go.mod
           - Makefile
           - maint-scripts/**/*
+          - tests/**/*
       when: always
 
 image: registry.gitlab.com/nunet/device-management-service/nunet-dms-builder:$DMS_BUILDER_VERSION

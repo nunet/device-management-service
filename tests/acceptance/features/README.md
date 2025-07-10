@@ -15,38 +15,29 @@ This document outlines the defined features and scenarios used for acceptance te
 
 | Feature Name | Description | Stakeholder Category | Environment | Development Status | Test Status | Comments |
 |--------------|-------------|----------------------|-------------|--------------------|-------------|----------|
-| [Allocation Types](#feature-allocation-types) ([.feature](./allocation_types.feature)) | Launch deployments with task- or service-based resource allocation. | Service and Resource Providers | Feature or Testnet | Implemented | Not started |  |
 | [Capabilities Management](#feature-capabilities-management) ([.feature](./capabilities_management.feature)) | Grant, revoke, and delegate behavior-level capabilities across users. | Resource Providers and Facilitators | Feature or Testnet | Implemented | Not started |  |
 | [Contract Management](#feature-contract-management) ([.feature](./contract_management.feature)) | Create and execute a contract. | Service and Resource Providers, Facilitators | Testnet | In progress | Not started |  |
 | [Deployment](#feature-deployment) ([.feature](./deployment.feature)) | As a Service Provider I want to deploy my computation on other nodes So that I don't have to use my machine | Service Providers | Feature or Testnet | Implemented | In refactoring | This test is fully implemented but being refactored. |
 | [Deployment Cancellation](#feature-deployment-cancellation) ([.feature](./deployment_cancellation.feature)) | Cancel deployments in various lifecycle stages and error conditions. | Service Providers | Feature or Testnet | Implemented | Not started |  |
 | [Deployment Constraints](#feature-deployment-constraints) ([.feature](./deployment_constraints.feature)) | Consider placement constraints such as location, edge proximity, or hardware specs to do a deployment. | Service and Resource Providers | Testnet - Requires infrastructure specific to each scenario. | Implemented | Not started |  |
-| [Deployment Launch](#feature-deployment-launch) ([.feature](./deployment_launch.feature)) | Enables launching single or multiple deployments across peers. | Service and Resource Providers | Feature or Testnet | Implemented | In progress |  |
 | [Deployment Operations](#feature-deployment-operations) ([.feature](./deployment_operations.feature)) | View, manage, and interact with active or failed deployments. | Service Providers | Feature or Testnet | Implemented | Not started |  |
 | [Deployment in an IP Network](#feature-deployment-in-an-ip-network) ([.feature](./deployment_in_an_ip_network.feature)) | Support deployments that communicate via IP networking. | Service and Resource Providers | Feature or Testnet | Implemented | Not started |  |
 | [Executor Types](#feature-executor-types) ([.feature](./executor_types.feature)) | Support multiple container/runtime types such as Docker and Firecracker. |  | Feature or Testnet | Docker Implemented | Not started |  |
 | [Failure Recovery](#feature-failure-recovery) ([.feature](./failure_recovery.feature)) | Test different strategies and levels of failure recovery for nodes, allocations, ensembles, deployments etc. | Service Providers | Feature or Testnet | Part of it in open MRs | Not started | The full failure recovery is not implemented yet but there are some open MRs with parts of it: [893](https://gitlab.com/nunet/device-management-service/-/merge_requests/893), [874](https://gitlab.com/nunet/device-management-service/-/merge_requests/874), [863](https://gitlab.com/nunet/device-management-service/-/merge_requests/863). |
+| [Geolocation](#feature-geolocation) ([.feature](./geolocation.feature)) | As a Service Provider I want deployments with location constraints to run only on eligible nodes So that deployments follow geographic policies | Services Providers | Testnet | Implemented | Not started |  |
 | [NuNet Documentation AI Agent](#feature-nunet-documentation-ai-agent) ([.feature](./nunet_documentation_ai_agent.feature)) | Usage of AI agent in public and private modes. | End Users | Testnet - Requires infrastructure as DDNS, Proxy, CA, GlusterFS. | In progress | Not started |  |
 | [Observability](#feature-observability) ([.feature](./observability.feature)) | Provide logs, metrics, and tracing for deployed services and system behavior. | Service and Resource Providers, Facilitators | Testnet - Requires infrastructure for storing and visualizing the generated data. | Implemented | Not started |  |
 | [Organization Management](#feature-organization-management) ([.feature](./organization_management.feature)) | Join, create, and manage private and public organizations. | Facilitators | Feature | Implemented | Not started |  |
 | [Posemesh](#feature-posemesh) ([.feature](./posemesh.feature)) | Launch Posemesh nodes. | Service Providers | Testnet - Requires infrastructure as DDNS, Proxy, CA. | In progress | Not started |  |
+| [Service Deployment](#feature-service-deployment) ([.feature](./service_deployment.feature)) | As a Service Provider I want to launch a service on a peer So that I can send a request to it | Service Providers | Feature or Testnet | Implemented | In progress |  |
 | [Stateful Deployment](#feature-stateful-deployment) ([.feature](./stateful_deployment.feature)) | Handle deployments with data persistence across reboots or environments. | Service Providers | Feature or Testnet - Requires GlusterFS infrastructure. | Implemented | Not started |  |
 | [Supervision](#feature-supervision) ([.feature](./supervision.feature)) | Monitor and react to deployment or system failures automatically. | Service and Resource Providers | Feature or Testnet | Not implemented | Not started |  |
 | [System and Peer Status](#feature-system-and-peer-status) ([.feature](./system_and_peer_status.feature)) | View DMS status, peer information, and peer connectivity. | Resource Providers | Feature or TestNet | Implemented | Not started |  |
+| [Task Deployment](#feature-task-deployment) ([.feature](./task_deployment.feature)) | As a Service Provider I want to deploy tasks across one or multiple peers So that I don't have to use my machine | Service Providers | Feature or Testnet | Implemented | In progress |  |
 
 ---
 
 ## Feature Coverage
-
-### Feature: Allocation Types
-
-*Launch deployments with task- or service-based resource allocation.*
-
-**Scenarios:**
-- Launch a deployment with a service-type allocation (long term allocation)
-- Launch a deployment with a task-type allocation (temporary allocation)
-
----
 
 ### Feature: Capabilities Management
 
@@ -105,20 +96,6 @@ This document outlines the defined features and scenarios used for acceptance te
 
 ---
 
-### Feature: Deployment Launch
-
-*Enables launching single or multiple deployments across peers.*
-
-**Scenarios:**
-- Launch a deployment on a selected peer
-- Launch a deployment on any available peer in the network
-- Launch multiple deployments communicating on different peers
-- Launch multiple deployments communicating on the same peer
-- Launch multiple deployments on different peers
-- Launch multiple deployments on the same peer
-
----
-
 ### Feature: Deployment Operations
 
 *View, manage, and interact with active or failed deployments.*
@@ -158,6 +135,18 @@ This document outlines the defined features and scenarios used for acceptance te
 *Test different strategies and levels of failure recovery for nodes, allocations, ensembles, deployments etc.*
 
 _(Scenarios to be defined)_
+
+---
+
+### Feature: Geolocation
+
+*As a Service Provider I want deployments with location constraints to run only on eligible nodes So that deployments follow geographic policies*
+
+**Scenarios:**
+- 
+- Deployment fails when one or more nodes have no matching running nodes for geographic constraints
+- Deployment is distributed across two eligible nodes based on location constraints
+- Deployment is executed only on a node satisfying location constraints
 
 ---
 
@@ -203,6 +192,16 @@ _(Scenarios to be defined)_
 
 ---
 
+### Feature: Service Deployment
+
+*As a Service Provider I want to launch a service on a peer So that I can send a request to it*
+
+**Scenarios:**
+- 
+- Deploy a service and send a request
+
+---
+
 ### Feature: Stateful Deployment
 
 *Handle deployments with data persistence across reboots or environments.*
@@ -232,6 +231,19 @@ _(Scenarios to be defined)_
 - View DMS status (version, onboarding status, DMS DID)
 - View connected peers
 - View self peer information
+
+---
+
+### Feature: Task Deployment
+
+*As a Service Provider I want to deploy tasks across one or multiple peers So that I don't have to use my machine*
+
+**Scenarios:**
+- 
+- Launch a deployment on a target peer
+- Launch a deployment on any available peer in the network
+- Launch multiple deployments on different peers
+- Launch multiple deployments on the same peer
 
 ---
 
