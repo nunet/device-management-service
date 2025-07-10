@@ -10,6 +10,7 @@
 
 ## Table of Contents
 
+<!--toc:start-->
 - [Device Management Service (DMS)](#device-management-service-dms)
   - [Table of Contents](#table-of-contents)
   - [About](#about)
@@ -19,11 +20,20 @@
       - [Ubuntu/Debian](#ubuntudebian)
     - [Building from source](#building-from-source)
       - [Dependencies](#dependencies)
+        - [Linux only](#linux-only)
+        - [macOS (Apple Silicon - M1/M2) only](#macos-apple-silicon-m1m2-only)
+      - [MacOS (ARM64 architecture)](#macos-arm64-architecture)
+      - [🐧 Linux Installation](#🐧-linux-installation)
+    - [Permissions and features (for compute providers using Linux)](#permissions-and-features-for-compute-providers-using-linux)
+      - [Required: Net-admin permission and IP over libp2p](#required-net-admin-permission-and-ip-over-libp2p)
+      - [May be required: iptables upgrade](#may-be-required-iptables-upgrade)
+      - [🍏 macOS ARM64 Installation & Debugging Guide (Apple Silicon)](#🍏-macos-arm64-installation-debugging-guide-apple-silicon)
+        - [✅ Troubleshooting Build Issues](#troubleshooting-build-issues)
+          - [Output should include: Mach-O 64-bit executable arm64](#output-should-include-mach-o-64-bit-executable-arm64)
+          - [⚠️ macOS Limitations](#️-macos-limitations)
+          - [📁 Optional: Add Binary to PATH](#📁-optional-add-binary-to-path)
     - [Installation on VMs](#installation-on-vms)
     - [Installation on WSL](#installation-on-wsl)
-    - [Permissions and features (for compute providers using Linux)](#permissions-and-features)
-      - [Required: Net-admin permission and IP over libp2p](#net-admin-permission-and-ip-over-libp2p)
-      - [May be required: iptables upgrade](#iptables-upgrade)
     - [System Requirements](#system-requirements)
       - [CPU-only machines](#cpu-only-machines)
         - [Minimum System Requirements](#minimum-system-requirements)
@@ -32,13 +42,16 @@
         - [Minimum System Requirements](#minimum-system-requirements)
         - [Recommended System Requirements](#recommended-system-requirements)
     - [GPU Driver Installation](#gpu-driver-installation)
+      - [For AMD64 Platforms](#for-amd64-platforms)
+      - [NVIDIA GPUs](#nvidia-gpus)
+      - [AMD GPUs](#amd-gpus)
+      - [Intel Discrete GPUs](#intel-discrete-gpus)
   - [Usage](#usage)
     - [Quick Start](#quick-start)
       - [Creating identities](#creating-identities)
-      - [Using a Ledger Wallet](#using-a-ledger-wallet)
+        - [Using a Ledger Wallet](#using-a-ledger-wallet)
       - [Setting up Capabilities](#setting-up-capabilities)
-        - [Create capability contexts](#create-capability-contexts)
-          - [Add a root anchor for your DMS context](#add-a-root-anchor-for-your-dms-context)
+        - [Add a root anchor for your DMS context](#add-a-root-anchor-for-your-dms-context)
         - [Setup your DMS for the public testnet](#setup-your-dms-for-the-public-testnet)
       - [Running DMS](#running-dms)
     - [Provide Compute Power to the Network](#provide-compute-power-to-the-network)
@@ -53,6 +66,7 @@
     - [Functionality](#functionality)
     - [Data Types](#data-types)
     - [References](#references)
+<!--toc:end-->
 
 ## About
 
@@ -107,9 +121,9 @@ We currently support Linux and MacOS (Darwin).
 - go (v1.21.7 or later)
 - [git-lfs](https://git-lfs.com/) (for downloading large files)
 
-##### macOS (Apple Silicon - M1/M2) only:
+##### macOS (Apple Silicon - M1/M2) only
 
-- [Homebrew installed] (/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")
+- [Homebrew installed] (/bin/bash -c "$(curl -fsSL <https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh>)")
 - Recommended: iTerm2 for improved CLI experience.
 
 #### MacOS (ARM64 architecture)
@@ -334,7 +348,7 @@ Usage:
 ...
 ```
 
-###### ⚠️ macOS Limitations:
+###### ⚠️ macOS Limitations
 
 - `cap_net_admin` and `cap_sys_admin` are not supported on macOS.
 - DMS cannot act as a compute provider — only as an orchestrator.
@@ -415,13 +429,13 @@ Note: For AMD64 platforms, we recommend using HiveOS as it comes with all necess
 
 NuNet DMS requires properly installed GPU drivers to function correctly. We do not automatically install drivers to ensure compatibility and flexibility across different user setups.
 
-#### For AMD64 Platforms:
+#### For AMD64 Platforms
 
 We recommend using the [Ubuntu](https://ubuntu.com/)-based [HiveOS](https://hiveon.com/install/) for the easiest setup.
 
 If you prefer to use a different operating system or need to install drivers manually, please follow these steps:
 
-#### NVIDIA GPUs:
+#### NVIDIA GPUs
 
 1. Visit the [NVIDIA Official Driver Downloads](https://www.nvidia.com/en-us/drivers/) page.
 2. Select your GPU model and operating system.
@@ -429,7 +443,7 @@ If you prefer to use a different operating system or need to install drivers man
 4. Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 5. Reboot your system after installation.
 
-#### AMD GPUs:
+#### AMD GPUs
 
 1. Visit the [AMD Drivers and Support for Processors and Graphics](https://www.amd.com/en/support/download/drivers.html) page.
 2. Select your GPU model and operating system.
@@ -441,10 +455,10 @@ Along with the drivers, you will need to install amdgpu using ROCm for AMD GPUs.
 Make sure you select the rocm usecase when installing the amdgpu.
 
 ```bash
-$ sudo amdgpu-install --usecase=rocm
+sudo amdgpu-install --usecase=rocm
 ```
 
-#### Intel Discrete GPUs:
+#### Intel Discrete GPUs
 
 1. Visit the [Intel® software for general purpose GPU capabilities documentation](https://dgpu-docs.intel.com/driver/overview.html) page.
 2. Select your GPU model and operating system.
@@ -491,13 +505,13 @@ In this example, we are going to set up two capability contexts:
 First the user
 
 ```shell
-$ nunet cap new user
+nunet cap new user
 ```
 
 then the dms instance.
 
 ```shell
-$ nunet cap new dms
+nunet cap new dms
 ```
 
 You can create as many identities as you want, specially if you want
@@ -532,13 +546,13 @@ screen in plaintext so that you can inspect it.
 You can get your Ledger wallet's DID with:
 
 ```shell
-$ nunet key did ledger
+nunet key did ledger
 ```
 
 To create the capability context for the user
 
 ```shell
-$ nunet cap new ledger:user
+nunet cap new ledger:user
 ```
 
 #### Setting up Capabilities
@@ -565,27 +579,27 @@ For more on capabilities and behaviors, see the [DMS Capabilities and Behaviors]
 You can do this by invoking the `dms cap anchor` command:
 
 ```shell
-$ nunet cap anchor --context dms --root <user-did>
+nunet cap anchor --context dms --root $(nunet key did user)
 ```
 
 Where `<user-did>` is the user did created above in [Creating identities](#creating-identities) and can be obtained by:
 
 ```shell
-$ nunet key did <user>
+nunet key did <user>
 ```
 
 or if you are using a Ledger Wallet
 
 ```shell
-$ nunet key did ledger:<user>
+nunet key did ledger:<user>
 ```
 
 ##### Setup your DMS for the public testnet
 
 0. **The NuNet DID**
 
-```
-did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
+```shell
+NUNET_DID='did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW'
 ```
 
 1. **Create a capability anchor for public behaviors**
@@ -593,24 +607,24 @@ did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
 Create the grant
 
 ```shell
-$ nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <nunet-did>
+nunet cap grant --context user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 $NUNET_DID | tee /tmp/grant-output
 ```
 
 or if you are using a Ledger Wallet
 
 ```shell
-$ nunet cap grant --context ledger:user --cap --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <nunet-did>
+nunet cap grant --context ledger:user --cap --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 $NUNET_DID | tee /tmp/grant-output
 ```
 
 And the granted token as a require anchor
 
 ```shell
-$ nunet cap anchor --context dms --require <the-grant-output>
+nunet cap anchor --context dms --require $(cat /tmp/grant-output)
 ```
 
 The first command grants nunet authorized users the capability to invoke public behaviors until December 31, 2025, and outputs a token.
 
-The second command consumes the token and adds the require anchor for your DMS
+The second command consumes the token and adds the require anchor for your DMS.
 
 2. **Ask NuNet for a public network capability token**
 
@@ -621,32 +635,32 @@ To request tokens for participating in the testnet, please go to [did.nunet.io](
 3.1 **Add the provide anchor to your personal context**
 
 ```shell
-$ nunet cap anchor --context user --provide <the-token-you-got-from-nunet>
+nunet cap anchor --context user --provide <the-token-you-got-from-nunet>
 ```
 
 or if you are using a Ledger Wallet
 
 ```shell
-$ nunet cap anchor --context ledger:user --provide <the-token-you-got-from-nunet>
+nunet cap anchor --context ledger:user --provide <the-token-you-got-from-nunet>
 ```
 
 3.2 **Delegate to your DMS**
 
 ```shell
-$ nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
+nunet cap delegate --context user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
 ```
 
 or if you are using a Ledger Wallet
 
 ```shell
-$ nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
+nunet cap delegate --context ledger:user --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-31 <your-dms-did>
 
 ```
 
 3.3 **Add the delegation token as a provide anchor in your DMS**
 
 ```shell
-$ nunet cap anchor --context dms --provide <the-delegate-output>
+nunet cap anchor --context dms --provide <the-delegate-output>
 ```
 
 The first command ingests the NuNet provided token and the last two commands use this token to delegate the public behavior capabilities to your DMS.
@@ -656,7 +670,7 @@ The first command ingests the NuNet provided token and the last two commands use
 If everything was setup properly, you should be able to run:
 
 ```shell
-$ nunet run
+nunet run
 ```
 
 > **Darwin users**: If you plan to onboard your computer power to the network, You may need to run with `sudo`.
