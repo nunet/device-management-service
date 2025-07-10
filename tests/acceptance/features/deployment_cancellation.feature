@@ -21,3 +21,4 @@ Feature: Deployment Cancellation
     Given a deployment has already finished execution
     When I request cancellation of the deployment
     Then I should receive a message indicating the deployment is already complete
+

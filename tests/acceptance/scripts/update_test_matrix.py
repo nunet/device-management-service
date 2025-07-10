@@ -17,7 +17,7 @@ def parse_feature_file(path):
             if stripped.startswith("Feature:"):
                 feature_name = stripped.split("Feature:", 1)[1].strip()
                 in_description = True
-            elif stripped.startswith("Scenario") or stripped.startswith("Scenario Outline"):
+            elif stripped.startswith("Background") or stripped.startswith("Scenario") or stripped.startswith("Scenario Outline"):
                 in_description = False
                 scenarios.append("- " + stripped.split(":", 1)[1].strip())
             elif in_description and stripped:

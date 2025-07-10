@@ -19,3 +19,4 @@ Feature: Stateful Deployment
     When I attempt to launch a deployment using a saved state
     Then the deployment should fail to start
     And I should receive an error indicating the data is unavailable or corrupted
+
