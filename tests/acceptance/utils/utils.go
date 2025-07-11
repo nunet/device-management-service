@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -49,20 +48,15 @@ func SetupPrivateNetwork(user, dms, org *Context) error {
 	return nil
 }
 
-func UploadEnsemble(node *Node, filename string, peer string) (file string, err error) {
+func FindTestdata(name string) string {
 	here := dutils.CurrentFileDirectory()
-	source := filepath.Join(here, "..", "examples", filename)
-	dest := fmt.Sprintf("/root/%s", filename)
+	return filepath.Join(here, "..", "tests", "acceptance", "testdata", name)
+}
 
+func UploadEnsemble(node *Node, source string) (dest string, err error) {
+	file := filepath.Base(source)
+	dest = filepath.Join("/root", file)
 	err = node.UploadFile(source, dest, 0o755)
-	if err != nil {
-		return "", err
-	}
-
-	// update the ensemble configuration to specify compute provider peer ID
-	updateCmd := fmt.Sprintf("sed -i 's/failure_recovery: stay_down/failure_recovery: stay_down\\n        peer: %s/' %s",
-		peer, dest)
-	_, err = node.RunCMD([]string{"sh", "-c", updateCmd})
 	if err != nil {
 		return "", err
 	}

@@ -222,3 +222,23 @@ func (n *Node) InstallDocker() error {
 
 	return nil
 }
+
+func (n *Node) PruneResolved() error {
+	dest := "/root/netplan.sh"
+	if err := n.UploadFile(FindTestdata("netplan.sh"), dest, 0o755); err != nil {
+		return err
+	}
+	_, err := n.RunCMD([]string{"bash", "-c", dest})
+	if err != nil {
+		return err
+	}
+	dest = "/root/resolv.sh"
+	if err := n.UploadFile(FindTestdata("resolv.sh"), dest, 0o755); err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"bash", "-c", dest})
+	if err != nil {
+		return err
+	}
+	return nil
+}
