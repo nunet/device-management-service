@@ -131,7 +131,8 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	err = cpDmsCtx.Onboard()
 	assert.NoError(t, err)
 
-	ensemble, err := utils.UploadEnsemble(sp, "docker_hello.yaml", cpInfo.ID)
+	file := utils.FindTestdata("ensembles/docker_hello.yaml")
+	ensemble, err := utils.UploadEnsemble(sp, file)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
