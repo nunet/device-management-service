@@ -53,12 +53,15 @@ func mustJSON(t *testing.T, b []byte) map[string]interface{} {
 }
 
 // withTempConfig copies the global config, runs mutate, then restores it.
-func withTempConfig(t *testing.T, mutate func(cfg *config.Config)) {
+func withTempConfig(t *testing.T, mutate func(observabilityConfig *config.Observability, apmConfig *config.APM)) {
 	t.Helper()
-	cfg := config.GetConfig()
-	orig := *cfg
-	mutate(cfg)
-	t.Cleanup(func() { *config.GetConfig() = orig })
+	observabilityCfg := &ObservabilityCfg
+	apmCfg := &ApmCfg
+	mutate(observabilityCfg, apmCfg)
+	t.Cleanup(func() {
+		ObservabilityCfg = *observabilityCfg
+		ApmCfg = *apmCfg
+	})
 }
 
 // parseLogLevel
@@ -177,8 +180,6 @@ func TestDisableESFlag(t *testing.T) {
 
 // pre‑flight helper
 func TestPreflightCheckES(t *testing.T) {
-	t.Parallel()
-
 	okSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -341,24 +342,27 @@ func TestDisableESAcrossGoroutines(t *testing.T) {
 
 // SetAPIKey
 func TestSetAPIKeyUpdatesConfig(t *testing.T) {
-	withTempConfig(t, func(cfg *config.Config) {
+	withTempConfig(t, func(obsCfg *config.Observability, apmCfg *config.APM) {
 		if err := SetAPIKey("unit-key"); err != nil {
 			t.Fatalf("SetAPIKey returned %v", err)
 		}
-		if cfg.Observability.ElasticsearchAPIKey != "unit-key" {
-			t.Fatalf("expected api-key in config, got %q", cfg.Observability.ElasticsearchAPIKey)
+		if obsCfg.ElasticsearchAPIKey != "unit-key" {
+			t.Fatalf("expected api-key in config, got %q", obsCfg.ElasticsearchAPIKey)
+		}
+		if apmCfg.APIKey != "unit-key" {
+			t.Fatalf("expected api-key in config, got %q", apmCfg.APIKey)
 		}
 	})
 }
 
 // SetAPMURL
 func TestSetAPMURLUpdateAndDisable(t *testing.T) {
-	withTempConfig(t, func(cfg *config.Config) {
+	withTempConfig(t, func(_ *config.Observability, apmCfg *config.APM) {
 		// Set a URL  tracer should (re)initialize
 		if err := SetAPMURL("http://apm.test"); err != nil {
 			t.Fatalf("SetAPMURL failed: %v", err)
 		}
-		if cfg.APM.ServerURL != "http://apm.test" {
+		if apmCfg.ServerURL != "http://apm.test" {
 			t.Fatalf("APM url not updated")
 		}
 
@@ -366,7 +370,7 @@ func TestSetAPMURLUpdateAndDisable(t *testing.T) {
 		if err := SetAPMURL(""); err != nil {
 			t.Fatalf("SetAPMURL disable failed: %v", err)
 		}
-		if cfg.APM.ServerURL != "" {
+		if apmCfg.ServerURL != "" {
 			t.Fatalf("APM url should be cleared")
 		}
 	})
@@ -374,12 +378,12 @@ func TestSetAPMURLUpdateAndDisable(t *testing.T) {
 
 // EnableElasticsearchLogging toggle
 func TestEnableElasticsearchLoggingToggle(t *testing.T) {
-	withTempConfig(t, func(cfg *config.Config) {
-		cfg.Observability.ElasticsearchEnabled = true
-		if err := EnableElasticsearchLogging(!cfg.Observability.ElasticsearchEnabled); err != nil {
+	withTempConfig(t, func(obsCfg *config.Observability, _ *config.APM) {
+		obsCfg.ElasticsearchEnabled = true
+		if err := EnableElasticsearchLogging(!obsCfg.ElasticsearchEnabled); err != nil {
 			t.Fatalf("EnableElasticsearchLogging toggle failed: %v", err)
 		}
-		if cfg.Observability.ElasticsearchEnabled {
+		if obsCfg.ElasticsearchEnabled {
 			t.Fatalf("toggle did not flip flag")
 		}
 	})
@@ -526,7 +530,7 @@ func TestInitLoggerNoOpEarlyExit(t *testing.T) {
 	t.Cleanup(func() { SetNoOpMode(false) })
 
 	before := combinedCore
-	if err := initLogger(config.GetConfig().Observability); err != nil {
+	if err := initLogger(ObservabilityCfg); err != nil {
 		t.Fatalf("initLogger (no-op) returned error: %v", err)
 	}
 	if combinedCore != before {
@@ -536,7 +540,7 @@ func TestInitLoggerNoOpEarlyExit(t *testing.T) {
 
 // createElasticsearchCore validation
 func TestCreateElasticsearchCoreValidationErrors(t *testing.T) {
-	base := config.GetConfig().Observability
+	base := ObservabilityCfg
 
 	// missing URL
 	cfg := base
@@ -574,11 +578,11 @@ func TestSetElasticsearchEndpointReinitialisesSyncer(t *testing.T) {
 	}))
 	t.Cleanup(esSrv.Close)
 
-	withTempConfig(t, func(cfg *config.Config) {
-		cfg.Observability.ElasticsearchEnabled = true
-		cfg.Observability.ElasticsearchAPIKey = "k"
-		cfg.Observability.ElasticsearchIndex = "idx"
-		cfg.Observability.FlushInterval = 1
+	withTempConfig(t, func(obsCfg *config.Observability, _ *config.APM) {
+		obsCfg.ElasticsearchEnabled = true
+		obsCfg.ElasticsearchAPIKey = "k"
+		obsCfg.ElasticsearchIndex = "idx"
+		obsCfg.FlushInterval = 1
 
 		if err := SetElasticsearchEndpoint(esSrv.URL); err != nil {
 			t.Fatalf("endpoint-1: %v", err)
@@ -642,7 +646,7 @@ func TestCreateElasticsearchCoreTLSInsecure(t *testing.T) {
 	}))
 	t.Cleanup(httpsSrv.Close)
 
-	cfg := config.GetConfig().Observability
+	cfg := ObservabilityCfg
 	cfg.ElasticsearchURL = httpsSrv.URL
 	cfg.ElasticsearchIndex = testIndex
 	cfg.ElasticsearchAPIKey = "k"
@@ -662,13 +666,13 @@ func TestEnableElasticsearchLoggingFlagToggleOnly(t *testing.T) {
 	customEventEmitter = &stubEmitter{}
 	t.Cleanup(func() { customEventEmitter = oldEmitter })
 
-	withTempConfig(t, func(cfg *config.Config) {
-		cfg.Observability.ElasticsearchURL = "http://dummy"
-		cfg.Observability.ElasticsearchIndex = testIndex
-		cfg.Observability.ElasticsearchAPIKey = "k"
-		cfg.Observability.ElasticsearchEnabled = true
+	withTempConfig(t, func(obsCfg *config.Observability, _ *config.APM) {
+		obsCfg.ElasticsearchURL = "http://dummy"
+		obsCfg.ElasticsearchIndex = testIndex
+		obsCfg.ElasticsearchAPIKey = "k"
+		obsCfg.ElasticsearchEnabled = true
 
-		if err := initLogger(cfg.Observability); err != nil {
+		if err := initLogger(*obsCfg); err != nil {
 			t.Fatalf("initLogger: %v", err)
 		}
 
@@ -692,21 +696,21 @@ func TestBufferedSyncerFlushNilClientSafe(t *testing.T) {
 
 // SetElasticsearchEndpoint disabled
 func TestSetElasticsearchEndpointDisabledMode(t *testing.T) {
-	withTempConfig(t, func(cfg *config.Config) {
-		cfg.Observability.ElasticsearchEnabled = false
-		cfg.Observability.ElasticsearchIndex = "idx"
-		oldURL := cfg.Observability.ElasticsearchURL
+	withTempConfig(t, func(obsCfg *config.Observability, _ *config.APM) {
+		obsCfg.ElasticsearchEnabled = false
+		obsCfg.ElasticsearchIndex = "idx"
+		oldURL := obsCfg.ElasticsearchURL
 
 		if err := SetElasticsearchEndpoint("http://new-es"); err != nil {
 			t.Fatalf("SetElasticsearchEndpoint: %v", err)
 		}
-		if cfg.Observability.ElasticsearchURL != "http://new-es" {
+		if obsCfg.ElasticsearchURL != "http://new-es" {
 			t.Fatalf("URL not updated in config")
 		}
 		if esSyncerInstance != nil {
 			t.Fatalf("syncer should remain nil when ES logging disabled")
 		}
 
-		cfg.Observability.ElasticsearchURL = oldURL
+		obsCfg.ElasticsearchURL = oldURL
 	})
 }

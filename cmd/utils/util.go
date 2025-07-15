@@ -121,15 +121,20 @@ func LoadCapabilityContext(dmsCLI *cli.DmsCLI, contextName string) (ucan.Capabil
 
 	fs := dmsCLI.FS()
 
-	passphrase, err := dmsCLI.Passphrase(contextName)
-	if err != nil {
-		return nil, fmt.Errorf("get dms passphrase: %w", err)
+	passphrase := ""
+	if !node.IsLedgerContext(contextName) {
+		passphrase, err = dmsCLI.Passphrase(contextName)
+		if err != nil {
+			return nil, fmt.Errorf("get dms passphrase: %w", err)
+		}
 	}
 
 	trustCtx, err := node.GetTrustContext(fs, contextName, passphrase, cfg.UserDir)
 	if err != nil {
 		return nil, fmt.Errorf("get trust context: %w", err)
 	}
+
+	contextName = node.GetContextKey(contextName) // normalize context name
 
 	capCtx, err := node.LoadCapabilityContext(trustCtx, fs, contextName, cfg.UserDir)
 	if err != nil {
@@ -173,13 +178,12 @@ func NewTestCli(opts ...func(*cli.DmsCLI)) *cli.DmsCLI {
 	}
 
 	fs := afero.NewMemMapFs()
-	cfg := &config.Config{General: config.General{
-		UserDir: "/tmp/nunet/user",
-		WorkDir: "/tmp/nunet/work",
-		DataDir: "/tmp/nunet/data",
-	}}
+	cfg := config.DefaultConfig
+	cfg.General.UserDir = "/tmp/nunet/user"
+	cfg.General.WorkDir = "/tmp/nunet/work"
+	cfg.General.DataDir = "/tmp/nunet/data"
 
-	defaults = append(defaults, cli.WithFS(fs), cli.WithConfig(cfg))
+	defaults = append(defaults, cli.WithFS(fs), cli.WithConfig(&cfg))
 
 	dmsCli := cli.New(append(defaults, opts...)...)
 

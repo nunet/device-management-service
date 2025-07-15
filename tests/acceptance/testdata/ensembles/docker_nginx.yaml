@@ -1,0 +1,29 @@
+version: "V1"
+
+allocations:
+    alloc1:
+        type: service
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 1 # in GiB
+            disk:
+                size: 1 # in GiB
+        execution:
+            type: docker
+            image: nginxdemos/hello
+            working_directory: /
+        dnsname: nginx-demo
+        failure_recovery: stay_down
+nodes:
+    node1:
+        allocations:
+            - alloc1
+        failure_recovery: stay_down
+        ports:
+            - public: 8080
+              private: 80
+              allocation: alloc1

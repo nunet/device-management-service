@@ -5,9 +5,17 @@ import (
 	"fmt"
 	"strings"
 
+	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 )
+
+// Context represents a named context within a node
+type Context struct {
+	Name string
+	DID  string
+	node *Node
+}
 
 func (c *Context) Grant(did string) (token string, err error) {
 	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap grant --context %s --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-30 %s",
@@ -136,6 +144,21 @@ func (c *Context) Manifest(ensembleID string) (*jobtypes.EnsembleManifest, error
 		return nil, fmt.Errorf("failed to get ensemble manifest: %s", resp.Error)
 	}
 	return &resp.Manifest, nil
+}
+
+func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/allocations/list", c.Name))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call allocation list manifest behavior: %s", out)
+	}
+	var resp node.AllocationsListResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("failed to get list of allocations: %s", resp.Error)
+	}
+	return resp.Allocations, nil
 }
 
 // JoinOrg allows a user to join an existing organization

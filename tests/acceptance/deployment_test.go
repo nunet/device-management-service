@@ -25,10 +25,9 @@ func init() {
 }
 
 func TestDeployment(t *testing.T) {
-	t.Parallel()
-
 	o := opts
 	o.TestingT = t
+	o.Paths = []string{"features/deployment.feature"}
 
 	suite := godog.TestSuite{
 		Name:                "deployment",

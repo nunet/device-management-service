@@ -124,6 +124,86 @@ func TestManifest(t *testing.T) {
 			require.Equal(t, node.Allocations, cloneNode.Allocations)
 		}
 	})
+
+	t.Run("must be able to check terminated task", func(t *testing.T) {
+		t.Parallel()
+
+		mf := EnsembleManifest{
+			Allocations: map[string]AllocationManifest{
+				"alloc1": {
+					Type:   AllocationTypeTask,
+					Status: AllocationRunning,
+				},
+				"alloc2": {
+					Type:   AllocationTypeTask,
+					Status: AllocationStopped,
+				},
+				"alloc3": {
+					Type:   AllocationTypeService,
+					Status: AllocationRunning,
+				},
+			},
+		}
+
+		// non-existent allocation should return false
+		require.False(t, mf.IsTerminatedTask("non-existent"))
+
+		// running allocation should return false
+		require.False(t, mf.IsTerminatedTask("alloc1"))
+
+		// stopped allocation should return true
+		require.True(t, mf.IsTerminatedTask("alloc2"))
+
+		// allocation not of type task should return false
+		require.False(t, mf.IsTerminatedTask("alloc3"))
+	})
+
+	t.Run("must be able to get allocation", func(t *testing.T) {
+		t.Parallel()
+		mf := EnsembleManifest{
+			Allocations: map[string]AllocationManifest{
+				allocName: {
+					Type:   AllocationTypeTask,
+					Status: AllocationRunning,
+				},
+			},
+		}
+
+		// non-existent allocation should return false
+		alloc, ok := mf.Allocation("non-existent")
+		require.False(t, ok)
+		require.Equal(t, AllocationManifest{}, alloc)
+
+		// existing allocation should return true
+		alloc, ok = mf.Allocation(allocName)
+		require.True(t, ok)
+		require.Equal(t, AllocationTypeTask, alloc.Type)
+		require.Equal(t, AllocationRunning, alloc.Status)
+	})
+
+	t.Run("must be able to get node", func(t *testing.T) {
+		t.Parallel()
+
+		mf := EnsembleManifest{
+			Nodes: map[string]NodeManifest{
+				"node1": {
+					ID:   "node1",
+					Peer: "peer1",
+				},
+			},
+		}
+
+		// non-existent node should return false
+		node, ok := mf.Node("non-existent")
+		require.False(t, ok)
+		require.Equal(t, NodeManifest{}, node)
+
+		// existing node should return true
+		node, ok = mf.Node("node1")
+		require.True(t, ok)
+		require.Equal(t, "node1", node.ID)
+		require.Equal(t, "peer1", node.Peer)
+	})
 }
 
 func TestUpdateAllocation(t *testing.T) {

@@ -414,6 +414,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.NewDeploymentBehavior: {
 			fn: n.handleNewDeployment,
 		},
+		behaviors.DeploymentUpdateBehavior: {
+			fn: n.handleDeploymentUpdate,
+		},
 		behaviors.DeploymentListBehavior: {
 			fn: n.handleDeploymentList,
 		},

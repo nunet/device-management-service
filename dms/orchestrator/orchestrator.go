@@ -40,6 +40,7 @@ var (
 	AllocationShutdownTimeout = 5 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
+	MinEnsembleUpdateTimeout  = 15 * time.Second
 
 	SubnetCreateTimeout  = 2 * time.Minute
 	SubnetDestroyTimeout = 30 * time.Second
@@ -60,6 +61,7 @@ var (
 // Orchestrator is the interface for orchestrating deployments
 type Orchestrator interface {
 	Deploy(expiry time.Time) error
+	Update(cfg jtypes.EnsembleConfig, expiry time.Time) error
 	Shutdown() error
 	Stop()
 	GetAllocationLogs(allocationID string) (AllocationLogsResponse, error)
@@ -233,6 +235,7 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 func (o *BasicOrchestrator) newManifest(
 	cfg jtypes.EnsembleConfig,
 ) jtypes.EnsembleManifest {
+	log.Debugf("creating new manifest based on config %+v", cfg.V1)
 	manifest := jtypes.EnsembleManifest{
 		ID:           o.id,
 		Orchestrator: o.actor.Handle(),
@@ -466,6 +469,18 @@ func (o *BasicOrchestrator) Manifest() jtypes.EnsembleManifest {
 	defer o.lock.Unlock()
 
 	return o.manifest.Clone()
+}
+
+func (o *BasicOrchestrator) ManifestNodesPeerIDs() []string {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	ids := make([]string, len(o.manifest.Nodes))
+	for _, n := range o.manifest.Nodes {
+		ids = append(ids, n.Peer)
+	}
+
+	return ids
 }
 
 func (o *BasicOrchestrator) Config() jtypes.EnsembleConfig {

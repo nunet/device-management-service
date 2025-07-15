@@ -2071,44 +2071,6 @@ func TestMonitorOnlyTaskManifest(t *testing.T) {
 	})
 }
 
-func TestAggregateErrors(t *testing.T) {
-	// Test with no errors
-	errCh := make(chan error, 1)
-	close(errCh)
-	result := aggregateErrors(errCh)
-	assert.NoError(t, result)
-
-	// Test with single error
-	errCh = make(chan error, 1)
-	errCh <- fmt.Errorf("error1")
-	close(errCh)
-	result = aggregateErrors(errCh)
-	assert.Error(t, result)
-	assert.Equal(t, "error1", result.Error())
-
-	// Test with multiple errors
-	errCh = make(chan error, 3)
-	errCh <- fmt.Errorf("error1")
-	errCh <- fmt.Errorf("error2")
-	errCh <- fmt.Errorf("error3")
-	close(errCh)
-	result = aggregateErrors(errCh)
-	assert.Error(t, result)
-	assert.Contains(t, result.Error(), "error1")
-	assert.Contains(t, result.Error(), "error2")
-	assert.Contains(t, result.Error(), "error3")
-
-	// Test with nil errors
-	errCh = make(chan error, 3)
-	errCh <- nil
-	errCh <- fmt.Errorf("error1")
-	errCh <- nil
-	close(errCh)
-	result = aggregateErrors(errCh)
-	assert.Error(t, result)
-	assert.Equal(t, "error1", result.Error())
-}
-
 func TestOrchestratorJoinSubnet(t *testing.T) {
 	substrate := network.NewSubstrate()
 	orch := MakeOrchestrator(t, substrate)

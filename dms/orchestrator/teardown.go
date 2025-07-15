@@ -217,10 +217,6 @@ type DeploymentRevertRequest struct {
 func (o *BasicOrchestrator) revertNodeDeployment(
 	cfg jtypes.EnsembleConfig, n string, h actor.Handle,
 ) {
-	defer func() {
-		o.removeNodeFromManifest(n)
-	}()
-
 	ncfg, ok := cfg.Node(n)
 	if !ok {
 		log.Warnf("revert node: failed to find node config for %s", n)
@@ -250,6 +246,10 @@ func (o *BasicOrchestrator) revertNodeDeployment(
 			"nodeID", n,
 			"error", err)
 	}
+
+	// QUESTION: do we have to update ensemble config too?
+	o.removeNodeFromManifest(n)
+	log.Debugf("revert message sent to node %s", n)
 }
 
 func (o *BasicOrchestrator) revert(cfg jtypes.EnsembleConfig, mf jtypes.EnsembleManifest) {
@@ -263,18 +263,33 @@ func (o *BasicOrchestrator) revert(cfg jtypes.EnsembleConfig, mf jtypes.Ensemble
 
 // removeNodeFromManifest removes the node from the manifest and its allocations
 func (o *BasicOrchestrator) removeNodeFromManifest(name string) {
+	log.Infof("removing node %s from manifest", name)
 	o.lock.Lock()
-	defer o.lock.Unlock()
-	n, ok := o.manifest.Nodes[name]
+	n, ok := o.manifest.Node(name)
 	if !ok {
 		return
 	}
+	o.lock.Unlock()
+
+	err := o.removeAllocationsFromSubnet(o.manifest, n.Allocations)
+	if err != nil {
+		log.Errorf(
+			"removeNodeFromManifest: error removing allocations from subnet: %v",
+			err)
+	}
+
+	o.lock.Lock()
+	defer o.lock.Unlock()
 	for _, a := range n.Allocations {
-		// TODO: be careful with redundancy
+		//  be careful with redundant allocations
+		alloc := o.manifest.Allocations[a]
+		alloc.Status = jtypes.AllocationTerminated
+		o.manifest.Allocations[a] = alloc
+		// XXX we're setting the status and then removing the allocs
+		//     the status is irrelevant at this point but keeping it
+		//     since we will most likely need to move to keeping with
+		//     a removed status to keep a history of the deployment.
 		delete(o.manifest.Allocations, a)
 	}
 	delete(o.manifest.Nodes, name)
-
-	// TODO: remove from subnetManifest (Tables, IPs...)?
-	// maybe this will be handled somewhere else
 }

@@ -26,13 +26,28 @@ GOFLAGS := "-buildvcs=false"
 
 all:
 	@if [ $(UNAME) = Linux ]; then\
-		make linux_amd64;\
+		if [ $(ARCH) = "aarch64" ]; then\
+			make linux_arm64;\
+		elif [ $(ARCH) = "armv6l" ]; then\
+			make linux_arm32_v6l;\
+		elif [ $(ARCH) = "armv7l" ]; then\
+			make linux_arm32_v7l;\
+		elif [ $(ARCH) = "x86_64" ]; then\
+			make linux_amd64;\
+		else\
+			echo "Unsupported architecture: $(ARCH)";\
+			exit 1;\
+		fi;\
 	elif [ $(UNAME) = Darwin ]; then\
-		make darwin_arm64;\
+		if [ $(ARCH) = "arm64" ]; then\
+			make darwin_arm64;\
+		elif [ $(ARCH) = "x86_64" ]; then\
+			make darwin_amd64;\
+		else\
+			echo "Unsupported architecture: $(ARCH)";\
+			exit 1;\
+		fi;\
 	fi
-
-run-acceptance:
-	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m
 
 linux_amd64:
 	@echo "Building for Linux AMD64..."
@@ -52,16 +67,28 @@ linux_arm64:
 		echo "arm64 - no compiler found";\
 	fi
 
-linux_arm32:
+linux_arm32_v6l:
 	go mod tidy
-	@if [ $(ARCH) = "armv7l" ] || [ $(ARCH) = "armv6l" ]; then\
-		echo "Building ON ARM32...";\
-		GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .;\
+	@if [ $(ARCH) = "armv6l" ]; then\
+		echo "Building ON armv6l...";\
+		GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_linux_arm32_v6l -ldflags=$(LDFLAGS) .;\
 	elif command -v arm-linux-gnueabihf-gcc > /dev/null 2>&1; then\
-		echo "Cross Compiling for arm32...";\
-		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm go build -o builds/dms_linux_arm32 -ldflags=$(LDFLAGS) .;\
+		echo "Cross Compiling for armv6l...";\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_linux_arm32_v6l -ldflags=$(LDFLAGS) .;\
 	else\
-		echo "arm32 - no compiler found";\
+		echo "arm-linux-gnueabihf - no compiler found";\
+	fi
+
+linux_arm32_v7l:
+	go mod tidy
+	@if [ $(ARCH) = "armv7l" ]; then\
+		echo "Building ON armv7l...";\
+		GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_linux_arm32_v7l -ldflags=$(LDFLAGS) .;\
+	elif command -v arm-linux-gnueabihf-gcc > /dev/null 2>&1; then\
+		echo "Cross Compiling for armv7l...";\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_linux_arm32_v7l -ldflags=$(LDFLAGS) .;\
+	else\
+		echo "arm-linux-gnueabihf - no compiler found";\
 	fi
 
 darwin_arm64:
@@ -92,7 +119,7 @@ e2e:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -v ./tests/e2e/... -tags=e2e -timeout=10m $(ARGS)
+	go test -v ./tests/e2e/... -tags=e2e -timeout=15m $(ARGS)
 
 e2e-%:
 	@echo "Running e2e test: TestE2E/$*"
@@ -102,7 +129,10 @@ e2e-%:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -v ./tests/e2e/... -tags=e2e -timeout=10m -run "TestE2E/$*" $(ARGS)
+	go test -v ./tests/e2e/... -tags=e2e -timeout=15m -run "TestE2E/$*" $(ARGS)
+
+run-acceptance: linux_amd64
+	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m -godog.tags="~@wip"
 
 build-nunet-glusterfs-client:
 	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image

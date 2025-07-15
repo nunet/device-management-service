@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/afero"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -158,6 +159,10 @@ func (m *MockOrchestrator) GetAllocationLogs(_ string) (AllocationLogsResponse, 
 
 func (m *MockOrchestrator) WriteAllocationLogs(_ string, _, _ []byte) (string, error) {
 	return "", nil
+}
+
+func (m *MockOrchestrator) Update(_ jtypes.EnsembleConfig, _ time.Time) error {
+	return nil
 }
 
 type MockOrchestratorRegistry struct {

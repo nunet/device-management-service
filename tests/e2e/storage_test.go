@@ -124,7 +124,7 @@ func TLSGlusterGenerator(t *testing.T) {
 	require.NoError(t, err)
 
 	// run first dms
-	dms1, err := dms.NewDMS(node1Config, password, "dms")
+	dms1, err := dms.NewDMS(cli1.fs, node1Config, cli1.env, password, "dms")
 	require.NoError(t, err)
 	assert.NotNil(t, dms1)
 	err = dms1.Run()
@@ -142,7 +142,7 @@ func TLSGlusterGenerator(t *testing.T) {
 
 	// run third dms
 	node3Config.BootstrapPeers = bootstrap
-	dms3, err := dms.NewDMS(node3Config, password, "dms")
+	dms3, err := dms.NewDMS(cli3.fs, node3Config, cli3.env, password, "dms")
 	require.NoError(t, err)
 	assert.NotNil(t, dms3)
 	err = dms3.Run()

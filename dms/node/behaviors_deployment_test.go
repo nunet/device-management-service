@@ -831,3 +831,178 @@ func TestHandleDeploymentRevert(t *testing.T) {
 		assert.Equal(t, jobtypes.AllocationTerminated, alloc.Status(ctx).Status)
 	})
 }
+
+func TestHandleDeploymentUpdate(t *testing.T) {
+	t.Parallel()
+	const allocName = "alloc1"
+
+	// Add behavior to test
+	node, sActor, _ := newMockNodeWithSender(t, behaviors.DeploymentUpdateBehavior)
+
+	// seed deployment data
+	eCfg := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{
+				allocName: {
+					Resources: types.Resources{
+						CPU:  types.CPU{Cores: 1},
+						RAM:  types.RAM{Size: 1},
+						Disk: types.Disk{Size: 1},
+					},
+					Type: jobtypes.AllocationTypeService,
+				},
+			},
+			Nodes:      map[string]jobtypes.NodeConfig{},
+			Supervisor: jobtypes.SupervisorConfig{},
+			Subnet:     jobtypes.SubnetConfig{},
+		},
+	}
+
+	mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+	require.NoError(t, err)
+	require.NotNil(t, mockOrch)
+	err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+	require.NoError(t, err)
+
+	t.Run("non existent", func(t *testing.T) {
+		t.Parallel()
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentUpdateBehavior,
+			UpdateDeploymentRequest{
+				EnsembleID: "non-existent-id",
+				Ensemble:   eCfg,
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp UpdateDeploymentResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.False(t, resp.OK)
+		assert.Contains(t, resp.Error, orchestrator.ErrOrchestratorNotFound.Error())
+	})
+
+	t.Run("not running deployment", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentUpdateBehavior,
+			UpdateDeploymentRequest{
+				EnsembleID: mockOrch.ID(),
+				Ensemble:   eCfg,
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp UpdateDeploymentResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.False(t, resp.OK)
+		assert.Contains(t, resp.Error, ErrorDeploymentNotRunning.Error())
+	})
+
+	t.Run("deployment time too short", func(t *testing.T) {
+		t.Parallel()
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrch)
+		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
+		// set to running status
+		mockOrch.(*orchestrator.MockOrchestrator).SetStatus(jobtypes.DeploymentStatusRunning)
+
+		shortExpiryMsg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentUpdateBehavior,
+			UpdateDeploymentRequest{
+				EnsembleID: mockOrch.ID(),
+				Ensemble:   eCfg,
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(1*time.Second).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(shortExpiryMsg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp UpdateDeploymentResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.False(t, resp.OK)
+		assert.Contains(t, resp.Error, "requested deployment update time too short")
+	})
+
+	t.Run("successful update", func(t *testing.T) {
+		t.Parallel()
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrch)
+		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
+		// set to running status
+		mockOrch.(*orchestrator.MockOrchestrator).SetStatus(jobtypes.DeploymentStatusRunning)
+
+		updatedCfg := eCfg.Clone()
+		updatedCfg.AddNodeAndAllocations(
+			"node2",
+			jobtypes.NodeConfig{
+				Allocations: []string{"alloc2"},
+			},
+			map[string]jobtypes.AllocationConfig{
+				"alloc2": {
+					Resources: types.Resources{
+						CPU:  types.CPU{Cores: 1},
+						RAM:  types.RAM{Size: 1},
+						Disk: types.Disk{Size: 1},
+					},
+					Type: jobtypes.AllocationTypeService,
+				},
+			},
+		)
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentUpdateBehavior,
+			UpdateDeploymentRequest{
+				EnsembleID: mockOrch.ID(),
+				Ensemble:   updatedCfg,
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp UpdateDeploymentResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.True(t, resp.OK)
+	})
+}

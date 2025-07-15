@@ -19,13 +19,18 @@ version=$(echo $fullVersion | cut -c 2-)
 
 mkdir -p $outputDir
 
-for arch in amd64 arm64 arm32; do
+for arch in amd64 arm64 arm32_v6l arm32_v7l; do
 
-    # echo .deb file will be written to: $outputDir
-    archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$arch
+    debarch=$arch
+    if [[ $arch == "arm32_v6l" ]]; then
+        debarch="armel"
+    elif [[ $arch == "arm32_v7l" ]]; then
+        debarch="armhf"
+    fi
+    archDir=$projectRoot/maint-scripts/nunet-dms_$fullVersion\_linux_$debarch
     cp -r $projectRoot/maint-scripts/nunet-dms $archDir
     sed -i "s/Version:.*/Version: $version/g" $archDir/DEBIAN/control
-    sed -i "s/Architecture:.*/Architecture: $arch/g" $archDir/DEBIAN/control
+    sed -i "s/Architecture:.*/Architecture: $debarch/g" $archDir/DEBIAN/control
 
     go version # redundant check of go version
     make linux_$arch
@@ -38,7 +43,7 @@ for arch in amd64 arm64 arm32; do
     fi
 
     # create bin only zip release
-    zip -j $outputDir/nunet-dms_${fullVersion}_${arch}.zip builds/dms_linux_$arch
+    zip -j $outputDir/nunet-dms_${fullVersion}_${debarch}.zip builds/dms_linux_$arch
 
     cp builds/dms_linux_$arch $archDir/usr/bin/nunet
     ls -R $archDir/usr # to allow checking all files are where they're supposed to be
@@ -60,8 +65,8 @@ for arch in amd64 arm64 arm32; do
 
         if [[ $CI_COMMIT_REF_NAME =~ $regex ]]; then
             echo "Deploying to package registry..."
-            curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${projectRoot}/dist/nunet-dms_${version}_${arch}.deb ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${arch}.deb
-            curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${fullVersion}_${arch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${arch}.zip
+            curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${projectRoot}/dist/nunet-dms_${version}_${debarch}.deb ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${debarch}.deb
+            curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${outputDir}/nunet-dms_${fullVersion}_${debarch}.zip ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_linux_${debarch}.zip
         else
             echo skipping deployment to package registry...
         fi
@@ -69,6 +74,6 @@ for arch in amd64 arm64 arm32; do
 
     if [[ -n ${NUNETBOT_BUILD_ENDPOINT+x} ]]; then
         # notify the bot about the build
-        curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$fullVersion\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_${arch}.deb\"}" $NUNETBOT_BUILD_ENDPOINT
+        curl -X POST -H "Content-Type: application/json" -H "$HOOK_TOKEN_HEADER_NAME: $HOOK_TOKEN_HEADER_VALUE" -d "{\"project\" : \"DMS\", \"version\" : \"$fullVersion\", \"commit\" : \"$CI_COMMIT_SHA\", \"commit_msg\" : \"$(echo $CI_COMMIT_MESSAGE | sed "s/\"/'/g")\", \"package_url\" : \"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nunet-dms/${fullVersion}/nunet-dms_${fullVersion}_${debarch}.deb\"}" $NUNETBOT_BUILD_ENDPOINT
     fi
 done

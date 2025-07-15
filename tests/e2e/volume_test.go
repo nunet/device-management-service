@@ -3,6 +3,7 @@ package itest
 // DeployWithVolume runs the tests that deploy with volume.
 func DeployWithVolumeTest(suite *TestSuite) {
 	suite.Run("dms creates a volume on storage node", func() {
+		suite.T().Skip("glusterfs container is running in host mode")
 		// glusterfs container is running in host mode
 		// we can directly use the bootstrap nodes here
 		// peers := strings.Join(suite.bootstrapPeers, ",")

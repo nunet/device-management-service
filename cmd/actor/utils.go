@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
-	"gitlab.com/nunet/device-management-service/dms/node"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
 func displayResponse(w io.Writer, resp any) error {
@@ -18,28 +18,28 @@ func displayResponse(w io.Writer, resp any) error {
 }
 
 func ProcessEnsembleYaml(fs afero.Afero, path string) (
-	*node.NewDeploymentRequest, error,
+	*jobtypes.EnsembleConfig, error,
 ) {
 	data, err := fs.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	cfg := &node.NewDeploymentRequest{}
-	err = parser.Parse(parser.SpecTypeEnsembleV1, data, &cfg.Ensemble)
+	cfg := &jobtypes.EnsembleConfig{}
+	err = parser.Parse(parser.SpecTypeEnsembleV1, data, &cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	for name, script := range cfg.Ensemble.V1.Scripts {
+	for name, script := range cfg.V1.Scripts {
 		scriptData, err := fs.ReadFile(string(script))
 		if err != nil {
 			return nil, fmt.Errorf("failed to read script file: %w", err)
 		}
-		cfg.Ensemble.V1.Scripts[name] = scriptData
+		cfg.V1.Scripts[name] = scriptData
 	}
 
-	for aIdx, alloc := range cfg.Ensemble.V1.Allocations {
+	for aIdx, alloc := range cfg.V1.Allocations {
 		// handle reading public key files
 		if alloc.Keys != nil {
 			for kIdx, key := range alloc.Keys {
@@ -47,7 +47,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 				if err != nil {
 					return nil, fmt.Errorf("failed to read key file: %w", err)
 				}
-				cfg.Ensemble.V1.Allocations[aIdx].Keys[kIdx].File = string(keyData)
+				cfg.V1.Allocations[aIdx].Keys[kIdx].File = string(keyData)
 			}
 		}
 
@@ -63,7 +63,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
 					}
-					cfg.Ensemble.V1.Allocations[aIdx].Volumes[i].ClientPrivateKey = string(pvkeyData)
+					cfg.V1.Allocations[aIdx].Volumes[i].ClientPrivateKey = string(pvkeyData)
 				}
 
 				if v.ClientPEM != "" {
@@ -71,7 +71,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read pem data: %w", err)
 					}
-					cfg.Ensemble.V1.Allocations[aIdx].Volumes[i].ClientPEM = string(pemData)
+					cfg.V1.Allocations[aIdx].Volumes[i].ClientPEM = string(pemData)
 				}
 
 				if v.ClientCA != "" {
@@ -79,7 +79,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read ca data: %w", err)
 					}
-					cfg.Ensemble.V1.Allocations[aIdx].Volumes[i].ClientCA = string(caData)
+					cfg.V1.Allocations[aIdx].Volumes[i].ClientCA = string(caData)
 				}
 			}
 		}

@@ -64,3 +64,18 @@ func orderByDependency(vertices map[string][]string) ([][]string, error) {
 
 	return result, nil
 }
+
+// aggregateErrors aggregates multiple errors coming from
+// a channel until there are no error msgs anymore
+func aggregateErrors(errCh chan error) error {
+	var aggErr error
+	for err := range errCh {
+		if aggErr == nil {
+			aggErr = err
+			continue
+		} else if err != nil {
+			aggErr = fmt.Errorf("%w\n%w", aggErr, err)
+		}
+	}
+	return aggErr
+}

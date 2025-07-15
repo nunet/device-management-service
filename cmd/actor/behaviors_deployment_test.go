@@ -24,6 +24,7 @@ type mockDeploymentBehaviorClient struct {
 	deploymentManifestFn func(ctx context.Context, req node.DeploymentManifestRequest, opts ...client.Option) (node.DeploymentManifestResponse, error)
 	deploymentShutdownFn func(ctx context.Context, req node.DeploymentShutdownRequest, opts ...client.Option) (node.DeploymentShutdownResponse, error)
 	deploymentNewFn      func(ctx context.Context, req node.NewDeploymentRequest, opts ...client.Option) (node.NewDeploymentResponse, error)
+	deploymentUpdateFn   func(ctx context.Context, req node.UpdateDeploymentRequest, opts ...client.Option) (node.UpdateDeploymentResponse, error)
 }
 
 func (m *mockDeploymentBehaviorClient) DeploymentList(ctx context.Context, req node.DeploymentListRequest, opts ...client.Option) (node.DeploymentListResponse, error) {
@@ -48,6 +49,10 @@ func (m *mockDeploymentBehaviorClient) DeploymentShutdown(ctx context.Context, r
 
 func (m *mockDeploymentBehaviorClient) DeploymentNew(ctx context.Context, req node.NewDeploymentRequest, opts ...client.Option) (node.NewDeploymentResponse, error) {
 	return m.deploymentNewFn(ctx, req, opts...)
+}
+
+func (m *mockDeploymentBehaviorClient) DeploymentUpdate(ctx context.Context, req node.UpdateDeploymentRequest, opts ...client.Option) (node.UpdateDeploymentResponse, error) {
+	return m.deploymentUpdateFn(ctx, req, opts...)
 }
 
 func TestDeploymentListBehavior(t *testing.T) {
@@ -445,6 +450,134 @@ allocations:
 
 			actorCmd := newActorCmdGroup(dmsCli)
 			_, _, err := utils.ExecuteCommand(actorCmd, append([]string{behaviors.NewDeploymentBehavior}, tt.args...)...)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestUpdateDeploymentBehavior(t *testing.T) {
+	t.Parallel()
+
+	testEnsembleConfig := `version: "V1"
+
+allocations:
+    alloc1:
+        type: task
+        executor: docker
+        execution:
+            type: docker
+            image: hello-world
+        resources:
+          cpu:
+                cores: 1
+          ram:
+              size: 1000000B
+          disk:
+              size: 1000000B
+        failure_recovery: stay_down`
+
+	testEnsemble := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{
+				"alloc1": {
+					Type:     jobtypes.AllocationTypeTask,
+					Executor: jobtypes.ExecutorDocker,
+					Resources: dmstypes.Resources{
+						CPU: dmstypes.CPU{
+							Cores: 1,
+						},
+						RAM: dmstypes.RAM{
+							Size: 1000000,
+						},
+						Disk: dmstypes.Disk{
+							Size: 1000000,
+						},
+					},
+					Execution: dmstypes.SpecConfig{
+						Type: string(jobtypes.ExecutorDocker),
+						Params: map[string]interface{}{
+							"image": "hello-world",
+						},
+					},
+					DNSName:         "alloc1",
+					FailureRecovery: jobtypes.AllocationFailureRecoveryStayDown,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name        string
+		args        []string
+		opts        client.MessageOptions
+		expectedReq node.UpdateDeploymentRequest
+		testFiles   map[string]string
+		wantErr     bool
+	}{
+		{
+			name:    "no args",
+			args:    []string{},
+			opts:    client.NewMessageOptions(),
+			wantErr: true,
+		},
+		{
+			name:    "no ensemble ID",
+			args:    []string{"--spec-file", "test_spec_file.yaml"},
+			opts:    client.NewMessageOptions(),
+			wantErr: true,
+		},
+		{
+			name: "with default ensemble file",
+			args: []string{"--id", "test-id"},
+			opts: client.NewMessageOptions(),
+			testFiles: map[string]string{
+				"ensemble.yaml": testEnsembleConfig,
+			},
+			expectedReq: node.UpdateDeploymentRequest{
+				EnsembleID: "test-id",
+				Ensemble:   testEnsemble,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid spec file",
+			args: []string{"--id", "test-id", "--spec-file", "test_spec_file.yaml"},
+			opts: client.NewMessageOptions(),
+			testFiles: map[string]string{
+				"test_spec_file.yaml": testEnsembleConfig,
+			},
+			expectedReq: node.UpdateDeploymentRequest{
+				EnsembleID: "test-id",
+				Ensemble:   testEnsemble,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dmsCli := setupTest(t, &mockDeploymentBehaviorClient{
+				deploymentUpdateFn: func(_ context.Context, req node.UpdateDeploymentRequest, opts ...client.Option) (node.UpdateDeploymentResponse, error) {
+					checkMessageOptions(t, tt.opts, opts...)
+					assert.Equal(t, tt.expectedReq, req)
+					return node.UpdateDeploymentResponse{}, nil
+				},
+			})
+
+			afs := afero.Afero{Fs: dmsCli.FS()}
+			for k, v := range tt.testFiles {
+				err := afs.WriteFile(k, []byte(v), 0o644)
+				assert.NoError(t, err)
+			}
+
+			actorCmd := newActorCmdGroup(dmsCli)
+			_, _, err := utils.ExecuteCommand(actorCmd, append([]string{behaviors.DeploymentUpdateBehavior}, tt.args...)...)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

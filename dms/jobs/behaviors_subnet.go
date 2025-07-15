@@ -10,26 +10,19 @@ package jobs
 
 import (
 	"encoding/json"
+	"fmt"
+
+	"go.uber.org/multierr"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 )
-
-type SubnetAddPeerRequest struct {
-	SubnetID string
-	PeerID   string
-	IP       string
-}
-
-type SubnetAddPeerResponse struct {
-	OK    bool
-	Error string
-}
 
 func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request SubnetAddPeerRequest
-	resp := SubnetAddPeerResponse{}
+	var request behaviors.SubnetAddPeerRequest
+	resp := behaviors.SubnetAddPeerResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
@@ -53,22 +46,11 @@ func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-type SubnetAcceptPeerRequest struct {
-	SubnetID string
-	PeerID   string
-	IP       string
-}
-
-type SubnetAcceptPeerResponse struct {
-	OK    bool
-	Error string
-}
-
-func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
+func (a *Allocation) handleSubnetAcceptPeers(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request SubnetAcceptPeerRequest
-	resp := SubnetAcceptPeerResponse{}
+	var request behaviors.SubnetAcceptPeersRequest
+	resp := behaviors.SubnetAcceptPeersResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
@@ -76,7 +58,7 @@ func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
 		return
 	}
 
-	err := a.network.AcceptSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	err := a.network.AcceptSubnetPeers(request.SubnetID, request.PartialRoutingTable)
 	if err != nil {
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
@@ -85,33 +67,18 @@ func (a *Allocation) handleSubnetAcceptPeer(msg actor.Envelope) {
 
 	log.Debugw("subnet_peer_accepted",
 		"labels", []string{},
-		"peerID", request.PeerID,
-		"subnetID", request.SubnetID)
+		"peers", request.PartialRoutingTable)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
-}
-
-type SubnetMapPortRequest struct {
-	SubnetID   string
-	Protocol   string
-	SourceIP   string
-	SourcePort string
-	DestIP     string
-	DestPort   string
-}
-
-type SubnetMapPortResponse struct {
-	OK    bool
-	Error string
 }
 
 func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 	defer msg.Discard()
 	log.Debugw("handle_subnet_map_port_invoked", "from", msg.From)
 
-	var request SubnetMapPortRequest
-	resp := SubnetMapPortResponse{}
+	var request behaviors.SubnetMapPortRequest
+	resp := behaviors.SubnetMapPortResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Debugw("subnet_map_port_unmarshal_error",
@@ -140,22 +107,11 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-type SubnetDNSAddRecordsRequest struct {
-	SubnetID string
-	// map of domain name:ip
-	Records map[string]string
-}
-
-type SubnetDNSAddRecordsResponse struct {
-	OK    bool
-	Error string
-}
-
 func (a *Allocation) handleSubnetDNSAddRecords(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request SubnetDNSAddRecordsRequest
-	resp := SubnetDNSAddRecordsResponse{}
+	var request behaviors.SubnetDNSAddRecordsRequest
+	resp := behaviors.SubnetDNSAddRecordsResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
@@ -179,25 +135,11 @@ func (a *Allocation) handleSubnetDNSAddRecords(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-type SubnetUnmapPortRequest struct {
-	SubnetID   string
-	Protocol   string
-	SourceIP   string
-	SourcePort string
-	DestIP     string
-	DestPort   string
-}
-
-type SubnetUnmapPortResponse struct {
-	OK    bool
-	Error string
-}
-
 func (a *Allocation) handleSubnetUnmapPort(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request SubnetUnmapPortRequest
-	resp := SubnetUnmapPortResponse{}
+	var request behaviors.SubnetUnmapPortRequest
+	resp := behaviors.SubnetUnmapPortResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
@@ -222,21 +164,11 @@ func (a *Allocation) handleSubnetUnmapPort(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
-type SubnetDNSRemoveRecordRequest struct {
-	SubnetID   string
-	DomainName string
-}
-
-type SubnetDNSRemoveRecordResponse struct {
-	OK    bool
-	Error string
-}
-
-func (a *Allocation) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
+func (a *Allocation) handleSubnetDNSRemoveRecords(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request SubnetDNSRemoveRecordRequest
-	resp := SubnetDNSRemoveRecordResponse{}
+	var request behaviors.SubnetDNSRemoveRecordsRequest
+	resp := behaviors.SubnetDNSRemoveRecordsResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
@@ -244,37 +176,35 @@ func (a *Allocation) handleSubnetDNSRemoveRecord(msg actor.Envelope) {
 		return
 	}
 
-	err := a.network.RemoveSubnetDNSRecord(request.SubnetID, request.DomainName)
-	if err != nil {
-		resp.Error = err.Error()
+	var errs error
+
+	for _, domain := range request.DomainNames {
+		err := a.network.RemoveSubnetDNSRecord(request.SubnetID, domain)
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("error removing dns record: %w", err))
+		}
+	}
+
+	if errs != nil {
+		resp.Error = errs.Error()
 		a.sendReply(msg, resp)
 		return
 	}
 
 	log.Debugw("subnet_dns_record_removed",
 		"labels", []string{},
-		"domainName", request.DomainName,
+		"domains", request.DomainNames,
 		"subnetID", request.SubnetID)
+
 	resp.OK = true
 	a.sendReply(msg, resp)
 }
 
-type SubnetRemovePeerRequest struct {
-	IP       string
-	SubnetID string
-	PeerID   string
-}
-
-type SubnetRemovePeerResponse struct {
-	OK    bool
-	Error string
-}
-
-func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
+func (a *Allocation) handleSubnetRemovePeers(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var request SubnetRemovePeerRequest
-	resp := SubnetRemovePeerResponse{}
+	var request behaviors.SubnetRemovePeersRequest
+	resp := behaviors.SubnetRemovePeersResponse{}
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		resp.Error = err.Error()
@@ -282,7 +212,7 @@ func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
 		return
 	}
 
-	err := a.network.RemoveSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	err := a.network.RemoveSubnetPeers(request.SubnetID, request.PartialRoutingTable)
 	if err != nil {
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)
@@ -291,8 +221,7 @@ func (a *Allocation) handleSubnetRemovePeer(msg actor.Envelope) {
 
 	log.Debugw("subnet_peer_removed",
 		"labels", []string{},
-		"peerID", request.PeerID,
-		"subnetID", request.SubnetID)
+		"peers", request.PartialRoutingTable)
 
 	resp.OK = true
 	a.sendReply(msg, resp)

@@ -3,15 +3,19 @@ package utils
 import (
 	"context"
 	"fmt"
+
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
 // These are the keys stored into the Context
 // We could use a map directly, but empty struct
 // has a better performance if it grows too large
 type (
-	nodesCtxKey    struct{}
-	nodeMapCtxKey  struct{}
-	ensembleCtxKey struct{}
+	nodesCtxKey     struct{}
+	nodeMapCtxKey   struct{}
+	ensembleCtxKey  struct{}
+	manifestCtxKey  struct{}
+	allocRespCtxKey struct{}
 )
 
 // TestCtx is a wrapper of Context
@@ -68,5 +72,33 @@ func (t *TestCtx) EnsembleID() (string, error) {
 func (t *TestCtx) WithEnsembleID(id string) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, ensembleCtxKey{}, id),
+	}
+}
+
+func (t *TestCtx) Manifest() (*jobtypes.EnsembleManifest, error) {
+	manifest, ok := t.ctx.Value(manifestCtxKey{}).(*jobtypes.EnsembleManifest)
+	if !ok {
+		return nil, fmt.Errorf("no ensemble ID available on context")
+	}
+	return manifest, nil
+}
+
+func (t *TestCtx) WithManifest(m *jobtypes.EnsembleManifest) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, manifestCtxKey{}, m),
+	}
+}
+
+func (t *TestCtx) AllocationResponses() ([]string, error) {
+	cfg, ok := t.ctx.Value(allocRespCtxKey{}).([]string)
+	if !ok {
+		return []string{}, fmt.Errorf("no allocation response available on context")
+	}
+	return cfg, nil
+}
+
+func (t *TestCtx) WithAllocationResponses(r []string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, allocRespCtxKey{}, r),
 	}
 }

@@ -8,12 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"github.com/stretchr/testify/require"
 )
 
 const glusterContainerName = "gluster-container"
@@ -110,6 +109,20 @@ func runGlusterCommands(containerName string, commands [][]string) error {
 	}
 
 	fmt.Println("Gluster volume setup completed successfully.")
+	return nil
+}
+
+func supportsGluster() error {
+	// Check if we have root privileges by trying a mount command that requires root
+	cmd := exec.Command("mount", "--type")
+	output, err := cmd.CombinedOutput()
+	outputStr := string(output)
+
+	// If the error contains "only root can do that", we don't have root privileges
+	if err != nil && strings.Contains(outputStr, "only root can do that") {
+		return fmt.Errorf("GlusterFS tests require root privileges: %s", outputStr)
+	}
+
 	return nil
 }
 
@@ -229,4 +242,9 @@ func setupGlusterfsServer(t *testing.T) {
 	}
 	err = runGlusterCommands(glusterContainerName, commands)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		if err := deleteGlusterContainer(glusterContainerName); err != nil {
+			t.Logf("failed to delete gluster container: %v", err)
+		}
+	})
 }

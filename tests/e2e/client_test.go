@@ -35,24 +35,24 @@ import (
 )
 
 type Client struct {
-	afero afero.Afero
-	cfg   *config.Config
+	fs  afero.Fs
+	cfg *config.Config
+	env env.EnvironmentProvider
 }
 
 func newClient(t *testing.T, cfg *config.Config) *Client {
 	t.Helper()
-	afs := afero.Afero{Fs: afero.NewOsFs()}
-
 	return &Client{
-		afero: afs,
-		cfg:   cfg,
+		fs:  afero.NewOsFs(),
+		cfg: cfg,
+		env: env.NewOSEnvironment(),
 	}
 }
 
 func (c *Client) newCommandCtx() *cobra.Command {
 	dmsCLI := cli.New(
 		cli.WithConfig(c.cfg),
-		cli.WithFS(c.afero),
+		cli.WithFS(c.fs),
 		cli.WithEnv(env.NewOSEnvironment()),
 	)
 	return cmd.NewRootCMD(dmsCLI)
@@ -83,7 +83,7 @@ func (c *Client) newCap(t *testing.T, name, passphrase string) {
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "new", name}
+	args := []string{"cap", "new", "-f", name}
 	root.SetArgs(args)
 	err = root.Execute()
 	require.NoError(t, err)
@@ -246,6 +246,27 @@ func (c *Client) deploy(t *testing.T, context, passphrase, specPath string) stri
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/new", "--spec-file", specPath, "--timeout", "2m"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	require.NoError(t, err)
+	return buf.String()
+}
+
+func (c *Client) update(t *testing.T, context, passphrase, specPath, ensembleID string) string {
+	root := c.newCommandCtx()
+
+	err := os.Setenv("DMS_PASSPHRASE", passphrase)
+	require.NoError(t, err)
+
+	args := []string{
+		"actor", "cmd", "--context",
+		context, "/dms/node/deployment/update", "--spec-file",
+		specPath, "--timeout", "2m",
+		"--id", ensembleID,
+	}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer

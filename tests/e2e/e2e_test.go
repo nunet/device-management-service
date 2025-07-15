@@ -29,15 +29,8 @@ import (
 // 3. Runner function should be defined in the respective test file and must be passed to the test suite
 func TestE2E(t *testing.T) {
 	t.Parallel()
-	setupGlusterfsServer(t)
-	t.Cleanup(func() {
-		if err := deleteGlusterContainer(glusterContainerName); err != nil {
-			t.Logf("failed to delete gluster container: %v", err)
-		}
-	})
-
 	var (
-		testSuites         = 4
+		testSuites         = 5
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -47,7 +40,6 @@ func TestE2E(t *testing.T) {
 
 	t.Run("BasicTests", func(t *testing.T) {
 		t.Parallel()
-
 		basicTests := &TestSuite{
 			numNodes:      3,
 			Name:          "basic_tests",
@@ -60,7 +52,6 @@ func TestE2E(t *testing.T) {
 
 	t.Run("DeploymentTests", func(t *testing.T) {
 		t.Parallel()
-
 		deploymentTests := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_tests",
@@ -75,6 +66,13 @@ func TestE2E(t *testing.T) {
 		t.Parallel()
 		t.Skip("not implemented")
 
+		err := supportsGluster()
+		if err != nil {
+			t.Skipf("glusterfs not supported, skipping gluster tests: %v", err)
+		} else {
+			setupGlusterfsServer(t)
+		}
+
 		deploymentWithVolumesTests := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_with_volumes_tests",
@@ -85,16 +83,25 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentWithVolumesTests)
 	})
 
-	t.Run("DeploymentFullAssertion", func(t *testing.T) {
-		t.Parallel()
-
-		deploymentSubnetAssertion := &TestSuite{
-			numNodes:      4,
-			Name:          "deployment_assert_subnet",
+	t.Run("DeploymentUpdates", func(t *testing.T) {
+		deploymentUpdates := &TestSuite{
+			numNodes:      3,
+			Name:          "deployment_updates",
 			restPortIndex: ports[6],
 			p2pPortIndex:  ports[7],
+			runner:        DeploymentUpdates,
+		}
+		suite.Run(t, deploymentUpdates)
+	})
+
+	t.Run("DeploymentFullAssertion", func(t *testing.T) {
+		deploymentFullAssertion := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_assert_subnet",
+			restPortIndex: ports[8],
+			p2pPortIndex:  ports[9],
 			runner:        DeploymentFullAssertion,
 		}
-		suite.Run(t, deploymentSubnetAssertion)
+		suite.Run(t, deploymentFullAssertion)
 	})
 }

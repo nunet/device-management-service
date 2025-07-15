@@ -365,6 +365,9 @@ func (a *allocator) Commit(ctx context.Context,
 func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 	log.Debugf("uncommitting allocation %s", allocationID)
 
+	// uncommit the ports (do first as it's best-efforts)
+	a.ports.Release(allocationID)
+
 	// Check if the allocation is committed
 	if _, ok := a.commits[allocationID]; !ok {
 		log.Warnf("allocation %s not committed", allocationID)
@@ -376,9 +379,6 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 	if err != nil {
 		return fmt.Errorf("uncommit resources: %w", err)
 	}
-
-	// uncommit the ports
-	a.ports.Release(allocationID)
 
 	// remove the commit from the state
 	a.lock.Lock()
@@ -506,11 +506,14 @@ func (a *allocator) Allocate(
 }
 
 // TODO: it should release on best-efforts
-// TODO: locks to avoid callers trying to release the same allocation
 func (a *allocator) Release(ctx context.Context, allocationID string) error {
 	log.Debugf("releasing allocation %s", allocationID)
 	a.lock.Lock()
 	defer a.lock.Unlock()
+
+	// deallocate the resources and ports
+	// do first since it's best effort
+	a.ports.Release(allocationID)
 
 	// Check if allocated
 	allocation, ok := a.allocations[allocationID]
@@ -529,9 +532,6 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 		log.Warnf("terminate allocation: %v", err)
 		return fmt.Errorf("terminate allocation: %w", err)
 	}
-
-	// deallocate the resources and ports
-	a.ports.Release(allocationID)
 
 	err = a.resources.DeallocateResources(ctx, allocationID)
 	if err != nil {

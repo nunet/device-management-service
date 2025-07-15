@@ -1,0 +1,48 @@
+version: "V1"
+
+allocations:
+    httpbin:
+        type: service
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 1 # GiB
+            disk:
+                size: 1 # GiB
+        execution:
+            type: docker
+            image: kennethreitz/httpbin 
+
+    nginx:
+        type: service
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 1 # GiB
+            disk:
+                size: 1 # GiB
+        execution:
+            type: docker
+            image: nginx:alpine
+
+nodes:
+    node1:
+        allocations:
+            - httpbin
+        ports:
+            - public: 7500
+              private: 80
+              allocation: httpbin
+    node2:
+        allocations:
+            - nginx
+        ports:
+            - public: 7501
+              private: 80
+              allocation: nginx

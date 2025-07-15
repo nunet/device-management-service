@@ -107,7 +107,7 @@ The following are the implemented behaviors and their associated capabilities:
 /dms/allocation/subnet/dns/add-records
 - SubnetDNSAddRecordsBehavior: Add DNS records to a subnet.
 /dms/allocation/subnet/dns/remove-record
-- SubnetDNSRemoveRecordBehavior: Remove a DNS record from a subnet.
+- SubnetDNSRemoveRecordsBehavior: Remove a DNS record from a subnet.
 
 /dms/ensemble/<ENSEMBLE_ID>
 - EnsembleNamespace: Interact with ensembles on the node.

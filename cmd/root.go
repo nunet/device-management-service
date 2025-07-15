@@ -15,7 +15,6 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/actor"
 	"gitlab.com/nunet/device-management-service/cmd/cap"
 	"gitlab.com/nunet/device-management-service/cmd/cli"
-	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
@@ -34,20 +33,18 @@ func NewRootCMD(dmsCli *cli.DmsCLI) *cobra.Command {
 		Run: func(cmd *cobra.Command, _ []string) {
 			_ = cmd.Help()
 		},
+		PersistentPreRun: func(_ *cobra.Command, _ []string) {
+			_, _ = dmsCli.ConfigLoader().Load()
+		},
 	}
 
-	cfg, err := dmsCli.Config()
-	if err != nil {
-		panic(err)
-	}
-	afs := afero.Afero{Fs: dmsCli.FS()}
-	env := dmsCli.Env()
+	dmsCli.ConfigLoader().BindFlags(cmd.PersistentFlags())
 
-	cmd.AddCommand(newRunCmd(env, cfg))
-	cmd.AddCommand(newKeyCmd(afs, env, cfg))
+	cmd.AddCommand(newRunCmd(dmsCli))
+	cmd.AddCommand(newKeyCmd(dmsCli))
 	cmd.AddCommand(cap.NewCapCmd(dmsCli))
 	cmd.AddCommand(actor.NewActorCmd(dmsCli))
-	cmd.AddCommand(newConfigCmd(afs.Fs, env, cfg))
+	cmd.AddCommand(newConfigCmd(dmsCli))
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newTapCommand())
 	cmd.AddCommand(newGPUCommand())
@@ -55,11 +52,11 @@ func NewRootCMD(dmsCli *cli.DmsCLI) *cobra.Command {
 	return cmd
 }
 
-func Execute(cfg *config.Config) {
+func Execute() {
 	dmsCli := cli.New(
-		cli.WithConfig(cfg),
 		cli.WithFS(afero.NewOsFs()),
 		cli.WithEnv(env.NewOSEnvironment()),
 	)
+
 	cobra.CheckErr(NewRootCMD(dmsCli).Execute())
 }
