@@ -34,7 +34,7 @@ func (c *Context) Anchor(kind, arg string) error {
 }
 
 func (c *Context) Run() error {
-	return c.node.RunDMSCmdBackground(fmt.Sprintf("GOLOG_LOG_LEVEL=debug nunet run -c %s > dms-logs.txt", c.Name))
+	return c.node.RunDMSCmdBackground(fmt.Sprintf("GOLOG_LOG_LEVEL=debug nunet run -c %s > dms-logs.txt 2>&1", c.Name))
 }
 
 func (c *Context) PeerAddr() (*node.PeerAddrInfoResponse, error) {
