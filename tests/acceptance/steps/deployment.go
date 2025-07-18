@@ -11,24 +11,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
-	"golang.org/x/sync/errgroup"
 )
-
-const orgName = "org"
 
 // Deployment registers all step definitions for deployment feature
 func Deployment(ctx *godog.ScenarioContext) {
 	ctx.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-		return hooks.SetupNodes(ctx, 3)
-	})
-	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		err := hooks.SaveLogs(ctx)
-		if err != nil {
+		if err := hooks.CleanupNodes(); err != nil {
 			return ctx, err
 		}
-		return hooks.TeardownNodes(ctx)
+		return ctx, nil
+	})
+	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		if err := hooks.SaveLogs(ctx); err != nil {
+			return ctx, err
+		}
+		if err := hooks.CleanupNodes(); err != nil {
+			return ctx, err
+		}
+		return ctx, nil
 	})
 
+	ctx.Step(`^the following nodes$`, theFollowingNodes)
 	ctx.Step(`^"([^"]*)" has deployed docker_hello\.yaml on "([^"]*)"$`, hasDeployedDockerHelloOn)
 	ctx.Step(`^"([^"]*)" deployment is completed$`, deploymentIsCompleted)
 	ctx.Step(`^"([^"]*)" ensemble should return "([^"]*)"$`, ensembleShouldReturn)
@@ -38,80 +41,21 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodes, err := tc.Nodes()
+	nodeMap, err := tc.NodeMap()
 	assert.NoError(t, err)
-	assert.NotEmpty(t, nodes)
+	assert.NotEmpty(t, nodeMap)
 
 	spName = strings.ToLower(spName)
 	cpName = strings.ToLower(cpName)
 
-	nodeMap := map[string]*utils.Node{
-		spName:  nodes[0],
-		cpName:  nodes[1],
-		orgName: nodes[2],
-	}
-
 	sp := nodeMap[spName]
 	cp := nodeMap[cpName]
-	org := nodeMap[orgName]
 
-	tc = tc.WithNodeMap(nodeMap)
+	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
+	assert.True(t, ok)
 
-	// only Bob (compute provider) needs Docker
-	// launch goroutine while setting up capabilities
-	// docker should be available before DMS starts
-	g := new(errgroup.Group)
-	g.Go(func() error {
-		return cp.InstallDocker()
-	})
-
-	spUserCtx, spDmsCtx, err := sp.InitialCaps(spName)
-	assert.NoError(t, err)
-	assert.NotNil(t, spUserCtx)
-	assert.NotNil(t, spDmsCtx)
-
-	cpUserCtx, cpDmsCtx, err := cp.InitialCaps(cpName)
-	assert.NoError(t, err)
-	assert.NotNil(t, cpUserCtx)
-	assert.NotNil(t, cpDmsCtx)
-
-	orgCtx, err := org.CreateContext(orgName)
-	assert.NoError(t, err, "could not create org")
-	assert.NotNil(t, orgCtx)
-
-	// update nodeMap with the latest node objects that have updated contexts
-	nodeMap = map[string]*utils.Node{
-		spName:  sp,
-		cpName:  cp,
-		orgName: org,
-	}
-	// update ctx after nodes have been updated with capability contexts
-	tc = tc.WithNodeMap(nodeMap)
-
-	err = utils.SetupPrivateNetwork(spUserCtx, spDmsCtx, orgCtx)
-	assert.NoError(t, err)
-
-	err = utils.SetupPrivateNetwork(cpUserCtx, cpDmsCtx, orgCtx)
-	assert.NoError(t, err)
-
-	err = spDmsCtx.Run()
-	assert.NoError(t, err)
-
-	// wait for dms to start on sp
-	require.Eventually(t, func() bool {
-		return sp.IsDMSRunning(9999)
-	}, 20*time.Second, 500*time.Millisecond)
-
-	// check if Docker was installed successfully
-	assert.NoError(t, g.Wait())
-
-	err = cpDmsCtx.Run()
-	assert.NoError(t, err)
-
-	// wait for dms to start on cp
-	require.Eventually(t, func() bool {
-		return cp.IsDMSRunning(9999)
-	}, 20*time.Second, 500*time.Millisecond)
+	cpDmsCtx, ok := cp.Contexts[cpName+utils.DefaultDMSSuffix]
+	assert.True(t, ok)
 
 	spInfo, err := spDmsCtx.PeerAddr()
 	assert.NoError(t, err)
@@ -126,9 +70,6 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	assert.NotEmpty(t, cpAddr)
 
 	err = spDmsCtx.Connect(cpAddr)
-	assert.NoError(t, err)
-
-	err = cpDmsCtx.Onboard()
 	assert.NoError(t, err)
 
 	file := utils.FindTestdata("ensembles/docker_hello.yaml")
