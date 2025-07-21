@@ -38,6 +38,8 @@ func writeSampleConfig(fs afero.Fs) error {
 		P2P: P2P{
 			Memory:          2048,
 			FileDescriptors: 1024,
+			ListenAddress:   []string{"/ip4/127.0.0.1/tcp/1234"},
+			BootstrapPeers:  []string{},
 		},
 	}
 
@@ -73,6 +75,19 @@ func TestLoadFromFile(t *testing.T) {
 	require.Equal(t, "/var/lib/nunet", cfg.General.UserDir)
 	require.Equal(t, 2048, cfg.P2P.Memory)
 	require.Equal(t, "DEBUG", cfg.LogLevel())
+}
+
+func TestLoadSliceValue(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	require.NoError(t, writeSampleConfig(fs))
+
+	ldr := NewLoader(WithFS(fs))
+
+	cfg, err := ldr.Load()
+	require.NoError(t, err)
+	require.Len(t, cfg.P2P.ListenAddress, 1)
+	require.Equal(t, "/ip4/127.0.0.1/tcp/1234", cfg.P2P.ListenAddress[0])
+	require.Len(t, cfg.P2P.BootstrapPeers, 0)
 }
 
 func TestEnvOverride(t *testing.T) {
