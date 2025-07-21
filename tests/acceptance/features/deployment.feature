@@ -5,9 +5,9 @@ Feature: Deployment
 
   Background:
     Given the following nodes
-	| nodes | role | onboarded |  org  |
-    	| Alice |  SP  |   false   | nunet |
-    	|  Bob  |  CP  |   true    | nunet |
+      | nodes | role | onboarded | org   |
+      | Alice | SP   | false     | nunet |
+      | Bob   | CP   | true      | nunet |
 
   Scenario Outline: Retrieve output from execution
     Given "Alice" has deployed <ensemble> on "Bob"
@@ -15,5 +15,5 @@ Feature: Deployment
     Then "Alice" ensemble should return <output>
 
   Examples:
-    |      ensemble     |        output        |
+    | ensemble          | output               |
     | docker_hello.yaml | "Hello from Docker!" |
