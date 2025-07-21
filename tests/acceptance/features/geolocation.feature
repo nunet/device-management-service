@@ -5,11 +5,11 @@ Feature: Geolocation
 
   Background:
     Given the following nodes:
-      | node  | organization | onboarded | continent | country |
-      | Alice | nunet-test   | no        |           |         |
-      | Bob   | nunet-test   | yes       | NA        | US      |
-      | Carol | nunet-test   | yes       | EU        | DE      |
-      | Dave  | nunet-test   | yes       | AS        | CH      |
+      | nodes | role | onboarded | org   | continent | country |
+      | Alice | SP   | false     | nunet |           |         |
+      | Bob   | CP   | true      | nunet | NA        | US      |
+      | Carol | CP   | true      | nunet | EU        | DE      |
+      | Dave  | CP   | true      | nunet | AS        | CH      |
 
   @wip
   Scenario Outline: Deployment is executed only on a node satisfying location constraints

@@ -5,8 +5,9 @@ Feature: Service Deployment
 
   Background:
     Given the following nodes:
-      | node  | organization | onboarded |
-      | Bob   | nunet-test   | yes       |
+      | nodes | role | onboarded | org   |
+      | Alice | SP   | false     | nunet |
+      | Bob   | CP   | true      | nunet |
 
   @wip
   Scenario Outline: Deploy a service and send a request
