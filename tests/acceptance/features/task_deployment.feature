@@ -5,10 +5,10 @@ Feature: Task Deployment
 
   Background:
     Given the following nodes:
-      | node  | organization | onboarded |
-      | Alice | nunet-test   | no        |
-      | Bob   | nunet-test   | yes       |
-      | Carol | nunet-test   | yes       |
+      | nodes | role | onboarded | org   |
+      | Alice | SP   | false     | nunet |
+      | Bob   | CP   | true      | nunet |
+      | Carol | CP   | true      | nunet |
 
   @wip
   Scenario Outline: Launch a deployment on any available peer in the network
