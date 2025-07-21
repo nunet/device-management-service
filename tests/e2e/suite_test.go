@@ -265,6 +265,7 @@ func (s *TestSuite) SetupSuite() {
 
 	s.grantTokens = make(map[int]map[int]string)
 	s.nodes = make(map[int]*mockNode)
+	s.bootstrapPeers = []string{}
 	s.currentDir = getCurrentFileDirectory()
 	s.testDataDir = filepath.Join(s.currentDir, "testdata")
 }
