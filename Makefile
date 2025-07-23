@@ -53,6 +53,21 @@ linux_amd64:
 	@echo "Building for Linux AMD64..."
 	go mod tidy
 	GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) .
+	
+linux_amd64_docker:
+	@echo "Building for Linux AMD64 using Docker..."
+	docker build -f $(PWD)/maint-scripts/Dockerfile.builder -t dms-builder $(PWD)/maint-scripts
+	docker run --rm \
+		--env GOFLAGS=-buildvcs=false \
+		--entrypoint="" \
+		--workdir /app \
+		-v $(PWD):/app \
+		dms-builder \
+		bash -c '\
+			git config --global --add safe.directory /app && \
+			go mod tidy && \
+			CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) .;\
+		'
 
 linux_arm64:
 	@echo "Building for Linux ARM64..."
@@ -131,8 +146,17 @@ e2e-%:
 	make setcap_e2e
 	go test -v ./tests/e2e/... -tags=e2e -timeout=15m -run "TestE2E/$*" $(ARGS)
 
-run-acceptance: linux_amd64
+run-acceptance:
+	@echo "Running acceptance tests"
 	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m -godog.tags="~@wip"
+
+build-and-run-acceptance:
+	@if [ $(UNAME) = Linux ]; then\
+		make linux_amd64;\
+	elif [ $(UNAME) = Darwin ]; then\
+		make linux_amd64_docker;\
+	fi
+	make run-acceptance
 
 build-nunet-glusterfs-client:
 	docker build -t nunet-glusterfs-client storage/volume/glusterfs/client_image
