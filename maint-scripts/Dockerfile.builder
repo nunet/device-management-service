@@ -22,6 +22,7 @@ RUN apt update \
     zip \
     gcc-arm-linux-gnueabihf \
     gcc-aarch64-linux-gnu \
+    gcc-x86-64-linux-gnu \
   && apt autoremove -y && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
