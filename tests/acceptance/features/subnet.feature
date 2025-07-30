@@ -1,4 +1,7 @@
 Feature: Allocation Running on Subnet
+  As a Service Provider
+  I want to launch services on peers
+  And the services can communicate with each other
 
   Background:
     Given the following nodes

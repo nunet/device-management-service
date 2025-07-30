@@ -1,4 +1,4 @@
-Feature: Geolocation
+Feature: Deployment Geolocated
   As a Service Provider
   I want deployments with location constraints to run only on eligible nodes
   So that deployments follow geographic policies
@@ -12,6 +12,7 @@ Feature: Geolocation
       | Dave  | CP   | true      | nunet | AS        | CH      |
 
   @wip
+  @complexity:high
   Scenario Outline: Deployment is executed only on a node satisfying location constraints
     When the <ensemble> is submitted
     Then the deployment status should be <status>
@@ -28,6 +29,7 @@ Feature: Geolocation
       | docker_hello_constraint_de.yaml | a node with location defined to continent EU and country DE | Completed | Carol         |
 
   @wip
+  @complexity:high
   Scenario Outline: Deployment is distributed across two eligible nodes based on location constraints
     When the <ensemble> is submitted
     Then the deployment status should be <status>
@@ -45,6 +47,7 @@ Feature: Geolocation
       | docker_hello_constraint_ch_de.yaml | two nodes with location defined to AS/CH and EU/DE | Completed | Dave          | Carol         |
 
   @wip
+  @complexity:high
   Scenario Outline: Deployment fails when one or more nodes have no matching running nodes for geographic constraints
     When the <ensemble> is submitted
     Then the deployment should fail with error "<error>"
