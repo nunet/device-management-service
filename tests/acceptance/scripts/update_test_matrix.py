@@ -20,7 +20,7 @@ def parse_feature_file(path):
             elif stripped.startswith("Background") or stripped.startswith("Scenario") or stripped.startswith("Scenario Outline"):
                 in_description = False
                 scenarios.append("- " + stripped.split(":", 1)[1].strip())
-            elif in_description and stripped:
+            elif in_description and stripped and not stripped.startswith("@"):
                 description_lines.append(stripped)
     description = " ".join(description_lines)
     return feature_name, scenarios, description

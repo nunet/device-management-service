@@ -11,6 +11,7 @@ Feature: Task Deployment
       | Carol | CP   | true      | nunet |
 
   @wip
+  @complexity:low
   Scenario Outline: Launch a deployment on any available peer in the network
     When the <ensemble> is submitted
     Then the deployment status should be <status>
@@ -23,6 +24,7 @@ Feature: Task Deployment
       | docker_hello.yaml | one node without targeting any peer | Completed |
 
   @wip
+  @complexity:low
   Scenario Outline: Launch a deployment on a target peer
     When the <ensemble> is submitted
     Then the deployment status should be <status>
@@ -38,6 +40,7 @@ Feature: Task Deployment
       | docker_hello.yaml | one node targeting Bob's peer | Completed | Bob          |
 
   @wip
+  @complexity:medium
   Scenario Outline: Launch multiple deployments on the same peer
     When the <ensemble> is submitted
     Then the deployment status should be <status>
@@ -51,6 +54,7 @@ Feature: Task Deployment
       | docker_hello.yaml | two allocations running on the same node | Completed |
 
   @wip
+  @complexity:low
   Scenario Outline: Launch multiple deployments on different peers
     When the <ensemble> is submitted
     Then the deployment status should be <status>

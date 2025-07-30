@@ -1,6 +1,6 @@
 @wip
-Feature: Posemesh
-  Launch Posemesh nodes.
+Feature: Cardano
+  Launch Cardano nodes.
 
   @wip
   @complexity:high
@@ -8,5 +8,5 @@ Feature: Posemesh
 
   @wip
   @complexity:high
-  Scenario: Launch a deployment with a Dynamic DNS Node
+  Scenario: Launch a deployment with a Block Producer Node
 
