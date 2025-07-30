@@ -254,15 +254,8 @@ func (s *TestSuite) setupTestNetwork() {
 }
 
 // SetupSuite runs once before the suite starts.
+// Keep testdata dir to find the test artifact after execution
 func (s *TestSuite) SetupSuite() {
-	// one private sandbox per suite
-	dir, err := os.MkdirTemp("", "dms-e2e-"+s.Name+"-*")
-	s.Require().NoError(err)
-	s.homeDir = dir // save
-	// All helpers use $HOME, so repoint it to the sandbox
-	_ = os.Setenv("HOME", s.homeDir)
-	_ = os.MkdirAll(filepath.Join(dir, ".nunet", "cap"), 0o755)
-
 	s.grantTokens = make(map[int]map[int]string)
 	s.nodes = make(map[int]*mockNode)
 	s.bootstrapPeers = []string{}
