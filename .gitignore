@@ -43,6 +43,9 @@ sync_remote.sh
 # builds
 builds/
 coverage.out
+coverage.txt
+coverage.html
+junit.xml
 
 # incus certificate
 acc-test-cfg.yml

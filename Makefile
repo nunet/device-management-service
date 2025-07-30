@@ -56,7 +56,7 @@ linux_amd64:
 	
 linux_amd64_docker:
 	@echo "Building for Linux AMD64 using Docker..."
-	docker build -f $(PWD)/maint-scripts/Dockerfile.builder -t dms-builder $(PWD)/maint-scripts
+	make build-dms-builder
 	docker run --rm \
 		--env GOFLAGS=-buildvcs=false \
 		--entrypoint="" \
@@ -125,6 +125,33 @@ clean:
 
 setcap_e2e: 
 	sudo setcap cap_net_admin,cap_sys_admin+ep ./tests/e2e/dms
+
+build-dms-builder:
+	@echo "Building dms-builder docker image"
+	docker build -f $(PWD)/maint-scripts/Dockerfile.builder -t dms-builder $(PWD)/maint-scripts
+
+unit-docker:
+	make build-dms-builder
+	docker build -f $(PWD)/maint-scripts/Dockerfile.unit-tests -t dms-unit-tests $(PWD)/maint-scripts
+	git lfs install && git lfs fetch && git lfs pull
+	make testdata
+	docker run -it --rm \
+		--name dms-unit-tests \
+		--env GOFLAGS=-buildvcs=false \
+		--entrypoint="" \
+		--workdir /app \
+		-v $(PWD):/app \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v /tmp/nunet:/tmp/nunet \
+		-v /root/.cache:/tmp/dms-unit-tests/cache \
+		dms-unit-tests \
+		bash -c 'git config --global --add safe.directory /app && bash /app/maint-scripts/unit-tests.sh'
+
+unit:
+	git lfs install && git lfs fetch && git lfs pull
+	make testdata
+	export GOFLAGS=-buildvcs=false
+	bash $(PWD)/maint-scripts/unit-tests.sh
 
 e2e:
 	@echo "Running all e2e tests"
