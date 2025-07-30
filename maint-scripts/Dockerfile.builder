@@ -5,24 +5,25 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install system dependencies
 RUN apt update \
   && apt install -y \
-    sudo \
-    iptables \
-    dnsutils \
-    git \
+    build-essential \
     curl \
-    wget \
+    devscripts \
+    dnsutils \
+    dpkg-dev \
+    gcc-aarch64-linux-gnu \
+    gcc-arm-linux-gnueabihf \
+    gcc-x86-64-linux-gnu \
+    git \
+    git-lfs \
+    iptables \
     libc6 \
     libcap2-bin \
-    make \
-    build-essential \
-    dpkg-dev \
-    devscripts \
-    lintian \
     libsystemd-dev \
+    lintian \
+    make \
+    sudo \
+    wget \
     zip \
-    gcc-arm-linux-gnueabihf \
-    gcc-aarch64-linux-gnu \
-    gcc-x86-64-linux-gnu \
   && apt autoremove -y && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
