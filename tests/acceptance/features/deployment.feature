@@ -5,9 +5,10 @@ Feature: Deployment
 
   Background:
     Given the following nodes
-      | nodes | role | onboarded | org   |
-      | Alice | SP   | false     | nunet |
-      | Bob   | CP   | true      | nunet |
+      | nodes   | role | onboarded | org   |
+      | Alice   | SP   | false     | nunet |
+      | Bob     | CP   | true      | nunet |
+      | Charlie | CP   | true      | nunet |
 
   Scenario Outline: Retrieve output from execution
     Given "Alice" has deployed <ensemble> on "Bob"
@@ -15,5 +16,12 @@ Feature: Deployment
     Then "Alice" ensemble should return <output>
 
   Examples:
-    | ensemble          | output               |
-    | docker_hello.yaml | "Hello from Docker!" |
+    | ensemble            | output               |
+    | "docker_hello.yaml" | "Hello from Docker!" |
+
+  Scenario: Remove node in running ensemble
+    Given "Alice" has services deployed on "Bob" and "Charlie"
+    And "Alice" deployment is running
+    When "Alice" updates deployment to remove "Charlie"
+    Then "Alice" deployment should be running on "Bob"
+    But "Alice" deployment should not be running on "Charlie"

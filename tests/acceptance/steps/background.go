@@ -106,6 +106,12 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 			})
 		}
 
+		if strings.EqualFold(node.role, "sp") {
+			g.Go(func() error {
+				return instance.InstallYQ()
+			})
+		}
+
 		userCtx, dmsCtx, err := instance.InitialCaps(node.name)
 		assert.NoError(t, err)
 		assert.NotNil(t, userCtx)
