@@ -90,6 +90,8 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
+	tc = tc.WithEnsembleFile(ensemble)
+
 	ensembleID, err := spDmsCtx.Deploy(ensemble)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)

@@ -242,3 +242,23 @@ func (n *Node) PruneResolved() error {
 	}
 	return nil
 }
+
+func (n *Node) InstallYQ() error {
+	_, err := n.RunCMD([]string{"apt-get", "update"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"apt-get", "install", "-y", "wget"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"wget", "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64", "-O", "/usr/local/bin/yq"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"chmod", "+x", "/usr/local/bin/yq"})
+	if err != nil {
+		return err
+	}
+	return nil
+}
