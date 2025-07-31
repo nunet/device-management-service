@@ -161,6 +161,21 @@ func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
 	return resp.Allocations, nil
 }
 
+func (c *Context) UpdateEnsemble(id, path string) error {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/update -i %s -f %s -t 2m", c.Name, id, path))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment update behavior: %s", out)
+	}
+	var resp node.UpdateDeploymentResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("failed to update deployment: %s", resp.Error)
+	}
+	return nil
+}
+
 // JoinOrg allows a user to join an existing organization
 func (c *Context) JoinOrg(dmsCtx *Context, orgDID, grantFromOrg string) error {
 	err := c.Anchor("provide", grantFromOrg)
