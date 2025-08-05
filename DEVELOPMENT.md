@@ -1,5 +1,24 @@
 # Development guidelines
 
+<!--toc:start-->
+- [Development guidelines](#development-guidelines)
+  - [First things first](#first-things-first)
+  - [Testing](#testing)
+    - [Running DMS and config file](#running-dms-and-config-file)
+      - [Config file](#config-file)
+    - [Actor behaviors](#actor-behaviors)
+    - [Running multiple DMS instances](#running-multiple-dms-instances)
+      - [Configuration file](#configuration-file)
+      - [Setting up capabilities](#setting-up-capabilities)
+    - [Deployment and Onboarding](#deployment-and-onboarding)
+    - [Logs](#logs)
+    - [Debugging tips](#debugging-tips)
+      - [Calling behaviors](#calling-behaviors)
+      - [Check logs](#check-logs)
+      - [Working with subnets](#working-with-subnets)
+    - [Local execution of unit tests](#local-execution-of-unit-tests)
+<!--toc:end-->
+
 ## First things first
 
 Before anything, you probably want to read:
@@ -217,7 +236,7 @@ Currently, there are two types of ensembles:
 - **service** for long-running jobs, e.g. running a web server
 
 You can run `docker ps` on the compute provider machines to check if allocations are effectively running.
-While this can work well for *service* ensembles, when running a *task* ensemble the container may exit before having a chance to fetch its status. In that case,
+While this can work well for _service_ ensembles, when running a _task_ ensemble the container may exit before having a chance to fetch its status. In that case,
 prefer `deployment/status` or `deployment/list` behaviors.
 
 #### Check logs
@@ -247,3 +266,15 @@ This enables you to check, for example:
 
 **Note**: not always tools like `dig` and `curl` will be available on the container.
 You can proceed to test with other containers or extend the available ones.
+
+### Local execution of unit tests
+
+To execute the unit tests locally, just run `make unit-docker`. It will build a
+docker image and run the unit tests in a container reproducing the same
+conditions as in the CI pipeline.
+
+Another command to run it outside a dockerized environment exists. It's `make
+unit`, but it will expect the host environment to be correctly configured for
+the unit tests. It can be useful in some situations, but the command is there
+to be used by the pipeline which already runs in docker, so it's recommended to
+stick with `make unit-docker` for consistent results.
