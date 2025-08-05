@@ -14,13 +14,12 @@ variables:
   # SECRET_DETECTION_DISABLED: true
   # SEMVER_DISABLED: true
   # SONARQUBE_DISABLED: true
-  # FEATURE_ENVIRONMENT_DISABLED: true
+  # ACCEPTANCE_TESTS_DISABLED: true
   # ALLOW_LINT_FAIL: true
   # ALLOW_UNIT_TESTS_FAIL: true
   # ALLOW_E2E_TESTS_FAIL: true
   # ALLOW_BUILD_FAIL: true
   # ALLOW_LICENSE_CHECK_FAIL: true
-  # ACCEPTANCE_TESTS_DISABLED: true
 
 include:
 - project: "nunet/gitlab-ci/templates"
