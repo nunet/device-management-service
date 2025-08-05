@@ -176,6 +176,21 @@ func (c *Context) UpdateEnsemble(id, path string) error {
 	return nil
 }
 
+func (c *Context) StopEnsemble(id string) error {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/shutdown --id %s", c.Name, id))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment shutdown behavior: %s", out)
+	}
+	var resp node.DeploymentShutdownResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("failed to shutdown deployment: %s", resp.Error)
+	}
+	return nil
+}
+
 // JoinOrg allows a user to join an existing organization
 func (c *Context) JoinOrg(dmsCtx *Context, orgDID, grantFromOrg string) error {
 	err := c.Anchor("provide", grantFromOrg)

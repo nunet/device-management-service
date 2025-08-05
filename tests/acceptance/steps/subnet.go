@@ -37,6 +37,7 @@ func Subnet(ctx *godog.ScenarioContext) {
 	ctx.Step(`^"([^"]*)" has services deployed on "([^"]*)" and "([^"]*)"$`, hasServicesDeployedOn)
 	ctx.Step(`^"([^"]*)" service tries to communicate with "([^"]*)"$`, serviceTriesToCommunicateWith)
 	ctx.Step(`they should get a OK response$`, shouldGetAOKResponse)
+	ctx.Step(`^"([^"]*)" restarts the deployment$`, restartsTheDeployment)
 }
 
 func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName string) (context.Context, error) {
@@ -240,4 +241,61 @@ func shouldGetAOKResponse(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func restartsTheDeployment(ctx context.Context, spName string) (context.Context, error) {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	nodeMap, err := tc.NodeMap()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, nodeMap)
+
+	spName = strings.ToLower(spName)
+	sp := nodeMap[spName]
+
+	ensembleID, err := tc.EnsembleID()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, ensembleID)
+
+	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
+	assert.True(t, ok)
+
+	status, err := spDmsCtx.EnsembleStatus(ensembleID)
+	assert.NoError(t, err)
+	assert.Equal(t, "Running", status)
+
+	err = spDmsCtx.StopEnsemble(ensembleID)
+	assert.NoError(t, err)
+
+	// assert it has really shutdown
+	require.Eventually(t, func() bool {
+		status, err := spDmsCtx.EnsembleStatus(ensembleID)
+		assert.NoError(t, err)
+		return status == "Completed"
+	}, 60*time.Second, 1*time.Second)
+
+	ensemble, err := tc.EnsembleFile()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, ensemble)
+
+	ensembleID, err = spDmsCtx.Deploy(ensemble)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, ensembleID)
+
+	tc = tc.WithEnsembleID(ensembleID)
+
+	require.Eventually(t, func() bool {
+		status, err := spDmsCtx.EnsembleStatus(ensembleID)
+		assert.NoError(t, err)
+		return status == "Running"
+	}, 60*time.Second, 1*time.Second)
+
+	manifest, err := spDmsCtx.Manifest(ensembleID)
+	assert.NoError(t, err)
+	assert.NotNil(t, manifest)
+
+	tc = tc.WithManifest(manifest)
+
+	return tc.Unwrap(), nil
 }
