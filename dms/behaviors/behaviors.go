@@ -82,6 +82,19 @@ const (
 	SubnetDNSRemoveRecordsBehavior = AllocationNamespace + "/subnet/dns/remove-records"
 
 	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
+
+	TokenomicNamespace           = "/dms/tokenomics"
+	ContractCreateBehavior       = TokenomicNamespace + "/contract/create"
+	ContractApproveLocalBehavior = TokenomicNamespace + "/contract/approve_local"
+	ContractListIncomingBehavior = TokenomicNamespace + "/contract/list_incoming"
+	ContractProposeBehavior      = TokenomicNamespace + "/contract/propose"
+	// registered by the contract actor
+	ContractTerminationBehavior = TokenomicNamespace + "/contract/terminate"
+	ContractCompleteBehavior    = TokenomicNamespace + "/contract/complete"
+	ContractStatusBehavior      = TokenomicNamespace + "/contract/state"
+	ContractSettleBehavior      = TokenomicNamespace + "/contract/settle"
+	ContractValidationBehavior  = TokenomicNamespace + "/contract/validate"
+	ContractSignBehavior        = TokenomicNamespace + "/contract/sign"
 )
 
 var (

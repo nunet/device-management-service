@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -26,6 +27,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
@@ -96,7 +98,150 @@ type CreateVolumeRequestCmd struct {
 	CAOutputDir   string
 }
 
+type CreateContractRequestCmd struct {
+	ContractFile string
+}
+
+type ContractStatusRequestCmd struct {
+	ContractDID string
+}
+
+type ContractApproveLocalRequestCmd struct {
+	ContractDID string
+}
+
 var registeredBehaviors = map[string]*behaviorConfig{
+	// /dms/tokenomics/contract/list_incoming
+	behaviors.ContractListIncomingBehavior: {
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			resp, err := dmsClient.ListIncoming(ctx, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a list incoming contract request",
+		Long: `Invoke the /dms/tokenomics/contract/list_incoming behavior on an actor
+					
+					This behavior calls the actors contract list behaviour.
+					
+					Examples:
+					
+					  nunet actor cmd --context user /dms/tokenomics/contract/list_incoming`,
+	},
+	// /dms/tokenomics/contract/aprove_local
+	behaviors.ContractApproveLocalBehavior: {
+		Payload: func() any { return &ContractApproveLocalRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractApproveLocalRequestCmd)
+			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract-did (required)")
+			_ = cmd.MarkFlagRequired("contract-did")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractApproveLocalRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			contractReq := contracts.ContractApproveLocalRequestBehaviour{
+				ContractDID: req.ContractDID,
+			}
+
+			resp, err := dmsClient.ApproveLocal(ctx, contractReq, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a contract approval request",
+		Long: `Invoke the /dms/tokenomics/contract/aprove_local behavior on an actor
+				
+				This behavior calls the actors contract approval behaviour.
+				
+				Examples:
+				
+				  nunet actor cmd --context user /dms/tokenomics/contract/aprove_local --contract-did <did>`,
+	},
+	// /dms/tokenomics/contract/state
+	behaviors.ContractStatusBehavior: {
+		Payload: func() any { return &ContractStatusRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractStatusRequestCmd)
+			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract-did (required)")
+			_ = cmd.MarkFlagRequired("contract-did")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractStatusRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			contractReq := contracts.ContractStatusRequestBehaviour{
+				ContractDID: req.ContractDID,
+			}
+
+			resp, err := dmsClient.ContractStatus(ctx, contractReq, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a contract state request",
+		Long: `Invoke the /dms/tokenomics/contract/state behavior on an actor
+			
+			This behavior calls the actors contract state behaviour.
+			
+			Examples:
+			
+			  nunet actor cmd --context user /dms/tokenomics/contract/state --contract-did <did> --dest <json_encdoed_handle_solution_enabler>`,
+	},
+	// /dms/tokenomics/contract/create
+	behaviors.ContractCreateBehavior: {
+		Payload: func() any { return &CreateContractRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CreateContractRequestCmd)
+			cmd.Flags().StringVarP(&p.ContractFile, "contract-file", "", "", "contract-file (required)")
+			_ = cmd.MarkFlagRequired("contract-file")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*CreateContractRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			data, err := os.ReadFile(req.ContractFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read contract file: %w", err)
+			}
+			var contractReq contracts.CreateContractRequestBehaviour
+			err = json.Unmarshal(data, &contractReq)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal create contract request payload: %w", err)
+			}
+
+			resp, err := dmsClient.NewContract(ctx, contractReq, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a create contract message",
+		Long: `Invoke the /dms/tokenomics/contract/create behavior on an actor
+		
+		This behavior calls the actors create contract behaviour.
+		
+		Examples:
+		
+		  nunet actor cmd --context user /dms/tokenomics/contract/create --contract-file <file> --dest <did_of_solution_enabler>`,
+	},
 	// /dms/volume/create
 	behaviors.VolumeCreateBehavior: {
 		Payload: func() any { return &CreateVolumeRequestCmd{} },

@@ -62,25 +62,17 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentTests)
 	})
 
-	t.Run("DeploymentWithVolumesTests", func(t *testing.T) {
+	t.Run("DeploymentWithContracts", func(t *testing.T) {
 		t.Parallel()
-		t.Skip("not implemented")
 
-		err := supportsGluster()
-		if err != nil {
-			t.Skipf("glusterfs not supported, skipping gluster tests: %v", err)
-		} else {
-			setupGlusterfsServer(t)
-		}
-
-		deploymentWithVolumesTests := &TestSuite{
+		deploymentWithContractsTests := &TestSuite{
 			numNodes:      3,
-			Name:          "deployment_with_volumes_tests",
+			Name:          "deployment_with_contracts_tests",
 			restPortIndex: ports[4],
 			p2pPortIndex:  ports[5],
-			runner:        DeployWithVolumeTest,
+			runner:        DeployWithContractTest,
 		}
-		suite.Run(t, deploymentWithVolumesTests)
+		suite.Run(t, deploymentWithContractsTests)
 	})
 
 	t.Run("DeploymentUpdates", func(t *testing.T) {

@@ -523,6 +523,16 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 				"type":  "dependency",
 			},
 		},
+		"contracts": map[string]any{
+			"contract1": map[string]any{
+				"did":  "did:example:1",
+				"host": "did:host:1",
+			},
+			"contract2": map[string]any{
+				"did":  "did:example:2",
+				"host": "did:host:2",
+			},
+		},
 	}
 
 	expected := map[string]any{
@@ -612,6 +622,16 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 					"S":    "node1",
 					"T":    "node2",
 					"type": "dependency",
+				},
+			},
+			"contracts": map[string]any{
+				"contract1": map[string]any{
+					"did":  "did:example:1",
+					"host": "did:host:1",
+				},
+				"contract2": map[string]any{
+					"did":  "did:example:2",
+					"host": "did:host:2",
 				},
 			},
 		},

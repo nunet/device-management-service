@@ -921,11 +921,21 @@ func (b *BidCoordinator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfi
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", b.eid,
 		"nodes", v1Config.Nodes)
+
+	// Log contract information
+	if len(v1Config.Contracts) > 0 {
+		log.Infow("including contracts in bid request",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", b.eid,
+			"contractCount", len(v1Config.Contracts))
+	}
+
 	for nodeID, nodeConfig := range v1Config.Nodes {
 		bidRequest := jtypes.BidRequest{
 			V1: &jtypes.BidRequestV1{
-				NodeID:   nodeID,
-				Location: nodeConfig.Location,
+				NodeID:    nodeID,
+				Location:  nodeConfig.Location,
+				Contracts: v1Config.Contracts,
 			},
 		}
 

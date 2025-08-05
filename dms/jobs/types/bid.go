@@ -49,7 +49,7 @@ type BidRequestV1 struct {
 	} `json:"general_requirements,omitempty"`
 
 	// contract attached to a bid request
-	ContractDID did.DID
+	Contracts map[string]types.ContractConfig `json:"contracts,omitempty"`
 }
 
 // Bid is the version struct for Bids in response to a bid request
@@ -64,6 +64,7 @@ type BidV1 struct {
 	Peer       string       // the peer ID of the node
 	Location   Location     // the location of the node
 	Handle     actor.Handle // the handle of the actor submitting the bid
+	Contracts  map[string]types.ContractConfig
 	Signature  []byte
 }
 
@@ -88,6 +89,10 @@ type EnsembleBidRequest struct {
 
 	// PeerExclusion is the list of peers to exclude from bidding
 	PeerExclusion []string `json:"peer_exclusion,omitempty"`
+}
+
+func (b *Bid) Contracts() map[string]types.ContractConfig {
+	return b.V1.Contracts
 }
 
 func (b *EnsembleBidRequest) Validate() error {

@@ -150,9 +150,7 @@ func (n *Node) createAllocation(
 		return nil, fmt.Errorf("create executor: %w", err)
 	}
 
-	allocActor, err := n.actor.CreateChild(
-		allocationID, supervisor,
-	)
+	allocActor, err := n.actor.CreateChild(allocationID, supervisor)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation actor: %w", err)
 	}

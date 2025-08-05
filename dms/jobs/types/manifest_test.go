@@ -70,6 +70,12 @@ func TestManifest(t *testing.T) {
 			},
 		}
 
+		contract := ContractManifest{
+			ID:   "contract1",
+			DID:  "did:example:1",
+			Host: "did:host:1",
+		}
+
 		mf := EnsembleManifest{
 			ID:           "id1",
 			Orchestrator: getMockActorHandle(t),
@@ -88,6 +94,7 @@ func TestManifest(t *testing.T) {
 				},
 				Allocations: []string{"alloc1"},
 			}},
+			Contracts: map[string]ContractManifest{"contract1": contract},
 		}
 
 		clone := mf.Clone()
@@ -96,6 +103,17 @@ func TestManifest(t *testing.T) {
 		require.Equal(t, mf.Orchestrator, clone.Orchestrator)
 		require.Equal(t, mf.Allocations, clone.Allocations)
 		require.Equal(t, mf.Nodes, clone.Nodes)
+		require.Equal(t, mf.Contracts, clone.Contracts)
+
+		// Ensure contracts are cloned
+		for key, contract := range mf.Contracts {
+			cloneContract, ok := clone.Contracts[key]
+			require.True(t, ok)
+
+			require.Equal(t, contract.ID, cloneContract.ID)
+			require.Equal(t, contract.DID, cloneContract.DID)
+			require.Equal(t, contract.Host, cloneContract.Host)
+		}
 
 		// Ensure allocations are cloned
 		for key, alloc := range mf.Allocations {

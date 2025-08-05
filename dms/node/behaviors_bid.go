@@ -3,14 +3,19 @@ package node
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"slices"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -73,6 +78,47 @@ func (n *Node) location() jobtypes.Location {
 	}
 }
 
+func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) error {
+	// handle payment verification logic in future
+	for _, v := range bidContracts {
+		hostDID, err := did.FromString(v.Host)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts host did: %w", err)
+		}
+		pubKey, err := did.PublicKeyFromDID(hostDID)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts host public key from did: %w", err)
+		}
+
+		pid, err := peer.IDFromPublicKey(pubKey)
+		if err != nil {
+			return fmt.Errorf("failed to get peer id: %w", err)
+		}
+
+		destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKey, v.DID, pid.String())
+		if err != nil {
+			return fmt.Errorf("failed to get contracts host handle: %w", err)
+		}
+
+		req := contracts.ContractValidateRequestBehaviour{ContractDID: v.DID}
+		reply, err := n.invokeBehaviour(destination, behaviors.ContractValidationBehavior, req, invokeMessageTimeout)
+		if err != nil {
+			return fmt.Errorf("failed to send message to contract host: %w", err)
+		}
+		var respEnvelope contracts.ContractValidateResponseBehaviour
+		err = json.Unmarshal(reply.Message, &respEnvelope)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
+		}
+
+		if !respEnvelope.Valid {
+			return fmt.Errorf("contract is invalid")
+		}
+	}
+
+	return nil
+}
+
 // TODO: ignore bid if our location is rejected or not included on accepted
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
@@ -107,6 +153,24 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 			"error", err,
 		)
 		return
+	}
+
+	// contracts are global at ensemble level so they apply
+	// to all nodes
+	if len(request.Request) > 0 {
+		if len(request.Request[0].V1.Contracts) > 0 {
+			err := n.verifyContract(request.Request[0].V1.Contracts)
+			if err != nil {
+				log.Errorw(
+					"contract_verification_error",
+					"labels", string(observability.LabelDeployment),
+					"error", err,
+				)
+				return
+			}
+
+			log.Infof("contract_verification_success: %v", request.Request[0].V1.Contracts)
+		}
 	}
 
 	machineResources, err := n.hardware.GetMachineResources()

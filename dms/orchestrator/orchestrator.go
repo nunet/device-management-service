@@ -242,6 +242,15 @@ func (o *BasicOrchestrator) newManifest(
 		Metadata:     cfg.V1.Metadata,
 		Allocations:  make(map[string]jtypes.AllocationManifest),
 		Nodes:        make(map[string]jtypes.NodeManifest),
+		Contracts:    make(map[string]jtypes.ContractManifest),
+	}
+
+	for name, v := range cfg.Contracts() {
+		manifest.Contracts[name] = jtypes.ContractManifest{
+			ID:   name,
+			DID:  v.DID,
+			Host: v.Host,
+		}
 	}
 
 	for name, alloc := range cfg.Allocations() {

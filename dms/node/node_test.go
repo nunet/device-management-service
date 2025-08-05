@@ -29,6 +29,7 @@ import (
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
+	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -149,6 +150,7 @@ func TestNew(t *testing.T) {
 			PortConfig{},
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
+			&store.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "onboarding is nil")
@@ -173,6 +175,7 @@ func TestNew(t *testing.T) {
 			PortConfig{},
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
+			&store.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "root capability context is nil")
@@ -196,6 +199,7 @@ func TestNew(t *testing.T) {
 			PortConfig{},
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
+			&store.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "hostID is empty")
@@ -220,6 +224,7 @@ func TestNew(t *testing.T) {
 			PortConfig{},
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
+			&store.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "network is nil")
@@ -244,6 +249,7 @@ func TestNew(t *testing.T) {
 			PortConfig{},
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
+			&store.Store{},
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, node)

@@ -160,6 +160,7 @@ func (a *BasicActor) Start() error {
 
 func (a *BasicActor) handleMessage(data []byte, srcPeerID peer.ID) {
 	var msg Envelope
+
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Debugf("error unmarshaling message: %s", err)
 		return

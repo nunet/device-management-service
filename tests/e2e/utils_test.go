@@ -29,6 +29,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -201,6 +202,22 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
+func replaceContractInFile(filePath, contractData string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	modifiedContent := strings.ReplaceAll(string(content), "{$contract}", contractData)
+
+	err = os.WriteFile(filePath, []byte(modifiedContent), 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write back to file: %w", err)
+	}
+
+	return nil
+}
+
 func replaceHostnameInFile(filePath, hostname string) error {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -230,6 +247,7 @@ type mockNode struct {
 	dmsContext  string
 	capCtx      ucan.CapabilityContext
 
+	privKey    crypto.PrivKey
 	shutdownCh chan struct{}
 }
 
@@ -244,7 +262,7 @@ func newMockNode(
 	userContext := fmt.Sprintf("user%d", index)
 	setupKeysAndCaps(t, cliHelper, password, dmsContext, userContext)
 
-	capCtx, err := loadCapCtx(t, cliHelper, password, dmsContext)
+	capCtx, pkey, err := loadCapCtx(t, cliHelper, password, dmsContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load capability context: %w", err)
 	}
@@ -265,13 +283,14 @@ func newMockNode(
 		userContext: userContext,
 		dmsContext:  dmsContext,
 		capCtx:      capCtx,
+		privKey:     pkey,
 		shutdownCh:  make(chan struct{}),
 	}, nil
 }
 
 func loadCapCtx(
 	t *testing.T, cliHelper *Client, password, dmsContext string,
-) (ucan.CapabilityContext, error) {
+) (ucan.CapabilityContext, crypto.PrivKey, error) {
 	t.Helper()
 	fs := afero.NewOsFs()
 
@@ -279,12 +298,12 @@ func loadCapCtx(
 		cliHelper.cfg.General.UserDir, node.KeystoreDir)
 	keyStore, err := keystore.New(fs, keyStoreDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open keystore: %w", err)
+		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
 	}
 
 	privK, err := dms.GetPrivKeyFromKS(keyStore, password, dmsContext)
 	if err != nil {
-		return nil,
+		return nil, nil,
 			fmt.Errorf("private key from keystore: %w", err)
 	}
 	pubKey := privK.GetPublic()
@@ -294,13 +313,13 @@ func loadCapCtx(
 
 	trustCtx, err := did.NewTrustContextWithPrivateKey(privK)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create trust context: %w", err)
+		return nil, nil, fmt.Errorf("unable to create trust context: %w", err)
 	}
 
 	capCtx, err := dms.LoadOrCreateCapCtx(
 		fs, dmsCtxPath, trustCtx, dmsContext, pubKey)
 	if err != nil {
-		return nil,
+		return nil, nil,
 			fmt.Errorf(
 				"unable to load or create capability context: %w", err)
 	}
@@ -308,7 +327,7 @@ func loadCapCtx(
 	trustCtx.Start(10 * time.Minute)
 	capCtx.Start(5 * time.Minute)
 
-	return capCtx, nil
+	return capCtx, privK, nil
 }
 
 func isContainerRunning(name string) (bool, error) {

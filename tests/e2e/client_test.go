@@ -105,7 +105,7 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
+	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -120,7 +120,7 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
+	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -154,6 +154,18 @@ func (c *Client) onboard(t *testing.T, context, passphrase string) {
 	// onboard with 40% of available ram and cpu
 	ram := types.ConvertBytesToGB(uint64(float64(mr.Resources.RAM.Size) * 0.4))
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/onboarding/onboard", "--no-gpu", "--ram", fmt.Sprintf("%d GB", ram), "--cpu", fmt.Sprintf("%.2f", math.Ceil(float64(mr.Resources.CPU.Cores*0.4))), "--disk", "10GiB"}
+	root.SetArgs(args)
+	err = root.Execute()
+	require.NoError(t, err)
+}
+
+func (c *Client) offboard(t *testing.T, context, passphrase string) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+	require.NoError(t, err)
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/onboarding/offboard"}
 	root.SetArgs(args)
 	err = root.Execute()
 	require.NoError(t, err)
@@ -204,6 +216,69 @@ func (c *Client) hello(t *testing.T, context, passphrase, dest string) (string, 
 	root.SetOutput(&buf)
 	err = root.Execute()
 	fmt.Println("hello response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) createContract(t *testing.T, contractFilePath, context, passphrase, dest string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/create", "--contract-file", contractFilePath, "--timeout", "5s", "--dest", dest}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("createContract response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) approveContracts(t *testing.T, contractDID, context, passphrase string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/approve_local", "--contract-did", contractDID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("approveContracts response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) listIncomingContracts(t *testing.T, context, passphrase string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/list_incoming", "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	return buf.String(), err
+}
+
+func (c *Client) contractStatus(t *testing.T, contractDID, context, passphrase, destination string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/state", "--contract-did", contractDID, "--timeout", "25s", "--dest", destination}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("contractStatus response: ", buf.String())
 	return buf.String(), err
 }
 

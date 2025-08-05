@@ -26,6 +26,13 @@ type EnsembleManifest struct {
 	Allocations  map[string]AllocationManifest `json:"allocations"`        // allocation name -> manifest
 	Nodes        map[string]NodeManifest       `json:"nodes"`              // node name -> manifest
 	Subnet       SubnetConfig                  `json:"subnet"`             // subnet configurations
+	Contracts    map[string]ContractManifest   `json:"contracts"`          // contract name -> manifest
+}
+
+type ContractManifest struct {
+	ID   string `json:"id"`  // contract unique id
+	DID  string `json:"did"` // DID of the contract
+	Host string `json:"host"`
 }
 
 type AllocationManifest struct {

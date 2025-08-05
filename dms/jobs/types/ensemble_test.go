@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -116,6 +117,32 @@ func TestEnsemble(t *testing.T) {
 		nodes := ensemble.Nodes()
 		require.Len(t, nodes, 1)
 		require.Equal(t, ensemble.V1.Nodes, nodes)
+	})
+
+	t.Run("must be able to get contracts", func(t *testing.T) {
+		t.Parallel()
+
+		ensemble := &EnsembleConfig{
+			V1: &EnsembleConfigV1{
+				Contracts: map[string]types.ContractConfig{
+					"contract1": {
+						DID:  "did:example:1",
+						Host: "did:host:1",
+					},
+				},
+			},
+		}
+
+		c, ok := ensemble.Contract("contract1")
+		require.True(t, ok)
+		require.Equal(t, ensemble.V1.Contracts["contract1"].DID, c.DID)
+
+		_, ok = ensemble.Contract("contract2")
+		require.False(t, ok)
+
+		contracts := ensemble.Contracts()
+		require.Len(t, contracts, 1)
+		require.Equal(t, ensemble.V1.Contracts, contracts)
 	})
 
 	t.Run("must be able to get edge constraints", func(t *testing.T) {
@@ -232,6 +259,12 @@ func TestEnsemble(t *testing.T) {
 						T: "t1",
 					},
 				},
+				Contracts: map[string]types.ContractConfig{
+					"contract1": {
+						DID:  "did:1234",
+						Host: "did:3456",
+					},
+				},
 			},
 		}
 
@@ -242,6 +275,7 @@ func TestEnsemble(t *testing.T) {
 		clone.V1.Allocations = make(map[string]AllocationConfig)
 		clone.V1.Nodes = make(map[string]NodeConfig)
 		clone.V1.Edges = []EdgeConstraint{}
+		clone.V1.Contracts = make(map[string]types.ContractConfig)
 
 		require.NotEqual(t, ensemble, &clone)
 	})

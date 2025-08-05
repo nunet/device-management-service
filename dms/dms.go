@@ -47,6 +47,7 @@ import (
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
+	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -163,6 +164,11 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
 	}
 
+	contractStore, err := store.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create contract store: %w", err)
+	}
+
 	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
 		OnboardedResources: clover_db.NewGenericEntityRepository[types.OnboardedResources](db),
@@ -246,6 +252,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
 		orchestratorRepo, geoip2db, hostLocation, portConfig, volumeTracker,
 		volumeController,
+		contractStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -290,6 +297,11 @@ func (d *DMS) Run() error {
 			log.Fatal(err)
 		}
 	}()
+
+	err = d.Node.StartContracts()
+	if err != nil {
+		log.Errorf("failed to start contracts from db: %v", err)
+	}
 
 	return nil
 }
@@ -351,7 +363,8 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"resource_allocation",
 			"orchestrator_view",
 			"gpu",
-			"contract",
+			"contracts",
+			"contracts_keys",
 		},
 	)
 }
