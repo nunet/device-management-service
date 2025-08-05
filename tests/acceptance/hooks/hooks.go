@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
@@ -27,7 +28,7 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 
 	start := time.Now()
 	fmt.Println("creating nodes...")
-	nodes, err := utils.CreateNodes(clients, count, utils.DefaultImage, utils.DefaultVMPrefix)
+	nodes, err := utils.CreateNodes(clients, count, utils.DefaultImage, config.VMsPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +79,11 @@ func CleanupNodes() error {
 			continue
 		}
 		for _, i := range instances {
-			err := utils.DeleteInstance(c, i.Name)
-			if err != nil {
-				return fmt.Errorf("failed to delete instance %s: %w", i.Name, err)
+			if strings.HasPrefix(i.Name, config.VMsPrefix) {
+				err := utils.DeleteInstance(c, i.Name)
+				if err != nil {
+					return fmt.Errorf("failed to delete instance %s: %w", i.Name, err)
+				}
 			}
 		}
 	}
