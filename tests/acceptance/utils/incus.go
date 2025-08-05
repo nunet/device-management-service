@@ -13,9 +13,8 @@ import (
 )
 
 const (
-	DefaultImage    = "ubuntu/22.04"
-	DefaultVMPrefix = "test"
-	LocalTarget     = "local"
+	DefaultImage = "ubuntu/22.04"
+	LocalTarget  = "local"
 )
 
 func ConnectIncus(target, clientCert, clientKey, serverCert string) (incus.InstanceServer, error) {
