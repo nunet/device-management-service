@@ -14,3 +14,11 @@ Feature: Allocation Running on Subnet
     Given "Alice" has services deployed on "Bob" and "Charlie"
     When "Bob" service tries to communicate with "Charlie"
     Then they should get a OK response
+
+  Scenario: Allocations communicating on the same subnet after restart
+    Given "Alice" has services deployed on "Bob" and "Charlie"
+    When "Bob" service tries to communicate with "Charlie"
+    Then they should get a OK response
+    Given "Alice" restarts the deployment
+    When "Bob" service tries to communicate with "Charlie"
+    Then they should get a OK response

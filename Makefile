@@ -175,7 +175,7 @@ e2e-%:
 
 run-acceptance:
 	@echo "Running acceptance tests"
-	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=10m -godog.tags="~@wip"
+	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=15m -godog.tags="~@wip"
 
 build-and-run-acceptance:
 	@if [ $(UNAME) = Linux ]; then\
