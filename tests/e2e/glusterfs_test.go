@@ -3,32 +3,13 @@ package itest
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
-	"testing"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
-	"github.com/stretchr/testify/require"
 )
-
-const glusterContainerName = "gluster-container"
-
-func createDirectories() {
-	dirs := []string{
-		"/etc/glusterfs",
-		"/var/lib/glusterd",
-		"/var/log/glusterfs",
-		"/glusterfs_data",
-	}
-
-	for _, dir := range dirs {
-		_ = os.MkdirAll(dir, 0o755)
-	}
-}
 
 func runGlusterContainer(containerName string) error {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
@@ -112,20 +93,6 @@ func runGlusterCommands(containerName string, commands [][]string) error {
 	return nil
 }
 
-func supportsGluster() error {
-	// Check if we have root privileges by trying a mount command that requires root
-	cmd := exec.Command("mount", "--type")
-	output, err := cmd.CombinedOutput()
-	outputStr := string(output)
-
-	// If the error contains "only root can do that", we don't have root privileges
-	if err != nil && strings.Contains(outputStr, "only root can do that") {
-		return fmt.Errorf("GlusterFS tests require root privileges: %s", outputStr)
-	}
-
-	return nil
-}
-
 func deleteGlusterContainer(containerName string) error {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
 	if err != nil {
@@ -148,36 +115,6 @@ func deleteGlusterContainer(containerName string) error {
 	}
 
 	fmt.Println("Container not found.")
-	return nil
-}
-
-func pullGlusterImage() error {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation(), client.WithHostFromEnv())
-	if err != nil {
-		return fmt.Errorf("failed to create Docker Client: %w", err)
-	}
-
-	imageName := "ghcr.io/gluster/gluster-containers:fedora"
-	images, err := cli.ImageList(context.Background(), image.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to list images: %w", err)
-	}
-
-	for _, img := range images {
-		for _, tag := range img.RepoTags {
-			if tag == imageName {
-				fmt.Println("Image is already present.")
-				return nil
-			}
-		}
-	}
-
-	out, err := cli.ImagePull(context.Background(), imageName, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
-	}
-	defer out.Close()
-	fmt.Println("Image pulled successfully.")
 	return nil
 }
 
@@ -220,31 +157,4 @@ func runBinaryInContainer(containerID string, binaryPath string, args []string, 
 
 	fmt.Printf("Binary %s executed inside container %s, output redirected to %s\n", binaryPath, containerID, outputFilePath)
 	return nil
-}
-
-// setupGlusterfsServer creates a glusterfs server env
-func setupGlusterfsServer(t *testing.T) {
-	t.Helper()
-
-	createDirectories()
-	err := pullGlusterImage()
-	require.NoError(t, err)
-	err = runGlusterContainer(glusterContainerName)
-	require.NoError(t, err)
-
-	hostname, err := os.Hostname()
-	require.NoError(t, err)
-	commands := [][]string{
-		{"gluster", "volume", "create", "nunet_vol", hostname + ":/data/brick2", "force"},
-		{"gluster", "volume", "start", "nunet_vol"},
-		{"gluster", "volume", "create", "nunet_vol2", hostname + ":/data/brick3", "force"},
-		{"gluster", "volume", "start", "nunet_vol2"},
-	}
-	err = runGlusterCommands(glusterContainerName, commands)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		if err := deleteGlusterContainer(glusterContainerName); err != nil {
-			t.Logf("failed to delete gluster container: %v", err)
-		}
-	})
 }

@@ -13,6 +13,7 @@ const (
 	LabelDeployment LogLabel = "deployment"
 	LabelAllocation LogLabel = "allocation"
 	LabelNode       LogLabel = "node"
+	LabelContract   LogLabel = "contract"
 	LabelUser       LogLabel = "user"
 )
 
@@ -28,6 +29,10 @@ type LabelRoutingConfig struct {
 
 // labelRoutingMap is our in-memory map from label → routing configuration.
 var labelRoutingMap = map[LogLabel]LabelRoutingConfig{
+	LabelContract: {
+		SkipES:  false,
+		ESIndex: "contract-index",
+	},
 	LabelAccounting: {
 		SkipES:  false,
 		ESIndex: "accounting-index",

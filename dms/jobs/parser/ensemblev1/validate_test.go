@@ -315,6 +315,66 @@ func TestValidateSpec(t *testing.T) {
 	}
 }
 
+func TestValidateContract(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		contract any
+		wantErr  bool
+		errorMsg string
+	}{
+		{
+			name: "valid contract",
+			contract: map[string]any{
+				"did": "did:example:1",
+			},
+			wantErr: false,
+		},
+		{
+			name:     "nil contract",
+			contract: nil,
+			wantErr:  true,
+			errorMsg: "invalid contract configuration:",
+		},
+		{
+			name:     "invalid contract type",
+			contract: "not a map",
+			wantErr:  true,
+			errorMsg: "invalid contract configuration: not a map",
+		},
+		{
+			name: "invalid did type",
+			contract: map[string]any{
+				"did": 123,
+			},
+			wantErr:  true,
+			errorMsg: "contract 'did' must be a string",
+		},
+		{
+			name: "invalid did format",
+			contract: map[string]any{
+				"did": "invalid-did",
+			},
+			wantErr:  true,
+			errorMsg: "invalid did format",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateContract(nil, tt.contract, "")
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateAllocation(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

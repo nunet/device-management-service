@@ -141,6 +141,7 @@ func (s *TestSuite) setupTestNetwork() {
 			if i == j {
 				continue
 			}
+
 			nodeGrantToken := node.client.grant(s.T(), node.dmsContext, otherNode.userDID, node.password)
 			node.client.anchor(s.T(), nodeGrantToken, node.dmsContext, "require", node.password)
 			otherNode.client.anchor(s.T(), nodeGrantToken, otherNode.userContext, "provide", otherNode.password)

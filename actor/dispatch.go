@@ -127,6 +127,8 @@ func (k *Dispatch) AddBehavior(behavior string, continuation Behavior, opt ...Be
 		}
 	}
 
+	log.Infof("registered behaviour: %s", behavior)
+
 	k.mx.Lock()
 	defer k.mx.Unlock()
 	k.behaviors[behavior] = st

@@ -38,6 +38,8 @@ import (
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
+	"gitlab.com/nunet/device-management-service/tokenomics"
+	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -118,6 +120,10 @@ type Node struct {
 	fs                   afero.Afero
 	ctx                  context.Context
 	cancel               func()
+
+	// contract store
+	contractStore  store.Store
+	contractActors []*tokenomics.ContractActor
 }
 
 // createActor creates an actor.
@@ -156,6 +162,7 @@ func New(cfg config.Config, fs afero.Afero,
 	geoIP types.GeoIPLocator, hostLocation geolocation.Geolocation,
 	portConfig PortConfig, vt *storage.VolumeTracker,
 	volumeController controller.GlusterControllerInterface,
+	contractStore *store.Store,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -177,6 +184,9 @@ func New(cfg config.Config, fs afero.Afero,
 	}
 	if geoIP == nil {
 		return nil, errors.New("geoIP is nil")
+	}
+	if contractStore == nil {
+		return nil, errors.New("contract store is nil")
 	}
 
 	rootDID := rootCap.DID()
@@ -231,6 +241,8 @@ func New(cfg config.Config, fs afero.Afero,
 		fs:                   fs,
 		volumeController:     volumeController,
 		volumeOwners:         make(map[string]string),
+		contractStore:        *contractStore,
+		contractActors:       make([]*tokenomics.ContractActor, 0),
 	}
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
@@ -501,6 +513,22 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 				actor.WithBehaviorTopic(behaviors.BroadcastStatusDiscoveryTopic),
 			},
 		},
+		// solution enabler
+		behaviors.ContractCreateBehavior: {
+			fn: n.handleNewContract,
+		},
+		// listerner by service provider and compute provider
+		behaviors.ContractProposeBehavior: {
+			fn: n.handleContractPropose,
+		},
+		// used by compute provider to accpet a contract
+		behaviors.ContractApproveLocalBehavior: {
+			fn: n.handleContractApprovalLocal,
+		},
+		// used by compute provider to list incoming contracts
+		behaviors.ContractListIncomingBehavior: {
+			fn: n.handleListIncomingContracts,
+		},
 	}
 
 	return dmsBehaviors
@@ -758,4 +786,43 @@ func (n *Node) GetBidRequests() []jobs.BidRequest {
 	}
 
 	return reqs
+}
+
+func (n *Node) addContractActor(a *tokenomics.ContractActor) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	n.contractActors = append(n.contractActors, a)
+}
+
+func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {
+	msg, err := actor.Message(
+		n.actor.Handle(),
+		destination,
+		behavior,
+		payload,
+		actor.WithMessageExpiry(actor.MakeExpiry(timeout)),
+	)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to create contract actor message: %w", err)
+	}
+
+	replyCh, err := n.actor.Invoke(msg)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to invoke message: %w", err)
+	}
+
+	ticker := time.NewTicker(timeout)
+	defer ticker.Stop()
+
+	var reply actor.Envelope
+	select {
+	case reply = <-replyCh:
+		defer reply.Discard()
+
+		return reply, nil
+
+	case <-ticker.C:
+		return actor.Envelope{}, errors.New("failed to receive reply due to timeout")
+	}
 }

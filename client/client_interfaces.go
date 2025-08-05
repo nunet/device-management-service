@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
 // MessageOptions contains common options for actor message operations
@@ -130,6 +131,7 @@ type ActorBehaviorsClient interface {
 	ActorCapBehaviorClient
 	ActorLoggerBehaviorClient
 	ActorVolumeBehaviorClient
+	ActorContractBehaviorClient
 }
 
 // ActorPublicBehaviorClient provides methods for public behaviors
@@ -258,4 +260,12 @@ type ActorVolumeBehaviorClient interface {
 
 	// StartVolume starts a volume
 	StartVolume(ctx context.Context, req node.StartVolumeRequest, opts ...Option) (node.StartVolumeResponse, error)
+}
+
+// ActorContractBehaviorClient provides methods for contracts
+type ActorContractBehaviorClient interface {
+	NewContract(ctx context.Context, req contracts.CreateContractRequestBehaviour, opts ...Option) (contracts.CreateContractResponseBehaviour, error)
+	ContractStatus(ctx context.Context, req contracts.ContractStatusRequestBehaviour, opts ...Option) (contracts.ContractStatusResponseBehaviour, error)
+	ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequestBehaviour, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error)
+	ListIncoming(ctx context.Context, opts ...Option) (contracts.ContractListIncomingResponseBehaviour, error)
 }

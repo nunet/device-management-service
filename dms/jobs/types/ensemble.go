@@ -39,16 +39,17 @@ type EnsembleConfig struct {
 
 // EnsembleConfigV1 is version 1 of the configuration for an ensemble
 type EnsembleConfigV1 struct {
-	EscalationStrategy EscalationStrategy          `json:"escalation_strategy"`     // escalation strategy (redeploy|teardown)
-	Allocations        map[string]AllocationConfig `json:"allocations"`             // (named) allocations in the ensemble
-	Nodes              map[string]NodeConfig       `json:"nodes"`                   // (named) nodes in the ensemble
-	Edges              []EdgeConstraint            `json:"edges,omitempty"`         // network edge constraints
-	Supervisor         SupervisorConfig            `json:"supervisor,omitempty"`    // supervision structure
-	Keys               map[string]string           `json:"keys,omitempty"`          // (named) ssh public keys relevant to the allocation
-	Scripts            map[string][]byte           `json:"scripts,omitempty"`       // (named) provisioning scripts
-	Subnet             SubnetConfig                `json:"subnet,omitempty"`        // subnet config
-	ExcludePeers       []string                    `json:"exclude_peers,omitempty"` // list of peers to not deploy on
-	Metadata           map[string]string           `json:"metadata,omitempty"`      // metadata (arbitrary key-value pairs)
+	EscalationStrategy EscalationStrategy              `json:"escalation_strategy"`     // escalation strategy (redeploy|teardown)
+	Allocations        map[string]AllocationConfig     `json:"allocations"`             // (named) allocations in the ensemble
+	Nodes              map[string]NodeConfig           `json:"nodes"`                   // (named) nodes in the ensemble
+	Edges              []EdgeConstraint                `json:"edges,omitempty"`         // network edge constraints
+	Supervisor         SupervisorConfig                `json:"supervisor,omitempty"`    // supervision structure
+	Keys               map[string]string               `json:"keys,omitempty"`          // (named) ssh public keys relevant to the allocation
+	Scripts            map[string][]byte               `json:"scripts,omitempty"`       // (named) provisioning scripts
+	Subnet             SubnetConfig                    `json:"subnet,omitempty"`        // subnet config
+	ExcludePeers       []string                        `json:"exclude_peers,omitempty"` // list of peers to not deploy on
+	Metadata           map[string]string               `json:"metadata,omitempty"`      // metadata (arbitrary key-value pairs)
+	Contracts          map[string]types.ContractConfig `json:"contracts,omitempty"`     // (named) contracts between parties
 }
 
 type EscalationStrategy string
@@ -161,6 +162,15 @@ func (e *EnsembleConfig) Validate() error {
 	}
 
 	return nil
+}
+
+func (e *EnsembleConfig) Contracts() map[string]types.ContractConfig {
+	return e.V1.Contracts
+}
+
+func (e *EnsembleConfig) Contract(contractID string) (types.ContractConfig, bool) {
+	c, ok := e.V1.Contracts[contractID]
+	return c, ok
 }
 
 func (e *EnsembleConfig) Allocations() map[string]AllocationConfig {

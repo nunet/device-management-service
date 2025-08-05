@@ -1,6 +1,7 @@
-version: "ensembleV1"
+version: "V1"
 metadata:
   name: "test-ensemble"
+      
 # Node definitions for edge constraints
 nodes:
   node1:
@@ -140,3 +141,11 @@ supervisor:
       allocations: ["worker1", "worker2"]
     - strategy: "RestForOne"
       allocations: ["vm1"]
+
+contracts:
+  contract1:
+    did: "did:contract1"
+    host: "did:host"
+  contract2:
+    did: "did:contract2"
+    host: "did:host2"

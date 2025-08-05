@@ -120,3 +120,27 @@ func handleFromPublicKey(pubk crypto.PubKey) (Handle, error) {
 		},
 	}, nil
 }
+
+// HandleFromPublicKeyWithInboxAddress converts a verified public key into the canonical Handle.
+// we also pass an inbox address to denote which inbox the message is routed to.
+func HandleFromPublicKeyWithInboxAddress(pubk crypto.PubKey, inboxAddress, host string) (Handle, error) {
+	if !crypto.AllowedKey(int(pubk.Type())) {
+		return Handle{}, fmt.Errorf("unexpected key type: %d", pubk.Type())
+	}
+
+	actorID, err := crypto.IDFromPublicKey(pubk)
+	if err != nil {
+		return Handle{}, err
+	}
+
+	actorDID := did.FromPublicKey(pubk)
+
+	return Handle{
+		ID:  actorID,
+		DID: actorDID,
+		Address: Address{
+			HostID:       host,
+			InboxAddress: inboxAddress,
+		},
+	}, nil
+}

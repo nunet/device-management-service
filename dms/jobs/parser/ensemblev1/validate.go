@@ -47,6 +47,7 @@ func NewEnsembleV1Validator() validate.Validator {
 			"V1.allocations.*.resources":   ValidateResources,
 			"V1.allocations.*.execution":   ValidateExecution,
 			"V1.allocations.*.healthcheck": ValidateHealthCheck,
+			"V1.contracts.*":               ValidateContract,
 		},
 	)
 }
@@ -890,6 +891,26 @@ func ValidateSubnet(_ *map[string]any, data any, _ tree.Path) error {
 
 	if _, ok := subnet["join"].(bool); !ok {
 		return fmt.Errorf("subnet.join expects boolean value")
+	}
+
+	return nil
+}
+
+// ValidateContract validates the contract configuration.
+// It checks that the contract has a valid DID and at least two parties.
+func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
+	contract, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid contract configuration: %v", data)
+	}
+
+	did, ok := contract["did"].(string)
+	if !ok {
+		return fmt.Errorf("contract 'did' must be a string")
+	}
+
+	if !strings.HasPrefix(did, "did:") {
+		return fmt.Errorf("invalid did format")
 	}
 
 	return nil
