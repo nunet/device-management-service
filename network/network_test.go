@@ -44,6 +44,7 @@ func TestNewNetwork(t *testing.T) {
 			config: &types.NetworkConfig{
 				Type: types.Libp2pNetwork,
 				Libp2pConfig: types.Libp2pConfig{
+					Env:                     "test",
 					PrivateKey:              &crypto.Secp256k1PrivateKey{},
 					BootstrapPeers:          []multiaddr.Multiaddr{},
 					Rendezvous:              "nunet-randevouz",
@@ -76,6 +77,7 @@ func TestLibp2pNetwork(t *testing.T) {
 	config := &types.NetworkConfig{
 		Type: types.Libp2pNetwork,
 		Libp2pConfig: types.Libp2pConfig{
+			Env:                     "test",
 			PrivateKey:              &crypto.Secp256k1PrivateKey{},
 			BootstrapPeers:          []multiaddr.Multiaddr{},
 			Rendezvous:              "nunet-randevouz",

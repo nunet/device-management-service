@@ -103,7 +103,7 @@ func newLibp2pNetwork(t *testing.T, mockFs afero.Fs, bootstrap []multiaddr.Multi
 			Server:                  false,
 			Scheduler:               scheduler,
 			CustomNamespace:         "/nunet-dht-1/",
-			ListenAddress:           []string{"/ip4/0.0.0.0/tcp/0"},
+			ListenAddress:           []string{"/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic-v1"},
 			GracePeriodMs:           1000,
 			PeerCountDiscoveryLimit: 40,
 			GossipMaxMessageSize:    2 << 16,

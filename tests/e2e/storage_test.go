@@ -32,21 +32,21 @@ func TLSGlusterGenerator(t *testing.T) {
 
 	_ = os.RemoveAll("/tmp/client_gluster_tls_certs")
 
-	node1Config := createConfig(rootDir, 9992, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9087), []string{})
+	node1Config := createConfig(rootDir, 9992, []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 9087), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", 9087)}, []string{})
 	cli1 := newClient(t, node1Config)
 	cli1.newKey(t, "dms", password)
 	cli1.newCap(t, "dms", password)
 	dms1DID := cli1.getDID(t, fmt.Sprintf("%s.cap", "dms"), password)
 	require.NotEmpty(t, dms1DID)
 
-	node3Config := createConfig(rootDir3, 9997, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9095), []string{})
+	node3Config := createConfig(rootDir3, 9997, []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 9095), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", 9095)}, []string{})
 	cli3 := newClient(t, node3Config)
 	cli3.newKey(t, "dms", password)
 	cli3.newCap(t, "dms", password)
 	dms3DID := cli3.getDID(t, fmt.Sprintf("%s.cap", "dms"), password)
 	require.NotEmpty(t, dms3DID)
 
-	node2Config := createConfig(rootDir2, 9994, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9089), []string{})
+	node2Config := createConfig(rootDir2, 9994, []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 9089), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", 9089)}, []string{})
 	cli2 := newClient(t, node2Config)
 	cli2.newKey(t, "dms", password)
 	cli2.newCap(t, "dms", password)

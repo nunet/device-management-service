@@ -10,30 +10,37 @@ package libp2p
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"math/rand"
 	"net"
+	"net/http"
+	"net/netip"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	connectip "github.com/quic-go/connect-ip-go"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+	"github.com/yosida95/uritemplate/v3"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	network "github.com/libp2p/go-libp2p/core/network"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 
 	"gitlab.com/nunet/device-management-service/lib/sys"
-	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
-	IfaceMTU = 1420
-
-	PacketExchangeProtocolID = "/dms/subnet/packet-exchange/0.0.1"
+	IfaceMTU      = 1420
+	MaxPacketSize = 2 * 1420 // Consistent packet size limit
 )
+
+type NetInterfaceFactory func(name string) (sys.NetInterface, error)
 
 type subnet struct {
 	ctx     context.Context
@@ -42,65 +49,114 @@ type subnet struct {
 	info struct {
 		id     string
 		rtable SubnetRoutingTable
+		cidr   *net.IPNet
 	}
 
 	mx     sync.Mutex
 	ifaces map[string]struct {
-		tun    *sys.NetInterface
+		tun    sys.NetInterface
 		ctx    context.Context
 		cancel context.CancelFunc
 	}
 
-	io struct {
-		mx      sync.RWMutex
-		streams map[string]*struct {
-			mx     sync.Mutex
-			stream network.Stream
-		}
-	}
+	// TODO: add some map to store HTTP/3 tunnel connections
 
 	dnsmx      sync.RWMutex
 	dnsRecords map[string]string
+
+	proxiedConns struct {
+		mx    sync.Mutex
+		conns map[string]*connectip.Conn // key: IP string
+	}
 
 	portMapping map[string]*struct {
 		destPort string
 		destIP   string
 		srcIP    string
 	}
+
+	locks        map[string]*sync.Mutex
+	packetQueues map[string]chan []byte
+	ifaceFactory NetInterfaceFactory
 }
 
-func (l *Libp2p) CreateSubnet(ctx context.Context, subnetID string, routingTable map[string]string) error {
+func newSubnet(ctx context.Context, l *Libp2p, factory NetInterfaceFactory) *subnet {
+	return &subnet{
+		ctx:     ctx,
+		network: l,
+		info: struct {
+			id     string
+			rtable SubnetRoutingTable
+			cidr   *net.IPNet
+		}{
+			rtable: NewRoutingTable(),
+			cidr:   &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // TODO: replace
+		},
+		ifaces: make(map[string]struct {
+			tun    sys.NetInterface
+			ctx    context.Context
+			cancel context.CancelFunc
+		}),
+		proxiedConns: struct {
+			mx    sync.Mutex
+			conns map[string]*connectip.Conn
+		}{
+			conns: map[string]*connectip.Conn{},
+		},
+		dnsRecords: map[string]string{},
+		portMapping: map[string]*struct {
+			destPort string
+			destIP   string
+			srcIP    string
+		}{},
+		locks:        make(map[string]*sync.Mutex),
+		packetQueues: make(map[string]chan []byte),
+		ifaceFactory: factory,
+	}
+}
+
+func (l *Libp2p) CreateSubnet(ctx context.Context, subnetID string, cidr string, routingTable map[string]string) error {
+	l.subnetsmx.Lock()
+	defer l.subnetsmx.Unlock()
+
 	if _, ok := l.subnets[subnetID]; ok {
 		return fmt.Errorf("subnet with ID %s already exists", subnetID)
 	}
 
-	s := newSubnet(ctx, l)
+	s := newSubnet(ctx, l, l.NetIfaceFactory)
 	s.info.id = subnetID
+
+	_, CIDR, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return err
+	}
+
+	s.mx.Lock()
+	s.info.cidr = CIDR
 
 	for ip, peerctx := range routingTable {
 		peerID, err := peer.Decode(peerctx)
 		if err != nil {
+			s.mx.Unlock()
 			return fmt.Errorf("failed to decode peer ID %s: %w", peerctx, err)
 		}
-
 		s.info.rtable.Add(peerID, ip)
 	}
-
-	if atomic.CompareAndSwapInt32(&l.isSubnetWriteProtocolRegistered, 0, 1) {
-		err := s.network.RegisterStreamMessageHandler(
-			types.MessageType(PacketExchangeProtocolID),
-			func(stream network.Stream) {
-				l.writePackets(stream)
-			})
-		if err != nil {
+	s.mx.Unlock()
+	if atomic.CompareAndSwapInt32(&l.isHTTPServerRegistered, 0, 1) {
+		if err := l.startIPProxy(); err != nil {
 			return err
 		}
 	}
 	l.subnets[subnetID] = s
+
 	return nil
 }
 
 func (l *Libp2p) DestroySubnet(subnetID string) error {
+	l.subnetsmx.Lock()
+	defer l.subnetsmx.Unlock()
+
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -114,23 +170,20 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 
 	s.mx.Lock()
 	s.ifaces = make(map[string]struct {
-		tun    *sys.NetInterface
+		tun    sys.NetInterface
 		ctx    context.Context
 		cancel context.CancelFunc
 	})
 	s.mx.Unlock()
 
-	s.io.mx.Lock()
-	for _, ms := range s.io.streams {
-		ms.mx.Lock()
-		_ = ms.stream.Reset()
-		ms.mx.Unlock()
+	// Clean up proxied connections
+	s.proxiedConns.mx.Lock()
+	for ip, conn := range s.proxiedConns.conns {
+		log.Debugf("closing proxied connection for %s during subnet destruction", ip)
+		conn.Close()
 	}
-	s.io.streams = make(map[string]*struct {
-		mx     sync.Mutex
-		stream network.Stream
-	})
-	s.io.mx.Unlock()
+	s.proxiedConns.conns = make(map[string]*connectip.Conn)
+	s.proxiedConns.mx.Unlock()
 
 	s.dnsmx.Lock()
 	s.dnsRecords = make(map[string]string)
@@ -146,8 +199,8 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 	}
 
 	if len(l.subnets) == 1 {
-		if atomic.CompareAndSwapInt32(&l.isSubnetWriteProtocolRegistered, 1, 0) {
-			l.UnregisterMessageHandler(PacketExchangeProtocolID)
+		if atomic.CompareAndSwapInt32(&l.isHTTPServerRegistered, 1, 0) {
+			l.stopIPProxy()
 		}
 	}
 
@@ -160,6 +213,9 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 // This is basically Creating the subnet, not adding adding a peer to the subnet.
 // Move all this business logic to the CreateSubnet.
 func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
+	l.subnetsmx.Lock()
+	defer l.subnetsmx.Unlock()
+
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -187,7 +243,7 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 		takenNames = append(takenNames, iface.Name)
 	}
 
-	log.Debugf("finding proper iface name for TUN interface. taken_names: %s", takenNames)
+	log.Debugf("finding proper iface name for TUN interface (taken_names=%s)", takenNames)
 	name, err := generateUniqueName(takenNames)
 	if err != nil {
 		return fmt.Errorf("failed to generate unique name for TUN interface: %w", err)
@@ -196,7 +252,7 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	log.Debugf("Creating TUN interface with name: %s", name)
 	address := fmt.Sprintf("%s/24", ipAddr.String())
 
-	iface, err := sys.NewTunTapInterface(name, sys.NetTunMode, false)
+	iface, err := s.ifaceFactory(name)
 	if err != nil {
 		return fmt.Errorf("failed to create tun interface: %w", err)
 	}
@@ -218,7 +274,7 @@ func (l *Libp2p) AddSubnetPeer(subnetID, peerID, ip string) error {
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.mx.Lock()
 	s.ifaces[ipAddr.String()] = struct {
-		tun    *sys.NetInterface
+		tun    sys.NetInterface
 		ctx    context.Context
 		cancel context.CancelFunc
 	}{
@@ -259,21 +315,27 @@ func (l *Libp2p) removeSubnetPeer(subnetID, peerID, ip string) error {
 		return fmt.Errorf("peer with ID %s is not in the subnet", peerID)
 	}
 
+	found := false
 	for _, i := range ips {
 		if i == ip {
-			goto delete_iface
+			found = true
+			break
 		}
 	}
+	if !found {
+		return nil
+	}
 
-	return nil
-
-delete_iface:
 	s.mx.Lock()
 	iface, ok := s.ifaces[ip]
 	if ok {
 		iface.cancel()
-		_ = iface.tun.Down()
-		_ = iface.tun.Delete()
+		if err := iface.tun.Down(); err != nil {
+			log.Errorf("failed to bring down tun device: %v (subnet=%s, ip=%s)", err, s.info.id, ip)
+		}
+		if err := iface.tun.Delete(); err != nil {
+			log.Errorf("failed to delete tun device: %v (subnet=%s, ip=%s)", err, s.info.id, ip)
+		}
 		delete(s.ifaces, ip)
 	}
 	s.mx.Unlock()
@@ -317,6 +379,9 @@ func (l *Libp2p) acceptSubnetPeer(subnetID, peerID, ip string) error {
 }
 
 func (l *Libp2p) AddSubnetDNSRecords(subnetID string, records map[string]string) error {
+	l.subnetsmx.Lock()
+	defer l.subnetsmx.Unlock()
+
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -332,6 +397,9 @@ func (l *Libp2p) AddSubnetDNSRecords(subnetID string, records map[string]string)
 }
 
 func (l *Libp2p) RemoveSubnetDNSRecord(subnetID, name string) error {
+	l.subnetsmx.Lock()
+	defer l.subnetsmx.Unlock()
+
 	s, ok := l.subnets[subnetID]
 	if !ok {
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
@@ -344,143 +412,240 @@ func (l *Libp2p) RemoveSubnetDNSRecord(subnetID, name string) error {
 	return nil
 }
 
-func (l *Libp2p) writePackets(stream network.Stream) {
-	IDSize := make([]byte, 2)
-	// read_subnet_id
-	// Read the incoming packet's size as a binary value.
-	_, err := stream.Read(IDSize)
+func (l *Libp2p) startIPProxy() error {
+	p := connectip.Proxy{}
+	hostIP, err := l.HostPublicIP()
 	if err != nil {
-		log.Errorf("failed to read subnet id size from stream: %v", err)
-		_ = stream.Reset()
-		return
+		return fmt.Errorf("failed to get host public IP: %w", err)
 	}
 
-	// Decode the incoming packet's size from binary.
-	size := binary.LittleEndian.Uint16(IDSize)
-	subnetID := make([]byte, size)
+	if l.rawqtr.listener == nil {
+		<-l.rawqtr.listenerReady
+	}
 
-	// Read in the packet until completion.
-	var IDLen uint16
-	for IDLen < size {
-		tmp, err := stream.Read(subnetID[IDLen:size])
-		IDLen += uint16(tmp)
+	actualPort := l.rawqtr.listener.Addr().(*net.UDPAddr).Port
+	template := uritemplate.MustNew(fmt.Sprintf("http://%s:%d/vpn", hostIP, actualPort))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vpn", func(w http.ResponseWriter, r *http.Request) {
+		// get subnet id from the query
+		subnetID := r.URL.Query().Get("subnetID")
+		if subnetID == "" {
+			log.Debug("received bad http proxy request, no subnetID was provided")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// get src ip from query params
+		srcIP := r.URL.Query().Get("srcIP")
+		if srcIP == "" || !IsIPv4(srcIP) {
+			log.Debug("received bad http proxy request, no srcIP was provided")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		log.Debugf("received http proxy request for subnet %s from %s", subnetID, srcIP)
+
+		l.subnetsmx.Lock()
+		// retrieve subnet
+		subnet, ok := l.subnets[subnetID]
+		l.subnetsmx.Unlock()
+		if !ok {
+			log.Debugf("subnet with ID %s does not exist", subnetID)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		addr := netip.MustParseAddr(srcIP)
+		route := netip.MustParsePrefix(subnet.info.cidr.String())
+		req, err := connectip.ParseRequest(r, template)
 		if err != nil {
-			log.Errorf("failed to read subnet id from stream: %v", err)
-			_ = stream.Reset()
+			log.Errorf("failed to parse request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-	}
 
-	// retrieve subnet object
-	subnet, ok := l.subnets[string(subnetID)]
-	if !ok {
-		log.Errorf("unrecognized subnet id %s, subnet does not exist on this host", string(subnetID))
-		_ = stream.Reset()
-		return
-	}
-
-	subnet.writePackets(stream)
-}
-
-func newSubnet(ctx context.Context, l *Libp2p) *subnet {
-	return &subnet{
-		ctx:     ctx,
-		network: l,
-		info: struct {
-			id     string
-			rtable SubnetRoutingTable
-		}{
-			rtable: NewRoutingTable(),
-		},
-		ifaces: make(map[string]struct {
-			tun    *sys.NetInterface
-			ctx    context.Context
-			cancel context.CancelFunc
-		}),
-		io: struct {
-			mx      sync.RWMutex
-			streams map[string]*struct {
-				mx     sync.Mutex
-				stream network.Stream
-			}
-		}{
-			streams: make(map[string]*struct {
-				mx     sync.Mutex
-				stream network.Stream
-			}),
-		},
-		dnsRecords: map[string]string{},
-		portMapping: map[string]*struct {
-			destPort string
-			destIP   string
-			srcIP    string
-		}{},
-	}
-}
-
-func (s *subnet) readPackets(ctx context.Context, iface *sys.NetInterface) {
-	for {
-		select {
-		case <-ctx.Done():
-			log.Debugf("context done, abandoning read loop... on subnetID: %s", s.info.id)
+		conn, err := p.Proxy(w, req)
+		if err != nil {
+			log.Errorf("failed to proxy connection: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
-		default:
-			{
-				packet := make([]byte, 1420)
-				// Read in a packet from the tun device.
-				plen, err := iface.Iface.Read(packet)
-				if errors.Is(err, fs.ErrClosed) {
-					time.Sleep(1 * time.Second)
-					log.Debugf("tun device closed, abandoning read loop on subnetID: %s, error: %v", s.info.id, err)
-					return
-				} else if err != nil {
-					log.Errorf("failed to read packet from tun device on subnetID: %s, error: %v", s.info.id, err)
-					continue
-				}
+		}
 
-				if plen == 0 {
-					continue
-				}
+		// ATOMIC check and store for incoming connections
+		subnet.proxiedConns.mx.Lock()
+		if old, ok := subnet.proxiedConns.conns[srcIP]; ok {
+			old.Close()
+		}
+		subnet.proxiedConns.conns[srcIP] = conn
+		subnet.proxiedConns.mx.Unlock()
 
-				srcPort, destPort, srcIP, destIP, err := s.parseIPPacket(packet)
+		// Double-check: is this still the connection in the map?
+		subnet.proxiedConns.mx.Lock()
+		if subnet.proxiedConns.conns[srcIP] != conn {
+			subnet.proxiedConns.mx.Unlock()
+			log.Debugf("connection from %s lost race, closing", srcIP)
+			log.Errorf("closing connection for %s", srcIP)
+			conn.Close()
+			return
+		}
+		subnet.proxiedConns.mx.Unlock()
+
+		log.Debugf("connection from %s stored in subnet", srcIP)
+
+		if err := l.handleIPProxyConn(subnet, conn, addr, route, 0); err != nil {
+			log.Error("failed to handle connection: %v", err)
+		}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &http3.Server{
+		Handler:         mux,
+		EnableDatagrams: true,
+	}
+	go func() {
+		if l.rawqtr.listener == nil {
+			<-l.rawqtr.listenerReady
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Debug("ip proxy context done, shutting down")
+				return
+			case <-l.ctx.Done():
+				log.Debug("libp2p context done, shutting down")
+				return
+			case rawQUICConn := <-l.rawqtr.listener.acceptQueue:
+				l.ipproxyConnsMx.Lock()
+				l.ipproxyConns[rawQUICConn.RemoteAddr().String()] = rawQUICConn
+				l.ipproxyConnsMx.Unlock()
+
+				go func() {
+					log.Debug("serve http3 connection on raw quic connection")
+					err = s.ServeQUICConn(rawQUICConn)
+					if err != nil {
+						log.Errorf("failed to serve http3 connection on raw quic connection: %v", err)
+						err := rawQUICConn.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "server is down")
+						if err != nil {
+							log.Errorf("failed to close raw quic connection: %v", err)
+						}
+					}
+				}()
+			}
+		}
+	}()
+
+	l.ipproxyCtx = ctx
+	l.ipproxyCtxCancel = cancel
+	l.ipproxy = s
+	l.ipproxyConnsMx.Lock()
+	l.ipproxyConns = make(map[string]*quic.Conn)
+	l.ipproxyConnsMx.Unlock()
+
+	log.Info("started ip proxy for all subnets")
+
+	return nil
+}
+
+func (l *Libp2p) handleIPProxyConn(
+	snet *subnet,
+	conn *connectip.Conn,
+	addr netip.Addr,
+	route netip.Prefix,
+	ipProtocol uint8,
+) error {
+	log.Debugf(
+		"handling ip proxy conn (subnet=%s, addr=%s, route=%s, ipProtocol=%d)",
+		snet.info.id, addr.String(), route.String(), ipProtocol,
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := conn.AssignAddresses(ctx, []netip.Prefix{netip.PrefixFrom(addr, addr.BitLen())}); err != nil {
+		return fmt.Errorf("failed to assign addresses: %w", err)
+	}
+	if err := conn.AdvertiseRoute(ctx, []connectip.IPRoute{
+		{StartIP: route.Addr(), EndIP: LastIP(route), IPProtocol: ipProtocol},
+	}); err != nil {
+		return fmt.Errorf("failed to advertise route: %w", err)
+	}
+
+	errChan := make(chan error, 2)
+	go func() {
+		for {
+			select {
+			case <-snet.ctx.Done():
+				snet.cleanupConn(addr.String(), conn)
+				return
+			default:
+				b := make([]byte, 2000)
+				n, err := conn.ReadPacket(b)
 				if err != nil {
-					log.Error("failed to parse IP packet: ", err)
+					errChan <- fmt.Errorf("failed to read from connection: %w", err)
+					snet.cleanupConn(addr.String(), conn)
+					return
+				}
+
+				log.Debugf("read %d bytes from connection", n)
+
+				// 1. retrieve dest ip
+				destIP := net.IPv4(b[16], b[17], b[18], b[19]).String()
+
+				_, ok := snet.info.rtable.GetByIP(destIP)
+				if !ok {
+					log.Debugf("unrecognized destination ip %s, no peerID found for ip, not a subnet member", destIP)
 					continue
 				}
 
-				log.Debugln(
-					"read packet from tun device",
-					"tun", iface.Iface.Name(),
-					"subnet", s.info.id,
-					"destIP", destIP,
-					"destPort", destPort,
-					"srcIP", srcIP,
-					"srcPort", srcPort,
-				)
-
-				if destIP != "10.0.0.1" && destPort != 53 {
-					s.Route(destIP, packet, plen)
-					continue
+				// 2. fetch the respective tun dev
+				snet.mx.Lock()
+				if iface, ok := snet.ifaces[destIP]; ok {
+					log.Debugf("writing packet to tun device %s", iface.tun.Name())
+					// 3. write to tun dev
+					if _, err := iface.tun.Write(b[:n]); err != nil {
+						log.Errorf("failed to write to tun device: %v (subnet=%s, destIP=%s)", err, snet.info.id, destIP)
+					}
+				} else {
+					log.Debugf("unrecognized destination ip %s, no tun device found for ip", destIP)
 				}
-
-				log.Debugln(
-					"handling DNS query",
-					"subnet", s.info.id,
-					"destIP", destIP,
-					"destPort", destPort,
-					"srcIP", srcIP,
-					"srcPort", srcPort,
-				)
-
-				if err := s.handleDNSQueries(iface, packet, plen); err != nil {
-					log.Errorf("failed to handle DNS query: %v", err)
-				}
+				snet.mx.Unlock()
 			}
 		}
-	}
+	}()
+
+	go func() {
+		select {
+		case err := <-errChan:
+			log.Errorf("failed to handle connection: %v", err)
+		case <-snet.ctx.Done():
+			snet.cleanupConn(addr.String(), conn)
+		}
+	}()
+
+	return nil
 }
 
-func (s *subnet) handleDNSQueries(iface *sys.NetInterface, packet []byte, packetlen int) error {
+func (l *Libp2p) stopIPProxy() {
+	log.Infof("stopping ip proxy")
+
+	l.ipproxyCtxCancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
+	// l.ipproxy.Shutdown(ctx)
+	l.ipproxy.Close()
+	for _, conn := range l.ipproxyConns {
+		err := conn.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "shutting down")
+		if err != nil {
+			log.Errorf("failed to close ipproxy connection: %v", err)
+		}
+	}
+	l.ipproxyConns = make(map[string]*quic.Conn)
+	l.ipproxy = nil
+}
+
+func (s *subnet) handleDNSQueries(iface sys.NetInterface, packet []byte, packetlen int) error {
 	s.dnsmx.RLock()
 	payload, err := handleDNSQuery(packet[28:packetlen], s.dnsRecords)
 	s.dnsmx.RUnlock()
@@ -528,202 +693,206 @@ func (s *subnet) handleDNSQueries(iface *sys.NetInterface, packet []byte, packet
 		return err
 	}
 
-	_, _ = iface.Iface.Write(buffer.Bytes())
+	_, _ = iface.Write(buffer.Bytes())
 	return nil
 }
 
-func (s *subnet) Route(destIP string, packet []byte, plen int) {
-	log.Debugf("routing packet on subnetID: %s, dstIP: %s", s.info.id, destIP)
-	// check if present in our tuns table first
-	defer s.mx.Unlock()
-	s.mx.Lock()
-	if _, ok := s.ifaces[destIP]; ok {
-		log.Debugf("found destination ip in tuns table on subnetID: %s, dstIP: %s", s.info.id, destIP)
-		// if so, write to the tun
-		_, _ = s.ifaces[destIP].tun.Iface.Write(packet[:plen])
-		return
-	}
+func (s *subnet) Route(iface sys.NetInterface, srcIP, destIP string, packet []byte, plen int) {
+	log.Debugf("routing packet (subnet=%s, dstIP=%s, packet_len=%d)", s.info.id, destIP, plen)
 
-	// if else check if present in our routing table
+	s.mx.Lock()
 	peerID, ok := s.info.rtable.GetByIP(destIP)
 	if !ok {
-		log.Debugf("unrecognized destination ip on subnetID: %s, dstIP: %s", s.info.id, destIP)
+		log.Debugf("unrecognized destination ip on subnetID: %s, dstIP: %s, not a subnet member", s.info.id, destIP)
+		s.mx.Unlock()
 		return
 	}
 
-	log.Debugf("found destination ip in routing table on subnetID: %s, dstIP: %s, peerID: %s", s.info.id, destIP, peerID.String())
+	_, ok = s.info.rtable.GetByIP(srcIP)
+	if !ok {
+		log.Debugf("unrecognized source ip on subnetID: %s, srcIP: %s, not a subnet member", s.info.id, srcIP)
+		s.mx.Unlock()
+		return
+	}
 
-	go s.redirectPacketToStream(s.ctx, peerID, packet, plen)
-}
-
-func (s *subnet) redirectPacketToStream(ctx context.Context, dst peer.ID, packet []byte, plen int) {
-	// Check if we already have an open connection to the destination peer.
-	defer s.io.mx.Unlock()
-	s.io.mx.Lock()
-	ms, ok := s.io.streams[dst.String()]
-	if ok {
-		log.Debug("found existing stream to destination peer on subnetID: %s, dst: %s", s.info.id, dst.String())
-		if func() bool {
-			ms.mx.Lock()
-			defer ms.mx.Unlock()
-			_ = ms.stream.SetWriteDeadline(time.Now().Add(time.Second))
-			// Write out the packet's length to the libp2p stream to ensure
-			// we know the full size of the packet at the other end.
-			err := binary.Write(ms.stream, binary.LittleEndian, uint16(len(s.info.id)))
-			if err == nil {
-				// Write the packet out to the libp2p stream.
-				// If everything succeeds continue on to the next packet.
-				_, _ = (ms.stream).Write([]byte(s.info.id))
-			} else {
-				// If we encounter an error when writing to a stream we should
-				// close that stream and delete it from the active stream map.
-				_ = ms.stream.Reset()
-				delete(s.io.streams, dst.String())
-				return false
-			}
-
-			// Write out the packet's length to the libp2p stream to ensure
-			// we know the full size of the packet at the other end.
-			err = binary.Write(ms.stream, binary.LittleEndian, uint16(plen))
-			if err == nil {
-				// Write the packet out to the libp2p stream.
-				// If everything succeeds continue on to the next packet.
-				_, err = (ms.stream).Write(packet[:plen])
-				if err == nil {
-					return true
-				}
-			}
-			// If we encounter an error when writing to a stream we should
-			// close that stream and delete it from the active stream map.
-			ms.stream.Close()
-			delete(s.io.streams, dst.String())
-			return false
-		}() {
-			return
+	if _, ok := s.ifaces[destIP]; ok {
+		log.Debugf("found destination ip in tuns table (local) on subnetID: %s, dstIP: %s, writing packet of length %d", s.info.id, destIP, plen)
+		// if so, write to the tun
+		n, err := s.ifaces[destIP].tun.Write(packet[:plen])
+		if err != nil {
+			log.Errorf("failed to write to tun device: %v (subnet=%s, destIP=%s, bytes_written=%d)", err, s.info.id, destIP, n)
+		} else {
+			log.Debugf("successfully wrote %d bytes to tun device (subnet=%s, destIP=%s)", n, s.info.id, destIP)
 		}
-	}
-
-	log.Debugf("no existing stream to destination peer on subnetID: %s, dst: %s", s.info.id, dst.String())
-
-	addrs, err := s.network.ResolveAddress(ctx, dst.String())
-	if err != nil {
-		log.Errorf("failed to resolve peer address on subnetID: %s, dst: %s, error: %v", s.info.id, "dst", dst.String(), err)
+		s.mx.Unlock()
 		return
 	}
+	s.mx.Unlock()
 
-	protocolID := types.MessageType(PacketExchangeProtocolID)
-	stream, err := s.network.OpenStream(ctx, addrs[0], protocolID)
-	if err != nil {
-		log.Errorf("failed to open stream on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
-		return
-	}
+	log.Debugf(
+		"found destination ip in routing table (subnet=%s, destIP=%s, peerID=%s)",
+		s.info.id, destIP, peerID.String(),
+	)
 
-	_ = stream.SetWriteDeadline(time.Now().Add(time.Second))
-
-	// Write packet length
-	err = binary.Write(stream, binary.LittleEndian, uint16(len([]byte(s.info.id))))
-	if err != nil {
-		log.Errorf("failed to write subnet id length on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
-		stream.Close()
-		return
-	}
-
-	// Write the packet
-	_, err = stream.Write([]byte(s.info.id))
-	if err != nil {
-		log.Errorf("failed to write on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
-		stream.Close()
-		return
-	}
-
-	// Write packet length
-	err = binary.Write(stream, binary.LittleEndian, uint16(plen))
-	if err != nil {
-		log.Errorf("failed to write packet length on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
-		stream.Close()
-		return
-	}
-
-	// Write the packet
-	_, err = stream.Write(packet[:plen])
-	if err != nil {
-		log.Errorf("failed to write packet on subnetID: %s, dst: %s, error: %v", s.info.id, dst.String(), err)
-		stream.Close()
-		return
-	}
-
-	// If all succeeds when writing the packet to the stream
-	// we should reuse this stream by adding it active streams map.
-	s.io.streams[dst.String()] = &struct {
-		mx     sync.Mutex
-		stream network.Stream
-	}{
-		mx:     sync.Mutex{},
-		stream: stream,
+	if err := s.proxyPacket(s.ctx, iface, peerID, srcIP, destIP, packet, plen); err != nil {
+		log.Errorf("failed to proxy packet: %v", err)
 	}
 }
 
-func (s *subnet) writePackets(stream network.Stream) {
-	defer stream.Close()
+func (s *subnet) proxyPacket(
+	ctx context.Context,
+	iface sys.NetInterface,
+	dst peer.ID,
+	srcIP,
+	destIP string,
+	packet []byte,
+	plen int,
+) error {
+	s.proxiedConns.mx.Lock()
+	conn, ok := s.proxiedConns.conns[destIP]
+	if !ok {
+		log.Debugf("no connection for %s, establishing one", destIP)
+		// No connection: establish one synchronously
+		newConn, quicConn, err := s.dialIPProxy(ctx, dst, srcIP)
+		if err != nil {
+			s.proxiedConns.mx.Unlock()
+			return fmt.Errorf("failed to establish connection to %s: %w", destIP, err)
+		}
 
-	if _, ok := s.info.rtable.Get(stream.Conn().RemotePeer()); !ok {
-		log.Debugf("unrecognized source peer on subnet: %s, src: %s", s.info.id, stream.Conn().RemotePeer().String())
-		_ = stream.Reset()
-		return
-	}
+		if old, ok := s.proxiedConns.conns[destIP]; ok {
+			if old != newConn { // Only close if it's a different connection
+				log.Debugf("closing old connection for %s", destIP)
+				old.Close()
+			}
+		}
+		s.proxiedConns.conns[destIP] = newConn
+		s.proxiedConns.mx.Unlock()
+		conn = newConn
 
-	packet := make([]byte, 1420)
-	packetSize := make([]byte, 2)
-	for {
-		select {
-		case <-s.ctx.Done():
-			log.Debugf("context done - subnetID: %s", s.info.id)
-			_ = stream.Reset()
-			return
-
-		default:
-			{
-				// read_packet
-				// Read the incoming packet's size as a binary value.
-				_, err := stream.Read(packetSize)
-				if err != nil {
-					log.Warnf("failed to read packet size from stream on subnetID: %s, error: %v", s.info.id, err)
-					_ = stream.Reset()
+		// Start a goroutine to read from the new connection and write to the TUN device
+		go func(ipconn *connectip.Conn, destIP, srcIP string, quicConn *quic.Conn) {
+			for {
+				select {
+				case <-ctx.Done():
+					log.Debugf("context done, abandoning read loop... (subnet=%s)", s.info.id)
 					return
-				}
-
-				// Decode the incoming packet's size from binary.
-				size := binary.LittleEndian.Uint16(packetSize)
-
-				// Read in the packet until completion.
-				var plen uint16
-				for plen < size {
-					tmp, err := stream.Read(packet[plen:size])
-					plen += uint16(tmp)
+				case <-s.ctx.Done():
+					log.Debugf("context done, abandoning read loop... (subnet=%s)", s.info.id)
+					return
+				case <-quicConn.Context().Done():
+					log.Debugf("quic connection for %s closed, closing connection", destIP)
+					s.cleanupConn(destIP, ipconn)
+					return
+				default:
+					b := make([]byte, 2000)
+					n, err := ipconn.ReadPacket(b)
 					if err != nil {
-						log.Warnf("failed to read packet from stream on subnetID: %s, error: %v", s.info.id, err)
-						_ = stream.Reset()
+						log.Errorf("failed to read from outgoing connection: %v (subnet=%s, dst=%s)", err, s.info.id, dst.String())
+						s.cleanupConn(destIP, ipconn)
 						return
 					}
+					// Write to the appropriate TUN device
+					s.mx.Lock()
+					iface, ok := s.ifaces[srcIP]
+					s.mx.Unlock()
+					if ok {
+						if _, err := iface.tun.Write(b[:n]); err != nil {
+							log.Errorf("failed to write to TUN from outgoing connection: %v (subnet=%s, dst=%s)", err, s.info.id, dst.String())
+						}
+					} else {
+						log.Debugf("no TUN device for destIP %s (subnet=%s)", destIP, s.info.id)
+					}
 				}
-				_ = stream.SetWriteDeadline(time.Now().Add(time.Second))
+			}
+		}(newConn, destIP, srcIP, quicConn)
+	} else {
+		log.Debugf("found connection for %s, writing packet", destIP)
+		s.proxiedConns.mx.Unlock()
+	}
+	// Now write to the connection
+	icmp, err := conn.WritePacket(packet[:plen])
+	if err != nil {
+		log.Errorf("failed to write packet to connection: %s (subnet=%s, dst=%s)", err, s.info.id, dst.String())
+		s.cleanupConn(destIP, conn)
+		return fmt.Errorf("failed to write packet to connection: %w", err)
+	}
+	if len(icmp) > 0 {
+		_, err := iface.Write(icmp)
+		if err != nil {
+			log.Errorf("failed to write ICMP packet to tun device: %s (subnet=%s, dst=%s)", err, s.info.id, dst.String())
+			return fmt.Errorf("failed to write ICMP packet to tun device: %w", err)
+		}
+	}
+	return nil
+}
 
-				log.Debugf("reading packet from stream on subnetID: %s, src: %s", s.info.id, stream.Conn().RemotePeer().String())
+func (s *subnet) readPackets(ctx context.Context, iface sys.NetInterface) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debugf("context done, abandoning read loop... (subnet=%s)", s.info.id)
+			return
+		case <-s.ctx.Done():
+			log.Debugf("context done, abandoning read loop... (subnet=%s)", s.info.id)
+			return
+		default:
+			{
+				packet := make([]byte, MaxPacketSize)
+				// Read in a packet from the tun device.
+				plen, err := iface.Read(packet)
+				if errors.Is(err, fs.ErrClosed) {
+					time.Sleep(1 * time.Second)
+					log.Debugf("tun device closed, abandoning read loop... (err=%s, subnet=%s)", err, s.info.id)
+					return
+				} else if err != nil {
+					log.Errorf("failed to read packet from tun device: %s (subnet=%s)", err, s.info.id)
+					continue
+				}
 
-				// write_packet
-				destIP := net.IPv4(packet[16], packet[17], packet[18], packet[19]).String()
+				if plen == 0 {
+					log.Errorf("received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
+					continue
+				}
 
-				// retrieve proper tun and write to it
-				// if no tun is found, drop the packet
-				s.mx.Lock()
-				if iface, ok := s.ifaces[destIP]; ok {
-					log.Debugf("writing packet to tun device: %s on subnetID: %s, dstIP: %s", iface.tun.Iface.Name(), s.info.id, "dstIP", destIP)
-					_, _ = iface.tun.Iface.Write(packet[:plen])
+				if plen > MaxPacketSize {
+					log.Debugf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
+					plen = MaxPacketSize
+				}
+
+				srcPort, destPort, srcIP, destIP, err := s.parseIPPacket(packet)
+				if err != nil {
+					log.Errorf("failed to parse IP packet: %s", err)
+					continue
+				}
+
+				log.Debugf(
+					"read packet from tun device (tun=%s, subnet=%s, destIP=%s, destPort=%s, srcIP=%s, srcPort=%s)",
+					iface.Name(),
+					s.info.id,
+					destIP,
+					destPort,
+					srcIP,
+					srcPort,
+				)
+
+				// Fix DNS filtering logic - only handle DNS queries, route everything else
+				if destPort == 53 {
+					log.Debugf(
+						"handling DNS query (tun=%s, subnet=%s, destIP=%s, destPort=%s, srcIP=%s, srcPort=%s)",
+						iface.Name(),
+						s.info.id,
+						destIP,
+						destPort,
+						srcIP,
+						srcPort,
+					)
+
+					if err := s.handleDNSQueries(iface, packet, plen); err != nil {
+						log.Errorf("failed to handle DNS query: %s", err)
+					}
 				} else {
-					// drop the packet
-					log.Debugf("unrecognized destination ip, no tun device found for ip on subnetID: %s, dstIP: %s", s.info.id, destIP)
+					s.Route(iface, srcIP, destIP, packet, plen)
 				}
-				s.mx.Unlock()
 			}
 		}
 	}
@@ -744,7 +913,6 @@ func (s *subnet) parseIPPacket(rawPacket []byte) (srcPort int, destPort int, src
 		destIP = ip.DstIP.String()
 	}
 
-	// Get TCP layer
 	udpLayer := packet.Layer(layers.LayerTypeUDP)
 	if udpLayer != nil {
 		udp, _ := udpLayer.(*layers.UDP)
@@ -752,7 +920,75 @@ func (s *subnet) parseIPPacket(rawPacket []byte) (srcPort int, destPort int, src
 		destPort = int(udp.DstPort)
 	}
 
+	// Add TCP parsing
+	tcpLayer := packet.Layer(layers.LayerTypeTCP)
+	if tcpLayer != nil {
+		tcp, _ := tcpLayer.(*layers.TCP)
+		srcPort = int(tcp.SrcPort)
+		destPort = int(tcp.DstPort)
+	}
+
 	return
+}
+
+func (s *subnet) dialIPProxy(
+	ctx context.Context,
+	target peer.ID,
+	srcIP string,
+) (*connectip.Conn, *quic.Conn, error) {
+	conn, proxyAddr, err := s.network.RawQUICConnect(target, s.info.id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to dial raw QUIC connection: %w", err)
+	}
+
+	tr := &http3.Transport{EnableDatagrams: true}
+	hconn := tr.NewClientConn(conn)
+	template := uritemplate.MustNew(fmt.Sprintf(
+		"https://%s:%d/vpn?subnetID=%s&srcIP=%s",
+		proxyAddr.Addr().Unmap().String(),
+		proxyAddr.Port(),
+		s.info.id,
+		srcIP,
+	))
+
+	ipconn, rsp, err := connectip.Dial(ctx, hconn, template)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to dial connect-ip connection: %w", err)
+	}
+	if rsp.StatusCode != http.StatusOK {
+		log.Errorf("unexpected status code: %d (err=%s, body=%s)", rsp.StatusCode, err, rsp.Body)
+		return nil, nil, fmt.Errorf("unexpected status code: %d", rsp.StatusCode)
+	}
+
+	log.Debugf("connected to IP Proxy for target %s on %s", target, proxyAddr)
+
+	return ipconn, conn, nil
+}
+
+func (s *subnet) PeersAddresses() map[string]bool {
+	addresses := make(map[string]bool)
+	s.mx.Lock()
+	rtable := s.info.rtable
+	s.mx.Unlock()
+
+	for peerID := range rtable.All() {
+		addrs := s.network.Host.Peerstore().Addrs(peerID)
+		if len(addrs) == 0 {
+			pinfo, err := s.network.resolvePeerAddress(context.TODO(), peerID)
+			if err != nil {
+				log.Errorf("failed to resolve peer address: %s", err)
+				continue
+			}
+			addrs = pinfo.Addrs
+		}
+		for _, addr := range addrs {
+			parts := strings.Split(addr.String(), "/")
+			ip := parts[2]
+			port := parts[4]
+			addresses[fmt.Sprintf("%s:%s", ip, port)] = true
+		}
+	}
+	return addresses
 }
 
 // stringSliceContains checks if a string is in a slice of strings
@@ -784,4 +1020,43 @@ func generateUniqueName(takenList []string) (string, error) {
 		}
 	}
 	return candidate, nil
+}
+
+func LastIP(prefix netip.Prefix) netip.Addr {
+	addr := prefix.Addr()
+	bytes := addr.AsSlice()
+
+	hostBits := len(bytes)*8 - prefix.Bits()
+	for i := len(bytes) - 1; i >= 0; i-- {
+		setBits := math.Min(8, float64(hostBits))
+		if setBits <= 0 {
+			break
+		}
+		bytes[i] |= byte(0xff >> (8 - int(setBits)))
+		hostBits -= 8
+	}
+
+	if addr.Is4() {
+		return netip.AddrFrom4([4]byte(bytes[:4]))
+	}
+	return netip.AddrFrom16([16]byte(bytes))
+}
+
+func IsIPv4(ip string) bool {
+	return net.ParseIP(ip).To4() != nil
+}
+
+func (s *subnet) cleanupConn(ip string, conn *connectip.Conn) {
+	defer s.proxiedConns.mx.Unlock()
+	s.proxiedConns.mx.Lock()
+	current, ok := s.proxiedConns.conns[ip]
+	if ok && current == conn {
+		log.Debugf("cleanupConn: closing and removing connection for %s", ip)
+		delete(s.proxiedConns.conns, ip)
+		conn.Close()
+	}
+}
+
+func NetTunFactory(name string) (sys.NetInterface, error) {
+	return sys.NewTunTapInterface(name, sys.NetTunMode, false)
 }

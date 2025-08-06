@@ -12,16 +12,32 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quic-go/quic-go/http3"
+
+	"github.com/quic-go/quic-go"
+	crypto "gitlab.com/nunet/device-management-service/lib/crypto"
+
+	ic "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+
+	"gitlab.com/nunet/device-management-service/lib/sys"
 
 	cid "github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -29,7 +45,6 @@ import (
 	libp2pdiscovery "github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -44,7 +59,6 @@ import (
 
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/observability"
 	commonproto "gitlab.com/nunet/device-management-service/proto/generated/v1/common"
@@ -122,8 +136,21 @@ type Libp2p struct {
 	// dependencies (db, filesystem...)
 	fs afero.Fs
 
-	subnets                         map[string]*subnet
-	isSubnetWriteProtocolRegistered int32
+	subnetsmx              sync.Mutex
+	subnets                map[string]*subnet
+	isHTTPServerRegistered int32
+
+	// for ip proxying in subnets
+	ipproxy          *http3.Server
+	ipproxyCtx       context.Context
+	ipproxyCtxCancel func()
+	ipproxyConns     map[string]*quic.Conn
+	ipproxyConnsMx   sync.Mutex
+
+	udpln  *net.UDPConn
+	rawqtr *RawQUICTransport
+
+	NetIfaceFactory NetInterfaceFactory // Injected factory for creating NetInterface (for testing/mocking)
 }
 
 // This results in a cyclic dependency error
@@ -143,6 +170,21 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		return nil, errors.New("scheduler is nil")
 	}
 
+	var netIfaceFactory NetInterfaceFactory
+	if config.NetIfaceFactory != nil {
+		netIfaceFactory = func(name string) (sys.NetInterface, error) {
+			iface, err := config.NetIfaceFactory(name)
+			if err != nil {
+				return nil, err
+			}
+			return iface.(sys.NetInterface), nil
+		}
+	} else if config.NetIfaceFactory == nil {
+		netIfaceFactory = func(name string) (sys.NetInterface, error) {
+			return sys.NewTunTapInterface(name, sys.NetTunMode, false)
+		}
+	}
+
 	return &Libp2p{
 		config:            config,
 		discoveredPeers:   make([]peer.AddrInfo, 0),
@@ -153,13 +195,14 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		fs:                fs,
 		subnets:           make(map[string]*subnet),
 		observedAddrCh:    make(chan multiaddr.Multiaddr, 1), // buffer of 1 to avoid blocking
+		NetIfaceFactory:   netIfaceFactory,                   // from config or nil
 	}, nil
 }
 
 // Init initializes a libp2p host with its dependencies.
 func (l *Libp2p) Init(cfg *config.Config) error {
 	ctx, cancel := context.WithCancel(context.Background())
-	host, dht, pubsub, err := NewHost(ctx, l.config, l.broadcastAppScore, l.broadcastScoreInspect)
+	host, dht, pubsub, udpConn, rqtr, err := NewHost(ctx, l.config, l.broadcastAppScore, l.broadcastScoreInspect)
 	if err != nil {
 		cancel()
 		log.Error(err)
@@ -174,6 +217,10 @@ func (l *Libp2p) Init(cfg *config.Config) error {
 	l.discovery = drouting.NewRoutingDiscovery(dht)
 	l.pubsub = pubsub
 	l.handlerRegistry = NewHandlerRegistry(host)
+	l.udpln = udpConn
+	l.rawqtr = rqtr
+
+	l.rawqtr.network = l
 
 	// Extract the public key from the private key
 	publicKey := l.config.PrivateKey.GetPublic()
@@ -532,15 +579,50 @@ func (l *Libp2p) GetMultiaddr() ([]multiaddr.Multiaddr, error) {
 func (l *Libp2p) Stop() error {
 	var errorMessages []string
 
-	l.cancel()
-	l.config.Scheduler.RemoveTask(l.discoveryTask.ID)
-	l.config.Scheduler.RemoveTask(l.advertiseRendezvousTask.ID)
-
-	if err := l.DHT.Close(); err != nil {
-		errorMessages = append(errorMessages, err.Error())
+	// Cancel context if not nil
+	if l.cancel != nil {
+		l.cancel()
 	}
-	if err := l.Host.Close(); err != nil {
-		errorMessages = append(errorMessages, err.Error())
+
+	// Remove scheduled tasks if scheduler exists
+	if l.config != nil && l.config.Scheduler != nil {
+		// Only remove tasks if they exist
+		if l.discoveryTask != nil {
+			l.config.Scheduler.RemoveTask(l.discoveryTask.ID)
+		}
+		if l.advertiseRendezvousTask != nil {
+			l.config.Scheduler.RemoveTask(l.advertiseRendezvousTask.ID)
+		}
+	}
+
+	// Close DHT if not nil
+	if l.DHT != nil {
+		if err := l.DHT.Close(); err != nil {
+			errorMessages = append(errorMessages, err.Error())
+		}
+	}
+
+	// Close Host if not nil
+	if l.Host != nil {
+		if err := l.Host.Close(); err != nil {
+			errorMessages = append(errorMessages, err.Error())
+		}
+	}
+
+	// Close subnets
+	if l.subnets != nil {
+		for subnetID := range l.subnets {
+			err := l.DestroySubnet(subnetID)
+			if err != nil {
+				errorMessages = append(errorMessages, err.Error())
+			}
+		}
+	}
+
+	if l.udpln != nil {
+		if err := l.udpln.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			errorMessages = append(errorMessages, err.Error())
+		}
 	}
 
 	if len(errorMessages) > 0 {
@@ -869,6 +951,7 @@ func (l *Libp2p) Advertise(ctx context.Context, key string, data []byte) error {
 		return fmt.Errorf("failed to provide key %s into the dht: %w", key, err)
 	}
 
+	log.Infof("advertised key: %s", key)
 	return nil
 }
 
@@ -1148,11 +1231,51 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 }
 
 func (l *Libp2p) HostPublicIP() (net.IP, error) {
+	if l.config.Env == "dev" || l.config.Env == "test" {
+		return l.listeningIP()
+	}
 	addr, err := l.waitForObservedAddr(l.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve observed addr: %w", err)
 	}
 	return manet.ToIP(addr)
+}
+
+func (l *Libp2p) listeningIP() (net.IP, error) {
+	var privIP net.IP
+	var hasPrivIP bool
+	if len(l.Host.Addrs()) > 4 && l.config.Env != "production" {
+		for _, addr := range l.Host.Addrs() {
+			if manet.IsPrivateAddr(addr) && !strings.Contains(addr.String(), "/ip4/127.0.0.1/udp") {
+				ip, err := manet.ToIP(addr)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert multiaddr to IP: %w", err)
+				}
+				return ip, nil
+			}
+		}
+	} else {
+		for _, addr := range l.Host.Addrs() {
+			if manet.IsPublicAddr(addr) {
+				ip, err := manet.ToIP(addr)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert multiaddr to IP: %w", err)
+				}
+				return ip, nil
+			} else if manet.IsPrivateAddr(addr) {
+				ip, err := manet.ToIP(addr)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert multiaddr to IP: %w", err)
+				}
+				privIP = ip
+				hasPrivIP = true
+			}
+		}
+		if hasPrivIP {
+			return privIP, nil
+		}
+	}
+	return net.ParseIP("127.0.0.1"), nil
 }
 
 // WaitForObservedAddr waits for the node to confirm its public IP address
@@ -1204,6 +1327,176 @@ func (l *Libp2p) getPublicKey() ([]byte, error) {
 	return pubKey.Raw()
 }
 
+func (l *Libp2p) RawQUICConnect(target peer.ID, serverName string) (*quic.Conn, *netip.AddrPort, error) {
+	if l.config.Env == "dev" || l.config.Env == "test" {
+		return l.rawQUICConnect(target, serverName, false)
+	}
+	return l.rawQUICConnect(target, serverName, true)
+}
+
+func (l *Libp2p) RawQUICConnectLocal(target peer.ID, serverName string) (*quic.Conn, *netip.AddrPort, error) {
+	return l.rawQUICConnect(target, serverName, false)
+}
+
+func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAddress bool) (*quic.Conn, *netip.AddrPort, error) {
+	connected := make(chan struct{}, 1)
+	go func() {
+		sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerConnectednessChanged))
+		if err != nil {
+			log.Fatal("failed to subscribe to peer connectedness changed event: ", err)
+		}
+		defer sub.Close()
+		for ev := range sub.Out() {
+			e := ev.(event.EvtPeerConnectednessChanged)
+			if e.Peer == target {
+				msg := fmt.Sprintf("peer connectedness changed: %s\n", e.Connectedness)
+				for _, c := range l.Host.Network().ConnsToPeer(target) {
+					msg += fmt.Sprintf("\t%s <-> %s\n", c.LocalMultiaddr(), c.RemoteMultiaddr())
+				}
+				log.Debug(msg)
+				if e.Connectedness == network.Connected {
+					connected <- struct{}{}
+				}
+			}
+		}
+	}()
+
+	ai, err := l.DHT.FindPeer(context.Background(), target)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to find peer: %w", err)
+	}
+
+	// 1st step: check if we have a public QUIC address for the target
+	// If we do, we can directly dial it.
+	var udpAddr *net.UDPAddr
+	rawQuicAddrs := getRawQUICAddrs(l.Host.Peerstore().Addrs(target))
+	for _, a := range rawQuicAddrs {
+		fmt.Println("found address", a, "for target", target)
+		if onlyPublicAddress {
+			if manet.IsPublicAddr(a) && isQUICAddr(a) {
+				udpAddr, err = quicAddrToNetAddr(a)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
+				}
+			}
+		} else {
+			if isQUICAddr(a) {
+				udpAddr, err = quicAddrToNetAddr(a)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
+				}
+
+				break
+			}
+		}
+	}
+
+	if udpAddr != nil {
+		addr := udpAddr.AddrPort()
+		conn, err := dialSubnetQUICLayer(l, l.rawqtr.Transport, udpAddr, serverName)
+		return conn, &addr, err
+	}
+
+	// 2nd step: connect to the target via a relay address.
+	// If we don't have a public QUIC address for the target,
+	// we need to connect to it via a relay address.
+	if err := l.Host.Connect(context.Background(), ai); err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to peer: %w", err)
+	}
+
+	// As soon as the relayed peer accepts the connection via the relay,
+	// it tries to establish a direction connection back to us using the DCUtR protocol.
+	// We wait for this connection to be established.
+	select {
+	case <-connected:
+	case <-time.After(2 * time.Minute):
+		return nil, nil, fmt.Errorf("timed out waiting for direct (e.g. hole-punched) connection")
+	}
+
+	// Now that we have a direct connection to the target, we can dial another
+	// QUIC connection on the same 4-tupe. This works since QUIC demultiplexes connections
+	// based on their connection ID.
+	var directAddr *net.UDPAddr
+	for _, c := range l.Host.Network().ConnsToPeer(target) {
+		if a := c.RemoteMultiaddr(); isQUICAddr(a) {
+			directAddr, err = quicAddrToNetAddr(a)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
+			}
+			log.Debugf("found QUIC address: %s", a)
+			break
+		}
+	}
+
+	// Due to https://github.com/libp2p/go-libp2p/issues/3101, we can't rely on the Connectedness connection state,
+	// as it doesn't distinguish between direct and connections via an unlimited relay.
+	start := time.Now()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+connectLoop:
+	for now := range ticker.C {
+		if now.Sub(start) > 5*time.Second {
+			break
+		}
+		for _, c := range l.Host.Network().ConnsToPeer(target) {
+			if a := c.RemoteMultiaddr(); isQUICAddr(a) {
+				directAddr, err = quicAddrToNetAddr(a)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
+				}
+				if directAddr.Port == 10000 {
+					break
+				}
+				break connectLoop
+			}
+		}
+	}
+	if directAddr == nil {
+		return nil, nil, fmt.Errorf("failed to find a direct QUIC address for peer %s after hole punching", target)
+	}
+
+	log.Debugf("dialing QUIC address: %s", directAddr)
+	log.Debugf("found hole punched connection, addr: %s:%d", directAddr.IP.String(), directAddr.Port)
+
+	addr := directAddr.AddrPort()
+	conn, err := dialSubnetQUICLayer(l, l.rawqtr.Transport, directAddr, serverName)
+	return conn, &addr, err
+}
+
+func dialSubnetQUICLayer(l *Libp2p, tr *quic.Transport, addr *net.UDPAddr, servName string) (*quic.Conn, error) {
+	priv, err := l.config.PrivateKey.Raw()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get private key: %w", err)
+	}
+	cert, err := generateSelfSignedCert(ed25519.PrivateKey(priv), []string{fmt.Sprintf("%s.nunet.internal", servName)})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate self signed certificate: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	log.Debugf("dialing QUIC address: %s", addr)
+	conn, err := tr.Dial(
+		ctx,
+		addr,
+		&tls.Config{
+			InsecureSkipVerify:       true,
+			VerifyPeerCertificate:    makeVerifySubnetPeerCertificateFn(l),
+			PreferServerCipherSuites: true,
+			ClientAuth:               tls.RequireAndVerifyClientCert,
+			Certificates:             []tls.Certificate{*cert},
+			NextProtos:               []string{"raw"},
+			ServerName:               fmt.Sprintf("%s.nunet.internal", servName),
+		},
+		&quic.Config{
+			EnableDatagrams: true,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial QUIC address: %w", err)
+	}
+	return conn, nil
+}
+
 func (l *Libp2p) getCustomNamespace(key, peerID string) string {
 	return fmt.Sprintf("%s-%s-%s", l.config.CustomNamespace, key, peerID)
 }
@@ -1215,4 +1508,105 @@ func createCIDFromKey(key string) (cid.Cid, error) {
 		return cid.Cid{}, err
 	}
 	return cid.NewCidV1(cid.Raw, mh), nil
+}
+
+func makeVerifySubnetPeerCertificateFn(l *Libp2p) func([][]byte, [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(l.subnets) == 0 {
+			return fmt.Errorf("peer not a member of any subnet, invalidating cert")
+		}
+
+		cert, err := x509.ParseCertificate(rawCerts[0])
+		if err != nil {
+			return fmt.Errorf("failed to parse certificate: %v", err)
+		}
+
+		// Check expiration
+		if time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter) {
+			return fmt.Errorf("certificate is expired or not yet valid")
+		}
+
+		subnetID := strings.Split(cert.Subject.CommonName, ".")[0]
+		// Check server name
+		if _, ok := l.subnets[subnetID]; ok && slices.Contains(cert.DNSNames, cert.Subject.CommonName) {
+			return fmt.Errorf("either server name does not match certificate or peer not a member of provided subnets")
+		}
+
+		var pubKey crypto.PubKey
+		switch algoType := strings.ToLower(cert.PublicKeyAlgorithm.String()); algoType {
+		case "ecdsa":
+			key, ok := cert.PublicKey.(ecdsa.PublicKey)
+			if !ok {
+				return fmt.Errorf("failed to cast public key to ecdsa type=%T", cert.PublicKey)
+			}
+			pubkey, err := key.ECDH()
+			if err != nil {
+				return fmt.Errorf("failed to get ecdh public key: %v", err)
+			}
+			pubKey, err = ic.UnmarshalECDSAPublicKey(pubkey.Bytes())
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal ecdsa public key: %v", err)
+			}
+		case "rsa":
+			key, ok := cert.PublicKey.(rsa.PublicKey)
+			if !ok {
+				return fmt.Errorf("failed to cast public key to rsa, type=%T", cert.PublicKey)
+			}
+			rawBytes, err := x509.MarshalPKIXPublicKey(key)
+			if err != nil {
+				return fmt.Errorf("failed to marshal PKIX public key: %v", err)
+			}
+			pubKey, err = ic.UnmarshalRsaPublicKey(rawBytes)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal rsa public key: %v", err)
+			}
+
+		case "ed25519":
+			key, ok := cert.PublicKey.(ed25519.PublicKey)
+			if !ok {
+				return fmt.Errorf("failed to cast public key to ed25519, type=%T", cert.PublicKey)
+			}
+			pubkey, err := ic.UnmarshalEd25519PublicKey([]byte(key))
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal ed25519 public key: %v", err)
+			}
+
+			pubKey = pubkey
+
+		default:
+			return fmt.Errorf("unsupported public key type: %T, %s", cert.PublicKey, cert.PublicKeyAlgorithm.String())
+		}
+
+		peerID, err := peer.IDFromPublicKey(pubKey)
+		if err != nil {
+			return fmt.Errorf("failed to get peer id from public key: %v", err)
+		}
+		for _, subnet := range l.subnets {
+			peerMap := subnet.info.rtable.All()
+			if _, ok := peerMap[peerID]; ok {
+				log.Debugf("peer is a member of subnet, allowing raw quic connection (peerID=%S, subnet=%s)", peerID.String(), subnet.info.id)
+				goto done
+			}
+		}
+
+		return fmt.Errorf("peer not a member of any subnet, invalidating cert")
+
+	done:
+		return nil
+	}
+}
+
+func getRawQUICAddrs(multiaddrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+	rawQuicAddrs := make([]multiaddr.Multiaddr, 0)
+	for _, a := range multiaddrs {
+		if isQUICAddr(a) {
+			_, err := quicAddrToNetAddr(a)
+			if err != nil {
+				log.Errorf("failed to convert multiaddr to net.UDPAddr: %v", err)
+				continue
+			}
+			rawQuicAddrs = append(rawQuicAddrs, a)
+		}
+	}
+	return rawQuicAddrs
 }

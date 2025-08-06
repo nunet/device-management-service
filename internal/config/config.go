@@ -12,6 +12,7 @@ type Config struct {
 }
 
 type General struct {
+	Env                      string `mapstructure:"env" json:"env"`
 	UserDir                  string `mapstructure:"user_dir"                   json:"user_dir"`
 	WorkDir                  string `mapstructure:"work_dir"                   json:"work_dir"`
 	DataDir                  string `mapstructure:"data_dir"                   json:"data_dir"`
@@ -41,8 +42,8 @@ type Profiler struct {
 type P2P struct {
 	ListenAddress   []string `mapstructure:"listen_address" json:"listen_address"`
 	BootstrapPeers  []string `mapstructure:"bootstrap_peers" json:"bootstrap_peers"`
-	Memory          int      `mapstructure:"memory"          json:"memory"`
-	FileDescriptors int      `mapstructure:"fd"              json:"fd"`
+	Memory          int      `mapstructure:"memory" json:"memory"`
+	FileDescriptors int      `mapstructure:"fd" json:"fd"`
 }
 
 type Job struct {

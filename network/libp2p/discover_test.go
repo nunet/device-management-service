@@ -19,7 +19,7 @@ import (
 //
 // Note: it has the chance of becoming flake, if that is the case, remove it
 func TestDiscoverDialPeersFullFlow(t *testing.T) {
-	hosts := newNetwork(t, 3, true)
+	hosts := newNetwork(t, 3, true, "test")
 	require.Len(t, hosts, 3)
 
 	// hosts[0] is the bootstrap peer (as per newNetwork implementation)

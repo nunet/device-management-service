@@ -155,6 +155,7 @@ func TestHandleSubnetDestroy(t *testing.T) {
 		err = node.network.CreateSubnet(
 			context.Background(),
 			subnetID,
+			"192.168.0.0/24",
 			map[string]string{"192.168.1.1": nVnet.GetHostID().String()})
 		require.NoError(t, err)
 
@@ -234,6 +235,7 @@ func TestHandleSubnetJoin(t *testing.T) {
 		err = node.network.CreateSubnet(
 			context.Background(),
 			subnetID,
+			"192.168.0.0/24",
 			map[string]string{"192.168.1.1": sVnet.GetHostID().String()})
 		require.NoError(t, err)
 

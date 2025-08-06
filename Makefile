@@ -69,6 +69,11 @@ linux_amd64_docker:
 			CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) .;\
 		'
 
+linux_amd64_debug:
+	@echo "Building for Linux AMD64 with debug..."
+	go mod tidy
+	GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) -gcflags="all=-N -l" .
+
 linux_arm64:
 	@echo "Building for Linux ARM64..."
 	go mod tidy

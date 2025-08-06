@@ -46,6 +46,7 @@ type SubnetCreateRequest struct {
 	SubnetID     string
 	IP           string
 	RoutingTable map[string]string
+	CIDR         string
 }
 
 type SubnetCreateResponse struct {
@@ -225,6 +226,7 @@ func (p *Provisioner) createSubnet(
 				SubnetCreateRequest{
 					SubnetID:     manifestID,
 					RoutingTable: routingTable,
+					CIDR:         p.subnetManifest.CIDR,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
