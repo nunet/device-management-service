@@ -1,9 +1,25 @@
+# Device Management Service (DMS)
+
+- [Project README](https://gitlab.com/nunet/device-management-service/-/blob/main/README.md)
+- [Release/Build Status](https://gitlab.com/nunet/device-management-service/-/releases)
+- [Changelog](https://gitlab.com/nunet/device-management-service/-/blob/main/CHANGELOG.md)
+- [License](https://www.apache.org/licenses/LICENSE-2.0.txt)
+- [Contribution Guidelines](https://gitlab.com/nunet/device-management-service/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
+- [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
+
+
 # Development guidelines
 
 <!--toc:start-->
 - [Development guidelines](#development-guidelines)
   - [First things first](#first-things-first)
   - [Testing](#testing)
+    - [e2e Tests](#e2e-tests)
+      - [Prerequisites](#prerequisites)
+      - [Running the e2e tests](#running-the-e2e-tests)
+    - [Acceptance tests](#acceptance-tests)
+  - [Manual Testing](#manual-testing)
     - [Running DMS and config file](#running-dms-and-config-file)
       - [Config file](#config-file)
     - [Actor behaviors](#actor-behaviors)
@@ -16,7 +32,7 @@
       - [Calling behaviors](#calling-behaviors)
       - [Check logs](#check-logs)
       - [Working with subnets](#working-with-subnets)
-    - [Local execution of unit tests](#local-execution-of-unit-tests)
+  - [Local execution of unit tests](#local-execution-of-unit-tests)
 <!--toc:end-->
 
 ## First things first
@@ -32,7 +48,52 @@ Before anything, you probably want to read:
 
 ## Testing
 
-When testing DMS, you usually want to setup multiple DMSes either under the same
+The repository contains unit tests, end-to-end (e2e) tests, and acceptance tests.
+
+Most packages contain unit tests, and it is always best to run them to ensure there is nothing broken before submitting changes.
+
+All unit tests can be run with the following command. It's necessary to include the `unit` tag to exclude other tests such as e2e tests.
+
+```bash
+go test --tags unit ./...
+```
+
+### e2e Tests
+
+#### Prerequisites
+Before running the e2e tests, make sure that the following commands are run:
+
+```bash
+sudo modprobe fuse
+docker pull ghcr.io/gluster/gluster-containers:fedora
+docker pull nginxdemos/hello:plain-text
+docker pull ubuntu:22.04
+docker pull hello-world
+sudo chmod 777 "/etc/glusterfs" "/var/lib/glusterd" "/var/log/glusterfs" "/glusterfs_data"
+sudo sed -i 's/#user_allow_other/user_allow_other/g' /etc/fuse.sh
+```
+
+#### Running the e2e tests
+To run the e2e tests, use the following command:
+```bash
+make e2e
+```
+
+Help in contributing tests is always appreciated :)
+
+### Acceptance tests
+
+Acceptance tests are located in the `tests/acceptance` directory. They are designed to test the DMS functionality in a more integrated manner, simulating real-world scenarios.
+It's recommended to first read the [Acceptance Tests README](./tests/acceptance/README.md) for detailed instructions on how to set up and run the tests.
+
+To run the acceptance tests, use the following command:
+```bash
+make run-acceptance
+```
+
+## Manual Testing
+
+When manually testing DMS, you usually want to setup multiple DMSes either under the same
 machine or across different machines (or VMs).
 
 Your DMSes should also use their own NuNet private network so that deployments
