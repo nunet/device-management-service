@@ -114,7 +114,7 @@ type Network interface {
 	HostPublicIP() (net.IP, error)
 
 	// CreateSubnet creates a subnet with the given subnetID and CIDR
-	CreateSubnet(ctx context.Context, subnetID string, routingTable map[string]string) error
+	CreateSubnet(ctx context.Context, subnetID, cidr string, routingTable map[string]string) error
 
 	// RemoveSubnet removes a subnet
 	DestroySubnet(subnetID string) error

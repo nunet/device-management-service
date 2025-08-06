@@ -253,7 +253,7 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 		return fmt.Errorf("%w envelope: %w", types.ErrUnmarshal, err)
 	}
 
-	pubKey, err := crypto.UnmarshalSecp256k1PublicKey(envelope.PublicKey)
+	pubKey, err := crypto.UnmarshalEd25519PublicKey(envelope.PublicKey)
 	if err != nil {
 		log.Errorw("libp2p_dht_validate_failure",
 			"labels", string(observability.LabelNode),
@@ -324,7 +324,7 @@ func (m *dhtMessenger) SendRequest(ctx context.Context, p peer.ID, msg *dht_pb.M
 	defer r.ReleaseMsg(bytes)
 
 	reply := new(dht_pb.Message)
-	if err := reply.Unmarshal(bytes); err != nil {
+	if err := proto.Unmarshal(bytes, reply); err != nil {
 		_ = s.Reset()
 		return nil, fmt.Errorf("unmarshal message: %w", err)
 	}

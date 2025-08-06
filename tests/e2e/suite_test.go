@@ -115,7 +115,7 @@ func (s *TestSuite) setupTestNetwork() {
 		nodeConfig := createConfig(
 			userDir,
 			uint32(s.restPortIndex),
-			fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", s.p2pPortIndex),
+			[]string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", s.p2pPortIndex), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", s.p2pPortIndex)},
 			[]string{},
 		)
 		nodeIndex := i

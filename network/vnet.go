@@ -395,7 +395,7 @@ func (*MemoryHost) GetPeerIP(peer.ID) string { return "" }
 
 func (*MemoryHost) HostPublicIP() (net.IP, error) { return nil, nil }
 
-func (*MemoryHost) CreateSubnet(context.Context, string, map[string]string) error { return nil }
+func (*MemoryHost) CreateSubnet(context.Context, string, string, map[string]string) error { return nil }
 
 func (*MemoryHost) DestroySubnet(string) error { return nil }
 

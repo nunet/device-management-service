@@ -217,7 +217,7 @@ func createFileCore(observabilityConfig config.Observability, levelEnabler zapco
 	return zapcore.NewCore(fileEncoder, fileWS, levelEnabler)
 }
 
-// createElasticsearchCore creates an Elasticsearch logging core with “preflight” fallback
+// createElasticsearchCore creates an Elasticsearch logging core with "preflight" fallback
 func createElasticsearchCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) (zapcore.Core, error) {
 	// Basic validations
 	if observabilityConfig.ElasticsearchURL == "" {
@@ -482,7 +482,7 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 	_, err := bulkRequest.Do(flushCtx)
 	if err != nil {
-		// If it’s a 401, disable ES immediately (atomic, no global lock)
+		// If it's a 401, disable ES immediately (atomic, no global lock)
 		if esErr, ok := err.(*elastic.Error); ok && esErr.Status == 401 {
 			disableES()
 			return
@@ -568,7 +568,7 @@ func (e *eventEmitterCore) With(fields []zapcore.Field) zapcore.Core {
 }
 
 func (e *eventEmitterCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
-	if e.Enabled(entry.Level) {
+	if e.LevelEnabler.Enabled(entry.Level) {
 		return ce.AddCore(entry, e)
 	}
 	return ce

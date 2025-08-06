@@ -105,7 +105,7 @@ func extractStatus(input string) string {
 }
 
 func createConfig(userDir string, restPort uint32,
-	p2pListenAddr string, bootstrap []string,
+	p2pListenAddrs []string, bootstrap []string,
 ) *config.Config {
 	return &config.Config{
 		General: config.General{
@@ -130,7 +130,7 @@ func createConfig(userDir string, restPort uint32,
 			AllowPrivilegedDocker: false,
 		},
 		P2P: config.P2P{
-			ListenAddress:   []string{p2pListenAddr},
+			ListenAddress:   p2pListenAddrs,
 			BootstrapPeers:  bootstrap,
 			Memory:          1024,
 			FileDescriptors: 10444,

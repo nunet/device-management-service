@@ -9,17 +9,14 @@
 package libp2p
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -28,6 +25,7 @@ import (
 func newNetwork(
 	t *testing.T, numHosts int,
 	withDiscovery bool,
+	env string,
 ) []*Libp2p {
 	t.Helper()
 
@@ -52,7 +50,8 @@ func newNetwork(
 		[]multiaddr.Multiaddr, 0, bootstrapPeersNum*5)
 
 	for range bootstrapPeersNum {
-		bootstrapCfg := setupPeerConfig(t, 0, bootstrapPeers)
+		bootstrapCfg := setupPeerConfig(t, 0, 0, bootstrapPeers)
+		bootstrapCfg.Env = env
 		host := newPeer(t, bootstrapCfg)
 		require.NotNil(t, host)
 
@@ -64,7 +63,8 @@ func newNetwork(
 	}
 
 	for i := bootstrapPeersNum; i < numHosts; i++ {
-		peerCfg := setupPeerConfig(t, 0, bootstrapPeers)
+		peerCfg := setupPeerConfig(t, 0, 0, bootstrapPeers)
+		peerCfg.Env = env
 		host := newPeer(t, peerCfg)
 		require.NotNil(t, host)
 		hosts = append(hosts, host)
@@ -130,23 +130,6 @@ func newPeer(t *testing.T, hostCfg *types.Libp2pConfig) *Libp2p {
 	return peer
 }
 
-func setupPeerConfig(t *testing.T, libp2pPort int, bootstrapPeers []multiaddr.Multiaddr) *types.Libp2pConfig {
-	t.Helper()
-	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
-	assert.NoError(t, err)
-	return &types.Libp2pConfig{
-		PrivateKey:              priv,
-		BootstrapPeers:          bootstrapPeers,
-		Rendezvous:              "nunet-randevouz",
-		Server:                  false,
-		Scheduler:               backgroundtasks.NewScheduler(10, time.Second),
-		DHTPrefix:               "/nunet",
-		CustomNamespace:         "/nunet-dht-1/",
-		ListenAddress:           []string{fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic-v1/", libp2pPort)},
-		PeerCountDiscoveryLimit: 40,
-	}
-}
-
 // verifyConnections checks that a host has the expected number of connections.
 // The host must be connected to at least minConnections other hosts.
 func verifyConnections(t *testing.T, host *Libp2p, minConnections int) {
@@ -165,16 +148,4 @@ func verifyConnections(t *testing.T, host *Libp2p, minConnections int) {
 	}, timeout, retryInterval,
 		"A host has only %d connections but needs at least %d",
 		len(host.Host.Network().Peers()), minConnections)
-}
-
-func createPeer(t *testing.T, port int) *Libp2p { //nolint
-	t.Helper()
-
-	peerConfig := setupPeerConfig(t, port, []multiaddr.Multiaddr{})
-	peer1, err := New(peerConfig, afero.NewMemMapFs())
-
-	require.NoError(t, err)
-	require.NoError(t, peer1.Init(&config.Config{}))
-
-	return peer1
 }
