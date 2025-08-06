@@ -9,6 +9,7 @@
 package actor
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -164,7 +165,7 @@ func CreateActor(t *testing.T, peer network.Network, capCxt ucan.CapabilityConte
 	return actor
 }
 
-func NewLibp2pNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr) ([]multiaddr.Multiaddr, crypto.PrivKey, *libp2p.Libp2p) {
+func NewLibp2pNetwork(t *testing.T, quicPort int, bootstrap []multiaddr.Multiaddr) ([]multiaddr.Multiaddr, crypto.PrivKey, *libp2p.Libp2p) {
 	t.Helper()
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519)
@@ -172,19 +173,27 @@ func NewLibp2pNetwork(t *testing.T, bootstrap []multiaddr.Multiaddr) ([]multiadd
 	net, err := network.NewNetwork(&types.NetworkConfig{
 		Type: types.Libp2pNetwork,
 		Libp2pConfig: types.Libp2pConfig{
+			Env:                     "test",
 			PrivateKey:              priv,
 			BootstrapPeers:          bootstrap,
 			Rendezvous:              "nunet-randevouz",
 			Server:                  false,
 			Scheduler:               backgroundtasks.NewScheduler(1, time.Second),
 			CustomNamespace:         "/nunet-dht-1/",
-			ListenAddress:           []string{"/ip4/127.0.0.1/tcp/0"},
 			PeerCountDiscoveryLimit: 40,
 			GossipMaxMessageSize:    2 << 16,
+			ListenAddress:           []string{"/ip4/0.0.0.0/tcp/3001", fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", quicPort)},
 		},
 	}, afero.NewMemMapFs())
 	assert.NoError(t, err)
-	err = net.Init(&config.Config{})
+	err = net.Init(&config.Config{
+		General: config.General{
+			Env: "test",
+		},
+		P2P: config.P2P{
+			ListenAddress: []string{"/ip4/0.0.0.0/tcp/3001", fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", quicPort)},
+		},
+	})
 	assert.NoError(t, err)
 
 	err = net.Start()

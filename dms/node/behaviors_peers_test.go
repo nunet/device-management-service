@@ -244,5 +244,10 @@ func TestHandlePeerConnect(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "CONNECTED", resp.Status)
 		assert.Empty(t, resp.Error)
+
+		require.NoError(t, sActor.Stop())
+		require.NoError(t, nActor.Stop())
+		require.NoError(t, sNet.Stop())
+		require.NoError(t, nodeNet.Stop())
 	})
 }

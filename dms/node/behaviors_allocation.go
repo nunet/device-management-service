@@ -47,7 +47,7 @@ func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 	}
 
 	resp := orchestrator.SubnetCreateResponse{}
-	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
+	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.CIDR, request.RoutingTable)
 	if err != nil {
 		handleErr(err)
 		return

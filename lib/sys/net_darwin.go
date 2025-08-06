@@ -19,7 +19,7 @@ import (
 
 // NewTunTapInterface creates a new tun/tap interface
 // persist is not used on darwin
-func NewTunTapInterface(name string, mode TunTapMode, persist bool) (*NetInterface, error) {
+func NewTunTapInterface(name string, mode TunTapMode, persist bool) (NetInterface, error) {
 	var intMode water.DeviceType = water.TAP
 
 	if mode == NetTunMode {
@@ -36,43 +36,43 @@ func NewTunTapInterface(name string, mode TunTapMode, persist bool) (*NetInterfa
 		return nil, fmt.Errorf("error creating interface: %w", err)
 	}
 
-	return &NetInterface{
-		Iface: iface,
+	return &netiface{
+		iface: iface,
 	}, nil
 }
 
 // UpNetInterface brings the network interface up
-func (n *NetInterface) Up() error {
+func (n *netiface) Up() error {
 	return fmt.Errorf("up interface not available on darwin")
 }
 
 // DownNetInterface brings the network interface down
-func (n *NetInterface) Down() error {
+func (n *netiface) Down() error {
 	return fmt.Errorf("down interface not available on darwin")
 }
 
 // DeleteNetInterface deletes the network interface
-func (n *NetInterface) Delete() error {
+func (n *netiface) Delete() error {
 	return fmt.Errorf("delete interface not available on darwin")
 }
 
 // SetMTU sets the MTU of the network interface
-func (n *NetInterface) SetMTU(mtu int) error {
+func (n *netiface) SetMTU(mtu int) error {
 	return fmt.Errorf("set mtu not available on darwin")
 }
 
 // SetAddress sets the address of the network interface
-func (n *NetInterface) SetAddress(address string) error {
+func (n *netiface) SetAddress(address string) error {
 	return fmt.Errorf("set interface address not available on darwin")
 }
 
 // AddRouteRule adds a route rule to the network interface
-func (n *NetInterface) AddRouteRule(src, dst, gw string) error {
+func (n *netiface) AddRouteRule(src, dst, gw string) error {
 	return fmt.Errorf("add route not available on darwin")
 }
 
 // DelRoute deletes a route from the network interface
-func (n *NetInterface) DelRoute(route string) error {
+func (n *netiface) DelRoute(route string) error {
 	return fmt.Errorf("delete route not available on darwin")
 }
 

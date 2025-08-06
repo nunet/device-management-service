@@ -71,11 +71,11 @@ func TestNew(t *testing.T) {
 }
 
 func TestActorMessaging(t *testing.T) {
-	addrs1, priv1, peer1 := NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
-	_, priv2, peer2 := NewLibp2pNetwork(t, addrs1)
+	addrs1, priv1, peer1 := NewLibp2pNetwork(t, 3001, []multiaddr.Multiaddr{})
+	_, priv2, peer2 := NewLibp2pNetwork(t, 3002, addrs1)
 
 	res, err := peer2.Ping(context.Background(), peer1.Host.ID().String(), time.Second)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, res.Success)
 
 	time.Sleep(500 * time.Millisecond)
@@ -114,7 +114,7 @@ func TestActorMessaging(t *testing.T) {
 		defer msg.Discard()
 		envChan <- msg
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = actor1.AddBehavior(testBehavior2, func(msg Envelope) {
 		defer msg.Discard()
@@ -151,14 +151,17 @@ func TestActorMessaging(t *testing.T) {
 	assert.NoError(t, err)
 	reply := <-replyChan
 	require.Equal(t, msg.Message, reply.Message)
+
+	require.NoError(t, peer2.Stop())
+	require.NoError(t, peer1.Stop())
 }
 
 func TestActorBroadcast(t *testing.T) {
 	topic := "test"
 	behavior := "/broadcast/test"
 
-	addrs1, priv1, peer1 := NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
-	_, priv2, peer2 := NewLibp2pNetwork(t, addrs1)
+	addrs1, priv1, peer1 := NewLibp2pNetwork(t, 3011, []multiaddr.Multiaddr{})
+	_, priv2, peer2 := NewLibp2pNetwork(t, 3012, addrs1)
 
 	res, err := peer2.Ping(context.Background(), peer1.Host.ID().String(), time.Second)
 	if err != nil {
@@ -226,11 +229,14 @@ func TestActorBroadcast(t *testing.T) {
 
 	result := <-mch
 	assert.Equal(t, string(result.Message), "{\"Name\":\"random name\",\"Type\":\"x\"}")
+
+	require.NoError(t, peer2.Stop())
+	require.NoError(t, peer1.Stop())
 }
 
 func TestActorHealthcheck(t *testing.T) {
-	addrs1, priv1, peer1 := NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
-	_, priv2, peer2 := NewLibp2pNetwork(t, addrs1)
+	addrs1, priv1, peer1 := NewLibp2pNetwork(t, 3021, []multiaddr.Multiaddr{})
+	_, priv2, peer2 := NewLibp2pNetwork(t, 3022, addrs1)
 
 	res, err := peer2.Ping(context.Background(), peer1.Host.ID().String(), time.Second)
 	assert.NoError(t, err)
@@ -283,11 +289,14 @@ func TestActorHealthcheck(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out")
 	}
+
+	require.NoError(t, peer2.Stop())
+	require.NoError(t, peer1.Stop())
 }
 
 func TestParentChildRelationship(t *testing.T) {
 	// Setup network and actors
-	_, priv1, peer1 := NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
+	_, priv1, peer1 := NewLibp2pNetwork(t, 3031, []multiaddr.Multiaddr{})
 
 	// Create trust context for parent
 	rootDID, rootTrust := MakeRootTrustContext(t)
@@ -356,14 +365,16 @@ func TestParentChildRelationship(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout waiting for child to receive message")
 	}
+
+	require.NoError(t, peer1.Stop())
 }
 
 // TestChildToChildBehaviorInvocation tests a similar workflow of
 // behavior invoking that we have between the orchestrator and allocations
 func TestChildToChildBehaviorInvocation(t *testing.T) {
 	// Setup networks for both parent actors
-	addrs1, priv1, peer1 := NewLibp2pNetwork(t, []multiaddr.Multiaddr{})
-	_, priv2, peer2 := NewLibp2pNetwork(t, addrs1)
+	addrs1, priv1, peer1 := NewLibp2pNetwork(t, 3041, []multiaddr.Multiaddr{})
+	_, priv2, peer2 := NewLibp2pNetwork(t, 3042, addrs1)
 
 	// Ensure network connectivity
 	res, err := peer2.Ping(context.Background(), peer1.Host.ID().String(), time.Second)
@@ -478,4 +489,7 @@ func TestChildToChildBehaviorInvocation(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout waiting for Child B to receive message")
 	}
+
+	require.NoError(t, peer2.Stop())
+	require.NoError(t, peer1.Stop())
 }
