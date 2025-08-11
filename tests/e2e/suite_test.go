@@ -44,9 +44,16 @@ type prefixWriter struct {
 
 func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 	lines := strings.Split(string(p), "\n")
+
+	// different colors for each node prefix
+	colorIdx, _ := strconv.Atoi(pw.prefix[len(pw.prefix)-3 : len(pw.prefix)-2])
+	colorIdx++
+	color := fmt.Sprintf("\x1b[3%dm", colorIdx)
+	colorReset := "\x1b[0m"
+
 	for i, line := range lines {
 		if line != "" {
-			if _, err := fmt.Fprintf(pw.w, "%s%s", pw.prefix, line); err != nil {
+			if _, err := fmt.Fprintf(pw.w, "%s%s%s%s", color, pw.prefix, colorReset, line); err != nil {
 				return 0, err
 			}
 		}
@@ -77,7 +84,13 @@ func (s *TestSuite) startNode(index int) {
 
 	binaryPath := filepath.Join(s.currentDir, binaryName)
 	cmd := exec.Command(binaryPath, "run", "--config", configPath, "--context", node.dmsContext)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GOLOG_LOG_LEVEL=%s", "debug"), fmt.Sprintf("DMS_PASSPHRASE=%s", node.password))
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GOLOG_LOG_LEVEL=%s,%s",
+			"debug",
+			"observability=info", // too verbose on debug level
+		),
+		fmt.Sprintf("DMS_PASSPHRASE=%s", node.password),
+	)
 	prefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
 	cmd.Stdout = &prefixWriter{prefix: prefix, w: os.Stdout}
 	cmd.Stderr = &prefixWriter{prefix: prefix, w: os.Stderr}
@@ -335,7 +348,7 @@ func (s *TestSuite) RevokeTokenTests() {
 // If we use the package level functions, the test case will be marked as PASS but the tests will ultimately FAIL since the suite can't track it.
 func (s *TestSuite) Test_RunSuite() {
 	gin.SetMode(gin.DebugMode)
-	os.Setenv("GOLOG_LOG_LEVEL", "debug")
+	os.Setenv("GOLOG_LOG_LEVEL", "debug,observability=info")
 	s.setupTestNetwork()
 	s.runner(s)
 }
