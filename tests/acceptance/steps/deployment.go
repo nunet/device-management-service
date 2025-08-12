@@ -37,9 +37,11 @@ func Deployment(ctx *godog.ScenarioContext) {
 	ctx.Step(`^"([^"]*)" deployment is (\w+)$`, deploymentIs)
 	ctx.Step(`^"([^"]*)" ensemble should return "([^"]*)"$`, ensembleShouldReturn)
 	ctx.Step(`^"([^"]*)" has services deployed on "([^"]*)" and "([^"]*)"$`, hasServicesDeployedOn)
+	ctx.Step(`^"([^"]*)" has service deployed on "([^"]*)"$`, hasServiceDeployedOn)
 	ctx.Step(`^"([^"]*)" deployment should be (\w+) on "([^"]*)"$`, deploymentShouldBeOn)
 	ctx.Step(`^"([^"]*)" deployment should not be (\w+) on "([^"]*)"$`, deploymentShouldNotBeOn)
 	ctx.Step(`^"([^"]*)" updates deployment to remove "([^"]*)"$`, updatesDeploymentToRemove)
+	ctx.Step(`^"([^"]*)" updates deployment to add "([^"]*)"$`, updatesDeploymentToAdd)
 }
 
 func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (context.Context, error) {
@@ -98,6 +100,10 @@ func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (co
 
 	tc = tc.WithEnsembleID(ensembleID)
 	return tc.Unwrap(), nil
+}
+
+func hasServiceDeployedOn(ctx context.Context, spName, cpName string) (context.Context, error) {
+	return hasDeployedOn(ctx, spName, "nginx.yaml", cpName)
 }
 
 func deploymentIs(ctx context.Context, spName, status string) (context.Context, error) {
@@ -202,6 +208,58 @@ func updatesDeploymentToRemove(ctx context.Context, spName, cpName string) (cont
 	assert.NotEmpty(t, ensembleID)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s)", matchNode), ensemble})
+	assert.NoError(t, err)
+
+	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
+	assert.NoError(t, err)
+
+	return tc.Unwrap(), nil
+}
+
+func updatesDeploymentToAdd(ctx context.Context, spName, cpName string) (context.Context, error) {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	nodeMap, err := tc.NodeMap()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, nodeMap)
+
+	spName = strings.ToLower(spName)
+	cpName = strings.ToLower(cpName)
+
+	sp := nodeMap[spName]
+	cp := nodeMap[cpName]
+
+	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
+	assert.True(t, ok)
+
+	cpDmsCtx, ok := cp.Contexts[cpName+utils.DefaultDMSSuffix]
+	assert.True(t, ok)
+
+	ensembleID, err := tc.EnsembleID()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, ensembleID)
+
+	ensemble, err := tc.EnsembleFile()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, ensembleID)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", ".allocations.\"nginx-node-2\" = .allocations.\"nginx-node-1\"", ensemble})
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", ".nodes.node2 = .nodes.node1", ensemble})
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", ".nodes.node2.allocations[0] = \"nginx-node-2\"", ensemble})
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", ".nodes.node2.ports[0].allocation = \"nginx-node-2\"", ensemble})
+	assert.NoError(t, err)
+
+	cpInfo, err := cpDmsCtx.PeerAddr()
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node2.peer = \"%s\"", cpInfo.ID), ensemble})
 	assert.NoError(t, err)
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
