@@ -11,6 +11,7 @@ import (
 	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
 	dutils "gitlab.com/nunet/device-management-service/utils"
+	"golang.org/x/exp/maps"
 )
 
 // SetupNodes connects to Incus, spin up number of specified machines and
@@ -97,6 +98,10 @@ func SaveLogs(ctx context.Context) error {
 	tc := utils.NewTestCtx(ctx)
 
 	nodes, _ := tc.Nodes()
+	if len(nodes) == 0 {
+		nm, _ := tc.NodeMap()
+		nodes = maps.Values(nm)
+	}
 	for i, n := range nodes {
 		logs, err := n.RunCMD([]string{"cat", "dms-logs.txt"})
 		if err != nil {
