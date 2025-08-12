@@ -97,11 +97,13 @@ func SaveLogs(ctx context.Context) error {
 	fmt.Println("saving logs...")
 	tc := utils.NewTestCtx(ctx)
 
+	timestamp := time.Now().Unix()
 	nodes, _ := tc.Nodes()
 	if len(nodes) == 0 {
 		nm, _ := tc.NodeMap()
 		nodes = maps.Values(nm)
 	}
+
 	for i, n := range nodes {
 		logs, err := n.RunCMD([]string{"cat", "dms-logs.txt"})
 		if err != nil {
@@ -114,7 +116,7 @@ func SaveLogs(ctx context.Context) error {
 			return err
 		}
 
-		filename := fmt.Sprintf("dms_logs_node_%d.txt", i)
+		filename := fmt.Sprintf("dms_logs_node_%d-%d.txt", i, timestamp)
 		path := filepath.Join(dest, filename)
 
 		err = os.WriteFile(path, []byte(logs), 0o644)
