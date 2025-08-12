@@ -25,3 +25,10 @@ Feature: Deployment
     When "Alice" updates deployment to remove "Charlie"
     Then "Alice" deployment should be running on "Bob"
     But "Alice" deployment should not be running on "Charlie"
+
+  Scenario: Add node in running ensemble
+    Given "Alice" has service deployed on "Bob"
+    And "Alice" deployment is running
+    When "Alice" updates deployment to add "Charlie"
+    Then "Alice" deployment should be running on "Charlie"
+    And "Alice" deployment should be running on "Bob"
