@@ -1,0 +1,40 @@
+@startuml Simple Contract Management Deployment Architecture
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam monochrome false
+skinparam shadowing false
+
+title Simple Contract Management - Direct Two-Party Architecture
+
+node "Service Provider (SP)" as SP
+node "Compute Provider (CP)" as CP
+
+node "Contract Host (Solution Enabler)" as ContractHost {
+    database "Contract Database" as ContractDB {
+        [Contract Objects]
+    }
+    
+    [Contract Actors with\n execution engine]
+}
+
+rectangle "Settlement and payment layer" as Settlement {
+    [Offline Accounting]
+    [NTX Utility / Blockchain]
+}
+
+' Direct relationship between SP and CP
+SP <-left-> CP : "Offline agreement and terms formulation of the contract"
+
+' Contract signing and hosting
+SP -down-> ContractHost: "Signs Contract via contract package"
+CP -down-> ContractHost: "Signs Contract via contract package"
+
+
+' Deployment validation flow
+ContractHost --> Settlement : "Processes payments when contract executed"
+
+' Contract Host internals
+[Contract Actors with\n execution engine] --> ContractDB
+
+@enduml
