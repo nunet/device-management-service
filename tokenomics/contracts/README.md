@@ -1,12 +1,21 @@
 # NuNet Contracts and Tokenomics Architecture Specification
 
 ## Table of Contents
-1. [Executive Summary](#executive-summary)
-2. [Architecture Overview](#architecture-overview)
-3. [Core Design Principles](#core-design-principles)
-4. [Conceptual Framework](#conceptual-framework)
-5. [Implementation Architecture](#implementation-architecture)
-6. [References and Links](#references-and-links)
+
+- [Executive Summary](#executive-summary)
+- [Supported Behaviors](#supported-behaviors)
+  - [Simple Contract Management](#simple-contract-management)
+  - [Complex Contract Management with Solution Enabler](#complex-contract-management-with-solution-enabler)
+- [Architecture Overview](#architecture-overview)
+  - [System Components Hierarchy](#system-components-hierarchy)
+  - [Core Architecture Diagram](#core-architecture-diagram)
+- [Core Design Principles](#core-design-principles)
+- [Conceptual Framework](#conceptual-framework)
+  - [Contract Parties and Assets](#contract-parties-and-assets)
+  - [Key Architectural Entities](#key-architectural-entities)
+- [Implementation Architecture](#implementation-architecture)
+- [References and Links](#references-and-links)
+
 
 ---
 
@@ -15,6 +24,117 @@
 The NuNet contracts and tokenomics system represents a sophisticated integration of **Agoric's Electronic Rights Transfer Protocol (ERTP)** with NuNet's **object capability model** (nuActor system). This architecture enables secure, decentralized economic contracts for compute resource sharing while maintaining compatibility with both off-platform (Solutions-based) and on-platform (P2P) contract execution.
 
 **Key Innovation**: The system unifies object capabilities (UCAN/nuActor) with economic contracts (Agoric ERTP), creating a secure, capability-based tokenomics layer that can operate with both trusted third parties and blockchain-based execution environments.
+
+---
+## Supported Behaviors
+
+There are two basic behaviors supported by this iteration of the contracts package: *simple contract management* and *complex contract management*. 
+
+### Simple Contract Management
+
+The simple contract management workflow provides a streamlined approach for direct bilateral agreements between Service Providers and Compute Providers.
+
+#### Key Components
+
+- **Service Provider (SP)**: Organization that needs computational resources for their applications  
+- **Compute Provider (CP)**: Organization that supplies computational resources
+- **SP/CP Computers**: machines belonging to respective organizations
+- **Contract Host (Solution Enabler)**: Neutral party that stores and validates contracts
+- **Contract Actors with Execution Engine**: Runtime components that enforce contract terms
+- **Contract Database**: Persistent storage for signed contract objects
+
+#### Workflow Description
+
+The simple contract management behavior follows this sequential process:
+
+##### 1. Contract Establishment Phase
+
+1. **Offline Agreement**: Service Provider and Compute Provider negotiate terms directly outside the system, establishing a bilateral agreement
+2. **Contract Signing**: Both parties independently sign the contract using the contract package functionality
+3. **Contract Storage**: The Contract Host stores the signed contract in the Contract Database
+4. **Actor Initialization**: Contract Actors are initialized to enforce the agreed terms
+
+##### 2. Deployment Request Phase
+
+5. **Deployment Request**: A computer from the Service Provider organization requests deployment from the Compute Provider
+6. **Contract Validation**: The Compute Provider queries Contract Actors to verify a valid signed contract exists
+7. **Decision Point**:
+   - **Valid Contract**: Compute Provider accepts and executes the deployment
+   - **Invalid/Missing Contract**: Deployment request is rejected
+
+#### Architecture Diagrams
+
+<p align="center">
+  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/simple_contract_deployment.png?ref_type=heads&inline=true" width="100%" alt="Simple Contract Deployment Component Diagram">
+</p>
+
+<p align="center">
+  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/simple_contract_sequence.png?ref_type=heads&inline=true" width="100%" alt="Simple Contract Deployment Sequence Diagram">
+</p>
+
+### Complex Contract Management with Solution Enabler
+
+> **⚠️ Note**: This behavior is not implemented in the current contract package and represents a future enhancement to the system.
+
+The complex contract management workflow introduces a **Solution Enabler** as an intermediary that coordinates transparent multi-party contracts between **Solution Providers** and **Compute Providers**. This enables sophisticated deployment scenarios where contract verification happens through capability delegation chains.
+
+#### Key Components
+
+- **Solution Enabler (SE)**: Intermediary that creates and manages contracts with both Solution Providers and Compute Providers
+- **Solution Provider (SP)**: Organization that provides computational solutions and requests deployments
+- **Compute Provider (CP)**: Organization that supplies computational resources for execution
+- **SP Computer**: Machine belonging to the Solution Provider organization that requests deployments
+- **CP Computer**: Machine belonging to the Compute Provider organization that executes deployments
+- **Contract Host**: Unified backend system with integrated database and Ocaps verifier for contract storage and verification
+- **Contract Actors**: Interface layer that manages contract lifecycle and verification requests
+
+#### Workflow Description
+
+The complex contract management follows this multi-party process:
+
+##### 1. Dual Contract Establishment Phase
+
+1. **SE-to-CP Contract Creation**: Solution Enabler creates a contract with the Compute Provider
+2. **CP Contract Signing**: Compute Provider signs the contract, triggering contract actor creation
+3. **SE-to-SP Contract Creation**: Solution Enabler creates a separate contract with the Solution Provider  
+4. **SP Contract Signing**: Solution Provider signs the contract, triggering contract actor creation
+
+##### 2. Deployment Request Phase
+
+5. **SP Deployment Request**: A computer from the Solution Provider organization requests deployment from the Compute Provider (includes SP-DID)
+
+##### 3. Contract Chain Verification Phase
+
+> **⚠️ Note**: This ocap chain verification functionality is not currently implemented and needs to be developed in order to support this complex contract management behavior.
+
+6. **Contract Chain Query**: Compute Provider queries Contract Actors to verify the existence of a complex contract chain
+7. **Chain Verification**: Contract Actors request verification from the Contract Host, which performs ocap chain verification to:
+   - Find contracts where CP is a party
+   - Find contracts where SP is a party  
+   - Check if the same SE is involved in both contracts
+   - Verify transparency properties
+   - Validate capability delegation
+
+##### 4. Deployment Decision Phase
+
+8. **Verification Result**: Based on contract chain validity:
+   - **Valid Chain**: Contract Host confirms valid chain → Contract Actors notify CP → Deployment accepted
+   - **Invalid Chain**: Contract Host rejects chain → Contract Actors notify CP → Deployment rejected
+
+##### 5. Deployment and Execution Phase
+
+9. **Deployment Execution**: If valid, CP Computer accepts deployment and SP Computer executes the job
+10. **Completion**: SP Computer notifies CP Computer of job completion
+
+#### Architecture Diagrams
+
+<p align="center">
+  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/complex_contract_deployment.png?ref_type=heads&inline=true" width="100%" alt="Complex Contract Deployment Diagram">
+</p>
+
+<p align="center">
+  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/complex_contract_sequence.png?ref_type=heads&inline=true" width="100%" alt="Complex Contract Sequence Diagram">
+</p>
 
 ---
 
@@ -39,57 +159,10 @@ NuNet Platform
 
 Based on the detailed design from [GitLab Issue #371](https://gitlab.com/nunet/architecture/-/issues/371#note_2219820898):
 
-```plantuml
-@startuml
+<p align="center">
+  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/contract_architecture_diagram.png?ref_type=heads&inline=true" width="100%" alt="Conceptual Contract Architecture Diagram">
+</p>
 
-node "Assets 1" as assets1
-node "Assets 2" as assets2
-
-[Issuer 1] as issuer1
-[Issuer 2] as issuer2
-
-issuer1 --> assets1
-issuer2 --> assets2
-
-cloud "Contract Host" {
-
-package "Contract Object" {
-   [e-rights - Chair 1]
-   [e-rights - Chair 2]
-
-   node "Contract Logic" as logic {
-      [Dispute resolution mechanism]
-      [Pre-defined behaviours]
-   }
-
-   [e-rights - Chair 1] --> logic
-   [e-rights - Chair 2] --> logic
-
-}
-   [Capabilities of Chair 1] as ocap1
-   [Capabilities of Chair 2] as ocap2
-
-   logic ..> ocap1
-   logic ..> ocap2
-
-}
-
-actor "Contract Party 1" as party1
-actor "Contract Party 2" as party2
-
-assets1 --> party1 : "owned by"
-assets2 --> party2 : "owned by"
-
-assets1 -> [e-rights - Chair 1] : "bound by contract"
-assets2 -> [e-rights - Chair 2] : "bound by contract"
-
-ocap1 -> party1 : "rights granted by contract (host?)"
-ocap2 -> party2 : "rights granted by contract (host?)"
-
-[Oracle / Arbiter] <-> [Dispute resolution mechanism]
-
-@enduml
-```
 
 ---
 

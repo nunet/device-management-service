@@ -1,0 +1,62 @@
+@startuml Simple Contract Management Sequence
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam monochrome false
+skinparam shadowing false
+
+title Simple Contract Management - Workflow Sequence
+
+participant "Service Provider\n(SP)" as SP
+participant "Compute Provider\n(CP)" as CP
+participant "Contract Host\n(Solution Enabler)" as ContractHost
+participant "Contract Database" as ContractDB
+participant "Contract Actors with\nexecution engine" as ContractActors
+participant "SP Computer" as SPComputer
+participant "CP Computer" as CPComputer
+
+== Contract Establishment Phase ==
+
+note over SP, CP
+  Offline negotiation and agreement
+end note
+
+SP <-> CP : 1. Offline agreement and terms formulation of the contract
+
+SP -> ContractHost : 2. Signs Contract via contract package
+activate ContractHost
+
+CP -> ContractHost : 3. Signs Contract via contract package
+
+ContractHost -> ContractDB : 4. Store signed contract
+activate ContractDB
+
+ContractHost -> ContractActors : 5. Initialize contract actors
+activate ContractActors
+
+deactivate ContractHost
+
+== Deployment Request Phase ==
+
+SPComputer -> CPComputer : 6. Request deployment (from SP organization)
+activate CPComputer
+
+CPComputer -> ContractActors : 7. Check if valid signed contract exists
+ContractActors -> CPComputer : 8. Contract validation result
+
+alt Contract exists and is valid
+    CPComputer -> SPComputer : 9a. Accept deployment - deploy and execute
+    activate SPComputer
+    
+    SPComputer -> CPComputer : 10. Job completion notification
+    deactivate SPComputer
+    
+else Contract invalid/unsigned or does not exist
+    CPComputer -> SPComputer : 9b. Reject deployment request
+end
+
+deactivate CPComputer
+deactivate ContractActors
+deactivate ContractDB
+
+@enduml

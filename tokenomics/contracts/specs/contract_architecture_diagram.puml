@@ -1,0 +1,49 @@
+@startuml
+
+node "Assets 1" as assets1
+node "Assets 2" as assets2
+
+[Issuer 1] as issuer1
+[Issuer 2] as issuer2
+
+issuer1 --> assets1
+issuer2 --> assets2
+
+cloud "Contract Host" {
+
+package "Contract Object" {
+   [e-rights - Chair 1]
+   [e-rights - Chair 2]
+
+   node "Contract Logic" as logic {
+      [Dispute resolution mechanism]
+      [Pre-defined behaviours]
+   }
+
+   [e-rights - Chair 1] --> logic
+   [e-rights - Chair 2] --> logic
+
+}
+   [Capabilities of Chair 1] as ocap1
+   [Capabilities of Chair 2] as ocap2
+
+   logic ..> ocap1
+   logic ..> ocap2
+
+}
+
+actor "Contract Party 1" as party1
+actor "Contract Party 2" as party2
+
+assets1 --> party1 : "owned by"
+assets2 --> party2 : "owned by"
+
+assets1 -> [e-rights - Chair 1] : "bound by contract"
+assets2 -> [e-rights - Chair 2] : "bound by contract"
+
+ocap1 -> party1 : "rights granted by contract (host?)"
+ocap2 -> party2 : "rights granted by contract (host?)"
+
+[Oracle / Arbiter] <-> [Dispute resolution mechanism]
+
+@enduml
