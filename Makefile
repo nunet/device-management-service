@@ -22,6 +22,9 @@ LDFLAGS := \
 
 GOFLAGS := "-buildvcs=false"
 
+# Default is vm; can override with: make run-acceptance INSTANCE_TYPE=container
+INSTANCE_TYPE ?= vm
+
 .PHONY: all clean linux_amd64 darwin_arm64 license
 
 all:
@@ -180,7 +183,17 @@ e2e-%:
 
 run-acceptance:
 	@echo "Running acceptance tests"
-	go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=15m -godog.tags="~@wip"
+	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=15m -godog.tags="~@wip"
+
+run-acceptance-%:
+	@echo "Running acceptance tests: $*"
+	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=15m -godog.tags="~@wip" -test.run "^$*/"
+
+run-acceptance-container:
+	make run-acceptance INSTANCE_TYPE=container
+
+run-acceptance-vm:
+	make run-acceptance INSTANCE_TYPE=vm
 
 build-and-run-acceptance:
 	@if [ $(UNAME) = Linux ]; then\

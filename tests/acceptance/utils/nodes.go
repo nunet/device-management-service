@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	incus "github.com/lxc/incus/client"
 )
@@ -37,6 +38,11 @@ func (n *Node) RunDMSCmd(cmd string) (string, error) {
 func (n *Node) RunDMSCmdBackground(cmd string) error {
 	fullCmd := fmt.Sprintf("DMS_PASSPHRASE=123 %s", cmd)
 	return n.RunCMDBackground([]string{"sh", "-c", fullCmd})
+}
+
+// WaitForInstanceReady waits a instance to be running and ready to be used
+func (n *Node) WaitForInstanceReady() error {
+	return WaitForInstanceReady(n.Client, n.Name, 60*time.Second)
 }
 
 // UploadFile uploads a local file to the instance.
@@ -142,8 +148,8 @@ func (n *Node) GetOnboardingResources() (ramGB float64, cpuCores float64, diskGB
 		return 0, 0, 0, fmt.Errorf("failed to get total disk: %w", err)
 	}
 
-	ramGB = totalRAM * 0.2
-	cpuCores = float64(totalCPUCores) * 0.2
+	ramGB = totalRAM * 0.4
+	cpuCores = float64(totalCPUCores) * 0.4
 	diskGB = totalDisk * 0.2
 
 	return ramGB, cpuCores, diskGB, nil
