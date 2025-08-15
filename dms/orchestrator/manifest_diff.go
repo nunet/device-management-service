@@ -250,6 +250,10 @@ func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig)
 			if _, isNew := newAllocs[currPort.Allocation]; isNew {
 				continue
 			}
+			// If the allocation is removed, skip validation for the port
+			if !slices.Contains(modNode.Allocations, currPort.Allocation) {
+				continue
+			}
 			found := false
 			for _, modPort := range modNode.Ports {
 				if modPort.Allocation == currPort.Allocation &&
