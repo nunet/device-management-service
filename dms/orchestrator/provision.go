@@ -32,7 +32,7 @@ type Provisioner struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	actor          actor.Actor
-	subnetManifest SubnetManifest
+	subnetManifest jtypes.SubnetManifest
 
 	lock sync.Mutex
 }
@@ -42,7 +42,7 @@ func NewProvisioner(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	actor actor.Actor,
-	subnetManifest SubnetManifest,
+	subnetManifest jtypes.SubnetManifest,
 ) *Provisioner {
 	return &Provisioner{
 		ctx:            ctx,

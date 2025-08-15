@@ -19,9 +19,9 @@ import (
 // records.
 type BaseDBModel struct {
 	ID        string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt time.Time
+	CreatedAt time.Time `json:",omitempty,omitzero"`
+	UpdatedAt time.Time `json:",omitempty,omitzero"`
+	DeletedAt time.Time `json:",omitempty,omitzero"`
 }
 
 // GetID returns the ID of the entity.
