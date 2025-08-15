@@ -703,6 +703,41 @@ func TestValidateEnsembleUpdate(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "valid - removing ports for removed allocations",
+			currentConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {
+							Peer:        "peer1",
+							Allocations: []string{"webapp", "db"},
+							Ports: []jtypes.PortConfig{
+								{Public: 8080, Private: 80, Allocation: "webapp"},
+							},
+						},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{
+						"webapp": {DNSName: "webapp"},
+						"db":     {DNSName: "db"},
+					},
+				},
+			},
+			modifiedConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {
+							Peer:        "peer1",
+							Allocations: []string{"db"},
+							Ports:       []jtypes.PortConfig{},
+						},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{
+						"db": {DNSName: "db"},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "valid - edge constraints with new nodes",
 			currentConfig: jtypes.EnsembleConfig{
 				V1: &jtypes.EnsembleConfigV1{
