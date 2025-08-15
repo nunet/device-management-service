@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -79,7 +80,7 @@ func (p *Provisioner) Provision(
 	return manifest, nil
 }
 
-func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.EnsembleManifest, error) {
+func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest, skipCreate ...string) (jtypes.EnsembleManifest, error) {
 	for allocName := range manifest.Allocations {
 		err := p.addAllocationToSubnet(manifest, allocName)
 		if err != nil {
@@ -97,37 +98,41 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.
 
 	// handles to request subnetcreate
 	subCreateHandles := []actor.Handle{}
-	for _, node := range manifest.Nodes {
-		subCreateHandles = append(subCreateHandles, node.Handle)
-	}
-
 	// subnet config requests (add peer, dns, port map)
 	subReqs := []subnetRequest{}
-	for allocName, allocManifest := range manifest.Allocations {
-		subReqs = append(subReqs, subnetRequest{
-			handle: allocManifest.Handle,
-			ip:     p.subnetManifest.IndexRoutingTable[allocName],
-			peerID: manifest.Nodes[allocManifest.NodeID].Peer,
-			ports:  allocManifest.Ports,
-		})
+	for _, node := range manifest.Nodes {
+		if !slices.Contains(skipCreate, node.ID) {
+			subCreateHandles = append(subCreateHandles, node.Handle)
+		}
+		for _, alloc := range node.Allocations {
+			amf := manifest.Allocations[alloc]
+			subReqs = append(subReqs, subnetRequest{
+				handle: amf.Handle,
+				ip:     p.subnetManifest.IndexRoutingTable[alloc],
+				peerID: manifest.Nodes[amf.NodeID].Peer,
+				ports:  amf.Ports,
+			})
+		}
 	}
 
 	if manifest.Subnet.Join { // orchestrator should join the subnet
-		ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
-		log.Debug("Generated IP %s for orchestrator", ip)
-		if err != nil {
-			return manifest, fmt.Errorf("error getting next IP: %w", err)
-		}
-		p.subnetManifest.RoutingTable[ip.String()] = p.actor.Handle().Address.HostID
-		p.subnetManifest.IndexRoutingTable[orchSubnetName] = ip.String()
-		p.subnetManifest.UsedIPs[ip.String()] = true
+		if _, ok := p.subnetManifest.IndexRoutingTable[orchSubnetName]; !ok {
+			ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
+			log.Debug("Generated IP %s for orchestrator", ip)
+			if err != nil {
+				return manifest, fmt.Errorf("error getting next IP: %w", err)
+			}
+			p.subnetManifest.RoutingTable[ip.String()] = p.actor.Handle().Address.HostID
+			p.subnetManifest.IndexRoutingTable[orchSubnetName] = ip.String()
+			p.subnetManifest.UsedIPs[ip.String()] = true
 
-		subCreateHandles = append(subCreateHandles, p.actor.Supervisor())
-		p.subnetManifest.DNSRecords[orchSubnetName] = p.subnetManifest.IndexRoutingTable[orchSubnetName]
+			subCreateHandles = append(subCreateHandles, p.actor.Supervisor())
+			p.subnetManifest.DNSRecords[orchSubnetName] = p.subnetManifest.IndexRoutingTable[orchSubnetName]
+		}
 	}
 
 	// 1.a create subnet in each peer
-	err := p.createSubnet(manifest.ID, subReqs, p.subnetManifest.RoutingTable, subCreateHandles)
+	err := p.createSubnet(manifest.ID, p.subnetManifest.RoutingTable, subCreateHandles)
 	if err != nil {
 		return manifest, fmt.Errorf("error creating subnet: %w", err)
 	}
@@ -135,7 +140,7 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.
 	// if orchestrator should join subnet, setup with one behavior
 	// this doesn't look very good but let's address with #893
 	if manifest.Subnet.Join {
-		err := p.orchestratorJoinSubnet(manifest.ID, p.subnetManifest.IndexRoutingTable, p.subnetManifest.DNSRecords)
+		err := p.orchestratorJoinSubnet(manifest.ID, p.subnetManifest.IndexRoutingTable, p.subnetManifest.RoutingTable, p.subnetManifest.DNSRecords)
 		if err != nil {
 			return manifest, fmt.Errorf("error joining subnet: %w", err)
 		}

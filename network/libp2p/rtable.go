@@ -42,12 +42,14 @@ func (rt *rtable) Add(peerID peer.ID, addr string) {
 	rt.mx.Lock()
 	defer rt.mx.Unlock()
 
-	if _, ok := rt.idx[peerID]; ok {
-		rt.idx[peerID] = append(rt.idx[peerID], addr)
-	} else {
+	if _, ok := rt.idx[peerID]; !ok {
 		rt.idx[peerID] = make([]string, 0)
-		rt.idx[peerID] = append(rt.idx[peerID], addr)
 	}
+	// Skip if the IP already exists
+	if slices.Contains(rt.idx[peerID], addr) {
+		return
+	}
+	rt.idx[peerID] = append(rt.idx[peerID], addr)
 	rt.revIdx[addr] = peerID
 }
 
