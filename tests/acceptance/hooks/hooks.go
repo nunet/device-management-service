@@ -38,7 +38,11 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 	remoteDMSPath := "/usr/local/bin/nunet"
 	localPath := filepath.Join(here, "..", "builds", "dms_linux_amd64")
 	for idx, n := range nodes {
-		err := n.UploadFile(localPath, remoteDMSPath, 0o755)
+		err := n.WaitForInstanceReady()
+		if err != nil {
+			return nil, fmt.Errorf("instance not ready: %w", err)
+		}
+		err = n.UploadFile(localPath, remoteDMSPath, 0o755)
 		if err != nil {
 			return nil, fmt.Errorf("failed to upload file to node %d: %w", idx, err)
 		}
