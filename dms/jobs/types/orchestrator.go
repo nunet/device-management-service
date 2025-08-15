@@ -58,6 +58,7 @@ type OrchestratorView struct {
 	OrchestratorID     string
 	Cfg                EnsembleConfig
 	Manifest           EnsembleManifest
+	SubnetManifest     SubnetManifest
 	Status             DeploymentStatus
 	DeploymentSnapshot DeploymentSnapshot
 	PrivKey            []byte

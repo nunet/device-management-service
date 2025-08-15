@@ -246,12 +246,6 @@ func New(cfg config.Config, fs afero.Afero,
 		}
 	}
 
-	if err := n.restoreDeployments(); err != nil {
-		log.Errorw("restoring deployments failed",
-			"labels", string(observability.LabelNode),
-			"error", err)
-	}
-
 	return n, nil
 }
 
@@ -332,7 +326,7 @@ func (n *Node) restoreDeployments() error {
 
 		childActor, err := n.actor.CreateChild(
 			d.OrchestratorID,
-			d.Manifest.Orchestrator,
+			n.actor.Handle(),
 			actor.WithPrivKey(pvkey),
 		)
 		if err != nil {
@@ -346,7 +340,13 @@ func (n *Node) restoreDeployments() error {
 			continue
 		}
 
-		orchestrator, err := n.orchestratorRegistry.RestoreDeployment(childActor, d.OrchestratorID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
+		if d.Manifest.Subnet.Join {
+			if err := n.addOrchestratorBehaviors(childActor, d.OrchestratorID); err != nil {
+				return fmt.Errorf("adding behaviors for orch to join subnet: %w", err)
+			}
+		}
+
+		orchestrator, err := n.orchestratorRegistry.RestoreDeployment(childActor, d.OrchestratorID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot, d.SubnetManifest)
 		if err != nil {
 			log.Errorf("restore orchestrator %s: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
@@ -507,6 +507,36 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 	return dmsBehaviors
 }
 
+func (n *Node) addOrchestratorBehaviors(actr actor.Actor, ensembleID string) error {
+	orchBehaviors := map[string]struct {
+		fn   func(actor.Envelope)
+		opts []actor.BehaviorOption
+	}{
+		fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetCreate,
+		},
+		fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetDestroy,
+		},
+		fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetJoin,
+		},
+	}
+
+	for behavior, handler := range orchBehaviors {
+		if err := n.actor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
+			return fmt.Errorf("adding %s behavior: %w", behavior, err)
+		}
+	}
+	err := n.actor.Security().Grant(actr.Handle().DID, n.actor.Handle().DID, []ucan.Capability{
+		ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
+	}, time.Hour)
+	if err != nil {
+		return fmt.Errorf("granting subnet caps to self orchestrator: %w", err)
+	}
+	return nil
+}
+
 func (n *Node) gcBidState() {
 	ticker := time.NewTicker(bidStateGCInterval)
 	defer ticker.Stop()
@@ -594,6 +624,12 @@ func (n *Node) Start() error {
 	); err != nil {
 		_ = n.actor.Stop()
 		return err
+	}
+
+	if err := n.restoreDeployments(); err != nil {
+		log.Errorw("restoring deployments failed",
+			"labels", string(observability.LabelNode),
+			"error", err)
 	}
 
 	n.running.Store(true)
@@ -687,31 +723,8 @@ func (n *Node) createOrchestrator(ctx context.Context,
 	// if orchestrator needs to join subnet, add the subnet behaviors under ensemble namespace
 	// and grant the caps
 	if ensemble.Subnet().Join {
-		dmsBehaviors := map[string]struct {
-			fn   func(actor.Envelope)
-			opts []actor.BehaviorOption
-		}{
-			fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
-				fn: n.handleSubnetCreate,
-			},
-			fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
-				fn: n.handleSubnetDestroy,
-			},
-			fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, ensembleID): {
-				fn: n.handleSubnetJoin,
-			},
-		}
-		for behavior, handler := range dmsBehaviors {
-			if err := n.actor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
-				return nil, fmt.Errorf("adding %s behavior for orch to join subnet: %w", behavior, err)
-			}
-		}
-
-		err := n.actor.Security().Grant(childActor.Handle().DID, n.actor.Handle().DID, []ucan.Capability{
-			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
-		}, time.Hour)
-		if err != nil {
-			return nil, fmt.Errorf("granting subnet caps to self orchestrator: %w", err)
+		if err := n.addOrchestratorBehaviors(childActor, ensembleID); err != nil {
+			return nil, fmt.Errorf("adding behaviors for orch to join subnet: %w", err)
 		}
 	}
 

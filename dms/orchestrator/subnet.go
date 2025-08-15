@@ -25,16 +25,6 @@ const (
 
 var orchestratorJoinTimeout = 2 * time.Minute
 
-type SubnetManifest struct {
-	CIDR              string            `json:"cidr"`
-	GatewayIP         string            `json:"gateway_ip"`
-	BroadcastIP       string            `json:"broadcast_ip"`
-	UsedIPs           map[string]bool   `json:"used_ips"`
-	RoutingTable      map[string]string `json:"routing_table"` // ip -> peerID
-	IndexRoutingTable map[string]string `json:"index_routing_table"`
-	DNSRecords        map[string]string `json:"dns_records"`
-}
-
 type subnetRequest struct {
 	handle actor.Handle
 	ip     string
@@ -69,7 +59,7 @@ type SubnetJoinResponse struct {
 	Error string
 }
 
-func newSubnetManifest() (SubnetManifest, error) {
+func newSubnetManifest() (jtypes.SubnetManifest, error) {
 	cidr, err := netutils.GetRandomCIDRInRange(
 		24,
 		net.ParseIP("10.0.0.0"),
@@ -77,7 +67,7 @@ func newSubnetManifest() (SubnetManifest, error) {
 		[]string{},
 	)
 	if err != nil {
-		return SubnetManifest{}, fmt.Errorf("error getting random CIDR: %w", err)
+		return jtypes.SubnetManifest{}, fmt.Errorf("error getting random CIDR: %w", err)
 	}
 
 	parts := strings.Split(strings.Split(cidr, "/")[0], ".")
@@ -88,7 +78,7 @@ func newSubnetManifest() (SubnetManifest, error) {
 		broadcastIP: true,
 	}
 
-	return SubnetManifest{
+	return jtypes.SubnetManifest{
 		CIDR:              cidr,
 		GatewayIP:         gatewayIP,
 		BroadcastIP:       broadcastIP,
