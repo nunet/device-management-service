@@ -123,8 +123,6 @@ func (c *Committer) commit(
 
 	// There are certain details that are filled during provisioning, e.g. allocation
 	// VPN addresses and public port mappings
-	allocationNodes := make(map[string]string)
-	portsByAllocation := make(map[string][]jtypes.PortConfig)
 	for n, bid := range candidate {
 		// update manifest only if node already exists
 		if nmf, ok := manifest.Nodes[n]; ok {
@@ -146,31 +144,22 @@ func (c *Committer) commit(
 
 		if ncfg, ok := cfg.Node(n); ok {
 			for _, a := range ncfg.Allocations {
-				allocationNodes[a] = n
-				// TODO: optimize the manifest format and how node/alloc data is
-				//       being passed around. A bit messy at the moment. see #825
-				for _, portMap := range ncfg.Ports {
-					if portMap.Allocation == a {
-						portsByAllocation[a] = append(portsByAllocation[a], portMap)
+				allocPorts := make(map[int]int)
+				for i := range ncfg.Ports {
+					if ncfg.Ports[i].Allocation == a {
+						pc := ncfg.Ports[i]
+						allocPorts[pc.Public] = pc.Private
 					}
 				}
-			}
-		}
-	}
 
-	for name := range cfg.Allocations() {
-		allocPorts := make(map[int]int)
-		if ports, ok := portsByAllocation[name]; ok {
-			for _, pc := range ports {
-				allocPorts[pc.Public] = pc.Private
+				if alloc, ok := manifest.Allocations[a]; ok {
+					alloc.NodeID = n
+					alloc.Handle = allocations[a]
+					alloc.Ports = allocPorts
+					manifest.Allocations[a] = alloc
+					// TODO: manifest partial updates
+				}
 			}
-		}
-		if alloc, ok := manifest.Allocations[name]; ok {
-			alloc.NodeID = allocationNodes[name]
-			alloc.Handle = allocations[name]
-			alloc.Ports = allocPorts
-			manifest.Allocations[name] = alloc
-			// TODO: manifest partial updates
 		}
 	}
 
@@ -194,6 +183,10 @@ func (c *Committer) commitDeployment(cfg jtypes.EnsembleConfig, n string, h acto
 	ncfg, ok := cfg.Node(n)
 	if !ok {
 		return fmt.Errorf("node %s not found", n)
+	}
+
+	if len(ncfg.Allocations) == 0 {
+		return nil
 	}
 
 	getAllocPortMapping := func(allocName string) map[int]int {
@@ -290,7 +283,15 @@ func (c *Committer) commitDeployment(cfg jtypes.EnsembleConfig, n string, h acto
 
 func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle) (map[string]actor.Handle, error) {
 	allocs := make(map[string]jtypes.AllocationDeploymentConfig)
-	ncfg, _ := cfg.Node(n)
+	ncfg, ok := cfg.Node(n)
+	if !ok {
+		return nil, fmt.Errorf("node %s not found", n)
+	}
+
+	if len(ncfg.Allocations) == 0 {
+		return nil, nil
+	}
+
 	for _, a := range ncfg.Allocations {
 		acfg, _ := cfg.Allocation(a)
 

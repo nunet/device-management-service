@@ -97,7 +97,14 @@ func (n *Node) handleSubnetJoin(msg actor.Envelope) {
 	}
 
 	resp := orchestrator.SubnetJoinResponse{}
+	_ = n.network.RemoveSubnetPeers(request.SubnetID, map[string]string{request.IP: request.PeerID})
 	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	err = n.network.AcceptSubnetPeers(request.SubnetID, request.RoutingTable)
 	if err != nil {
 		handleErr(err)
 		return
@@ -185,7 +192,6 @@ func (n *Node) createAllocations(
 	}
 
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
-	allocationIDs := make([]string, 0, len(allocations))
 	for allocationName, allocationConfig := range allocations {
 		allocationID := types.ConstructAllocationID(ensembleID, allocationName)
 		// TODO: check if the allocation ID exists
@@ -207,7 +213,6 @@ func (n *Node) createAllocations(
 		}
 
 		allocHandlesByName[allocationName] = allocation.Actor.Handle()
-		allocationIDs = append(allocationIDs, allocation.ID)
 
 		// node grants subnet create/destroy caps to the orchestrator
 		if err := n.actor.Security().Grant(supervisor.DID, n.actor.Handle().DID, []ucan.Capability{
@@ -253,9 +258,6 @@ func (n *Node) createAllocations(
 			}
 		}()
 	}
-
-	// Start monitoring allocations
-	go n.monitorEnsembleAllocations(ensembleID, allocationIDs)
 
 	log.Infof("Finished createAllocations for ensembleID: %s", ensembleID)
 	return allocHandlesByName, nil

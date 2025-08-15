@@ -300,7 +300,7 @@ deploy:
 			return fmt.Errorf("failed to create bidder: %w", err)
 		}
 
-		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), expiry)
+		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), o.deploymentSnapshot.Candidates, expiry)
 		if err != nil {
 			if errors.Is(err, ErrCandidateNotFound) {
 				log.Warnf("candidate deployment not found, redeploying: %v", err)

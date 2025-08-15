@@ -42,13 +42,14 @@ import (
 )
 
 const (
-	helloMinDelay         = 10 * time.Second
-	helloMaxDelay         = 20 * time.Second
-	helloTimeout          = 3 * time.Second
-	helloAttempts         = 3
-	clearCommitsFrequency = 60 * time.Second
+	helloMinDelay = 10 * time.Second
+	helloMaxDelay = 20 * time.Second
+	helloTimeout  = 3 * time.Second
+	helloAttempts = 3
 
-	grantAllocationCapsFreq = 1 * time.Hour
+	clearCommitsFrequency    = 60 * time.Second
+	ensembleMonitorFrequency = 10 * time.Second
+	grantAllocationCapsFreq  = 1 * time.Hour
 
 	rootProto = "actor/root/messages/0.0.1"
 
