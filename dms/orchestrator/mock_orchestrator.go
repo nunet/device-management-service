@@ -26,7 +26,7 @@ type MockOrchestrator struct {
 	id             string
 	cfg            jtypes.EnsembleConfig
 	manifest       jtypes.EnsembleManifest
-	subnetManifest SubnetManifest
+	subnetManifest jtypes.SubnetManifest
 	status         jtypes.DeploymentStatus
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
@@ -50,7 +50,7 @@ func NewMockOrchestrator(
 		ctx:                ctx,
 		fs:                 fs,
 		workDir:            workDir,
-		subnetManifest:     SubnetManifest{},
+		subnetManifest:     jtypes.SubnetManifest{},
 		deploymentSnapshot: jtypes.DeploymentSnapshot{},
 		nonce:              0,
 		supervisor:         NewSupervisor(ctx, oActor, id),
@@ -137,6 +137,13 @@ func (m *MockOrchestrator) Manifest() jtypes.EnsembleManifest {
 	return m.manifest.Clone()
 }
 
+func (m *MockOrchestrator) SubnetManifest() jtypes.SubnetManifest {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	return m.subnetManifest
+}
+
 func (m *MockOrchestrator) Config() jtypes.EnsembleConfig {
 	return jtypes.EnsembleConfig{}
 }
@@ -205,6 +212,7 @@ func (m *MockOrchestratorRegistry) RestoreDeployment(
 	_ actor.Actor, _ string, _ jtypes.EnsembleConfig,
 	_ jtypes.EnsembleManifest, _ jtypes.DeploymentStatus,
 	_ jtypes.DeploymentSnapshot,
+	_ jtypes.SubnetManifest,
 ) (Orchestrator, error) {
 	return nil, nil
 }

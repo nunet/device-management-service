@@ -11,14 +11,17 @@ import (
 
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/network"
+	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 func TestRegistry(t *testing.T) {
 	substrate := network.NewSubstrate()
-	orch := MakeOrchestrator(t, substrate)
-	provider := MakeProvider(t, substrate)
 
+	orch := MakeOrchestrator(t, substrate)
+	orch.MockOrchestratorBehaviors(t)
+
+	provider := MakeProvider(t, substrate)
 	provider.MockDeploymentBehaviors(t)
 
 	cfg := jtypes.EnsembleConfig{
@@ -124,23 +127,52 @@ func TestRegistry(t *testing.T) {
 	t.Run("RestoreDeployment", func(t *testing.T) {
 		registry := NewRegistry()
 
+		addRoute := func(subnet jtypes.SubnetManifest, name, dnsName, peerID string) (string, error) {
+			ip, err := netutils.GetNextIP(subnet.CIDR, subnet.UsedIPs)
+			if err != nil {
+				return "", err
+			}
+
+			subnet.RoutingTable[ip.String()] = peerID
+			subnet.IndexRoutingTable[name] = ip.String()
+			subnet.UsedIPs[ip.String()] = true
+			subnet.DNSRecords[dnsName] = subnet.IndexRoutingTable[name]
+			return ip.String(), nil
+		}
+
+		subnet, err := newSubnetManifest()
+		assert.NoError(t, err)
+
+		_, err = addRoute(subnet, orchSubnetName, orchSubnetName, orch.peerID.String())
+		assert.NoError(t, err)
+		alloc1Ip, err := addRoute(subnet, "alloc1", "alloc1.internal", provider.peerID.String())
+		assert.NoError(t, err)
+
 		// Create test manifest and snapshot
 		manifest := jtypes.EnsembleManifest{
 			ID:           ensembleID,
 			Orchestrator: orch.actor.Handle(),
 			Allocations: map[string]jtypes.AllocationManifest{
 				"alloc1": {
-					ID:     "test-ensemble_alloc1",
-					Type:   jtypes.AllocationTypeService,
-					Status: jtypes.AllocationRunning,
-					Handle: orch.handle,
+					ID:       "test-ensemble_alloc1",
+					DNSName:  "alloc1.internal",
+					Type:     jtypes.AllocationTypeService,
+					Status:   jtypes.AllocationRunning,
+					Handle:   provider.handle,
+					NodeID:   "node1",
+					PrivAddr: alloc1Ip,
 				},
 			},
 			Nodes: map[string]jtypes.NodeManifest{
 				"node1": {
 					ID:          "node1",
 					Allocations: []string{"alloc1"},
+					Peer:        provider.peerID.String(),
+					Handle:      provider.handle,
 				},
+			},
+			Subnet: jtypes.SubnetConfig{
+				Join: true,
 			},
 		}
 
@@ -156,6 +188,7 @@ func TestRegistry(t *testing.T) {
 			manifest,
 			jtypes.DeploymentStatusRunning,
 			snapshot,
+			subnet,
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, o)
@@ -170,6 +203,7 @@ func TestRegistry(t *testing.T) {
 			manifest,
 			jtypes.DeploymentStatusRunning,
 			snapshot,
+			subnet,
 		)
 		assert.ErrorIs(t, err, ErrOrchestratorExists)
 	})
