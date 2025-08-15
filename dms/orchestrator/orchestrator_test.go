@@ -2109,6 +2109,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 
 	// Prepare routing table and DNS records
 	indexRoutingTable := map[string]string{"orchestrator": "10.0.0.2"}
+	routingTable := map[string]string{"10.0.0.2": p.actor.Handle().Address.HostID}
 	dnsRecords := map[string]string{"orchestrator": "10.0.0.2"}
 
 	t.Run("success", func(t *testing.T) {
@@ -2137,7 +2138,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 			},
 		}
 
-		err = p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
+		err = p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, routingTable, dnsRecords)
 		assert.NoError(t, err)
 		<-ch
 	})
@@ -2154,7 +2155,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 			require.NoError(t, orch.actor.Send(reply))
 		}))
 
-		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, routingTable, dnsRecords)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "join failed")
 	})
@@ -2167,7 +2168,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 		}))
 		orchestratorJoinTimeout = 1 * time.Second
 
-		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, routingTable, dnsRecords)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "timeout joining orchestrator to subnet")
 	})
@@ -2849,20 +2850,11 @@ func TestProvisionSubnet(t *testing.T) {
 
 	const ensembleID = "test-ensemble"
 
-	// Test provisioning subnet
-	subReqs := []subnetRequest{
-		{
-			handle: provider.handle,
-			ip:     "10.0.0.2",
-			peerID: "peer1",
-			ports:  map[int]int{8080: 8080},
-		},
-	}
 	routingTable := map[string]string{
-		"peer1": "10.0.0.2",
+		"10.0.0.2": provider.peerID.String(),
 	}
 	subCreateHandles := []actor.Handle{provider.handle}
-	err = p.createSubnet(ensembleID, subReqs, routingTable, subCreateHandles)
+	err = p.createSubnet(ensembleID, routingTable, subCreateHandles)
 	require.NoError(t, err)
 	<-provider.channels[fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID)]
 }

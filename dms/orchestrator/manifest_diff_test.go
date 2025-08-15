@@ -16,109 +16,6 @@ import (
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
-func TestIdentifyNewNodes(t *testing.T) {
-	tests := []struct {
-		name           string
-		currentConfig  jtypes.EnsembleConfig
-		modifiedConfig jtypes.EnsembleConfig
-		expectedNodes  map[string]bool // Just check keys
-	}{
-		{
-			name: "no new nodes",
-			currentConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						node1: {},
-						node2: {},
-					},
-				},
-			},
-			modifiedConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						node1: {},
-						node2: {},
-					},
-				},
-			},
-			expectedNodes: map[string]bool{},
-		},
-		{
-			name: "some new nodes",
-			currentConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						node1: {},
-						node2: {},
-					},
-				},
-			},
-			modifiedConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						node1: {},
-						node2: {},
-						node3: {},
-						node4: {},
-					},
-				},
-			},
-			expectedNodes: map[string]bool{
-				node3: true,
-				node4: true,
-			},
-		},
-		{
-			name: "all new nodes",
-			currentConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						node1: {},
-						node2: {},
-					},
-				},
-			},
-			modifiedConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						node3: {},
-						node4: {},
-					},
-				},
-			},
-			expectedNodes: map[string]bool{
-				node3: true,
-				node4: true,
-			},
-		},
-		{
-			name: "empty configs",
-			currentConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{},
-				},
-			},
-			modifiedConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{},
-				},
-			},
-			expectedNodes: map[string]bool{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			newNodes := identifyNewNodes(tt.currentConfig, tt.modifiedConfig)
-
-			require.Len(t, newNodes, len(tt.expectedNodes))
-			for nodeName := range newNodes {
-				require.True(t, tt.expectedNodes[nodeName], "Node %s should be in expected nodes", nodeName)
-			}
-		})
-	}
-}
-
 func TestNewConfigForRemovedNodes(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -239,7 +136,7 @@ func TestNewConfigForRemovedNodes(t *testing.T) {
 					Allocations: map[string]jtypes.AllocationConfig{},
 				},
 			},
-			expectedErr: true,
+			expectedErr: false,
 		},
 		{
 			name: "remove node with allocation",
@@ -331,7 +228,8 @@ func TestNewConfigForRemovedNodes(t *testing.T) {
 	}
 }
 
-func TestNewConfigForAddedNodes(t *testing.T) {
+func TestNewConfigForDeploymentUpdate(t *testing.T) {
+	withAllocs := func(n jtypes.NodeConfig, allocs ...string) jtypes.NodeConfig { n.Allocations = allocs; return n }
 	tests := []struct {
 		name           string
 		oldConfig      jtypes.EnsembleConfig
@@ -368,6 +266,7 @@ func TestNewConfigForAddedNodes(t *testing.T) {
 			expected: jtypes.EnsembleConfig{
 				V1: &jtypes.EnsembleConfigV1{
 					Nodes: map[string]jtypes.NodeConfig{
+						node1: withAllocs(Node1Cfg),
 						node2: Node2Cfg,
 					},
 					Allocations: map[string]jtypes.AllocationConfig{
@@ -408,6 +307,7 @@ func TestNewConfigForAddedNodes(t *testing.T) {
 			expected: jtypes.EnsembleConfig{
 				V1: &jtypes.EnsembleConfigV1{
 					Nodes: map[string]jtypes.NodeConfig{
+						node1: withAllocs(Node1Cfg),
 						node2: Node2Cfg,
 						node3: Node3Cfg,
 					},
@@ -435,9 +335,7 @@ func TestNewConfigForAddedNodes(t *testing.T) {
 				V1: &jtypes.EnsembleConfigV1{
 					Nodes: map[string]jtypes.NodeConfig{
 						node1: Node1Cfg,
-						node2: {
-							Allocations: []string{missing},
-						},
+						node2: withAllocs(Node2Cfg, "missing"),
 					},
 					Allocations: map[string]jtypes.AllocationConfig{
 						alloc1: Alloc1Cfg,
@@ -472,7 +370,15 @@ func TestNewConfigForAddedNodes(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: true,
+			expected: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						node1: withAllocs(Node1Cfg),
+						node2: withAllocs(Node2Cfg),
+					},
+					Allocations: map[string]jtypes.AllocationConfig{},
+				},
+			},
 		},
 		{
 			name: "add node with existing allocation",
@@ -502,6 +408,7 @@ func TestNewConfigForAddedNodes(t *testing.T) {
 			expected: jtypes.EnsembleConfig{
 				V1: &jtypes.EnsembleConfigV1{
 					Nodes: map[string]jtypes.NodeConfig{
+						node1: withAllocs(Node1Cfg),
 						node2: Node2Cfg,
 					},
 					Allocations: map[string]jtypes.AllocationConfig{
@@ -514,7 +421,7 @@ func TestNewConfigForAddedNodes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := newConfigForAddedNodes([]string{}, tt.oldConfig, tt.modifiedConfig)
+			result, err := newConfigForDeploymentUpdate(tt.oldConfig, tt.modifiedConfig, map[string]string{})
 
 			if tt.expectedErr == true {
 				require.Error(t, err)

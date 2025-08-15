@@ -370,9 +370,10 @@ func (l *Libp2p) acceptSubnetPeer(subnetID, peerID, ip string) error {
 		return fmt.Errorf("failed to decode peer ID %s: %w", peerID, err)
 	}
 
-	if _, ok := s.info.rtable.Get(peerIDObj); ok {
-		return nil
-	}
+	// TODO: remove this or check if the IP exists.
+	// if _, ok := s.info.rtable.Get(peerIDObj); ok {
+	// 	return nil
+	// }
 
 	s.info.rtable.Add(peerIDObj, ip)
 	return nil

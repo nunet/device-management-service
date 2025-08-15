@@ -60,7 +60,8 @@ type SubnetJoinRequest struct {
 	IP       string
 
 	// map of domain_name:ip
-	Records map[string]string
+	RoutingTable map[string]string
+	Records      map[string]string
 }
 
 type SubnetJoinResponse struct {
@@ -209,10 +210,10 @@ func (p *Provisioner) newSubnetRequests(mf jtypes.EnsembleManifest) ([]subnetReq
 
 func (p *Provisioner) createSubnet(
 	manifestID string,
-	subReqs []subnetRequest, routingTable map[string]string,
+	routingTable map[string]string,
 	subCreateHandles []actor.Handle,
 ) error {
-	errCh := make(chan error, len(subReqs))
+	errCh := make(chan error, len(subCreateHandles))
 	wg := sync.WaitGroup{}
 
 	for _, handle := range subCreateHandles {
@@ -526,17 +527,18 @@ func (p *Provisioner) mapPorts(manifestID string, subReqs []subnetRequest) error
 // TODO: maybe this hsould go to the createSubnet method
 func (p *Provisioner) orchestratorJoinSubnet(
 	manifestID string,
-	indexRoutingTable map[string]string, dnsRecords map[string]string,
+	indexRoutingTable map[string]string, routingTable map[string]string, dnsRecords map[string]string,
 ) error {
 	msg, err := actor.Message(
 		p.actor.Handle(),
 		p.actor.Supervisor(),
 		fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, manifestID),
 		SubnetJoinRequest{
-			SubnetID: manifestID,
-			IP:       indexRoutingTable[orchSubnetName],
-			PeerID:   p.actor.Handle().Address.HostID,
-			Records:  dnsRecords,
+			SubnetID:     manifestID,
+			IP:           indexRoutingTable[orchSubnetName],
+			PeerID:       p.actor.Handle().Address.HostID,
+			RoutingTable: routingTable,
+			Records:      dnsRecords,
 		},
 		actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 	)
