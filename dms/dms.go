@@ -197,6 +197,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           gcfg.P2P.ListenAddress,
 		PeerCountDiscoveryLimit: 40,
+		GracePeriodMs:           20000, // 20 seconds
 		Memory:                  gcfg.P2P.Memory,
 		FileDescriptors:         gcfg.P2P.FileDescriptors,
 	}
