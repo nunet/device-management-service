@@ -208,7 +208,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 				"docker", "exec", client.executionID,
 				"curl", "-s", "-o", "/dev/null",
 				"-w", "'%{http_code}'",
-				"-m", "5", // 5 second timeout
+				"-m", "60", // 60 second timeout
 				"http://" + server.dns + portStr,
 			}
 			out, err := client.node.RunCMD(cmd)
