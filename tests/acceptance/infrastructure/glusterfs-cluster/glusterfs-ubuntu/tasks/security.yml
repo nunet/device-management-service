@@ -1,0 +1,26 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Add GlusterFS IPs to trusted zone
+  ansible.posix.firewalld:
+    zone: trusted
+    permanent: true
+    source: "{{ item }}/32"
+    state: enabled
+  loop: '{{ other_hosts }}'
+
+- name: Add extra IPs to trusted zone
+  ansible.posix.firewalld:
+    zone: trusted
+    permanent: true
+    source: "{{ item }}"
+    state: enabled
+  loop: '{{ role_config.extra_allowed_ips }}'
+
+- name: Reload firewalld
+  shell: |
+    set -euo pipefail
+    firewall-cmd --reload
+    firewall-cmd --runtime-to-permanent
+  args:
+    executable: /bin/bash
+

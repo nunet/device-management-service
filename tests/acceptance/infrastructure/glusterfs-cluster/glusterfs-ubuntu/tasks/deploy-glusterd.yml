@@ -1,0 +1,76 @@
+---
+- name: Install glusterfs server dependencies
+  ansible.builtin.apt:
+    name:
+      - glusterfs-server
+      - unzip
+    state: present
+  when: inventory_hostname in groups.glusterfs_servers
+- name: Enable fuse kernel module
+  ansible.builtin.shell: modprobe fuse
+  when: inventory_hostname in groups.glusterfs_servers
+
+- name: Enable glusterd
+  ansible.builtin.systemd_service:
+    state: started
+    enabled: true
+    name: glusterd
+  when: inventory_hostname in groups.glusterfs_servers
+
+- name: Create and test glusterfs certificates
+  include_tasks: generate-certificates.yml
+  vars:
+    common_names: "{{ groups.all }}"
+
+- name: Deploy glusterfs certificates
+  include_tasks: deploy-certificates.yml
+  loop:
+    - /etc/ssl
+    - /etc/pki/tls
+  loop_control:
+    loop_var: ssl_target_folder
+
+- name: Create DMS storage CA directory
+  ansible.builtin.file:
+    path: /home/ubuntu/.nunet/storage_ca_directory
+    state: directory
+  delegate_to: "{{ glusterfs_main_node }}"
+  run_once: true
+- name: Copy glusterfs certificate to DMS dir
+  ansible.builtin.copy:
+    src: /etc/ssl/glusterfs.pem 
+    remote_src: true
+    dest: /home/ubuntu/.nunet/storage_ca_directory/glusterfs_nodes
+  delegate_to: "{{ glusterfs_main_node }}"
+  run_once: true
+
+- name: Make sure /var/lib/glusterd folder exists
+  ansible.builtin.file:
+    path: /var/lib/glusterd
+    state: directory
+- name: Set secure-access to enable SSL
+  ansible.builtin.copy:
+    content: option transport.socket.ssl-cert-depth 3
+    dest: /var/lib/glusterd/secure-access
+
+- name: Create bricks directory
+  ansible.builtin.file:
+    path: /data/bricks
+    state: directory
+  when: inventory_hostname in groups.glusterfs_servers
+
+- name: Restart glusterd
+  ansible.builtin.systemd_service:
+    state: restarted
+    name: glusterd
+  when: inventory_hostname in groups.glusterfs_servers
+
+- name: Probing GlusterFS on main node
+  ansible.builtin.shell: gluster peer probe {{ item }}
+  loop: "{{ glusterfs_secondary_nodes }}"
+  when: inventory_hostname in groups.glusterfs_servers and inventory_hostname == glusterfs_main_node
+
+- name: Probing GlusterFS main node on secondary nodes
+  ansible.builtin.shell: gluster peer probe {{ glusterfs_main_node }}
+  when: inventory_hostname in groups.glusterfs_servers and inventory_hostname != glusterfs_main_node
+

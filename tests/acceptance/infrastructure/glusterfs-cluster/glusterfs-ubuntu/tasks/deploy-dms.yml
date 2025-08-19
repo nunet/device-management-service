@@ -1,0 +1,16 @@
+---
+- name: Download DMS latest
+  ansible.builtin.uri:
+    url: https://d.nunet.io/nunet-dms-amd64-latest.deb
+    dest: /tmp/nunet.deb
+  when: (inventory_hostname == glusterfs_main_node or inventory_hostname in groups.glusterfs_clients) and role_config.local_dms_deb == None
+- name: Upload DMS
+  ansible.builtin.copy:
+    src: "{{ role_config.local_dms_deb }}"
+    dest: /tmp/nunet.deb
+  when: (inventory_hostname == glusterfs_main_node or inventory_hostname in groups.glusterfs_clients) and role_config.local_dms_deb != None
+- name: Install DMS
+  ansible.builtin.apt:
+    deb: "/tmp/nunet.deb"
+  when: inventory_hostname == glusterfs_main_node or inventory_hostname in groups.glusterfs_clients
+

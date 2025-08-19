@@ -1,0 +1,34 @@
+#cloud-config
+users:
+- default
+- name: ubuntu
+  shell: /bin/bash
+  sudo: ['ALL=(ALL) NOPASSWD:ALL']
+  ssh-authorized-keys:
+  - "##SSH_KEY"
+
+packages:
+- openssh-server
+- openssh-sftp-server
+- rsync
+- vim
+- kitty-terminfo
+- firewalld
+- python3-apt
+
+write_files:
+# Secure SSH configuration to prevent unauthorized access
+- path: /etc/ssh/sshd_config
+  content: |
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    UsePAM yes
+    PrintMotd no
+    Subsystem       sftp    /usr/lib/sftp-server
+
+runcmd:
+- |
+  for service in sshd firewalld; do
+    systemctl enable $service
+    systemctl start $service
+  done

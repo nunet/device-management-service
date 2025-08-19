@@ -1,0 +1,15 @@
+---
+- name: Read config
+  ansible.builtin.include_vars:
+    file: "{{ item }}"
+    name: role_config
+  with_first_found:
+    - "{{ cwd }}/{{ lookup('ansible.builtin.env', 'GLUSTERFS_ROLE_CONFIG', default='config.yml') }}"
+    - "{{ cwd }}/config.dist.yml"
+  delegate_to: 127.0.0.1
+  run_once: true
+- name: Check if local_dms_deb set
+  ansible.builtin.set_fact:
+    local_dms_deb_set: "{{ role_config.local_dms_deb is defined and role_config.local_dms_deb != None }}"
+  delegate_to: 127.0.0.1
+  run_once: true

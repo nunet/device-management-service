@@ -1,0 +1,24 @@
+---
+- name: Make sure target folder exists
+  ansible.builtin.file:
+    path: "{{ ssl_target_folder }}"
+    state: directory
+- name: Deploy certificates to target folder
+  ansible.builtin.copy:
+    src: /tmp/glusterfs-certs/{{ inventory_hostname }}/{{ cert_filename }}
+    dest: "{{ ssl_target_folder }}"
+  loop:
+    - glusterfs.key
+    - glusterfs.pem
+  loop_control:
+    loop_var: cert_filename
+- name: Deploy node CA to target folder
+  ansible.builtin.copy:
+    src: /tmp/glusterfs-certs/glusterfs-cluster-ca.pem
+    dest: "{{ ssl_target_folder }}/glusterfs.ca"
+  when: inventory_hostname in groups.glusterfs_servers
+- name: Deploy client CA to target folder
+  ansible.builtin.copy:
+    src: /tmp/glusterfs-certs/glusterfs-clients-ca.pem
+    dest: "{{ ssl_target_folder }}/glusterfs.ca"
+  when: inventory_hostname in groups.glusterfs_clients

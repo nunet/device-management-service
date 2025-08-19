@@ -1,0 +1,43 @@
+---
+- name: Create certificates
+  ansible.builtin.shell: |
+    NODE_NAME="{{ common_name }}"
+    mkdir -p /tmp/glusterfs-certs/$NODE_NAME
+    openssl genrsa -out "/tmp/glusterfs-certs/$NODE_NAME/glusterfs.key" 4096
+    openssl req -new -x509 -key "/tmp/glusterfs-certs/$NODE_NAME/glusterfs.key" -subj "/CN=$NODE_NAME" -out "/tmp/glusterfs-certs/$NODE_NAME/glusterfs.pem"
+  args:
+    executable: /bin/bash
+  loop: "{{ common_names }}"
+  loop_control:
+    loop_var: common_name
+  delegate_to: 127.0.0.1
+  run_once: true
+
+- name: Generate cluster CA file
+  ansible.builtin.shell: cat /tmp/glusterfs-certs/*/glusterfs.pem >/tmp/glusterfs-certs/glusterfs-cluster-ca.pem
+  args:
+    executable: /bin/bash
+  delegate_to: 127.0.0.1
+  run_once: true
+
+- name: Generate clients CA file
+  ansible.builtin.shell: cat {% for node_name in groups.glusterfs_servers %}/tmp/glusterfs-certs/{{ node_name }}/glusterfs.pem {% endfor %}>/tmp/glusterfs-certs/glusterfs-clients-ca.pem
+  args:
+    executable: /bin/bash
+  delegate_to: 127.0.0.1
+  run_once: true
+
+- name: Test cluster ca against all certs
+  shell: openssl verify -CAfile /tmp/glusterfs-certs/glusterfs-cluster-ca.pem /tmp/glusterfs-certs/{{ item }}/glusterfs.pem
+  delegate_to: 127.0.0.1
+  run_once: true
+  loop: "{{ groups.all }}"
+  args:
+    executable: /bin/bash
+- name: Test client ca against server certs
+  shell: openssl verify -CAfile /tmp/glusterfs-certs/glusterfs-clients-ca.pem /tmp/glusterfs-certs/{{ item }}/glusterfs.pem
+  delegate_to: 127.0.0.1
+  run_once: true
+  loop: "{{ groups.glusterfs_servers }}"
+  args:
+    executable: /bin/bash
