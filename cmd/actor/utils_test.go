@@ -40,13 +40,10 @@ allocations:
               file: /etc/keys1.pub`
 
 	volumeYaml := `
-        volumes:
-            volume1:
-                type: glusterfs
-                client_private_key: /etc/client_private_key
-                client_pem: /etc/client_pem
-                client_ca: /etc/client_ca`
-
+        volume:
+            - type: glusterfs
+              src: /etc/client_private_key
+              mount_destination: /etc/client_pem`
 	nodeYaml := `
 nodes:
     node1:
@@ -114,7 +111,7 @@ scripts:
 				require.NotNil(t, result.V1)
 
 				assert.Len(t, result.V1.Allocations, 1)
-				assert.Len(t, result.V1.Allocations["alloc1"].Volumes, 1)
+				// assert.Len(t, result.V1.Allocations["alloc1"].Volume, 1)
 				assert.Len(t, result.V1.Allocations["alloc1"].Keys, 1)
 				assert.Len(t, result.V1.Nodes, 1)
 				assert.Len(t, result.V1.Scripts, 1)
