@@ -8,10 +8,10 @@
 - [Code of Conduct](https://gitlab.com/nunet/device-management-service/-/blob/main/CODE_OF_CONDUCT.md)
 - [Secure Coding Guidelines](https://gitlab.com/nunet/team-processes-and-guidelines/-/blob/main/secure_coding_guidelines/README.md)
 
-
 # Development guidelines
 
 <!--toc:start-->
+- [Device Management Service (DMS)](#device-management-service-dms)
 - [Development guidelines](#development-guidelines)
   - [First things first](#first-things-first)
   - [Testing](#testing)
@@ -32,7 +32,8 @@
       - [Calling behaviors](#calling-behaviors)
       - [Check logs](#check-logs)
       - [Working with subnets](#working-with-subnets)
-  - [Local execution of unit tests](#local-execution-of-unit-tests)
+    - [Local execution of unit tests](#local-execution-of-unit-tests)
+    - [Local execution of acceptance tests](#local-execution-of-acceptance-tests)
 <!--toc:end-->
 
 ## First things first
@@ -61,6 +62,7 @@ go test --tags unit ./...
 ### e2e Tests
 
 #### Prerequisites
+
 Before running the e2e tests, make sure that the following commands are run:
 
 ```bash
@@ -74,7 +76,9 @@ sudo sed -i 's/#user_allow_other/user_allow_other/g' /etc/fuse.sh
 ```
 
 #### Running the e2e tests
+
 To run the e2e tests, use the following command:
+
 ```bash
 make e2e
 ```
@@ -87,6 +91,7 @@ Acceptance tests are located in the `tests/acceptance` directory. They are desig
 It's recommended to first read the [Acceptance Tests README](./tests/acceptance/README.md) for detailed instructions on how to set up and run the tests.
 
 To run the acceptance tests, use the following command:
+
 ```bash
 make run-acceptance
 ```
@@ -339,3 +344,14 @@ unit`, but it will expect the host environment to be correctly configured for
 the unit tests. It can be useful in some situations, but the command is there
 to be used by the pipeline which already runs in docker, so it's recommended to
 stick with `make unit-docker` for consistent results.
+
+### Local execution of acceptance tests
+
+The [acceptance tests README file](/tests/acceptance/README.md) describe the
+prerequisites that needs to be installed in the system in order to run these
+tests.
+
+After these dependencies are installed, running the tests can be executed using
+make targets.
+
+Please refer to the README file mentioned above for detailed instructions.

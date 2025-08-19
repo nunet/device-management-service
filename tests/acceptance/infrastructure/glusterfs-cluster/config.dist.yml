@@ -1,0 +1,5 @@
+cluster_size: 1 # must be an odd number between 1 and 9
+clients_size: 0
+dms_passphrase: change-me
+extra_allowed_ips: [] # extra IPs to be added to the glusterfs cluster firewall. Format IP/mask: 10.0.0.1/32, 192.168.0.0/24...
+local_dms_deb:
