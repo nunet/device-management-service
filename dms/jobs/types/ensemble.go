@@ -68,7 +68,7 @@ type AllocationConfig struct {
 	Keys            []types.AllocationKey     `json:"keys,omitempty"`             // names of the authorized ssh keys for the allocation
 	Provision       []string                  `json:"provision,omitempty"`        // names of provisioning scripts to run (in order)
 	HealthCheck     types.HealthCheckManifest `json:"healthcheck,omitempty"`      // name of the health check script
-	Volumes         []types.VolumeConfig      `json:"volumes,omitempty"`          // unified storage configuration (optional)
+	Volume          []types.VolumeConfig      `json:"volume,omitempty"`           // unified storage configuration (optional)
 	FailureRecovery AllocationFailureRecovery `json:"failure_recovery,omitempty"` // failure recovery (stay_down|one_for_one|one_for_all|rest_for_one)
 	DependsOn       []string                  `json:"depends_on,omitempty"`       // list of allocations that this allocation depends on
 }

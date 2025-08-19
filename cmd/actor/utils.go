@@ -52,8 +52,8 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 		}
 
 		// handle reading client certificate files for volumes
-		if len(alloc.Volumes) > 0 {
-			for i, v := range alloc.Volumes {
+		if len(alloc.Volume) > 0 {
+			for i, v := range alloc.Volume {
 				if v.Type != "glusterfs" {
 					continue
 				}
@@ -63,7 +63,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read pvkeyData data: %w", err)
 					}
-					cfg.V1.Allocations[aIdx].Volumes[i].ClientPrivateKey = string(pvkeyData)
+					cfg.V1.Allocations[aIdx].Volume[i].ClientPrivateKey = string(pvkeyData)
 				}
 
 				if v.ClientPEM != "" {
@@ -71,7 +71,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read pem data: %w", err)
 					}
-					cfg.V1.Allocations[aIdx].Volumes[i].ClientPEM = string(pemData)
+					cfg.V1.Allocations[aIdx].Volume[i].ClientPEM = string(pemData)
 				}
 
 				if v.ClientCA != "" {
@@ -79,7 +79,7 @@ func ProcessEnsembleYaml(fs afero.Afero, path string) (
 					if err != nil {
 						return nil, fmt.Errorf("failed to read ca data: %w", err)
 					}
-					cfg.V1.Allocations[aIdx].Volumes[i].ClientCA = string(caData)
+					cfg.V1.Allocations[aIdx].Volume[i].ClientCA = string(caData)
 				}
 			}
 		}

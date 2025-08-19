@@ -307,7 +307,7 @@ func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle
 			Execution:        acfg.Execution,
 			ProvisionScripts: provisionScripts,
 			Keys:             acfg.Keys,
-			Volumes:          acfg.Volumes,
+			Volume:           acfg.Volume,
 		}
 	}
 
