@@ -1,0 +1,11 @@
+cloud-init*.yaml
+!cloud-init.tpl.yaml
+glusterfs-key*
+glusterfs-key*.pub
+hosts_glusterfs*
+log.txt
+hostvars.json
+debug.json
+config*.yml
+!config.dist.yml
+debug.yml

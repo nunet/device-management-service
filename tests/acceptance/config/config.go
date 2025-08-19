@@ -17,8 +17,9 @@ type IncusHost struct {
 }
 
 type Config struct {
-	IncusHosts []IncusHost `yaml:"incus_hosts"`
-	VMsPrefix  string      `yaml:"vms_prefix"`
+	IncusHosts      []IncusHost `yaml:"incus_hosts"`
+	VMsPrefix       string      `yaml:"vms_prefix"`
+	GlusterfsVMName string      `yaml:"glusterfs_vm_name"`
 }
 
 // Parse parses a yaml file and returns host config
@@ -67,7 +68,8 @@ func Get() (*Config, error) {
 	var config *Config
 	if confFile == "" {
 		config = &Config{
-			VMsPrefix: "acc-test",
+			VMsPrefix:       "acc-test",
+			GlusterfsVMName: "glusterfs-test-node1",
 			IncusHosts: []IncusHost{
 				{
 					Host: "local",

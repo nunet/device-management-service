@@ -1,0 +1,5 @@
+- name: Deploy GlusterFS cluster over SSH
+  hosts: all
+  tasks:
+    - include_role:
+        name: glusterfs-ubuntu

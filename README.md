@@ -115,9 +115,9 @@ We currently support Linux and MacOS (Darwin).
 #### Dependencies
 
 ##### Common
+
 - go (v1.22.7 or later)
 - [git lfs](https://git-lfs.com/) for downloading large files
-
 
 ##### Linux only
 
@@ -125,25 +125,26 @@ We currently support Linux and MacOS (Darwin).
 - gcc
 - build-essential (linux only)
 
-##### macOS (Apple Silicon - M1/M2) only:
+##### macOS (Apple Silicon - M1/M2) only
+
 - Install [Homebrew](https://brew.sh/) for package management
 - Recommended: [iTerm2](https://iterm2.com/) for improved CLI experience.
-
 
 #### MacOS (ARM64 architecture)
 
 Before you begin, ensure that you have the following installed:
 
 1. Homebrew: to manage dependencies easily.
-   
+
     If you don't have Homebrew installed, run:
+
     ```bash
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     ```
 
 2. Go (Golang): The Go programming language, which is used to build the project.
-       
-    Verify if Go is installed: 
+
+    Verify if Go is installed:
 
     ```bash
     go version
@@ -155,9 +156,9 @@ Before you begin, ensure that you have the following installed:
     brew install go
     ```
 
- 3. Git: To clone the GitLab repository.
- 4. Make: Used for automating the build process.
-       
+3. Git: To clone the GitLab repository.
+4. Make: Used for automating the build process.
+
        Verify if make is installed
 
     ```bash
@@ -227,7 +228,7 @@ then the orchestator will create its own tun interface and join the subnet. For 
 > **Darwin users**: unfortunately, the DMS can neither work with granular permissions nor
 > with iptables and tun interfaces. Thus, on Darwin, for now, the DMS can only be an orchestrator.
 
-For Linux users, granular permissions will have to be set to the binary (possible but *NOT* recommended way is to run as root).
+For Linux users, granular permissions will have to be set to the binary (possible but _NOT_ recommended way is to run as root).
 
 #### Required: Net-admin permission and IP over libp2p
 
@@ -579,6 +580,7 @@ For more on capabilities and behaviors, see the [DMS Capabilities and Behaviors]
 ###### Add a root anchor for your DMS context
 
 You can do this by getting the did of the user first with:
+
 ```shell
 nunet key did user
 ```
@@ -608,6 +610,7 @@ The examples below will mostly use this chaining so be sure to have the `DMS_PAS
 0. **The NuNet DID**
 
 The NuNet public network is represented by the following DID:
+
 ```
 did:key:zzCHUybNYmK8QsttZwXqUX8aDLoBGHnMCakDX2RpsGwmXmYHEW
 ```
@@ -730,7 +733,6 @@ The DMS searches for a configuration file `dms_config.json` in the following loc
 The configuration file must be in JSON format and it does **not** support comments. It's recommended that only the parameters that need to be changed are included in the config file so that other parameters can retain their default values.
 
 It's possible to manage configuration using the `config` subcommand as well. `nunet config set` allows setting each parameter individually and `nunet config edit` will open the config file in the default editor from `$EDITOR`
-
 
 ## Specification
 

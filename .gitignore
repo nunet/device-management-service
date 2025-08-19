@@ -48,5 +48,8 @@ coverage.txt
 coverage.html
 junit.xml
 
-# incus certificate
+# acceptance tests
 acc-test-cfg.yml
+cloud-init.yaml
+glusterfs-key
+glusterfs-key.pub
