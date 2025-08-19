@@ -48,17 +48,17 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	cpName = strings.ToLower(cpName)
-	otherCPName = strings.ToLower(otherCPName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
 
-	sp := nodeMap[spName]
-	cp := nodeMap[cpName]
-	otherCP := nodeMap[otherCPName]
+	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cp)
+	assert.NotNil(t, cpDmsCtx)
 
-	spDmsCtx := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	cpDmsCtx := cp.Contexts[cpName+utils.DefaultDMSSuffix]
-	otherCPDmsCtx := otherCP.Contexts[otherCPName+utils.DefaultDMSSuffix]
+	otherCP, otherCPDmsCtx := utils.NodeWithDMS(nodeMap, otherCPName)
+	assert.NotNil(t, otherCP)
+	assert.NotNil(t, otherCPDmsCtx)
 
 	spInfo, err := spDmsCtx.PeerAddr()
 	assert.NoError(t, err)
@@ -122,18 +122,17 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	cpName = strings.ToLower(cpName)
-	otherCPName = strings.ToLower(otherCPName)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cp)
+	assert.NotNil(t, cpDmsCtx)
 
-	cp := nodeMap[cpName]
-	otherCP := nodeMap[otherCPName]
+	otherCP, otherCPDmsCtx := utils.NodeWithDMS(nodeMap, otherCPName)
+	assert.NotNil(t, otherCP)
+	assert.NotNil(t, otherCPDmsCtx)
 
 	manifest, err := tc.Manifest()
 	assert.NoError(t, err)
 	assert.NotNil(t, manifest)
-
-	cpDmsCtx := cp.Contexts[cpName+utils.DefaultDMSSuffix]
-	otherCPDmsCtx := otherCP.Contexts[otherCPName+utils.DefaultDMSSuffix]
 
 	cpAllocs, err := cpDmsCtx.AllocationList()
 	assert.NoError(t, err)
@@ -145,8 +144,8 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 
 	allocMap := make(map[string][]jobs.AllocationInfo)
 
-	allocMap[cpName] = cpAllocs
-	allocMap[otherCPName] = otherCPAllocs
+	allocMap[strings.ToLower(cpName)] = cpAllocs
+	allocMap[strings.ToLower(otherCPName)] = otherCPAllocs
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
