@@ -52,17 +52,13 @@ func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (co
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	cpName = strings.ToLower(cpName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
 
-	sp := nodeMap[spName]
-	cp := nodeMap[cpName]
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
-
-	cpDmsCtx, ok := cp.Contexts[cpName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cp)
+	assert.NotNil(t, cpDmsCtx)
 
 	spInfo, err := spDmsCtx.PeerAddr()
 	assert.NoError(t, err)
@@ -114,15 +110,12 @@ func deploymentIs(ctx context.Context, spName, status string) (context.Context, 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	sp := nodeMap[spName]
+	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
 
 	require.Eventually(t, func() bool {
 		ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
@@ -141,15 +134,13 @@ func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	sp := nodeMap[spName]
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
 	assert.NoError(t, err)
@@ -174,17 +165,12 @@ func updatesDeploymentToRemove(ctx context.Context, spName, cpName string) (cont
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	cpName = strings.ToLower(cpName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
 
-	sp := nodeMap[spName]
-	cp := nodeMap[cpName]
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
-
-	cpDmsCtx, ok := cp.Contexts[cpName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
+	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
@@ -224,17 +210,12 @@ func updatesDeploymentToAdd(ctx context.Context, spName, cpName string) (context
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	cpName = strings.ToLower(cpName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
 
-	sp := nodeMap[spName]
-	cp := nodeMap[cpName]
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
-
-	cpDmsCtx, ok := cp.Contexts[cpName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
+	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
@@ -276,18 +257,15 @@ func deploymentShouldBeOn(ctx context.Context, spName, status, cpName string) (c
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	cpName = strings.ToLower(cpName)
+	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, spDmsCtx)
 
-	sp := nodeMap[spName]
-	cp := nodeMap[cpName]
+	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
 
 	require.Eventually(t, func() bool {
 		ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
@@ -298,9 +276,6 @@ func deploymentShouldBeOn(ctx context.Context, spName, status, cpName string) (c
 	manifest, err := spDmsCtx.Manifest(ensembleID)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, manifest)
-
-	cpDmsCtx, ok := cp.Contexts[cpName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
 	assert.NoError(t, err)
@@ -324,18 +299,15 @@ func deploymentShouldNotBeOn(ctx context.Context, spName, status, cpName string)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	cpName = strings.ToLower(cpName)
+	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, spDmsCtx)
 
-	sp := nodeMap[spName]
-	cp := nodeMap[cpName]
+	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
 
 	require.Eventually(t, func() bool {
 		ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
@@ -346,9 +318,6 @@ func deploymentShouldNotBeOn(ctx context.Context, spName, status, cpName string)
 	manifest, err := spDmsCtx.Manifest(ensembleID)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, manifest)
-
-	cpDmsCtx, ok := cp.Contexts[cpName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
 	assert.NoError(t, err)

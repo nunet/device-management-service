@@ -148,9 +148,9 @@ func (n *Node) GetOnboardingResources() (ramGB float64, cpuCores float64, diskGB
 		return 0, 0, 0, fmt.Errorf("failed to get total disk: %w", err)
 	}
 
-	ramGB = totalRAM * 0.4
-	cpuCores = float64(totalCPUCores) * 0.4
-	diskGB = totalDisk * 0.2
+	ramGB = totalRAM * 0.7
+	cpuCores = float64(totalCPUCores) * 0.7
+	diskGB = totalDisk * 0.7
 
 	return ramGB, cpuCores, diskGB, nil
 }
