@@ -51,7 +51,7 @@ func (o *BasicOrchestrator) Update(modifiedCfg jtypes.EnsembleConfig, expiry tim
 	}
 
 	// 2. deploy new nodes
-	err = o.handleNewAllocations(o.cfg.Clone(), modifiedCfg, expiry)
+	err = o.handleNewAllocations(modifiedCfg, expiry)
 	if err != nil {
 		return fmt.Errorf("deploying new nodes: %w", err)
 	}
@@ -75,7 +75,7 @@ func (o *BasicOrchestrator) Update(modifiedCfg jtypes.EnsembleConfig, expiry tim
 //
 // TODO: 6. revert subnet updates
 func (o *BasicOrchestrator) handleNewAllocations(
-	oldCfg, newCfg jtypes.EnsembleConfig, expiry time.Time,
+	modifiedCfg jtypes.EnsembleConfig, expiry time.Time,
 ) error {
 	existingNodes := make(map[string]string)
 	for n, node := range o.manifest.Nodes {
@@ -83,8 +83,8 @@ func (o *BasicOrchestrator) handleNewAllocations(
 	}
 
 	newConfig, err := newConfigForDeploymentUpdate(
-		oldCfg,
-		newCfg,
+		o.cfg,
+		modifiedCfg,
 		existingNodes,
 	)
 	if err != nil {
@@ -97,7 +97,7 @@ func (o *BasicOrchestrator) handleNewAllocations(
 
 	addNodesAndAllocsToCfg := func() {
 		for name := range newConfig.Nodes() {
-			if node, ok := newCfg.Node(name); ok {
+			if node, ok := modifiedCfg.Node(name); ok {
 				o.lock.Lock()
 				o.cfg.AddNodeAndAllocations(name, node, newConfig.Allocations())
 				o.lock.Unlock()
@@ -215,9 +215,7 @@ deploy:
 		// 7. update config and manifest with added nodes
 		updateManifest(mfAFterProvisionAllocs)
 		addNodesAndAllocsToCfg()
-		for n, bid := range candidate {
-			o.deploymentSnapshot.Candidates[n] = bid
-		}
+		o.deploymentSnapshot.Candidates = candidate
 		return nil
 	}
 

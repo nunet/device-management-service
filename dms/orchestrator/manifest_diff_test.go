@@ -504,27 +504,6 @@ func TestValidateEnsembleUpdate(t *testing.T) {
 			errorContains: "removing supervisor is not allowed",
 		},
 		{
-			name: "invalid - changing node peer",
-			currentConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						"node1": {Peer: "peer1"},
-					},
-					Allocations: map[string]jtypes.AllocationConfig{},
-				},
-			},
-			modifiedConfig: jtypes.EnsembleConfig{
-				V1: &jtypes.EnsembleConfigV1{
-					Nodes: map[string]jtypes.NodeConfig{
-						"node1": {Peer: "peer2"},
-					},
-					Allocations: map[string]jtypes.AllocationConfig{},
-				},
-			},
-			expectError:   true,
-			errorContains: "changing node's peer for node 'node1' is not allowed",
-		},
-		{
 			name: "invalid - changing node location constraints",
 			currentConfig: jtypes.EnsembleConfig{
 				V1: &jtypes.EnsembleConfigV1{
@@ -814,6 +793,74 @@ func TestValidateEnsembleUpdate(t *testing.T) {
 						{S: "node1", T: "node2", RTT: 100},
 						{S: "node1", T: "node3", RTT: 50},
 					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid - changing node peer",
+			currentConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {Peer: "peer1"},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{},
+				},
+			},
+			modifiedConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {Peer: "peer2"},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid - adding edge constraints when source node relocated",
+			currentConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {Peer: "peer1"},
+						"node2": {Peer: "peer2"},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{},
+					Edges:       []jtypes.EdgeConstraint{},
+				},
+			},
+			modifiedConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {Peer: "peerX"},
+						"node2": {Peer: "peer2"},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{},
+					Edges:       []jtypes.EdgeConstraint{{S: "node1", T: "node2", RTT: 100}},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid - adding edge constraints when target node relocated",
+			currentConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {Peer: "peer1"},
+						"node2": {Peer: "peer2"},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{},
+					Edges:       []jtypes.EdgeConstraint{},
+				},
+			},
+			modifiedConfig: jtypes.EnsembleConfig{
+				V1: &jtypes.EnsembleConfigV1{
+					Nodes: map[string]jtypes.NodeConfig{
+						"node1": {Peer: "peer1"},
+						"node2": {Peer: "peerY"},
+					},
+					Allocations: map[string]jtypes.AllocationConfig{},
+					Edges:       []jtypes.EdgeConstraint{{S: "node1", T: "node2", RTT: 100}},
 				},
 			},
 			expectError: false,
