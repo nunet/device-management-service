@@ -10,6 +10,7 @@ package orchestrator
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
@@ -69,6 +70,7 @@ func newConfigForDeploymentUpdate(
 	}, nil
 }
 
+// identifyNewAllocations returns the set of allocations for a node that are new in the modifiedConfig
 func identifyNewAllocations(
 	currentConfig, modifiedConfig jtypes.EnsembleConfig,
 	node string,
@@ -95,6 +97,7 @@ func identifyNewAllocations(
 	return allocations, nil
 }
 
+// identifyRemovedAllocations returns the set of allocations for a node that are removed in the modifiedConfig
 func identifyRemovedAllocations(
 	currentConfig, modifiedConfig jtypes.EnsembleConfig,
 	node string,
@@ -116,17 +119,48 @@ func identifyRemovedAllocations(
 	return allocations
 }
 
+// identifyRemovedNodes returns the set of nodes that are removed in the modifiedConfig
+func identifyRemovedNodes(
+	currentConfig, modifiedConfig jtypes.EnsembleConfig,
+) map[string]jtypes.NodeConfig {
+	nodes := make(map[string]jtypes.NodeConfig)
+
+	for name, node := range currentConfig.Nodes() {
+		if _, exists := modifiedConfig.Node(name); !exists {
+			nodes[name] = node
+		}
+	}
+
+	return nodes
+}
+
+// identifyRelocatedNodes returns the set of node names whose Peer is changed
+// between currentConfig and modifiedConfig. These will be treated as remove+add (relocation).
+func identifyRelocatedNodes(currentConfig, modifiedConfig jtypes.EnsembleConfig) map[string]jtypes.NodeConfig {
+	nodes := make(map[string]jtypes.NodeConfig)
+
+	for name, currCfg := range currentConfig.Nodes() {
+		if modCfg, ok := modifiedConfig.Node(name); ok {
+			if currCfg.Peer != modCfg.Peer {
+				nodes[name] = currCfg
+			}
+		}
+	}
+	return nodes
+}
+
 // newConfigForRemovedNodes builds a new ensemble config based on
 // a base ensemble config + removed nodes
 func newConfigForRemovedNodes(
 	oldCfg, modifieCfg jtypes.EnsembleConfig,
 ) (jtypes.EnsembleConfig, error) {
-	removedNodes := identifyRemovedNodes(oldCfg, modifieCfg)
+	nodes := identifyRemovedNodes(oldCfg, modifieCfg)
+	maps.Copy(nodes, identifyRelocatedNodes(oldCfg, modifieCfg))
 
 	nodesCfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
 			Allocations: make(map[string]jtypes.AllocationConfig),
-			Nodes:       removedNodes,
+			Nodes:       nodes,
 			Scripts:     modifieCfg.V1.Scripts,
 			Keys:        modifieCfg.V1.Keys,
 			Edges:       modifieCfg.EdgeConstraints(),
@@ -190,30 +224,16 @@ func manifestOnlyForNodes(mf jtypes.EnsembleManifest, nodes []string,
 	return newMf, nil
 }
 
-func identifyRemovedNodes(
-	currentConfig, modifiedConfig jtypes.EnsembleConfig,
-) map[string]jtypes.NodeConfig {
-	nodes := make(map[string]jtypes.NodeConfig)
-
-	for name, node := range currentConfig.Nodes() {
-		if _, exists := modifiedConfig.Node(name); !exists {
-			nodes[name] = node
-		}
-	}
-
-	return nodes
-}
-
 // validateEnsembleUpdate checks if a given ensemble modification is valid
+// A node with it's peer changed is considered as relocated and will be treated as a new node.
 //
 // Invalid modifications:
 // - Removing supervisor
 // - Changing node location
-// - Changing node's peer
 //
 // Unsupported modifications:
-// - Changing node's ports (excepting when adding for new node's allocations)
-// - Adding edge constraints for already deployed nodes
+// - Changing node's ports (except when adding for new node's allocations)
+// - Adding edge constraints for already deployed nodes, unless at least one endpoint is a relocated node
 // - Changing supervisor strategy
 func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig) error {
 	// 1. Supervisor must not be removed
@@ -225,16 +245,12 @@ func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig)
 	// 2. Validate existing nodes
 	for name, currNode := range currentConfig.Nodes() {
 		modNode, ok := modifiedConfig.Node(name)
-		if !ok {
+		if !ok || modNode.Peer != currNode.Peer {
 			continue
 		}
 
 		if !validateLocationConstraintsUpdate(currNode.Location, modNode.Location) {
 			return fmt.Errorf("invalid modification: changing node location for node '%s' is not allowed", name)
-		}
-
-		if currNode.Peer != modNode.Peer {
-			return fmt.Errorf("invalid modification: changing node's peer for node '%s' is not allowed", name)
 		}
 
 		// Track new allocations
@@ -270,12 +286,17 @@ func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig)
 	}
 
 	// 3. Edge constraints: no new edges between already deployed nodes
+	// Allow new edges if at least one endpoint is a relocated node (peer changed)
 	existing := currentConfig.Nodes()
+	relocated := identifyRelocatedNodes(currentConfig, modifiedConfig)
 	for _, edge := range modifiedConfig.V1.Edges {
-		if _, sExists := existing[edge.S]; !sExists {
-			continue
-		}
-		if _, tExists := existing[edge.T]; !tExists {
+		_, sExists := existing[edge.S]
+		_, tExists := existing[edge.T]
+		_, sReloc := relocated[edge.S]
+		_, tReloc := relocated[edge.T]
+
+		// Allow if either endpoint is a new node or a relocated node
+		if !sExists || !tExists || sReloc || tReloc {
 			continue
 		}
 
