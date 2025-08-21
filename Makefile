@@ -92,6 +92,10 @@ linux_amd64_debug:
 	go mod tidy
 	GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) -gcflags="all=-N -l" .
 
+linux_amd64_e2e:
+	make linux_amd64_debug
+	mv builds/dms_linux_amd64 tests/e2e/dms
+
 linux_arm64:
 	@echo "Building for Linux ARM64..."
 	go mod tidy

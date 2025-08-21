@@ -27,7 +27,7 @@ func newKeystoreTestSuite(t *testing.T) *keystoreTestSuite {
 	fs := afero.NewMemMapFs()
 	keysDir := "/tmp/dms/keystore"
 
-	keystore, err := New(fs, keysDir)
+	keystore, err := New(fs, keysDir, false)
 	require.NoError(t, err)
 	require.NotNil(t, keystore)
 
@@ -65,7 +65,7 @@ func TestNew(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			keystore, err := New(tt.fs, tt.keysDir)
+			keystore, err := New(tt.fs, tt.keysDir, false)
 			if tt.expErr != nil {
 				assert.Nil(t, keystore)
 				assert.ErrorIs(t, err, tt.expErr)
