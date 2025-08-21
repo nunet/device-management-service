@@ -1,5 +1,3 @@
-# Note: keep allocations's resources equal as the assertions
-# are taking that into account
 version: "V1"
 nginx_wrapper: &nginx_service
   type: service
@@ -24,16 +22,20 @@ nginx_wrapper: &nginx_service
     response:
       type: string
       value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
-    dns_name: nginxdemo
 allocations:
-  nginx: *nginx_service
+  nginx1: *nginx_service
+  nginx2: *nginx_service
 nodes:
   node1:
     allocations:
-      - nginx
+      - nginx1
+      - nginx2
     ports:
       - private: 80
         public: 50001
-        allocation: nginx
+        allocation: nginx1
+      - private: 80
+        public: 50002
+        allocation: nginx2
 subnet:
   join: true

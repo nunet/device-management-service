@@ -32,3 +32,15 @@ Feature: Deployment
     When "Alice" updates deployment to add "Charlie"
     Then "Alice" deployment should be running on "Charlie"
     And "Alice" deployment should be running on "Bob"
+
+  Scenario: Add allocation to running ensemble
+    Given "Alice" has deployed ensemble with 1 allocation on "Bob"
+    And "Alice" deployment is running
+    When "Alice" updates deployment to add 1 allocation
+    Then "Alice" deployment should have 2 allocations running on "Bob"
+
+  Scenario: Remove allocation from running ensemble
+    Given "Alice" has deployed ensemble with 2 allocations on "Bob"
+    And "Alice" deployment is running
+    When "Alice" updates deployment to remove 1 allocation
+    Then "Alice" deployment should have 1 allocation running on "Bob"

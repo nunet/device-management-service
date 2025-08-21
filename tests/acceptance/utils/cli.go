@@ -164,7 +164,7 @@ func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
 func (c *Context) UpdateEnsemble(id, path string) error {
 	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/update -i %s -f %s -t 2m", c.Name, id, path))
 	if err != nil {
-		return fmt.Errorf("failed to call deployment update behavior: %s", out)
+		return fmt.Errorf("failed to call deployment update behavior: %w", err)
 	}
 	var resp node.UpdateDeploymentResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
