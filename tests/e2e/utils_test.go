@@ -6,7 +6,7 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package itest
+package e2e
 
 import (
 	"context"
@@ -23,14 +23,12 @@ import (
 
 	"github.com/docker/docker/client"
 	"github.com/shirou/gopsutil/v4/process"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
-	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
@@ -138,7 +136,7 @@ func createConfig(userDir string, restPort uint32,
 		},
 		Observability: config.Observability{
 			LogLevel:             "debug",
-			LogFile:              filepath.Join(userDir, "logs.txt"),
+			LogFile:              filepath.Join(userDir, "logs.jsonl"),
 			MaxSize:              100,
 			MaxBackups:           3,
 			MaxAge:               28,
@@ -175,8 +173,8 @@ func getProc(pid int32) *process.Process {
 	return nil
 }
 
-// setupKeysAndCaps creates keys and capabilities for the given CLI instance.
-func setupKeysAndCaps(t *testing.T, cli *Client, pass, keyType1, keyType2 string) {
+// initCaps creates capabilities for the given config and keys.
+func initCaps(t *testing.T, cli *Client, pass, keyType1, keyType2 string) {
 	cli.newCap(t, keyType1, pass)
 	cli.newCap(t, keyType2, pass)
 }
@@ -234,6 +232,8 @@ func replaceHostnameInFile(filePath, hostname string) error {
 	return nil
 }
 
+// MOCK NODE
+
 type mockNode struct {
 	index       int
 	config      *config.Config
@@ -252,15 +252,16 @@ type mockNode struct {
 }
 
 func newMockNode(
-	t *testing.T, config *config.Config,
-	password, rootDir string, index int,
+	t *testing.T, cfg *config.Config, password, rootDir string, index int,
 ) (*mockNode, error) {
 	t.Helper()
 
-	cliHelper := newClient(t, config)
+	cliHelper, err := newClient(t, cfg)
+	require.NoError(t, err)
+
 	dmsContext := fmt.Sprintf("dms%d", index)
 	userContext := fmt.Sprintf("user%d", index)
-	setupKeysAndCaps(t, cliHelper, password, dmsContext, userContext)
+	initCaps(t, cliHelper, password, dmsContext, userContext)
 
 	capCtx, pkey, err := loadCapCtx(t, cliHelper, password, dmsContext)
 	if err != nil {
@@ -273,7 +274,7 @@ func newMockNode(
 	require.NotEmpty(t, dmsDID)
 
 	return &mockNode{
-		config:      config,
+		config:      cfg,
 		client:      cliHelper,
 		password:    password,
 		rootDir:     rootDir,
@@ -292,16 +293,8 @@ func loadCapCtx(
 	t *testing.T, cliHelper *Client, password, dmsContext string,
 ) (ucan.CapabilityContext, crypto.PrivKey, error) {
 	t.Helper()
-	fs := afero.NewOsFs()
 
-	keyStoreDir := filepath.Join(
-		cliHelper.cfg.General.UserDir, node.KeystoreDir)
-	keyStore, err := keystore.New(fs, keyStoreDir)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
-	}
-
-	privK, err := dms.GetPrivKeyFromKS(keyStore, password, dmsContext)
+	privK, err := dms.GetPrivKeyFromKS(cliHelper.ks, password, dmsContext)
 	if err != nil {
 		return nil, nil,
 			fmt.Errorf("private key from keystore: %w", err)
@@ -317,7 +310,7 @@ func loadCapCtx(
 	}
 
 	capCtx, err := dms.LoadOrCreateCapCtx(
-		fs, dmsCtxPath, trustCtx, dmsContext, pubKey)
+		cliHelper.fs, dmsCtxPath, trustCtx, dmsContext, pubKey)
 	if err != nil {
 		return nil, nil,
 			fmt.Errorf(
