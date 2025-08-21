@@ -93,7 +93,7 @@ func (t *TestCtx) WithEnsembleFile(path string) *TestCtx {
 func (t *TestCtx) Manifest() (*jobtypes.EnsembleManifest, error) {
 	manifest, ok := t.ctx.Value(manifestCtxKey{}).(*jobtypes.EnsembleManifest)
 	if !ok {
-		return nil, fmt.Errorf("no ensemble ID available on context")
+		return nil, fmt.Errorf("no manifest available on context")
 	}
 	return manifest, nil
 }
