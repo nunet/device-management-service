@@ -57,7 +57,7 @@ func createKey(t *testing.T, fs afero.Fs, basePath, contextKey, passphrase strin
 	t.Helper()
 
 	keyStoreDir := filepath.Join(basePath, KeystoreDir)
-	ks, err := keystore.New(fs, keyStoreDir)
+	ks, err := keystore.New(fs, keyStoreDir, false)
 	require.NoError(t, err)
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)

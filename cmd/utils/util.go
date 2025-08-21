@@ -72,7 +72,7 @@ func NewCapabilityContext(dmsCLI *cli.DmsCLI, context string) (ucan.CapabilityCo
 	fs := dmsCLI.FS()
 
 	keyStoreDir := filepath.Join(cfg.UserDir, node.KeystoreDir)
-	ks, err := keystore.New(fs, keyStoreDir)
+	ks, err := keystore.New(fs, keyStoreDir, false)
 	if err != nil {
 		return nil, ctxDID, fmt.Errorf("create keystore: %w", err)
 	}
@@ -106,9 +106,10 @@ func NewCapabilityContext(dmsCLI *cli.DmsCLI, context string) (ucan.CapabilityCo
 	return capCtx, ctxDID, nil
 }
 
-// loadCapabilityContext is a helper function to reduce boilerplate in commands.
+// LoadCapabilityContext is a helper function to reduce boilerplate in commands.
 // It handles the common steps of loading a capability context: getting config,
 // retrieving passphrase, loading trust context, and finally loading capability context.
+// TODO slow
 func LoadCapabilityContext(dmsCLI *cli.DmsCLI, contextName string) (ucan.CapabilityContext, error) {
 	if contextName == "" {
 		contextName = DefaultUserContextName
@@ -144,7 +145,7 @@ func LoadCapabilityContext(dmsCLI *cli.DmsCLI, contextName string) (ucan.Capabil
 	return capCtx, nil
 }
 
-// saveCapabilityContext is a helper function to save a capability context
+// SaveCapabilityContext is a helper function to save a capability context
 func SaveCapabilityContext(dmsCLI *cli.DmsCLI, capCtx ucan.CapabilityContext) error {
 	cfg, err := dmsCLI.Config()
 	if err != nil {
@@ -168,6 +169,7 @@ func NewClient(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient
 	}, sctx)
 }
 
+// TODO test code not in _test.go
 func NewTestCli(opts ...func(*cli.DmsCLI)) *cli.DmsCLI {
 	defaults := []func(*cli.DmsCLI){}
 

@@ -146,7 +146,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	log.Debugf("loaded geoip2 database: %v", geoip2db)
 
 	keyStoreDir := filepath.Join(gcfg.UserDir, node.KeystoreDir)
-	keyStore, err := keystore.New(fs, keyStoreDir)
+	keyStore, err := keystore.New(fs, keyStoreDir, false)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create keystore: %w", err)
 	}

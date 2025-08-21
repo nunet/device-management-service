@@ -6,7 +6,7 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package itest
+package e2e
 
 import (
 	"bytes"
@@ -29,6 +29,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/types"
@@ -36,24 +37,35 @@ import (
 
 type Client struct {
 	fs  afero.Fs
+	ks  keystore.KeyStore
 	cfg *config.Config
 	env env.EnvironmentProvider
 }
 
-func newClient(t *testing.T, cfg *config.Config) *Client {
+func newClient(t *testing.T, cfg *config.Config) (*Client, error) {
 	t.Helper()
+
+	fs := afero.NewOsFs()
+	ks, err := keystore.New(fs, filepath.Join(cfg.General.UserDir, node.KeystoreDir), true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create keystore: %w", err)
+	}
+
 	return &Client{
-		fs:  afero.NewOsFs(),
+		fs:  fs,
 		cfg: cfg,
 		env: env.NewOSEnvironment(),
-	}
+		ks:  ks,
+	}, nil
 }
 
+// TODO rename to newCommandContainer?
 func (c *Client) newCommandCtx() *cobra.Command {
 	dmsCLI := cli.New(
 		cli.WithConfig(c.cfg),
 		cli.WithFS(c.fs),
 		cli.WithEnv(env.NewOSEnvironment()),
+		cli.WithKeystoreProvider(c.ks),
 	)
 	return cmd.NewRootCMD(dmsCLI)
 }
@@ -152,7 +164,7 @@ func (c *Client) onboard(t *testing.T, context, passphrase string) {
 	mr, err := hw.GetMachineResources()
 	require.NoError(t, err)
 	// onboard with 40% of available ram and cpu
-	ram := types.ConvertBytesToGB(uint64(float64(mr.Resources.RAM.Size) * 0.4))
+	ram := expectedRAMGB(t)
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/onboarding/onboard", "--no-gpu", "--ram", fmt.Sprintf("%d GB", ram), "--cpu", fmt.Sprintf("%.2f", math.Ceil(float64(mr.Resources.CPU.Cores*0.4))), "--disk", "10GiB"}
 	root.SetArgs(args)
 	err = root.Execute()

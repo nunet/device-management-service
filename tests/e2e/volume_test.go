@@ -1,4 +1,4 @@
-package itest
+package e2e
 
 // DeployWithVolume runs the tests that deploy with volume.
 func DeployWithVolumeTest(suite *TestSuite) {

@@ -9,6 +9,8 @@
 package keystore
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +29,7 @@ type KeyStore interface {
 	Delete(keyID string, passphrase string) error
 	ListKeys() ([]string, error)
 	Exists(key string) bool
+	Dir() string
 }
 
 // BasicKeyStore handles keypair storage.
@@ -35,12 +38,16 @@ type BasicKeyStore struct {
 	fs      afero.Fs
 	keysDir string
 	mu      sync.RWMutex
+	cache   map[string]*Key
+	fsCache bool
 }
 
 var _ KeyStore = (*BasicKeyStore)(nil)
 
 // New creates a new BasicKeyStore.
-func New(fs afero.Fs, keysDir string) (*BasicKeyStore, error) {
+//
+// fsCache: keeps unmarshalled keys in the file system. Insecure, only for tests.
+func New(fs afero.Fs, keysDir string, fsCache bool) (*BasicKeyStore, error) {
 	if keysDir == "" {
 		return nil, ErrEmptyKeysDir
 	}
@@ -52,6 +59,8 @@ func New(fs afero.Fs, keysDir string) (*BasicKeyStore, error) {
 	return &BasicKeyStore{
 		fs:      fs,
 		keysDir: keysDir,
+		cache:   make(map[string]*Key),
+		fsCache: fsCache,
 	}, nil
 }
 
@@ -76,11 +85,33 @@ func (ks *BasicKeyStore) Save(id string, data []byte, passphrase string) (string
 		return "", fmt.Errorf("failed to write key to file: %w", err)
 	}
 
+	// cache
+	delete(ks.cache, key.ID)
+	if ks.fsCache {
+		_ = ks.fs.Remove(filepath.Join(ks.keysDir, id+".gob"))
+	}
+
 	return filename, nil
 }
 
 // Get unlocks a key by keyID.
 func (ks *BasicKeyStore) Get(keyID string, passphrase string) (*Key, error) {
+	// read cache?
+	fsCachePath := filepath.Join(ks.keysDir, keyID+".gob")
+	if key, ok := ks.cache[keyID]; ok {
+		return key, nil
+	}
+	if ks.fsCache {
+		if b, err := afero.ReadFile(ks.fs, fsCachePath); err == nil {
+			key := &Key{}
+			if err := gob.NewDecoder(bytes.NewReader(b)).Decode(key); err == nil {
+				ks.cache[keyID] = key
+				return key, nil
+			}
+		}
+	}
+
+	// read & unmarshall
 	bts, err := afero.ReadFile(ks.fs, filepath.Join(ks.keysDir, keyID+".json"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -92,6 +123,18 @@ func (ks *BasicKeyStore) Get(keyID string, passphrase string) (*Key, error) {
 	key, err := UnmarshalKey(bts, passphrase)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal keystore file: %w", err)
+	}
+
+	// save cache
+	ks.cache[keyID] = key
+	if ks.fsCache {
+		var buf bytes.Buffer
+		if err := gob.NewEncoder(&buf).Encode(key); err != nil {
+			return key, nil
+		}
+		if err := afero.WriteFile(ks.fs, fsCachePath, buf.Bytes(), 0o600); err != nil {
+			return key, nil
+		}
 	}
 
 	return key, err
@@ -130,6 +173,12 @@ func (ks *BasicKeyStore) Delete(keyID string, passphrase string) error {
 		return fmt.Errorf("failed to delete key file: %w", err)
 	}
 
+	// cache
+	delete(ks.cache, keyID)
+	if ks.fsCache {
+		_ = ks.fs.Remove(filepath.Join(ks.keysDir, keyID+".gob"))
+	}
+
 	return nil
 }
 
@@ -152,4 +201,8 @@ func (ks *BasicKeyStore) ListKeys() ([]string, error) {
 	}
 
 	return keys, nil
+}
+
+func (ks *BasicKeyStore) Dir() string {
+	return ks.keysDir
 }

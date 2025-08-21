@@ -15,10 +15,12 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/internal/config"
 
 	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -59,24 +61,78 @@ Example:
 	return cmd
 }
 
-func runNewCap(_ context.Context, dmsCLI *cli.DmsCLI, opts NewCapOptions, streams cli.Streams) error {
+func runNewCap(ctx context.Context, dmsCLI *cli.DmsCLI, opts NewCapOptions, streams cli.Streams) error {
+	var passphrase string
+	var privKey crypto.PrivKey
+
+	fs := dmsCLI.FS()
+	cfg, err := dmsCLI.Config()
+	if err != nil {
+		return fmt.Errorf("unable to get config: %w", err)
+	}
+
+	// ledger doesnt need keystore
+	if node.IsLedgerContext(opts.Context) {
+		return GenCaps(ctx, cfg, fs, opts, streams, nil)
+	}
+
+	// set up keystore
+	ks := dmsCLI.Keystore()
+	if ks == nil {
+		keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
+		ks, err = keystore.New(fs, keyStoreDir, false)
+		if err != nil {
+			return fmt.Errorf("failed to open keystore: %w", err)
+		}
+	}
+
+	// extract priv key
+	if ks.Exists(opts.Context) {
+		fmt.Fprintf(streams.Out, "Using identity at %s/%s.json...\n", ks.Dir(), opts.Context)
+		passphrase, err = dmsCLI.Passphrase(opts.Context)
+		if err != nil {
+			return fmt.Errorf("failed to get passphrase: %w", err)
+		}
+
+		key, err := ks.Get(opts.Context, passphrase)
+		if err != nil {
+			return fmt.Errorf("failed to get key from keystore: %w", err)
+		}
+
+		privKey, err = key.PrivKey()
+		if err != nil {
+			return fmt.Errorf("unable to convert key from keystore to private key: %v", err)
+		}
+	} else {
+		fmt.Fprintf(streams.Out, "A new identity will be created for '%s' context...\n", opts.Context)
+		passphrase, err = dmsCLI.NewPassphrase(opts.Context)
+		if err != nil {
+			return fmt.Errorf("failed to create new passphrase: %w", err)
+		}
+
+		privKey, err = dms.GenerateAndStorePrivKey(ks, passphrase, opts.Context)
+		if err != nil {
+			return fmt.Errorf("failed to create new key: %w", err)
+		}
+	}
+	if !ks.Exists(opts.Context) {
+		return fmt.Errorf("key missing: %s", opts.Context)
+	}
+
+	return GenCaps(ctx, cfg, fs, opts, streams, privKey)
+}
+
+// GenCaps generates capability files.
+func GenCaps(
+	_ context.Context, cfg *config.Config, fs afero.Fs, opts NewCapOptions, streams cli.Streams, privKey crypto.PrivKey,
+) error {
+	var err error
 	var trustCtx did.TrustContext
 	var rootDID did.DID
 
-	fs := dmsCLI.FS()
-
 	if node.IsLedgerContext(opts.Context) {
 		// need userDir for the resolver
-		cfg, err := dmsCLI.Config()
-		if err != nil {
-			return fmt.Errorf("unable to get config: %w", err)
-		}
-
-		idx, err := node.ResolveLedgerIndex(
-			dmsCLI.FS(),
-			cfg.General.UserDir,
-			node.GetContextKey(opts.Context),
-		)
+		idx, err := node.ResolveLedgerIndex(fs, cfg.General.UserDir, node.GetContextKey(opts.Context))
 		if err != nil {
 			return err
 		}
@@ -90,58 +146,14 @@ func runNewCap(_ context.Context, dmsCLI *cli.DmsCLI, opts NewCapOptions, stream
 		rootDID = provider.DID()
 		opts.Context = node.GetContextKey(opts.Context) // normalize context name
 	} else {
-		cfg, err := dmsCLI.Config()
-		if err != nil {
-			return fmt.Errorf("unable to get config: %w", err)
-		}
-		keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
-		ks, err := keystore.New(fs, keyStoreDir)
-		if err != nil {
-			return fmt.Errorf("failed to open keystore: %w", err)
-		}
-
-		passphrase := ""
-		if ks.Exists(opts.Context) {
-			fmt.Fprintf(streams.Out, "Using identity at %s/%s.json...\n", keyStoreDir, opts.Context)
-			passphrase, err = dmsCLI.Passphrase(opts.Context)
-			if err != nil {
-				return fmt.Errorf("failed to get passphrase: %w", err)
-			}
-		} else {
-			fmt.Fprintf(streams.Out, "A new identity will be created for '%s' context...\n", opts.Context)
-			passphrase, err = dmsCLI.NewPassphrase(opts.Context)
-			if err != nil {
-				return fmt.Errorf("failed to create new passphrase: %w", err)
-			}
-
-			_, err = dms.GenerateAndStorePrivKey(ks, passphrase, opts.Context)
-			if err != nil {
-				return fmt.Errorf("failed to create new key: %w", err)
-			}
-		}
-
-		key, err := ks.Get(opts.Context, passphrase)
-		if err != nil {
-			return fmt.Errorf("failed to get key from keystore: %w", err)
-		}
-
-		priv, err := key.PrivKey()
-		if err != nil {
-			return fmt.Errorf("unable to convert key from keystore to private key: %w", err)
-		}
-
-		trustCtx, err = did.NewTrustContextWithPrivateKey(priv)
+		trustCtx, err = did.NewTrustContextWithPrivateKey(privKey)
 		if err != nil {
 			return fmt.Errorf("unable to create trust context: %w", err)
 		}
 
-		rootDID = did.FromPublicKey(priv.GetPublic())
+		rootDID = did.FromPublicKey(privKey.GetPublic())
 	}
 
-	cfg, err := dmsCLI.Config()
-	if err != nil {
-		return fmt.Errorf("unable to get config: %w", err)
-	}
 	capStoreDir := filepath.Join(cfg.General.UserDir, node.CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", opts.Context))
 
