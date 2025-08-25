@@ -25,7 +25,8 @@ func resolveDNS(query *dns.Msg, records map[string]string) *dns.Msg {
 	for _, question := range query.Question {
 		if question.Qtype != dns.TypeA {
 			// We only support A records
-			m.SetRcode(query, dns.RcodeNotImplemented)
+			m.SetRcode(query, dns.RcodeSuccess)
+			m.Answer = []dns.RR{}
 			continue
 		}
 
