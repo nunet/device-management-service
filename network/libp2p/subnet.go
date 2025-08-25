@@ -164,6 +164,7 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 
 	for ip := range s.ifaces {
 		s.ifaces[ip].cancel()
+		s.ifaces[ip].tun.Close()
 		_ = s.ifaces[ip].tun.Down()
 		_ = s.ifaces[ip].tun.Delete()
 	}

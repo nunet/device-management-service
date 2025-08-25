@@ -61,6 +61,13 @@ const (
 	bidStateGCInterval          = time.Minute
 )
 
+// TODO issue #1154 - better handle transient allocations
+// temporary subnet status handling - 1 = active , 0 = destroyed
+var (
+	subnetStatusMx sync.Mutex
+	subnetStatus   map[string]int
+)
+
 type peerState struct {
 	numConnections                  int
 	hasRoot                         bool
@@ -189,6 +196,8 @@ func New(cfg config.Config, fs afero.Afero,
 	if contractStore == nil {
 		return nil, errors.New("contract store is nil")
 	}
+
+	subnetStatus = make(map[string]int)
 
 	rootDID := rootCap.DID()
 	rootTrust := rootCap.Trust()
