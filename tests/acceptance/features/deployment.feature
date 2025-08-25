@@ -33,6 +33,13 @@ Feature: Deployment
     Then "Alice" deployment should be running on "Charlie"
     And "Alice" deployment should be running on "Bob"
 
+  Scenario: Update node in running ensemble
+    Given "Alice" has service deployed on "Bob"
+    And "Alice" deployment is running
+    When "Alice" updates deployment to run on "Charlie"
+    Then "Alice" deployment should be running on "Charlie"
+    And "Alice" deployment should not be running on "Bob"
+
   Scenario: Add allocation to running ensemble
     Given "Alice" has deployed ensemble with 1 allocation on "Bob"
     And "Alice" deployment is running
