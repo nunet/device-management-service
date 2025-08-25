@@ -44,6 +44,7 @@ func Deployment(ctx *godog.ScenarioContext) {
 	ctx.Step(`^"([^"]*)" deployment should not be (\w+) on "([^"]*)"$`, deploymentShouldNotBeOn)
 	ctx.Step(`^"([^"]*)" updates deployment to remove "([^"]*)"$`, updatesDeploymentToRemove)
 	ctx.Step(`^"([^"]*)" updates deployment to add "([^"]*)"$`, updatesDeploymentToAdd)
+	ctx.Step(`^"([^"]*)" updates deployment to run on "([^"]*)"$`, updatesDeploymentToRunOn)
 	ctx.Step(`^"([^"]*)" has deployed ensemble with (\d+) allocations? on "([^"]*)"$`, hasDeployedEnsembleWithAllocationsOn)
 	ctx.Step(`^"([^"]*)" updates deployment to add (\d+) allocation$`, updatesDeploymentToAddAllocation)
 	ctx.Step(`^"([^"]*)" deployment should have (\d+) allocations? running on "([^"]*)"$`, deploymentShouldHaveAllocationsRunningOn)
@@ -360,6 +361,50 @@ func updatesDeploymentToRemove(ctx context.Context, spName, cpName string) (cont
 	assert.NotEmpty(t, ensemble)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s)", matchNode), ensemble})
+	assert.NoError(t, err)
+
+	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
+	assert.NoError(t, err)
+
+	return tc.Unwrap(), nil
+}
+
+func updatesDeploymentToRunOn(ctx context.Context, spName, cpName string) (context.Context, error) {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	nodeMap, err := tc.NodeMap()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, nodeMap)
+
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
+
+	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cpDmsCtx)
+
+	ensembleID, err := tc.EnsembleID()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, ensembleID)
+
+	ensemble, err := tc.EnsembleFile()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, ensemble)
+
+	manifest, err := spDmsCtx.Manifest(ensembleID)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, manifest)
+
+	nodes := slices.Sorted(maps.Keys(manifest.Nodes))
+	assert.Len(t, nodes, 1)
+
+	selected := nodes[0]
+
+	cpInfo, err := cpDmsCtx.PeerAddr()
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.%s.peer = \"%s\"", selected, cpInfo.ID), ensemble})
 	assert.NoError(t, err)
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
