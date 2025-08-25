@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	portRangeFrom = 3000
-	portRangeTo   = 3100
+	portRangeFrom = 30000
+	portRangeTo   = 30100
 
 	MockTotalCPU  = 12
 	MockTotalRAM  = 32 * 1024 * 1024 * 1024  // 32 GB
@@ -288,6 +288,8 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	scheduler := backgroundtasks.NewScheduler(1, time.Second)
 
 	vNet, priv := setupTestNetwork(t, substrate)
+
+	subnetStatus = make(map[string]int)
 
 	// allocator, nP2PNet, priv := newMockAllocator(t, substrate)
 	allocator := newAllocator(

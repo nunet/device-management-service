@@ -30,6 +30,7 @@ type NetInterface interface {
 	Read([]byte) (int, error)
 	Up() error
 	Down() error
+	Close() error
 	Delete() error
 	SetAddress(string) error
 	SetMTU(int) error
@@ -49,6 +50,10 @@ func (n *netiface) Read(packet []byte) (int, error) {
 
 func (n *netiface) Write(packet []byte) (int, error) {
 	return n.iface.Write(packet)
+}
+
+func (n *netiface) Close() error {
+	return n.iface.Close()
 }
 
 // GetNetInterfaces gets the list of network interfaces

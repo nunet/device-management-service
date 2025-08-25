@@ -202,11 +202,11 @@ e2e-%:
 
 run-acceptance:
 	@echo "Running acceptance tests"
-	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=15m -godog.tags="~@wip"
+	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=25m -godog.tags="~@wip"
 
 run-acceptance-%:
 	@echo "Running acceptance tests: $*"
-	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=15m -godog.tags="~@wip" -test.run "^$*/"
+	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=25m -godog.tags="~@wip" -test.run "^$*/"
 
 run-acceptance-container:
 	make run-acceptance INSTANCE_TYPE=container

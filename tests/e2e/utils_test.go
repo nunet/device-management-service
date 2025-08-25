@@ -107,6 +107,7 @@ func createConfig(userDir string, restPort uint32,
 ) *config.Config {
 	return &config.Config{
 		General: config.General{
+			Env:                    "test",
 			UserDir:                userDir,
 			WorkDir:                filepath.Join(userDir, "work_dir"),
 			DataDir:                filepath.Join(userDir, "data_dir"),

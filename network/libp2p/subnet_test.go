@@ -981,6 +981,7 @@ func (m *MockNetInterface) Read(b []byte) (int, error) {
 	copy(b, pkt)
 	return len(pkt), nil
 }
+func (m *MockNetInterface) Close() error            { return nil }
 func (m *MockNetInterface) Up() error               { return nil }
 func (m *MockNetInterface) Down() error             { return nil }
 func (m *MockNetInterface) Delete() error           { return nil }
