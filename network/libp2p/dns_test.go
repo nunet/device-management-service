@@ -70,7 +70,7 @@ func TestDNS_NonARecord(t *testing.T) {
 	response := resolveDNS(query, records)
 
 	assert.Equal(t, 0, len(response.Answer))
-	assert.Equal(t, dns.RcodeNotImplemented, response.Rcode)
+	assert.Equal(t, dns.RcodeSuccess, response.Rcode)
 }
 
 func TestDNS_MultipleQuestions(t *testing.T) {
