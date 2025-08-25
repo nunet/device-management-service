@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -17,61 +16,6 @@ import (
 )
 
 func DeploymentTest(suite *TestSuite) {
-	suite.Run("must be able to deploy nginx demo with storage", func() {
-		// deploy nginx.yaml to node1 using deployer's orchestrator
-		node1 := suite.nodes[0]
-		hostname, err := os.Hostname()
-		suite.Require().NoError(err)
-		srcFile := filepath.Join(suite.testDataDir, "ensembles", "nginx-storage.yaml")
-		destinationFile := filepath.Join(node1.config.WorkDir, "nginx-storage.yaml")
-		err = copyFile(srcFile, destinationFile)
-		suite.Require().NoError(err)
-		err = replaceHostnameInFile(destinationFile, hostname)
-		suite.Require().NoError(err)
-
-		freeResourcesBefore, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
-		suite.Require().NoError(err)
-
-		// Deploy nginx.yaml from deployer's orchestrator.
-		deployer := suite.nodes[1]
-		deploymentResult := deployer.client.deploy(
-			suite.T(), deployer.userContext, deployer.password,
-			filepath.Join(node1.config.WorkDir, "nginx-storage.yaml"))
-		suite.Contains(deploymentResult, `"Status": "OK"`)
-		manifestID := extractEnsembleID(deploymentResult)
-
-		// Wait until the deployment status is "Running".
-		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
-			suite.T().Log("Deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
-		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
-		time.Sleep(2 * time.Second)
-
-		// Ensure resources are allocated.
-		freeResourcesDuring, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
-		suite.Require().NoError(err)
-		suite.False(freeResourcesDuring.Equal(freeResourcesBefore))
-
-		// TODO: check port mapping
-
-		// Shutdown the nginx deployment.
-		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, manifestID)
-		suite.Contains(shutdownRes, `"Error": ""`)
-
-		// wait for the ensemble to be shutdown
-		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, manifestID)
-			suite.T().Log("deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
-		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
-
-		// Ensure resources are freed.
-		freeResourcesAfter, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
-		suite.Require().NoError(err)
-		suite.True(freeResourcesAfter.Equal(freeResourcesBefore))
-	})
-
 	suite.Run("allocation of type TASK: deploy docker hello-world", func() {
 		deployer := suite.nodes[1]
 		deployment2Result := deployer.client.deploy(
@@ -532,6 +476,105 @@ func DeploymentUpdates(suite *TestSuite) {
 			suite.T().Log("Initial deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
+
+		// Deployment status should still be "Running"
+		status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().Equal(extractStatus(status), jobtypes.DeploymentStatusRunning.String())
+
+		// Validate both nodes have decreased resources after the update
+		suite.Require().Eventually(func() bool {
+			return checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) &&
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore)
+		}, 30*time.Second, 5*time.Second,
+			"free resources should be decreased in relation with the initial state (for both nodes)")
+	})
+
+	// testAddAllocation tests adding and removing an allocation to a two-node ensemble
+	suite.Run("AllocationUpdate", func() {
+		// Deploy initial ensemble with a single node
+		deployer := suite.nodes[0]
+		aliceProvider := suite.nodes[1]
+		bobProvider := suite.nodes[2]
+
+		// Get initial free resources to compare later
+		aliceResourcesBefore, err := aliceProvider.client.freeResources(
+			suite.T(), aliceProvider.dmsContext, aliceProvider.password,
+		)
+		suite.Require().NoError(err)
+
+		bobResourcesBefore, err := bobProvider.client.freeResources(
+			suite.T(), bobProvider.dmsContext, bobProvider.password,
+		)
+		suite.Require().NoError(err)
+
+		// Deploy the initial ensemble with a two nodes
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "multiple.yaml"),
+		)
+		suite.Require().Contains(deploymentResult, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deploymentResult)
+
+		defer func() {
+			// cleanup: shutdown and check if resources were freed
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Require().Contains(shutdownRes, `"Error": ""`)
+
+			suite.Require().Eventually(func() bool {
+				return checkResourcesEqual(suite.T(), aliceProvider, aliceResourcesBefore) &&
+					checkResourcesEqual(suite.T(), bobProvider, bobResourcesBefore)
+			}, 30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Alice and Bob")
+		}()
+
+		// wait until deploymnet is runnning
+		suite.Require().Eventually(func() bool {
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.T().Log("Initial deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
+
+		// Verify resources were decreased on both nodes after initial deployment
+		suite.Require().True(
+			checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) &&
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore),
+		)
+
+		// Update the ensemble by adding an allocation
+		addUpdateResult := deployer.client.update(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "add-allocation-to-multi.yaml"), ensembleID,
+		)
+		suite.Require().Contains(addUpdateResult, `"OK": true`)
+
+		suite.Require().Eventually(func() bool {
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.T().Log("Updated deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Updated deployment did not reach Running status")
+
+		// Deployment addStatus should still be "Running"
+		addStatus := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().Equal(extractStatus(addStatus), jobtypes.DeploymentStatusRunning.String())
+
+		// Validate both nodes have decreased resources after the update
+		suite.Require().Eventually(func() bool {
+			return checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) &&
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore)
+		}, 30*time.Second, 5*time.Second,
+			"free resources should be decreased in relation with the initial state (for both nodes)")
+
+		// Update the ensemble by adding an allocation
+		rmUpdateResult := deployer.client.update(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "remove-allocation-from-multi.yaml"), ensembleID,
+		)
+		suite.Require().Contains(rmUpdateResult, `"OK": true`)
+
+		suite.Require().Eventually(func() bool {
+			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.T().Log("Updated deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Updated deployment did not reach Running status")
 
 		// Deployment status should still be "Running"
 		status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)

@@ -316,9 +316,15 @@ func (a *allocator) monitorEnsembleAllocations() {
 	cleanupFinishedEnsemble := func(ensembleID string, allocationIDs []string) {
 		log.Debugf("Cleaning up ensemble %s", ensembleID)
 
-		if err := a.network.DestroySubnet(ensembleID); err != nil {
-			log.Warnf("Monitor Ensemble: failed to destroy subnet (it may already be destroyed) %s: %v", ensembleID, err)
+		// TODO issue #1154 - better handle transient allocations
+		subnetStatusMx.Lock()
+		if stat, ok := subnetStatus[ensembleID]; ok && stat == 1 {
+			if err := a.network.DestroySubnet(ensembleID); err != nil {
+				log.Warnf("Monitor Ensemble: failed to destroy subnet (it may already be destroyed) %s: %v", ensembleID, err)
+			}
+			subnetStatus[ensembleID] = 0 // mark as destroyed
 		}
+		subnetStatusMx.Unlock()
 
 		for _, allocID := range allocationIDs {
 			if err := a.Release(a.ctx, allocID); err != nil {

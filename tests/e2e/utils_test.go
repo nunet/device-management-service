@@ -108,6 +108,7 @@ func createConfig(userDir string, restPort uint32,
 ) *config.Config {
 	return &config.Config{
 		General: config.General{
+			Env:                    "test",
 			UserDir:                userDir,
 			WorkDir:                filepath.Join(userDir, "work_dir"),
 			DataDir:                filepath.Join(userDir, "data_dir"),
@@ -207,22 +208,6 @@ func replaceContractInFile(filePath, contractData string) error {
 	}
 
 	modifiedContent := strings.ReplaceAll(string(content), "{$contract}", contractData)
-
-	err = os.WriteFile(filePath, []byte(modifiedContent), 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to write back to file: %w", err)
-	}
-
-	return nil
-}
-
-func replaceHostnameInFile(filePath, hostname string) error {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
-	}
-
-	modifiedContent := strings.ReplaceAll(string(content), "${hostname}", hostname)
 
 	err = os.WriteFile(filePath, []byte(modifiedContent), 0o644)
 	if err != nil {

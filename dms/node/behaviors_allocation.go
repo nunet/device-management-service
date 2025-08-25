@@ -53,6 +53,11 @@ func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 		return
 	}
 
+	// TODO issue #1154 - better handle transient allocations
+	subnetStatusMx.Lock()
+	subnetStatus[request.SubnetID] = 1
+	subnetStatusMx.Unlock()
+
 	resp.OK = true
 	n.sendReply(msg, resp)
 }
@@ -72,11 +77,27 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 		return
 	}
 
+	// if subnet already destroyed by a transient alloc cleaning up after itself
+	subnetStatusMx.Lock()
+	if subnetStatus, ok := subnetStatus[request.SubnetID]; ok && subnetStatus == 0 {
+		// Subnet is already destroyed
+		resp.OK = true
+		n.sendReply(msg, resp)
+		subnetStatusMx.Unlock()
+		return
+	}
+	subnetStatusMx.Unlock()
+
 	err := n.network.DestroySubnet(request.SubnetID)
 	if err != nil {
 		handleErr(err)
 		return
 	}
+
+	// TODO issue #1154 - better handle transient allocations
+	subnetStatusMx.Lock()
+	subnetStatus[request.SubnetID] = 0
+	subnetStatusMx.Unlock()
 
 	resp.OK = true
 	n.sendReply(msg, resp)
