@@ -12,12 +12,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -177,43 +175,6 @@ func getProc(pid int32) *process.Process {
 func initCaps(t *testing.T, cli *Client, pass, keyType1, keyType2 string) {
 	cli.newCap(t, keyType1, pass)
 	cli.newCap(t, keyType2, pass)
-}
-
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file content: %w", err)
-	}
-
-	return nil
-}
-
-func replaceHostnameInFile(filePath, hostname string) error {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
-	}
-
-	modifiedContent := strings.ReplaceAll(string(content), "${hostname}", hostname)
-
-	err = os.WriteFile(filePath, []byte(modifiedContent), 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to write back to file: %w", err)
-	}
-
-	return nil
 }
 
 // MOCK NODE
