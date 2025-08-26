@@ -62,6 +62,46 @@ func MakeOrchestrator(t *testing.T, substrate *network.Substrate) TestDMS {
 	return dms
 }
 
+func (dms *TestDMS) MockOrchestratorBehaviors(t *testing.T) {
+	t.Helper()
+
+	dms.channels[fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "test-ensemble")] = make(chan struct{}, 1)
+	require.NoError(t, dms.super.AddBehavior(fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, "test-ensemble"), func(msg actor.Envelope) {
+		defer func() {
+			msg.Discard()
+			dms.channels[msg.Behavior] <- struct{}{}
+		}()
+
+		reply, err := actor.ReplyTo(msg, SubnetCreateResponse{
+			OK: true,
+		})
+		require.NoError(t, err)
+
+		reply.To = msg.From
+		reply.From = dms.handle
+
+		require.NoError(t, dms.actor.Send(reply))
+	}))
+
+	dms.channels[fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, "test-ensemble")] = make(chan struct{}, 1)
+	require.NoError(t, dms.super.AddBehavior(fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, "test-ensemble"), func(msg actor.Envelope) {
+		defer func() {
+			msg.Discard()
+			dms.channels[msg.Behavior] <- struct{}{}
+		}()
+
+		reply, err := actor.ReplyTo(msg, SubnetJoinResponse{
+			OK: true,
+		})
+		require.NoError(t, err)
+
+		reply.To = msg.From
+		reply.From = dms.handle
+
+		require.NoError(t, dms.actor.Send(reply))
+	}))
+}
+
 func (dms *TestDMS) MockDeploymentBehaviors(t *testing.T) {
 	t.Helper()
 

@@ -24,7 +24,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
@@ -145,7 +145,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	log.Debugf("loaded geoip2 database: %v", geoip2db)
 
 	keyStoreDir := filepath.Join(gcfg.UserDir, node.KeystoreDir)
-	keyStore, err := keystore.New(fs, keyStoreDir)
+	keyStore, err := keystore.New(fs, keyStoreDir, false)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create keystore: %w", err)
 	}
@@ -181,12 +181,13 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("unable to create onboarding manager: %w", err)
 	}
 
-	bootstrapPeers := make([]multiaddr.Multiaddr, len(gcfg.P2P.BootstrapPeers))
-	for i, addr := range gcfg.P2P.BootstrapPeers {
-		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
+	bootstrapPeers := make([]ma.Multiaddr, len(gcfg.BootstrapPeers))
+	for i, addr := range gcfg.BootstrapPeers {
+		bootstrapPeers[i], _ = ma.NewMultiaddr(addr)
 	}
 
 	cfg := &types.Libp2pConfig{
+		Env:                     gcfg.General.Env,
 		PrivateKey:              privK,
 		BootstrapPeers:          bootstrapPeers,
 		Rendezvous:              "nunet-test",
@@ -196,6 +197,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           gcfg.P2P.ListenAddress,
 		PeerCountDiscoveryLimit: 40,
+		GracePeriodMs:           20000, // 20 seconds
 		Memory:                  gcfg.P2P.Memory,
 		FileDescriptors:         gcfg.P2P.FileDescriptors,
 	}

@@ -73,7 +73,9 @@ func fieldJSONTag[T repositories.ModelType](field string) string {
 	fieldName := field
 	if field, ok := reflect.TypeOf(*new(T)).FieldByName(field); ok {
 		if tag, ok := field.Tag.Lookup("json"); ok {
-			fieldName = strings.Split(tag, ",")[0]
+			if name := strings.Split(tag, ",")[0]; name != "" {
+				fieldName = name
+			}
 		}
 	}
 	return fieldName

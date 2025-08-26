@@ -1,0 +1,8 @@
+#SPDX-License-Identifier: MIT-0
+---
+# vars file for glusterfs-ubuntu
+other_hosts: '{{ hostvars.values() | rejectattr("inventory_hostname", "==", inventory_hostname) | rejectattr("ansible_host", "undefined") | map(attribute="ansible_host") }}'
+host_ips: '{{ hostvars.values() | rejectattr("ansible_host", "undefined") | map(attribute="ansible_host") }}'
+glusterfs_main_node: "{{ groups.glusterfs_servers[0] }}"
+glusterfs_secondary_nodes: '{{ groups.glusterfs_servers[1:] }}'
+cwd: "{{ lookup('env', 'PWD') }}"

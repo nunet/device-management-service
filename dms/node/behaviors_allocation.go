@@ -47,11 +47,16 @@ func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 	}
 
 	resp := orchestrator.SubnetCreateResponse{}
-	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.RoutingTable)
+	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.CIDR, request.RoutingTable)
 	if err != nil {
 		handleErr(err)
 		return
 	}
+
+	// TODO issue #1154 - better handle transient allocations
+	subnetStatusMx.Lock()
+	subnetStatus[request.SubnetID] = 1
+	subnetStatusMx.Unlock()
 
 	resp.OK = true
 	n.sendReply(msg, resp)
@@ -72,11 +77,27 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 		return
 	}
 
+	// if subnet already destroyed by a transient alloc cleaning up after itself
+	subnetStatusMx.Lock()
+	if subnetStatus, ok := subnetStatus[request.SubnetID]; ok && subnetStatus == 0 {
+		// Subnet is already destroyed
+		resp.OK = true
+		n.sendReply(msg, resp)
+		subnetStatusMx.Unlock()
+		return
+	}
+	subnetStatusMx.Unlock()
+
 	err := n.network.DestroySubnet(request.SubnetID)
 	if err != nil {
 		handleErr(err)
 		return
 	}
+
+	// TODO issue #1154 - better handle transient allocations
+	subnetStatusMx.Lock()
+	subnetStatus[request.SubnetID] = 0
+	subnetStatusMx.Unlock()
 
 	resp.OK = true
 	n.sendReply(msg, resp)
@@ -97,7 +118,14 @@ func (n *Node) handleSubnetJoin(msg actor.Envelope) {
 	}
 
 	resp := orchestrator.SubnetJoinResponse{}
+	_ = n.network.RemoveSubnetPeers(request.SubnetID, map[string]string{request.IP: request.PeerID})
 	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	err = n.network.AcceptSubnetPeers(request.SubnetID, request.RoutingTable)
 	if err != nil {
 		handleErr(err)
 		return
@@ -185,7 +213,6 @@ func (n *Node) createAllocations(
 	}
 
 	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
-	allocationIDs := make([]string, 0, len(allocations))
 	for allocationName, allocationConfig := range allocations {
 		allocationID := types.ConstructAllocationID(ensembleID, allocationName)
 		// TODO: check if the allocation ID exists
@@ -198,7 +225,7 @@ func (n *Node) createAllocations(
 				Execution:        allocationConfig.Execution,
 				ProvisionScripts: allocationConfig.ProvisionScripts,
 				Keys:             allocationConfig.Keys,
-				Volume:           allocationConfig.Volumes,
+				Volume:           allocationConfig.Volume,
 			},
 			supervisor,
 		)
@@ -207,7 +234,6 @@ func (n *Node) createAllocations(
 		}
 
 		allocHandlesByName[allocationName] = allocation.Actor.Handle()
-		allocationIDs = append(allocationIDs, allocation.ID)
 
 		// node grants subnet create/destroy caps to the orchestrator
 		if err := n.actor.Security().Grant(supervisor.DID, n.actor.Handle().DID, []ucan.Capability{
@@ -253,9 +279,6 @@ func (n *Node) createAllocations(
 			}
 		}()
 	}
-
-	// Start monitoring allocations
-	go n.monitorEnsembleAllocations(ensembleID, allocationIDs)
 
 	log.Infof("Finished createAllocations for ensembleID: %s", ensembleID)
 	return allocHandlesByName, nil

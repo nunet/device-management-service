@@ -10,7 +10,7 @@
 
 //go:build e2e || !unit
 
-package itest
+package e2e
 
 import (
 	"testing"

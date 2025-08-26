@@ -32,6 +32,7 @@ type Registry interface {
 		actr actor.Actor, id string, cfg jtypes.EnsembleConfig,
 		manifest jtypes.EnsembleManifest, status jtypes.DeploymentStatus,
 		restoreInfo jtypes.DeploymentSnapshot,
+		subnetManifest jtypes.SubnetManifest,
 	) (Orchestrator, error)
 	// Orchestrators returns a map of all orchestrators
 	Orchestrators() map[string]Orchestrator
@@ -88,12 +89,8 @@ func restoreDeployment(
 	actr actor.Actor, id string,
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
 	status jtypes.DeploymentStatus, restoreInfo jtypes.DeploymentSnapshot,
+	subnetManifest jtypes.SubnetManifest,
 ) (Orchestrator, error) {
-	subnet, err := newSubnetManifest()
-	if err != nil {
-		return nil, err
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	o := &BasicOrchestrator{
@@ -102,10 +99,12 @@ func restoreDeployment(
 		cfg:                cfg,
 		status:             status,
 		deploymentSnapshot: restoreInfo,
-		supervisor:         NewSupervisor(context.TODO(), actr, id),
-		subnetManifest:     subnet,
+		supervisor:         NewSupervisor(ctx, actr, id),
+		manifest:           manifest,
+		subnetManifest:     subnetManifest,
 		ctx:                ctx,
 		cancel:             cancel,
+		statusSubscribers:  make(map[chan jtypes.DeploymentStatus]struct{}),
 	}
 
 	// TODO: manifest.Empty()
@@ -131,7 +130,7 @@ func restoreDeployment(
 			"labels", []string{string(observability.LabelDeployment)},
 			"orchestratorID", id,
 		)
-		provisioner := NewProvisioner(ctx, cancel, actr, subnet)
+		provisioner := NewProvisioner(ctx, cancel, actr, o.subnetManifest)
 		manifestAfterProvision, err := provisioner.Provision(
 			jtypes.NewEnsembleCfgReader(cfg),
 			jtypes.NewManifestReader(manifest))
@@ -148,10 +147,31 @@ func restoreDeployment(
 		o.setStatus(jtypes.DeploymentStatusRunning)
 	}
 
-	allocations := make(map[string]actor.Handle, len(manifest.Allocations))
-	for _, allocation := range manifest.Allocations {
-		allocations[allocation.ID] = allocation.Handle
+	if o.manifest.Subnet.Join {
+		if _, ok := o.subnetManifest.IndexRoutingTable[orchSubnetName]; ok {
+			handleError := func(err error) (Orchestrator, error) {
+				log.Errorf("failed to join subnet: %s", err)
+				o.lock.Lock()
+				o.revert(cfg, manifest)
+				o.lock.Unlock()
+				return o, o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
+			}
+
+			provisioner := NewProvisioner(ctx, cancel, o.actor, o.subnetManifest)
+			err := provisioner.createSubnet(o.manifest.ID, o.subnetManifest.RoutingTable, []actor.Handle{o.actor.Supervisor()})
+			if err != nil {
+				return handleError(err)
+			}
+
+			err = provisioner.orchestratorJoinSubnet(manifest.ID, o.subnetManifest.IndexRoutingTable, o.subnetManifest.RoutingTable, o.subnetManifest.DNSRecords)
+			if err != nil {
+				return handleError(err)
+			}
+		}
 	}
+
+	go o.monitorOnlyTaskManifest()
+
 	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 
 	return o, nil
@@ -161,6 +181,7 @@ func restoreDeployment(
 func (f *basicRegistry) RestoreDeployment(
 	actr actor.Actor, id string, cfg jtypes.EnsembleConfig,
 	manifest jtypes.EnsembleManifest, status jtypes.DeploymentStatus, restoreInfo jtypes.DeploymentSnapshot,
+	subnetManifest jtypes.SubnetManifest,
 ) (Orchestrator, error) {
 	// check if orchestrator already exists
 	f.lock.RLock()
@@ -170,7 +191,7 @@ func (f *basicRegistry) RestoreDeployment(
 	}
 	f.lock.RUnlock()
 
-	o, err := restoreDeployment(actr, id, cfg, manifest, status, restoreInfo)
+	o, err := restoreDeployment(actr, id, cfg, manifest, status, restoreInfo, subnetManifest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to restore deployment: %w", err)
 	}

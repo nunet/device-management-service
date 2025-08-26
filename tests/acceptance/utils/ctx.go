@@ -11,11 +11,12 @@ import (
 // We could use a map directly, but empty struct
 // has a better performance if it grows too large
 type (
-	nodesCtxKey     struct{}
-	nodeMapCtxKey   struct{}
-	ensembleCtxKey  struct{}
-	manifestCtxKey  struct{}
-	allocRespCtxKey struct{}
+	nodesCtxKey        struct{}
+	nodeMapCtxKey      struct{}
+	ensembleIDCtxKey   struct{}
+	ensembleFileCtxKey struct{}
+	manifestCtxKey     struct{}
+	allocRespCtxKey    struct{}
 )
 
 // TestCtx is a wrapper of Context
@@ -62,7 +63,7 @@ func (t *TestCtx) WithNodeMap(m map[string]*Node) *TestCtx {
 }
 
 func (t *TestCtx) EnsembleID() (string, error) {
-	id, ok := t.ctx.Value(ensembleCtxKey{}).(string)
+	id, ok := t.ctx.Value(ensembleIDCtxKey{}).(string)
 	if !ok {
 		return "", fmt.Errorf("no ensemble ID available on context")
 	}
@@ -71,14 +72,28 @@ func (t *TestCtx) EnsembleID() (string, error) {
 
 func (t *TestCtx) WithEnsembleID(id string) *TestCtx {
 	return &TestCtx{
-		ctx: context.WithValue(t.ctx, ensembleCtxKey{}, id),
+		ctx: context.WithValue(t.ctx, ensembleIDCtxKey{}, id),
+	}
+}
+
+func (t *TestCtx) EnsembleFile() (string, error) {
+	path, ok := t.ctx.Value(ensembleFileCtxKey{}).(string)
+	if !ok {
+		return "", fmt.Errorf("no ensemble file available on context")
+	}
+	return path, nil
+}
+
+func (t *TestCtx) WithEnsembleFile(path string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, ensembleFileCtxKey{}, path),
 	}
 }
 
 func (t *TestCtx) Manifest() (*jobtypes.EnsembleManifest, error) {
 	manifest, ok := t.ctx.Value(manifestCtxKey{}).(*jobtypes.EnsembleManifest)
 	if !ok {
-		return nil, fmt.Errorf("no ensemble ID available on context")
+		return nil, fmt.Errorf("no manifest available on context")
 	}
 	return manifest, nil
 }

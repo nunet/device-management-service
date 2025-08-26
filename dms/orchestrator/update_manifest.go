@@ -1,12 +1,16 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"go.uber.org/multierr"
 
+	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -47,14 +51,10 @@ func (o *BasicOrchestrator) Update(modifiedCfg jtypes.EnsembleConfig, expiry tim
 	}
 
 	// 2. deploy new nodes
-	err = o.deployNewNodes(o.cfg.Clone(), modifiedCfg, expiry)
+	err = o.handleNewAllocations(modifiedCfg, expiry)
 	if err != nil {
 		return fmt.Errorf("deploying new nodes: %w", err)
 	}
-
-	// 3. deploy new allocations into existent nodes
-	// TODO
-	// (if not best-efforts, we should revert deployed new nodes)
 
 	// 4. start supervisor for new allocations
 	o.supervisor.Update(jtypes.NewManifestReader(o.manifest))
@@ -63,8 +63,7 @@ func (o *BasicOrchestrator) Update(modifiedCfg jtypes.EnsembleConfig, expiry tim
 	return nil
 }
 
-// deployNewNodes deployes *only new nodes* to the running ensemble.
-//   - It does NOT update existent nodes with new allocations.
+// handleNewAllocations deployes new allocations to the running ensemble.
 //   - It does NOT remove allocations from existent nodes
 //
 // It is similar to o.deploy but it adds:
@@ -74,44 +73,48 @@ func (o *BasicOrchestrator) Update(modifiedCfg jtypes.EnsembleConfig, expiry tim
 // It _implictly_ updates o.manifest by the use of o.commit and
 // o.provision
 //
-// Another difference from o.deploy is that this function is not updating
-// snapshots and ensemble status.
-//
 // TODO: 6. revert subnet updates
-func (o *BasicOrchestrator) deployNewNodes(
-	oldCfg, newCfg jtypes.EnsembleConfig, expiry time.Time,
+func (o *BasicOrchestrator) handleNewAllocations(
+	modifiedCfg jtypes.EnsembleConfig, expiry time.Time,
 ) error {
-	if len(identifyNewNodes(oldCfg, newCfg)) == 0 {
-		return nil
+	existingNodes := make(map[string]string)
+	for n, node := range o.manifest.Nodes {
+		existingNodes[n] = node.Peer
 	}
-	log.Info("deploying added nodes")
 
-	alreadyDeployedNodes := o.ManifestNodesPeerIDs()
-
-	newConfig, err := newConfigForAddedNodes(
-		alreadyDeployedNodes,
-		oldCfg,
-		newCfg,
+	newConfig, err := newConfigForDeploymentUpdate(
+		o.cfg,
+		modifiedCfg,
+		existingNodes,
 	)
 	if err != nil {
 		return fmt.Errorf("creating new nodes config: %w", err)
 	}
 
+	if len(newConfig.Allocations()) == 0 {
+		return nil
+	}
+
 	addNodesAndAllocsToCfg := func() {
-		for name, node := range newConfig.Nodes() {
-			o.lock.Lock()
-			o.cfg.AddNodeAndAllocations(name, node, newConfig.Allocations())
-			o.lock.Unlock()
+		for name := range newConfig.Nodes() {
+			if node, ok := modifiedCfg.Node(name); ok {
+				o.lock.Lock()
+				o.cfg.AddNodeAndAllocations(name, node, newConfig.Allocations())
+				o.lock.Unlock()
+			}
 		}
 	}
 
 	updateManifest := func(manifest jtypes.EnsembleManifest) {
 		currentManifest := o.Manifest()
 		for n, node := range manifest.Nodes {
-			currentManifest.Nodes[n] = node
 			for _, alloc := range node.Allocations {
 				currentManifest.Allocations[alloc] = manifest.Allocations[alloc]
 			}
+			if nmf, ok := currentManifest.Node(n); ok {
+				node.Allocations = append(node.Allocations, nmf.Allocations...)
+			}
+			currentManifest.Nodes[n] = node
 		}
 		o.updateManifest(currentManifest)
 	}
@@ -124,7 +127,8 @@ deploy:
 			return fmt.Errorf("failed to create bidder: %w", err)
 		}
 
-		candidate, err := bidC.bid(jtypes.NewEnsembleCfgReader(newConfig), expiry)
+		bidC.getNonce()
+		candidate, err := bidC.bid(jtypes.NewEnsembleCfgReader(newConfig), o.DeploymentSnapshot().Candidates, expiry)
 		if err != nil {
 			if errors.Is(err, ErrCandidateNotFound) {
 				log.Warnf("candidate deployment not found, redeploying: %v", err)
@@ -135,6 +139,9 @@ deploy:
 		}
 
 		newManifest := o.newManifest(newConfig)
+		for alloc, amf := range o.manifest.Allocations {
+			newManifest.Allocations[alloc] = amf
+		}
 
 		// 2. commit
 		committer := NewCommitter(o.ctx, o.id, o.actor)
@@ -177,7 +184,8 @@ deploy:
 		}
 
 		// 4. provision subnet
-		mfAfterSubnet, err := provisioner.provisionSubnet(updatedManifest)
+		skip := utils.MapKeysToSlice(existingNodes)
+		mfAfterSubnet, err := provisioner.provisionSubnet(updatedManifest, skip...)
 		if err != nil {
 			o.revert(newConfig, updatedManifest)
 			log.Warnf("provision subnet for new nodes (will revert deployment): %w", err)
@@ -207,7 +215,7 @@ deploy:
 		// 7. update config and manifest with added nodes
 		updateManifest(mfAFterProvisionAllocs)
 		addNodesAndAllocsToCfg()
-
+		o.deploymentSnapshot.Candidates = candidate
 		return nil
 	}
 
@@ -217,10 +225,6 @@ deploy:
 // handleEnsembleRemovals handles both removals of nodes and allocations in
 // a best effort basis.
 func (o *BasicOrchestrator) handleEnsembleRemovals(modifiedCfg jtypes.EnsembleConfig) error {
-	if len(identifyRemovedNodes(o.cfg, modifiedCfg)) == 0 {
-		return nil
-	}
-
 	var errs error
 	log.Infof("removing nodes and allocations from config %+v", modifiedCfg.V1)
 
@@ -230,7 +234,7 @@ func (o *BasicOrchestrator) handleEnsembleRemovals(modifiedCfg jtypes.EnsembleCo
 	)
 	if err != nil {
 		errs = multierr.Append(errs, err)
-	} else {
+	} else if len(removeNodesCfg.Nodes()) > 0 {
 		mf, err := manifestOnlyForNodes(o.manifest, utils.MapKeysToSlice(removeNodesCfg.Nodes()))
 		if err != nil {
 			errs = multierr.Append(errs, err)
@@ -241,7 +245,103 @@ func (o *BasicOrchestrator) handleEnsembleRemovals(modifiedCfg jtypes.EnsembleCo
 	}
 
 	// 2. teardown allocations from existent nodes
-	// TODO
+	for n := range o.cfg.Nodes() {
+		allocs := identifyRemovedAllocations(o.cfg, modifiedCfg, n)
+		if len(allocs) == 0 {
+			continue
+		}
+
+		errCh := make(chan error, len(allocs))
+		wg := sync.WaitGroup{}
+		for alloc := range allocs {
+			amf, ok := o.manifest.Allocation(alloc)
+			if !ok {
+				errCh <- fmt.Errorf("allocation %s not found in manifest", alloc)
+				continue
+			}
+			wg.Add(1)
+			go func(h actor.Handle, allocID string) {
+				defer wg.Done()
+				msg, err := actor.Message(
+					o.actor.Handle(),
+					h,
+					fmt.Sprintf(behaviors.AllocationShutdownBehavior.DynamicTemplate, o.manifest.ID),
+					AllocationStopRequest{
+						AllocationID: allocID,
+					},
+					actor.WithMessageExpiry(actor.MakeExpiry(AllocationShutdownTimeout)),
+				)
+				if err != nil {
+					log.Errorf("error creating stop message for alloc: %s: %v", allocID, err)
+					errCh <- err
+					return
+				}
+
+				// invoke the stop message
+				replyCh, err := o.actor.Invoke(msg)
+				if err != nil {
+					log.Errorf("error invoking stop message for %s: %v", allocID, err)
+					errCh <- err
+					return
+				}
+
+				// wait for the reply
+				var reply actor.Envelope
+				select {
+				case reply = <-replyCh:
+					defer reply.Discard()
+					var resp AllocationStopResponse
+					if err := json.Unmarshal(reply.Message, &resp); err != nil {
+						log.Errorf("error unmarshalling stop allocation response: %s", err)
+						errCh <- err
+						return
+					}
+					if !resp.OK {
+						log.Errorf("failed to stop allocation %s", allocID)
+						errCh <- fmt.Errorf("failed to stop allocation %s", allocID)
+						return
+					}
+				case <-time.After(AllocationShutdownTimeout):
+					log.Errorf("timeout stopping allocation %s", allocID)
+					errCh <- fmt.Errorf("timeout stopping allocation %s", allocID)
+					return
+				}
+				log.Infof("allocation %s stopped", allocID)
+			}(o.manifest.Nodes[n].Handle, amf.ID)
+		}
+		wg.Wait()
+		close(errCh)
+
+		err := o.removeAllocationsFromSubnet(o.manifest, utils.MapKeysToSlice(allocs))
+		if err != nil {
+			log.Errorf(
+				"removeNodeFromManifest: error removing allocations from subnet: %v",
+				err)
+		}
+		func(allocs []string) {
+			o.lock.Lock()
+			defer o.lock.Unlock()
+			for _, alloc := range allocs {
+				delete(o.manifest.Allocations, alloc)
+				delete(o.cfg.V1.Allocations, alloc)
+			}
+			nodeAllocs := modifiedCfg.V1.Nodes[n].Allocations
+			nmf := o.manifest.Nodes[n]
+			nmf.Allocations = nodeAllocs
+			o.manifest.Nodes[n] = nmf
+
+			ncfg := o.cfg.V1.Nodes[n]
+			ncfg.Allocations = nodeAllocs
+			o.cfg.V1.Nodes[n] = ncfg
+		}(utils.MapKeysToSlice(allocs))
+
+		if errCh != nil {
+			errs = multierr.Append(errs, aggregateErrors(errCh))
+		}
+	}
+	if errs != nil {
+		log.Errorf("error removing allocations for nodes: %v", errs)
+	}
 
 	return errs
 }

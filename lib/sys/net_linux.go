@@ -23,7 +23,7 @@ import (
 )
 
 // NewTunTapInterface creates a new tun/tap interface
-func NewTunTapInterface(name string, mode TunTapMode, persist bool) (*NetInterface, error) {
+func NewTunTapInterface(name string, mode TunTapMode, persist bool) (NetInterface, error) {
 	var intMode water.DeviceType = water.TAP
 
 	if mode == NetTunMode {
@@ -44,14 +44,14 @@ func NewTunTapInterface(name string, mode TunTapMode, persist bool) (*NetInterfa
 		return nil, fmt.Errorf("error creating interface: %w", err)
 	}
 
-	return &NetInterface{
-		Iface: iface,
+	return &netiface{
+		iface: iface,
 	}, nil
 }
 
 // UpNetInterface brings the network interface up
-func (n *NetInterface) Up() error {
-	link, err := netlink.LinkByName(n.Iface.Name())
+func (n *netiface) Up() error {
+	link, err := netlink.LinkByName(n.iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}
@@ -64,8 +64,8 @@ func (n *NetInterface) Up() error {
 }
 
 // DownNetInterface brings the network interface down
-func (n *NetInterface) Down() error {
-	link, err := netlink.LinkByName(n.Iface.Name())
+func (n *netiface) Down() error {
+	link, err := netlink.LinkByName(n.iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}
@@ -78,8 +78,8 @@ func (n *NetInterface) Down() error {
 }
 
 // DeleteNetInterface deletes the network interface
-func (n *NetInterface) Delete() error {
-	link, err := netlink.LinkByName(n.Iface.Name())
+func (n *netiface) Delete() error {
+	link, err := netlink.LinkByName(n.iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}
@@ -92,8 +92,8 @@ func (n *NetInterface) Delete() error {
 }
 
 // SetMTU sets the MTU of the network interface
-func (n *NetInterface) SetMTU(mtu int) error {
-	link, err := netlink.LinkByName(n.Iface.Name())
+func (n *netiface) SetMTU(mtu int) error {
+	link, err := netlink.LinkByName(n.iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}
@@ -106,13 +106,13 @@ func (n *NetInterface) SetMTU(mtu int) error {
 }
 
 // SetAddress sets the address of the network interface in CIDR notation
-func (n *NetInterface) SetAddress(address string) error {
+func (n *netiface) SetAddress(address string) error {
 	addr, err := netlink.ParseAddr(address)
 	if err != nil {
 		return fmt.Errorf("error parsing address: %w", err)
 	}
 
-	link, err := netlink.LinkByName(n.Iface.Name())
+	link, err := netlink.LinkByName(n.iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}
@@ -125,8 +125,8 @@ func (n *NetInterface) SetAddress(address string) error {
 }
 
 // AddRouteRule adds an ip route rule to the network interface
-func (n *NetInterface) AddRouteRule(src, dst, gw string) error {
-	link, err := netlink.LinkByName(n.Iface.Name())
+func (n *netiface) AddRouteRule(src, dst, gw string) error {
+	link, err := netlink.LinkByName(n.iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}
@@ -188,8 +188,8 @@ func (n *NetInterface) AddRouteRule(src, dst, gw string) error {
 }
 
 // DelRoute deletes a route from the network interface
-func (n *NetInterface) DelRoute(route string) error {
-	link, err := netlink.LinkByName(n.Iface.Name())
+func (n *netiface) DelRoute(route string) error {
+	link, err := netlink.LinkByName(n.iface.Name())
 	if err != nil {
 		return fmt.Errorf("error getting network interface by name: %w", err)
 	}

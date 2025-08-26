@@ -63,7 +63,7 @@ Example:
 			fs := dmsCli.FS()
 
 			keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
-			ks, err := keystore.New(fs, keyStoreDir)
+			ks, err := keystore.New(fs, keyStoreDir, false)
 			if err != nil {
 				return fmt.Errorf("failed to create keystore: %w", err)
 			}
@@ -149,7 +149,7 @@ Examples:
 			}
 
 			keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
-			ks, err := keystore.New(fs, keyStoreDir)
+			ks, err := keystore.New(fs, keyStoreDir, false)
 			if err != nil {
 				return fmt.Errorf("failed to open keystore: %w", err)
 			}

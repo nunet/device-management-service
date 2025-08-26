@@ -62,3 +62,19 @@ func UploadEnsemble(node *Node, source string) (dest string, err error) {
 	}
 	return dest, nil
 }
+
+// NodeWithDMS retrieves a node and its DMS context from the node map
+func NodeWithDMS(nodeMap map[string]*Node, nodeName string) (*Node, *Context) {
+	nodeName = strings.ToLower(nodeName)
+	node, ok := nodeMap[nodeName]
+	if !ok {
+		return nil, nil
+	}
+
+	dmsCtx, ok := node.Contexts[nodeName+DefaultDMSSuffix]
+	if !ok {
+		return nil, nil
+	}
+
+	return node, dmsCtx
+}

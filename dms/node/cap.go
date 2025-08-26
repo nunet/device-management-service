@@ -54,7 +54,7 @@ func CreateTrustContextFromKeyStore(
 ) (did.TrustContext, crypto.PrivKey, error) {
 	keyStoreDir := filepath.Join(keyStorePath, KeystoreDir)
 
-	ks, err := keystore.New(fs, keyStoreDir)
+	ks, err := keystore.New(fs, keyStoreDir, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
 	}

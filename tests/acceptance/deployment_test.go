@@ -15,7 +15,6 @@ import (
 
 var opts = godog.Options{
 	Output:        colors.Colored(os.Stdout),
-	Concurrency:   4,
 	Format:        "pretty",
 	StopOnFailure: true,
 }

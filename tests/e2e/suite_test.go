@@ -1,4 +1,4 @@
-package itest
+package e2e
 
 import (
 	"encoding/json"
@@ -7,34 +7,160 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
-
+	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 const binaryName = "dms"
 
-// TestSuite defines our end-to-end test suite.
-type TestSuite struct {
-	suite.Suite
-	runner func(*TestSuite)
+// envE2ECacheKeep set to "DMS_E2E_CACHE_KEEP=1" will preserve the generated cache for post-run inspections.
+const envE2ECacheKeep = "DMS_E2E_CACHE_KEEP"
 
-	Name           string
-	numNodes       int
-	currentDir     string
-	testDataDir    string
-	bootstrapPeers []string
-	nodes          map[int]*mockNode
-	grantTokens    map[int]map[int]string // map[nodeIndex]map[otherNodeIndex]grantToken
+// envE2ECacheKeys set to "DMS_E2E_CACHE_KEYS=1" will preserve generated keys to speed up test runs.
+// Implies envE2ECacheKeep.
+const envE2ECacheKeys = "DMS_E2E_CACHE_KEYS"
 
-	restPortIndex int
-	p2pPortIndex  int
-	homeDir       string
+// envE2EDebugNodes set to "DMS_E2E_DEBUG_NODES=1,3" will start the nodes in debug mode.
+const envE2EDebugNodes = "DMS_E2E_DEBUG_NODES"
+
+// SUMMARY
+
+type SummaryNode struct {
+	Onboarded bool
+	Error     bool
+
+	// TODO node summaries
+
+	// TODO implement
+	Connected bool
+	// Role is this node's role, eg orchestrator TODO implement
+	Role string
+	// TODO implement
+	Bids []any
+	// errs is a list of errors for this node TODO implement
+	Errs []string
+	// TODO Onboarded RAM, disk, GPU
+}
+
+type Summary struct {
+	// Nodes is a map of test nodes and their state.
+	Nodes map[string]*SummaryNode
+	// NodeConns is a map of active connections between nodes, sourced from nodes' logs.
+	NodeConns map[string][]string
+	// NodeIDs is a list of node indexes to peer IDs.
+	NodeIDs []string
+	// NodeDIDs is a list of node indexes to DIDs [userDID, dmsDID].
+	NodeDIDs [][]string
+	// NodeTestConns is like NodeConns, but only for test nodes. Sourced from the test runner.
+	NodeTestConns map[string][]string
+	Test          struct {
+		NodesReady       bool
+		CapsReady        bool
+		NetworkCreated   bool
+		NetworkReady     bool
+		NetworkConnected bool
+	}
+
+	// errs is a list of errors in the test runner TODO implement
+	// errs []string
+}
+
+func (s *Summary) String() string {
+	f := fmt.Sprintf
+
+	// E2E runner info
+	conns := 0
+	for _, targets := range s.NodeTestConns {
+		conns += len(targets)
+	}
+	ret := f("\nSUMMARY [nodes: %d, conns: %d]\n", len(s.Nodes), conns)
+	if s.Test.NodesReady {
+		ret += f("(nodes ready) ")
+	}
+	if s.Test.CapsReady {
+		ret += f("(caps ready) ")
+	}
+	if s.Test.NetworkCreated {
+		ret += f("(network created) ")
+	}
+	if s.Test.NetworkReady {
+		ret += f("(network ready) ")
+	}
+	if s.Test.NetworkConnected {
+		ret += f("(network connected) ")
+	}
+
+	if len(s.NodeIDs) == 0 {
+		return ret
+	}
+	ret += "\n"
+
+	// nodes
+	for idx, peerID := range s.NodeIDs {
+		ret += f("\n  %d: %s", idx, peerID)
+
+		// log scraped states
+		tags := []string{}
+		if s.Nodes[peerID].Onboarded {
+			tags = append(tags, "onboarded")
+		}
+		if s.Nodes[peerID].Connected {
+			tags = append(tags, "connected")
+		}
+		if s.Nodes[peerID].Error {
+			tags = append(tags, "error")
+		}
+		if len(tags) > 0 {
+			ret += "\n  - #" + strings.Join(tags, "#")
+		}
+
+		// TODO remaining node info from SummaryNode
+
+		// DIDs
+		ret += f("\n  - userDID: %s", s.NodeDIDs[idx][0])
+		ret += f("\n  - dmsDID: %s", s.NodeDIDs[idx][1])
+	}
+
+	return ret
+}
+
+//nolint:revive,unparam
+func (s *Summary) parseLog(nodeIdx int, isErr bool, text string) {
+	// dont panic the whole test case
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic in parseLog for node %d: %v\n", nodeIdx, r)
+		}
+	}()
+
+	// parse lines
+	if strings.Contains(text, `machine_onboarded_successfully`) {
+		s.Nodes[s.NodeIDs[nodeIdx]].Onboarded = true
+	}
+}
+
+// LOGS
+
+type LogInterceptor struct {
+	summary *Summary
+	nodeIdx int
+	isErr   bool
+	fwd     io.Writer
+}
+
+var _ io.Writer = &LogInterceptor{}
+
+func (l LogInterceptor) Write(p []byte) (n int, err error) {
+	l.summary.parseLog(l.nodeIdx, l.isErr, string(p))
+
+	return l.fwd.Write(p)
 }
 
 type prefixWriter struct {
@@ -44,9 +170,16 @@ type prefixWriter struct {
 
 func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 	lines := strings.Split(string(p), "\n")
+
+	// different colors for each node prefix
+	colorIdx, _ := strconv.Atoi(pw.prefix[len(pw.prefix)-3 : len(pw.prefix)-2])
+	colorIdx++
+	color := fmt.Sprintf("\x1b[3%dm", colorIdx)
+	colorReset := "\x1b[0m"
+
 	for i, line := range lines {
 		if line != "" {
-			if _, err := fmt.Fprintf(pw.w, "%s%s", pw.prefix, line); err != nil {
+			if _, err := fmt.Fprintf(pw.w, "%s%s%s%s", color, pw.prefix, colorReset, line); err != nil {
 				return 0, err
 			}
 		}
@@ -59,7 +192,35 @@ func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// TEST SUITE
+
+// TestSuite defines a single end-to-end test suite, with a dedicated network.
+// TODO rename to TestCase?
+type TestSuite struct {
+	suite.Suite
+	runner func(*TestSuite)
+
+	// Name is the name of this test case.
+	Name       string
+	numNodes   int
+	currentDir string
+	// rootDir is the root path for the test case.
+	rootDir        string
+	bootstrapPeers []string
+	nodes          map[int]*mockNode
+	grantTokens    map[int]map[int]string // map[nodeIndex]map[otherNodeIndex]grantToken
+
+	restPortIndex int
+	p2pPortIndex  int
+	summary       *Summary
+	// testDataDir is the E2E testdata dir with fixtures.
+	testDataDir string
+}
+
 func (s *TestSuite) startNode(index int) {
+	dbgNodes := strings.Split(os.Getenv(envE2EDebugNodes), ",")
+	idxS := strconv.Itoa(index)
+
 	s.T().Logf("Starting node%d", index)
 	node, ok := s.nodes[index]
 	s.Require().True(ok)
@@ -75,12 +236,35 @@ func (s *TestSuite) startNode(index int) {
 	err = os.WriteFile(configPath, jsonData, 0o644)
 	s.Require().NoError(err)
 
+	// run or dbg the node
 	binaryPath := filepath.Join(s.currentDir, binaryName)
-	cmd := exec.Command(binaryPath, "run", "--config", configPath, "--context", node.dmsContext)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GOLOG_LOG_LEVEL=%s", "debug"), fmt.Sprintf("DMS_PASSPHRASE=%s", node.password))
+	var cmd *exec.Cmd
+	if slices.Contains(dbgNodes, idxS) {
+		cmd = exec.Command("dlv", "exec", "--headless", "--listen=:234"+idxS, "--continue", "--api-version=2",
+			"--accept-multiclient", binaryPath, "--", "run", "--config", configPath, "--context", node.dmsContext)
+	} else {
+		cmd = exec.Command(binaryPath, "run", "--config", configPath, "--context", node.dmsContext)
+	}
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GOLOG_LOG_LEVEL=%s,%s",
+			"debug",
+			"observability=info", // too verbose on debug level
+		),
+		fmt.Sprintf("DMS_PASSPHRASE=%s", node.password),
+	)
+	// intercept log for scraping
 	prefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
-	cmd.Stdout = &prefixWriter{prefix: prefix, w: os.Stdout}
-	cmd.Stderr = &prefixWriter{prefix: prefix, w: os.Stderr}
+	cmd.Stdout = &LogInterceptor{
+		summary: s.summary,
+		nodeIdx: index,
+		fwd:     &prefixWriter{prefix: prefix, w: os.Stdout},
+	}
+	cmd.Stderr = &LogInterceptor{
+		summary: s.summary,
+		nodeIdx: index,
+		isErr:   true,
+		fwd:     &prefixWriter{prefix: prefix, w: os.Stderr},
+	}
 
 	// Start the node process.
 	err = cmd.Start()
@@ -100,28 +284,46 @@ func (s *TestSuite) startNode(index int) {
 
 	err = cmd.Wait()
 	s.T().Logf("node %d exited with error: %v", index, err)
+	if err != nil && !strings.Contains(err.Error(), "signal: killed") {
+		if _, ok := s.summary.Nodes[node.peerID]; ok {
+			s.summary.Nodes[node.peerID].Error = true
+			s.printSummary()
+		} else {
+			s.T().Logf("summary for node %d missing", index)
+		}
+	}
 }
 
 // setupTestNetwork creates a network of nodes and grants mutual access to all nodes.
 func (s *TestSuite) setupTestNetwork() {
+	cacheKeys := os.Getenv(envE2ECacheKeys) == "1"
+	summ := s.summary
+
 	s.T().Logf("%s: setting up %d nodes", s.Name, s.numNodes)
-	// Start from a clean per‑suite sandbox, **never** the real $HOME
-	_ = os.RemoveAll(filepath.Join(s.homeDir, ".nunet"))
 	for i := 0; i < s.numNodes; i++ {
-		rootDir := fmt.Sprintf("testdata/%s/dms%d", s.Name, i)
+		nodeName := fmt.Sprintf("dms%d", i)
 		password := fmt.Sprintf("password%d", i)
-		userDir := filepath.Join(s.homeDir, rootDir)
-		_ = os.RemoveAll(userDir)
-		nodeConfig := createConfig(
-			userDir,
+		// lock the node in this dir
+		nodeRoot := filepath.Join(s.rootDir, nodeName)
+		cfg := createConfig(
+			nodeRoot,
 			uint32(s.restPortIndex),
-			fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", s.p2pPortIndex),
+			[]string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", s.p2pPortIndex), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", s.p2pPortIndex)},
 			[]string{},
 		)
+
+		// remove old files
+		if cacheKeys {
+			_ = os.RemoveAll(cfg.DataDir)
+			_ = os.RemoveAll(cfg.WorkDir)
+			_ = os.RemoveAll(filepath.Join(cfg.General.UserDir, node.CapstoreDir))
+		} else {
+			_ = os.RemoveAll(nodeRoot)
+		}
 		nodeIndex := i
 
 		var err error
-		s.nodes[nodeIndex], err = newMockNode(s.T(), nodeConfig, password, rootDir, nodeIndex)
+		s.nodes[nodeIndex], err = newMockNode(s.T(), cfg, password, nodeRoot, nodeIndex)
 		s.Require().NoError(err)
 
 		s.restPortIndex++
@@ -129,9 +331,10 @@ func (s *TestSuite) setupTestNetwork() {
 	}
 
 	s.T().Logf("setting up caps")
+	summ.Test.NodesReady = true
+	s.printSummary()
 
 	// grant mutual access to all nodes in the network.
-	// TODO: lower the time complexity.
 	for i, node := range s.nodes {
 		// set the root anchor
 		node.client.addRootAnchor(s.T(), node.dmsContext, node.userDID, node.password)
@@ -164,6 +367,8 @@ func (s *TestSuite) setupTestNetwork() {
 		node.client.anchor(s.T(), delegateToken, node.dmsContext, "provide", node.password)
 	}
 
+	summ.Test.CapsReady = true
+	s.printSummary()
 	s.T().Logf("creating network")
 	for i := 0; i < len(s.nodes); i++ {
 		node := s.nodes[i]
@@ -183,6 +388,10 @@ func (s *TestSuite) setupTestNetwork() {
 		node.peerID = networkStats.ID
 		s.T().Logf("node %d peerID: %s", node.index, node.peerID)
 
+		summ.Nodes[node.peerID] = &SummaryNode{}
+		summ.NodeIDs = append(summ.NodeIDs, node.peerID)
+		summ.NodeDIDs = append(summ.NodeDIDs, []string{node.userDID, node.dmsDID})
+
 		// We add all the nodes except the last one to the bootstrap peers to ensure that the network is connected.
 		if i != s.numNodes-1 {
 			bootstrapAddr := make([]string, 0)
@@ -195,6 +404,8 @@ func (s *TestSuite) setupTestNetwork() {
 		}
 	}
 
+	summ.Test.NetworkCreated = true
+	s.printSummary()
 	s.T().Logf("waiting for the network to be ready")
 	s.Require().Eventually(func() bool {
 		expectedPeers := make(map[string]struct{})
@@ -229,6 +440,8 @@ func (s *TestSuite) setupTestNetwork() {
 		return true
 	}, 120*time.Second, 2*time.Second, fmt.Sprintf("Expected all %d nodes to have %d peers within timeout", s.numNodes, s.numNodes-1))
 
+	summ.Test.NetworkReady = true
+	s.printSummary()
 	s.T().Logf("network is ready. Onboarding ...")
 	for _, node := range s.nodes {
 		node.client.onboard(s.T(), node.userContext, node.password)
@@ -247,26 +460,25 @@ func (s *TestSuite) setupTestNetwork() {
 
 			result := node.client.connect(s.T(), node.userContext, node.password, otherHostID.ID)
 			s.Contains(result, `"Status": "CONNECTED"`)
+			summ.NodeTestConns[node.peerID] = append(summ.NodeTestConns[node.peerID], otherHostID.ID)
+			summ.NodeTestConns[otherHostID.ID] = append(summ.NodeTestConns[otherHostID.ID], node.peerID)
 		}
 	}
 
+	summ.Test.NetworkConnected = true
+	s.printSummary()
 	s.T().Logf("all nodes are onboarded and connected")
 }
 
 // SetupSuite runs once before the suite starts.
+// Keep testdata dir to find the test artifact after execution
 func (s *TestSuite) SetupSuite() {
-	// one private sandbox per suite
-	dir, err := os.MkdirTemp("", "dms-e2e-"+s.Name+"-*")
-	s.Require().NoError(err)
-	s.homeDir = dir // save
-	// All helpers use $HOME, so repoint it to the sandbox
-	_ = os.Setenv("HOME", s.homeDir)
-	_ = os.MkdirAll(filepath.Join(dir, ".nunet", "cap"), 0o755)
-
 	s.grantTokens = make(map[int]map[int]string)
 	s.nodes = make(map[int]*mockNode)
+	s.bootstrapPeers = []string{}
 	s.currentDir = getCurrentFileDirectory()
 	s.testDataDir = filepath.Join(s.currentDir, "testdata")
+	s.rootDir = filepath.Join(s.testDataDir, s.Name)
 }
 
 // TearDownSuite runs once after all tests are complete.
@@ -304,11 +516,20 @@ func (s *TestSuite) TearDownSuite() {
 		}, 10*time.Second, 100*time.Millisecond, fmt.Sprintf("process %d not terminated", pid))
 	}
 
-	s.T().Logf("cleaning up directories")
-	for _, node := range s.nodes {
-		err := os.RemoveAll(filepath.Join(s.currentDir, node.rootDir))
-		if err != nil {
-			s.T().Logf("failed to remove directory %s: %v", node.rootDir, err)
+	// clean up
+	if os.Getenv(envE2ECacheKeep) != "1" && os.Getenv(envE2ECacheKeys) != "1" {
+		s.T().Logf("cleaning up directories")
+		for _, node := range s.nodes {
+			// safety
+			if !strings.HasPrefix(s.currentDir, node.rootDir) {
+				s.T().Logf("skipping external directory %s", node.rootDir)
+				continue
+			}
+
+			err := os.RemoveAll(node.rootDir)
+			if err != nil {
+				s.T().Logf("failed to remove directory %s: %v", node.rootDir, err)
+			}
 		}
 	}
 
@@ -340,7 +561,19 @@ func (s *TestSuite) RevokeTokenTests() {
 // If we use the package level functions, the test case will be marked as PASS but the tests will ultimately FAIL since the suite can't track it.
 func (s *TestSuite) Test_RunSuite() {
 	gin.SetMode(gin.DebugMode)
-	os.Setenv("GOLOG_LOG_LEVEL", "debug")
+	os.Setenv("GOLOG_LOG_LEVEL", "debug,observability=info")
+	s.summary = &Summary{
+		Nodes:         make(map[string]*SummaryNode),
+		NodeConns:     make(map[string][]string),
+		NodeTestConns: make(map[string][]string),
+	}
 	s.setupTestNetwork()
 	s.runner(s)
+}
+
+func (s *TestSuite) printSummary() {
+	if s.summary == nil {
+		return
+	}
+	s.T().Log(s.summary.String())
 }

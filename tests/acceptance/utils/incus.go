@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	incus "github.com/lxc/incus/client"
 	"github.com/lxc/incus/shared/api"
@@ -13,10 +15,66 @@ import (
 )
 
 const (
-	DefaultImage    = "ubuntu/22.04"
+	DefaultImage    = "ubuntu/22.04/cloud"
 	DefaultVMPrefix = "test"
 	LocalTarget     = "local"
+	ContainerType   = "container"
+	VMType          = "vm"
 )
+
+func getInstanceType() string {
+	typ := os.Getenv("INSTANCE_TYPE")
+	if typ != ContainerType {
+		return VMType
+	}
+	return ContainerType
+}
+
+func WaitForInstanceReady(c incus.InstanceServer, name string, timeout time.Duration) error {
+	if getInstanceType() != VMType {
+		// Containers don't need additional check
+		return nil
+	}
+
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		inst, _, err := c.GetInstance(name)
+		if err != nil {
+			return fmt.Errorf("failed to get instance: %w", err)
+		}
+
+		// Wait for instance running
+		if inst.Status != "Running" {
+			// Wait and retry
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		// Try pushing a small test file to verify if the incus agent is responsive
+		args := incus.InstanceFileArgs{
+			Content:   bytes.NewReader([]byte("ping")),
+			Mode:      0o644,
+			Type:      "file",
+			WriteMode: "overwrite",
+		}
+
+		err = c.CreateInstanceFile(name, "/tmp/_agent_check.txt", args)
+		if err == nil {
+			return nil // incus agent is ready
+		}
+
+		if !strings.Contains(err.Error(), "VM agent isn't currently running") &&
+			!strings.Contains(err.Error(), "Instance is not running") {
+			return fmt.Errorf("unexpected error while checking agent status: %w", err)
+		}
+
+		// Wait and retry
+		time.Sleep(1 * time.Second)
+	}
+
+	return fmt.Errorf("VM agent did not respond within %s", timeout)
+}
 
 func ConnectIncus(target, clientCert, clientKey, serverCert string) (incus.InstanceServer, error) {
 	if target == LocalTarget {
@@ -33,35 +91,66 @@ func ConnectIncus(target, clientCert, clientKey, serverCert string) (incus.Insta
 	return incus.ConnectIncus(target, connectionArgs)
 }
 
-func CreateInstance(c incus.InstanceServer, name, image string) error {
-	req := api.InstancesPost{
-		Name: name,
-		InstancePut: api.InstancePut{
-			Architecture: "x86_64",
-			Config: map[string]string{
-				"security.nesting":                     "true", // allows Docker
-				"security.syscalls.intercept.mknod":    "true",
-				"security.syscalls.intercept.setxattr": "true",
-				"boot.host_shutdown_action":            "force-stop",
+func CreateInstance(c incus.InstanceServer, instanceType, name, image string) error {
+	var req api.InstancesPost
+	switch instanceType {
+	case ContainerType:
+		req = api.InstancesPost{
+			Name: name,
+			InstancePut: api.InstancePut{
+				Architecture: "x86_64",
+				Config: map[string]string{
+					"security.nesting":                     "true", // allows Docker
+					"security.syscalls.intercept.mknod":    "true",
+					"security.syscalls.intercept.setxattr": "true",
+					"boot.host_shutdown_action":            "force-stop",
+				},
+				Devices:   map[string]map[string]string{},
+				Ephemeral: true,
 			},
-			Devices:   map[string]map[string]string{},
-			Ephemeral: true,
-		},
-		Source: api.InstanceSource{
-			Type:     "image",
-			Alias:    image,
-			Server:   "https://images.linuxcontainers.org",
-			Protocol: "simplestreams",
-		},
+			Source: api.InstanceSource{
+				Type:     "image",
+				Alias:    image,
+				Server:   "https://images.linuxcontainers.org",
+				Protocol: "simplestreams",
+			},
+		}
+	default:
+		// VM instance type
+		req = api.InstancesPost{
+			Name: name,
+			InstancePut: api.InstancePut{
+				Architecture: "x86_64",
+				Config: map[string]string{
+					"boot.host_shutdown_action": "force-stop",
+					"limits.cpu":                "4",
+					"limits.memory":             "2GiB",
+				},
+				Devices: map[string]map[string]string{
+					"root": {
+						"type": "disk",
+						"path": "/",
+						"pool": "default", // use "incus storage list" to verify if the default pool exists
+					},
+				},
+				Ephemeral: true,
+			},
+			Source: api.InstanceSource{
+				Type:     "image",
+				Alias:    image,
+				Server:   "https://images.linuxcontainers.org",
+				Protocol: "simplestreams",
+			},
+			Type: "virtual-machine",
+		}
 	}
-
 	op, err := c.CreateInstance(req)
 	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
+		return fmt.Errorf("failed to create instance: %w", err)
 	}
 
 	if err := op.Wait(); err != nil {
-		return fmt.Errorf("failed to wait for container creation: %w", err)
+		return fmt.Errorf("failed to wait for instance creation: %w", err)
 	}
 
 	startReq := api.InstanceStatePut{
@@ -73,7 +162,7 @@ func CreateInstance(c incus.InstanceServer, name, image string) error {
 
 	startOp, err := c.UpdateInstanceState(name, startReq, "")
 	if err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
+		return fmt.Errorf("failed to start instance: %w", err)
 	}
 	return startOp.Wait()
 }
@@ -136,7 +225,7 @@ func RunBackgroundCommandInInstance(c incus.InstanceServer, name string, command
 	return nil
 }
 
-func UploadFileToInstance(c incus.InstanceServer, containerName, localPath, remotePath string, mode int) error {
+func UploadFileToInstance(c incus.InstanceServer, name, localPath, remotePath string, mode int) error {
 	data, err := os.ReadFile(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
@@ -151,8 +240,8 @@ func UploadFileToInstance(c incus.InstanceServer, containerName, localPath, remo
 		WriteMode: "overwrite",
 	}
 
-	if err := c.CreateInstanceFile(containerName, remotePath, args); err != nil {
-		return fmt.Errorf("failed to upload file to container: %w", err)
+	if err := c.CreateInstanceFile(name, remotePath, args); err != nil {
+		return fmt.Errorf("failed to upload file to instance: %w", err)
 	}
 
 	return nil
@@ -172,7 +261,7 @@ func DeleteInstance(c incus.InstanceServer, name string) error {
 		}, "")
 		if err == nil {
 			if err := stopOp.Wait(); err != nil {
-				return fmt.Errorf("failed to wait for container stop: %w", err)
+				return fmt.Errorf("failed to wait for instance stop: %w", err)
 			}
 		}
 		// ephemeral instances are deleted automatically after stopped
@@ -183,11 +272,11 @@ func DeleteInstance(c incus.InstanceServer, name string) error {
 
 	delOp, err := c.DeleteInstance(name)
 	if err != nil {
-		return fmt.Errorf("failed to delete container: %w", err)
+		return fmt.Errorf("failed to delete instance: %w", err)
 	}
 
 	if err := delOp.Wait(); err != nil {
-		return fmt.Errorf("failed to wait for container deletion: %w", err)
+		return fmt.Errorf("failed to wait for instance deletion: %w", err)
 	}
 
 	return nil
@@ -215,7 +304,7 @@ func ConnectToClients(config *config.Config) ([]incus.InstanceServer, error) {
 }
 
 // CreateNodes creates `howMany` instances on a given Incus server (unix or remote URL).
-func CreateNodes(clients []incus.InstanceServer, howMany int, image, containerNamePrefix string) ([]*Node, error) {
+func CreateNodes(clients []incus.InstanceServer, howMany int, image, namePrefix string) ([]*Node, error) {
 	nodes := make([]*Node, 0, howMany)
 	g := new(errgroup.Group)
 
@@ -223,9 +312,9 @@ func CreateNodes(clients []incus.InstanceServer, howMany int, image, containerNa
 		idx := i
 		g.Go(func() error {
 			client := clients[idx%len(clients)]
-			name := containerNamePrefix + "-node-" + strconv.Itoa(idx)
+			name := namePrefix + "-node-" + strconv.Itoa(idx)
 
-			err := CreateInstance(client, name, image)
+			err := CreateInstance(client, getInstanceType(), name, image)
 			if err != nil {
 				return fmt.Errorf("failed to create instance %s: %w", name, err)
 			}

@@ -48,14 +48,14 @@ Note: The command requires root privileges or CAP_NET_ADMIN=ep capability.
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "TAP interface %s created\n", iface.Iface.Name())
+			fmt.Fprintf(cmd.OutOrStdout(), "TAP interface %s created\n", iface.Name())
 
 			// Assign IP address to the TAP interface
 			err = iface.SetAddress(cidr)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "IP address %s assigned to TAP interface %s\n", cidr, iface.Iface.Name())
+			fmt.Fprintf(cmd.OutOrStdout(), "IP address %s assigned to TAP interface %s\n", cidr, iface.Name())
 
 			// Bring the TAP interface up
 			err = iface.Up()

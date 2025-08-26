@@ -134,6 +134,7 @@ func (n *Node) saveDeployment(orchestrator orchestrator.Orchestrator) error {
 		OrchestratorID:     orchestrator.ID(),
 		Cfg:                orchestrator.Config(),
 		Manifest:           orchestrator.Manifest(),
+		SubnetManifest:     orchestrator.SubnetManifest(),
 		Status:             orchestrator.Status(),
 		DeploymentSnapshot: orchestrator.DeploymentSnapshot(),
 		PrivKey:            pkRaw,

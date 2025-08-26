@@ -35,6 +35,7 @@ cover.out
 
 # others
 .aider*
+CONVENTIONS.md
 sync_remote.sh
 
 # emacs
@@ -43,3 +44,20 @@ sync_remote.sh
 # builds
 builds/
 coverage.out
+coverage.txt
+coverage.html
+junit.xml
+
+# acceptance tests
+acc-test-cfg.yml
+cloud-init.yaml
+glusterfs-key
+glusterfs-key.pub
+
+# e2e tests
+tests/e2e/dms
+tests/e2e/testdata/basic_tests/
+tests/e2e/testdata/deployment_assert_subnet/
+tests/e2e/testdata/deployment_tests/
+tests/e2e/testdata/deployment_updates/
+tests/e2e/testdata/deployment_with_contracts_tests/

@@ -14,6 +14,16 @@ import (
 	"strings"
 )
 
+// byte units
+const (
+	_  = iota
+	KB = 1 << (10 * iota)
+	MB
+	GB
+	TB
+	PB
+)
+
 // HardwareManager defines the interface for managing machine resources.
 type HardwareManager interface {
 	GetMachineResources() (MachineResources, error)
@@ -500,17 +510,22 @@ type NetworkInfo struct {
 	NetworkType string
 }
 
+// TODO use units and convert the base only?
+
 // ConvertBytesToGB converts bytes to gigabytes
+// TODO should be GiB?
 func ConvertBytesToGB(bytes uint64) uint64 {
 	return bytes / 1e9
 }
 
 // ConvertGBToBytes converts gigabytes to bytes
+// TODO should be GiB?
 func ConvertGBToBytes(gb uint64) uint64 {
 	return gb * 1e9
 }
 
 // ConvertMibToBytes converts mebibytes to bytes
+// TODO should be MB?
 func ConvertMibToBytes(mib uint64) uint64 {
 	return mib * 1024 * 1024
 }

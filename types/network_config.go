@@ -41,6 +41,7 @@ type NetworkConfig struct {
 
 // Libp2pConfig holds the libp2p configuration
 type Libp2pConfig struct {
+	Env                     string
 	DHTPrefix               string
 	PrivateKey              crypto.PrivKey
 	BootstrapPeers          []multiaddr.Multiaddr
@@ -55,4 +56,6 @@ type Libp2pConfig struct {
 	BootstrapMaxSleep       int // in minutes
 	Memory                  int // in MB
 	FileDescriptors         int
+	// NetIfaceFactory is a factory for creating NetInterface (for testing/mocking). Signature must match libp2p.NetInterfaceFactory.
+	NetIfaceFactory func(name string) (interface{}, error)
 }

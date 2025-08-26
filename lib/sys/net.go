@@ -23,13 +23,37 @@ const (
 	NetTapMode
 )
 
-// // TUN is a struct containing the fields necessary
-// // to configure a system TUN device. Access the
-// // internal TUN device through TUN.Iface
-type NetInterface struct {
-	Iface *water.Interface
-	Src   string
-	Dst   string
+// NetInterface defines the interface for network interfaces (TUN/TAP)
+type NetInterface interface {
+	Name() string
+	Write([]byte) (int, error)
+	Read([]byte) (int, error)
+	Up() error
+	Down() error
+	Close() error
+	Delete() error
+	SetAddress(string) error
+	SetMTU(int) error
+}
+
+type netiface struct {
+	iface *water.Interface
+}
+
+func (n *netiface) Name() string {
+	return n.iface.Name()
+}
+
+func (n *netiface) Read(packet []byte) (int, error) {
+	return n.iface.Read(packet)
+}
+
+func (n *netiface) Write(packet []byte) (int, error) {
+	return n.iface.Write(packet)
+}
+
+func (n *netiface) Close() error {
+	return n.iface.Close()
 }
 
 // GetNetInterfaces gets the list of network interfaces

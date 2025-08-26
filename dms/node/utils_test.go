@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	portRangeFrom = 3000
-	portRangeTo   = 3100
+	portRangeFrom = 30000
+	portRangeTo   = 30100
 
 	MockTotalCPU  = 12
 	MockTotalRAM  = 32 * 1024 * 1024 * 1024  // 32 GB
@@ -57,7 +57,7 @@ func createKey(t *testing.T, fs afero.Fs, basePath, contextKey, passphrase strin
 	t.Helper()
 
 	keyStoreDir := filepath.Join(basePath, KeystoreDir)
-	ks, err := keystore.New(fs, keyStoreDir)
+	ks, err := keystore.New(fs, keyStoreDir, false)
 	require.NoError(t, err)
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
@@ -103,7 +103,7 @@ func newLibp2pNetwork(t *testing.T, mockFs afero.Fs, bootstrap []multiaddr.Multi
 			Server:                  false,
 			Scheduler:               scheduler,
 			CustomNamespace:         "/nunet-dht-1/",
-			ListenAddress:           []string{"/ip4/0.0.0.0/tcp/0"},
+			ListenAddress:           []string{"/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic-v1"},
 			GracePeriodMs:           1000,
 			PeerCountDiscoveryLimit: 40,
 			GossipMaxMessageSize:    2 << 16,
@@ -288,6 +288,8 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	scheduler := backgroundtasks.NewScheduler(1, time.Second)
 
 	vNet, priv := setupTestNetwork(t, substrate)
+
+	subnetStatus = make(map[string]int)
 
 	// allocator, nP2PNet, priv := newMockAllocator(t, substrate)
 	allocator := newAllocator(

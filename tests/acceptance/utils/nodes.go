@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	incus "github.com/lxc/incus/client"
 )
@@ -37,6 +38,11 @@ func (n *Node) RunDMSCmd(cmd string) (string, error) {
 func (n *Node) RunDMSCmdBackground(cmd string) error {
 	fullCmd := fmt.Sprintf("DMS_PASSPHRASE=123 %s", cmd)
 	return n.RunCMDBackground([]string{"sh", "-c", fullCmd})
+}
+
+// WaitForInstanceReady waits a instance to be running and ready to be used
+func (n *Node) WaitForInstanceReady() error {
+	return WaitForInstanceReady(n.Client, n.Name, 60*time.Second)
 }
 
 // UploadFile uploads a local file to the instance.
@@ -142,9 +148,9 @@ func (n *Node) GetOnboardingResources() (ramGB float64, cpuCores float64, diskGB
 		return 0, 0, 0, fmt.Errorf("failed to get total disk: %w", err)
 	}
 
-	ramGB = totalRAM * 0.2
-	cpuCores = float64(totalCPUCores) * 0.2
-	diskGB = totalDisk * 0.2
+	ramGB = totalRAM * 0.7
+	cpuCores = float64(totalCPUCores) * 0.7
+	diskGB = totalDisk * 0.7
 
 	return ramGB, cpuCores, diskGB, nil
 }
@@ -237,6 +243,26 @@ func (n *Node) PruneResolved() error {
 		return err
 	}
 	_, err = n.RunCMD([]string{"bash", "-c", dest})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *Node) InstallYQ() error {
+	_, err := n.RunCMD([]string{"apt-get", "update"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"apt-get", "install", "-y", "wget"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"wget", "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64", "-O", "/usr/local/bin/yq"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"chmod", "+x", "/usr/local/bin/yq"})
 	if err != nil {
 		return err
 	}

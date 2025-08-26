@@ -69,6 +69,7 @@ type Orchestrator interface {
 	StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus
 	Status() jtypes.DeploymentStatus
 	Manifest() jtypes.EnsembleManifest
+	SubnetManifest() jtypes.SubnetManifest
 	Config() jtypes.EnsembleConfig
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
@@ -87,7 +88,7 @@ type BasicOrchestrator struct {
 	id             string
 	cfg            jtypes.EnsembleConfig
 	manifest       jtypes.EnsembleManifest
-	subnetManifest SubnetManifest
+	subnetManifest jtypes.SubnetManifest
 	status         jtypes.DeploymentStatus
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
@@ -300,7 +301,7 @@ deploy:
 			return fmt.Errorf("failed to create bidder: %w", err)
 		}
 
-		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), expiry)
+		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), o.deploymentSnapshot.Candidates, expiry)
 		if err != nil {
 			if errors.Is(err, ErrCandidateNotFound) {
 				log.Warnf("candidate deployment not found, redeploying: %v", err)
@@ -469,6 +470,13 @@ func (o *BasicOrchestrator) Manifest() jtypes.EnsembleManifest {
 	defer o.lock.Unlock()
 
 	return o.manifest.Clone()
+}
+
+func (o *BasicOrchestrator) SubnetManifest() jtypes.SubnetManifest {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	return o.subnetManifest
 }
 
 func (o *BasicOrchestrator) ManifestNodesPeerIDs() []string {

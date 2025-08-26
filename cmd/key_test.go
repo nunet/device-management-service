@@ -29,8 +29,7 @@ func TestGenerateNewKey(t *testing.T) {
 	out, _, err := cmdUtils.ExecuteCommand(cmd, testKeyName)
 	require.NoError(t, err)
 
-	ks, err := keystore.New(fs, filepath.Join(cfg.General.UserDir,
-		node.KeystoreDir))
+	ks, err := keystore.New(fs, filepath.Join(cfg.General.UserDir, node.KeystoreDir), false)
 	require.NoError(t, err)
 
 	ok := ks.Exists(testKeyName)

@@ -14,13 +14,12 @@ variables:
   # SECRET_DETECTION_DISABLED: true
   # SEMVER_DISABLED: true
   # SONARQUBE_DISABLED: true
-  # FEATURE_ENVIRONMENT_DISABLED: true
+  # ACCEPTANCE_TESTS_DISABLED: true
   # ALLOW_LINT_FAIL: true
   # ALLOW_UNIT_TESTS_FAIL: true
   # ALLOW_E2E_TESTS_FAIL: true
   # ALLOW_BUILD_FAIL: true
   # ALLOW_LICENSE_CHECK_FAIL: true
-  # ACCEPTANCE_TESTS_DISABLED: true
 
 include:
 - project: "nunet/gitlab-ci/templates"
@@ -59,7 +58,22 @@ Build DMS Builder:
     - if: $BUILD_IMAGE_ONLY == "true"
     - changes: 
         - maint-scripts/Dockerfile.builder
-      if: $CI_COMMIT_BRANCH == "main"
+
+build:acceptance-tests-runner-image:
+  stage: build
+  extends:
+    - .docker_build # from repo nunet/gitlab-ci/templates
+  needs: []
+  variables:
+    IMAGE_PATH: tests/acceptance/infrastructure/glusterfs-cluster
+    IMAGE_NAME: nunet-dms-acceptance-tests-runner
+    DOCKERFILE_NAME: Dockerfile
+  rules:
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft.*$/
+      when: never
+    - if: $BUILD_IMAGE_ONLY == "true"
+    - changes: 
+        - tests/acceptance/infrastructure/glusterfs-cluster/Dockerfile
 
 Deploy DMS:
   stage: deploy

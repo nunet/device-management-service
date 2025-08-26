@@ -10,11 +10,10 @@ package utils
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"strconv"
 	"strings"
-
-	"golang.org/x/exp/rand"
 )
 
 // GetNextIP returns the next available IP in the CIDR range
@@ -91,6 +90,38 @@ func nextIP(ip net.IP, netmask int) net.IP {
 	return nil
 }
 
+// GetRandomCIDR returns a random CIDR with the given mask
+// and not in the blacklist.
+// If the blacklist is empty, it will return a random CIDR with the given mask.
+// This function supports mask 0, 8, 16, 24.
+// If you need more elaborate masks to get more subnets (i.e: 0<mask<32)
+// refactor this to use bitwise operations on the IP.
+func GetRandomCIDR(mask int, blacklist []string) (string, error) {
+	var cidr string
+	var breakCounter int
+	for {
+		if mask > 0 && breakCounter > 2^mask || mask == 0 && breakCounter > 255 {
+			return fmt.Sprintf("%s/%d", "0.0.0.0", mask), fmt.Errorf("could not find a CIDR after %d attempts", breakCounter)
+		}
+
+		ip := net.IP{byte(rand.IntN(256)), byte(rand.IntN(256)), byte(rand.IntN(256)), byte(rand.IntN(256))}
+
+		candidate := fmt.Sprintf("%s/%d", ip, mask)
+		if !isOnBlacklist(candidate, blacklist) {
+			cidr = candidate
+			break
+		}
+		breakCounter++
+	}
+
+	_, ip, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", nil
+	}
+
+	return ip.String(), nil
+}
+
 // isOnBlacklist returns true if the given CIDR is in the blacklist.
 func isOnBlacklist(cidr string, blacklist []string) bool {
 	for _, blacklistedCIDR := range blacklist {
@@ -140,7 +171,7 @@ func GetRandomCIDRInRange(mask int, start, end net.IP, blacklist []string) (stri
 }
 
 func randRange(minimum, maximum int) int {
-	return rand.Intn(maximum-minimum+1) + minimum
+	return rand.IntN(maximum-minimum+1) + minimum
 }
 
 // IsFreePort checks if a given port is free to use by trying to listen on it.

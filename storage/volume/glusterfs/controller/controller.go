@@ -220,7 +220,7 @@ func (gc *GlusterController) DeleteVolume(volName string) error {
 		return fmt.Errorf("failed to stop volume %s: %v, output: %s", volName, err, string(output))
 	}
 	// Delete the volume
-	output, err = sys.ExecCommand("gluster", "volume", "delete", volName).CombinedOutput()
+	output, err = sys.ExecCommand("gluster", "volume", "delete", volName, "--mode=script").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete volume %s: %v, output: %s", volName, err, string(output))
 	}

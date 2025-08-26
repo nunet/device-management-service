@@ -34,7 +34,7 @@ func (c *Context) Anchor(kind, arg string) error {
 }
 
 func (c *Context) Run() error {
-	return c.node.RunDMSCmdBackground(fmt.Sprintf("GOLOG_LOG_LEVEL=debug nunet run -c %s > dms-logs.txt", c.Name))
+	return c.node.RunDMSCmdBackground(fmt.Sprintf("GOLOG_LOG_LEVEL=debug nunet run -c %s > dms-logs.txt 2>&1", c.Name))
 }
 
 func (c *Context) PeerAddr() (*node.PeerAddrInfoResponse, error) {
@@ -159,6 +159,36 @@ func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
 		return nil, fmt.Errorf("failed to get list of allocations: %s", resp.Error)
 	}
 	return resp.Allocations, nil
+}
+
+func (c *Context) UpdateEnsemble(id, path string) error {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/update -i %s -f %s -t 2m", c.Name, id, path))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment update behavior: %w", err)
+	}
+	var resp node.UpdateDeploymentResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("failed to update deployment: %s", resp.Error)
+	}
+	return nil
+}
+
+func (c *Context) StopEnsemble(id string) error {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/shutdown --id %s", c.Name, id))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment shutdown behavior: %s", out)
+	}
+	var resp node.DeploymentShutdownResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("failed to shutdown deployment: %s", resp.Error)
+	}
+	return nil
 }
 
 // JoinOrg allows a user to join an existing organization

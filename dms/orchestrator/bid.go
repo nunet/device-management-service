@@ -58,7 +58,7 @@ func NewBidCoordinator(
 // bid handles the bid process from beginning to end
 //
 // TODO: update deployment status when Generating
-func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, expiry time.Time) (map[string]jtypes.Bid, error) {
+func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, candidates map[string]jtypes.Bid, expiry time.Time) (map[string]jtypes.Bid, error) {
 	cfg := cfgReader.Read() // read cfg copy
 
 	candidate := make(map[string]jtypes.Bid)
@@ -94,6 +94,11 @@ func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, expiry time.Tim
 	// do not bid peers excluded from config
 	for _, peerID := range cfg.V1.ExcludePeers {
 		peerExclusion[peerID] = struct{}{}
+		if _, ok := nodeForTargetPeer[peerID]; ok {
+			if bid, ok := candidates[nodeForTargetPeer[peerID]]; ok {
+				bidMap[nodeForTargetPeer[peerID]] = append(bidMap[nodeForTargetPeer[peerID]], bid)
+			}
+		}
 	}
 
 	addBid := func(bid jtypes.Bid) bool {
@@ -922,6 +927,9 @@ func (b *BidCoordinator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfi
 		"orchestratorID", b.eid,
 		"nodes", v1Config.Nodes)
 	for nodeID, nodeConfig := range v1Config.Nodes {
+		if len(nodeConfig.Allocations) == 0 {
+			continue
+		}
 		bidRequest := jtypes.BidRequest{
 			V1: &jtypes.BidRequestV1{
 				NodeID:   nodeID,

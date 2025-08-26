@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/client"
@@ -34,6 +35,7 @@ type DmsCLI struct {
 	defaultConfig      *config.Config
 	configLoader       *config.Loader
 	passphraseProvider passphrase.Provider
+	keystoreProvider   keystore.KeyStore
 	clientFn           func(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient, error)
 }
 
@@ -59,6 +61,10 @@ func (c *DmsCLI) Passphrase(key string) (string, error) {
 
 func (c *DmsCLI) NewPassphrase(key string) (string, error) {
 	return c.passphraseProvider.NewPassphrase(key)
+}
+
+func (c *DmsCLI) Keystore() keystore.KeyStore {
+	return c.keystoreProvider
 }
 
 func (c *DmsCLI) NewClient(sctx actor.SecurityContext) (client.DmsClient, error) {
@@ -130,6 +136,12 @@ func WithConfig(cfg *config.Config) func(*DmsCLI) {
 func WithPassphraseProvider(pp passphrase.Provider) func(*DmsCLI) {
 	return func(cli *DmsCLI) {
 		cli.passphraseProvider = pp
+	}
+}
+
+func WithKeystoreProvider(ks keystore.KeyStore) func(*DmsCLI) {
+	return func(cli *DmsCLI) {
+		cli.keystoreProvider = ks
 	}
 }
 

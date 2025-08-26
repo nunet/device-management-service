@@ -1,0 +1,9 @@
+---
+- name: Read config.yml if it exists
+  include_tasks: read-config.yml
+- name: Deploy security configs
+  include_tasks: security.yml
+- name: Deploy glusterd
+  include_tasks: deploy-glusterd.yml
+- name: Deploy DMS
+  include_tasks: deploy-dms.yml

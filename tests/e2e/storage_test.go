@@ -1,6 +1,6 @@
 //go:build storagetst || !unit
 
-package itest
+package e2e
 
 import (
 	"encoding/json"
@@ -32,22 +32,25 @@ func TLSGlusterGenerator(t *testing.T) {
 
 	_ = os.RemoveAll("/tmp/client_gluster_tls_certs")
 
-	node1Config := createConfig(rootDir, 9992, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9087), []string{})
-	cli1 := newClient(t, node1Config)
+	node1Config := createConfig(rootDir, 9992, []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 9087), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", 9087)}, []string{})
+	cli1, err := newClient(t, node1Config)
+	require.NoError(t, err)
 	cli1.newKey(t, "dms", password)
 	cli1.newCap(t, "dms", password)
 	dms1DID := cli1.getDID(t, fmt.Sprintf("%s.cap", "dms"), password)
 	require.NotEmpty(t, dms1DID)
 
-	node3Config := createConfig(rootDir3, 9997, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9095), []string{})
-	cli3 := newClient(t, node3Config)
+	node3Config := createConfig(rootDir3, 9997, []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 9095), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", 9095)}, []string{})
+	cli3, err := newClient(t, node3Config)
+	require.NoError(t, err)
 	cli3.newKey(t, "dms", password)
 	cli3.newCap(t, "dms", password)
 	dms3DID := cli3.getDID(t, fmt.Sprintf("%s.cap", "dms"), password)
 	require.NotEmpty(t, dms3DID)
 
-	node2Config := createConfig(rootDir2, 9994, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", 9089), []string{})
-	cli2 := newClient(t, node2Config)
+	node2Config := createConfig(rootDir2, 9994, []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 9089), fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", 9089)}, []string{})
+	cli2, err := newClient(t, node2Config)
+	require.NoError(t, err)
 	cli2.newKey(t, "dms", password)
 	cli2.newCap(t, "dms", password)
 	dms2DID := cli2.getDID(t, fmt.Sprintf("%s.cap", "dms"), password)

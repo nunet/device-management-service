@@ -6,30 +6,26 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package itest
+package e2e
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/docker/docker/client"
 	"github.com/shirou/gopsutil/v4/process"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/types"
@@ -105,10 +101,11 @@ func extractStatus(input string) string {
 }
 
 func createConfig(userDir string, restPort uint32,
-	p2pListenAddr string, bootstrap []string,
+	p2pListenAddrs []string, bootstrap []string,
 ) *config.Config {
 	return &config.Config{
 		General: config.General{
+			Env:                    "test",
 			UserDir:                userDir,
 			WorkDir:                filepath.Join(userDir, "work_dir"),
 			DataDir:                filepath.Join(userDir, "data_dir"),
@@ -130,14 +127,14 @@ func createConfig(userDir string, restPort uint32,
 			AllowPrivilegedDocker: false,
 		},
 		P2P: config.P2P{
-			ListenAddress:   []string{p2pListenAddr},
+			ListenAddress:   p2pListenAddrs,
 			BootstrapPeers:  bootstrap,
 			Memory:          1024,
 			FileDescriptors: 10444,
 		},
 		Observability: config.Observability{
 			LogLevel:             "debug",
-			LogFile:              filepath.Join(userDir, "logs.txt"),
+			LogFile:              filepath.Join(userDir, "logs.jsonl"),
 			MaxSize:              100,
 			MaxBackups:           3,
 			MaxAge:               28,
@@ -174,48 +171,13 @@ func getProc(pid int32) *process.Process {
 	return nil
 }
 
-// setupKeysAndCaps creates keys and capabilities for the given CLI instance.
-func setupKeysAndCaps(t *testing.T, cli *Client, pass, keyType1, keyType2 string) {
+// initCaps creates capabilities for the given config and keys.
+func initCaps(t *testing.T, cli *Client, pass, keyType1, keyType2 string) {
 	cli.newCap(t, keyType1, pass)
 	cli.newCap(t, keyType2, pass)
 }
 
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file content: %w", err)
-	}
-
-	return nil
-}
-
-func replaceHostnameInFile(filePath, hostname string) error {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
-	}
-
-	modifiedContent := strings.ReplaceAll(string(content), "${hostname}", hostname)
-
-	err = os.WriteFile(filePath, []byte(modifiedContent), 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to write back to file: %w", err)
-	}
-
-	return nil
-}
+// MOCK NODE
 
 type mockNode struct {
 	index       int
@@ -234,15 +196,16 @@ type mockNode struct {
 }
 
 func newMockNode(
-	t *testing.T, config *config.Config,
-	password, rootDir string, index int,
+	t *testing.T, cfg *config.Config, password, rootDir string, index int,
 ) (*mockNode, error) {
 	t.Helper()
 
-	cliHelper := newClient(t, config)
+	cliHelper, err := newClient(t, cfg)
+	require.NoError(t, err)
+
 	dmsContext := fmt.Sprintf("dms%d", index)
 	userContext := fmt.Sprintf("user%d", index)
-	setupKeysAndCaps(t, cliHelper, password, dmsContext, userContext)
+	initCaps(t, cliHelper, password, dmsContext, userContext)
 
 	capCtx, err := loadCapCtx(t, cliHelper, password, dmsContext)
 	if err != nil {
@@ -255,7 +218,7 @@ func newMockNode(
 	require.NotEmpty(t, dmsDID)
 
 	return &mockNode{
-		config:      config,
+		config:      cfg,
 		client:      cliHelper,
 		password:    password,
 		rootDir:     rootDir,
@@ -273,16 +236,8 @@ func loadCapCtx(
 	t *testing.T, cliHelper *Client, password, dmsContext string,
 ) (ucan.CapabilityContext, error) {
 	t.Helper()
-	fs := afero.NewOsFs()
 
-	keyStoreDir := filepath.Join(
-		cliHelper.cfg.General.UserDir, node.KeystoreDir)
-	keyStore, err := keystore.New(fs, keyStoreDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open keystore: %w", err)
-	}
-
-	privK, err := dms.GetPrivKeyFromKS(keyStore, password, dmsContext)
+	privK, err := dms.GetPrivKeyFromKS(cliHelper.ks, password, dmsContext)
 	if err != nil {
 		return nil,
 			fmt.Errorf("private key from keystore: %w", err)
@@ -298,7 +253,7 @@ func loadCapCtx(
 	}
 
 	capCtx, err := dms.LoadOrCreateCapCtx(
-		fs, dmsCtxPath, trustCtx, dmsContext, pubKey)
+		cliHelper.fs, dmsCtxPath, trustCtx, dmsContext, pubKey)
 	if err != nil {
 		return nil,
 			fmt.Errorf(

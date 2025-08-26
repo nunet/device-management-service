@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -25,6 +26,7 @@ var (
 
 var DefaultConfig = Config{
 	General: General{
+		Env:                    "test",
 		UserDir:                fmt.Sprintf("%s/.nunet", homeDir),
 		WorkDir:                fmt.Sprintf("%s/nunet", homeDir),
 		DataDir:                fmt.Sprintf("%s/nunet/data", homeDir),
@@ -175,7 +177,7 @@ func (l *Loader) init() {
 // stores the result. Subsequent calls are cheap no-ops.
 func (l *Loader) Load() (*Config, error) {
 	var err error
-	l.once.Do(func() { err = l.readAndUnmarshal() })
+	l.once.Do(func() { err = l.Reload() })
 	return l.cfg, err
 }
 
@@ -349,7 +351,10 @@ func (l *Loader) readAndUnmarshal() error {
 		return fmt.Errorf("read config: %w", err)
 	}
 
-	if err := l.v.UnmarshalExact(l.cfg); err != nil {
+	if err := l.v.UnmarshalExact(
+		l.cfg,
+		func(c *mapstructure.DecoderConfig) { c.ZeroFields = true },
+	); err != nil {
 		return fmt.Errorf("unmarshal config: %w", err)
 	}
 
