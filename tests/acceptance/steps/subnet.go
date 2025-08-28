@@ -250,15 +250,13 @@ func restartsTheDeployment(ctx context.Context, spName string) (context.Context,
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	sp := nodeMap[spName]
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
-
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
 
 	status, err := spDmsCtx.EnsembleStatus(ensembleID)
 	assert.NoError(t, err)
