@@ -106,7 +106,7 @@ The following are the implemented behaviors and their associated capabilities:
 - SubnetUnmapPortBehavior: Unmap a port in a subnet.
 /dms/allocation/subnet/dns/add-records
 - SubnetDNSAddRecordsBehavior: Add DNS records to a subnet.
-/dms/allocation/subnet/dns/remove-record
+/dms/allocation/subnet/dns/remove-records
 - SubnetDNSRemoveRecordsBehavior: Remove a DNS record from a subnet.
 
 /dms/ensemble/<ENSEMBLE_ID>

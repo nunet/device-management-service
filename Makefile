@@ -323,22 +323,8 @@ license:
 	go install github.com/google/addlicense@v1.1.1
 	addlicense $(LICENSE_FLAGS) $(if $(CHECK),-check) .
 
-arch=$(shell uname -m)
-FC_TEST_DATA_PATH = ./executor/firecracker/testdata
 
-testdata_objects = \
-$(FC_TEST_DATA_PATH)/rootfs.ext4 \
-$(FC_TEST_DATA_PATH)/vmlinux.bin
-
+# use for downloading data or setups required before running tests
 testdata: $(testdata_objects)
 	@echo "Preparing test data..."
-
-$(FC_TEST_DATA_PATH)/rootfs.ext4:
-	@echo "Downloading rootfs.ext4..."
-	mkdir -p $(FC_TEST_DATA_PATH)
-	curl -L -o $@ https://s3.amazonaws.com/spec.ccfc.min/img/hello/fsfiles/hello-rootfs.ext4
-
-$(FC_TEST_DATA_PATH)/vmlinux.bin:
-	@echo "Downloading vmlinux.bin..."
-	mkdir -p $(FC_TEST_DATA_PATH)
-	curl -L -o $@ https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/$(arch)/kernels/vmlinux.bin
+	@echo "Nothing to do at the moment."
