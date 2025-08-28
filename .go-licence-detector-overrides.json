@@ -1,8 +1,20 @@
 {
     "name": "github.com/libp2p/go-libp2p-pubsub",
-    "licenceFile": "LICENSE-MIT"
+    "licenceType": "Apache-2.0 OR MIT"
 }
 {
     "name": "github.com/miekg/dns",
-    "licenceFile": "LICENSE"
+    "licenceType": "BSD-3-Clause"
+}
+{
+    "name": "github.com/libp2p/go-libp2p-testing",
+    "licenceType": "Apache-2.0 OR MIT"
+}
+{
+    "name": "github.com/multiformats/go-base36",
+    "licenceType": "Apache-2.0 OR MIT"
+}
+{
+    "name": "github.com/multiformats/go-multicodec",
+    "licenceType": "Apache-2.0 OR MIT"
 }
