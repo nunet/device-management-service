@@ -28,6 +28,7 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
+	"gitlab.com/nunet/device-management-service/observability"
 	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
@@ -324,6 +325,7 @@ func (d *DMS) Stop() {
 	}
 	log.Infof("network stopped")
 
+	observability.Shutdown()
 	// TODO: stop rest server
 }
 

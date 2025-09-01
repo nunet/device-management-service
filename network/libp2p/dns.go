@@ -60,7 +60,7 @@ func handleDNSQuery(packet []byte, records map[string]string) ([]byte, error) {
 
 	// Resolve the DNS query
 	response := resolveDNS(msg, records)
-	log.Debug("DNS query resolved successfully", "response", response)
+	log.Debugw("DNS query resolved successfully", "response", response)
 
 	// Encode the response message into a UDP packet
 	responseBytes, err := response.Pack()
