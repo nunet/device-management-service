@@ -78,6 +78,15 @@ func (l *labelInjectionCore) Write(ent zapcore.Entry, fields []zapcore.Field) er
 		finalFields = append(finalFields, zap.String("es_index", overrideIndex))
 	}
 
+	// bind logs to traces
+	if len(activeSpans) > 0 {
+		latestSpan := activeSpans[len(activeSpans)-1]
+		finalFields = append(finalFields, zap.String("span.id", latestSpan.TraceContext().Span.String()))
+	} else if latestSpanID != "" {
+		finalFields = append(finalFields, zap.String("span.id", latestSpanID))
+	}
+	finalFields = append(finalFields, zap.String("transaction.id", rootTransaction.TraceContext().Trace.String()))
+
 	return l.next.Write(ent, finalFields)
 }
 

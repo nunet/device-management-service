@@ -298,3 +298,39 @@ Example usage in the main function:
     }
 ```
 but it also happens automatically
+
+## Local ELK Stack
+
+Source: [Getting started with the Elastic Stack and Docker Compose: Part 2](https://www.elastic.co/blog/getting-started-with-the-elastic-stack-and-docker-compose-part-2)
+Login: elastic / changeme
+
+1. `git clone https://github.com/elkninja/elastic-stack-docker-part-two.git`
+2. `cd elastic-stack-docker-part-two`
+3. `docker-compose up`
+4. Generate a certificate
+   1. `docker cp es-cluster-es01-1:/usr/share/elasticsearch/config/certs/ca/ca.crt /tmp/.`
+   2. `openssl x509 -fingerprint -sha256 -noout -in /tmp/ca.crt | awk -F"=" {' print $2 '} | sed s/://g`
+   3. `cat /tmp/ca.crt`
+5. Visit https://localhost:5601/app/fleet/settings/outputs/fleet-default-output
+   - make the form [look like this image](https://static-www.elastic.co/v3/assets/bltefdd0b53724fa2ce/blt0fd5e8f5c53241e8/65256f40fbc4f6c0df9ae3af/Screenshot_2023-10-10_at_9.35.17_AM.png)
+   - update "Hosts" to `https://es01:9200`
+   - update "... fingerprint" to the output from step 4.2
+   - update and indent "Advanced YAML config"
+     - then "Save and Deploy"
+```go
+ssl:
+  certificate_authorities:
+  - |
+    OUTPUT_STEP_4_3
+```
+6. [Create a data view](https://localhost:5601/app/management/kibana/dataViews) called "dms-logs"
+  - "Index pattern": `nunet-dms,*-index`
+7. Create an API key
+   - https://localhost:5601/app/management/security/api_keys/create
+8. Update config:
+    - `apm.secret_token = "supersecrettoken"`
+    - `observability.elasticsearch_url = "https://localhost:9200"`
+    - `observability.elasticsearch_api_key = "STEP6"`
+9. Results available after stopping the DMS and waiting a bit:
+   - Traces: [Observability -> APM -> nunet-dms -> Traces -> DMS](https://localhost:5601/app/apm/services/nunet-dms/overview?comparisonEnabled=true&environment=ENVIRONMENT_ALL&kuery=&latencyAggregationType=avg&offset=1d&rangeFrom=now-15m&rangeTo=now&serviceGroup=)
+   - Logs: [Analytics -> Discover -> dms-logs](https://localhost:5601/app/management/data/index_management/data_streams/logs-nunet-dms) and [Management -> Stack Management -> Index Management](https://localhost:5601/app/discover#)

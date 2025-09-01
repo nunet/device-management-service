@@ -59,7 +59,7 @@ var labelRoutingMap = map[LogLabel]LabelRoutingConfig{
 	},
 }
 
-// GetRoutingConfig inspects the provided labels and returns whether logs
+// GetLableRoutingConfig inspects the provided labels and returns whether logs
 // should be skipped for ES (skipES) and which ES index to route them to (esIndex).
 func GetLableRoutingConfig(labels []string) (skipES bool, esIndex string) {
 	for _, lbl := range labels {

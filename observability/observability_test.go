@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/transport"
@@ -198,7 +199,7 @@ func TestPreflightCheckES(t *testing.T) {
 }
 
 // StartTrace paths
-func TestStartTraceVariants(t *testing.T) {
+func TestStartTrace(t *testing.T) {
 	tr, _ := apm.NewTracerOptions(apm.TracerOptions{ServiceName: "unit", Transport: transport.Discard})
 
 	tracerMutex.Lock()
@@ -211,15 +212,6 @@ func TestStartTraceVariants(t *testing.T) {
 		currentTracer, tracingNoOpMode = oldTracer, oldNoOp
 		tracerMutex.Unlock()
 	})
-
-	// brand‑new tx
-	txBefore := tr.Stats().TransactionsSent
-	done := StartTrace("tx‑op")
-	done()
-	tr.Flush(nil)
-	if tr.Stats().TransactionsSent-txBefore != 1 {
-		t.Fatalf("transaction not recorded")
-	}
 
 	// nested span
 	parent := tr.StartTransaction("parent", "req")
@@ -437,6 +429,8 @@ func TestTracerNoOpAfterSetNoOp(t *testing.T) {
 		tracerMutex.Unlock()
 	})
 
+	initRootTrace(tr)
+
 	// enable global no-op
 	SetNoOpMode(true)
 
@@ -455,7 +449,7 @@ func TestTracerNoOpAfterSetNoOp(t *testing.T) {
 	done2()
 	tr.Flush(nil)
 
-	if got := tr.Stats().TransactionsSent; got == 0 {
+	if tr.Stats().SpansSent == 0 {
 		t.Fatalf("transactions were not sent after no-op disabled")
 	}
 }
@@ -713,4 +707,16 @@ func TestSetElasticsearchEndpointDisabledMode(t *testing.T) {
 
 		obsCfg.ElasticsearchURL = oldURL
 	})
+}
+
+func TestCollectSystemMetrics(t *testing.T) {
+	metrics := collectSystemMetrics()
+
+	keys := []string{
+		"cpuUsage", "ramUsed", "ramTotal", "diskUsed", "diskTotal", "uptime", "load15", "rxBytes",
+		"txBytes",
+	}
+	for _, key := range keys {
+		assert.Contains(t, metrics, key, "expected metric '%s' to be present", key)
+	}
 }

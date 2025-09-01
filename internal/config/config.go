@@ -104,6 +104,8 @@ type APM struct {
 	ServiceName string `mapstructure:"service_name" json:"service_name"`
 	Environment string `mapstructure:"environment"  json:"environment"`
 	APIKey      string `mapstructure:"api_key"      json:"api_key"`
+	// SecretToken is a legacy API key used for local ELK deployments.
+	SecretToken string `mapstructure:"secret_token"      json:"secret_token"`
 }
 
 // Convenience helpers
