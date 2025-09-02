@@ -67,8 +67,8 @@ func (h *executionHandler) active() bool {
 
 // run starts the container and handles its execution lifecycle.
 func (h *executionHandler) run(ctx context.Context) {
-	endTrace := observability.StartTrace(ctx, "docker_execution_handler_run_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "docker_execution_handler_run_duration")
+	defer endSpan()
 
 	h.running.Store(true)
 	defer close(h.waitCh)
@@ -273,8 +273,8 @@ func (h *executionHandler) resume(ctx context.Context) error {
 
 // kill sends a stop signal to the container.
 func (h *executionHandler) kill(ctx context.Context) error {
-	endTrace := observability.StartTrace(ctx, "docker_execution_handler_kill_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "docker_execution_handler_kill_duration")
+	defer endSpan()
 
 	timeout := int(DestroyTimeout)
 	stopOptions := container.StopOptions{
@@ -299,8 +299,8 @@ func (h *executionHandler) destroy(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	endTrace := observability.StartTrace(ctx, "docker_execution_handler_destroy_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "docker_execution_handler_destroy_duration")
+	defer endSpan()
 
 	// stop the container
 	if err := h.kill(ctx); err != nil {
@@ -351,8 +351,8 @@ func (h *executionHandler) outputStream(
 	ctx context.Context,
 	request types.LogStreamRequest,
 ) (io.ReadCloser, error) {
-	endTrace := observability.StartTrace(ctx, "docker_execution_handler_output_stream_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "docker_execution_handler_output_stream_duration")
+	defer endSpan()
 
 	since := "1" // Default to the start of UNIX time to get all logs.
 	if request.Tail {

@@ -12,7 +12,9 @@ package observability
 import (
 	"context"
 	"net/url"
+	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,8 +26,8 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"go.elastic.co/apm"
 	"go.elastic.co/apm/transport"
+	"go.elastic.co/apm/v2"
 )
 
 var (
@@ -102,7 +104,7 @@ func initTracing(apmConfig config.APM) {
 	}
 
 	tracer.SetMetricsInterval(10 * time.Second)
-	apm.DefaultTracer = tracer
+	apm.SetDefaultTracer(tracer)
 	currentTracer = tracer
 	tracingNoOpMode = false
 
@@ -113,8 +115,14 @@ func initTracing(apmConfig config.APM) {
 }
 
 func initRootTrace(tracer *apm.Tracer) {
+	// compose a distinctive name
+	name := "DMS"
+	if nodeName := os.Getenv("ELASTIC_APM_SERVICE_NODE_NAME"); nodeName != "" {
+		name += "-" + nodeName
+	}
+
 	// create the root trace
-	rootTransaction = tracer.StartTransaction("DMS", "background-job")
+	rootTransaction = tracer.StartTransaction(name, "background-job")
 	rootTransaction.Context.SetLabel("did", didID.String())
 	rootSpan, _ = apm.StartSpan(apm.ContextWithTransaction(context.Background(), rootTransaction), "root", "custom")
 }
@@ -220,23 +228,23 @@ func registerCustomMetrics(tracer *apm.Tracer) {
 	tracer.RegisterMetricsGatherer(gatherer)
 }
 
-// StartTrace is a unified entry point to start instrumentation.
+// StartSpan is a unified entry point to start instrumentation.
 //
 // Usage patterns:
-//   - StartTrace(operationName string, keyValues ...interface{})
-//   - StartTrace(ctx context.Context, operationName string, keyValues ...interface{})
-//   - StartTrace(c *gin.Context, operationName string, keyValues ...interface{})
+//   - StartSpan(operationName string, keyValues ...interface{})
+//   - StartSpan(ctx context.Context, operationName string, keyValues ...interface{})
+//   - StartSpan(c *gin.Context, operationName string, keyValues ...interface{})
 //
 // Logic:
-//  1. If we find an existing transaction in ctx (e.g., from apmgin), start a span.
-//  2. If no existing transaction is found, start a new "request"-type transaction.
-func StartTrace(args ...interface{}) func() {
+//  1. If we find an existing span in ctx (e.g., from apmgin), start a nested span.
+//  2. If no existing span is found, nest under the root DMS span.
+func StartSpan(args ...interface{}) func() {
 	var ctx context.Context
 	var operationName string
 	var keyValues []interface{}
 
 	if len(args) == 0 {
-		log.Error("StartTrace called without arguments")
+		log.Error("StartSpan called without arguments")
 		return func() {}
 	}
 
@@ -246,12 +254,13 @@ func StartTrace(args ...interface{}) func() {
 		// No context provided
 		// TODO catch all callers?
 		ctx = context.Background()
-		operationName = v
+		// sanitize TODO allowlist instead of excludelist
+		operationName = strings.ReplaceAll(strings.TrimLeft(v, "/"), "/", "_")
 		keyValues = args[1:]
 	case *gin.Context:
 		ctx = v.Request.Context()
 		if len(args) < 2 {
-			log.Error("StartTrace called with *gin.Context but without operation name")
+			log.Error("StartSpan called with *gin.Context but without operation name")
 			return func() {}
 		}
 		if opName, ok := args[1].(string); ok {
@@ -264,7 +273,7 @@ func StartTrace(args ...interface{}) func() {
 	case context.Context:
 		ctx = v
 		if len(args) < 2 {
-			log.Error("StartTrace called with context but without operation name")
+			log.Error("StartSpan called with context but without operation name")
 			return func() {}
 		}
 		if opName, ok := args[1].(string); ok {
@@ -275,14 +284,14 @@ func StartTrace(args ...interface{}) func() {
 			return func() {}
 		}
 	default:
-		log.Error("Unsupported first argument type for StartTrace")
+		log.Error("Unsupported first argument type for StartSpan")
 		return func() {}
 	}
 
-	return startTrace(ctx, operationName, keyValues...)
+	return startSpan(ctx, operationName, keyValues...)
 }
 
-func startTrace(ctx context.Context, operationName string, keyValues ...interface{}) func() {
+func startSpan(ctx context.Context, operationName string, keyValues ...interface{}) func() {
 	tracerMutex.Lock()
 	noOp := tracingNoOpMode
 	tracer := currentTracer
@@ -301,6 +310,7 @@ func startTrace(ctx context.Context, operationName string, keyValues ...interfac
 	// create a new span
 	span, _ := apm.StartSpan(ctx, operationName, "custom")
 	if span.Dropped() {
+		log.Warn("Span dropped: " + operationName)
 		return func() {}
 	}
 	activeSpans = append(activeSpans, span)

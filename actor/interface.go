@@ -187,3 +187,11 @@ func WithPrivKey(privKey crypto.PrivKey) CreateChildOption {
 		o.PrivKey = privKey
 	}
 }
+
+func CapabilitiesJoin(caps []Capability) string {
+	ret := ""
+	for _, c := range caps {
+		ret += string(c) + " "
+	}
+	return ret
+}

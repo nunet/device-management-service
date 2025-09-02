@@ -183,3 +183,17 @@ What and how you should assert deployments:
    2. free resources increased
 3. (Orchestrator) assert deployment status depending on allocations types
 4. (CP) assert subnet deleted (including tunneling iface)
+
+## Debugging
+
+1. use `make linux_amd64_e2e` to create a debug binary
+2. cache decrypted keys in FS via `DMS_E2E_CACHE_KEYS=1`
+3. delve debug specific nodes via `DMS_E2E_DEBUG_NODES=0,2`
+   - opens ports `2340` and `2342` respectively
+4. start remote debugging first
+5. pause the runner after a remote breakpoint is hit (to avoid timeouts)
+
+### Observability
+
+1. set `DMS_E2E_OBSERVE_TOKEN` to the Elasticsearch APM **secret token**
+2. set `DMS_E2E_OBSERVE_API_KEY` to the Elasticsearch API key

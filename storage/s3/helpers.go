@@ -22,8 +22,8 @@ import (
 // GetAWSDefaultConfig returns the default AWS config based on environment variables,
 // shared configuration and shared credentials files.
 func GetAWSDefaultConfig() (aws.Config, error) {
-	endTrace := observability.StartTrace("get_aws_default_config_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("get_aws_default_config_duration")
+	defer endSpan()
 
 	var optFns []func(*config.LoadOptions) error
 	cfg, err := config.LoadDefaultConfig(context.Background(), optFns...)
@@ -38,8 +38,8 @@ func GetAWSDefaultConfig() (aws.Config, error) {
 
 // hasValidCredentials checks if the provided AWS config has valid credentials.
 func hasValidCredentials(config aws.Config) bool {
-	endTrace := observability.StartTrace("has_valid_credentials_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("has_valid_credentials_duration")
+	defer endSpan()
 
 	credentials, err := config.Credentials.Retrieve(context.Background())
 	if err != nil {
@@ -58,8 +58,8 @@ func hasValidCredentials(config aws.Config) bool {
 
 // sanitizeKey removes trailing spaces and wildcards
 func sanitizeKey(key string) string {
-	endTrace := observability.StartTrace("sanitize_key_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("sanitize_key_duration")
+	defer endSpan()
 
 	sanitizedKey := strings.TrimSuffix(strings.TrimSpace(key), "*")
 	log.Infow("sanitize_key_success", "sanitizedKey", sanitizedKey)

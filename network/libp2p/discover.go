@@ -23,8 +23,8 @@ import (
 
 // discoverDialPeers discovers peers using rendezvous point
 func (l *Libp2p) discoverDialPeers(ctx context.Context) error {
-	endTrace := observability.StartTrace(ctx, "libp2p_peer_discover_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "libp2p_peer_discover_duration")
+	defer endSpan()
 
 	foundPeers, err := l.findPeersFromRendezvousDiscovery(ctx)
 	if err != nil {
@@ -56,8 +56,8 @@ func (l *Libp2p) advertiseForRendezvousDiscovery(context context.Context) error 
 
 // findPeersFromRendezvousDiscovery uses the randevouz point to discover other peers.
 func (l *Libp2p) findPeersFromRendezvousDiscovery(ctx context.Context) ([]peer.AddrInfo, error) {
-	endTrace := observability.StartTrace(ctx, "libp2p_find_peers_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "libp2p_find_peers_duration")
+	defer endSpan()
 
 	peers, err := dutil.FindPeers(
 		ctx,

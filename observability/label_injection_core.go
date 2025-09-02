@@ -10,6 +10,7 @@ package observability
 
 import (
 	"reflect"
+	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -78,7 +79,7 @@ func (l *labelInjectionCore) Write(ent zapcore.Entry, fields []zapcore.Field) er
 	finalFields = append(finalFields, zap.Strings("labels", mergedLabels))
 
 	// Use the routing logic to decide skipES, overrideIndex.
-	skipES, overrideIndex := GetLableRoutingConfig(mergedLabels)
+	skipES, overrideIndex := GetLabelRoutingConfig(mergedLabels)
 	if skipES {
 		finalFields = append(finalFields, zap.Bool("es_skip", true))
 	}
@@ -86,11 +87,43 @@ func (l *labelInjectionCore) Write(ent zapcore.Entry, fields []zapcore.Field) er
 		finalFields = append(finalFields, zap.String("es_index", overrideIndex))
 	}
 
-	// bind logs to traces
-	if len(activeSpans) > 0 {
+	// catch WARN and ERROR and create spans
+	switch {
+	case ent.Level == zapcore.WarnLevel || ent.Level == zapcore.ErrorLevel:
+		// extract error
+		var errMsg string
+		for _, f := range fields {
+			if f.Key != "error" {
+				continue
+			}
+			if f.String != "" {
+				errMsg = " " + f.String
+			} else if err, ok := f.Interface.(error); ok {
+				// TODO doesnt catch eg "onboard_error"
+				errMsg = " " + err.Error()
+			}
+		}
+
+		// optionally attach an unstructured log msg
+		var logMsg string
+		if fields == nil {
+			logMsg = ent.Message[0:min(len(ent.Message), 100)]
+		}
+
+		// create span
+		end := StartSpan(strings.ToUpper(ent.Level.String())+errMsg,
+			"error", errMsg,
+			"logMsg", logMsg)
+		spanID := activeSpans[len(activeSpans)-1].TraceContext().Span.String()
+		end()
+		// bind this log msg to this err span
+		finalFields = append(finalFields, zap.String("span.id", spanID))
+		//
+		// bind non-err logs to traces
+	case len(activeSpans) > 0:
 		latestSpan := activeSpans[len(activeSpans)-1]
 		finalFields = append(finalFields, zap.String("span.id", latestSpan.TraceContext().Span.String()))
-	} else if latestSpanID != "" {
+	case latestSpanID != "":
 		finalFields = append(finalFields, zap.String("span.id", latestSpanID))
 	}
 	finalFields = append(finalFields, zap.String("transaction.id", rootTransaction.TraceContext().Trace.String()))

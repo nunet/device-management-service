@@ -39,8 +39,8 @@ type s3Object struct {
 // NewClient creates a new S3Storage which includes a S3-SDK client.
 // It depends on a VolumeController to manage the volumes being acted upon.
 func NewClient(config aws.Config, volController storage.VolumeController) (*Storage, error) {
-	endTrace := observability.StartTrace("new_client_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("new_client_duration")
+	defer endSpan()
 
 	if !hasValidCredentials(config) {
 		err := fmt.Errorf("invalid credentials")
@@ -62,8 +62,8 @@ func NewClient(config aws.Config, volController storage.VolumeController) (*Stor
 
 // Size calculates the size of a given object in S3.
 func (s *Storage) Size(ctx context.Context, source *types.SpecConfig) (uint64, error) {
-	endTrace := observability.StartTrace(ctx, "s3_size_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "s3_size_duration")
+	defer endSpan()
 
 	inputSource, err := DecodeInputSpec(source)
 	if err != nil {

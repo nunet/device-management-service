@@ -54,7 +54,9 @@ func CreateTrustContextFromKeyStore(
 ) (did.TrustContext, crypto.PrivKey, error) {
 	keyStoreDir := filepath.Join(keyStorePath, KeystoreDir)
 
-	ks, err := keystore.New(fs, keyStoreDir, false)
+	// support FS cache for E2E tests #1139
+	fsCache := os.Getenv("DMS_E2E_CACHE_KEYS") == "1"
+	ks, err := keystore.New(fs, keyStoreDir, fsCache)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open keystore: %w", err)
 	}
