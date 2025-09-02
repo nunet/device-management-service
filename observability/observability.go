@@ -120,8 +120,10 @@ func initLogger(observabilityConfig config.Observability) error {
 		return nil
 	}
 
-	// 1. Check if GOLOG_LOG_LEVEL is set. If so, let that override any config-based level
-	if envLogLevel := os.Getenv("GOLOG_LOG_LEVEL"); envLogLevel != "" {
+	// 1. Check if DMS_OBSERVE_LEVEL and GOLOG_LOG_LEVEL is set. If so, let that override any config-based level
+	if envLogLevel := os.Getenv("DMS_OBSERVE_LEVEL"); envLogLevel != "" {
+		observabilityConfig.LogLevel = envLogLevel
+	} else if envLogLevel := os.Getenv("GOLOG_LOG_LEVEL"); envLogLevel != "" {
 		observabilityConfig.LogLevel = envLogLevel
 	}
 

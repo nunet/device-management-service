@@ -38,8 +38,8 @@ type BasicVolumeController struct {
 // TODO-BugFix [path]: volBasePath might not end with `/`, causing errors when calling methods.
 // We need to validate it using the `path` library or just verifying the string.
 func NewDefaultVolumeController(repo repositories.GenericRepository[types.StorageVolume], volBasePath string, fs afero.Fs) (*BasicVolumeController, error) {
-	endTrace := observability.StartTrace(TraceVolumeControllerInitDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeControllerInitDuration)
+	defer endSpan()
 
 	vc := &BasicVolumeController{
 		repo:     repo,
@@ -60,8 +60,8 @@ func NewDefaultVolumeController(repo repositories.GenericRepository[types.Storag
 //
 // TODO-maybe [withName]: allow callers to specify custom name for path
 func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, opts ...storage.CreateVolOpt) (types.StorageVolume, error) {
-	endTrace := observability.StartTrace(TraceVolumeCreateDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeCreateDuration)
+	defer endSpan()
 
 	vol := types.StorageVolume{
 		Private:        false,
@@ -102,8 +102,8 @@ func (vc *BasicVolumeController) CreateVolume(volSource storage.VolumeSource, op
 //
 // TODO-maybe [CID]: maybe calculate CID of every volume in case WithCID opt is not provided
 func (vc *BasicVolumeController) LockVolume(pathToVol string, opts ...storage.LockVolOpt) error {
-	endTrace := observability.StartTrace(TraceVolumeLockDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeLockDuration)
+	defer endSpan()
 
 	query := vc.repo.GetQuery()
 	query.Conditions = append(query.Conditions, repositories.EQ("Path", pathToVol))
@@ -157,8 +157,8 @@ func WithCID(cid string) storage.LockVolOpt {
 // Note [CID]: if we start to type CID as cid.CID, we may have to use generics here
 // as in `[T string | cid.CID]`
 func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.IDType) error {
-	endTrace := observability.StartTrace(TraceVolumeDeleteDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeDeleteDuration)
+	defer endSpan()
 
 	query := vc.repo.GetQuery()
 
@@ -201,8 +201,8 @@ func (vc *BasicVolumeController) DeleteVolume(identifier string, idType storage.
 //
 // TODO [filter]: maybe add opts to filter results by certain values
 func (vc *BasicVolumeController) ListVolumes() ([]types.StorageVolume, error) {
-	endTrace := observability.StartTrace(TraceVolumeListDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeListDuration)
+	defer endSpan()
 
 	volumes, err := vc.repo.FindAll(context.TODO(), vc.repo.GetQuery())
 	if err != nil {
@@ -217,8 +217,8 @@ func (vc *BasicVolumeController) ListVolumes() ([]types.StorageVolume, error) {
 // GetSize returns the size of a volume
 // TODO-minor: identify which measurement type will be used
 func (vc *BasicVolumeController) GetSize(identifier string, idType storage.IDType) (int64, error) {
-	endTrace := observability.StartTrace(TraceVolumeGetSizeDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeGetSizeDuration)
+	defer endSpan()
 
 	query := vc.repo.GetQuery()
 
@@ -250,8 +250,8 @@ func (vc *BasicVolumeController) GetSize(identifier string, idType storage.IDTyp
 
 // EncryptVolume encrypts a given volume
 func (vc *BasicVolumeController) EncryptVolume(path string, _ types.Encryptor, _ types.EncryptionType) error {
-	endTrace := observability.StartTrace(TraceVolumeEncryptDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeEncryptDuration)
+	defer endSpan()
 
 	log.Errorw(LogVolumeEncryptNotImplemented, LogKeyPath, path)
 	return ErrNotImplemented
@@ -259,8 +259,8 @@ func (vc *BasicVolumeController) EncryptVolume(path string, _ types.Encryptor, _
 
 // DecryptVolume decrypts a given volume
 func (vc *BasicVolumeController) DecryptVolume(path string, _ types.Decryptor, _ types.EncryptionType) error {
-	endTrace := observability.StartTrace(TraceVolumeDecryptDuration)
-	defer endTrace()
+	endSpan := observability.StartSpan(TraceVolumeDecryptDuration)
+	defer endSpan()
 
 	log.Errorw(LogVolumeDecryptNotImplemented, LogKeyPath, path)
 	return ErrNotImplemented

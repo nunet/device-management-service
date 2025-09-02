@@ -329,6 +329,7 @@ ssl:
    - https://localhost:5601/app/management/security/api_keys/create
 8. Update config:
     - `apm.secret_token = "supersecrettoken"`
+    - `apm.server_url = "http://localhost:8200"`
     - `observability.elasticsearch_url = "https://localhost:9200"`
     - `observability.elasticsearch_api_key = "STEP6"`
 9. Results available after stopping the DMS and waiting a bit:

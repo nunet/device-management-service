@@ -41,8 +41,8 @@ func (s InputSource) ToMap() map[string]interface{} {
 }
 
 func DecodeInputSpec(spec *types.SpecConfig) (InputSource, error) {
-	endTrace := observability.StartTrace("decode_input_spec_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("decode_input_spec_duration")
+	defer endSpan()
 
 	if !spec.IsType(types.StorageProviderS3) {
 		err := fmt.Errorf("invalid storage source type. Expected %s but received %s", types.StorageProviderS3, spec.Type)

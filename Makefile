@@ -146,6 +146,9 @@ darwin_amd64:
 lint:
 	golangci-lint run --max-issues-per-linter=200
 
+format:
+	gofumpt -w .
+
 clean:
 	@echo "Cleaning up..."
 	sudo rm -rf builds/ dist/

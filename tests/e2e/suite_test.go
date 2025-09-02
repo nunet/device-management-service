@@ -35,8 +35,15 @@ const envE2ECacheKeep = "DMS_E2E_CACHE_KEEP"
 // Implies envE2ECacheKeep.
 const envE2ECacheKeys = "DMS_E2E_CACHE_KEYS"
 
-// envE2EDebugNodes set to "DMS_E2E_DEBUG_NODES=1,3" will start the nodes in debug mode.
+// envE2EDebugNodes set to "DMS_E2E_DEBUG_NODES=1,3" will start nodes with indexes 1 and 3 in debug mode (delve).
 const envE2EDebugNodes = "DMS_E2E_DEBUG_NODES"
+
+// envE2EObserveToken set to "DMS_E2E_OBSERVE_TOKEN=supersecrettoken" will enable observability for all nodes' logs
+// and traces. Requires envE2EObserveAPIKey.
+const envE2EObserveToken = "DMS_E2E_OBSERVE_TOKEN"
+
+// envE2EObserveAPIKey set to "DMS_E2E_OBSERVE_API_KEY=someapikey" will enable observability for all nodes' logs. Requires envE2EObserveToken.
+const envE2EObserveAPIKey = "DMS_E2E_OBSERVE_API_KEY"
 
 // SUMMARY
 
@@ -248,17 +255,19 @@ func (s *TestSuite) startNode(index int) {
 	binaryPath := filepath.Join(s.currentDir, binaryName)
 	var cmd *exec.Cmd
 	if slices.Contains(dbgNodes, idxS) {
-		cmd = exec.Command("dlv", "exec", "--headless", "--listen=:234"+idxS, "--continue", "--api-version=2",
+		cmd = exec.Command("dlv", "exec", "--headless", "--listen=:234"+idxS, "--api-version=2",
 			"--accept-multiclient", binaryPath, "--", "run", "--config", configPath, "--context", node.dmsContext)
 	} else {
 		cmd = exec.Command(binaryPath, "run", "--config", configPath, "--context", node.dmsContext)
 	}
+	// config the env
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("GOLOG_LOG_LEVEL=%s,%s",
-			"debug",
-			"observability=info", // too verbose on debug level
-		),
-		fmt.Sprintf("DMS_PASSPHRASE=%s", node.password),
+		// define a name for Kibana
+		"ELASTIC_APM_SERVICE_NODE_NAME=E2E-"+s.T().Name()+"-node-"+idxS,
+		"DMS_PASSPHRASE="+node.password,
+		// log levels
+		"GOLOG_LOG_LEVEL=debug",
+		"DMS_OBSERVE_LEVEL=debug",
 	)
 	// intercept log for scraping
 	prefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
@@ -285,7 +294,27 @@ func (s *TestSuite) startNode(index int) {
 	// Start a goroutine to wait for shutdown.
 	go func() {
 		<-node.shutdownCh
-		_ = cmd.Process.Kill()
+
+		// Try graceful shutdown first
+		if err := cmd.Process.Signal(os.Interrupt); err != nil {
+			s.T().Logf("failed to send interrupt signal to node %d: %v", index, err)
+			_ = cmd.Process.Kill()
+			return
+		}
+
+		// Wait for graceful shutdown with timeout
+		done := make(chan error)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case <-done:
+			return
+		case <-time.After(5 * time.Second):
+			s.T().Logf("graceful shutdown timeout for node %d, forcing kill", index)
+			_ = cmd.Process.Kill()
+		}
 	}()
 
 	s.T().Logf("started node %d with pid %d", index, cmd.Process.Pid)
@@ -325,6 +354,7 @@ func (s *TestSuite) setupTestNetwork() {
 			_ = os.RemoveAll(cfg.DataDir)
 			_ = os.RemoveAll(cfg.WorkDir)
 			_ = os.RemoveAll(filepath.Join(cfg.General.UserDir, node.CapstoreDir))
+			_ = os.Remove(filepath.Join(cfg.General.UserDir, "logs.jsonl"))
 		} else {
 			_ = os.RemoveAll(nodeRoot)
 		}
@@ -570,7 +600,8 @@ func (s *TestSuite) RevokeTokenTests() {
 // If we use the package level functions, the test case will be marked as PASS but the tests will ultimately FAIL since the suite can't track it.
 func (s *TestSuite) Test_RunSuite() {
 	gin.SetMode(gin.DebugMode)
-	os.Setenv("GOLOG_LOG_LEVEL", "debug,observability=info")
+	os.Setenv("GOLOG_LOG_LEVEL", "debug")
+	// os.Setenv("DMS_OBSERVE_LEVEL", "debug")
 	s.summary = &Summary{
 		Nodes:         make(map[string]*SummaryNode),
 		NodeConns:     make(map[string][]string),

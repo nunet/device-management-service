@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"gitlab.com/nunet/device-management-service/observability"
 )
 
 var (
@@ -200,7 +202,13 @@ func (k *Dispatch) dispatch() {
 				}
 			} else if err := k.sctx.Require(msg, b.opt.Capability); err != nil {
 				k.mx.Unlock()
-				log.Warnf("message from %s does not have the required capability %s %s: %s", msg.From, b.opt.Capability, string(msg.Capability), err)
+				log.Warnw("message does not have the required capability",
+					"from", msg.From,
+					"capabilities", CapabilitiesJoin(b.opt.Capability),
+					"msg", string(msg.Capability),
+					"error", err.Error(),
+					"labels", string(observability.LabelNode),
+				)
 				continue
 			}
 
@@ -223,6 +231,10 @@ func (k *Dispatch) dispatch() {
 			log.Debugf("dispatching message from %s to %s", msg.From, msg.Behavior)
 			go func() {
 				defer k.options.Limiter.Release(msg)
+				endSpan := observability.StartSpan("Dispatch_"+msg.Behavior, "FromDID", msg.From.DID)
+				defer endSpan()
+
+				// exec the behavior's handler
 				b.cont(msg)
 			}()
 

@@ -21,11 +21,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"go.elastic.co/apm"
 	"go.elastic.co/apm/transport"
+	"go.elastic.co/apm/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -206,12 +207,13 @@ func TestPreflightCheckES(t *testing.T) {
 	}
 }
 
-// StartTrace paths
-func TestStartTrace(t *testing.T) {
+// StartSpan paths
+func TestStartSpan(t *testing.T) {
 	tr, _ := apm.NewTracerOptions(apm.TracerOptions{ServiceName: "unit", Transport: transport.Discard})
 
 	tracerMutex.Lock()
 	oldTracer, oldNoOp := currentTracer, tracingNoOpMode
+	// TODO
 	currentTracer, tracingNoOpMode = tr, false
 	tracerMutex.Unlock()
 
@@ -225,7 +227,37 @@ func TestStartTrace(t *testing.T) {
 	parent := tr.StartTransaction("parent", "req")
 	ctx := apm.ContextWithTransaction(context.Background(), parent)
 	spBefore := tr.Stats().SpansSent
-	done2 := StartTrace(ctx, "child")
+	done2 := StartSpan(ctx, "child")
+	done2()
+	parent.End()
+	tr.Flush(nil)
+	if tr.Stats().SpansSent-spBefore != 1 {
+		t.Fatalf("span not recorded")
+	}
+}
+
+// StartSpan paths
+func TestStartSpanGin(t *testing.T) {
+	tr, _ := apm.NewTracerOptions(apm.TracerOptions{ServiceName: "unit", Transport: transport.Discard})
+	initRootTrace(tr)
+
+	tracerMutex.Lock()
+	oldTracer, oldNoOp := currentTracer, tracingNoOpMode
+	// TODO
+	currentTracer, tracingNoOpMode = tr, false
+	tracerMutex.Unlock()
+
+	t.Cleanup(func() {
+		tracerMutex.Lock()
+		currentTracer, tracingNoOpMode = oldTracer, oldNoOp
+		tracerMutex.Unlock()
+	})
+
+	// nested span
+	parent := tr.StartTransaction("parent", "req")
+	ctx := &gin.Context{Request: &http.Request{}}
+	spBefore := tr.Stats().SpansSent
+	done2 := StartSpan(ctx, "child")
 	done2()
 	parent.End()
 	tr.Flush(nil)
@@ -442,7 +474,7 @@ func TestTracerNoOpAfterSetNoOp(t *testing.T) {
 	// enable global no-op
 	SetNoOpMode(true)
 
-	done := StartTrace("noop-tx")
+	done := StartSpan("noop-tx")
 	done()
 	tr.Flush(nil)
 
@@ -453,7 +485,7 @@ func TestTracerNoOpAfterSetNoOp(t *testing.T) {
 	// disable global no-op and ensure traffic resumes
 	SetNoOpMode(false)
 
-	done2 := StartTrace("active-tx")
+	done2 := StartSpan("active-tx")
 	done2()
 	tr.Flush(nil)
 

@@ -106,7 +106,7 @@ func extractStatus(input string) string {
 func createConfig(userDir string, restPort uint32,
 	p2pListenAddrs []string, bootstrap []string,
 ) *config.Config {
-	return &config.Config{
+	cfg := &config.Config{
 		General: config.General{
 			Env:                    "test",
 			UserDir:                userDir,
@@ -158,6 +158,24 @@ func createConfig(userDir string, restPort uint32,
 			APIKey:      os.Getenv("ES_API"),
 		},
 	}
+
+	// observability
+	apiKey := os.Getenv(envE2EObserveAPIKey)
+	token := os.Getenv(envE2EObserveToken)
+	if apiKey != "" {
+		cfg.Observability.ElasticsearchEnabled = true
+		cfg.Observability.ElasticsearchAPIKey = apiKey
+
+		// if secrettoken is set, switch to local observability
+		if token != "" {
+			cfg.Observability.ElasticsearchURL = "https://localhost:9200"
+			cfg.APM.ServerURL = "http://localhost:8200"
+			cfg.APM.SecretToken = token
+			cfg.APM.Environment = "development"
+		}
+	}
+
+	return cfg
 }
 
 // getProc finds a process by pid.

@@ -11,7 +11,7 @@ package cmd
 import (
 	"fmt"
 	"net/http"
-	_ "net/http/pprof" //#nosec
+	_ "net/http/pprof" // #nosec
 	"os"
 
 	"github.com/spf13/cobra"
@@ -78,6 +78,7 @@ Or manually create a dms_config.json file and refer to the README for available 
 				log.Infof("Shutting down after receiving %v...\n", sig)
 
 				dmsInstance.Stop()
+				// TODO is a graceful exit an error?
 				os.Exit(1)
 			}()
 

@@ -36,8 +36,8 @@ func createCollections(db *clover.DB, collections []string) error {
 // NewDB initializes and sets up the clover database using bbolt under the hood.
 // Additionally, it automatically creates collections for the necessary types.
 func NewDB(path string, collections []string) (*clover.DB, error) {
-	endTrace := observability.StartTrace("clover_db_init_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("clover_db_init_duration")
+	defer endSpan()
 
 	db, err := clover.Open(path)
 	if err != nil {
