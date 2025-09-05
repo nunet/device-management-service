@@ -168,6 +168,14 @@ incus launch images:ubuntu/22.04 vm-test --vm
 
 ## 4. Provision the required supporting infrastructure
 
+The acceptance tests require Incus images to execute tests in Incus VMs or containers.
+To create these images locally, run from the root directory of the `device-management-service` project:
+
+```bash
+cd tests/acceptance/scripts
+./create-images-acc-test.sh
+```
+
 The acceptance tests require a GlusterFS Cluster to be provisioned in order to
 execute some tests related to the storage package.
 

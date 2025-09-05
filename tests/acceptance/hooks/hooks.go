@@ -29,7 +29,7 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 
 	start := time.Now()
 	fmt.Println("creating nodes...")
-	nodes, err := utils.CreateNodes(clients, count, utils.DefaultImage, config.VMsPrefix)
+	nodes, err := utils.CreateNodes(clients, count, config.VMsPrefix)
 	if err != nil {
 		return nil, err
 	}
