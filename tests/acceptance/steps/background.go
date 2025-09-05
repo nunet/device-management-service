@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
-	"golang.org/x/sync/errgroup"
 )
 
 type tableNode struct {
@@ -99,26 +98,8 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 		instance, ok := nodeToInstance[node.name]
 		assert.True(t, ok)
 
-		// only compute providers need docker
-		// launch goroutines to install dependencies
-		g := new(errgroup.Group)
-		if strings.EqualFold(node.role, "cp") {
-			g.Go(func() error {
-				if err := instance.InstallDocker(); err != nil {
-					return err
-				}
-				if err := instance.PruneResolved(); err != nil {
-					return err
-				}
-				return nil
-			})
-		}
-
-		if strings.EqualFold(node.role, "sp") {
-			g.Go(func() error {
-				return instance.InstallYQ()
-			})
-		}
+		err := instance.PruneResolved()
+		assert.NoError(t, err)
 
 		userCtx, dmsCtx, err := instance.InitialCaps(node.name)
 		assert.NoError(t, err)
@@ -130,10 +111,6 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 
 		err = utils.SetupPrivateNetwork(userCtx, dmsCtx, orgCtx)
 		assert.NoError(t, err)
-
-		// wait dependencies before running, otherwise DMS won't
-		// recognize Docker
-		assert.NoError(t, g.Wait())
 
 		err = dmsCtx.Run()
 		assert.NoError(t, err)

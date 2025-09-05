@@ -23,11 +23,12 @@ import (
 )
 
 const (
-	DefaultImage    = "ubuntu/22.04/cloud"
-	DefaultVMPrefix = "test"
-	LocalTarget     = "local"
-	ContainerType   = "container"
-	VMType          = "vm"
+	DefaultImageContainer = "ubuntu-acc-test-container"
+	DefaultImageVM        = "ubuntu-acc-test-vm"
+	DefaultVMPrefix       = "test"
+	LocalTarget           = "local"
+	ContainerType         = "container"
+	VMType                = "vm"
 )
 
 func getInstanceType() string {
@@ -99,7 +100,7 @@ func ConnectIncus(target, clientCert, clientKey, serverCert string) (incus.Insta
 	return incus.ConnectIncus(target, connectionArgs)
 }
 
-func CreateInstance(c incus.InstanceServer, instanceType, name, image string) error {
+func CreateInstance(c incus.InstanceServer, instanceType, name string) error {
 	var req api.InstancesPost
 	switch instanceType {
 	case ContainerType:
@@ -117,10 +118,8 @@ func CreateInstance(c incus.InstanceServer, instanceType, name, image string) er
 				Ephemeral: true,
 			},
 			Source: api.InstanceSource{
-				Type:     "image",
-				Alias:    image,
-				Server:   "https://images.linuxcontainers.org",
-				Protocol: "simplestreams",
+				Type:  "image",
+				Alias: DefaultImageContainer,
 			},
 		}
 	default:
@@ -144,10 +143,8 @@ func CreateInstance(c incus.InstanceServer, instanceType, name, image string) er
 				Ephemeral: true,
 			},
 			Source: api.InstanceSource{
-				Type:     "image",
-				Alias:    image,
-				Server:   "https://images.linuxcontainers.org",
-				Protocol: "simplestreams",
+				Type:  "image",
+				Alias: DefaultImageVM,
 			},
 			Type: "virtual-machine",
 		}
@@ -312,7 +309,7 @@ func ConnectToClients(config *config.Config) ([]incus.InstanceServer, error) {
 }
 
 // CreateNodes creates `howMany` instances on a given Incus server (unix or remote URL).
-func CreateNodes(clients []incus.InstanceServer, howMany int, image, namePrefix string) ([]*Node, error) {
+func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string) ([]*Node, error) {
 	nodes := make([]*Node, 0, howMany)
 	g := new(errgroup.Group)
 
@@ -322,7 +319,7 @@ func CreateNodes(clients []incus.InstanceServer, howMany int, image, namePrefix 
 			client := clients[idx%len(clients)]
 			name := namePrefix + "-node-" + strconv.Itoa(idx)
 
-			err := CreateInstance(client, getInstanceType(), name, image)
+			err := CreateInstance(client, getInstanceType(), name)
 			if err != nil {
 				return fmt.Errorf("failed to create instance %s: %w", name, err)
 			}
