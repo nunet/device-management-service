@@ -39,7 +39,7 @@ type GenericRepositoryClover[T repositories.ModelType] struct {
 func NewGenericRepository[T repositories.ModelType](
 	db *clover.DB,
 ) repositories.GenericRepository[T] {
-	endSpan := observability.StartSpan("clover_db_repo_init_duration")
+	endSpan := observability.StartSpan("clover_db_repo_init")
 	defer endSpan()
 	collection := strcase.ToSnake(reflect.TypeOf(*new(T)).Name())
 	logger.Infow("clover_db_repo_init_success", "collection", collection)
@@ -68,7 +68,7 @@ func (repo *GenericRepositoryClover[T]) queryWithID(
 
 // Create adds a new record to the repository and returns the created data.
 func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, error) {
-	endSpan := observability.StartSpan(ctx, "clover_db_create_duration")
+	endSpan := observability.StartSpan(ctx, "clover_db_create")
 	defer endSpan()
 
 	var model T
@@ -93,7 +93,7 @@ func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, 
 
 // Get retrieves a record by its identifier.
 func (repo *GenericRepositoryClover[T]) Get(ctx context.Context, id interface{}) (T, error) {
-	endSpan := observability.StartSpan(ctx, "clover_db_get_duration")
+	endSpan := observability.StartSpan(ctx, "clover_db_get")
 	defer endSpan()
 
 	var model T
@@ -122,7 +122,7 @@ func (repo *GenericRepositoryClover[T]) Update(
 	id interface{},
 	data T,
 ) (T, error) {
-	endSpan := observability.StartSpan(ctx, "clover_db_update_duration")
+	endSpan := observability.StartSpan(ctx, "clover_db_update")
 	defer endSpan()
 
 	updates := toCloverDoc(data).AsMap()
@@ -141,7 +141,7 @@ func (repo *GenericRepositoryClover[T]) Update(
 
 // Delete removes a record by its identifier.
 func (repo *GenericRepositoryClover[T]) Delete(ctx context.Context, id interface{}) error {
-	endSpan := observability.StartSpan(ctx, "clover_db_delete_duration")
+	endSpan := observability.StartSpan(ctx, "clover_db_delete")
 	defer endSpan()
 
 	err := repo.db.Delete(
@@ -161,7 +161,7 @@ func (repo *GenericRepositoryClover[T]) Find(
 	ctx context.Context,
 	query repositories.Query[T],
 ) (T, error) {
-	endSpan := observability.StartSpan(ctx, "clover_db_find_duration")
+	endSpan := observability.StartSpan(ctx, "clover_db_find")
 	defer endSpan()
 
 	var model T
@@ -192,7 +192,7 @@ func (repo *GenericRepositoryClover[T]) FindAll(
 	ctx context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
-	endSpan := observability.StartSpan(ctx, "clover_db_find_all_duration")
+	endSpan := observability.StartSpan(ctx, "clover_db_find_all")
 	defer endSpan()
 
 	var models []T

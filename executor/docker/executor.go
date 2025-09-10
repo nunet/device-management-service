@@ -87,7 +87,7 @@ func (e *Executor) GetID() string {
 
 // Start begins the execution of a request by starting a Docker container.
 func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) error {
-	endSpan := observability.StartSpan(ctx, "docker_executor_start_duration")
+	endSpan := observability.StartSpan(ctx, "docker_executor_start")
 	defer endSpan()
 
 	log.Infow("docker_executor_start_begin",
@@ -185,7 +185,7 @@ func (e *Executor) Wait(
 	ctx context.Context,
 	executionID string,
 ) (<-chan *types.ExecutionResult, <-chan error) {
-	endSpan := observability.StartSpan(ctx, "docker_executor_wait_duration")
+	endSpan := observability.StartSpan(ctx, "docker_executor_wait")
 	defer endSpan()
 
 	log.Infow("docker_executor_wait_begin", "executionID", executionID)
@@ -383,7 +383,7 @@ func (e *Executor) Run(
 // This includes removing containers including networks and volumes with the executor's label.
 // It also removes all temporary directories created for init scripts.
 func (e *Executor) Cleanup(ctx context.Context) error {
-	endSpan := observability.StartSpan(ctx, "docker_executor_cleanup_duration")
+	endSpan := observability.StartSpan(ctx, "docker_executor_cleanup")
 	defer endSpan()
 
 	log.Infow("docker_executor_cleanup_begin",

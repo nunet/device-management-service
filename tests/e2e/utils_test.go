@@ -103,9 +103,7 @@ func extractStatus(input string) string {
 	return matches[1]
 }
 
-func createConfig(userDir string, restPort uint32,
-	p2pListenAddrs []string, bootstrap []string,
-) *config.Config {
+func createConfig(userDir string, restPort uint32, p2pListenAddrs []string, bootstrap []string) *config.Config {
 	cfg := &config.Config{
 		General: config.General{
 			Env:                    "test",

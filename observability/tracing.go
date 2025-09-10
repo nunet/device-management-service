@@ -26,6 +26,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/transport"
 	"go.elastic.co/apm/v2"
 )
@@ -75,7 +76,7 @@ func initTracing(apmConfig config.APM) {
 		return
 	}
 
-	// Parse and set the APM Server URLQ
+	// Parse and set the APM Server URL
 	serverURL, err := url.Parse(apmConfig.ServerURL)
 	if err != nil {
 		log.Warnf("Failed to parse APM server URL: %v", err)
@@ -122,7 +123,13 @@ func initRootTrace(tracer *apm.Tracer) {
 	}
 
 	// create the root trace
-	rootTransaction = tracer.StartTransaction(name, "background-job")
+	opts := apm.TransactionOptions{}
+	if traceparent := os.Getenv("ELASTIC_APM_TRACEPARENT"); traceparent != "" {
+		traceCtx, _ := apmhttp.ParseTraceparentHeader(traceparent)
+		traceCtx.State, _ = apmhttp.ParseTracestateHeader(os.Getenv("ELASTIC_APM_TRACESTATE"))
+		opts.TraceContext = traceCtx
+	}
+	rootTransaction = tracer.StartTransactionOptions(name, "background-job", opts)
 	rootTransaction.Context.SetLabel("did", didID.String())
 	rootSpan, _ = apm.StartSpan(apm.ContextWithTransaction(context.Background(), rootTransaction), "root", "custom")
 }
@@ -252,10 +259,11 @@ func StartSpan(args ...interface{}) func() {
 	switch v := args[0].(type) {
 	case string:
 		// No context provided
-		// TODO catch all callers?
 		ctx = context.Background()
-		// sanitize TODO allowlist instead of excludelist
-		operationName = strings.ReplaceAll(strings.TrimLeft(v, "/"), "/", "_")
+		// sanitize
+		operationName = strings.ReplaceAll(strings.ReplaceAll(v,
+			": /", ": "),
+			"/", "_")
 		keyValues = args[1:]
 	case *gin.Context:
 		ctx = v.Request.Context()

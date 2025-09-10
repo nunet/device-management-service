@@ -10,16 +10,95 @@ package observability
 
 import (
 	"reflect"
+	"runtime/debug"
 	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
+// LogLabel is the type used for routing decisions based on label names.
+type LogLabel string
+
+// These constants define the labels we can attach to log entries.
+// TODO desc for each label
+const (
+	LabelDefault LogLabel = "default"
+	// TODO merge with LabelContract?
+	LabelAccounting LogLabel = "accounting"
+	LabelMetric     LogLabel = "metric"
+	LabelDeployment LogLabel = "deployment"
+	LabelAllocation LogLabel = "allocation"
+	LabelNode       LogLabel = "node"
+	LabelContract   LogLabel = "contract"
+	// TODO unused
+	LabelUser LogLabel = "user"
+)
+
+// LabelRoutingConfig defines optional routing rules per label.
+type LabelRoutingConfig struct {
+	// If SkipES is true, logs with this label will not be sent to Elasticsearch.
+	SkipES bool
+
+	// If ESIndex is non-empty, logs with this label will be routed to that ES index
+	// instead of the default/logs index.
+	ESIndex string
+}
+
+// labelRoutingMap is our in-memory map from label → routing configuration.
+var labelRoutingMap = map[LogLabel]LabelRoutingConfig{
+	LabelContract: {
+		SkipES:  false,
+		ESIndex: "contract-index",
+	},
+	LabelAccounting: {
+		SkipES:  false,
+		ESIndex: "accounting-index",
+	},
+	LabelMetric: {
+		SkipES:  false,
+		ESIndex: "metric-index",
+	},
+	LabelDeployment: {
+		SkipES:  false,
+		ESIndex: "deployment-index",
+	},
+	LabelAllocation: {
+		SkipES:  false,
+		ESIndex: "allocation-index",
+	},
+	LabelNode: {
+		SkipES:  false,
+		ESIndex: "node-index",
+	},
+	LabelUser: {
+		SkipES:  false,
+		ESIndex: "user-index",
+	},
+}
+
 // labelInjectionCore ensures "labels" is set and sets "es_skip"/"es_index".
 type labelInjectionCore struct {
 	next         zapcore.Core
 	levelEnabler zapcore.LevelEnabler
+}
+
+// GetLabelRoutingConfig inspects the provided labels and returns whether logs
+// should be skipped for ES (skipES) and which ES index to route them to (esIndex).
+func GetLabelRoutingConfig(labels []string) (skipES bool, esIndex string) {
+	for _, lbl := range labels {
+		cfg, exists := labelRoutingMap[LogLabel(lbl)]
+		if !exists {
+			continue
+		}
+		if cfg.SkipES {
+			skipES = true
+		}
+		if cfg.ESIndex != "" {
+			esIndex = cfg.ESIndex
+		}
+	}
+	return
 }
 
 func newLabelInjectionCore(next zapcore.Core, enabler zapcore.LevelEnabler) zapcore.Core {
@@ -87,6 +166,18 @@ func (l *labelInjectionCore) Write(ent zapcore.Entry, fields []zapcore.Field) er
 		finalFields = append(finalFields, zap.String("es_index", overrideIndex))
 	}
 
+	finalFields = l.gatherFields(ent, fields, finalFields)
+	finalFields = append(finalFields, zap.String("transaction.id", rootTransaction.TraceContext().Trace.String()))
+
+	if ent.Message == "test" {
+		print()
+	}
+	return l.next.Write(ent, finalFields)
+}
+
+func (l *labelInjectionCore) gatherFields(
+	ent zapcore.Entry, fields []zapcore.Field, finalFields []zapcore.Field,
+) []zapcore.Field {
 	// catch WARN and ERROR and create spans
 	switch {
 	case ent.Level == zapcore.WarnLevel || ent.Level == zapcore.ErrorLevel:
@@ -99,36 +190,54 @@ func (l *labelInjectionCore) Write(ent zapcore.Entry, fields []zapcore.Field) er
 			if f.String != "" {
 				errMsg = " " + f.String
 			} else if err, ok := f.Interface.(error); ok {
-				// TODO doesnt catch eg "onboard_error"
 				errMsg = " " + err.Error()
 			}
 		}
+		errSnippet := errMsg
 
 		// optionally attach an unstructured log msg
 		var logMsg string
 		if fields == nil {
-			logMsg = ent.Message[0:min(len(ent.Message), 100)]
+			logMsg = ent.Message[0:min(len(ent.Message), 300)]
+		}
+
+		if len(errSnippet) == 0 {
+			errSnippet = " " + logMsg
+		}
+		if len(errSnippet) > 30 {
+			errSnippet = errSnippet[:30] + "..."
+		}
+
+		// keep in sync with the call path
+		skipFrames := 13
+		// get a stack trace
+		sTrace := strings.Split(string(debug.Stack()), "\n")[skipFrames:]
+		if sTrace[len(sTrace)-1] == "" {
+			sTrace = sTrace[:len(sTrace)-1]
 		}
 
 		// create span
-		end := StartSpan(strings.ToUpper(ent.Level.String())+errMsg,
+		end := StartSpan(strings.ToUpper(ent.Level.String())+errSnippet,
 			"error", errMsg,
-			"logMsg", logMsg)
+			"logMsg", logMsg,
+			// format stack for Kibana
+			"stack_trace", strings.Join(sTrace, "\n ------ "),
+		)
 		spanID := activeSpans[len(activeSpans)-1].TraceContext().Span.String()
 		end()
 		// bind this log msg to this err span
 		finalFields = append(finalFields, zap.String("span.id", spanID))
 		//
 		// bind non-err logs to traces
+
 	case len(activeSpans) > 0:
 		latestSpan := activeSpans[len(activeSpans)-1]
 		finalFields = append(finalFields, zap.String("span.id", latestSpan.TraceContext().Span.String()))
+
 	case latestSpanID != "":
 		finalFields = append(finalFields, zap.String("span.id", latestSpanID))
 	}
-	finalFields = append(finalFields, zap.String("transaction.id", rootTransaction.TraceContext().Trace.String()))
-
-	return l.next.Write(ent, finalFields)
+	return finalFields
 }
 
 func (l *labelInjectionCore) Sync() error {

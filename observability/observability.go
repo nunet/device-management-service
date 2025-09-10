@@ -196,11 +196,16 @@ func parseLogLevel(levelStr string) (zapcore.Level, error) {
 	return level, nil
 }
 
+func utcTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	// Use zapcore.ISO8601TimeEncoder on the UTC time.
+	zapcore.ISO8601TimeEncoder(t.UTC(), enc)
+}
+
 // createConsoleCore creates a console logging core
 func createConsoleCore(levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = utcTimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 
 	consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
@@ -212,7 +217,7 @@ func createConsoleCore(levelEnabler zapcore.LevelEnabler) zapcore.Core {
 func createFileCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = utcTimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 
 	fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
@@ -254,7 +259,7 @@ func createElasticsearchCore(observabilityConfig config.Observability, levelEnab
 
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = utcTimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 
 	esEncoder := zapcore.NewJSONEncoder(encoderConfig)

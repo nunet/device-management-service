@@ -41,7 +41,7 @@ func (s InputSource) ToMap() map[string]interface{} {
 }
 
 func DecodeInputSpec(spec *types.SpecConfig) (InputSource, error) {
-	endSpan := observability.StartSpan("decode_input_spec_duration")
+	endSpan := observability.StartSpan("decode_input_spec")
 	defer endSpan()
 
 	if !spec.IsType(types.StorageProviderS3) {

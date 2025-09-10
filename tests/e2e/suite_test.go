@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
+	"go.elastic.co/apm/module/apmhttp/v2"
+	"go.elastic.co/apm/transport"
+	"go.elastic.co/apm/v2"
+
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -230,6 +235,8 @@ type TestSuite struct {
 	summary       *Summary
 	// testDataDir is the E2E testdata dir with fixtures.
 	testDataDir string
+	rootTrace   *apm.Transaction
+	tracer      *apm.Tracer
 }
 
 func (s *TestSuite) startNode(index int) {
@@ -269,6 +276,15 @@ func (s *TestSuite) startNode(index int) {
 		"GOLOG_LOG_LEVEL=debug",
 		"DMS_OBSERVE_LEVEL=debug",
 	)
+	// nest under a test span
+	if s.rootTrace != nil {
+		traceCtx := s.rootTrace.TraceContext()
+		cmd.Env = append(cmd.Env,
+			"ELASTIC_APM_TRACEPARENT="+apmhttp.FormatTraceparentHeader(traceCtx),
+			"ELASTIC_APM_TRACESTATE="+traceCtx.State.String(),
+		)
+	}
+
 	// intercept log for scraping
 	prefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
 	cmd.Stdout = &LogInterceptor{
@@ -516,8 +532,51 @@ func (s *TestSuite) SetupSuite() {
 	s.nodes = make(map[int]*mockNode)
 	s.bootstrapPeers = []string{}
 	s.currentDir = getCurrentFileDirectory()
+	// TODO should be nested under "testdata/artifacts" to diff from fixtures
 	s.testDataDir = filepath.Join(s.currentDir, "testdata")
 	s.rootDir = filepath.Join(s.testDataDir, s.Name)
+
+	// Initialize the APM tracer
+	cfg := createConfig("/tmp/fake", 0, []string{}, []string{})
+	if !cfg.Observability.ElasticsearchEnabled {
+		return
+	}
+	s.T().Logf("initializing APM tracer")
+
+	// Create a new APM transport
+	tr, err := transport.NewHTTPTransport()
+	if err != nil {
+		s.T().Logf("Failed to create APM transport: %v", err)
+		return
+	}
+
+	// Parse and set the APM Server URL
+	serverURL, err := url.Parse(cfg.APM.ServerURL)
+	if err != nil {
+		s.T().Logf("Failed to parse APM server URL: %v", err)
+		return
+	}
+	tr.SetServerURL(serverURL)
+
+	// Set API key if provided
+	if cfg.APM.SecretToken != "" {
+		tr.SetSecretToken(cfg.APM.SecretToken)
+	} else if cfg.APM.APIKey != "" {
+		tr.SetAPIKey(cfg.APM.APIKey)
+	}
+
+	tracer, err := apm.NewTracerOptions(apm.TracerOptions{
+		ServiceName:    cfg.APM.ServiceName,
+		ServiceVersion: "1.0.0",
+		Transport:      tr,
+	})
+	if err != nil {
+		s.T().Logf("Failed to initialize APM tracer: %v", err)
+		return
+	}
+	apm.SetDefaultTracer(tracer)
+	s.tracer = tracer
+	s.rootTrace = tracer.StartTransaction("E2E/"+s.Name, "request")
 }
 
 // TearDownSuite runs once after all tests are complete.
@@ -570,6 +629,12 @@ func (s *TestSuite) TearDownSuite() {
 				s.T().Logf("failed to remove directory %s: %v", node.rootDir, err)
 			}
 		}
+	}
+
+	if s.rootTrace != nil {
+		s.rootTrace.End()
+		s.tracer.Flush(nil)
+		s.tracer.Close()
 	}
 
 	s.T().Logf("teardown complete")
