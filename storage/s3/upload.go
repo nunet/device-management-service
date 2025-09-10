@@ -31,7 +31,7 @@ import (
 // be careful if managing files with `os` (the volume controller might be
 // using an in-memory one)
 func (s *Storage) Upload(ctx context.Context, vol types.StorageVolume, destinationSpecs *types.SpecConfig) error {
-	endSpan := observability.StartSpan(ctx, "s3_upload_duration")
+	endSpan := observability.StartSpan(ctx, "s3_upload")
 	defer endSpan()
 
 	target, err := DecodeInputSpec(destinationSpecs)

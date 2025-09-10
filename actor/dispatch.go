@@ -231,7 +231,7 @@ func (k *Dispatch) dispatch() {
 			log.Debugf("dispatching message from %s to %s", msg.From, msg.Behavior)
 			go func() {
 				defer k.options.Limiter.Release(msg)
-				endSpan := observability.StartSpan("Dispatch_"+msg.Behavior, "FromDID", msg.From.DID)
+				endSpan := observability.StartSpan("Dispatch: "+msg.Behavior, "FromDID", msg.From.DID)
 				defer endSpan()
 
 				// exec the behavior's handler

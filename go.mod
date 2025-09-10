@@ -235,6 +235,7 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.elastic.co/apm/module/apmgin/v2 v2.6.2
 	go.elastic.co/apm/module/apmhttp v1.15.0
+	go.elastic.co/apm/module/apmhttp/v2 v2.6.2
 	go.elastic.co/apm/v2 v2.6.2
 )
 
@@ -263,7 +264,6 @@ require (
 	github.com/pion/webrtc/v4 v4.1.2 // indirect
 	github.com/pkg/sftp v1.13.6 // indirect
 	github.com/zitadel/oidc/v2 v2.12.0 // indirect
-	go.elastic.co/apm/module/apmhttp/v2 v2.6.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.uber.org/mock v0.5.2 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect

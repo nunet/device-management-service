@@ -73,7 +73,7 @@ func (l *Libp2p) connectToBootstrapNodes(ctx context.Context) error {
 
 // Start dht bootstrapper
 func (l *Libp2p) bootstrapDHT(ctx context.Context) error {
-	endSpan := observability.StartSpan(ctx, "libp2p_bootstrap_duration")
+	endSpan := observability.StartSpan(ctx, "libp2p_bootstrap")
 	defer endSpan()
 
 	if err := l.DHT.Bootstrap(ctx); err != nil {
@@ -223,7 +223,7 @@ type dhtValidator struct {
 
 // Validate validates an item placed into the dht.
 func (d dhtValidator) Validate(key string, value []byte) error {
-	endSpan := observability.StartSpan("libp2p_dht_validate_duration")
+	endSpan := observability.StartSpan("libp2p_dht_validate")
 	defer endSpan()
 
 	// empty value is considered deleting an item from the dht

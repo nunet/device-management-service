@@ -238,6 +238,10 @@ func TestStartSpan(t *testing.T) {
 
 // StartSpan paths
 func TestStartSpanGin(t *testing.T) {
+	// test tracecontext
+	t.Setenv("ELASTIC_APM_TRACEPARENT", "00-841827e1f7ef0495b7cde61893d1d83f-841827e1f7ef0495-01")
+	t.Setenv("ELASTIC_APM_TRACESTATE", "es=s:1")
+
 	tr, _ := apm.NewTracerOptions(apm.TracerOptions{ServiceName: "unit", Transport: transport.Discard})
 	initRootTrace(tr)
 

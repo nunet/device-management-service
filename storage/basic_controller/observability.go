@@ -27,14 +27,14 @@ const (
 	LogVolumeDecryptNotImplemented = "volume_decrypt_not_implemented"
 
 	// Trace names
-	TraceVolumeControllerInitDuration = "volume_controller_init_duration"
-	TraceVolumeCreateDuration         = "volume_create_duration"
-	TraceVolumeLockDuration           = "volume_lock_duration"
-	TraceVolumeDeleteDuration         = "volume_delete_duration"
-	TraceVolumeListDuration           = "volume_list_duration"
-	TraceVolumeGetSizeDuration        = "volume_get_size_duration"
-	TraceVolumeEncryptDuration        = "volume_encrypt_duration"
-	TraceVolumeDecryptDuration        = "volume_decrypt_duration"
+	TraceVolumeControllerInitDuration = "volume_controller_init"
+	TraceVolumeCreateDuration         = "volume_create"
+	TraceVolumeLockDuration           = "volume_lock"
+	TraceVolumeDeleteDuration         = "volume_delete"
+	TraceVolumeListDuration           = "volume_list"
+	TraceVolumeGetSizeDuration        = "volume_get_size"
+	TraceVolumeEncryptDuration        = "volume_encrypt"
+	TraceVolumeDecryptDuration        = "volume_decrypt"
 
 	// Error messages
 	ErrMsgVolumeCreateFailure         = "failed to create storage volume"
