@@ -99,9 +99,7 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 		"ensembleID", request.EnsembleID)
 
 	resp := orchestrator.CommitDeploymentResponse{}
-	allocationID := types.ConstructAllocationID(request.EnsembleID, request.AllocationName)
-	request.Resources.AllocationID = allocationID
-	err := n.commitDeployment(request.EnsembleID, allocationID, request.Resources, request.PortMapping)
+	err := n.commitDeployment(request.EnsembleID, request.AllocationName, request.Resources, request.PortMapping)
 	if err != nil {
 		handleErr(err)
 		return
@@ -480,8 +478,9 @@ func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 		log.Warnf("failed to destroy subnet for ensemble id: %s: %v (it may not have been created or may already been destroyed)", ensembleID, err)
 	}
 
-	for _, allocName := range request.AllocsByName {
-		allocID := types.ConstructAllocationID(ensembleID, allocName)
+	for _, allocID := range request.AllocsByName {
+		// Now the allocID comes pre-constructed from the orchestrator, so we use it directly
+		// without calling types.ConstructAllocationID again
 
 		// Here we're considering both the committed and uncommitted resources/allocations/ports from the orchestrator
 		// TODO: consider the allocation state and perform the necessary actions eg: uncommit, release, etc.
@@ -495,12 +494,15 @@ func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 					"error", err)
 			}
 		} else {
-			if err := n.allocator.Uncommit(context.Background(), allocName); err != nil {
+			log.Debugf("allocation %s not found in allocator, skipping to uncommit", allocID)
+			if err := n.allocator.Uncommit(context.Background(), allocID); err != nil {
 				log.Errorw("revert_deployment_uncommit_failure",
 					"labels", []string{string(observability.LabelDeployment)},
 					"ensembleID", ensembleID,
 					"error", err,
 				)
+			} else {
+				log.Debugf("successfully uncommitted allocation %s", allocID)
 			}
 		}
 	}

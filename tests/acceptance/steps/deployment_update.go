@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // DeploymentUpdate registers all step definitions for deployment update feature
@@ -201,7 +202,10 @@ func updatesDeploymentToRemoveAllocation(ctx context.Context, spName string, cou
 
 	// since ranging through map keys is arbitrary
 	// this can be considered a random pick
-	alloc := allocs[0]
+	selected := allocs[0]
+
+	alloc, err := types.ParseManifestKey(selected, ensembleID)
+	assert.NoError(t, err)
 
 	ensemble, err := tc.EnsembleFile()
 	assert.NoError(t, err)
@@ -223,15 +227,15 @@ func updatesDeploymentToRemoveAllocation(ctx context.Context, spName string, cou
 	assert.NotEmpty(t, nodeName)
 
 	// remove top-level allocations definition
-	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.allocations.%s)", alloc), ensemble})
+	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.allocations.%s)", alloc.AllocationName), ensemble})
 	assert.NoError(t, err)
 
 	// remove allocation mapping inside node
-	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s.allocations[] | select(. == \"%s\"))", nodeName, alloc), ensemble})
+	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s.allocations[] | select(. == \"%s\"))", nodeName, alloc.AllocationName), ensemble})
 	assert.NoError(t, err)
 
 	// remove port configuration
-	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s.ports[] | select(.allocation == \"%s\"))", nodeName, alloc), ensemble})
+	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s.ports[] | select(.allocation == \"%s\"))", nodeName, alloc.AllocationName), ensemble})
 	assert.NoError(t, err)
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)

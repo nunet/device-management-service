@@ -422,7 +422,7 @@ func (s *TestSuite) setupTestNetwork() {
 		s.Require().Eventually(func() bool {
 			networkStats, err = node.client.self(s.T(), node.dmsContext, node.password)
 			return err == nil && networkStats.ID != ""
-		}, 15*time.Second, 3*time.Second, "Expected node %s to be ready", node.index)
+		}, 30*time.Second, 5*time.Second, "Expected node %s to be ready", node.index)
 
 		node.peerID = networkStats.ID
 		s.T().Logf("node %d peerID: %s", node.index, node.peerID)

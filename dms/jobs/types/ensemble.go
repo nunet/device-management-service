@@ -182,13 +182,82 @@ func (e *EnsembleConfig) Allocation(name string) (AllocationConfig, bool) {
 	return a, ok
 }
 
+// buildStandbyNodes constructs standby node configurations for nodes with redundancy
+func buildStandbyNodes(nodes map[string]NodeConfig, nodeIDGenerator types.NodeIDGenerator) map[string]NodeConfig {
+	standbyNodes := make(map[string]NodeConfig)
+	for nodeID, nodeConfig := range nodes {
+		if nodeConfig.Redundancy == 0 {
+			continue
+		}
+		for i := 1; i <= nodeConfig.Redundancy; i++ {
+			standbyNodeID, err := nodeIDGenerator.GenerateStandbyNodeID(nodeID, i)
+			if err != nil {
+				// Log error and skip this standby node
+				continue
+			}
+			ncfg := NodeConfig{
+				Allocations:     nodeConfig.Allocations,
+				Ports:           nodeConfig.Ports,
+				Location:        nodeConfig.Location,
+				FailureRecovery: nodeConfig.FailureRecovery,
+			}
+			standbyNodes[standbyNodeID] = ncfg
+		}
+	}
+	return standbyNodes
+}
+
+// Nodes returns a map of all nodes including standby nodes (using default generator)
 func (e *EnsembleConfig) Nodes() map[string]NodeConfig {
+	return e.NodesWithGenerator(types.NewDefaultNodeIDGenerator())
+}
+
+// NodesWithGenerator returns a map of all nodes including standby nodes using the provided generator
+func (e *EnsembleConfig) NodesWithGenerator(nodeIDGenerator types.NodeIDGenerator) map[string]NodeConfig {
+	result := make(map[string]NodeConfig)
+
+	// First add all primary nodes
+	for nodeID, nodeConfig := range e.V1.Nodes {
+		result[nodeID] = nodeConfig
+	}
+
+	// Then add standby nodes
+	for nodeID, nodeConfig := range buildStandbyNodes(e.V1.Nodes, nodeIDGenerator) {
+		result[nodeID] = nodeConfig
+	}
+
+	return result
+}
+
+// PrimaryNodes returns only the primary nodes (no standby nodes)
+func (e *EnsembleConfig) PrimaryNodes() map[string]NodeConfig {
 	return e.V1.Nodes
 }
 
-func (e *EnsembleConfig) Node(node string) (NodeConfig, bool) {
-	n, ok := e.V1.Nodes[node]
-	return n, ok
+func (e *EnsembleConfig) Node(nodeID string) (NodeConfig, bool) {
+	return e.NodeWithGenerator(nodeID, types.NewDefaultNodeIDGenerator())
+}
+
+func (e *EnsembleConfig) NodeWithGenerator(nodeID string, nodeIDGenerator types.NodeIDGenerator) (NodeConfig, bool) {
+	// Check if it's a primary node directly from the configuration
+	if n, ok := e.V1.Nodes[nodeID]; ok {
+		return n, true
+	}
+
+	// Check if it's a standby node using the generator
+	isStandby, primaryNodeID, standbyIndex, err := nodeIDGenerator.ParseNodeID(nodeID)
+	if err != nil || !isStandby {
+		return NodeConfig{}, false
+	}
+
+	// Get the primary node
+	primaryNode, ok := e.V1.Nodes[primaryNodeID]
+	if !ok || standbyIndex < 1 || standbyIndex > primaryNode.Redundancy {
+		return NodeConfig{}, false
+	}
+
+	// Return a copy of the primary node config for this standby
+	return primaryNode, true
 }
 
 func (e *EnsembleConfig) AllocationsForNode(node string) map[string]AllocationConfig {

@@ -61,7 +61,7 @@ func MakeOrchestrator(t *testing.T, substrate *network.Substrate) TestDMS {
 		priv:     priv,
 		pub:      pub,
 		peerID:   peer.GetHostID(),
-		handle:   handle,
+		handle:   childActor.Handle(),
 		actor:    childActor,
 		super:    mockActor,
 		net:      peer,
@@ -130,7 +130,7 @@ func (dms *TestDMS) MockDeploymentBehaviors(t *testing.T) {
 		bid := jtypes.Bid{
 			V1: &jtypes.BidV1{
 				EnsembleID: request.ID,
-				NodeID:     "node1",
+				NodeID:     request.Request[0].V1.NodeID,
 				Peer:       dms.handle.Address.HostID,
 				Location:   jtypes.Location{Country: "US"},
 				Handle:     dms.handle,
@@ -185,9 +185,18 @@ func (dms *TestDMS) MockDeploymentBehaviors(t *testing.T) {
 			dms.channels[msg.Behavior] <- struct{}{}
 		}()
 
+		var request jtypes.AllocationDeploymentRequest
+		if err := json.Unmarshal(msg.Message, &request); err != nil {
+			t.Fatalf("unmarshal allocation deployment request: %s", err)
+		}
+		allocations := make(map[string]actor.Handle)
+		for id := range request.Allocations {
+			allocations[id] = dms.handle
+		}
+
 		reply, err := actor.ReplyTo(msg, jtypes.AllocationDeploymentResponse{
 			OK:          true,
-			Allocations: map[string]actor.Handle{"alloc1": dms.handle},
+			Allocations: allocations,
 		})
 		require.NoError(t, err)
 

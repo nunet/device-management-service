@@ -847,23 +847,23 @@ func (s *subnet) readPackets(ctx context.Context, iface sys.NetInterface) {
 					log.Debugf("tun device closed, abandoning read loop... (err=%s, subnet=%s)", err, s.info.id)
 					return
 				} else if err != nil {
-					log.Errorf("failed to read packet from tun device: %s (subnet=%s)", err, s.info.id)
+					log.Debugf("(error): failed to read packet from tun device: %s (subnet=%s)", err, s.info.id)
 					continue
 				}
 
 				if plen == 0 {
-					log.Errorf("received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
+					log.Debugf("(error): received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
 					continue
 				}
 
 				if plen > MaxPacketSize {
-					log.Debugf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
+					log.Warnf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
 					plen = MaxPacketSize
 				}
 
 				srcPort, destPort, srcIP, destIP, err := s.parseIPPacket(packet)
 				if err != nil {
-					log.Errorf("failed to parse IP packet: %s", err)
+					log.Warnf("(error): failed to parse IP packet: %s", err)
 					continue
 				}
 

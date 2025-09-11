@@ -10,6 +10,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"strconv"
 	"testing"
@@ -61,5 +62,5 @@ func expectedRAMGB(t *testing.T) int {
 		}
 	}
 
-	return int(expected)
+	return int(math.Ceil(expected))
 }

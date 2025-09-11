@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 5
+		testSuites         = 6
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -62,14 +62,26 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentTests)
 	})
 
+	t.Run("DeploymentWithRedundancy", func(t *testing.T) {
+		t.Parallel()
+		deploymentWithRedundancyTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_redundancy_tests",
+			restPortIndex: ports[4],
+			p2pPortIndex:  ports[5],
+			runner:        DeploymentWithRedundancyTest,
+		}
+		suite.Run(t, deploymentWithRedundancyTests)
+	})
+
 	t.Run("DeploymentWithContracts", func(t *testing.T) {
 		t.Parallel()
 
 		deploymentWithContractsTests := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_with_contracts_tests",
-			restPortIndex: ports[4],
-			p2pPortIndex:  ports[5],
+			restPortIndex: ports[6],
+			p2pPortIndex:  ports[7],
 			runner:        DeployWithContractTest,
 		}
 		suite.Run(t, deploymentWithContractsTests)
@@ -79,8 +91,8 @@ func TestE2E(t *testing.T) {
 		deploymentUpdates := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_updates",
-			restPortIndex: ports[6],
-			p2pPortIndex:  ports[7],
+			restPortIndex: ports[8],
+			p2pPortIndex:  ports[9],
 			runner:        DeploymentUpdates,
 		}
 		suite.Run(t, deploymentUpdates)
@@ -90,8 +102,8 @@ func TestE2E(t *testing.T) {
 		deploymentFullAssertion := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_assert_subnet",
-			restPortIndex: ports[8],
-			p2pPortIndex:  ports[9],
+			restPortIndex: ports[10],
+			p2pPortIndex:  ports[11],
 			runner:        DeploymentFullAssertion,
 		}
 		suite.Run(t, deploymentFullAssertion)

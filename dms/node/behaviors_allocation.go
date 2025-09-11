@@ -210,11 +210,8 @@ func (n *Node) createAllocations(
 		return nil, fmt.Errorf("invalid supervisor handle")
 	}
 
-	allocHandlesByName := make(map[string]actor.Handle, len(allocations))
-	for allocationName, allocationConfig := range allocations {
-		allocationID := types.ConstructAllocationID(ensembleID, allocationName)
-		// TODO: check if the allocation ID exists
-
+	allocHandlesByID := make(map[string]actor.Handle, len(allocations))
+	for allocationID, allocationConfig := range allocations {
 		allocation, err := n.createAllocation(
 			allocationID,
 			allocationConfig.Type,
@@ -231,7 +228,7 @@ func (n *Node) createAllocations(
 			return nil, fmt.Errorf("create allocation %s: %w", allocationID, err)
 		}
 
-		allocHandlesByName[allocationName] = allocation.Actor.Handle()
+		allocHandlesByID[allocationID] = allocation.Actor.Handle()
 
 		// node grants subnet create/destroy caps to the orchestrator
 		if err := n.actor.Security().Grant(supervisor.DID, n.actor.Handle().DID, []ucan.Capability{
@@ -279,7 +276,7 @@ func (n *Node) createAllocations(
 	}
 
 	log.Infof("Finished createAllocations for ensembleID: %s", ensembleID)
-	return allocHandlesByName, nil
+	return allocHandlesByID, nil
 }
 
 // TODO (wrong nomenclature): handleAllocationDeployment -> handleEnsembleDeployment

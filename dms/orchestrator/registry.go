@@ -18,6 +18,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // Registry is an interface which acts as a source for orchestrators
@@ -26,6 +27,7 @@ type Registry interface {
 	NewOrchestrator(
 		ctx context.Context, fs afero.Afero, workDir string,
 		id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
+		nodeIDGenerator types.NodeIDGenerator, allocationIDGenerator types.AllocationIDGenerator,
 	) (Orchestrator, error)
 	// RestoreDeployment restores deployments where the status is either provisioning, committing or running
 	RestoreDeployment(
@@ -62,6 +64,7 @@ func NewRegistry() Registry {
 func (f *basicRegistry) NewOrchestrator(
 	ctx context.Context, fs afero.Afero, workDir string,
 	id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
+	nodeIDGenerator types.NodeIDGenerator, allocationIDGenerator types.AllocationIDGenerator,
 ) (Orchestrator, error) {
 	// check if orchestrator already exists
 	f.lock.RLock()
@@ -71,7 +74,7 @@ func (f *basicRegistry) NewOrchestrator(
 	}
 	f.lock.RUnlock()
 
-	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg)
+	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg, nodeIDGenerator, allocationIDGenerator)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
 	}
@@ -130,7 +133,7 @@ func restoreDeployment(
 			"labels", []string{string(observability.LabelDeployment)},
 			"orchestratorID", id,
 		)
-		provisioner := NewProvisioner(ctx, cancel, actr, o.subnetManifest)
+		provisioner := NewProvisioner(ctx, cancel, actr, o.subnetManifest, o.allocationIDGenerator)
 		manifestAfterProvision, err := provisioner.Provision(
 			jtypes.NewEnsembleCfgReader(cfg),
 			jtypes.NewManifestReader(manifest))
@@ -157,7 +160,7 @@ func restoreDeployment(
 				return o, o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
 			}
 
-			provisioner := NewProvisioner(ctx, cancel, o.actor, o.subnetManifest)
+			provisioner := NewProvisioner(ctx, cancel, o.actor, o.subnetManifest, o.allocationIDGenerator)
 			err := provisioner.createSubnet(o.manifest.ID, o.subnetManifest.RoutingTable, []actor.Handle{o.actor.Supervisor()})
 			if err != nil {
 				return handleError(err)

@@ -148,13 +148,13 @@ func NewAllocation(
 		status:       AllocationPending,
 		network:      network,
 		executor:     executor,
+		selfRelease:  selfRelease,
 		state: struct {
 			subnetIP    string
 			gatewayIP   string
 			portMapping map[int]int
 		}{},
-		selfRelease: selfRelease,
-		createdAt:   time.Now(),
+		createdAt: time.Now(),
 	}
 	return allocation, nil
 }

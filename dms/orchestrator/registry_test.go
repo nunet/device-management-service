@@ -73,13 +73,13 @@ func TestRegistry(t *testing.T) {
 		registry := NewRegistry()
 
 		// Test creating a new orchestrator
-		o, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+		o, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 		require.NoError(t, err)
 		assert.NotNil(t, o)
 		assert.Equal(t, ensembleID, o.ID())
 
 		// Test creating an orchestrator with existing ID
-		_, err = registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+		_, err = registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 		assert.ErrorIs(t, err, ErrOrchestratorExists)
 	})
 
@@ -91,7 +91,7 @@ func TestRegistry(t *testing.T) {
 		assert.ErrorIs(t, err, ErrOrchestratorNotFound)
 
 		// Create an orchestrator
-		o, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+		o, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 		require.NoError(t, err)
 
 		// Test getting existing orchestrator
@@ -108,7 +108,7 @@ func TestRegistry(t *testing.T) {
 		assert.Empty(t, orchestrators)
 
 		// Create an orchestrator
-		o, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+		o, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 		require.NoError(t, err)
 
 		// Test registry with one orchestrator
@@ -121,7 +121,7 @@ func TestRegistry(t *testing.T) {
 		registry := NewRegistry()
 
 		// Create an orchestrator
-		_, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+		_, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 		require.NoError(t, err)
 
 		// Delete the orchestrator

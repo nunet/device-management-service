@@ -18,4 +18,5 @@ const (
 	AllocationFailed     AllocationStatus = "failed"
 	AllocationCompleted  AllocationStatus = "completed"
 	AllocationTerminated AllocationStatus = "terminated"
+	AllocationStandby    AllocationStatus = "standby" // Allocation is in standby mode (redundancy)
 )

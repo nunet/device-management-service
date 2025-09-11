@@ -878,7 +878,7 @@ func (b *BidCoordinator) makeResidualBidRequest(
 		}
 	}
 
-	for n, ncfg := range cfg.V1.Nodes {
+	for n, ncfg := range cfg.Nodes() {
 		if _, exclude := newCandidates[n]; exclude {
 			log.Debugw(
 				fmt.Sprintf("node %s is in candidate, skipping", n),
@@ -935,10 +935,13 @@ func (b *BidCoordinator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfi
 			"contractCount", len(v1Config.Contracts))
 	}
 
-	for nodeID, nodeConfig := range v1Config.Nodes {
-		if len(nodeConfig.Allocations) == 0 {
-			continue
-		}
+	nodes := config.Nodes()
+	log.Infow("generating bid request",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", b.eid,
+		"nodes", nodes)
+
+	for nodeID, nodeConfig := range nodes {
 		bidRequest := jtypes.BidRequest{
 			V1: &jtypes.BidRequestV1{
 				NodeID:    nodeID,
