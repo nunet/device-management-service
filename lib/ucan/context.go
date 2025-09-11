@@ -240,7 +240,9 @@ func (ctx *BasicCapabilityContext) cleanUpTokens() {
 		tokenList = slices.DeleteFunc(tokenList, func(t *Token) bool {
 			return t.Verify(ctx.trust, uint64(now), ctx.revoke) != nil
 		})
+		ctx.mx.Lock()
 		ctx.require[anchor] = tokenList
+		ctx.mx.Unlock()
 	}
 
 	for _, anchor := range ctx.getProvideAnchors() {
@@ -249,7 +251,9 @@ func (ctx *BasicCapabilityContext) cleanUpTokens() {
 		tokenList = slices.DeleteFunc(tokenList, func(t *Token) bool {
 			return t.Verify(ctx.trust, uint64(now), ctx.revoke) != nil
 		})
+		ctx.mx.Lock()
 		ctx.provide[anchor] = tokenList
+		ctx.mx.Unlock()
 	}
 
 	for subject, tokenList := range ctx.tokens {
@@ -257,7 +261,9 @@ func (ctx *BasicCapabilityContext) cleanUpTokens() {
 		tokenList = slices.DeleteFunc(tokenList, func(t *Token) bool {
 			return t.Verify(ctx.trust, uint64(now), ctx.revoke) != nil
 		})
+		ctx.mx.Lock()
 		ctx.tokens[subject] = tokenList
+		ctx.mx.Unlock()
 	}
 }
 

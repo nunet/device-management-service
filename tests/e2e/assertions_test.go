@@ -10,6 +10,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
@@ -110,11 +111,15 @@ func (s *TestSuite) assertManifestAfterDeployment(
 		s.Require().NoError(err)
 
 		// Add this node to the expected manifest
+		allocKeys := make([]string, len(nodeConfig.Allocations))
+		for i, allocName := range nodeConfig.Allocations {
+			allocKeys[i] = fmt.Sprintf("%s.%s", nodeName, allocName)
+		}
 		expectedManifest.Nodes[nodeName] = jobtypes.NodeManifest{
 			ID:          nodeName,
 			Peer:        matchedProvider.peerID,
 			PubAddrss:   []string{}, // We don't validate this
-			Allocations: nodeConfig.Allocations,
+			Allocations: allocKeys,
 			Handle: actor.Handle{
 				ID:  providerHandleID,
 				DID: matchedProvider.capCtx.DID(),
@@ -145,7 +150,7 @@ func (s *TestSuite) assertManifestAfterDeployment(
 		s.Require().NotEmpty(nodeName, "Could not find node for allocation %s", allocName)
 
 		provider := nodeToProvider[nodeName]
-		allocID := types.ConstructAllocationID(ensembleID, allocName)
+		allocID := types.ConstructAllocationID(ensembleID, fmt.Sprintf("%s.%s", nodeName, allocName))
 
 		// Determine status based on allocation type
 		var expectedStatus jobtypes.AllocationStatus
@@ -160,7 +165,7 @@ func (s *TestSuite) assertManifestAfterDeployment(
 		allocProviderHandleID, err := crypto.IDFromPublicKey(pubk)
 		s.Require().NoError(err)
 
-		expectedManifest.Allocations[allocName] = jobtypes.AllocationManifest{
+		expectedManifest.Allocations[fmt.Sprintf("%s.%s", nodeName, allocName)] = jobtypes.AllocationManifest{
 			ID:          allocID,
 			Type:        allocConfig.Type,
 			NodeID:      nodeName,
@@ -227,11 +232,12 @@ func (s *TestSuite) assertAllocationsRunning(
 
 	expectedAllocsIDs := make(map[string]bool)
 	for _, alloc := range allocationsNames {
-		expectedAllocsIDs[types.ConstructAllocationID(ensembleID, alloc)] = true
+		expectedAllocsIDs[alloc] = true
 	}
-
 	for _, alloc := range allocations {
-		_, ok := expectedAllocsIDs[alloc.ID]
+		key, err := types.ParseManifestKey(alloc.ID, ensembleID)
+		s.Require().NoError(err)
+		_, ok := expectedAllocsIDs[key.AllocationName]
 		s.Assert().True(ok, "Expected allocation %s to be running", alloc.ID)
 
 		if alloc.Executor == string(types.ExecutorTypeDocker) {

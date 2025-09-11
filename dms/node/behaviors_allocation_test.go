@@ -508,7 +508,7 @@ func TestCreateAllocations(t *testing.T) {
 		require.NoError(t, err)
 
 		allocations := map[string]jobtypes.AllocationDeploymentConfig{
-			allocationName: {
+			allocationID: {
 				Type:      "task",
 				Resources: resrc,
 				Execution: types.SpecConfig{
@@ -521,7 +521,7 @@ func TestCreateAllocations(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, allocHandles)
 		assert.Len(t, allocHandles, 1)
-		assert.Contains(t, allocHandles, allocationName)
+		assert.Contains(t, allocHandles, allocationID)
 	})
 }
 
@@ -669,7 +669,7 @@ func TestHandleAllocationDeployment(t *testing.T) {
 			jobtypes.AllocationDeploymentRequest{
 				EnsembleID: ensembleID,
 				Allocations: map[string]jobtypes.AllocationDeploymentConfig{
-					allocationName: {
+					allocationID: {
 						Type:      "task",
 						Resources: resrc,
 						Execution: types.SpecConfig{
@@ -694,7 +694,7 @@ func TestHandleAllocationDeployment(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, resp.OK)
 		assert.NotNil(t, resp.Allocations)
-		assert.Contains(t, resp.Allocations, allocationName)
+		assert.Contains(t, resp.Allocations, allocationID)
 	})
 }
 

@@ -88,12 +88,12 @@ func (m *MockOrchestrator) newManifest(
 
 	for name, alloc := range cfg.Allocations() {
 		amf := jtypes.AllocationManifest{
-			ID:          types.ConstructAllocationID(m.id, name),
+			ID:          types.NewAllocationID(m.id, "mock-node", name).String(),
+			Type:        alloc.Type,
+			NodeID:      "mock-node",
 			DNSName:     alloc.DNSName + ".internal",
 			Healthcheck: alloc.HealthCheck,
 			Status:      jtypes.AllocationPending,
-			Ports:       make(map[int]int),
-			Type:        alloc.Type,
 		}
 		manifest.Allocations[name] = amf
 	}
@@ -197,6 +197,7 @@ func NewMockOrchestratorRegistry() *MockOrchestratorRegistry {
 func (m *MockOrchestratorRegistry) NewOrchestrator(
 	ctx context.Context, fs afero.Afero, workDir string,
 	id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
+	_ types.NodeIDGenerator, _ types.AllocationIDGenerator,
 ) (Orchestrator, error) {
 	m.lock.RLock()
 	if _, ok := m.orchestrators[id]; ok {

@@ -752,6 +752,7 @@ func (n *Node) createOrchestrator(ctx context.Context,
 	orchestrator, err := n.orchestratorRegistry.NewOrchestrator(
 		ctx, n.fs, n.dmsConfig.WorkDir,
 		ensembleID, childActor, ensemble,
+		types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new orchestrator: %w", err)

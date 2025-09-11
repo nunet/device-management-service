@@ -11,9 +11,9 @@ maint-scripts/inventory.yaml
 device-management-service
 executor/firecracker/testdata
 
-test/integration/dms
-test/integration/testdata/dms*
-test/integration/testdata/storage
+test/e2e/dms
+test/e2e/testdata/dms*
+test/e2e/testdata/storage
 
 # dms logs
 tests/acceptance/testdata/*.txt

@@ -11,7 +11,9 @@ package steps
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -141,12 +143,18 @@ func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	assert.NoError(t, err)
 	assert.NotNil(t, manifest)
 
-	path, err := spDmsCtx.LogsFromAllocation(ensembleID, "alloc1")
+	allocs := slices.Collect(maps.Keys(manifest.Allocations))
+	assert.NotEmpty(t, allocs)
+
+	alloc := allocs[0]
+
+	path, err := spDmsCtx.LogsFromAllocation(ensembleID, alloc)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, path)
 
-	// TODO: keep it consistent on DMS, rename log file as stdout.log instead
-	out, err := sp.RunCMD([]string{"cat", filepath.Join(path, "stdout.logs")})
+	logFile := "stdout.log"
+
+	out, err := sp.RunCMD([]string{"cat", filepath.Join(path, logFile)})
 	assert.NoError(t, err)
 	assert.Contains(t, out, expected)
 	return nil

@@ -108,7 +108,17 @@ func (s *Supervisor) startSupervision() {
 		case <-ticker.C:
 			wg := sync.WaitGroup{}
 			for allocationID := range s.registeredHealthChecks {
-				allocation, ok := s.getAllocation(types.AllocationNameFromID(allocationID))
+				fmt.Println("allocationID", allocationID)
+
+				// Parse the allocation ID to get the manifest key
+				allocID, err := types.ParseAllocationID(allocationID)
+				if err != nil {
+					log.Warnf("failed to parse allocation ID %s: %v", allocationID, err)
+					continue
+				}
+
+				manifestKey := allocID.ManifestKey()
+				allocation, ok := s.getAllocation(manifestKey)
 				if !ok {
 					log.Warnf("allocation not found in manifest to supervise: %s", allocationID)
 					continue
@@ -184,7 +194,15 @@ func (s *Supervisor) unregisterHealthCheck(allocationID string) {
 }
 
 func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) error {
-	if s.manifest.IsTerminatedTask(types.AllocationNameFromID(allocation.ID)) {
+	// Parse the allocation ID to get the manifest key for termination check
+	allocID, err := types.ParseAllocationID(allocation.ID)
+	if err != nil {
+		log.Warnf("failed to parse allocation ID %s: %v", allocation.ID, err)
+		return err
+	}
+
+	manifestKey := allocID.ManifestKey()
+	if s.manifest.IsTerminatedTask(manifestKey) {
 		return nil
 	}
 	expiry := actor.MakeExpiry(HealthCheckTimeout)
@@ -239,7 +257,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 			s.lock.Unlock()
 		}
 	case <-time.After(HealthCheckTimeout):
-		if s.manifest.IsTerminatedTask(types.AllocationNameFromID(allocation.ID)) {
+		if s.manifest.IsTerminatedTask(manifestKey) {
 			return nil
 		}
 

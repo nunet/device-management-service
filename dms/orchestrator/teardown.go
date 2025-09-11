@@ -144,7 +144,7 @@ func (o *BasicOrchestrator) Shutdown() error {
 	wg = sync.WaitGroup{}
 	for allocName, alloc := range o.manifest.Allocations {
 		wg.Add(1)
-		go func(h actor.Handle, allocID string) {
+		go func(h actor.Handle, allocID string, allocName string) {
 			defer wg.Done()
 			msg, err := actor.Message(
 				o.actor.Handle(),
@@ -192,7 +192,7 @@ func (o *BasicOrchestrator) Shutdown() error {
 			}
 			log.Infof("allocation %s stopped", allocID)
 			allocStatuses[allocName] = jtypes.AllocationCompleted
-		}(o.manifest.Nodes[alloc.NodeID].Handle, alloc.ID)
+		}(o.manifest.Nodes[alloc.NodeID].Handle, alloc.ID, allocName)
 	}
 	wg.Wait()
 	log.Infow("orchestrator_shutdown_complete",
@@ -223,13 +223,27 @@ func (o *BasicOrchestrator) revertNodeDeployment(
 		return
 	}
 
+	// Instead of sending the allocation names with nodeID prefix,
+	// we should send the complete allocation IDs as created by types.ConstructAllocationID
+	// to match exactly how they're stored in the allocator
+	allocIDs := make([]string, 0, len(ncfg.Allocations))
+	for _, allocName := range ncfg.Allocations {
+		// Generate full allocation ID using the generator
+		allocID, err := o.allocationIDGenerator.GenerateFullAllocationID(o.id, n, allocName)
+		if err != nil {
+			log.Errorf("failed to generate full allocation ID for %s.%s: %v", n, allocName, err)
+			continue
+		}
+		allocIDs = append(allocIDs, allocID)
+	}
+
 	msg, err := actor.Message(
 		o.actor.Handle(),
 		h,
 		behaviors.DeploymentRevertBehavior,
 		DeploymentRevertRequest{
 			EnsembleID:   o.id,
-			AllocsByName: ncfg.Allocations,
+			AllocsByName: allocIDs,
 		},
 	)
 	if err != nil {

@@ -163,9 +163,15 @@ func (c *Client) onboard(t *testing.T, context, passphrase string) {
 	hw := hardware.NewHardwareManager()
 	mr, err := hw.GetMachineResources()
 	require.NoError(t, err)
+
 	// onboard with 40% of available ram and cpu
-	ram := expectedRAMGB(t)
-	args := []string{"actor", "cmd", "--context", context, "/dms/node/onboarding/onboard", "--no-gpu", "--ram", fmt.Sprintf("%d GB", ram), "--cpu", fmt.Sprintf("%.2f", math.Ceil(float64(mr.Resources.CPU.Cores*0.4))), "--disk", "10GiB"}
+	ram := types.ConvertBytesToGB(uint64(float64(mr.Resources.RAM.Size) * 0.4))
+	args := []string{
+		"actor", "cmd", "--context", context, "/dms/node/onboarding/onboard",
+		"--no-gpu", "--ram", fmt.Sprintf("%d GB", ram), "--cpu",
+		fmt.Sprintf("%.2f", math.Ceil(float64(mr.Resources.CPU.Cores*0.4))),
+		"--disk", "10GiB",
+	}
 	root.SetArgs(args)
 	err = root.Execute()
 	require.NoError(t, err)
@@ -369,7 +375,7 @@ func (c *Client) shutdownDeployment(t *testing.T, context, passphrase, deploymen
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/shutdown", "--id", deploymentID}
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/shutdown", "--id", deploymentID, "--timeout", "10m"}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -419,7 +425,7 @@ func (c *Client) deploymentStatus(t *testing.T, context, passphrase, deploymentI
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/status", "--id", deploymentID}
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/status", "--id", deploymentID, "--timeout", "10m"}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer

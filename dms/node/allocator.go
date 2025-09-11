@@ -589,6 +589,12 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 	allocation, ok := a.allocations[allocationID]
 	if !ok {
 		log.Warnf("allocation %s not found", allocationID)
+
+		// The reason we are not returning an error is because
+		// for instance when shutting down a deployment with allocations of type TASK
+		// the allocation is not found in the allocator because it was already terminated
+		// and we don't want to return an error in this case
+		// return fmt.Errorf("failed to release allocation: allocation %s not found", allocationID)
 		return nil
 	}
 
@@ -599,7 +605,7 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 	// status as Completed rather than Terminated
 	err := allocation.Terminate(ctx)
 	if err != nil {
-		log.Warnf("terminate allocation: %v", err)
+		log.Errorf("terminate allocation: %v", err)
 		return fmt.Errorf("terminate allocation: %w", err)
 	}
 

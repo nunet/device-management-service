@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,7 +68,6 @@ func (o *BasicOrchestrator) Update(modifiedCfg jtypes.EnsembleConfig, expiry tim
 	// 4. start supervisor for new allocations
 	o.supervisor.Update(jtypes.NewManifestReader(o.manifest))
 
-	log.Warnf("Updated Manifest: %s", o.manifest)
 	return nil
 }
 
@@ -152,7 +152,7 @@ deploy:
 		}
 
 		// 2. commit
-		committer := NewCommitter(o.ctx, o.id, o.actor)
+		committer := NewCommitter(o.ctx, o.id, o.actor, o.allocationIDGenerator, o.nodeIDGenerator)
 		updatedManifest, err := committer.commit(
 			jtypes.NewEnsembleCfgReader(newConfig),
 			jtypes.NewManifestReader(newManifest), candidate)
@@ -162,7 +162,7 @@ deploy:
 		}
 
 		// 3. extend subnet manifest with new nodes
-		provisioner := NewProvisioner(o.ctx, o.cancel, o.actor, o.subnetManifest)
+		provisioner := NewProvisioner(o.ctx, o.cancel, o.actor, o.subnetManifest, o.allocationIDGenerator)
 		addedDNSRecords := make(map[string]string, len(updatedManifest.Allocations))
 		routingTableExtension := make(map[string]string, len(updatedManifest.Allocations))
 		for allocName, alloc := range updatedManifest.Allocations {
@@ -196,7 +196,7 @@ deploy:
 		mfAfterSubnet, err := provisioner.provisionSubnet(updatedManifest, skip...)
 		if err != nil {
 			o.revert(newConfig, updatedManifest)
-			log.Warnf("provision subnet for new nodes (will revert deployment): %w", err)
+			log.Errorf("provision subnet for new nodes (will revert deployment): %w", err)
 			continue deploy
 		}
 
@@ -259,9 +259,20 @@ func (o *BasicOrchestrator) handleEnsembleRemovals(modifiedCfg jtypes.EnsembleCo
 			continue
 		}
 
+		// Generate manifest keys using the allocation ID generator
+		allocNamesForSubnetRemoval := make(map[string]jtypes.AllocationConfig, len(allocs))
+		for alloc, allocCfg := range allocs {
+			allocName, err := o.allocationIDGenerator.GenerateManifestKey(n, alloc)
+			if err != nil {
+				log.Errorf("failed to generate manifest key for %s.%s: %v", n, alloc, err)
+				continue
+			}
+			allocNamesForSubnetRemoval[allocName] = allocCfg
+		}
+
 		errCh := make(chan error, len(allocs))
 		wg := sync.WaitGroup{}
-		for alloc := range allocs {
+		for alloc := range allocNamesForSubnetRemoval {
 			amf, ok := o.manifest.Allocation(alloc)
 			if !ok {
 				errCh <- fmt.Errorf("allocation %s not found in manifest", alloc)
@@ -320,7 +331,7 @@ func (o *BasicOrchestrator) handleEnsembleRemovals(modifiedCfg jtypes.EnsembleCo
 		wg.Wait()
 		close(errCh)
 
-		err := o.removeAllocationsFromSubnet(o.manifest, utils.MapKeysToSlice(allocs))
+		err := o.removeAllocationsFromSubnet(o.manifest, utils.MapKeysToSlice(allocNamesForSubnetRemoval))
 		if err != nil {
 			log.Errorf(
 				"removeNodeFromManifest: error removing allocations from subnet: %v",
@@ -331,7 +342,8 @@ func (o *BasicOrchestrator) handleEnsembleRemovals(modifiedCfg jtypes.EnsembleCo
 			defer o.lock.Unlock()
 			for _, alloc := range allocs {
 				delete(o.manifest.Allocations, alloc)
-				delete(o.cfg.V1.Allocations, alloc)
+				allocName := strings.Split(alloc, ".")[1] // TODO: this is a hack to get the allocation name
+				delete(o.cfg.V1.Allocations, allocName)
 			}
 			nodeAllocs := modifiedCfg.V1.Nodes[n].Allocations
 			nmf := o.manifest.Nodes[n]
@@ -341,7 +353,7 @@ func (o *BasicOrchestrator) handleEnsembleRemovals(modifiedCfg jtypes.EnsembleCo
 			ncfg := o.cfg.V1.Nodes[n]
 			ncfg.Allocations = nodeAllocs
 			o.cfg.V1.Nodes[n] = ncfg
-		}(utils.MapKeysToSlice(allocs))
+		}(utils.MapKeysToSlice(allocNamesForSubnetRemoval))
 
 		if errCh != nil {
 			errs = multierr.Append(errs, aggregateErrors(errCh))

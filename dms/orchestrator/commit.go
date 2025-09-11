@@ -25,16 +25,105 @@ import (
 )
 
 type Committer struct {
-	ctx   context.Context
-	eid   string // ensemble id
-	actor actor.Actor
+	ctx                   context.Context
+	eid                   string // ensemble id
+	actor                 actor.Actor
+	allocationIDGenerator types.AllocationIDGenerator
+	nodeIDGenerator       types.NodeIDGenerator
 }
 
-func NewCommitter(ctx context.Context, eid string, act actor.Actor) *Committer {
+func NewCommitter(ctx context.Context, eid string, act actor.Actor, allocationIDGenerator types.AllocationIDGenerator, nodeIDGenerator types.NodeIDGenerator) *Committer {
 	return &Committer{
-		ctx:   ctx,
-		eid:   eid,
-		actor: act,
+		ctx:                   ctx,
+		eid:                   eid,
+		actor:                 act,
+		allocationIDGenerator: allocationIDGenerator,
+		nodeIDGenerator:       nodeIDGenerator,
+	}
+}
+
+// parseStandbyNode parses a node name and returns (isStandby, primaryNode, standbyIndex)
+func parseStandbyNode(nodeName string) (bool, string, int) {
+	return types.ParseNodeName(nodeName)
+}
+
+// processNodeAllocations processes allocations and port mappings for a node
+func (c *Committer) processNodeAllocations(
+	cfg jtypes.EnsembleConfig,
+	nodeID string,
+	isStandby bool,
+	primaryNode string,
+	allocationNodes map[string]string,
+	portsByAllocation map[string][]jtypes.PortConfig,
+) {
+	// For standby nodes, we need to get config from primary
+	var nodeConfig jtypes.NodeConfig
+	var ok bool
+
+	if isStandby {
+		nodeConfig, ok = cfg.NodeWithGenerator(primaryNode, c.nodeIDGenerator)
+	} else {
+		nodeConfig, ok = cfg.NodeWithGenerator(nodeID, c.nodeIDGenerator)
+	}
+
+	if !ok {
+		return
+	}
+
+	for _, allocName := range nodeConfig.Allocations {
+		// Generate manifest key using generator
+		manifestKey, err := c.allocationIDGenerator.GenerateManifestKey(nodeID, allocName)
+		if err != nil {
+			log.Errorf("failed to generate manifest key for %s.%s: %v", nodeID, allocName, err)
+			continue
+		}
+
+		// Track the node that will deploy this allocation using manifest key
+		allocationNodes[manifestKey] = nodeID
+
+		// TODO: optimize the manifest format and how node/alloc data is
+		//       being passed around. A bit messy at the moment. see #825
+		for _, portMap := range nodeConfig.Ports {
+			if portMap.Allocation == allocName {
+				portsByAllocation[allocName] = append(portsByAllocation[allocName], portMap)
+			}
+		}
+	}
+}
+
+// updateManifestAllocations updates manifest allocations with node and port information
+func (c *Committer) updateManifestAllocations(
+	manifest jtypes.EnsembleManifest,
+	allocationNodes map[string]string,
+	portsByAllocation map[string][]jtypes.PortConfig,
+	allocations map[string]actor.Handle,
+) {
+	for _, nodeManifest := range manifest.Nodes {
+		for _, allocName := range nodeManifest.Allocations {
+			// Parse the manifest key to get allocation details
+			allocID, err := types.ParseManifestKey(allocName, c.eid)
+			if err != nil {
+				log.Warnf("failed to parse manifest key %s: %v", allocName, err)
+				continue
+			}
+
+			allocPorts := make(map[int]int)
+			if ports, ok := portsByAllocation[allocID.ConfigName()]; ok {
+				for _, pc := range ports {
+					allocPorts[pc.Public] = pc.Private
+				}
+			}
+			if alloc, ok := manifest.Allocations[allocName]; ok {
+				alloc.NodeID = allocationNodes[allocName]
+				alloc.Handle = allocations[allocID.String()]
+				alloc.Ports = allocPorts
+				alloc.IsStandby = nodeManifest.RedundancyRole == jtypes.RoleStandby
+				alloc.RedundancyGroup = allocID.ConfigName()
+				manifest.Allocations[allocName] = alloc
+				log.Infof("adding allocation to manifest, allocation: %s, node: %s, handle: %s, isStandby: %v",
+					allocName, alloc.NodeID, alloc.Handle, alloc.IsStandby)
+			}
+		}
 	}
 }
 
@@ -106,11 +195,11 @@ func (c *Committer) commit(
 					"nodeID", n,
 					"error", err)
 				ok = false
-				return
-			}
-			log.Debugf("allocating deployment for %s", n)
-			for a, h := range allocated {
-				allocations[a] = h
+			} else {
+				log.Debugf("allocating deployment for %s", n)
+				for a, h := range allocated {
+					allocations[a] = h
+				}
 			}
 			mx.Unlock()
 		}(n, bid)
@@ -121,47 +210,68 @@ func (c *Committer) commit(
 		return manifest, fmt.Errorf("failed to allocate resources: %w", ErrDeploymentFailed)
 	}
 
+	allocationNodes := make(map[string]string)
+	portsByAllocation := make(map[string][]jtypes.PortConfig)
 	// There are certain details that are filled during provisioning, e.g. allocation
 	// VPN addresses and public port mappings
 	for n, bid := range candidate {
-		// update manifest only if node already exists
+		// Extract node role information
+		var role jtypes.RedundancyRole
+		var primaryNode string
+		var standbyIndex int
+
+		isStandby, parsedPrimary, parsedIndex := parseStandbyNode(n)
+		if isStandby {
+			role = jtypes.RoleStandby
+			primaryNode = parsedPrimary
+			standbyIndex = parsedIndex
+		} else {
+			role = jtypes.RolePrimary
+			primaryNode = n
+			standbyIndex = 0
+		}
+
+		// update manifest node
 		if nmf, ok := manifest.Nodes[n]; ok {
 			nmf.Peer = bid.Peer()
 			nmf.Handle = bid.Handle()
 			nmf.Location = bid.Location()
+			nmf.RedundancyRole = role
+			nmf.PrimaryNode = primaryNode
+			nmf.StandbyIndex = standbyIndex
 			manifest.Nodes[n] = nmf
-			// TODO: manifest partial updates
+
+			// TODO: remove from here on the dynamic ensemble modification PR
+			// use diffs instead, after o.commit
 		} else {
 			nmf := jtypes.NodeManifest{
-				ID:       n,
-				Peer:     bid.Peer(),
-				Handle:   bid.Handle(),
-				Location: bid.Location(),
+				ID:             n,
+				Peer:           bid.Peer(),
+				Handle:         bid.Handle(),
+				Location:       bid.Location(),
+				RedundancyRole: role,
+				PrimaryNode:    primaryNode,
+				StandbyIndex:   standbyIndex,
+				StandbyNodes:   make([]string, 0),
 			}
+			if role == jtypes.RoleStandby {
+				nmf.StandbyNodes = make([]string, 0)
+			} else {
+				for i := 0; i < standbyIndex; i++ {
+					nmf.StandbyNodes = append(nmf.StandbyNodes, fmt.Sprintf("%s-standby-%d", primaryNode, i+1))
+				}
+			}
+
 			manifest.Nodes[n] = nmf
 			// TODO: manifest partial updates
 		}
 
-		if ncfg, ok := cfg.Node(n); ok {
-			for _, a := range ncfg.Allocations {
-				allocPorts := make(map[int]int)
-				for i := range ncfg.Ports {
-					if ncfg.Ports[i].Allocation == a {
-						pc := ncfg.Ports[i]
-						allocPorts[pc.Public] = pc.Private
-					}
-				}
-
-				if alloc, ok := manifest.Allocations[a]; ok {
-					alloc.NodeID = n
-					alloc.Handle = allocations[a]
-					alloc.Ports = allocPorts
-					manifest.Allocations[a] = alloc
-					// TODO: manifest partial updates
-				}
-			}
-		}
+		// Process node allocations and port mappings
+		c.processNodeAllocations(cfg, n, isStandby, primaryNode, allocationNodes, portsByAllocation)
 	}
+
+	// Update manifest allocations with node and port information
+	c.updateManifestAllocations(manifest, allocationNodes, portsByAllocation, allocations)
 
 	return manifest, nil
 }
@@ -180,7 +290,17 @@ type CommitDeploymentResponse struct {
 }
 
 func (c *Committer) commitDeployment(cfg jtypes.EnsembleConfig, n string, h actor.Handle) error {
-	ncfg, ok := cfg.Node(n)
+	// Check if this is a standby node and get the primary node config
+	isStandby, primaryNode, _ := parseStandbyNode(n)
+	var ncfg jtypes.NodeConfig
+	var ok bool
+
+	if isStandby {
+		ncfg, ok = cfg.NodeWithGenerator(primaryNode, c.nodeIDGenerator)
+	} else {
+		ncfg, ok = cfg.NodeWithGenerator(n, c.nodeIDGenerator)
+	}
+
 	if !ok {
 		return fmt.Errorf("node %s not found", n)
 	}
@@ -213,15 +333,23 @@ func (c *Committer) commitDeployment(cfg jtypes.EnsembleConfig, n string, h acto
 			}
 
 			allocPorts := getAllocPortMapping(allocName)
+
+			// Generate full allocation ID using generator
+			fullAllocID, err := c.allocationIDGenerator.GenerateFullAllocationID(c.eid, n, allocName)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to generate full allocation ID for %s.%s: %w", n, allocName, err)
+				return
+			}
+
 			msg, err := actor.Message(
 				c.actor.Handle(),
 				h,
 				behaviors.CommitDeploymentBehavior,
 				CommitDeploymentRequest{
 					EnsembleID:     c.eid,
-					AllocationName: allocName,
+					AllocationName: fullAllocID,
 					NodeID:         n,
-					Resources:      types.CommittedResources{Resources: allocation.Resources},
+					Resources:      types.CommittedResources{Resources: allocation.Resources, AllocationID: fullAllocID},
 					PortMapping:    allocPorts,
 				},
 				actor.WithMessageTimeout(aggregatedTimeout),
@@ -283,12 +411,24 @@ func (c *Committer) commitDeployment(cfg jtypes.EnsembleConfig, n string, h acto
 
 func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle) (map[string]actor.Handle, error) {
 	allocs := make(map[string]jtypes.AllocationDeploymentConfig)
-	ncfg, ok := cfg.Node(n)
+
+	// Check if this is a standby node and get the primary node config
+	isStandby, primaryNode, _ := parseStandbyNode(n)
+	var ncfg jtypes.NodeConfig
+	var ok bool
+
+	if isStandby {
+		ncfg, ok = cfg.NodeWithGenerator(primaryNode, c.nodeIDGenerator)
+	} else {
+		ncfg, ok = cfg.NodeWithGenerator(n, c.nodeIDGenerator)
+	}
+
 	if !ok {
-		return nil, fmt.Errorf("node %s not found", n)
+		return nil, fmt.Errorf("node not found for %s", n)
 	}
 
 	if len(ncfg.Allocations) == 0 {
+		log.Warnf("no allocations found for %s, won't allocate (ensemble: %s)", n, c.eid)
 		return nil, nil
 	}
 
@@ -300,7 +440,13 @@ func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle
 			provisionScripts[p] = cfg.V1.Scripts[p]
 		}
 
-		allocs[a] = jtypes.AllocationDeploymentConfig{
+		// Generate full allocation ID using generator
+		fullAllocID, err := c.allocationIDGenerator.GenerateFullAllocationID(c.eid, n, a)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate full allocation ID for %s.%s: %w", n, a, err)
+		}
+
+		allocs[fullAllocID] = jtypes.AllocationDeploymentConfig{
 			Type:             acfg.Type,
 			Executor:         acfg.Executor,
 			Resources:        acfg.Resources,
