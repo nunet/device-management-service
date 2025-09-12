@@ -30,6 +30,9 @@ import (
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -151,6 +154,9 @@ func TestNew(t *testing.T) {
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
 			&store.Store{},
+			&payment.Store{},
+			&usage.Store{},
+			&transaction.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "onboarding is nil")
@@ -176,6 +182,9 @@ func TestNew(t *testing.T) {
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
 			&store.Store{},
+			&payment.Store{},
+			&usage.Store{},
+			&transaction.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "root capability context is nil")
@@ -200,6 +209,9 @@ func TestNew(t *testing.T) {
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
 			&store.Store{},
+			&payment.Store{},
+			&usage.Store{},
+			&transaction.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "hostID is empty")
@@ -225,6 +237,9 @@ func TestNew(t *testing.T) {
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
 			&store.Store{},
+			&payment.Store{},
+			&usage.Store{},
+			&transaction.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "network is nil")
@@ -250,6 +265,9 @@ func TestNew(t *testing.T) {
 			&storage.VolumeTracker{},
 			&controller.GlusterController{},
 			&store.Store{},
+			&payment.Store{},
+			&usage.Store{},
+			&transaction.Store{},
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, node)

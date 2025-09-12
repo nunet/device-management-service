@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -33,13 +34,19 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -59,6 +66,12 @@ const (
 	RestoreDeadlineProvisioning = 1 * time.Minute
 	RestoreDeadlineRunning      = 5 * time.Minute
 	bidStateGCInterval          = time.Minute
+
+	// contract event handler config
+	eventHandlerWorkers   = 2
+	eventHandlerQueueSize = 200
+	eventHandlerBaseDelay = 5 * time.Second
+	eventHandlerMaxDelay  = 15 * time.Second
 )
 
 // TODO issue #1154 - better handle transient allocations
@@ -130,8 +143,14 @@ type Node struct {
 	cancel               func()
 
 	// contract store
-	contractStore  store.Store
-	contractActors []*tokenomics.ContractActor
+	contractStore    *store.Store
+	paymentStore     *payment.Store
+	usageStore       *usage.Store
+	contractActors   []*tokenomics.ContractActor
+	transactionStore *transaction.Store
+
+	// contract event handler
+	contractEventHandler *eventhandler.EventHandler
 }
 
 // createActor creates an actor.
@@ -171,6 +190,9 @@ func New(cfg config.Config, fs afero.Afero,
 	portConfig PortConfig, vt *storage.VolumeTracker,
 	volumeController controller.GlusterControllerInterface,
 	contractStore *store.Store,
+	paymentStore *payment.Store,
+	usageStore *usage.Store,
+	transactionStore *transaction.Store,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -195,6 +217,15 @@ func New(cfg config.Config, fs afero.Afero,
 	}
 	if contractStore == nil {
 		return nil, errors.New("contract store is nil")
+	}
+	if paymentStore == nil {
+		return nil, errors.New("payment store is nil")
+	}
+	if usageStore == nil {
+		return nil, errors.New("usage store is nil")
+	}
+	if transactionStore == nil {
+		return nil, errors.New("transaction store is nil")
 	}
 
 	subnetStatus = make(map[string]int)
@@ -251,9 +282,15 @@ func New(cfg config.Config, fs afero.Afero,
 		fs:                   fs,
 		volumeController:     volumeController,
 		volumeOwners:         make(map[string]string),
-		contractStore:        *contractStore,
+		contractStore:        contractStore,
+		paymentStore:         paymentStore,
+		usageStore:           usageStore,
+		transactionStore:     transactionStore,
 		contractActors:       make([]*tokenomics.ContractActor, 0),
 	}
+
+	// setup contract event handler
+	n.contractEventHandler = eventhandler.New(ctx, eventHandlerWorkers, eventHandlerQueueSize, eventHandlerBaseDelay, eventHandlerMaxDelay, n.handleContractEvents)
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
 		cancel()
@@ -527,6 +564,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.ContractCreateBehavior: {
 			fn: n.handleNewContract,
 		},
+		behaviors.ContractUsagesCalculateBehavior: {
+			fn: n.handleContractUsagesCalculate,
+		},
 		// listerner by service provider and compute provider
 		behaviors.ContractProposeBehavior: {
 			fn: n.handleContractPropose,
@@ -538,6 +578,30 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		// used by compute provider to list incoming contracts
 		behaviors.ContractListIncomingBehavior: {
 			fn: n.handleListIncomingContracts,
+		},
+
+		// used by payment validator
+		behaviors.ContractUsageBehavior: {
+			fn: n.handleIncomingContractUsage,
+		},
+
+		// used by SP and CP
+		behaviors.ContractTransactionBehavior: {
+			fn: n.handleIncomingTransaction,
+		},
+		behaviors.ContractPaymentStatusBehavior: {
+			fn: n.handlePaymentStatus,
+		},
+		// used by payment validator to validate payment
+		behaviors.ContractPaymentValidationRequestBehavior: {
+			fn: n.handleContractPaymentValidationRequestFromContractHost,
+		},
+		behaviors.ContractListLocalTransactionsBehavior: {
+			fn: n.handleListLocalTransactions,
+		},
+
+		behaviors.ContractConfirmLocalTransactionBehavior: {
+			fn: n.handleConfirmLocalTransaction,
 		},
 	}
 
@@ -819,6 +883,65 @@ func (n *Node) addContractActor(a *tokenomics.ContractActor) {
 	n.contractActors = append(n.contractActors, a)
 }
 
+func (n *Node) collectUsagesAndForwardToPaymentProviders() (int, error) {
+	total := 0
+	lastProcessedAt, _ := n.usageStore.GetLastProcessedAt()
+	now := time.Now()
+
+	usages, err := n.usageStore.CountAllocationsByContract(lastProcessedAt, now)
+	if err != nil {
+		return total, fmt.Errorf("failed to get usages: %w", err)
+	}
+
+	type paymentForwardToProviderRequest struct {
+		AllocationsUsed int
+		Contract        contracts.Contract
+	}
+
+	allPayments := make([]paymentForwardToProviderRequest, 0)
+
+	for contractDID, v := range usages {
+		c, err := n.contractStore.GetContract(contractDID)
+		if err != nil {
+			log.Warnf("contract %s was not found on this host", contractDID)
+			continue
+		}
+
+		request := paymentForwardToProviderRequest{
+			Contract:        *c,
+			AllocationsUsed: v,
+		}
+		allPayments = append(allPayments, request)
+	}
+	err = n.usageStore.SaveLastProcessedAt(now)
+	if err != nil {
+		return 0, fmt.Errorf("failed to save last processed usage: %w", err)
+	}
+
+	for _, v := range allPayments {
+		req := contracts.ContractUsageRequestBehavior{
+			UniqueID: uuid.NewString(),
+			Contract: v.Contract,
+			Usages:   v.AllocationsUsed,
+		}
+
+		// construct destination address
+		destination, err := actor.HandleFromDID(v.Contract.PaymentValidatorDID.URI)
+		if err != nil {
+			log.Errorf("failed to get handle of payment provider")
+			continue
+		}
+		envelope, err := n.invokeBehaviour(destination, behaviors.ContractUsageBehavior, req, invokeMessageTimeout)
+		if envelope.Message == nil || err != nil {
+			log.Errorf("failed to update payment status of contract host: %v", err)
+			continue
+		}
+		total++
+	}
+
+	return total, nil
+}
+
 func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {
 	msg, err := actor.Message(
 		n.actor.Handle(),
@@ -849,4 +972,60 @@ func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payloa
 	case <-ticker.C:
 		return actor.Envelope{}, errors.New("failed to receive reply due to timeout")
 	}
+}
+
+func (n *Node) handleContractEvents(event eventhandler.Event) error {
+	hostDID, err := did.FromString(event.ContractHostDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host did: %w", err)
+	}
+	pubKey, err := did.PublicKeyFromDID(hostDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host public key from did: %w", err)
+	}
+
+	pid, err := peer.IDFromPublicKey(pubKey)
+	if err != nil {
+		return fmt.Errorf("failed to get peer id: %w", err)
+	}
+
+	// get actor public key
+	contractActorDID, err := did.FromString(event.ContractDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts actor did: %w", err)
+	}
+	pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
+	}
+
+	destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, event.ContractDID, pid.String())
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host handle: %w", err)
+	}
+
+	bts, err := json.Marshal(event.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event object: %w", err)
+	}
+
+	req := contracts.ContractEventRequestBehaviour{
+		Payload: bts,
+	}
+	reply, err := n.invokeBehaviour(destination, behaviors.ContractEventsBehavior, req, invokeMessageTimeout)
+	if err != nil {
+		return fmt.Errorf("failed to send message to contract host: %w", err)
+	}
+
+	var respEnvelope contracts.ContractEventResponseBehaviour
+	err = json.Unmarshal(reply.Message, &respEnvelope)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
+	}
+
+	if respEnvelope.Error != "" {
+		return fmt.Errorf("failed to process contract event: %s", respEnvelope.Error)
+	}
+
+	return nil
 }

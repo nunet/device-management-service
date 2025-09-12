@@ -49,6 +49,9 @@ import (
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -170,6 +173,17 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("unable to create contract store: %w", err)
 	}
 
+	// payment validator
+	paymentsStore, err := payment.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create payment store: %w", err)
+	}
+
+	usageStore, err := usage.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create usage store: %w", err)
+	}
+
 	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
 		OnboardedResources: clover_db.NewGenericEntityRepository[types.OnboardedResources](db),
@@ -250,12 +264,16 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 
 	volumeTracker := storage.NewVolumeTracker()
 
+	txStore, err := transaction.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transaction store: %w", err)
+	}
+
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
 		orchestratorRepo, geoip2db, hostLocation, portConfig, volumeTracker,
-		volumeController,
-		contractStore,
+		volumeController, contractStore, paymentsStore, usageStore, txStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -369,6 +387,10 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"gpu",
 			"contracts",
 			"contracts_keys",
+			"contracts_payments",
+			"service_provider_transactions",
+			"contracts_usage",
+			"usage_metadata",
 		},
 	)
 }

@@ -20,6 +20,7 @@ import (
 	"gitlab.com/nunet/device-management-service/executor/null"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -388,6 +389,8 @@ func TestAllocatorAllocate(t *testing.T) {
 			orchHandle,
 			job,
 			nullExecutor,
+			map[string]types.ContractConfig{},
+			&eventhandler.EventHandler{},
 		)
 		assert.Error(t, err, "allocate should return an error for resources not committed")
 		assert.Nil(t, allocation, "allocation should be nil on failure")
@@ -418,7 +421,7 @@ func TestAllocatorAllocate(t *testing.T) {
 		assert.NoError(t, err, "commit should not return an error")
 
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor)
+			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
 		assert.NoError(t, err, "allocate should not return an error")
 		assert.NotNil(t, allocation, "allocation should not be nil on success")
 
@@ -499,7 +502,7 @@ func TestAllocatorAllocate(t *testing.T) {
 
 		// try to allocate too much resources
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, beyondAvailableJob, nullExecutor)
+			ctx, allocationID, "service", allocActor, orchHandle, beyondAvailableJob, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
 		assert.ErrorContains(t, err, types.ErrNoFreeResources.Error())
 		assert.Nil(t, allocation)
 	})
@@ -553,7 +556,7 @@ func TestAllocator_Stop(t *testing.T) {
 		assert.NoError(t, err, "commit should not return an error")
 
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor)
+			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
 
 		assert.NoError(t, err, "allocate should not return an error")
 		assert.NotNil(t, allocation, "allocation should not be nil on success")
@@ -633,7 +636,7 @@ func TestAllocator_Stop(t *testing.T) {
 
 		// allocate the first allocation
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor)
+			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
 
 		assert.NoError(t, err, "allocate should not return an error")
 		assert.NotNil(t, allocation, "allocation should not be nil on success")

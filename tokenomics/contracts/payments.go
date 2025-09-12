@@ -9,68 +9,23 @@
 package contracts
 
 import (
-	"context"
 	"time"
 )
 
-type (
-	PaymentMode string
-	PricingType string
-	PaymentType string
-)
-
 const (
-	// Payment modes
-	FiatPayment       PaymentMode = "fiat"
-	BlockchainPayment PaymentMode = "blockchain"
+	FiatMethod       PaymentType = "fiat"
+	BlockchainMethod PaymentType = "blockchain"
 )
 
-const (
-	// Payment types
-	EscrowPaymentType PaymentType = "escrow"
-	DirectPaymentType PaymentType = "direct"
-)
-
-const (
-	// Pricing types
-	FixedJobPricingType PricingType = "fixed"
-	PeriodicPricingType PricingType = "periodic"
-)
-
-// PaymentGateway defines the operations for managing payments and settlements
-type PaymentGateway interface {
-	Deposit(ctx context.Context, contractID string, payment Payment) error
-	ProcessPayment(paymentType PaymentType, amount float64) error
-}
+type PaymentType string
 
 // Payment represents a payment transaction
-type Payment struct {
-	Requestor   string
-	Provider    string
-	Currency    string
-	Timestamp   time.Time
-	PaymentType PaymentType // PaymentType (like escrow vs. direct)
-	PaymentMode PaymentMode
-	PricingMeta PricingMetadata
-}
-
-// PeriodicPricing represents the details for periodic pricing
-type PeriodicPricing struct {
-	Period      DurationDetails
-	UsageLimits UsageLimits
-}
-
-// UsageLimits represents the usage limits or quotas for periodic pricing
-type UsageLimits struct {
-	MaxCPUHours         int
-	MaxMemoryUsage      int
-	MaxStorageUsage     int
-	MaxNetworkBandwidth int
-}
-
-type PricingMetadata struct {
-	Price       float32
-	PlatformFee float32
-	Type        PricingType
-	Periodic    *PeriodicPricing
+type PaymentDetails struct {
+	PaymentType       PaymentType `json:"payment_type"`
+	RequesterAddr     string      `json:"requester_addr"`
+	ProviderAddr      string      `json:"provider_addr"`
+	Currency          string      `json:"currency"`
+	Timestamp         time.Time   `json:"timestamp"`
+	FeesPerAllocation string      `json:"fees_per_allocation"`
+	Blockchain        string      `json:"blockchain"` // ETHEREUM, CARDANO etc..
 }

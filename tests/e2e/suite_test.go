@@ -376,6 +376,12 @@ func (s *TestSuite) setupTestNetwork() {
 		}
 		nodeIndex := i
 
+		// for contracts test set the 4th node as a payment validator
+		if s.Name == "deployment_with_contracts_tests" && nodeIndex == 3 {
+			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9421/"
+			cfg.PaymentProvider.Mode = true
+		}
+
 		var err error
 		s.nodes[nodeIndex], err = newMockNode(s.T(), cfg, password, nodeRoot, nodeIndex)
 		s.Require().NoError(err)

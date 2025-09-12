@@ -103,7 +103,17 @@ func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) erro
 			return fmt.Errorf("failed to get peer id: %w", err)
 		}
 
-		destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKey, v.DID, pid.String())
+		// get actor public key
+		contractActorDID, err := did.FromString(v.DID)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts actor did: %w", err)
+		}
+		pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
+		}
+
+		destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, v.DID, pid.String())
 		if err != nil {
 			return fmt.Errorf("failed to get contracts host handle: %w", err)
 		}

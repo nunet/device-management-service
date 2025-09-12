@@ -29,6 +29,8 @@ import (
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -172,7 +174,12 @@ func (n *Node) createAllocation(
 	allocationID string,
 	allocType jobtypes.AllocationType,
 	job jobs.Job, supervisor actor.Handle,
+	contracts map[string]types.ContractConfig,
 ) (*jobs.Allocation, error) {
+	if contracts == nil {
+		contracts = make(map[string]types.ContractConfig)
+	}
+
 	executor, err := createExecutor(context.Background(), n.fs, job.Execution.Type)
 	if err != nil {
 		return nil, fmt.Errorf("create executor: %w", err)
@@ -187,9 +194,24 @@ func (n *Node) createAllocation(
 		context.Background(), allocationID,
 		allocType, allocActor, supervisor,
 		job, executor,
+		contracts,
+		n.contractEventHandler,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("allocate: %w", err)
+	}
+
+	for _, v := range contracts {
+		evt := events.CreateAllocation{
+			Type:         events.CreateAllocationEvent,
+			Resources:    job.Resources,
+			AllocationID: allocationID,
+		}
+		n.contractEventHandler.Push(eventhandler.Event{
+			ContractHostDID: v.Host,
+			ContractDID:     v.DID,
+			Payload:         evt,
+		})
 	}
 
 	return allocation, nil
@@ -223,6 +245,7 @@ func (n *Node) createAllocations(
 				Volume:           allocationConfig.Volume,
 			},
 			supervisor,
+			allocationConfig.Contracts,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create allocation %s: %w", allocationID, err)

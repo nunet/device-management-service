@@ -34,6 +34,14 @@ type General struct {
 	StorageCADirectory       string `mapstructure:"storage_ca_directory"       json:"storage_ca_directory"`
 	StorageBricksDir         string `mapstructure:"storage_bricks_dir"         json:"storage_bricks_dir"`
 	StorageGlusterfsHostname string `mapstructure:"storage_glusterfs_hostname" json:"storage_glusterfs_hostname"`
+
+	PaymentProvider PaymentProvider `mapstructure:"payment_provider" json:"payment_provider"`
+}
+
+type PaymentProvider struct {
+	Mode             bool   `mapstructure:"mode" json:"mode"`
+	EthereumRPCURL   string `mapstructure:"ethereum_rpc_url" json:"ethereum_rpc_url"`
+	EthereumRPCToken string `mapstructure:"ethereum_rpc_token" json:"ethereum_rpc_token"`
 }
 
 type Rest struct {

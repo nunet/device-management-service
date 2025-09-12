@@ -110,7 +110,126 @@ type ContractApproveLocalRequestCmd struct {
 	ContractDID string
 }
 
+type ContractConfirmLocalTransactionCmd struct {
+	UniqueID string
+	TxHash   string
+}
+
+type ContractPaymentStatusCmd struct {
+	UniqueID string
+}
+
 var registeredBehaviors = map[string]*behaviorConfig{
+	// /dms/tokenomics/contract/payment/status
+	behaviors.ContractPaymentStatusBehavior: {
+		Payload: func() any { return &ContractPaymentStatusCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractPaymentStatusCmd)
+			cmd.Flags().StringVarP(&p.UniqueID, "unique-id", "", "", "unique id (required)")
+			_ = cmd.MarkFlagRequired("unique-id")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractPaymentStatusCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payment status payload")
+			}
+
+			request := contracts.ContractPaymentStatusRequest{
+				UniqueID: req.UniqueID,
+			}
+
+			resp, err := dmsClient.GetPaymentStatus(ctx, request, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a payment status request",
+		Long: `Invoke the /dms/tokenomics/contract/payment/status behavior on an actor
+							
+							This behavior calls the payment status behaviour.
+							
+							Examples:
+							
+							  nunet actor cmd --context user /dms/tokenomics/contract/payment/status --unique-id <uniqueid>`,
+	},
+	// /dms/tokenomics/contract/usages/calculate
+	behaviors.ContractUsagesCalculateBehavior: {
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			resp, err := dmsClient.CollectUsagesAndForwardToPaymentProviders(ctx, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a usage calculation request",
+		Long: `Invoke the /dms/tokenomics/contract/usages/calculate behavior on an actor
+						
+						This behavior calls the actors contract calculate usages behaviour.
+						
+						Examples:
+						
+						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate`,
+	},
+	// /dms/tokenomics/contract/transactions/confirm
+	behaviors.ContractConfirmLocalTransactionBehavior: {
+		Payload: func() any { return &ContractConfirmLocalTransactionCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractConfirmLocalTransactionCmd)
+			cmd.Flags().StringVarP(&p.UniqueID, "unique-id", "", "", "transaction unique id (required)")
+			cmd.Flags().StringVarP(&p.TxHash, "tx-hash", "", "", "transaction hash (required)")
+			_ = cmd.MarkFlagRequired("unique-id")
+			_ = cmd.MarkFlagRequired("tx-hash")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractConfirmLocalTransactionCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode ContractConfirmLocalTransactionCmd payload")
+			}
+
+			request := contracts.ContractConfirmLocalTransactionRequest{
+				UniqueID: req.UniqueID,
+				TxHash:   req.TxHash,
+			}
+
+			resp, err := dmsClient.ConfirmTransaction(ctx, request, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a confirm transactions request",
+		Long: `Invoke the /dms/tokenomics/contract/transactions/confirm behavior on an actor
+							
+							This behavior calls the actors contract confirm transactions behaviour.
+							
+							Examples:
+							
+							  nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash> `,
+	},
+	// /dms/tokenomics/contract/transactions/list
+	behaviors.ContractListLocalTransactionsBehavior: {
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			resp, err := dmsClient.ListTransactions(ctx, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a list transactions request",
+		Long: `Invoke the /dms/tokenomics/contract/transactions/list behavior on an actor
+						
+						This behavior calls the actors contract list transactions behaviour.
+						
+						Examples:
+						
+						  nunet actor cmd --context user /dms/tokenomics/contract/transactions/list`,
+	},
 	// /dms/tokenomics/contract/list_incoming
 	behaviors.ContractListIncomingBehavior: {
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
@@ -220,6 +339,9 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to read contract file: %w", err)
 			}
 			var contractReq contracts.CreateContractRequestBehaviour
+
+			fmt.Println("contractReq ", string(data))
+
 			err = json.Unmarshal(data, &contractReq)
 			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal create contract request payload: %w", err)
