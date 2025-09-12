@@ -1,3 +1,4 @@
+// force pipeline trigger
 module gitlab.com/nunet/device-management-service
 
 go 1.23.8
