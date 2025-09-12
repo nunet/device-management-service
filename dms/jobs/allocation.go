@@ -24,6 +24,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -100,6 +102,9 @@ type Allocation struct {
 	// selfRelease will use node's releaseAllocation mechanism
 	selfRelease func() error
 
+	Contracts            map[string]types.ContractConfig
+	contractEventHandler *eventhandler.EventHandler
+
 	createdAt time.Time
 	startedAt time.Time
 }
@@ -116,6 +121,7 @@ func NewAllocation(
 	network network.Network,
 	executor types.Executor,
 	selfRelease func() error,
+	contractEventHandler *eventhandler.EventHandler,
 ) (*Allocation, error) {
 	if network == nil {
 		return nil, fmt.Errorf("network is nil")
@@ -154,7 +160,8 @@ func NewAllocation(
 			gatewayIP   string
 			portMapping map[int]int
 		}{},
-		createdAt: time.Now(),
+		createdAt:            time.Now(),
+		contractEventHandler: contractEventHandler,
 	}
 	return allocation, nil
 }
@@ -426,6 +433,18 @@ func (a *Allocation) Cleanup() error {
 // it won't return errors right away but try to clean up
 // all the other steps
 func (a *Allocation) Terminate(ctx context.Context) error {
+	for _, v := range a.Contracts {
+		evt := events.StopAllocation{
+			Type:         events.StopAllocationEvent,
+			AllocationID: a.ID,
+		}
+		a.contractEventHandler.Push(eventhandler.Event{
+			ContractHostDID: v.Host,
+			ContractDID:     v.DID,
+			Payload:         evt,
+		})
+	}
+
 	status := a.Status(ctx)
 	if status.Status != AllocationStopped && status.Status != AllocationCompleted {
 		err := a.Stop(ctx)

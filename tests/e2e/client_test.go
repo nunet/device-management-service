@@ -253,6 +253,70 @@ func (c *Client) createContract(t *testing.T, contractFilePath, context, passphr
 	return buf.String(), err
 }
 
+func (c *Client) listLocalTransactions(t *testing.T, context, passphrase string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/transactions/list", "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("listLocalTransactions response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) paymentStatus(t *testing.T, context, passphrase, uniqueID, dest string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/status", "--unique-id", uniqueID, "--timeout", "5s", "--dest", dest}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("paymentStatus response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniqueID, txHash string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/transactions/confirm", "--unique-id", uniqueID, "--tx-hash", txHash, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("confirmLocalTransaction response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) calculateContractUsages(t *testing.T, context, passphrase string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/usages/calculate", "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("calculateContractUsages response: ", buf.String())
+	return buf.String(), err
+}
+
 func (c *Client) approveContracts(t *testing.T, contractDID, context, passphrase string) (string, error) {
 	root := c.newCommandCtx()
 

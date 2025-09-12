@@ -21,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/null"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -96,6 +97,8 @@ func TestHandleAllocatedResources(t *testing.T) {
 				},
 			},
 			nullExecutor,
+			map[string]types.ContractConfig{},
+			&eventhandler.EventHandler{},
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)
@@ -226,6 +229,8 @@ func TestHandleFreeResources(t *testing.T) {
 				},
 			},
 			nullExecutor,
+			map[string]types.ContractConfig{},
+			&eventhandler.EventHandler{},
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)

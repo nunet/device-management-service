@@ -78,7 +78,7 @@ func TestE2E(t *testing.T) {
 		t.Parallel()
 
 		deploymentWithContractsTests := &TestSuite{
-			numNodes:      3,
+			numNodes:      4,
 			Name:          "deployment_with_contracts_tests",
 			restPortIndex: ports[6],
 			p2pPortIndex:  ports[7],

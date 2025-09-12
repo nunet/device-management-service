@@ -88,13 +88,34 @@ const (
 	ContractApproveLocalBehavior = TokenomicNamespace + "/contract/approve_local"
 	ContractListIncomingBehavior = TokenomicNamespace + "/contract/list_incoming"
 	ContractProposeBehavior      = TokenomicNamespace + "/contract/propose"
+
+	// ContractUsagesCalculateBehavior can be invoked on the contract host
+	// to produce the usages.
+	ContractUsagesCalculateBehavior = TokenomicNamespace + "/contract/usages/calculate"
 	// registered by the contract actor
-	ContractTerminationBehavior = TokenomicNamespace + "/contract/terminate"
-	ContractCompleteBehavior    = TokenomicNamespace + "/contract/complete"
-	ContractStatusBehavior      = TokenomicNamespace + "/contract/state"
-	ContractSettleBehavior      = TokenomicNamespace + "/contract/settle"
-	ContractValidationBehavior  = TokenomicNamespace + "/contract/validate"
-	ContractSignBehavior        = TokenomicNamespace + "/contract/sign"
+	ContractTerminationBehavior     = TokenomicNamespace + "/contract/terminate"
+	ContractCompleteBehavior        = TokenomicNamespace + "/contract/complete"
+	ContractStatusBehavior          = TokenomicNamespace + "/contract/state"
+	ContractSettleBehavior          = TokenomicNamespace + "/contract/settle"
+	ContractValidationBehavior      = TokenomicNamespace + "/contract/validate"
+	ContractSignBehavior            = TokenomicNamespace + "/contract/sign"
+	ContractEventsBehavior          = TokenomicNamespace + "/contract/events"
+	ContractPaymentValidateBehavior = TokenomicNamespace + "/contract/payment/validate"
+
+	// listened by payment validator for incoming payment verifications
+	ContractPaymentValidationRequestBehavior = TokenomicNamespace + "/contract/payment/validation/request"
+	// Get a payment status from provider
+	ContractPaymentStatusBehavior = TokenomicNamespace + "/contract/payment/status"
+
+	// used by payment provider to listen for incoming aggregated usage
+	ContractUsageBehavior = TokenomicNamespace + "/contract/usage"
+
+	// All participants will listen for this behaviour
+	// specificly the service provider will need to listen for this so it can
+	// send the amount
+	ContractTransactionBehavior             = TokenomicNamespace + "/contract/transaction"
+	ContractListLocalTransactionsBehavior   = TokenomicNamespace + "/contract/transactions/list"
+	ContractConfirmLocalTransactionBehavior = TokenomicNamespace + "/contract/transactions/confirm"
 )
 
 var (

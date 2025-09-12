@@ -17,18 +17,98 @@ import (
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 type CreateContractRequestBehaviour struct {
 	SolutionEnablerDID    did.DID              `json:"solution_enabler_did"`
+	PaymentValidatorDID   did.DID              `json:"payment_validator_did"`
 	ResourceConfiguration types.Resources      `json:"resource_configuration"`
 	TerminationOption     *TerminationOption   `json:"termination_option"`
 	Penalties             []PenaltyClause      `json:"penalties"`
-	PaymentDetails        Payment              `json:"payment_details"`
+	PaymentDetails        PaymentDetails       `json:"payment_details"`
 	ContractTerms         interface{}          `json:"contract_terms"`
 	ContractParticipants  ContractParticipants `json:"contract_participants"`
 	Duration              DurationDetails      `json:"duration"`
+}
+
+type ContractPaymentStatusRequest struct {
+	UniqueID string `json:"unique_id"`
+}
+
+type ContractPaymentStatusResponse struct {
+	UniqueID string `json:"unique_id"`
+	Paid     bool   `json:"paid"`
+	Error    string `json:"error"`
+}
+
+type CollectUsagesAndForwardToPaymentProvidersReponse struct {
+	Error       string `json:"error"`
+	TotalUsages int    `json:"total_usages"`
+}
+
+type ContractListLocalTransactionsRequest struct{}
+
+type ContractListLocalTransactionsResponse struct {
+	Error        string                     `json:"error"`
+	Transactions []*transaction.Transaction `json:"transactions"`
+}
+
+type ContractConfirmLocalTransactionRequest struct {
+	UniqueID string `json:"unique_id"`
+	TxHash   string `json:"tx_hash"`
+}
+
+type ContractConfirmLocalTransactionResponse struct {
+	Error string `json:"error"`
+}
+
+type TransactionForServiceProviderRequest struct {
+	UniqueID            string `json:"unique_id"`
+	PaymentValidatorDID string `json:"payment_validator_did"`
+	ContractDID         string `json:"contract_did"`
+	ToAddress           string `json:"to_address"`
+	Amount              string `json:"amount"`
+}
+
+type TransactionForServiceProviderResponse struct {
+	Error string `json:"error"`
+}
+
+type ContractUsageRequestBehavior struct {
+	UniqueID string   `json:"unique_id"`
+	Contract Contract `json:"contract"`
+	Usages   int      `json:"usages"`
+}
+
+type ContractUsageResponseBehavior struct {
+	Error string `json:"error"`
+}
+
+type ContractEventRequestBehaviour struct {
+	Payload []byte `json:"payload"`
+}
+
+type ContractEventResponseBehaviour struct {
+	Error string `json:"error"`
+}
+
+type ContractPaymentValidationRequestBehavior struct {
+	TxHash   string `json:"tx_hash"`
+	UniqueID string `json:"unique_id"`
+}
+
+type ContractPaymentValidationResponseBehavior struct {
+	Error string `json:"error"`
+}
+
+type PaymentValidateRequestBehaviour struct {
+	ContractDID string `json:"contract_did"`
+}
+
+type PaymentValidateResponseBehaviour struct {
+	Error string `json:"error"`
 }
 
 type ContractListIncomingResponseBehaviour struct {
@@ -169,18 +249,20 @@ type StateTransition struct {
 type Contract struct {
 	ContractDID           string               `json:"contract_did"`
 	SolutionEnablerDID    did.DID              `json:"solution_enabler_did"`
+	PaymentValidatorDID   did.DID              `json:"payment_validator_did"`
 	ResourceConfiguration types.Resources      `json:"resource_configuration"`
 	TerminationOption     *TerminationOption   `json:"termination_option,omitempty"`
 	Penalties             []PenaltyClause      `json:"penalties"`
 	Duration              *DurationDetails     `json:"duration,omitempty"`
 	ContractParticipants  ContractParticipants `json:"participants"`
-	PaymentDetails        Payment              `json:"payment_details"` // Zero value: zero value of payments.Payment struct
-	Signatures            []Signature          `json:"signatures"`      // Changed to slice of Signature
-	Settled               bool                 `json:"settled"`         // Example default: false
-	Verification          jobs.Status          `json:"verification"`    // Zero value: zero value of jobs.Status
-	ContractProof         []byte               `json:"contract_proof"`  // Example default: "Pending"
-	CurrentState          ContractState        `json:"current_state"`   // state tracking
-	ContractTerms         interface{}          `json:"contract_terms"`  // To store contract agreement terms
+	PaymentDetails        PaymentDetails       `json:"payment_details"` // Zero value: zero value of payments.Payment struct
+	Paid                  bool                 `json:"paid"`
+	Signatures            []Signature          `json:"signatures"`     // Changed to slice of Signature
+	Settled               bool                 `json:"settled"`        // Example default: false
+	Verification          jobs.Status          `json:"verification"`   // Zero value: zero value of jobs.Status
+	ContractProof         []byte               `json:"contract_proof"` // Example default: "Pending"
+	CurrentState          ContractState        `json:"current_state"`  // state tracking
+	ContractTerms         interface{}          `json:"contract_terms"` // To store contract agreement terms
 	TerminationStarted    time.Time            `json:"termination_started"`
 	Transitions           []StateTransition    `json:"transitions"`
 }
@@ -238,6 +320,7 @@ func NewContract(contractDID string, req CreateContractRequestBehaviour) *Contra
 	return &Contract{
 		ContractDID:           contractDID,
 		SolutionEnablerDID:    req.SolutionEnablerDID,
+		PaymentValidatorDID:   req.PaymentValidatorDID,
 		ResourceConfiguration: req.ResourceConfiguration,
 		TerminationOption:     req.TerminationOption,
 		Penalties:             req.Penalties,

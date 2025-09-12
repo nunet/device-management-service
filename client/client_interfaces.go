@@ -276,4 +276,8 @@ type ActorContractBehaviorClient interface {
 	ContractStatus(ctx context.Context, req contracts.ContractStatusRequestBehaviour, opts ...Option) (contracts.ContractStatusResponseBehaviour, error)
 	ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequestBehaviour, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error)
 	ListIncoming(ctx context.Context, opts ...Option) (contracts.ContractListIncomingResponseBehaviour, error)
+	ListTransactions(ctx context.Context, opts ...Option) (contracts.ContractListLocalTransactionsResponse, error)
+	CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error)
+	ConfirmTransaction(ctx context.Context, req contracts.ContractConfirmLocalTransactionRequest, opts ...Option) (contracts.ContractConfirmLocalTransactionResponse, error)
+	GetPaymentStatus(ctx context.Context, req contracts.ContractPaymentStatusRequest, opts ...Option) (contracts.ContractPaymentStatusResponse, error)
 }

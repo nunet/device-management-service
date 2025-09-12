@@ -23,6 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	contractstore "gitlab.com/nunet/device-management-service/tokenomics/store"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 )
 
 const (
@@ -37,16 +38,22 @@ type ContractActor struct {
 	ctx                context.Context
 	cancel             context.CancelFunc
 
-	contractStore contractstore.Store
+	contractStore *contractstore.Store
 	participants  contracts.ContractParticipants
+
+	PaymentProviderDID did.DID
+
+	usageStore *usage.Store
 }
 
 func NewContractActor(
 	solutionEnabler actor.Handle,
+	paymentValidator did.DID,
 	net network.Network,
 	participants contracts.ContractParticipants,
 	privKey crypto.PrivKey, pubKey crypto.PubKey,
-	contractStore contractstore.Store,
+	contractStore *contractstore.Store,
+	usageStore *usage.Store,
 ) (*ContractActor, error) {
 	provider, err := did.ProviderFromPrivateKey(privKey)
 	if err != nil {
@@ -90,6 +97,8 @@ func NewContractActor(
 		cancel:             cancel,
 		contractStore:      contractStore,
 		participants:       participants,
+		usageStore:         usageStore,
+		PaymentProviderDID: paymentValidator,
 	}
 
 	if err := contractActor.setupBehaviorsAndCapabilities(); err != nil {
@@ -98,6 +107,10 @@ func NewContractActor(
 
 	if err := contractActor.SetupParticipantsCapabilities(participants); err != nil {
 		return nil, fmt.Errorf("failed to setup participant capabilities: %w", err)
+	}
+
+	if err := contractActor.setupPaymentValidatorBehaviorAndCapabilities(paymentValidator); err != nil {
+		return nil, fmt.Errorf("failed to setup payment validator capabilities: %w", err)
 	}
 
 	return &contractActor, nil
@@ -168,13 +181,27 @@ func (c *ContractActor) setupBehaviorsAndCapabilities() error {
 	return nil
 }
 
+func (c *ContractActor) setupPaymentValidatorBehaviorAndCapabilities(paymentValidatorDID did.DID) error {
+	err := c.Security().Grant(
+		paymentValidatorDID,
+		c.ContractDID,
+		[]ucan.Capability{behaviors.ContractPaymentValidateBehavior},
+		contractActorCapsLifespan,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to grant capabilities to Provider: %w", err)
+	}
+
+	return nil
+}
+
 // Setup contract participants capabilities
 func (c *ContractActor) SetupParticipantsCapabilities(participants contracts.ContractParticipants) error {
 	// Grant capabilities to the primary party
 	err := c.Security().Grant(
 		participants.Provider,
 		c.ContractDID,
-		[]ucan.Capability{behaviors.ContractTerminationBehavior, behaviors.ContractCompleteBehavior, behaviors.ContractStatusBehavior, behaviors.ContractSettleBehavior, behaviors.ContractValidationBehavior, behaviors.ContractSignBehavior},
+		[]ucan.Capability{behaviors.ContractEventsBehavior, behaviors.ContractTerminationBehavior, behaviors.ContractCompleteBehavior, behaviors.ContractStatusBehavior, behaviors.ContractSettleBehavior, behaviors.ContractValidationBehavior, behaviors.ContractSignBehavior},
 		contractActorCapsLifespan,
 	)
 	if err != nil {
@@ -185,7 +212,7 @@ func (c *ContractActor) SetupParticipantsCapabilities(participants contracts.Con
 	err = c.Security().Grant(
 		participants.Requestor,
 		c.ContractDID,
-		[]ucan.Capability{behaviors.ContractTerminationBehavior, behaviors.ContractCompleteBehavior, behaviors.ContractStatusBehavior, behaviors.ContractSettleBehavior, behaviors.ContractValidationBehavior, behaviors.ContractSignBehavior},
+		[]ucan.Capability{behaviors.ContractEventsBehavior, behaviors.ContractTerminationBehavior, behaviors.ContractCompleteBehavior, behaviors.ContractStatusBehavior, behaviors.ContractSettleBehavior, behaviors.ContractValidationBehavior, behaviors.ContractSignBehavior},
 		contractActorCapsLifespan,
 	)
 	if err != nil {
@@ -222,9 +249,62 @@ func (c *ContractActor) getContractBehaviors() map[string]struct {
 		behaviors.ContractSignBehavior: {
 			fn: c.handleContractSignByParticipants,
 		},
+		behaviors.ContractPaymentValidateBehavior: {
+			fn: c.handlePaymentValidate,
+		},
+		behaviors.ContractEventsBehavior: {
+			fn: c.handleContractEvents,
+		},
 	}
 
 	return contractBehaviors
+}
+
+func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
+	defer msg.Discard()
+	resp := contracts.ContractEventResponseBehaviour{}
+
+	var req contracts.ContractEventRequestBehaviour
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		resp.Error = err.Error()
+		c.sendReply(msg, resp)
+		return
+	}
+
+	// save the payload in db
+	err := c.usageStore.AddUsageEvent(usage.Usage{
+		ContractDID: c.ContractDID.URI,
+		Data:        req.Payload,
+	})
+	if err != nil {
+		resp.Error = err.Error()
+		c.sendReply(msg, resp)
+		return
+	}
+
+	c.sendReply(msg, resp)
+}
+
+func (c *ContractActor) handlePaymentValidate(msg actor.Envelope) {
+	defer msg.Discard()
+
+	resp := contracts.PaymentValidateResponseBehaviour{}
+	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
+	if err != nil {
+		resp.Error = err.Error()
+		c.sendReply(msg, resp)
+		return
+	}
+
+	contract.Paid = true
+	err = c.contractStore.Upsert(contract)
+	if err != nil {
+		resp.Error = err.Error()
+		c.sendReply(msg, resp)
+		return
+	}
+
+	c.sendReply(msg, resp)
 }
 
 func (c *ContractActor) handleContractSignByParticipants(msg actor.Envelope) {

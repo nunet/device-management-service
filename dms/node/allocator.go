@@ -25,6 +25,7 @@ import (
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -228,6 +229,8 @@ type Allocator interface {
 		orchestrator actor.Handle,
 		job jobs.Job,
 		executor types.Executor,
+		contracts map[string]types.ContractConfig,
+		contractEventHandler *eventhandler.EventHandler,
 	) (*jobs.Allocation, error)
 	// Release releases allocated resources and ports for an allocation.
 	Release(ctx context.Context, allocationID string) error
@@ -514,6 +517,8 @@ func (a *allocator) Allocate(
 	orchestrator actor.Handle,
 	job jobs.Job,
 	executor types.Executor,
+	contracts map[string]types.ContractConfig,
+	contractEventHandler *eventhandler.EventHandler,
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
 	a.lock.Lock()
@@ -555,10 +560,13 @@ func (a *allocator) Allocate(
 		a.network,
 		executor,
 		func() error { return a.Release(ctx, allocationID) },
+		contractEventHandler,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation: %w", err)
 	}
+
+	allocation.Contracts = contracts
 
 	// start the allocation
 	err = allocation.Start()

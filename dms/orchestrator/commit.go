@@ -431,7 +431,7 @@ func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle
 		log.Warnf("no allocations found for %s, won't allocate (ensemble: %s)", n, c.eid)
 		return nil, nil
 	}
-
+	contracts := cfg.Contracts()
 	for _, a := range ncfg.Allocations {
 		acfg, _ := cfg.Allocation(a)
 
@@ -454,6 +454,7 @@ func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle
 			ProvisionScripts: provisionScripts,
 			Keys:             acfg.Keys,
 			Volume:           acfg.Volume,
+			Contracts:        contracts,
 		}
 	}
 

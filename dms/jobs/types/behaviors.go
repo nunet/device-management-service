@@ -30,6 +30,7 @@ type AllocationDeploymentConfig struct {
 	ProvisionScripts map[string][]byte
 	Keys             []types.AllocationKey
 	Volume           []types.VolumeConfig
+	Contracts        map[string]types.ContractConfig
 }
 
 type AllocationDeploymentResponse struct {

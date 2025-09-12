@@ -83,3 +83,71 @@ func (c *Client) ListIncoming(ctx context.Context, opts ...Option) (contracts.Co
 	err = c.unmarshalResponse(resp, &response)
 	return response, err
 }
+
+func (c *Client) ListTransactions(ctx context.Context, opts ...Option) (contracts.ContractListLocalTransactionsResponse, error) {
+	var response contracts.ContractListLocalTransactionsResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractListLocalTransactionsBehavior,
+		struct{}{},
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractListLocalTransactionsBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) ConfirmTransaction(ctx context.Context, req contracts.ContractConfirmLocalTransactionRequest, opts ...Option) (contracts.ContractConfirmLocalTransactionResponse, error) {
+	var response contracts.ContractConfirmLocalTransactionResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractConfirmLocalTransactionBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractConfirmLocalTransactionBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error) {
+	var response contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractUsagesCalculateBehavior,
+		struct{}{},
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractUsagesCalculateBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) GetPaymentStatus(ctx context.Context, req contracts.ContractPaymentStatusRequest, opts ...Option) (contracts.ContractPaymentStatusResponse, error) {
+	var response contracts.ContractPaymentStatusResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractPaymentStatusBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractPaymentStatusBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}

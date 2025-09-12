@@ -20,6 +20,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/null"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -86,6 +87,7 @@ func TestNewAllocation(t *testing.T) {
 				tt.network,
 				tt.executor,
 				func() error { return nil },
+				&eventhandler.EventHandler{},
 			)
 
 			if tt.wantErr {
@@ -541,5 +543,6 @@ func createTestAllocation(t *testing.T, vol ...types.VolumeConfig) (*Allocation,
 		mockNetwork,
 		mockExecutor,
 		func() error { return nil },
+		&eventhandler.EventHandler{},
 	)
 }
