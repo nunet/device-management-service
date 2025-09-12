@@ -16,16 +16,16 @@ type Mounter interface {
 
 type VolumeConfig struct {
 	// The type of storage backend, e.g., "glusterfs" or "local".
-	Type             string `json:"type"`
-	MountDestination string `json:"mount_destination"` // the mount path inside the container
-	ReadOnly         bool   `json:"read_only"`
+	Type             string `json:"type" yaml:"type"`
+	MountDestination string `json:"mount_destination" yaml:"mount_destination"` // the mount path inside the container
+	ReadOnly         bool   `json:"read_only" yaml:"read_only"`
 
-	Name             string   `json:"name"`
-	Servers          []string `json:"servers"`
-	ClientPrivateKey string   `json:"client_private_key"`
-	ClientPEM        string   `json:"client_pem"`
-	ClientCA         string   `json:"client_ca"`
+	Name             string   `json:"name,omitempty" yaml:"name,omitempty"`
+	Servers          []string `json:"servers,omitempty" yaml:"servers,omitempty"`
+	ClientPrivateKey string   `json:"client_private_key,omitempty" yaml:"client_private_key,omitempty"`
+	ClientPEM        string   `json:"client_pem,omitempty" yaml:"client_pem,omitempty"`
+	ClientCA         string   `json:"client_ca,omitempty" yaml:"client_ca,omitempty"`
 
 	// Local
-	Src string `json:"src,omitempty"`
+	Src string `json:"src,omitempty" yaml:"src,omitempty"`
 }

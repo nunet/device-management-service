@@ -9,44 +9,13 @@
 package utils
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 )
-
-func TestNormalize(t *testing.T) {
-	data := map[string]interface{}{
-		"jobs": []map[string]interface{}{
-			{"name": "job2"},
-			{"name": "job1"},
-		},
-	}
-
-	expected := map[string]interface{}{
-		"jobs": []interface{}{
-			map[string]interface{}{
-				"name": "job1",
-			},
-			map[string]interface{}{
-				"name": "job2",
-			},
-		},
-	}
-
-	result := Normalize(data)
-	assert.Equal(t, expected, result)
-}
-
-func TestToAnySlice(t *testing.T) {
-	data := []string{"a", "b", "c"}
-	expected := []any{"a", "b", "c"}
-
-	result, err := ToAnySlice(data)
-	assert.NoError(t, err)
-	assert.Equal(t, expected, result)
-}
 
 func TestGetConfigAtPath(t *testing.T) {
 	data := map[string]interface{}{
@@ -66,9 +35,44 @@ func TestGetConfigAtPath(t *testing.T) {
 
 	_, err = GetConfigAtPath(data, "jobs.[x]")
 	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidIndex))
 }
 
-func TestCreateAdjencyList(t *testing.T) {
+func TestGetConfigAtPath_MissingKey(t *testing.T) {
+	data := map[string]any{
+		"jobs": []map[string]any{
+			{"name": "job1"},
+		},
+	}
+
+	_, err := GetConfigAtPath(data, "missing")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrKeyNotFound))
+}
+
+func TestGetConfigAtPath_IndexOutOfRange(t *testing.T) {
+	data := map[string]any{
+		"jobs": []map[string]any{
+			{"name": "job1"},
+			{"name": "job2"},
+		},
+	}
+
+	_, err := GetConfigAtPath(data, "jobs.[3]")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIndexOutOfRange))
+}
+
+func TestGetConfigAtPath_InvalidTypeAtPath(t *testing.T) {
+	data := map[string]any{
+		"jobs": 123,
+	}
+	_, err := GetConfigAtPath(data, "jobs.name")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidTypeAtPath))
+}
+
+func TestCreateAdjacencyList(t *testing.T) {
 	tt := []struct {
 		name        string
 		input       map[string]any

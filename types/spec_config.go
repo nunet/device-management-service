@@ -19,9 +19,9 @@ import (
 // A SpecConfig can be used to define an engine spec, a storage volume, etc.
 type SpecConfig struct {
 	// Type of the spec (e.g. docker, firecracker, storage, etc.)
-	Type string `json:"type"`
+	Type string `json:"type" yaml:"type"`
 	// Params of the spec
-	Params map[string]interface{} `json:"params,omitempty"`
+	Params map[string]interface{} `json:"params,omitempty" yaml:"params,omitempty"`
 }
 
 type Config interface {

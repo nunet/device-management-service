@@ -307,26 +307,26 @@ func (gpus GPUs) GetWithIndex(index int) (GPU, error) {
 // CPU represents the CPU information
 type CPU struct {
 	// ClockSpeed represents the CPU clock speed in Hz
-	ClockSpeed float64 `json:"clock_speed" description:"CPU clock speed in Hz"`
+	ClockSpeed float64 `json:"clock_speed,omitempty" yaml:"clock_speed,omitempty" description:"CPU clock speed in Hz"`
 
 	// Cores represents the number of physical CPU cores
-	Cores float32 `json:"cores" description:"Number of physical CPU cores"`
+	Cores float32 `json:"cores" yaml:"cores" description:"Number of physical CPU cores"`
 
 	// TODO: capture the below fields if required
 	// Model represents the CPU model, e.g., "Intel Core i7-9700K", "AMD Ryzen 9 5900X"
-	Model string `json:"model,omitempty" description:"CPU model, e.g., Intel Core i7-9700K, AMD Ryzen 9 5900X"`
+	Model string `json:"model,omitempty" yaml:"model,omitempty" description:"CPU model, e.g., Intel Core i7-9700K, AMD Ryzen 9 5900X"`
 
 	// Vendor represents the CPU manufacturer, e.g., "Intel", "AMD"
-	Vendor string `json:"vendor,omitempty" description:"CPU manufacturer, e.g., Intel, AMD"`
+	Vendor string `json:"vendor,omitempty" yaml:"vendor,omitempty" description:"CPU manufacturer, e.g., Intel, AMD"`
 
 	// Threads represents the number of logical CPU threads (including hyperthreading)
-	Threads int `json:"threads,omitempty" description:"Number of logical CPU threads (including hyperthreading)"`
+	Threads int `json:"threads,omitempty" yaml:"threads,omitempty" description:"Number of logical CPU threads (including hyperthreading)"`
 
 	// Architecture represents the CPU architecture, e.g., "x86", "x86_64", "arm64"
-	Architecture string `json:"architecture,omitempty" description:"CPU architecture, e.g., x86, x86_64, arm64"`
+	Architecture string `json:"architecture,omitempty" yaml:"architecture,omitempty" description:"CPU architecture, e.g., x86, x86_64, arm64"`
 
 	// Cache size in bytes
-	CacheSize uint64 `json:"cache_size,omitempty" description:"CPU cache size in bytes"`
+	CacheSize uint64 `json:"cache_size,omitempty" yaml:"cache_size,omitempty" description:"CPU cache size in bytes"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -390,14 +390,14 @@ func (c *CPU) ClockSpeedInGHz() float64 {
 // RAM represents the RAM information
 type RAM struct {
 	// Size in bytes
-	Size uint64 `json:"size" description:"Size of the RAM in bytes"`
+	Size uint64 `json:"size" yaml:"size" description:"Size of the RAM in bytes"`
 
 	// TODO: capture the below fields if required
 	// Clock speed in Hz
-	ClockSpeed uint64 `json:"clock_speed,omitempty" description:"Clock speed of the RAM in Hz"`
+	ClockSpeed uint64 `json:"clock_speed,omitempty" yaml:"clock_speed,omitempty" description:"Clock speed of the RAM in Hz"`
 
 	// Type represents the RAM type, e.g., "DDR4", "DDR5", "LPDDR4"
-	Type string `json:"type,omitempty" description:"RAM type, e.g., DDR4, DDR5, LPDDR4"`
+	Type string `json:"type,omitempty" yaml:"type,omitempty" description:"RAM type, e.g., DDR4, DDR5, LPDDR4"`
 }
 
 // implementing Comparable and Calculable interfaces
@@ -441,26 +441,26 @@ func (r *RAM) SizeInGB() uint64 {
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
-	Size uint64 `json:"size" description:"Size of the disk in bytes"`
+	Size uint64 `json:"size" yaml:"size" description:"Size of the disk in bytes"`
 
 	// TODO: capture the below fields if required
 	// Model represents the disk model, e.g., "Samsung 970 EVO Plus", "Western Digital Blue SN550"
-	Model string `json:"model,omitempty" description:"Disk model, e.g., Samsung 970 EVO Plus, Western Digital Blue SN550"`
+	Model string `json:"model,omitempty" yaml:"model,omitempty" description:"Disk model, e.g., Samsung 970 EVO Plus, Western Digital Blue SN550"`
 
 	// Vendor represents the disk manufacturer, e.g., "Samsung", "Western Digital"
-	Vendor string `json:"vendor,omitempty" description:"Disk manufacturer, e.g., Samsung, Western Digital"`
+	Vendor string `json:"vendor,omitempty" yaml:"vendor,omitempty" description:"Disk manufacturer, e.g., Samsung, Western Digital"`
 
 	// Type represents the disk type, e.g., "SSD", "HDD", "NVMe"
-	Type string `json:"type,omitempty" description:"Disk type, e.g., SSD, HDD, NVMe"`
+	Type string `json:"type,omitempty" yaml:"type,omitempty" description:"Disk type, e.g., SSD, HDD, NVMe"`
 
 	// Interface represents the disk interface, e.g., "SATA", "PCIe", "M.2"
-	Interface string `json:"interface,omitempty" description:"Disk interface, e.g., SATA, PCIe, M.2"`
+	Interface string `json:"interface,omitempty" yaml:"interface,omitempty" description:"Disk interface, e.g., SATA, PCIe, M.2"`
 
 	// Read speed in bytes per second
-	ReadSpeed uint64 `json:"read_speed,omitempty" description:"Read speed in bytes per second"`
+	ReadSpeed uint64 `json:"read_speed,omitempty" yaml:"read_speed,omitempty" description:"Read speed in bytes per second"`
 
 	// Write speed in bytes per second
-	WriteSpeed uint64 `json:"write_speed,omitempty" description:"Write speed in bytes per second"`
+	WriteSpeed uint64 `json:"write_speed,omitempty" yaml:"write_speed,omitempty" description:"Write speed in bytes per second"`
 }
 
 // implementing Comparable and Calculable interfaces

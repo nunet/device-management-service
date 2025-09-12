@@ -20,6 +20,7 @@ import (
 
 	cmd "gitlab.com/nunet/device-management-service/cmd/actor"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -155,7 +156,7 @@ func DeploymentFullAssertion(suite *TestSuite) {
 	ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "multiple_nginx.yaml")
 
 	// process ensemble cfg as a helper for later assertions
-	ensembleCfg, err := cmd.ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, ensemblePath)
+	ensembleCfg, err := cmd.ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, env.NewOSEnvironment(), ensemblePath)
 	suite.Require().NoError(err)
 
 	// 2. start deployment

@@ -125,3 +125,19 @@ func ParseSIWithDefaultUnit(value any, defaultUnit string) (float64, error) {
 	parsed, _, err := humanize.ParseSI(strVal)
 	return parsed, err
 }
+
+func ToBytesFormat(value any) (string, error) {
+	v, err := strconv.ParseUint(fmt.Sprintf("%v", value), 10, 64)
+	if err != nil {
+		return "", err
+	}
+	return humanize.BigBytes(humanize.BigByte.SetUint64(v)), nil
+}
+
+func ToSIFormatWithUnit(value any, unit string) (string, error) {
+	v, err := strconv.ParseFloat(fmt.Sprintf("%v", value), 64)
+	if err != nil {
+		return "", err
+	}
+	return humanize.SI(v, unit), nil
+}

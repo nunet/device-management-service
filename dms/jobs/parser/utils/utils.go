@@ -9,56 +9,65 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
-	"reflect"
-	"sort"
 	"strconv"
+	"strings"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 )
 
-// getConfigAtPath retrieves a part of the configuration at a given path
+// Sentinel errors to enable precise upstream handling
+var (
+	ErrKeyNotFound       = errors.New("key not found")
+	ErrInvalidIndex      = errors.New("invalid index")
+	ErrIndexOutOfRange   = errors.New("index out of range")
+	ErrInvalidTypeAtPath = errors.New("invalid type at path")
+	ErrCycleDetected     = errors.New("cycle detected")
+)
+
+// GetConfigAtPath retrieves a part of the configuration at a given path
 func GetConfigAtPath(config any, path tree.Path) (any, error) {
 	current := config
 	for _, key := range path.Parts() {
 		switch v := current.(type) {
 		case map[string]any:
-			current = v[key]
-		case []any, []map[string]any:
+			val, ok := v[key]
+			if !ok {
+				if val, ok = v[strings.ToLower(key)]; !ok {
+					return nil, fmt.Errorf("%w: %q", ErrKeyNotFound, key)
+				}
+			}
+			current = val
+		case []any:
+			if len(key) < 3 || key[0] != '[' || key[len(key)-1] != ']' {
+				return nil, fmt.Errorf("%w: %s (expected [n])", ErrInvalidIndex, key)
+			}
 			i, err := strconv.Atoi(key[1 : len(key)-1])
 			if err != nil {
-				return nil, fmt.Errorf("invalid index: %v", key)
+				return nil, fmt.Errorf("%w: %s", ErrInvalidIndex, key)
 			}
-			switch v := v.(type) {
-			case []any:
-				current = v[i]
-			case []map[string]any:
-				current = v[i]
+			if i < 0 || i >= len(v) {
+				return nil, fmt.Errorf("%w: %d (len=%d)", ErrIndexOutOfRange, i, len(v))
 			}
+			current = v[i]
+		case []map[string]any:
+			if len(key) < 3 || key[0] != '[' || key[len(key)-1] != ']' {
+				return nil, fmt.Errorf("%w: %s (expected [n])", ErrInvalidIndex, key)
+			}
+			i, err := strconv.Atoi(key[1 : len(key)-1])
+			if err != nil {
+				return nil, fmt.Errorf("%w: %s", ErrInvalidIndex, key)
+			}
+			if i < 0 || i >= len(v) {
+				return nil, fmt.Errorf("%w: %d (len=%d)", ErrIndexOutOfRange, i, len(v))
+			}
+			current = v[i]
 		default:
-			return nil, fmt.Errorf("invalid data type: %v", current)
+			return nil, fmt.Errorf("%w at %q: %T", ErrInvalidTypeAtPath, key, current)
 		}
 	}
 	return current, nil
-}
-
-// Generic function to convert any slice to []any
-func ToAnySlice(slice any) ([]any, error) {
-	value := reflect.ValueOf(slice)
-
-	// Check if the input is a slice
-	if value.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("input is not a slice. type: %T", slice)
-	}
-
-	length := value.Len()
-	anySlice := make([]any, length)
-
-	for i := 0; i < length; i++ {
-		anySlice[i] = value.Index(i).Interface()
-	}
-
-	return anySlice, nil
 }
 
 // CreateAdjencyList creates an adjacency list from a map
@@ -84,18 +93,24 @@ func CreateAdjencyList[T comparable](m map[T]any, path tree.Path) map[T][]T {
 }
 
 func hasCycle[T comparable](adjencyList map[T][]T, node T, visited, recursionStack map[T]bool) bool {
+	// If the node is already in the current recursion stack, we found a cycle
 	if recursionStack[node] {
 		return true
 	}
+	// If we've already fully visited this node (and its descendants), skip
+	if visited[node] {
+		return false
+	}
+	// Mark as visited and add to the recursion stack
+	visited[node] = true
 	recursionStack[node] = true
+	// Recurse on all neighbors
 	for _, neighbor := range adjencyList[node] {
-		if visited[neighbor] {
-			continue
-		}
 		if hasCycle(adjencyList, neighbor, visited, recursionStack) {
 			return true
 		}
 	}
+	// Remove from recursion stack when backtracking
 	recursionStack[node] = false
 	return false
 }
@@ -111,42 +126,4 @@ func DetectCycles[T comparable](adjencyList map[T][]T) bool {
 		}
 	}
 	return false
-}
-
-func normalizeMap(m interface{}) interface{} {
-	v := reflect.ValueOf(m)
-
-	switch v.Kind() {
-	case reflect.Map:
-		// Create a new map to hold normalized values
-		newMap := reflect.MakeMap(reflect.MapOf(v.Type().Key(), reflect.TypeOf((*interface{})(nil)).Elem()))
-		for _, key := range v.MapKeys() {
-			newValue := normalizeMap(v.MapIndex(key).Interface())
-			newMap.SetMapIndex(key, reflect.ValueOf(newValue))
-		}
-		return newMap.Interface()
-
-	case reflect.Slice:
-		// Create a new []interface{} slice to hold normalized values
-		newSlice := make([]interface{}, v.Len())
-		for i := 0; i < v.Len(); i++ {
-			newSlice[i] = normalizeMap(v.Index(i).Interface())
-		}
-
-		// Sort the slice if it's sortable
-		sort.Slice(newSlice, func(i, j int) bool {
-			return fmt.Sprint(newSlice[i]) < fmt.Sprint(newSlice[j])
-		})
-
-		return newSlice
-
-	default:
-		// For other types, return as is
-		return m
-	}
-}
-
-// Normalize is the exported function that users will call
-func Normalize(m any) interface{} {
-	return normalizeMap(m)
 }

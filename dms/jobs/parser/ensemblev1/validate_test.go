@@ -1553,7 +1553,7 @@ func TestValidateNode(t *testing.T) {
 			// Missing public port when private port is specified
 			name: "missing public port",
 			node: map[string]any{
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 				"ports": []any{
 					map[string]any{
 						"private":    8080,
@@ -1570,7 +1570,7 @@ func TestValidateNode(t *testing.T) {
 			// Invalid port number
 			name: "invalid port number",
 			node: map[string]any{
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 				"ports": []any{
 					map[string]any{
 						"public":     80,
@@ -1588,7 +1588,7 @@ func TestValidateNode(t *testing.T) {
 			// Invalid location
 			name: "invalid location",
 			node: map[string]any{
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 				"location": map[string]any{
 					"accept": []any{
 						map[string]any{
@@ -1608,7 +1608,7 @@ func TestValidateNode(t *testing.T) {
 			name: "allocation not found",
 			node: map[string]any{
 				"allocations":      []any{"nonexistent"},
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 			},
 			root: map[string]any{
 				"allocations": map[string]any{},
@@ -1622,7 +1622,7 @@ func TestValidateNode(t *testing.T) {
 			name: "invalid allocation reference type",
 			node: map[string]any{
 				"allocations":      []any{123},
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 			},
 			root: map[string]any{
 				"allocations": map[string]any{},
@@ -1636,7 +1636,7 @@ func TestValidateNode(t *testing.T) {
 			name: "invalid redundancy type",
 			node: map[string]any{
 				"redundancy":       "invalid",
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 			},
 			expectError: true,
 			errorMsg:    "redundancy must be a number",
@@ -1646,7 +1646,7 @@ func TestValidateNode(t *testing.T) {
 			name: "redundancy should be a positive number",
 			node: map[string]any{
 				"redundancy":       -1,
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 			},
 			expectError: true,
 			errorMsg:    "redundancy must be a positive number",
@@ -1655,7 +1655,7 @@ func TestValidateNode(t *testing.T) {
 			name: "redundancy should be greater than 0",
 			node: map[string]any{
 				"redundancy":       -1,
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 			},
 			expectError: true,
 			errorMsg:    "redundancy must be a positive number",
@@ -1665,7 +1665,7 @@ func TestValidateNode(t *testing.T) {
 			name: "valid redundancy",
 			node: map[string]any{
 				"redundancy":       1,
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 			},
 			expectError: false,
 		},
@@ -1689,7 +1689,7 @@ func TestValidateNode(t *testing.T) {
 			// valid failure_recovery
 			name: "valid failure_recovery",
 			node: map[string]any{
-				"failure_recovery": defautNodeFailureStrategy,
+				"failure_recovery": defaultNodeFailureStrategy,
 			},
 			expectError: false,
 		},

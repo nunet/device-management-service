@@ -27,19 +27,19 @@ const (
 // EngineSpec contains necessary parameters to execute a docker job.
 type EngineSpec struct {
 	// Image this should be pullable by docker
-	Image string `json:"image,omitempty"`
+	Image string `json:"image,omitempty" yaml:"image,omitempty"`
 	// Entrypoint optionally override the default entrypoint
-	Entrypoint []string `json:"entrypoint,omitempty"`
+	Entrypoint []string `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
 	// Cmd specifies the command to run in the container
-	Cmd []string `json:"cmd,omitempty"`
+	Cmd []string `json:"cmd,omitempty" yaml:"cmd,omitempty"`
 	// EnvironmentVariables is a slice of env to run the container with
-	Environment []string `json:"environment,omitempty"`
+	Environment []string `json:"environment,omitempty" yaml:"environment,omitempty"`
 	// WorkingDirectory inside the container
-	WorkingDirectory string `json:"working_directory,omitempty"`
+	WorkingDirectory string `json:"working_directory,omitempty" yaml:"working_directory,omitempty"`
 	// Privileged indicates whether the container should run with --privileged mode
-	Privileged bool `json:"privileged,omitempty"`
+	Privileged bool `json:"privileged,omitempty" yaml:"privileged,omitempty"`
 	// User to run the container as
-	User string `json:"user,omitempty"`
+	User string `json:"user,omitempty" yaml:"user,omitempty"`
 }
 
 // Validate checks if the engine spec is valid

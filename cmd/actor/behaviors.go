@@ -772,7 +772,7 @@ Examples:
 
 			req := &node.NewDeploymentRequest{}
 
-			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: dmsCli.FS()}, reqCmd.Config)
+			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: dmsCli.FS()}, dmsCli.Env(), reqCmd.Config)
 			if err != nil {
 				return nil, fmt.Errorf("failed to process ensemble config file: %w", err)
 			}
@@ -813,7 +813,7 @@ Examples:
 				EnsembleID: reqCmd.EnsembleID,
 			}
 
-			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: dmsCli.FS()}, reqCmd.Config)
+			cfg, err := ProcessEnsembleYaml(afero.Afero{Fs: dmsCli.FS()}, dmsCli.Env(), reqCmd.Config)
 			if err != nil {
 				return nil, fmt.Errorf("failed to process ensemble config file: %w", err)
 			}
