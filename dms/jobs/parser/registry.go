@@ -10,20 +10,22 @@ package parser
 
 import (
 	"sync"
+
+	"gitlab.com/nunet/device-management-service/dms/jobs/parser/types"
 )
 
 type Registry struct {
-	parsers map[SpecType]Parser
+	parsers map[SpecType]types.Parser
 	mu      sync.RWMutex
 }
 
-func (r *Registry) RegisterParser(specType SpecType, p Parser) {
+func (r *Registry) RegisterParser(specType SpecType, p types.Parser) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.parsers[specType] = p
 }
 
-func (r *Registry) GetParser(specType SpecType) (Parser, bool) {
+func (r *Registry) GetParser(specType SpecType) (types.Parser, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	p, exists := r.parsers[specType]

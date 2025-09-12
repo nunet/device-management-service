@@ -1,7 +1,7 @@
 version: "V1"
 metadata:
   name: "test-ensemble"
-      
+
 # Node definitions for edge constraints
 nodes:
   node1:
@@ -72,8 +72,8 @@ resources:
       size: 2 # GiB
 # Scripts for provisioning (will be transformed to bytes)
 scripts:
-  setup: "scripts/setup.sh"
-  cleanup: "scripts/cleanup.sh"
+  setup: "${file:./scripts/setup.sh}"
+  cleanup: "${file:./scripts/cleanup.sh}"
 # Allocation definitions
 allocations:
   worker1:
@@ -89,6 +89,7 @@ allocations:
       environment:
         - "DEBUG=1"
         - "WORKER_ID=1"
+        - "PATH=${env:HOME}"
       working_directory: "/app"
     provision:
       - "setup" # Reference to script in scripts section

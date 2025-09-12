@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
 // TestProcessEnsembleYaml tests the ProcessEnsembleYaml function using different ensemble configurations.
@@ -45,7 +46,7 @@ allocations:
 	keyYaml := `
         keys:
             - type: ssh
-              file: /etc/keys1.pub`
+              file: ${file:/etc/keys1.pub}`
 
 	volumeYaml := `
         volume:
@@ -66,7 +67,7 @@ nodes:
 
 	scriptYaml := `
 scripts:
-    script1: /etc/script1.sh`
+    script1: ${file:/etc/script1.sh}`
 
 	tests := []struct {
 		name     string
@@ -140,7 +141,7 @@ scripts:
 				}
 			}
 
-			result, err := ProcessEnsembleYaml(fs, tt.filePath)
+			result, err := ProcessEnsembleYaml(fs, env.NewMockEnvironment(), tt.filePath)
 
 			if tt.wantErr {
 				require.Error(t, err, "Expected an error but got none")

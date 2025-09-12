@@ -15,6 +15,7 @@
 package tree
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -120,7 +121,7 @@ func matchParts(pathParts, patternParts []string) bool {
 			}
 		default:
 			// If the part doesn't match, it doesn't match
-			if part != configPathMatchAny && part != pathParts[i] {
+			if part != configPathMatchAny && !strings.EqualFold(part, pathParts[i]) {
 				return false
 			}
 		}
@@ -130,4 +131,37 @@ func matchParts(pathParts, patternParts []string) bool {
 		}
 	}
 	return true
+}
+
+// WalkFunc is a function applied to each node in the data structure.
+type WalkFunc func(node *any, path Path) error
+
+// Walk recursively traverses a generic data structure and applies a function to each node.
+func Walk(data *any, path Path, fn WalkFunc) error {
+	// Apply the function to the current node first.
+	if err := fn(data, path); err != nil {
+		return err
+	}
+
+	switch v := (*data).(type) {
+	case map[string]any:
+		for key, val := range v {
+			// A temporary variable is needed to pass the address correctly.
+			tempVal := val
+			if err := Walk(&tempVal, path.Next(key), fn); err != nil {
+				return err
+			}
+			v[key] = tempVal
+		}
+	case []any:
+		for i, val := range v {
+			tempVal := val
+			next := path.Next(fmt.Sprintf("[%d]", i))
+			if err := Walk(&tempVal, next, fn); err != nil {
+				return err
+			}
+			v[i] = tempVal
+		}
+	}
+	return nil
 }

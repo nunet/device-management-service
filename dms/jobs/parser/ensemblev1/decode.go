@@ -10,15 +10,16 @@ package ensemblev1
 
 import (
 	"fmt"
+	"maps"
+	"reflect"
 	"strings"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/transform"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
-	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
-func NewEnsemblev1Transformer() transform.Transformer {
+func NewEnsemblev1Decoder() transform.Transformer {
 	return transform.NewTransformer(
 		[]map[tree.Path]transform.TransformerFunc{
 			// Transform key value pairs to slices with name as key
@@ -29,13 +30,23 @@ func NewEnsemblev1Transformer() transform.Transformer {
 			},
 			// Transform configs
 			{
-				"allocations.*.volumes.[]": TransformVolume,
-				"allocations.*.resources":  TransformResources,
-				"scripts.*":                TransformStringToBytes,
+				"allocations.*.volumes.[]":            TransformVolume,
+				"allocations.*.resources":             TransformResources,
+				"scripts.*":                           TransformStringToBytes,
+				"allocations.*.execution.environment": TransformEnvironment,
+			},
+			// Transform numeric values
+			{
+				"allocations.*.resources.cpu.clock_speed": transform.ParseWithDefaultUnit("cpu clock_speed", "GHz"),
+				"allocations.*.resources.ram.clock_speed": transform.ParseWithDefaultUnit("ram clock_speed", "GHz"),
+				"allocations.*.resources.ram.size":        transform.ParseBytesWithDefaultUnit("ram size", "GiB"),
+				"allocations.*.resources.disk.size":       transform.ParseBytesWithDefaultUnit("disk size", "GiB"),
+				"allocations.*.resources.gpu.[].vram":     transform.ParseBytesWithDefaultUnit("gpu vram", "GiB"),
+				"allocations.*.healthcheck.interval":      transform.ParseDuration("healthcheck duration"),
 			},
 			{
-				"allocations.*.execution":         transform.SpecConfigTransformer("execution"),
-				"allocations.*.volumes.[].remote": transform.SpecConfigTransformer("remote volume"),
+				"allocations.*.execution":         transform.ToSpecConfigTransformer("execution"),
+				"allocations.*.volumes.[].remote": transform.ToSpecConfigTransformer("remote volume"),
 				"edge_constraints.[]":             TransformEdgeConstraint,
 			},
 			{
@@ -46,14 +57,14 @@ func NewEnsemblev1Transformer() transform.Transformer {
 }
 
 func TransformStringToBytes(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
-	str, ok := data.(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid string data: %v", data)
+	switch v := data.(type) {
+	case []byte:
+		return v, nil
+	case string:
+		return []byte(v), nil
+	default:
+		return nil, fmt.Errorf("invalid data type: %T,", data)
 	}
-
-	data = []byte(str)
-
-	return data, nil
 }
 
 // TransformSpec transforms the spec configuration and wraps it in a "V1" key.
@@ -85,9 +96,9 @@ func TransformSpec(_ *map[string]interface{}, data any, _ tree.Path) (any, error
 			if nodeConfig, ok := node.(map[string]any); ok {
 				// set failure_recovery to "stay_down" if not set
 				if nodeConfig["failure_recovery"] == nil {
-					nodeConfig["failure_recovery"] = defautNodeFailureStrategy
+					nodeConfig["failure_recovery"] = defaultNodeFailureStrategy
 				}
-				// set redundancy to 1 if not set
+				// set redundancy to 0 if not set
 				if nodeConfig["redundancy"] == nil {
 					nodeConfig["redundancy"] = 0
 				}
@@ -101,7 +112,7 @@ func TransformSpec(_ *map[string]interface{}, data any, _ tree.Path) (any, error
 		delete(spec, "edge_constraints")
 	}
 
-	return map[string]any{"V1": spec}, nil
+	return map[string]any{"v1": spec}, nil
 }
 
 // TransformEdgeConstraint maps the edges parameter to Source and Target (S and T) properties.
@@ -153,19 +164,13 @@ func TransformVolume(root *map[string]interface{}, data any, path tree.Path) (an
 		// Handle volume inheritance
 		parent := tree.NewPath("")
 
-		c, err := utils.GetConfigAtPath(*root, parent.Next("volumes"))
-		if err != nil {
-			return config, nil
-		}
-
-		volumes, _ := utils.ToAnySlice(c)
-		for _, v := range volumes {
-			if volume, ok := v.(map[string]any); ok && volume["name"] == config["name"] {
-				// Merge the configurations
-				for k, v := range config {
-					volume[k] = v
+		if c, err := utils.GetConfigAtPath(*root, parent.Next("volumes")); err == nil {
+			for _, v := range c.([]any) {
+				if volume, ok := v.(map[string]any); ok && volume["name"] == config["name"] {
+					// Merge the configurations
+					maps.Copy(volume, config)
+					config = volume
 				}
-				config = volume
 			}
 		}
 	}
@@ -194,77 +199,31 @@ func TransformResources(root *map[string]interface{}, data any, path tree.Path) 
 		// Handle volume inheritance
 		parent := tree.NewPath("")
 
-		c, err := utils.GetConfigAtPath(*root, parent.Next("resources"))
-		if err != nil {
-			return config, nil
-		}
-
-		resources, _ := utils.ToAnySlice(c)
-		for _, v := range resources {
-			if rcs, ok := v.(map[string]any); ok && rcs["name"] == config["name"] {
-				// Merge the configurations
-				for k, v := range config {
-					rcs[k] = v
-				}
-				config = rcs
-			}
-		}
-	}
-
-	// Convert resource values to their respective units:
-	// - CPU and RAM clock_speed: defaults to GHz, accepts SI units (Hz, MHz, GHz)
-	// - RAM and disk size: defaults to GiB, accepts binary (KiB, MiB, GiB) and decimal (KB, MB, GB) units
-	// - GPU VRAM: defaults to GiB, accepts binary and decimal units
-	if cpu, ok := config["cpu"].(map[string]any); ok {
-		if speed, ok := cpu["clock_speed"]; ok {
-			val, err := convert.ParseSIWithDefaultUnit(speed, "GHz")
-			if err != nil {
-				return nil, fmt.Errorf("invalid cpu clock_speed: %v", err)
-			}
-			cpu["clock_speed"] = val
-		}
-	}
-
-	if ram, ok := config["ram"].(map[string]any); ok {
-		if speed, ok := ram["clock_speed"]; ok {
-			val, err := convert.ParseSIWithDefaultUnit(speed, "GHz")
-			if err != nil {
-				return nil, fmt.Errorf("invalid ram clock_speed: %v", err)
-			}
-			ram["clock_speed"] = val
-		}
-		if size, ok := ram["size"]; ok {
-			val, err := convert.ParseBytesWithDefaultUnit(size, "GiB")
-			if err != nil {
-				return nil, fmt.Errorf("invalid ram size: %v", err)
-			}
-			ram["size"] = val
-		}
-	}
-
-	if disk, ok := config["disk"].(map[string]any); ok {
-		if size, ok := disk["size"]; ok {
-			val, err := convert.ParseBytesWithDefaultUnit(size, "GiB")
-			if err != nil {
-				return nil, fmt.Errorf("invalid disk size: %v", err)
-			}
-			disk["size"] = val
-		}
-	}
-
-	if gpus, ok := config["gpu"].([]any); ok {
-		for i, g := range gpus {
-			if gpu, ok := g.(map[string]any); ok {
-				if vram, ok := gpu["vram"]; ok {
-					val, err := convert.ParseBytesWithDefaultUnit(vram, "GiB")
-					if err != nil {
-						return nil, fmt.Errorf("invalid gpu[%d] vram: %v", i, err)
-					}
-					gpu["vram"] = val
+		if c, err := utils.GetConfigAtPath(*root, parent.Next("resources")); err == nil {
+			for _, v := range c.([]any) {
+				if rcs, ok := v.(map[string]any); ok && rcs["name"] == config["name"] {
+					// Merge the configurations
+					maps.Copy(rcs, config)
+					config = rcs
 				}
 			}
 		}
 	}
 
 	return config, nil
+}
+
+func TransformEnvironment(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+	switch v := data.(type) {
+	case map[string]any, map[string]string:
+		envs := make([]string, 0)
+		for k, v := range reflect.ValueOf(v).Seq2() {
+			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+		}
+		return envs, nil
+	case []string, []any:
+		return v, nil
+	default:
+		return nil, fmt.Errorf("invalid environment configuration: %T", data)
+	}
 }

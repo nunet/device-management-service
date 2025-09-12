@@ -12,7 +12,6 @@ import (
 	"fmt"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
-	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 )
 
 // TransformerFunc is a function that transforms a part of the configuration.
@@ -47,7 +46,6 @@ func (t TransformerImpl) Transform(rawConfig *map[string]interface{}) (interface
 			return nil, err
 		}
 	}
-	// return Normalize(data), nil
 	return data, nil
 }
 
@@ -73,7 +71,7 @@ func (t TransformerImpl) transform(root *map[string]interface{}, data any, path 
 			}
 		}
 		return result, nil
-	} else if result, err := utils.ToAnySlice(data); err == nil {
+	} else if result, ok := data.([]any); ok {
 		for i, value := range result {
 			next := path.Next(fmt.Sprintf("[%d]", i))
 			result[i], err = t.transform(root, value, next, transformers)

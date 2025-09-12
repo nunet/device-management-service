@@ -6,22 +6,28 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package parser
+package translator
 
 import (
-	"fmt"
+	"sync"
+
+	"gitlab.com/nunet/device-management-service/dms/translator/types"
 )
 
-func Parse(specType SpecType, data []byte, result any) error {
-	parser, exists := registry.GetParser(specType)
-	if !exists {
-		return fmt.Errorf("parser for spec type %s not found", specType)
-	}
+type Registry struct {
+	translators map[SpecType]types.Translator
+	mu          sync.RWMutex
+}
 
-	err := parser.Parse(data, result)
-	if err != nil {
-		return err
-	}
+func (r *Registry) RegisterTranslator(specType SpecType, t types.Translator) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.translators[specType] = t
+}
 
-	return nil
+func (r *Registry) GetTranslator(specType SpecType) (types.Translator, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, exists := r.translators[specType]
+	return p, exists
 }

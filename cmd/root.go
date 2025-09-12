@@ -48,6 +48,8 @@ func NewRootCMD(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newGPUCommand())
 	cmd.AddCommand(newNetworkCommand(dmsCli))
+	cmd.AddCommand(newTranslateCmd(dmsCli))
+	cmd.AddCommand(newValidateCmd(dmsCli))
 
 	return cmd
 }

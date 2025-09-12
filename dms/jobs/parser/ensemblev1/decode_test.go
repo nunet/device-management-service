@@ -76,7 +76,7 @@ func TestTransformSpec(t *testing.T) {
 			},
 			expectError: false,
 			expected: map[string]any{
-				"V1": map[string]any{
+				"v1": map[string]any{
 					"edges": []any{
 						map[string]any{"edges": []any{"node1", "node2"}},
 					},
@@ -93,7 +93,7 @@ func TestTransformSpec(t *testing.T) {
 			},
 			expectError: false,
 			expected: map[string]any{
-				"V1": map[string]any{
+				"v1": map[string]any{
 					"allocations": map[string]any{
 						"alloc1": map[string]any{
 							"dns_name":         "alloc1",
@@ -112,10 +112,10 @@ func TestTransformSpec(t *testing.T) {
 			},
 			expectError: false,
 			expected: map[string]any{
-				"V1": map[string]any{
+				"v1": map[string]any{
 					"nodes": map[string]any{
 						"node1": map[string]any{
-							"failure_recovery": defautNodeFailureStrategy,
+							"failure_recovery": defaultNodeFailureStrategy,
 							"redundancy":       0,
 						},
 					},
@@ -129,7 +129,7 @@ func TestTransformSpec(t *testing.T) {
 			},
 			expectError: false,
 			expected: map[string]any{
-				"V1": map[string]any{
+				"v1": map[string]any{
 					"field": "value",
 				},
 			},
@@ -298,6 +298,25 @@ func TestTransformVolume(t *testing.T) {
 }
 
 func TestTransformResources(t *testing.T) {
+	validResources := map[string]any{
+		"name": "rc1",
+		"cpu": map[string]any{
+			"cores":       4,
+			"clock_speed": 2.4,
+		},
+		"ram": map[string]any{
+			"size":        16,
+			"clock_speed": 3.2,
+		},
+		"disk": map[string]any{
+			"size": 500,
+		},
+		"gpu": []any{
+			map[string]any{
+				"vram": 8,
+			},
+		},
+	}
 	t.Parallel()
 	tests := []struct {
 		name        string
@@ -311,132 +330,19 @@ func TestTransformResources(t *testing.T) {
 			name: "string reference inherits values",
 			root: &map[string]any{
 				"resources": []any{
-					map[string]any{
-						"name": "rc1",
-						"cpu": map[string]any{
-							"cores": 4,
-							"arch":  "x86_64",
-						},
-						"ram": map[string]any{
-							"size": 8,
-						},
-					},
+					validResources,
 				},
 			},
 			input:       "rc1",
 			path:        tree.NewPath("allocations", "alloc1", "resources"),
 			expectError: false,
-			expected: map[string]any{
-				"name": "rc1",
-				"cpu": map[string]any{
-					"cores": 4,
-					"arch":  "x86_64",
-				},
-				"ram": map[string]any{
-					"size": uint64(8589934592), // 8 GiB in bytes
-				},
-			},
+			expected:    validResources,
 		},
 		{
-			name: "map format with default units",
-			input: map[string]any{
-				"cpu": map[string]any{
-					"cores":       4,
-					"clock_speed": 2.4, // defaults to GHz
-				},
-				"ram": map[string]any{
-					"size":        16,  // defaults to GiB
-					"clock_speed": 3.2, // defaults to GHz
-				},
-				"disk": map[string]any{
-					"size": 500, // defaults to GiB
-				},
-				"gpu": []any{
-					map[string]any{
-						"vram": 8, // defaults to GiB
-					},
-				},
-			},
+			name:        "valid resources",
+			input:       validResources,
 			expectError: false,
-			expected: map[string]any{
-				"cpu": map[string]any{
-					"cores":       4,
-					"clock_speed": float64(2.4e9),
-				},
-				"ram": map[string]any{
-					"size":        uint64(17179869184), // 16 GiB in bytes
-					"clock_speed": float64(3.2e9),
-				},
-				"disk": map[string]any{
-					"size": uint64(536870912000), // 500 GiB in bytes
-				},
-				"gpu": []any{
-					map[string]any{
-						"vram": uint64(8589934592), // 8 GiB in bytes
-					},
-				},
-			},
-		},
-		{
-			name: "explicit units",
-			input: map[string]any{
-				"cpu": map[string]any{
-					"clock_speed": "3.6GHz",
-				},
-				"ram": map[string]any{
-					"size":        "32GiB",
-					"clock_speed": "3600MHz",
-				},
-				"disk": map[string]any{
-					"size": "1TB",
-				},
-				"gpu": []any{
-					map[string]any{
-						"vram": "16GB",
-					},
-				},
-			},
-			expectError: false,
-			expected: map[string]any{
-				"cpu": map[string]any{
-					"clock_speed": float64(3.6e9),
-				},
-				"ram": map[string]any{
-					"size":        uint64(34359738368), // 32 GiB in bytes
-					"clock_speed": float64(3.6e9),
-				},
-				"disk": map[string]any{
-					"size": uint64(1000000000000), // 1 TB in bytes
-				},
-				"gpu": []any{
-					map[string]any{
-						"vram": uint64(16000000000), // 16 GB in bytes
-					},
-				},
-			},
-		},
-		{
-			name: "invalid cpu clock_speed unit",
-			input: map[string]any{
-				"cpu": map[string]any{
-					"clock_speed": "3.5 invalid",
-				},
-			},
-			expectError: true,
-		},
-		{
-			name: "invalid ram size unit",
-			input: map[string]any{
-				"ram": map[string]any{
-					"size": "16 invalid",
-				},
-			},
-			expectError: true,
-		},
-		{
-			name:        "invalid type",
-			input:       123,
-			expectError: true,
+			expected:    validResources,
 		},
 		{
 			name: "reference not found",
@@ -451,7 +357,6 @@ func TestTransformResources(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result, err := TransformResources(tt.root, tt.input, tt.path)
@@ -468,7 +373,7 @@ func TestTransformResources(t *testing.T) {
 func TestNewEnsemblev1Transformer(t *testing.T) {
 	t.Parallel()
 	input := map[string]any{
-		"version": "V1",
+		"version": "v1",
 		"resources": map[string]any{
 			"rc1": map[string]any{
 				"cpu": map[string]any{
@@ -536,8 +441,8 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 	}
 
 	expected := map[string]any{
-		"V1": map[string]any{
-			"version": "V1",
+		"v1": map[string]any{
+			"version": "v1",
 			"resources": []any{
 				map[string]any{
 					"name": "rc1",
@@ -614,7 +519,7 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 				"node1": map[string]any{
 					"allocations":      []any{"alloc1"},
 					"redundancy":       0,
-					"failure_recovery": defautNodeFailureStrategy,
+					"failure_recovery": defaultNodeFailureStrategy,
 				},
 			},
 			"edges": []any{
@@ -637,7 +542,7 @@ func TestNewEnsemblev1Transformer(t *testing.T) {
 		},
 	}
 
-	transformer := NewEnsemblev1Transformer()
+	transformer := NewEnsemblev1Decoder()
 	result, err := transformer.Transform(&input)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, result)

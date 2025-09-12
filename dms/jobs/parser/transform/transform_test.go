@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
-	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 )
 
 type TransformerTestSuite struct {
@@ -23,7 +22,7 @@ type TransformerTestSuite struct {
 }
 
 // Mock transformer function
-func mockTransformer(_ *map[string]interface{}, _ interface{}, _ tree.Path) (any, error) {
+func mockTransformer(_ *map[string]any, _ any, _ tree.Path) (any, error) {
 	return "transformed", nil
 }
 
@@ -50,57 +49,57 @@ func (s *TransformerTestSuite) TestNewTransformer() {
 func (s *TransformerTestSuite) TestTransform() {
 	transformer := NewTransformer(s.transformers)
 
-	rawConfig := map[string]interface{}{
+	rawConfig := map[string]any{
 		"mockPath": "value",
 	}
-	expectedConfig := map[string]interface{}{
+	expectedConfig := map[string]any{
 		"mockPath": "transformed",
 	}
 
 	result, err := transformer.Transform(&rawConfig)
 	s.NoError(err)
-	s.Equal(utils.Normalize(expectedConfig), result)
+	s.Equal(expectedConfig, result)
 }
 
 func (s *TransformerTestSuite) TestTransformWithNestedData() {
 	transformer := NewTransformer(s.transformers)
 
-	rawConfig := map[string]interface{}{
+	rawConfig := map[string]any{
 		"mockPath": "value",
-		"nested": map[string]interface{}{
+		"nested": map[string]any{
 			"mockPath": "nestedValue",
 		},
 	}
-	expectedConfig := map[string]interface{}{
+	expectedConfig := map[string]any{
 		"mockPath": "transformed",
-		"nested": map[string]interface{}{
+		"nested": map[string]any{
 			"mockPath": "transformed",
 		},
 	}
 
 	result, err := transformer.Transform(&rawConfig)
 	s.NoError(err)
-	s.Equal(utils.Normalize(expectedConfig), result)
+	s.Equal(expectedConfig, result)
 }
 
 func (s *TransformerTestSuite) TestTransformWithDifferentOrder() {
 	transformer := NewTransformer(s.transformers)
 
-	rawConfig := map[string]interface{}{
-		"jobs": []interface{}{
-			map[string]interface{}{
+	rawConfig := map[string]any{
+		"jobs": []any{
+			map[string]any{
 				"name":     "job1",
 				"mockPath": "value1",
 			},
-			map[string]interface{}{
+			map[string]any{
 				"name":     "job2",
 				"mockPath": "value2",
 			},
 		},
 	}
 
-	expectedConfig := map[string]interface{}{
-		"jobs": []map[string]interface{}{
+	expectedConfig := map[string]any{
+		"jobs": []map[string]any{
 			{
 				"name":     "job2",
 				"mockPath": "transformed",
@@ -114,5 +113,8 @@ func (s *TransformerTestSuite) TestTransformWithDifferentOrder() {
 
 	result, err := transformer.Transform(&rawConfig)
 	s.NoError(err)
-	s.Equal(utils.Normalize(expectedConfig), utils.Normalize(result))
+	resultMap, ok := result.(map[string]any)
+	s.True(ok)
+	s.Len(resultMap["jobs"], 2)
+	s.ElementsMatch(expectedConfig["jobs"], resultMap["jobs"])
 }
