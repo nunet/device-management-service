@@ -10,5 +10,5 @@ else
 fi
 
 ssh-add "${GLUSTERFS_SSH_KEY:-glusterfs-key}"
-
+unset ANSIBLE_PRIVATE_KEY
 ansible-playbook "$PLAYBOOK" -i "${GLUSTERFS_ANSIBLE_HOSTS:-hosts_glusterfs}"
