@@ -190,12 +190,10 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 			libp2p.Transport(webtransport.New),
 			libp2p.Transport(ws.New),
 		),
-		// libp2p.EnableNATService(),
 		libp2p.ConnectionManager(connmgr),
-		// TODO debug: disable relay
-		// libp2p.DisableRelay(),
+		libp2p.EnableNATService(),
+		libp2p.EnableAutoNATv2(),
 		libp2p.EnableRelay(),
-		libp2p.EnableHolePunching(),
 		libp2p.EnableRelayService(
 			relay.WithLimit(&relay.RelayLimit{
 				Duration: 5 * time.Minute,
