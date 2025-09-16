@@ -241,30 +241,6 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		return nil, nil, nil, nil, nil, err
 	}
 
-	// dht with old prefix for backward compatibility
-	// TODO: deprecate this once enough nodes are updated to use the new prefix #1089
-	bwDHTOpts := []dht.Option{
-		dht.ProtocolPrefix(protocol.ID("")), // no prefix
-		dht.NamespacedValidator(strings.ReplaceAll(config.CustomNamespace, "/", ""), dhtValidator{PS: ps, customNamespace: config.DHTPrefix}),
-		dht.Mode(dht.ModeAutoServer),
-	}
-	bwDHT, err := dht.New(ctx, host, bwDHTOpts...)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
-	err = bwDHT.Bootstrap(ctx)
-	if err != nil {
-		log.Errorw("failed to bootstrap backward dht",
-			"labels", string(observability.LabelNode),
-			"error", err,
-		)
-	} else {
-		log.Infow("backward dht bootstrap completed",
-			"labels", string(observability.LabelNode),
-		)
-	}
-
 	go watchForNewPeers(ctx, host, newPeer)
 
 	optsPS := []pubsub.Option{

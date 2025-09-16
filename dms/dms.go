@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -109,22 +108,6 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	if btPeers != "" {
 		peers := strings.Split(btPeers, ",")
 		gcfg.P2P.BootstrapPeers = peers
-	} else {
-		// force new bootstrap nodes in config if the original config file has not been
-		// edited by the user
-		// TODO: to be removed once we decommission the old nodes: #1089
-		modBootstrapPeers, updateCfg := getBootstrapNodes(gcfg.P2P.BootstrapPeers)
-		if updateCfg {
-			log.Infof("updating config file with new bootstrap peers: %v", modBootstrapPeers)
-
-			ldr := config.NewLoader(config.WithFS(fs), config.WithConfig(gcfg)) // singleton loader
-
-			if err := ldr.Set("p2p.bootstrap_peers", modBootstrapPeers); err != nil {
-				log.Errorf("unable to update config file with new bootstrap peers: %v", err)
-			}
-
-			gcfg.P2P.BootstrapPeers = modBootstrapPeers
-		}
 	}
 
 	initialize(fs, gcfg, env)
@@ -473,41 +456,4 @@ func LoadOrCreateCapCtx(
 	}
 
 	return capCtx, nil
-}
-
-// getBootstrapNodes is a temporary function to get bootstrap nodes that contain the new
-// bootstrap nodes if the user has not set any custom bootstrap nodes or already has the new
-// nodes in the config.
-// TODO: it should be removed once we decommission the old nodes: #1089
-func getBootstrapNodes(configNodes []string) ([]string, bool) {
-	oldNodes := [3]string{
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
-	}
-
-	newNodes := [3]string{
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWHzew9HTYzywFuvTHGK5Yzoz7qAhMfxagtCvhvjheoBQ3",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWJMtMN1mTNRfgMqUygT7eSXamVzc9ihpSjeairm9PebmB",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWKjSodxxi7UfRHzuk7eGgUF49MoPUCJvtva9K12TqDDsi",
-	}
-
-	noO := 0
-	for _, node := range configNodes {
-		for _, nN := range newNodes {
-			if strings.Contains(node, nN) {
-				return configNodes, false
-			}
-		}
-
-		if !slices.Contains(oldNodes[:], node) {
-			noO++
-		}
-	}
-
-	if noO == 0 && len(configNodes) != 0 {
-		return slices.Concat(configNodes, newNodes[:]), true
-	}
-
-	return configNodes, false
 }
