@@ -62,7 +62,7 @@ func (s *Store) Upsert(t Transaction) error {
 	doc := document.NewDocumentOf(t)
 	doc.Set("unique_id", t.UniqueID)
 	doc.Set("contract_did", t.ContractDID)
-	doc.Set("created_at", time.Now().Unix())
+	doc.Set("created_at", time.Now().UnixNano())
 	doc.Set("transaction_data", bts)
 
 	return s.db.Insert(transactionsCollection, doc)
