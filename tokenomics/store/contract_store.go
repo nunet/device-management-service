@@ -66,7 +66,7 @@ func (s *Store) Upsert(contract *contracts.Contract) error {
 		// Update the existing document
 		update := document.NewDocument()
 		update.Set("contract_did", contract.ContractDID)
-		update.Set("updated_at", time.Now().Unix())
+		update.Set("updated_at", time.Now().UnixNano())
 		update.Set("contract_data", bts)
 
 		return s.db.Update(q, update.AsMap())
@@ -75,7 +75,7 @@ func (s *Store) Upsert(contract *contracts.Contract) error {
 	// Insert a new document
 	doc := document.NewDocumentOf(contract)
 	doc.Set("contract_did", contract.ContractDID)
-	doc.Set("created_at", time.Now().Unix())
+	doc.Set("created_at", time.Now().UnixNano())
 	doc.Set("contract_data", bts)
 
 	return s.db.Insert(contractsCollection, doc)
@@ -116,7 +116,7 @@ func (s *Store) InsertContractKey(c ContractKey) error {
 
 	doc := document.NewDocumentOf(c)
 	doc.Set("contract_did", c.ContractDID)
-	doc.Set("created_at", time.Now().Unix())
+	doc.Set("created_at", time.Now().UnixNano())
 	doc.Set("key_data", bts)
 
 	return s.db.Insert(contractsKeysCollection, doc)

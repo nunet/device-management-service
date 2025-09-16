@@ -59,7 +59,7 @@ func (s *Store) Insert(p Payment) error {
 	doc := document.NewDocumentOf(p)
 	doc.Set("unique_id", p.UniqueID)
 	doc.Set("contract_did", p.Contract.ContractDID)
-	doc.Set("created_at", time.Now().Unix())
+	doc.Set("created_at", time.Now().UnixNano())
 	doc.Set("payment_data", bts)
 
 	return s.db.Insert(paymentsCollection, doc)

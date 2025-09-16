@@ -44,7 +44,7 @@ func (s *Store) AddUsageEvent(u Usage) error {
 
 	doc := document.NewDocument()
 	doc.Set("contract_did", u.ContractDID)
-	doc.Set("created_at", time.Now().Unix())
+	doc.Set("created_at", time.Now().UnixNano())
 	doc.Set("usage_data", u.Data)
 
 	_, err := s.db.InsertOne(contractsUsageCollection, doc)
@@ -102,7 +102,7 @@ func (s *Store) GetAllEvents() ([]*Usage, error) {
 // GetEventsByDateRange retrieves all events created within the given date range.
 func (s *Store) GetEventsByDateRange(start, end time.Time) ([]*Usage, error) {
 	q := query.NewQuery(contractsUsageCollection).Where(
-		query.Field("created_at").GtEq(start.Unix()).And(query.Field("created_at").LtEq(end.Unix())),
+		query.Field("created_at").GtEq(start.UnixNano()).And(query.Field("created_at").LtEq(end.UnixNano())),
 	)
 
 	docs, err := s.db.FindAll(q)
