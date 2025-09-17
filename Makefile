@@ -156,6 +156,9 @@ clean:
 setcap_e2e: 
 	sudo setcap cap_net_admin,cap_sys_admin+ep ./tests/e2e/dms
 
+setcap_e2e_debug:
+	sudo setcap cap_net_admin,cap_sys_admin+ep $(shell which dlv)
+
 build-dms-builder:
 	@echo "Building dms-builder docker image"
 	docker build -f $(PWD)/maint-scripts/Dockerfile.builder -t dms-builder $(PWD)/maint-scripts

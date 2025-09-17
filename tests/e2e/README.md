@@ -186,14 +186,18 @@ What and how you should assert deployments:
 
 ## Debugging
 
-1. use `make linux_amd64_e2e` to create a debug binary
+1. create a debug binary
+   - `make linux_amd64_e2e`
+   - `make setcap_e2e`
+   - `make setcap_e2e_debug` (for `dlv`)
 2. cache decrypted keys in FS via `DMS_E2E_CACHE_KEYS=1`
 3. delve debug specific nodes via `DMS_E2E_DEBUG_NODES=0,2`
    - opens ports `2340` and `2342` respectively
 4. start remote debugging first
-5. pause the runner after a remote breakpoint is hit (to avoid timeouts)
+5. **pause** the runner after a remote breakpoint is hit (to avoid timeouts)
 
 ### Observability
 
-1. set `DMS_E2E_OBSERVE_TOKEN` to the Elasticsearch APM **secret token**
-2. set `DMS_E2E_OBSERVE_API_KEY` to the Elasticsearch API key
+1. for production ELK, set `DMS_E2E_OBSERVE_API_KEY` to the Elasticsearch API key
+2. for local ELK, **additionally** set `DMS_E2E_OBSERVE_TOKEN` to the Elasticsearch APM **secret token**
+3. (optional) set a custom prefix via `DMS_E2E_OBSERVE_PREFIX` to distinguish between test runs, eg `me` will result in `me/E2E/deployment_tests` (also available as a label `prefix`).

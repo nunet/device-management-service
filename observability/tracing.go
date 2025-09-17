@@ -117,7 +117,7 @@ func initTracing(apmConfig config.APM) {
 
 func initRootTrace(tracer *apm.Tracer) {
 	// compose a distinctive name
-	name := "DMS"
+	name := "DMS-" + didID.String()
 	if nodeName := os.Getenv("ELASTIC_APM_SERVICE_NODE_NAME"); nodeName != "" {
 		name += "-" + nodeName
 	}
