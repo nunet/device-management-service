@@ -146,10 +146,10 @@ log.Infow("docker_executor_cleanup_success",
 
 Log levels can be updated at runtime:
 ```go
-    err := observability.SetLogLevel("debug")
-    if err != nil {
-        // handle error
-    }
+	err := observability.SetLogLevel("debug")
+	if err != nil {
+		// handle error
+	}
 ```
 
 ### Tracing
@@ -158,21 +158,21 @@ Elastic APM is integrated for distributed tracing. Use the helper function `Star
 
 Usage examples:
 ```go
-    // Starting a trace without an existing context.
-    func processOrder(orderID string) {
-        endTrace := observability.StartTrace("process_order", "orderID", orderID)
-        defer endTrace()
-    
-        // Processing logic...
-    }
+	// Starting a trace without an existing context.
+	func processOrder(orderID string) {
+		endTrace := observability.StartTrace("process_order", "orderID", orderID)
+		defer endTrace()
+	
+		// Processing logic...
+	}
 
-    // Starting a trace with an existing context.
-    func handleRequest(ctx context.Context, orderID string) {
-        endTrace := observability.StartTrace(ctx, "handle_request", "orderID", orderID)
-        defer endTrace()
-    
-        // Request handling logic...
-    }
+	// Starting a trace with an existing context.
+	func handleRequest(ctx context.Context, orderID string) {
+		endTrace := observability.StartTrace(ctx, "handle_request", "orderID", orderID)
+		defer endTrace()
+	
+		// Request handling logic...
+	}
 ```
 If a transaction is already present (e.g., via APM-enabled Gin middleware), `StartTrace` creates a child span; otherwise, it starts a new transaction.
 
@@ -180,10 +180,10 @@ If a transaction is already present (e.g., via APM-enabled Gin middleware), `Sta
 
 Logs can be annotated with labels to control routing:
 ```go
-    log.Infow("Payment processed",
-        "paymentID", "PAY123",
-        "labels", []string{"accounting"},
-    )
+	log.Infow("Payment processed",
+		"paymentID", "PAY123",
+		"labels", []string{"accounting"},
+	)
 ```
 The label injection core processes the `labels` field:
 - Logs tagged with specific labels may be routed to an override Elasticsearch index (e.g., "accounting-index").
@@ -224,42 +224,42 @@ Observability supports dynamic reconfiguration at runtime:
 
 1. **Enable/Disable Elasticsearch Logging:**
 ```go
-       err := observability.EnableElasticsearchLogging(true) // or false
-       if err != nil {
-           // handle error
-       }
+	   err := observability.EnableElasticsearchLogging(true) // or false
+	   if err != nil {
+		   // handle error
+	   }
 ```
 2. **Set Elasticsearch Endpoint:**
 ```go
-       err := observability.SetElasticsearchEndpoint("https://new-elasticsearch.example.com:9200")
-       if err != nil {
-           // handle error
-       }
+	   err := observability.SetElasticsearchEndpoint("https://new-elasticsearch.example.com:9200")
+	   if err != nil {
+		   // handle error
+	   }
 ```
 3. **Set APM Server URL:**
 ```go
-       err := observability.SetAPMURL("https://new-apm-server.example.com")
-       if err != nil {
-           // handle error
-       }
+	   err := observability.SetAPMURL("https://new-apm-server.example.com")
+	   if err != nil {
+		   // handle error
+	   }
 ```
 4. **Update API Key (for Elasticsearch and APM):**
 ```go
-       err := observability.SetAPIKey("newApiKey123")
-       if err != nil {
-           // handle error
-       }
+	   err := observability.SetAPIKey("newApiKey123")
+	   if err != nil {
+		   // handle error
+	   }
 ```
 5. **Set Flush Interval for Elasticsearch Logs:**
 ```go
-       err := observability.SetFlushInterval(15) // flush interval in seconds
-       if err != nil {
-           // handle error
-       }
+	   err := observability.SetFlushInterval(15) // flush interval in seconds
+	   if err != nil {
+		   // handle error
+	   }
 ```
 6. **Toggle No-Op Mode:**
 ```go
-       observability.SetNoOpMode(true) // disables logging, tracing, and event emission
+	   observability.SetNoOpMode(true) // disables logging, tracing, and event emission
 ```
 ---
 
@@ -268,10 +268,10 @@ Observability supports dynamic reconfiguration at runtime:
 For unit tests, disable observability side-effects by enabling no-op mode:
 ```go
   func TestNew(t *testing.T) {
-    // Set observability to no-op mode for testing
-    observability.SetNoOpMode(true)
-    // some tests
-    }
+	// Set observability to no-op mode for testing
+	observability.SetNoOpMode(true)
+	// some tests
+	}
 ```
 This ensures that logging, Elasticsearch, and APM tracing are effectively disabled during tests.
 
@@ -281,7 +281,7 @@ This ensures that logging, Elasticsearch, and APM tracing are effectively disabl
 
 To properly release resources and flush logs/traces, call:
 ```go
-    observability.Shutdown()
+	observability.Shutdown()
 ```
 This function:
 - Flushes and closes Elasticsearch log buffers.
@@ -290,16 +290,38 @@ This function:
 
 Example usage in the main function:
 ```go
-    func main() {
-        // Application logic...
-    
-        // On graceful shutdown:
-        observability.Shutdown()
-    }
+	func main() {
+		// Application logic...
+	
+		// On graceful shutdown:
+		observability.Shutdown()
+	}
 ```
 but it also happens automatically
 
-## Local ELK Stack
+## Enabling Observability
+
+```json
+{
+	"apm": {
+		"api_key": "PROD_API_KEY",
+		"environment": "production",
+		"server_url": "https://apm.telemetry.nunet.io",
+		"service_name": "nunet-dms",
+		"secret_token": ""
+	},
+	"observability": {
+		"elasticsearch_api_key": "PROD_API_KEY",
+		"elasticsearch_enabled": true,
+		"elasticsearch_index": "nunet-dms",
+		"elasticsearch_url": "https://telemetry.nunet.io"
+	}
+}
+```
+
+The top-level trace is called based on the DID, eg `DMS-did:key:z6Mku1nVmZ9AQywxSUpWuAH2uen8SswqFHKkrRWAjs4gD9Uk`, but can be overridden via `ELASTIC_APM_SERVICE_NODE_NAME`.
+
+### Local ELK Stack
 
 Source: [Getting started with the Elastic Stack and Docker Compose: Part 2](https://www.elastic.co/blog/getting-started-with-the-elastic-stack-and-docker-compose-part-2)
 Login: elastic / changeme
@@ -316,22 +338,22 @@ Login: elastic / changeme
    - update "Hosts" to `https://es01:9200`
    - update "... fingerprint" to the output from step 4.2
    - update and indent "Advanced YAML config"
-     - then "Save and Deploy"
+	 - then "Save and Deploy"
 ```go
 ssl:
   certificate_authorities:
   - |
-    OUTPUT_STEP_4_3
+	OUTPUT_STEP_4_3
 ```
 6. [Create a data view](https://localhost:5601/app/management/kibana/dataViews) called "dms-logs"
   - "Index pattern": `nunet-dms,*-index`
 7. Create an API key
    - https://localhost:5601/app/management/security/api_keys/create
 8. Update config:
-    - `apm.secret_token = "supersecrettoken"`
-    - `apm.server_url = "http://localhost:8200"`
-    - `observability.elasticsearch_url = "https://localhost:9200"`
-    - `observability.elasticsearch_api_key = "STEP6"`
-9. Results available after stopping the DMS and waiting a bit:
+	- `apm.server_url = "http://localhost:8200"`
+	- `apm.secret_token = "supersecrettoken"`
+	- `observability.elasticsearch_url = "https://localhost:9200"`
+	- `observability.elasticsearch_api_key = "STEP6"`
+9. Results available after stopping the DMS and waiting for a bit:
    - Traces: [Observability -> APM -> nunet-dms -> Traces -> DMS](https://localhost:5601/app/apm/services/nunet-dms/overview?comparisonEnabled=true&environment=ENVIRONMENT_ALL&kuery=&latencyAggregationType=avg&offset=1d&rangeFrom=now-15m&rangeTo=now&serviceGroup=)
    - Logs: [Analytics -> Discover -> dms-logs](https://localhost:5601/app/management/data/index_management/data_streams/logs-nunet-dms) and [Management -> Stack Management -> Index Management](https://localhost:5601/app/discover#)

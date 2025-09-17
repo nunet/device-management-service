@@ -50,6 +50,9 @@ const envE2EObserveToken = "DMS_E2E_OBSERVE_TOKEN"
 // envE2EObserveAPIKey set to "DMS_E2E_OBSERVE_API_KEY=someapikey" will enable observability for all nodes' logs. Requires envE2EObserveToken.
 const envE2EObserveAPIKey = "DMS_E2E_OBSERVE_API_KEY"
 
+// envE2EObservePrefix used to distinguish between test runs, eg `me` will result in `prefix/E2E/deployment_tests`.
+const envE2EObservePrefix = "DMS_E2E_OBSERVE_PREFIX"
+
 // SUMMARY
 
 type SummaryNode struct {
@@ -268,9 +271,13 @@ func (s *TestSuite) startNode(index int) {
 		cmd = exec.Command(binaryPath, "run", "--config", configPath, "--context", node.dmsContext)
 	}
 	// config the env
+	tracePrefix := os.Getenv(envE2EObservePrefix)
+	if tracePrefix != "" {
+		tracePrefix += "/"
+	}
 	cmd.Env = append(os.Environ(),
 		// define a name for Kibana
-		"ELASTIC_APM_SERVICE_NODE_NAME=E2E-"+s.T().Name()+"-node-"+idxS,
+		"ELASTIC_APM_SERVICE_NODE_NAME="+tracePrefix+"E2E-"+s.T().Name()+"-node-"+idxS,
 		"DMS_PASSPHRASE="+node.password,
 		// log levels
 		"GOLOG_LOG_LEVEL=debug",
@@ -286,17 +293,17 @@ func (s *TestSuite) startNode(index int) {
 	}
 
 	// intercept log for scraping
-	prefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
+	logPrefix := fmt.Sprintf("[%s-node-%d] ", s.Name, index)
 	cmd.Stdout = &LogInterceptor{
 		summary: s.summary,
 		nodeIdx: index,
-		fwd:     &prefixWriter{prefix: prefix, w: os.Stdout},
+		fwd:     &prefixWriter{prefix: logPrefix, w: os.Stdout},
 	}
 	cmd.Stderr = &LogInterceptor{
 		summary: s.summary,
 		nodeIdx: index,
 		isErr:   true,
-		fwd:     &prefixWriter{prefix: prefix, w: os.Stderr},
+		fwd:     &prefixWriter{prefix: logPrefix, w: os.Stderr},
 	}
 
 	// Start the node process.
@@ -582,7 +589,17 @@ func (s *TestSuite) SetupSuite() {
 	}
 	apm.SetDefaultTracer(tracer)
 	s.tracer = tracer
-	s.rootTrace = tracer.StartTransaction("E2E/"+s.Name, "request")
+
+	// compose name and the top trace
+	prefix := os.Getenv(envE2EObservePrefix)
+	name := "E2E/" + s.Name
+	if prefix != "" {
+		name = prefix + "/" + name
+	}
+	s.rootTrace = tracer.StartTransaction(name, "request")
+	if prefix != "" {
+		s.rootTrace.Context.SetLabel("prefix", prefix)
+	}
 }
 
 // TearDownSuite runs once after all tests are complete.
