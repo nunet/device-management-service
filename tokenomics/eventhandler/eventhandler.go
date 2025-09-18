@@ -32,11 +32,11 @@ type EventHandler struct {
 	handler   HandlerFunc
 	baseDelay time.Duration
 	maxDelay  time.Duration
-	quit      chan struct{}
 	ctx       context.Context
 }
 
 // New creates a new EventHandler.
+// - ctx: context to cancel processing
 // - workers: number of concurrent workers
 // - queueSize: buffer size for the event channel
 // - baseDelay: initial retry delay
@@ -49,7 +49,6 @@ func New(ctx context.Context, workers, queueSize int, baseDelay, maxDelay time.D
 		handler:   handler,
 		baseDelay: baseDelay,
 		maxDelay:  maxDelay,
-		quit:      make(chan struct{}),
 		ctx:       ctx,
 	}
 	eh.start()
@@ -64,12 +63,18 @@ func (eh *EventHandler) start() {
 	}
 }
 
-// worker processes events from the channel.
 func (eh *EventHandler) worker(id int) {
 	defer eh.wg.Done()
 	for {
 		select {
-		case event := <-eh.events:
+		case <-eh.ctx.Done():
+			log.Printf("[Worker %d] Stopping (context done)", id)
+			return
+		case event, ok := <-eh.events:
+			if !ok {
+				log.Printf("[Worker %d] Stopping (events channel closed)", id)
+				return
+			}
 			err := eh.handler(event)
 			if err != nil {
 				log.Printf("[Worker %d] Error: %v (attempt %d/%d)", id, err, event.attempts+1, event.MaxRetries)
@@ -86,12 +91,6 @@ func (eh *EventHandler) worker(id int) {
 					}(event, delay)
 				}
 			}
-		case <-eh.quit:
-			log.Printf("[Worker %d] Stopping (quit signal)", id)
-			return
-		case <-eh.ctx.Done():
-			log.Printf("[Worker %d] Stopping (context done)", id)
-			return
 		}
 	}
 }
@@ -102,17 +101,12 @@ func (eh *EventHandler) Push(event Event) {
 		event.MaxRetries = defaultMaxRetries
 	}
 
-	go func() {
-		// may block if queue is full, but only this goroutine blocks
-		// this is fine as long as we dont have millions of events in the queue
-		eh.events <- event
-	}()
-}
-
-// Stop gracefully shuts down the event handler.
-func (eh *EventHandler) Stop() {
-	close(eh.quit)
-	eh.wg.Wait()
+	select {
+	case eh.events <- event:
+		// queued successfully
+	case <-eh.ctx.Done():
+		// drop the event
+	}
 }
 
 // backoff calculates exponential backoff delay.

@@ -10,9 +10,11 @@ import (
 
 func TestEventHandler_Success(t *testing.T) {
 	var processed int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	handler := New(
-		context.Background(),
+		ctx,
 		1,  // workers
 		10, // queue size
 		10*time.Millisecond,
@@ -22,7 +24,6 @@ func TestEventHandler_Success(t *testing.T) {
 			return nil
 		},
 	)
-	defer handler.Stop()
 
 	handler.Push(Event{Payload: "ok", MaxRetries: 1})
 
@@ -35,9 +36,11 @@ func TestEventHandler_Success(t *testing.T) {
 
 func TestEventHandler_RetryUntilSuccess(t *testing.T) {
 	var attempts int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	handler := New(
-		context.Background(),
+		ctx,
 		1,
 		10,
 		5*time.Millisecond,
@@ -50,7 +53,6 @@ func TestEventHandler_RetryUntilSuccess(t *testing.T) {
 			return nil
 		},
 	)
-	defer handler.Stop()
 
 	handler.Push(Event{Payload: "retry", MaxRetries: 5})
 
@@ -63,9 +65,11 @@ func TestEventHandler_RetryUntilSuccess(t *testing.T) {
 
 func TestEventHandler_MaxRetries(t *testing.T) {
 	var attempts int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	handler := New(
-		context.Background(),
+		ctx,
 		1,
 		10,
 		5*time.Millisecond,
@@ -75,7 +79,6 @@ func TestEventHandler_MaxRetries(t *testing.T) {
 			return errors.New("always fail")
 		},
 	)
-	defer handler.Stop()
 
 	handler.Push(Event{Payload: "fail", MaxRetries: 2})
 
@@ -87,15 +90,17 @@ func TestEventHandler_MaxRetries(t *testing.T) {
 }
 
 func TestEventHandler_Backoff(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	handler := New(
-		context.Background(),
+		ctx,
 		1,
 		1,
 		10*time.Millisecond,
 		100*time.Millisecond,
 		func(_ Event) error { return nil },
 	)
-	defer handler.Stop()
 
 	tests := []struct {
 		attempt int
@@ -117,40 +122,18 @@ func TestEventHandler_Backoff(t *testing.T) {
 	}
 }
 
-func TestEventHandler_Stop(t *testing.T) {
-	handler := New(
-		context.Background(),
-		2,
-		10,
-		10*time.Millisecond,
-		100*time.Millisecond,
-		func(_ Event) error { return nil },
-	)
-
-	done := make(chan struct{})
-	go func() {
-		handler.Stop()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// success
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Stop() did not complete")
-	}
-}
-
 // Test that multiple workers process events concurrently.
 func TestEventHandler_ParallelWorkers(t *testing.T) {
 	var processed int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	workerCount := 3
 	eventCount := 6
 	sleepPerEvent := 100 * time.Millisecond
 
 	handler := New(
-		context.Background(),
+		ctx,
 		workerCount,
 		10,
 		10*time.Millisecond,
@@ -161,7 +144,6 @@ func TestEventHandler_ParallelWorkers(t *testing.T) {
 			return nil
 		},
 	)
-	defer handler.Stop()
 
 	start := time.Now()
 
@@ -169,18 +151,12 @@ func TestEventHandler_ParallelWorkers(t *testing.T) {
 		handler.Push(Event{Payload: i, MaxRetries: 1})
 	}
 
-	for {
-		//nolint:staticcheck
-		if atomic.LoadInt32(&processed) == int32(eventCount) {
-			break
-		}
+	for atomic.LoadInt32(&processed) == int32(eventCount) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	elapsed := time.Since(start)
 
-	// If sequential: eventCount * sleepPerEvent
-	// If parallel: closer to (eventCount/workerCount) * sleepPerEvent
 	expectedSequential := time.Duration(eventCount) * sleepPerEvent
 	expectedParallel := time.Duration(eventCount/workerCount) * sleepPerEvent
 

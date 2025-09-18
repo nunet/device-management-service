@@ -280,4 +280,8 @@ type ActorContractBehaviorClient interface {
 	CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error)
 	ConfirmTransaction(ctx context.Context, req contracts.ContractConfirmLocalTransactionRequest, opts ...Option) (contracts.ContractConfirmLocalTransactionResponse, error)
 	GetPaymentStatus(ctx context.Context, req contracts.ContractPaymentStatusRequest, opts ...Option) (contracts.ContractPaymentStatusResponse, error)
+	TerminateContract(ctx context.Context, req contracts.ContractTerminationRequestBehaviour, opts ...Option) (contracts.ContractTerminationResponseBehaviour, error)
+	CompleteContract(ctx context.Context, req contracts.ContractCompletionRequestBehaviour, opts ...Option) (contracts.ContractCompletionResponseBehaviour, error)
+	ValidateContract(ctx context.Context, req contracts.ContractValidateRequestBehaviour, opts ...Option) (contracts.ContractValidateResponseBehaviour, error)
+	SettleContract(ctx context.Context, req contracts.ContractSettleRequestBehaviour, opts ...Option) (contracts.ContractSettleResponseBehaviour, error)
 }

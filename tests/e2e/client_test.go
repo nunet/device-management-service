@@ -285,6 +285,54 @@ func (c *Client) paymentStatus(t *testing.T, context, passphrase, uniqueID, dest
 	return buf.String(), err
 }
 
+func (c *Client) terminateContract(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/terminate", "--contract-did", contractDID, "--contract-host-did", contractHostDID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("terminateContract response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) validateContract(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/validate", "--contract-did", contractDID, "--contract-host-did", contractHostDID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("validateContract response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) settleContract(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/settle", "--contract-did", contractDID, "--contract-host-did", contractHostDID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("settleContract response: ", buf.String())
+	return buf.String(), err
+}
+
 func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniqueID, txHash string) (string, error) {
 	root := c.newCommandCtx()
 
@@ -348,13 +396,13 @@ func (c *Client) listIncomingContracts(t *testing.T, context, passphrase string)
 	return buf.String(), err
 }
 
-func (c *Client) contractStatus(t *testing.T, contractDID, context, passphrase, destination string) (string, error) {
+func (c *Client) contractStatus(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/state", "--contract-did", contractDID, "--timeout", "25s", "--dest", destination}
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/state", "--contract-did", contractDID, "--contract-host-did", contractHostDID, "--timeout", "25s"}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer

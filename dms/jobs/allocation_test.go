@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
@@ -87,7 +88,7 @@ func TestNewAllocation(t *testing.T) {
 				tt.network,
 				tt.executor,
 				func() error { return nil },
-				&eventhandler.EventHandler{},
+				eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 			)
 
 			if tt.wantErr {
@@ -543,6 +544,6 @@ func createTestAllocation(t *testing.T, vol ...types.VolumeConfig) (*Allocation,
 		mockNetwork,
 		mockExecutor,
 		func() error { return nil },
-		&eventhandler.EventHandler{},
+		eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 	)
 }

@@ -17,9 +17,11 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/client"
 	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
@@ -103,7 +105,8 @@ type CreateContractRequestCmd struct {
 }
 
 type ContractStatusRequestCmd struct {
-	ContractDID string
+	ContractDID  string
+	ContractHost string
 }
 
 type ContractApproveLocalRequestCmd struct {
@@ -119,7 +122,248 @@ type ContractPaymentStatusCmd struct {
 	UniqueID string
 }
 
+type ContractTerminateCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type ContractCompleteCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type ContractValidateCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type ContractSettleCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
 var registeredBehaviors = map[string]*behaviorConfig{
+	// /dms/tokenomics/contract/settle
+	behaviors.ContractSettleBehavior: {
+		Payload: func() any { return &ContractSettleCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractSettleCmd)
+			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract did (required)")
+			cmd.Flags().StringVarP(&p.ContractHost, "contract-host-did", "", "", "contract host did (required)")
+			_ = cmd.MarkFlagRequired("contract-did")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractSettleCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode contract settle payload")
+			}
+
+			request := contracts.ContractSettleRequestBehaviour{
+				ContractDID: req.ContractDID,
+			}
+
+			if req.ContractHost != "" {
+				destination, err := getDestinationHandle(req.ContractDID, req.ContractHost)
+				if err != nil {
+					return nil, err
+				}
+
+				opts.MsgOpts = append(opts.MsgOpts, client.WithDestination(destination))
+			}
+
+			resp, err := dmsClient.SettleContract(ctx, request, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a settle request",
+		Long: `Invoke the /dms/tokenomics/contract/settle behavior on an actor
+									
+									This behavior calls the contract settle behaviour.
+									
+									Examples:
+									
+									  nunet actor cmd --context user /dms/tokenomics/contract/settle --contract-did <did> --contract-host-did <hostdid>`,
+	},
+	// /dms/tokenomics/contract/terminate
+	behaviors.ContractTerminationBehavior: {
+		Payload: func() any { return &ContractTerminateCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractTerminateCmd)
+			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract did (required)")
+			cmd.Flags().StringVarP(&p.ContractHost, "contract-host-did", "", "", "contract host did (required)")
+			_ = cmd.MarkFlagRequired("contract-did")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractTerminateCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode contract terminate payload")
+			}
+
+			request := contracts.ContractTerminationRequestBehaviour{
+				ContractDID: req.ContractDID,
+			}
+
+			if req.ContractHost != "" {
+				destination, err := getDestinationHandle(req.ContractDID, req.ContractHost)
+				if err != nil {
+					return nil, err
+				}
+
+				opts.MsgOpts = append(opts.MsgOpts, client.WithDestination(destination))
+			}
+
+			resp, err := dmsClient.TerminateContract(ctx, request, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a termination request",
+		Long: `Invoke the /dms/tokenomics/contract/terminate behavior on an actor
+								
+								This behavior calls the contract terminate behaviour.
+								
+								Examples:
+								
+								  nunet actor cmd --context user /dms/tokenomics/contract/terminate --contract-did <did> --contract-host-did <hostdid>`,
+	},
+	// /dms/tokenomics/contract/complete
+	behaviors.ContractCompleteBehavior: {
+		Payload: func() any { return &ContractCompleteCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractCompleteCmd)
+			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract did (required)")
+			cmd.Flags().StringVarP(&p.ContractHost, "contract-host-did", "", "", "contract host did (required)")
+			_ = cmd.MarkFlagRequired("contract-did")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractCompleteCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode contract complete payload")
+			}
+
+			request := contracts.ContractCompletionRequestBehaviour{
+				ContractDID: req.ContractDID,
+			}
+
+			if req.ContractHost != "" {
+				destination, err := getDestinationHandle(req.ContractDID, req.ContractHost)
+				if err != nil {
+					return nil, err
+				}
+
+				opts.MsgOpts = append(opts.MsgOpts, client.WithDestination(destination))
+			}
+
+			resp, err := dmsClient.CompleteContract(ctx, request, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a contract complete request",
+		Long: `Invoke the /dms/tokenomics/contract/complete behavior on an actor
+								
+								This behavior calls the contract complete behaviour.
+								
+								Examples:
+								
+								  nunet actor cmd --context user /dms/tokenomics/contract/complete --contract-did <did> --contract-host-did <hostdid>`,
+	},
+	// /dms/tokenomics/contract/validate
+	behaviors.ContractValidationBehavior: {
+		Payload: func() any { return &ContractValidateCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractValidateCmd)
+			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract did (required)")
+			cmd.Flags().StringVarP(&p.ContractHost, "contract-host-did", "", "", "contract host did (required)")
+			_ = cmd.MarkFlagRequired("contract-did")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractValidateCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode contract complete payload")
+			}
+
+			request := contracts.ContractValidateRequestBehaviour{
+				ContractDID: req.ContractDID,
+			}
+
+			if req.ContractHost != "" {
+				destination, err := getDestinationHandle(req.ContractDID, req.ContractHost)
+				if err != nil {
+					return nil, err
+				}
+
+				opts.MsgOpts = append(opts.MsgOpts, client.WithDestination(destination))
+			}
+
+			resp, err := dmsClient.ValidateContract(ctx, request, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a contract validate request",
+		Long: `Invoke the /dms/tokenomics/contract/validate behavior on an actor
+								
+								This behavior calls the contract validate behaviour.
+								
+								Examples:
+								
+								  nunet actor cmd --context user /dms/tokenomics/contract/validate --contract-did <did> --contract-host-did <hostdid>`,
+	},
+	// /dms/tokenomics/contract/state
+	behaviors.ContractStatusBehavior: {
+		Payload: func() any { return &ContractStatusRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractStatusRequestCmd)
+			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract-did (required)")
+			cmd.Flags().StringVarP(&p.ContractHost, "contract-host-did", "", "", "contract host did (required)")
+			_ = cmd.MarkFlagRequired("contract-did")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractStatusRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to encode payload")
+			}
+
+			contractReq := contracts.ContractStatusRequestBehaviour{
+				ContractDID: req.ContractDID,
+			}
+
+			if req.ContractHost != "" {
+				destination, err := getDestinationHandle(req.ContractDID, req.ContractHost)
+				if err != nil {
+					return nil, err
+				}
+
+				opts.MsgOpts = append(opts.MsgOpts, client.WithDestination(destination))
+			}
+
+			resp, err := dmsClient.ContractStatus(ctx, contractReq, opts.MsgOpts...)
+			if err != nil {
+				return resp, err
+			}
+
+			return resp, nil
+		},
+		Action: bInvoke,
+		Short:  "Send a contract state request",
+		Long: `Invoke the /dms/tokenomics/contract/state behavior on an actor
+		
+		This behavior calls the actors contract state behaviour.
+		
+		Examples:
+		
+		  nunet actor cmd --context user /dms/tokenomics/contract/state --contract-did <did> --contract-host-did <hostdid>`,
+	},
 	// /dms/tokenomics/contract/payment/status
 	behaviors.ContractPaymentStatusBehavior: {
 		Payload: func() any { return &ContractPaymentStatusCmd{} },
@@ -284,41 +528,6 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				Examples:
 				
 				  nunet actor cmd --context user /dms/tokenomics/contract/aprove_local --contract-did <did>`,
-	},
-	// /dms/tokenomics/contract/state
-	behaviors.ContractStatusBehavior: {
-		Payload: func() any { return &ContractStatusRequestCmd{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*ContractStatusRequestCmd)
-			cmd.Flags().StringVarP(&p.ContractDID, "contract-did", "", "", "contract-did (required)")
-			_ = cmd.MarkFlagRequired("contract-did")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*ContractStatusRequestCmd)
-			if !ok {
-				return nil, fmt.Errorf("failed to encode payload")
-			}
-
-			contractReq := contracts.ContractStatusRequestBehaviour{
-				ContractDID: req.ContractDID,
-			}
-
-			resp, err := dmsClient.ContractStatus(ctx, contractReq, opts.MsgOpts...)
-			if err != nil {
-				return resp, err
-			}
-
-			return resp, nil
-		},
-		Action: bInvoke,
-		Short:  "Send a contract state request",
-		Long: `Invoke the /dms/tokenomics/contract/state behavior on an actor
-			
-			This behavior calls the actors contract state behaviour.
-			
-			Examples:
-			
-			  nunet actor cmd --context user /dms/tokenomics/contract/state --contract-did <did> --dest <json_encdoed_handle_solution_enabler>`,
 	},
 	// /dms/tokenomics/contract/create
 	behaviors.ContractCreateBehavior: {
@@ -1184,4 +1393,43 @@ Examples:
   nunet actor cmd --context user /dms/cap/anchor --provide token
   nunet actor cmd --context user /dms/cap/anchor --revoke token`,
 	},
+}
+
+func getDestinationHandle(cDID, cHost string) (string, error) {
+	contractDID, err := did.FromString(cDID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get contract did")
+	}
+
+	pubKey, err := did.PublicKeyFromDID(contractDID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get contract did public key")
+	}
+
+	contractHostDID, err := did.FromString(cHost)
+	if err != nil {
+		return "", fmt.Errorf("failed to get contract host did")
+	}
+
+	hostPubKey, err := did.PublicKeyFromDID(contractHostDID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get contract host public key")
+	}
+
+	hostPeerID, err := peer.IDFromPublicKey(hostPubKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to get contract host peer id")
+	}
+
+	destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKey, cDID, hostPeerID.String())
+	if err != nil {
+		return "", fmt.Errorf("failed to get create remote handle")
+	}
+
+	d, err := json.Marshal(destination)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal destination handle")
+	}
+
+	return string(d), nil
 }

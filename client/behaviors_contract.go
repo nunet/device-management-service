@@ -151,3 +151,71 @@ func (c *Client) GetPaymentStatus(ctx context.Context, req contracts.ContractPay
 	err = c.unmarshalResponse(resp, &response)
 	return response, err
 }
+
+func (c *Client) TerminateContract(ctx context.Context, req contracts.ContractTerminationRequestBehaviour, opts ...Option) (contracts.ContractTerminationResponseBehaviour, error) {
+	var response contracts.ContractTerminationResponseBehaviour
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractTerminationBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractTerminationBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) SettleContract(ctx context.Context, req contracts.ContractSettleRequestBehaviour, opts ...Option) (contracts.ContractSettleResponseBehaviour, error) {
+	var response contracts.ContractSettleResponseBehaviour
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractSettleBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractSettleBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) CompleteContract(ctx context.Context, req contracts.ContractCompletionRequestBehaviour, opts ...Option) (contracts.ContractCompletionResponseBehaviour, error) {
+	var response contracts.ContractCompletionResponseBehaviour
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractCompleteBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractCompleteBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) ValidateContract(ctx context.Context, req contracts.ContractValidateRequestBehaviour, opts ...Option) (contracts.ContractValidateResponseBehaviour, error) {
+	var response contracts.ContractValidateResponseBehaviour
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.ContractValidationBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.ContractValidationBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}

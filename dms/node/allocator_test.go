@@ -11,6 +11,7 @@ package node
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/assert"
@@ -390,7 +391,7 @@ func TestAllocatorAllocate(t *testing.T) {
 			job,
 			nullExecutor,
 			map[string]types.ContractConfig{},
-			&eventhandler.EventHandler{},
+			eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 		)
 		assert.Error(t, err, "allocate should return an error for resources not committed")
 		assert.Nil(t, allocation, "allocation should be nil on failure")
@@ -421,7 +422,7 @@ func TestAllocatorAllocate(t *testing.T) {
 		assert.NoError(t, err, "commit should not return an error")
 
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
+			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }))
 		assert.NoError(t, err, "allocate should not return an error")
 		assert.NotNil(t, allocation, "allocation should not be nil on success")
 
@@ -502,7 +503,7 @@ func TestAllocatorAllocate(t *testing.T) {
 
 		// try to allocate too much resources
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, beyondAvailableJob, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
+			ctx, allocationID, "service", allocActor, orchHandle, beyondAvailableJob, nullExecutor, map[string]types.ContractConfig{}, eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }))
 		assert.ErrorContains(t, err, types.ErrNoFreeResources.Error())
 		assert.Nil(t, allocation)
 	})
@@ -556,7 +557,7 @@ func TestAllocator_Stop(t *testing.T) {
 		assert.NoError(t, err, "commit should not return an error")
 
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
+			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }))
 
 		assert.NoError(t, err, "allocate should not return an error")
 		assert.NotNil(t, allocation, "allocation should not be nil on success")
@@ -636,7 +637,7 @@ func TestAllocator_Stop(t *testing.T) {
 
 		// allocate the first allocation
 		allocation, err := alloc.Allocate(
-			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, &eventhandler.EventHandler{})
+			ctx, allocationID, "service", allocActor, orchHandle, job, nullExecutor, map[string]types.ContractConfig{}, eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }))
 
 		assert.NoError(t, err, "allocate should not return an error")
 		assert.NotNil(t, allocation, "allocation should not be nil on success")
