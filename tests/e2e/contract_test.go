@@ -9,8 +9,6 @@
 package e2e
 
 import (
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,9 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/nunet/device-management-service/actor"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/lib/crypto"
 )
 
 // DeployWithContractTest runs the tests that deploy with contracts
@@ -70,21 +66,6 @@ func DeployWithContractTest(suite *TestSuite) {
 		contractDID, err := getContractID(cmdOut)
 		suite.Require().NoError(err)
 
-		pubKeyActorStr, err := getPublicKey(cmdOut)
-		suite.Require().NoError(err)
-
-		pubKeyBytes, err := hex.DecodeString(pubKeyActorStr)
-		suite.Require().NoError(err)
-
-		pubKeyActor, err := crypto.BytesToPublicKey(pubKeyBytes)
-		suite.Require().NoError(err)
-
-		destinationSolutionEnabler, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyActor, contractDID, contractHost.peerID)
-
-		suite.Require().NoError(err)
-		address, err := json.Marshal(destinationSolutionEnabler)
-		suite.Require().NoError(err)
-
 		// check the list and see the contract that is not approved yet localy
 		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
 		fmt.Println(cmdOut, err)
@@ -92,7 +73,8 @@ func DeployWithContractTest(suite *TestSuite) {
 		fmt.Println(cmdOut, err)
 
 		time.Sleep(7 * time.Second)
-		cmdOut, err = requester.client.contractStatus(suite.T(), contractDID, requester.dmsContext, requester.password, string(address))
+		// contractStatus can be changed and no more needed to contract the address here
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
 		suite.Require().NoError(err)
 
 		contractState, err := extractContractState(cmdOut)
@@ -173,6 +155,47 @@ func DeployWithContractTest(suite *TestSuite) {
 		statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, uniqueID, paymentValidator.dmsDID)
 		suite.Require().NoError(err)
 		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		// check the status of the contract actor
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		time.Sleep(3 * time.Second)
+
+		_, err = provider.client.settleContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("SETTLED", contractState)
+
+		time.Sleep(3 * time.Second)
+
+		// terminate by provider
+		_, err = provider.client.terminateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		time.Sleep(3 * time.Second)
+
+		// check the status of the contract actor
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("TERMINATED", contractState)
+
+		// validate contract
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
 	})
 }
 
@@ -202,13 +225,13 @@ func extractContractState(input string) (string, error) {
 
 	match := re.FindStringSubmatch(input)
 	if len(match) < 2 {
-		return "", fmt.Errorf("contract_did not found in the input string")
+		return "", fmt.Errorf("state not found in the input string")
 	}
 	return match[1], nil
 }
 
-func getPublicKey(input string) (string, error) {
-	pattern := `"pub_key"\s*:\s*"([^"]+)"`
+func extractValidationResponse(input string) (string, error) {
+	pattern := `"valid"\s*:\s*(true|false)`
 
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -217,9 +240,8 @@ func getPublicKey(input string) (string, error) {
 
 	match := re.FindStringSubmatch(input)
 	if len(match) < 2 {
-		return "", fmt.Errorf("pub_key not found in the input string")
+		return "", fmt.Errorf("valid not found in the input string")
 	}
-
 	return match[1], nil
 }
 
