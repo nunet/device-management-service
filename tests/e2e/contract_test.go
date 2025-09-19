@@ -105,7 +105,11 @@ func DeployWithContractTest(suite *TestSuite) {
 
 		// Wait until the deployment status is "Running".
 		suite.Require().Eventually(func() bool {
-			status := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
 			suite.T().Log("Deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Deployment with contract did not reach Running status")

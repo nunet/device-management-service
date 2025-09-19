@@ -251,6 +251,21 @@ func (s *TestSuite) startNode(index int) {
 	s.Require().True(ok)
 	s.Require().NotNil(node)
 
+	// If the node was previously stopped, create a new shutdown channel
+	if node.stopped {
+		s.T().Logf("node %d was previously stopped, creating new shutdown channel", index)
+		node.shutdownCh = make(chan struct{})
+		node.stopped = false
+
+		// previous config
+		path := filepath.Join(node.config.General.UserDir, "dms_config.json")
+		jsonData, err := os.ReadFile(path)
+		s.Require().NoError(err)
+		err = json.Unmarshal(jsonData, &node.config)
+		s.Require().NoError(err)
+		s.T().Logf("previous config: %+v", node.config)
+	}
+
 	// save config to a file
 	configPath := filepath.Join(node.config.General.UserDir, "dms_config.json")
 	_ = os.MkdirAll(filepath.Dir(configPath), 0o755)
@@ -333,6 +348,7 @@ func (s *TestSuite) startNode(index int) {
 
 		select {
 		case <-done:
+			s.T().Logf("node %d shutdown gracefully", index)
 			return
 		case <-time.After(5 * time.Second):
 			s.T().Logf("graceful shutdown timeout for node %d, forcing kill", index)
@@ -352,6 +368,47 @@ func (s *TestSuite) startNode(index int) {
 			s.T().Logf("summary for node %d missing", index)
 		}
 	}
+}
+
+// stopNode stops a specific node by sending a shutdown signal
+func (s *TestSuite) stopNode(index int) {
+	node, ok := s.nodes[index]
+	s.Require().True(ok)
+	s.Require().NotNil(node)
+
+	if node.stopped {
+		return
+	}
+
+	// Read the PID file
+	data, err := os.ReadFile(filepath.Join(node.config.General.UserDir, "proc.pid"))
+	if err != nil {
+		return
+	}
+
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		return
+	}
+
+	// Get process handle
+	proc := getProc(int32(pid))
+	if proc == nil {
+		node.stopped = true
+		return
+	}
+
+	// Send shutdown signal
+	node.shutdownCh <- struct{}{}
+
+	// Wait for process to actually terminate with timeout
+	s.Require().Eventually(func() bool {
+		if exists, _ := proc.IsRunning(); !exists {
+			node.stopped = true
+			return true
+		}
+		return false
+	}, 10*time.Second, 100*time.Millisecond, fmt.Sprintf("process %d not terminated for node %d", pid, index))
 }
 
 // setupTestNetwork creates a network of nodes and grants mutual access to all nodes.

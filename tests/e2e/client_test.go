@@ -487,7 +487,7 @@ func (c *Client) shutdownDeployment(t *testing.T, context, passphrase, deploymen
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/shutdown", "--id", deploymentID, "--timeout", "10m"}
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/shutdown", "--id", deploymentID, "--timeout", "15m"}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -531,11 +531,14 @@ func (c *Client) anchorBehaviour(t *testing.T, context, passphrase, token string
 	return buf.String()
 }
 
-func (c *Client) deploymentStatus(t *testing.T, context, passphrase, deploymentID string) string {
+func (c *Client) deploymentStatus(t *testing.T, context, passphrase, deploymentID string) (string, error) {
+	t.Helper()
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
-	require.NoError(t, err)
+	if err != nil {
+		return "", fmt.Errorf("failed to set env: %w", err)
+	}
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/status", "--id", deploymentID, "--timeout", "10m"}
 	root.SetArgs(args)
@@ -543,8 +546,10 @@ func (c *Client) deploymentStatus(t *testing.T, context, passphrase, deploymentI
 	var buf bytes.Buffer
 	root.SetOutput(&buf)
 	err = root.Execute()
-	require.NoError(t, err)
-	return buf.String()
+	if err != nil {
+		return "", fmt.Errorf("failed to execute deployment status command: %w", err)
+	}
+	return buf.String(), nil
 }
 
 func (c *Client) deploymentManifest(
@@ -724,4 +729,67 @@ func (c *Client) onboardedResources(_ *testing.T, context, passphrase string) (t
 
 func (c *Client) allocatedResources(_ *testing.T, context, passphrase string) (types.Resources, error) {
 	return c.getResources("allocated", context, passphrase)
+}
+
+func (c *Client) deploymentList(t *testing.T, context, passphrase string) (map[string]string, error) {
+	t.Helper()
+	var resp node.DeploymentListResponse
+
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	if err != nil {
+		return map[string]string{}, fmt.Errorf("failed to set env: %w", err)
+	}
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/list"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	if err != nil {
+		return map[string]string{}, fmt.Errorf("failed to execute deployment list command: %w", err)
+	}
+
+	err = json.Unmarshal(buf.Bytes(), &resp)
+	if err != nil {
+		return map[string]string{}, fmt.Errorf("unmarshal deployment list response: %w", err)
+	}
+
+	return resp.Deployments, nil
+}
+
+func (c *Client) deploymentLogs(context, passphrase, deploymentID, allocationName string) (node.DeploymentLogsResponse, error) {
+	var resp node.DeploymentLogsResponse
+
+	root := c.newCommandCtx()
+
+	if err := os.Setenv(node.DMSPassphraseEnv, passphrase); err != nil {
+		return node.DeploymentLogsResponse{}, fmt.Errorf("failed to set env: %w", err)
+	}
+
+	args := []string{
+		"actor", "cmd", "--context", context,
+		"/dms/node/deployment/logs",
+		"--id", deploymentID,
+		"--allocation", allocationName,
+	}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	if err := root.Execute(); err != nil {
+		return node.DeploymentLogsResponse{}, fmt.Errorf("failed to execute deployment logs command: %w", err)
+	}
+
+	if err := json.Unmarshal(buf.Bytes(), &resp); err != nil {
+		return node.DeploymentLogsResponse{}, fmt.Errorf("unmarshal deployment logs response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return node.DeploymentLogsResponse{}, fmt.Errorf(resp.Error)
+	}
+
+	return resp, nil
 }

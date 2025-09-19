@@ -15,16 +15,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
-
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+// Deployment behavior data source strategy:
+// - Store-based (primary source of truth): handleDeploymentList, handleDeploymentStatus, handleDeploymentManifest
+// - In-memory registry (requires active orchestrator): handleDeploymentLogs, handleDeploymentShutdown, handleDeploymentUpdate
+// - Store + in-memory: handleNewDeployment (creates in memory, auto-saved to store via status watcher)
 
 // MinDeploymentTime minimum time for deployment
 const (
@@ -120,47 +122,13 @@ type NewDeploymentResponse struct {
 }
 
 func (n *Node) saveDeployment(orchestrator orchestrator.Orchestrator) error {
-	pvkey := orchestrator.ActorPrivateKey()
-
-	pkRaw, err := crypto.MarshalPrivateKey(pvkey)
+	err := n.orchestratorRegistry.SaveOrchestrator(orchestrator)
 	if err != nil {
-		return fmt.Errorf("convert priv key to raw: %w", err)
+		return fmt.Errorf("save deployment: %w", err)
 	}
 
-	// TODO (not sensitive now): encrypt the orchestrator's pvkey before storing
-	view := jobtypes.OrchestratorView{
-		OrchestratorID:     orchestrator.ID(),
-		Cfg:                orchestrator.Config(),
-		Manifest:           orchestrator.Manifest(),
-		SubnetManifest:     orchestrator.SubnetManifest(),
-		Status:             orchestrator.Status(),
-		DeploymentSnapshot: orchestrator.DeploymentSnapshot(),
-		PrivKey:            pkRaw,
-	}
-
-	q := n.orchestratorRepo.GetQuery()
-	q.Conditions = append(q.Conditions,
-		repositories.EQ("OrchestratorID", orchestrator.ID()),
-	)
-	orchView, err := n.orchestratorRepo.Find(n.ctx, q)
-	// NOTE: what we're doing here is basically UpInsert, not
-	// very supported by Clover as we can not define custom IDs
-	if errors.Is(err, repositories.ErrNotFound) {
-		// record does not exist, create it
-		_, err = n.orchestratorRepo.Create(n.ctx, view)
-		if err != nil {
-			return fmt.Errorf("save deployment on database: %w", err)
-		}
-	} else {
-		// record already exists, update it
-		_, err = n.orchestratorRepo.Update(n.ctx, orchView.ID, view)
-		if err != nil {
-			return fmt.Errorf("save deployment on database: %w", err)
-		}
-	}
-
-	log.Debugf("deployment %s of status %s saved", view.OrchestratorID,
-		view.Status.String())
+	log.Debugf("deployment %s of status %s saved", orchestrator.ID(),
+		orchestrator.Status().String())
 
 	return nil
 }
@@ -207,6 +175,7 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	})
 
 	if err := orch.Deploy(msg.Expiry().Add(-orchestrator.MinEnsembleDeploymentTime)); err != nil {
+		// Orchestrator status is automatically saved to store via status watcher
 		orch.Stop()
 		log.Errorw("ensemble_deployment_error",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -217,13 +186,7 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 		return
 	}
 
-	// save the deployment
-	if err := n.saveDeployment(orch); err != nil {
-		log.Errorw("save_deployment_error",
-			"labels", []string{string(observability.LabelDeployment)},
-			"ensembleID", orch.ID(),
-			"error", err)
-	}
+	// Orchestrator status is automatically saved to store via status watcher
 }
 
 type DeploymentListResponse struct {
@@ -253,26 +216,38 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 	}
 
 	resp.Deployments = make(map[string]string)
-	for ID, dep := range n.orchestratorRegistry.Orchestrators() {
-		if len(request.Metadata) > 0 {
-			manifest := dep.Manifest()
-			shouldInclude := true
 
-			for k, v := range request.Metadata {
-				manifestValue, exists := manifest.Metadata[k]
-				if !exists || manifestValue != v {
-					shouldInclude = false
-					break
-				}
-			}
-			if !shouldInclude {
-				continue
-			}
+	// Get all deployments from store (primary source of truth)
+	allDeployments, err := n.orchestratorRegistry.GetAllDeployments()
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get deployments from store: %w", err))
+		return
+	}
+
+	for _, deployment := range allDeployments {
+		if shouldIncludeDeployment(deployment, request.Metadata) {
+			resp.Deployments[deployment.OrchestratorID] = deployment.Status.String()
 		}
-		resp.Deployments[ID] = dep.Status().String()
 	}
 
 	n.sendReply(msg, resp)
+}
+
+// shouldIncludeDeployment checks if a deployment should be included based on metadata filter
+func shouldIncludeDeployment(deployment *jobtypes.OrchestratorView, metadataFilter map[string]string) bool {
+	if len(metadataFilter) == 0 {
+		return true
+	}
+
+	// Check if all metadata filter conditions are met
+	for k, v := range metadataFilter {
+		manifestValue, exists := deployment.Manifest.Metadata[k]
+		if !exists || manifestValue != v {
+			return false
+		}
+	}
+
+	return true
 }
 
 type DeploymentLogsRequest struct {
@@ -303,6 +278,7 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 		return
 	}
 
+	// For logs, we need an active orchestrator (in-memory registry only)
 	o, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
@@ -352,14 +328,14 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		return
 	}
 
-	o, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
+	// Read deployment status from store (primary source of truth)
+	deployment, err := n.orchestratorRegistry.GetDeployment(request.ID)
 	if err != nil {
-		// TODO: check database for persisted deployments data
-		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
+		handleErr(fmt.Errorf("failed to get deployment: %s", err))
 		return
 	}
 
-	resp.Status = o.Status().String()
+	resp.Status = deployment.Status.String()
 	n.sendReply(msg, resp)
 }
 
@@ -390,14 +366,14 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 		return
 	}
 
-	o, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
+	// Read deployment manifest from store (primary source of truth)
+	deployment, err := n.orchestratorRegistry.GetDeployment(request.ID)
 	if err != nil {
-		// TODO: check database for persisted deployments data
-		handleErr(err)
+		handleErr(fmt.Errorf("failed to get deployment: %s", err))
 		return
 	}
 
-	resp.Manifest = o.Manifest()
+	resp.Manifest = deployment.Manifest
 	n.sendReply(msg, resp)
 }
 
@@ -451,6 +427,13 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 		handleErr(err)
 		return
 	}
+
+	// force status update and ignore status watcher
+	if err := n.orchestratorRegistry.SaveOrchestrator(o); err != nil {
+		handleErr(err)
+		return
+	}
+
 	resp.OK = true
 	n.sendReply(msg, resp)
 }
@@ -463,6 +446,11 @@ func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 		log.Debugw("revert_deployment_unmarshal_error",
 			"labels", []string{string(observability.LabelDeployment)},
 			"error", err)
+
+		n.sendReply(msg, orchestrator.DeploymentRevertResponse{
+			OK:    false,
+			Error: fmt.Sprintf("failed to unmarshal revert request: %v", err),
+		})
 		return
 	}
 	ensembleID := request.EnsembleID
@@ -506,9 +494,15 @@ func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 			}
 		}
 	}
+
 	log.Infow("deployment_reverted",
 		"labels", []string{string(observability.LabelDeployment)},
 		"ensembleID", ensembleID)
+
+	// Send success response
+	n.sendReply(msg, orchestrator.DeploymentRevertResponse{
+		OK: true,
+	})
 }
 
 type UpdateDeploymentRequest struct {
@@ -572,4 +566,138 @@ func (n *Node) handleDeploymentUpdate(msg actor.Envelope) {
 func (n *Node) updateDeployment(_ orchestrator.Orchestrator) error {
 	// TODO
 	return nil
+}
+
+// Deployment pruning and clearing commands
+
+type DeploymentPruneRequest struct {
+	OlderThanDays int `json:"older_than_days"`
+}
+
+type DeploymentPruneResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("deployment_prune_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		n.sendReply(msg, DeploymentPruneResponse{Error: err.Error()})
+	}
+
+	var request DeploymentPruneRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment prune request: %s", err))
+		return
+	}
+
+	if request.OlderThanDays <= 0 {
+		handleErr(errors.New("older_than_days must be greater than 0"))
+		return
+	}
+
+	// Calculate the cutoff time
+	cutoffTime := time.Now().AddDate(0, 0, -request.OlderThanDays)
+
+	// Prune deployments older than the cutoff time
+	if err := n.orchestratorRegistry.PruneDeployments(cutoffTime); err != nil {
+		handleErr(fmt.Errorf("failed to prune deployments: %w", err))
+		return
+	}
+
+	log.Infow("deployments_pruned",
+		"labels", []string{string(observability.LabelDeployment)},
+		"older_than_days", request.OlderThanDays,
+		"cutoff_time", cutoffTime)
+
+	n.sendReply(msg, DeploymentPruneResponse{OK: true})
+}
+
+type DeploymentClearRequest struct {
+	All bool `json:"all"`
+}
+
+type DeploymentClearResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+func (n *Node) handleDeploymentClear(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("deployment_clear_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		n.sendReply(msg, DeploymentClearResponse{Error: err.Error()})
+	}
+
+	var request DeploymentClearRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment clear request: %s", err))
+		return
+	}
+
+	if !request.All {
+		handleErr(errors.New("all must be true to clear all deployments"))
+		return
+	}
+
+	// Clear all deployments
+	if err := n.orchestratorRegistry.ClearDeployments(); err != nil {
+		handleErr(fmt.Errorf("failed to clear deployments: %w", err))
+		return
+	}
+
+	log.Infow("deployments_cleared",
+		"labels", []string{string(observability.LabelDeployment)})
+
+	n.sendReply(msg, DeploymentClearResponse{OK: true})
+}
+
+type DeploymentDeleteRequest struct {
+	OrchestratorID string `json:"orchestrator_id"`
+}
+
+type DeploymentDeleteResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("deployment_delete_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		n.sendReply(msg, DeploymentDeleteResponse{Error: err.Error()})
+	}
+
+	var request DeploymentDeleteRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment delete request: %s", err))
+		return
+	}
+
+	if request.OrchestratorID == "" {
+		handleErr(errors.New("orchestrator_id is required"))
+		return
+	}
+
+	// Delete the specific deployment
+	if err := n.orchestratorRegistry.DeleteDeployment(request.OrchestratorID); err != nil {
+		handleErr(fmt.Errorf("failed to delete deployment %s: %w", request.OrchestratorID, err))
+		return
+	}
+
+	log.Infow("deployment_deleted",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestrator_id", request.OrchestratorID)
+
+	n.sendReply(msg, DeploymentDeleteResponse{OK: true})
 }

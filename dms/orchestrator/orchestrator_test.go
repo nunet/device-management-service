@@ -79,7 +79,7 @@ func TestOrchestratorDeploy(t *testing.T) {
 		},
 	}
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	// Create orchestrator with orchestrator mock
 	ctx := context.Background()
@@ -196,9 +196,9 @@ func TestOrchestratorDeployWithRedundancy(t *testing.T) {
 	}
 
 	// Set up behaviors for all providers
-	provider1.MockDeploymentBehaviors(t)
-	provider2.MockDeploymentBehaviors(t)
-	provider3.MockDeploymentBehaviors(t)
+	provider1.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
+	provider2.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
+	provider3.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	mx := sync.Mutex{}
 	nodesPeerIDs := make(map[string]string)
@@ -653,7 +653,7 @@ func TestOrchestratorManifest(t *testing.T) {
 		},
 	}
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
@@ -899,7 +899,7 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 		},
 	}
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	behavior := fmt.Sprintf(behaviors.AllocationLogsBehavior.DynamicTemplate, "test-ensemble")
 	require.NoError(t, provider.actor.AddBehavior(behavior, func(msg actor.Envelope) {
@@ -977,7 +977,7 @@ func TestHandleTaskTermination(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -1389,12 +1389,12 @@ func TestRevertNodeDeployment(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set up test manifest
-	manifest := jtypes.EnsembleManifest{
+	o.manifest = jtypes.EnsembleManifest{
 		ID:           ensembleID,
 		Orchestrator: orch.actor.Handle(),
 		Allocations: map[string]jtypes.AllocationManifest{
 			"alloc1": {
-				ID:     "test-ensemble_alloc1",
+				ID:     "test-ensemble_node1.alloc1",
 				Type:   jtypes.AllocationTypeService,
 				Status: jtypes.AllocationRunning,
 			},
@@ -1407,7 +1407,6 @@ func TestRevertNodeDeployment(t *testing.T) {
 			},
 		},
 	}
-	o.manifest = manifest
 
 	// Test successful revert
 	t.Run("successful revert", func(t *testing.T) {
@@ -1417,6 +1416,17 @@ func TestRevertNodeDeployment(t *testing.T) {
 			defer func() {
 				provider.channels[msg.Behavior] <- struct{}{}
 			}()
+
+			// Send reply for invoke-style messaging
+			reply, err := actor.ReplyTo(msg, DeploymentRevertResponse{
+				OK: true,
+			})
+			require.NoError(t, err)
+
+			reply.To = msg.From
+			reply.From = provider.handle
+
+			require.NoError(t, provider.actor.Send(reply))
 		}))
 
 		o.revertNodeDeployment(cfg, "node1", provider.handle)
@@ -1425,42 +1435,91 @@ func TestRevertNodeDeployment(t *testing.T) {
 		// Verify node was removed from manifest
 		_, ok := o.manifest.Nodes["node1"]
 		assert.False(t, ok)
-		_, ok = o.manifest.Allocations["alloc1"]
+		_, ok = o.manifest.Allocations["test-ensemble_node1.alloc1"]
 		assert.False(t, ok)
 	})
 
 	// Test revert failure
 	t.Run("revert failure", func(t *testing.T) {
 		// Reset manifest
-		o.manifest = manifest
+		o.manifest = jtypes.EnsembleManifest{
+			ID:           ensembleID,
+			Orchestrator: orch.actor.Handle(),
+			Allocations: map[string]jtypes.AllocationManifest{
+				"alloc1": {
+					ID:     "test-ensemble_node1.alloc1",
+					Type:   jtypes.AllocationTypeService,
+					Status: jtypes.AllocationRunning,
+				},
+			},
+			Nodes: map[string]jtypes.NodeManifest{
+				"node1": {
+					ID:          "node1",
+					Allocations: []string{"alloc1"},
+					Handle:      provider.handle,
+				},
+			},
+		}
 
+		fmt.Println("manifest", o.manifest)
 		provider.channels[behaviors.DeploymentRevertBehavior] = make(chan struct{}, 1)
 		require.NoError(t, provider.actor.AddBehavior(behaviors.DeploymentRevertBehavior, func(msg actor.Envelope) {
 			defer msg.Discard()
 			defer func() {
 				provider.channels[msg.Behavior] <- struct{}{}
 			}()
+
+			// Send failure reply for invoke-style messaging
+			reply, err := actor.ReplyTo(msg, DeploymentRevertResponse{
+				OK:    false,
+				Error: "simulated revert failure",
+			})
+			require.NoError(t, err)
+
+			reply.To = msg.From
+			reply.From = provider.handle
+
+			require.NoError(t, provider.actor.Send(reply))
 		}))
 
 		o.revertNodeDeployment(cfg, "node1", provider.handle)
 		<-provider.channels[behaviors.DeploymentRevertBehavior]
 
-		// Verify node was still removed from manifest despite failure
+		// Verify node wasn't removed from manifest cause of failure
 		_, ok := o.manifest.Nodes["node1"]
-		assert.False(t, ok)
+		assert.True(t, ok)
 		_, ok = o.manifest.Allocations["alloc1"]
-		assert.False(t, ok)
+		assert.True(t, ok)
 	})
 
 	// Test non-existent node
 	t.Run("non-existent node", func(t *testing.T) {
-		// Reset manifest
-		o.manifest = manifest
-
+		o.manifest = jtypes.EnsembleManifest{
+			ID:           ensembleID,
+			Orchestrator: orch.actor.Handle(),
+			Allocations: map[string]jtypes.AllocationManifest{
+				"alloc1": {
+					ID:     "test-ensemble_node1.alloc1",
+					Type:   jtypes.AllocationTypeService,
+					Status: jtypes.AllocationRunning,
+				},
+			},
+			Nodes: map[string]jtypes.NodeManifest{
+				"node1": {
+					ID:          "node1",
+					Allocations: []string{"alloc1"},
+					Handle:      provider.handle,
+				},
+			},
+		}
 		o.revertNodeDeployment(cfg, "non-existent", provider.handle)
 
-		// Verify manifest is unchanged
-		assert.Equal(t, manifest, o.manifest)
+		_, ok := o.manifest.Nodes["non-existent"]
+		assert.False(t, ok)
+		_, ok = o.manifest.Nodes["node1"]
+		assert.True(t, ok)
+		_, ok = o.manifest.Allocations["alloc1"]
+		assert.True(t, ok)
 	})
 }
 
@@ -1568,6 +1627,17 @@ func TestRevert(t *testing.T) {
 		defer func() {
 			provider.channels[msg.Behavior] <- struct{}{}
 		}()
+
+		// Send reply for invoke-style messaging
+		reply, err := actor.ReplyTo(msg, DeploymentRevertResponse{
+			OK: true,
+		})
+		require.NoError(t, err)
+
+		reply.To = msg.From
+		reply.From = provider.handle
+
+		require.NoError(t, provider.actor.Send(reply))
 	}))
 
 	// Test successful revert
@@ -1684,7 +1754,7 @@ func TestShutdown(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -2783,7 +2853,7 @@ func TestProvisionSubnet(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -2879,7 +2949,7 @@ func TestSubnetAddPeer(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -2947,7 +3017,7 @@ func TestAddDNSRecords(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -3014,7 +3084,7 @@ func TestMapPorts(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{

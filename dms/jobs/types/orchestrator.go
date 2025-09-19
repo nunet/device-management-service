@@ -62,6 +62,10 @@ type OrchestratorView struct {
 	Status             DeploymentStatus
 	DeploymentSnapshot DeploymentSnapshot
 	PrivKey            []byte
+
+	// Fields for persistence
+	CompletedAt  *time.Time // nil if not completed
+	ErrorMessage string     // for failed deployments
 }
 
 type DeploymentSnapshot struct {

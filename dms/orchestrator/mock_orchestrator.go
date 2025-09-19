@@ -180,6 +180,10 @@ func (m *MockOrchestrator) Update(_ jtypes.EnsembleConfig, _ time.Time) error {
 	return nil
 }
 
+func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.DeploymentStatus {
+	return make(chan jtypes.DeploymentStatus)
+}
+
 type MockOrchestratorRegistry struct {
 	lock          sync.RWMutex
 	orchestrators map[string]Orchestrator // map of orchestrators
@@ -222,6 +226,7 @@ func (m *MockOrchestratorRegistry) RestoreDeployment(
 	_ jtypes.EnsembleManifest, _ jtypes.DeploymentStatus,
 	_ jtypes.DeploymentSnapshot,
 	_ jtypes.SubnetManifest,
+	_ types.AllocationIDGenerator,
 ) (Orchestrator, error) {
 	return nil, nil
 }
@@ -250,6 +255,56 @@ func (m *MockOrchestratorRegistry) GetOrchestrator(id string) (Orchestrator, err
 
 func (m *MockOrchestratorRegistry) DeleteOrchestrator(_ string) {}
 
-func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.DeploymentStatus {
-	return make(chan jtypes.DeploymentStatus)
+// Methods for deployment persistence (mock implementations)
+func (m *MockOrchestratorRegistry) SaveOrchestrator(_ Orchestrator) error {
+	return nil
+}
+
+func (m *MockOrchestratorRegistry) GetAllDeployments() ([]*jtypes.OrchestratorView, error) {
+	return nil, nil
+}
+
+func (m *MockOrchestratorRegistry) GetDeploymentsByStatus(_ jtypes.DeploymentStatus) ([]*jtypes.OrchestratorView, error) {
+	return nil, nil
+}
+
+func (m *MockOrchestratorRegistry) PruneDeployments(_ time.Time) error {
+	return nil
+}
+
+func (m *MockOrchestratorRegistry) ClearDeployments() error {
+	return nil
+}
+
+func (m *MockOrchestratorRegistry) DeleteDeployment(_ string) error {
+	return nil
+}
+
+func (m *MockOrchestratorRegistry) GetDeployment(orchestratorID string) (*jtypes.OrchestratorView, error) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	orch, ok := m.orchestrators[orchestratorID]
+	if !ok {
+		return nil, ErrOrchestratorNotFound
+	}
+
+	// Convert orchestrator to OrchestratorView
+	privKey := orch.ActorPrivateKey()
+	privKeyBytes, err := crypto.PrivateKeyToBytes(privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal private key: %w", err)
+	}
+
+	view := &jtypes.OrchestratorView{
+		OrchestratorID:     orch.ID(),
+		Cfg:                orch.Config(),
+		Manifest:           orch.Manifest(),
+		SubnetManifest:     orch.SubnetManifest(),
+		Status:             orch.Status(),
+		DeploymentSnapshot: orch.DeploymentSnapshot(),
+		PrivKey:            privKeyBytes,
+	}
+
+	return view, nil
 }

@@ -122,6 +122,13 @@ func (c *Client) InvokeBehavior(ctx context.Context, behavior string, payload an
 	opts := NewMessageOptions(msgOpts...)
 	opts.IsInvocation = true
 
+	// Apply timeout to context if specified
+	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		defer cancel()
+	}
+
 	msg, err := c.NewActorMessage(ctx, behavior, payload, opts)
 	if err != nil {
 		return actor.Envelope{}, fmt.Errorf("create actor message: %w", err)

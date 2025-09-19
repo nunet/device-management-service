@@ -146,3 +146,54 @@ func (c *Client) DeploymentUpdate(
 	err = c.unmarshalResponse(resp, &response)
 	return response, err
 }
+
+func (c *Client) DeploymentPrune(ctx context.Context, req node.DeploymentPruneRequest, opts ...Option) (node.DeploymentPruneResponse, error) {
+	var response node.DeploymentPruneResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentPruneBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentPruneBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) DeploymentClear(ctx context.Context, req node.DeploymentClearRequest, opts ...Option) (node.DeploymentClearResponse, error) {
+	var response node.DeploymentClearResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentClearBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentClearBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) DeploymentDelete(ctx context.Context, req node.DeploymentDeleteRequest, opts ...Option) (node.DeploymentDeleteResponse, error) {
+	var response node.DeploymentDeleteResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentDeleteBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentDeleteBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}

@@ -241,7 +241,9 @@ func (s *TestSuite) assertAllocationsRunning(
 		s.Assert().True(ok, "Expected allocation %s to be running", alloc.ID)
 
 		if alloc.Executor == string(types.ExecutorTypeDocker) {
+			fmt.Println("alloc.ExecutionID", alloc.ExecutionID)
 			containerRunning, err := isContainerRunning(alloc.ExecutionID)
+			fmt.Println("containerRunning", containerRunning)
 			s.Assert().NoError(err)
 			s.Assert().True(containerRunning, "Expected container to be running")
 		}
