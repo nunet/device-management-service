@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,18 +87,18 @@ func (p *Provisioner) Provision(
 }
 
 func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest, skipCreate ...string) (jtypes.EnsembleManifest, error) {
-	for allocName := range manifest.Allocations {
-		err := p.addAllocationToSubnet(manifest, allocName)
+	for allocManifestKey := range manifest.Allocations {
+		err := p.addAllocationToSubnet(manifest, allocManifestKey)
 		if err != nil {
 			return manifest,
-				fmt.Errorf("error adding allocation %s to subnet: %w", allocName, err)
+				fmt.Errorf("error adding allocation %s to subnet: %w", allocManifestKey, err)
 		}
 
-		err = manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
-			alloc.PrivAddr = p.subnetManifest.IndexRoutingTable[allocName]
+		err = manifest.UpdateAllocation(allocManifestKey, func(alloc *jtypes.AllocationManifest) {
+			alloc.PrivAddr = p.subnetManifest.IndexRoutingTable[allocManifestKey]
 		})
 		if err != nil {
-			return manifest, fmt.Errorf("error updating allocation %s: %w", allocName, err)
+			return manifest, fmt.Errorf("error updating allocation %s: %w", allocManifestKey, err)
 		}
 	}
 
@@ -109,15 +110,17 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest, skipCrea
 		if !slices.Contains(skipCreate, nodeManifest.ID) {
 			subCreateHandles = append(subCreateHandles, nodeManifest.Handle)
 		}
-		for _, allocName := range nodeManifest.Allocations {
-			allocManifest, ok := manifest.Allocations[allocName]
+		fmt.Println("allocations in manifest.Nodes", nodeManifest.Allocations)
+		for _, allocID := range nodeManifest.Allocations {
+			allocManifest, ok := manifest.Allocations[allocID]
 			if !ok {
-				log.Warnf("provisioning subnet: allocation %s not found in manifest, skipping", allocName)
+				log.Warnf("provisioning subnet: allocation %s not found in manifest, skipping", allocID)
 				continue
 			}
+			fmt.Println("ip", p.subnetManifest.IndexRoutingTable[allocID], "allocID", allocID)
 			subReqs = append(subReqs, subnetRequest{
 				handle: allocManifest.Handle,
-				ip:     p.subnetManifest.IndexRoutingTable[allocName],
+				ip:     p.subnetManifest.IndexRoutingTable[allocID],
 				peerID: manifest.Nodes[allocManifest.NodeID].Peer,
 				ports:  allocManifest.Ports,
 			})
@@ -140,7 +143,6 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest, skipCrea
 		}
 	}
 
-	// 1.a create subnet in each peer
 	err := p.createSubnet(manifest.ID, p.subnetManifest.RoutingTable, subCreateHandles)
 	if err != nil {
 		return manifest, fmt.Errorf("error creating subnet: %w", err)
@@ -156,6 +158,10 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest, skipCrea
 	}
 
 	// 1.b create and plug IPs
+	log.Infof("Adding %d peers to subnet %s", len(subReqs), manifest.ID)
+	for i, req := range subReqs {
+		log.Infof("Subnet request %d: Handle=%s, IP=%s, PeerID=%s", i, req.handle, req.ip, req.peerID)
+	}
 	err = p.subnetAddPeer(manifest.ID, subReqs)
 	if err != nil {
 		return manifest, fmt.Errorf("error adding peers to subnet: %w", err)
@@ -205,7 +211,17 @@ func (p *Provisioner) provisionAllocations(
 					log.Errorf("failed to generate manifest key for %s.%s: %v", nodeKey, allocName, err)
 					continue
 				}
-				if !utils.SliceContains(nodeManifest.Allocations, allocKey) {
+				// TODO: this is a temporary hack, we need to find better ways to handle this
+				rawNodeAllocations := make([]string, 0)
+				for _, alloc := range nodeManifest.Allocations {
+					parts := strings.Split(alloc, ".")
+					if len(parts) != 2 {
+						log.Errorf("invalid allocation key format: %s, skipping", alloc)
+						continue
+					}
+					rawNodeAllocations = append(rawNodeAllocations, parts[1])
+				}
+				if !utils.SliceContains(rawNodeAllocations, allocName) {
 					log.Debugf("skipping allocation %s because it's not on node %s", allocName, nodeKey)
 					continue
 				}

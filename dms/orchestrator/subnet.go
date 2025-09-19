@@ -216,11 +216,11 @@ func (p *Provisioner) createSubnet(
 
 	for _, handle := range subCreateHandles {
 		wg.Add(1)
-		go func() {
+		go func(h actor.Handle) {
 			defer wg.Done()
 			msg, err := actor.Message(
 				p.actor.Handle(),
-				handle,
+				h,
 				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, manifestID),
 				SubnetCreateRequest{
 					SubnetID:     manifestID,
@@ -259,8 +259,8 @@ func (p *Provisioner) createSubnet(
 				return
 			}
 
-			log.Info("subnet successfully created on peer", handle)
-		}()
+			log.Infof("subnet %s successfully created on peer %v", manifestID, h)
+		}(handle)
 	}
 
 	wg.Wait()
@@ -527,10 +527,12 @@ func (p *Provisioner) orchestratorJoinSubnet(
 	manifestID string,
 	indexRoutingTable map[string]string, routingTable map[string]string, dnsRecords map[string]string,
 ) error {
+	behaviorName := fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, manifestID)
+
 	msg, err := actor.Message(
 		p.actor.Handle(),
 		p.actor.Supervisor(),
-		fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, manifestID),
+		behaviorName,
 		SubnetJoinRequest{
 			SubnetID:     manifestID,
 			IP:           indexRoutingTable[orchSubnetName],

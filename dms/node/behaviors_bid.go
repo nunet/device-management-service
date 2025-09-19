@@ -287,6 +287,10 @@ loop:
 	if err := n.allocator.CheckAvailability(toAnswer.V1.PublicPorts.Static, toAnswer.V1.PublicPorts.Dynamic, toAnswer.V1.Resources); err != nil {
 		log.Debugw("no_resource_availability_for_bid",
 			"labels", string(observability.LabelDeployment),
+			"nodeID", toAnswer.V1.NodeID,
+			"staticPorts", toAnswer.V1.PublicPorts.Static,
+			"dynamicPorts", toAnswer.V1.PublicPorts.Dynamic,
+			"resources", toAnswer.V1.Resources,
 			"error", err)
 		return
 	}
@@ -322,6 +326,13 @@ loop:
 			"error", err)
 		return
 	}
+
+	log.Infow("sending_bid_response",
+		"labels", string(observability.LabelDeployment),
+		"ensembleID", request.ID,
+		"nodeID", toAnswer.V1.NodeID,
+		"peerID", n.hostID,
+		"nonce", request.Nonce)
 
 	n.sendReply(msg, bid)
 	n.storeBid(request.ID, request.Nonce, toAnswer)

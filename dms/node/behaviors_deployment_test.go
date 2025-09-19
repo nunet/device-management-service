@@ -292,41 +292,41 @@ func TestHandleNewDeployment(t *testing.T) {
 func TestHandleDeploymentList(t *testing.T) {
 	t.Parallel()
 
-	// Add behavior to test
-	node, sActor, _ := newMockNodeWithSender(t, behaviors.DeploymentListBehavior)
-
-	// seed deployment data
-	eCfgWithMetadata := jobtypes.EnsembleConfig{
-		V1: &jobtypes.EnsembleConfigV1{
-			Metadata:    map[string]string{"name": "test-deploy"},
-			Allocations: map[string]jobtypes.AllocationConfig{},
-			Nodes:       map[string]jobtypes.NodeConfig{},
-			Supervisor:  jobtypes.SupervisorConfig{},
-			Subnet:      jobtypes.SubnetConfig{},
-		},
-	}
-	mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
-	require.NoError(t, err)
-	require.NotNil(t, mockOrch)
-	err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
-	require.NoError(t, err)
-
-	eCfgWithoutMetadata := jobtypes.EnsembleConfig{
-		V1: &jobtypes.EnsembleConfigV1{
-			Allocations: map[string]jobtypes.AllocationConfig{},
-			Nodes:       map[string]jobtypes.NodeConfig{},
-			Supervisor:  jobtypes.SupervisorConfig{},
-			Subnet:      jobtypes.SubnetConfig{},
-		},
-	}
-	mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
-	require.NoError(t, err)
-	require.NotNil(t, mockOrchWithoutM)
-	err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
-	require.NoError(t, err)
-
 	t.Run("without metadata filtering expect all", func(t *testing.T) {
 		t.Parallel()
+
+		// Add behavior to test
+		node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentListBehavior)
+
+		// seed deployment data
+		eCfgWithMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Metadata:    map[string]string{"name": "test-deploy"},
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrch)
+		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
+
+		eCfgWithoutMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrchWithoutM)
+		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
 
 		msg, err := actor.Message(
 			sActor.Handle(),
@@ -349,14 +349,47 @@ func TestHandleDeploymentList(t *testing.T) {
 		assert.Equal(t, 2, len(resp.Deployments))
 		status, ok := resp.Deployments[mockOrch.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusRunning.String(), status)
 		status, ok = resp.Deployments[mockOrchWithoutM.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusRunning.String(), status)
 	})
 
 	t.Run("with metadata", func(t *testing.T) {
 		t.Parallel()
+
+		// Add behavior to test
+		node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentListBehavior)
+
+		// seed deployment data
+		eCfgWithMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Metadata:    map[string]string{"name": "test-deploy"},
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrch)
+		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
+
+		eCfgWithoutMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrchWithoutM)
+		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
 
 		msg, err := actor.Message(
 			sActor.Handle(),
@@ -383,7 +416,7 @@ func TestHandleDeploymentList(t *testing.T) {
 		assert.Equal(t, 1, len(resp.Deployments))
 		status, ok := resp.Deployments[mockOrch.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusRunning.String(), status)
 	})
 }
 
@@ -769,6 +802,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
 		)
 		require.NoError(t, err)
+		msg.Options.ReplyTo = fmt.Sprintf("/dms/actor/replyto/%d", 1)
 
 		node.handleDeploymentRevert(msg)
 		time.Sleep(2 * time.Second) // give some time for the revert to process

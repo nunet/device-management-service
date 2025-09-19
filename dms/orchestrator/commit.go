@@ -446,6 +446,7 @@ func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle
 			return nil, fmt.Errorf("failed to generate full allocation ID for %s.%s: %w", n, a, err)
 		}
 
+		fmt.Println("fullAllocID", fullAllocID)
 		allocs[fullAllocID] = jtypes.AllocationDeploymentConfig{
 			Type:             acfg.Type,
 			Executor:         acfg.Executor,

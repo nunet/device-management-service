@@ -27,10 +27,10 @@ func TestRegistry(t *testing.T) {
 	substrate := network.NewSubstrate()
 
 	orch := MakeOrchestrator(t, substrate)
-	orch.MockOrchestratorBehaviors(t)
+	orch.MockOrchestratorBehaviors(t, ensembleID)
 
 	provider := MakeProvider(t, substrate)
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -70,7 +70,7 @@ func TestRegistry(t *testing.T) {
 	ensembleID := "test-ensemble"
 
 	t.Run("NewOrchestrator", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := NewRegistry(NewMockDeploymentStore())
 
 		// Test creating a new orchestrator
 		o, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
@@ -84,7 +84,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("GetOrchestrator", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := NewRegistry(NewMockDeploymentStore())
 
 		// Test getting non-existent orchestrator
 		_, err := registry.GetOrchestrator(ensembleID)
@@ -101,7 +101,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("Orchestrators", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := NewRegistry(NewMockDeploymentStore())
 
 		// Test empty registry
 		orchestrators := registry.Orchestrators()
@@ -118,7 +118,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("DeleteOrchestrator", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := NewRegistry(NewMockDeploymentStore())
 
 		// Create an orchestrator
 		_, err := registry.NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
@@ -133,7 +133,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("RestoreDeployment", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := NewRegistry(NewMockDeploymentStore())
 
 		addRoute := func(subnet jtypes.SubnetManifest, name, dnsName, peerID string) (string, error) {
 			ip, err := netutils.GetNextIP(subnet.CIDR, subnet.UsedIPs)
@@ -197,6 +197,7 @@ func TestRegistry(t *testing.T) {
 			jtypes.DeploymentStatusRunning,
 			snapshot,
 			subnet,
+			types.NewTestAllocationIDGenerator(),
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, o)
@@ -212,6 +213,7 @@ func TestRegistry(t *testing.T) {
 			jtypes.DeploymentStatusRunning,
 			snapshot,
 			subnet,
+			types.NewTestAllocationIDGenerator(),
 		)
 		assert.ErrorIs(t, err, ErrOrchestratorExists)
 	})

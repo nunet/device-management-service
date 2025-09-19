@@ -25,7 +25,6 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
@@ -62,10 +61,11 @@ const (
 
 	rootProto = "actor/root/messages/0.0.1"
 
-	RestoreDeadlineCommitting   = 1 * time.Minute
-	RestoreDeadlineProvisioning = 1 * time.Minute
-	RestoreDeadlineRunning      = 5 * time.Minute
-	bidStateGCInterval          = time.Minute
+	// TODO: We should consider a restoration deadline down the line (see code at restoreDeployments)
+	// RestoreDeadlineCommitting   = 1 * time.Minute
+	// RestoreDeadlineProvisioning = 1 * time.Minute
+	// RestoreDeadlineRunning      = 5 * time.Minute
+	bidStateGCInterval = time.Minute
 
 	// contract event handler config
 	eventHandlerWorkers   = 2
@@ -128,9 +128,6 @@ type Node struct {
 	answeredBids map[string][]uint64
 	running      atomic.Bool
 
-	// db state
-	orchestratorRepo repositories.GenericRepository[jobtypes.OrchestratorView]
-
 	// volume controller
 	volumeController controller.GlusterControllerInterface
 	volumeOwners     map[string]string // mapping volume name with did
@@ -185,7 +182,6 @@ func New(cfg config.Config, fs afero.Afero,
 	resourceManager types.ResourceManager,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
-	orchestratorRepo repositories.GenericRepository[jobtypes.OrchestratorView],
 	geoIP types.GeoIPLocator, hostLocation geolocation.Geolocation,
 	portConfig PortConfig, vt *storage.VolumeTracker,
 	volumeController controller.GlusterControllerInterface,
@@ -193,6 +189,7 @@ func New(cfg config.Config, fs afero.Afero,
 	paymentStore *payment.Store,
 	usageStore *usage.Store,
 	transactionStore *transaction.Store,
+	deploymentStore orchestrator.DeploymentStore,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -226,6 +223,9 @@ func New(cfg config.Config, fs afero.Afero,
 	}
 	if transactionStore == nil {
 		return nil, errors.New("transaction store is nil")
+	}
+	if deploymentStore == nil {
+		return nil, errors.New("deployment store is nil")
 	}
 
 	subnetStatus = make(map[string]int)
@@ -274,8 +274,7 @@ func New(cfg config.Config, fs afero.Afero,
 		executors:            make(map[string]executorMetadata),
 		ctx:                  ctx,
 		cancel:               cancel,
-		orchestratorRepo:     orchestratorRepo,
-		orchestratorRegistry: orchestrator.NewRegistry(),
+		orchestratorRegistry: orchestrator.NewRegistry(deploymentStore),
 		geoIP:                geoIP,
 		hostLocation:         hostLocation,
 		dmsConfig:            cfg,
@@ -330,47 +329,23 @@ func (n *Node) saveDeployments() error {
 }
 
 func (n *Node) restoreDeployments() error {
-	query := n.orchestratorRepo.GetQuery()
-	query.Conditions = append(
-		query.Conditions,
-		repositories.LTE("Status", jobtypes.DeploymentStatusRunning),
-	)
-
-	// TODO: delete old orchestrator views
-	orchestratorsViews, err := n.orchestratorRepo.FindAll(n.ctx, query)
+	// Get all deployments from store (source of truth)
+	allDeployments, err := n.orchestratorRegistry.GetAllDeployments()
 	if err != nil {
-		if errors.Is(err, repositories.ErrNotFound) {
-			return nil
-		}
-		return fmt.Errorf("query the database for hanging deployments: %w", err)
+		return fmt.Errorf("failed to get all deployments: %w", err)
 	}
 
 	var failedToRestore []string
-	for _, d := range orchestratorsViews {
-		if d.Status < jobtypes.DeploymentStatusCommitting {
-			log.Warnf("deployment %s was not previously committed; ignoring restoration", d.OrchestratorID)
+	for _, d := range allDeployments {
+		// Only restore deployments in restorable states
+		if !isRestorableStatus(d.Status) {
+			log.Debugf("deployment %s has non-restorable status %d; skipping", d.OrchestratorID, d.Status)
 			continue
 		}
 
-		// Check restore deadline based on deployment status
-		// TODO: on the compute provider side, if the deployer stops to answer
-		// for more than the restore deadlines, they should free any resources alocated
-		// and consider the deployment as canceled
-		var restoreDeadline time.Duration
-		switch d.Status {
-		case jobtypes.DeploymentStatusCommitting:
-			restoreDeadline = RestoreDeadlineCommitting
-		case jobtypes.DeploymentStatusProvisioning:
-			restoreDeadline = RestoreDeadlineProvisioning
-		case jobtypes.DeploymentStatusRunning:
-			restoreDeadline = RestoreDeadlineRunning
-		default:
-			log.Warnf("deployment %s has unknown restorable status %d; ignoring", d.OrchestratorID, d.Status)
-			continue
-		}
-
-		if time.Since(d.CreatedAt) > restoreDeadline {
-			log.Warnf("deployment %s exceeded restore deadline; skipping", d.OrchestratorID)
+		// Check if deployment is still valid (not based on time)
+		if !isDeploymentStillValid(d) {
+			log.Warnf("deployment %s is no longer valid; skipping", d.OrchestratorID)
 			continue
 		}
 
@@ -404,7 +379,18 @@ func (n *Node) restoreDeployments() error {
 			}
 		}
 
-		orchestrator, err := n.orchestratorRegistry.RestoreDeployment(childActor, d.OrchestratorID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot, d.SubnetManifest)
+		orchestrator, err := n.
+			orchestratorRegistry.
+			RestoreDeployment(
+				childActor,
+				d.OrchestratorID,
+				d.Cfg,
+				d.Manifest,
+				d.Status,
+				d.DeploymentSnapshot,
+				d.SubnetManifest,
+				types.NewDefaultAllocationIDGenerator(),
+			)
 		if err != nil {
 			log.Errorf("restore orchestrator %s: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
@@ -490,6 +476,15 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		},
 		behaviors.DeploymentShutdownBehavior: {
 			fn: n.handleDeploymentShutdown,
+		},
+		behaviors.DeploymentPruneBehavior: {
+			fn: n.handleDeploymentPrune,
+		},
+		behaviors.DeploymentClearBehavior: {
+			fn: n.handleDeploymentClear,
+		},
+		behaviors.DeploymentDeleteBehavior: {
+			fn: n.handleDeploymentDelete,
 		},
 		behaviors.AllocationsListBehavior: {
 			fn: n.handleAllocationsList,
@@ -813,7 +808,7 @@ func (n *Node) createOrchestrator(ctx context.Context,
 		return nil, fmt.Errorf("start child actor: %w", err)
 	}
 
-	orchestrator, err := n.orchestratorRegistry.NewOrchestrator(
+	orch, err := n.orchestratorRegistry.NewOrchestrator(
 		ctx, n.fs, n.dmsConfig.WorkDir,
 		ensembleID, childActor, ensemble,
 		types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(),
@@ -830,7 +825,7 @@ func (n *Node) createOrchestrator(ctx context.Context,
 		}
 	}
 
-	return orchestrator, nil
+	return orch, nil
 }
 
 // TODO: make send reply a helper func from actor pkg
@@ -1028,4 +1023,38 @@ func (n *Node) handleContractEvents(event eventhandler.Event) error {
 	}
 
 	return nil
+}
+
+// isRestorableStatus checks if a deployment status is restorable
+// TODO: This will be implemented later with more sophisticated logic
+// For now, all deployments with status <= Running are considered restorable
+func isRestorableStatus(status jobtypes.DeploymentStatus) bool {
+	// TODO: Implement more sophisticated restorable status logic
+	// This should consider:
+	// - Deployment lifecycle state
+	// - Resource allocation status
+	// - Compute provider availability
+	// - Network connectivity requirements
+	// For now we will keep it as true until this logic has been designed.
+	return status <= jobtypes.DeploymentStatusRunning
+}
+
+// isDeploymentStillValid checks if a deployment is still valid for restoration
+// TODO: This will be implemented later with comprehensive validation
+// For now, all deployments are considered valid
+func isDeploymentStillValid(_ *jobtypes.OrchestratorView) bool {
+	// TODO: Implement comprehensive deployment validation
+	// This should check:
+	// - Deployment configuration is still valid
+	// - Required resources are still available
+	// - Network configuration is still accessible
+	// - Compute provider is still responsive
+	// - Deployment hasn't been explicitly cancelled
+	// - Resource quotas haven't been exceeded
+	// - Security policies haven't changed
+	//
+	// Note: Compute providers should also implement similar validation
+	// on their side to ensure resources are still available and
+	// haven't been reclaimed due to extended downtime
+	return true
 }

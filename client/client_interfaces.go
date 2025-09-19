@@ -215,6 +215,15 @@ type ActorDeploymentBehaviorClient interface {
 
 	// DeploymentUpdate updates a running deployment
 	DeploymentUpdate(ctx context.Context, req node.UpdateDeploymentRequest, opts ...Option) (node.UpdateDeploymentResponse, error)
+
+	// DeploymentPrune removes old deployments
+	DeploymentPrune(ctx context.Context, req node.DeploymentPruneRequest, opts ...Option) (node.DeploymentPruneResponse, error)
+
+	// DeploymentClear removes all deployments
+	DeploymentClear(ctx context.Context, req node.DeploymentClearRequest, opts ...Option) (node.DeploymentClearResponse, error)
+
+	// DeploymentDelete removes a specific deployment
+	DeploymentDelete(ctx context.Context, req node.DeploymentDeleteRequest, opts ...Option) (node.DeploymentDeleteResponse, error)
 }
 
 // ActorAllocationsBehaviorClient provides methods for allocations view

@@ -716,6 +716,36 @@ latter can be achieved by simply granting the capability (using the `nunet cap g
 
 Learn how deployments work by following our [Deployments Guide](docs/deployments/README.md).
 
+#### Managing Deployment History
+
+DMS maintains a persistent history of all deployments across restarts. You can manage this deployment history using the following CLI commands:
+
+**List all deployments:**
+```shell
+nunet actor cmd --context user /dms/node/deployment/list
+```
+
+**Prune old deployments:**
+Remove deployments older than a specified duration (e.g., 7 days, 30 days):
+```shell
+nunet actor cmd --context user /dms/node/deployment/prune --days-old 7
+nunet actor cmd --context user /dms/node/deployment/prune --days-old 30
+```
+
+**Clear all deployment history:**
+Remove all deployment records from the database:
+```shell
+nunet actor cmd --context user /dms/node/deployment/clear --all
+```
+
+**Delete a specific deployment:**
+Remove a specific deployment by its orchestrator ID:
+```shell
+nunet actor cmd --context user /dms/node/deployment/delete --orchestrator-id <deployment-id>
+```
+
+These commands help you manage storage space and maintain a clean deployment history. The prune command is particularly useful for removing old, completed deployments while keeping recent ones for reference. The delete command allows you to remove specific deployments that are no longer needed.
+
 ### REST Endpoints
 
 Refer to the `api` package [README](https://gitlab.com/nunet/device-management-service/-/blob/main/api/README.md) for the list of all endpoints. Head over to project's issue section and create an issue with your question.

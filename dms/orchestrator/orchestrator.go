@@ -44,7 +44,7 @@ var (
 	MinEnsembleUpdateTimeout  = 15 * time.Second
 
 	SubnetCreateTimeout  = 2 * time.Minute
-	SubnetDestroyTimeout = 30 * time.Second
+	SubnetDestroyTimeout = 60 * time.Second
 
 	MaxBidMultiplier = 8
 	MaxPermutations  = 1_000_000
@@ -164,6 +164,10 @@ func NewOrchestrator(
 	return o, nil
 }
 
+func (o *BasicOrchestrator) SetStatus(status jtypes.DeploymentStatus) {
+	o.setStatus(status)
+}
+
 func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
@@ -254,6 +258,12 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 	return nil
 }
 
+func (o *BasicOrchestrator) NewManifest(
+	cfg jtypes.EnsembleConfig,
+) jtypes.EnsembleManifest {
+	return o.newManifest(cfg)
+}
+
 func (o *BasicOrchestrator) newManifest(
 	cfg jtypes.EnsembleConfig,
 ) jtypes.EnsembleManifest {
@@ -265,6 +275,7 @@ func (o *BasicOrchestrator) newManifest(
 		Allocations:  make(map[string]jtypes.AllocationManifest),
 		Nodes:        make(map[string]jtypes.NodeManifest),
 		Contracts:    make(map[string]jtypes.ContractManifest),
+		Subnet:       cfg.V1.Subnet,
 	}
 
 	for name, v := range cfg.Contracts() {
@@ -353,8 +364,6 @@ func (o *BasicOrchestrator) newManifest(
 			manifest.Allocations[allocKey] = amf
 		}
 	}
-
-	manifest.Subnet = cfg.V1.Subnet
 
 	return manifest
 }
@@ -445,9 +454,7 @@ deploy:
 				"error", err,
 				"orchestratorID", o.id)
 
-			o.lock.Lock()
 			o.revert(cfg, manifestAfterCommit)
-			o.lock.Unlock()
 			continue deploy
 		}
 

@@ -67,7 +67,7 @@ func TestOrchestratorWithCustomGenerators(t *testing.T) {
 		},
 	}
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	// Create orchestrator with custom generators
 	ctx := context.Background()

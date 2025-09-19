@@ -978,6 +978,56 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/list --filter "<metadata_key>=<metadata_value>"`,
 	},
 
+	// /dms/node/deployment/prune
+	behaviors.DeploymentPruneBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &node.DeploymentPruneRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentPruneRequest)
+
+			cmd.Flags().IntVarP(&p.OlderThanDays, "days-old", "o", 30, "remove deployments older than N days")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*node.DeploymentPruneRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return dmsClient.DeploymentPrune(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Prune old deployments",
+		Long: `Invokes the /dms/node/deployment/prune behavior on an actor
+
+This behavior removes deployments older than the specified number of days.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/prune --older-than-days 7`,
+	},
+
+	// /dms/node/deployment/clear
+	behaviors.DeploymentClearBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &node.DeploymentClearRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentClearRequest)
+
+			cmd.Flags().BoolVarP(&p.All, "all", "a", false, "clear all deployments (required)")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*node.DeploymentClearRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return dmsClient.DeploymentClear(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Clear all deployments",
+		Long: `Invokes the /dms/node/deployment/clear behavior on an actor
+
+This behavior removes all deployment history from the node.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/clear --all`,
+	},
+
 	// /dms/node/deployment/status
 	behaviors.DeploymentStatusBehavior: {
 		Action:  bInvoke,
@@ -1392,6 +1442,30 @@ Examples:
   nunet actor cmd --context user /dms/cap/anchor --require token
   nunet actor cmd --context user /dms/cap/anchor --provide token
   nunet actor cmd --context user /dms/cap/anchor --revoke token`,
+	},
+
+	behaviors.DeploymentDeleteBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &node.DeploymentDeleteRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentDeleteRequest)
+			cmd.Flags().StringVar(&p.OrchestratorID, "id", "", "deployment id to delete (required)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*node.DeploymentDeleteRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return dmsClient.DeploymentDelete(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Delete a specific deployment",
+		Long: `Invokes the /dms/node/deployment/delete behavior on an actor
+
+This behavior removes a specific deployment by its deployment id.
+
+Examples:
+	nunet actor cmd --context user /dms/node/deployment/delete --id <deployment-id>`,
 	},
 }
 

@@ -33,7 +33,7 @@ func TestSupervision(t *testing.T) {
 	provider := MakeProvider(t, substrate)
 
 	// Set up the behaviors first
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	healthcheckCh := make(chan struct{}, 1)
 

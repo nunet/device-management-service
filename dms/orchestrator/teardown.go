@@ -64,6 +64,13 @@ func (o *BasicOrchestrator) Shutdown() error {
 				log.Errorf("failed to update allocation manifest %s status: %v", allocName, err)
 			}
 		}
+
+		log.Infow("status updated",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", o.id,
+			"status", jtypes.DeploymentStatusCompleted.String(),
+		)
+
 		// set orchestrator status
 		o.setStatus(jtypes.DeploymentStatusCompleted)
 		if o.cancel != nil {
@@ -214,6 +221,11 @@ type DeploymentRevertRequest struct {
 	AllocsByName []string
 }
 
+type DeploymentRevertResponse struct {
+	OK    bool
+	Error string
+}
+
 func (o *BasicOrchestrator) revertNodeDeployment(
 	cfg jtypes.EnsembleConfig, n string, h actor.Handle,
 ) {
@@ -254,46 +266,252 @@ func (o *BasicOrchestrator) revertNodeDeployment(
 		return
 	}
 
-	if err := o.actor.Send(msg); err != nil {
-		log.Debugw("revert_message_send_failure",
+	replyCh, err := o.actor.Invoke(msg)
+	if err != nil {
+		log.Debugw("revert_message_invoke_failure",
 			"labels", []string{string(observability.LabelDeployment)},
 			"nodeID", n,
 			"error", err)
+		return
 	}
 
-	// QUESTION: do we have to update ensemble config too?
+	// Wait for revert response with timeout
+	select {
+	case reply := <-replyCh:
+		defer reply.Discard()
+
+		var response DeploymentRevertResponse
+		if err := json.Unmarshal(reply.Message, &response); err != nil {
+			log.Errorw("failed to unmarshal revert response",
+				"labels", []string{string(observability.LabelDeployment)},
+				"nodeID", n,
+				"error", err)
+			return
+		}
+
+		if !response.OK {
+			log.Errorw("revert failed on node",
+				"labels", []string{string(observability.LabelDeployment)},
+				"nodeID", n,
+				"error", response.Error)
+			return
+		}
+
+		log.Debugw("revert completed successfully",
+			"labels", []string{string(observability.LabelDeployment)},
+			"nodeID", n)
+
+	case <-time.After(30 * time.Second):
+		log.Errorw("revert timeout on node",
+			"labels", []string{string(observability.LabelDeployment)},
+			"nodeID", n)
+		return
+	}
+
 	o.removeNodeFromManifest(n)
-	log.Debugf("revert message sent to node %s", n)
+	log.Debugw("revert message sent successfully",
+		"labels", []string{string(observability.LabelDeployment)},
+		"nodeID", n)
 }
 
 func (o *BasicOrchestrator) revert(cfg jtypes.EnsembleConfig, mf jtypes.EnsembleManifest) {
 	log.Infow("reverting manifest",
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", mf.ID)
+
+	// Log the manifest content to see what nodes are being reverted
+	log.Infow("manifest nodes being reverted",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", mf.ID,
+		"manifestNodes", len(mf.Nodes),
+		"nodeIDs", func() []string {
+			var nodeIDs []string
+			for nodeID := range mf.Nodes {
+				nodeIDs = append(nodeIDs, nodeID)
+			}
+			return nodeIDs
+		}(),
+	)
+
+	// BUG FIX: Collect all nodes first to avoid modifying map during iteration
+	// The original code was calling removeNodeFromManifest during iteration,
+	// which modified mf.Nodes and caused the iteration to stop prematurely
+	nodesToRevert := make([]struct {
+		nodeID string
+		handle actor.Handle
+	}, len(mf.Nodes))
+
 	for n, nmf := range mf.Nodes {
-		o.revertNodeDeployment(cfg, n, nmf.Handle)
+		nodesToRevert = append(nodesToRevert, struct {
+			nodeID string
+			handle actor.Handle
+		}{n, nmf.Handle})
 	}
+
+	for i, node := range nodesToRevert {
+		log.Infow("attempting to revert node",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", mf.ID,
+			"nodeID", node.nodeID,
+			"handle", node.handle.String(),
+			"iteration", i+1,
+			"total", len(nodesToRevert),
+		)
+		o.revertNodeDeployment(cfg, node.nodeID, node.handle)
+		log.Infow("completed reverting node",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", mf.ID,
+			"nodeID", node.nodeID,
+		)
+	}
+
+	// If subnet was being joined, destroy it during revert
+	if mf.Subnet.Join {
+		// IMPORTANT
+		// For the deployment restoration (#1166) to work properly
+		// We need to cleanup the subnetManifest state for the orchestrator
+		// to trigger the code path that will result in re-creating the subnet on the orchestrator
+		// during redeployment (during restoration)
+		// without this line, the redeployment will fail and will continually try to redeploy without succes
+		// because the orchestrator will try to join the subnet where it wasn't created (i.e: subnet doesnt exist error)
+		o.revertSubnetManifest()
+
+		log.Infow("destroying subnet during revert",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", mf.ID,
+		)
+
+		// Send subnet destroy request to the supervisor
+		msg, err := actor.Message(
+			o.actor.Handle(),
+			o.actor.Supervisor(),
+			fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, mf.ID),
+			SubnetDestroyRequest{
+				SubnetID: mf.ID,
+			},
+		)
+		if err != nil {
+			log.Errorw("failed to create subnet destroy message",
+				"labels", []string{string(observability.LabelDeployment)},
+				"orchestratorID", mf.ID,
+				"error", err,
+			)
+			return
+		}
+		// Send the message and wait for response
+		replyCh, err := o.actor.Invoke(msg)
+		if err != nil {
+			log.Errorw("failed to invoke subnet destroy message during revert",
+				"labels", []string{string(observability.LabelDeployment)},
+				"orchestratorID", mf.ID,
+				"error", err,
+			)
+			return
+		}
+
+		// Wait for subnet destroy response with timeout
+		select {
+		case reply := <-replyCh:
+			defer reply.Discard()
+
+			var response SubnetDestroyResponse
+			if err := json.Unmarshal(reply.Message, &response); err != nil {
+				log.Errorw("failed to unmarshal subnet destroy response",
+					"labels", []string{string(observability.LabelDeployment)},
+					"orchestratorID", mf.ID,
+					"error", err,
+				)
+				return
+			} else if !response.OK {
+				log.Errorw("subnet destroy failed during revert",
+					"labels", []string{string(observability.LabelDeployment)},
+					"orchestratorID", mf.ID,
+					"error", response.Error,
+				)
+				return
+			} else {
+				log.Infow("subnet destroy completed successfully during revert",
+					"labels", []string{string(observability.LabelDeployment)},
+					"orchestratorID", mf.ID,
+				)
+			}
+
+		case <-time.After(30 * time.Second):
+			log.Errorw("subnet destroy timeout during revert",
+				"labels", []string{string(observability.LabelDeployment)},
+				"orchestratorID", mf.ID,
+			)
+		}
+	}
+}
+
+// revertSubnetManifest reverts the subnet manifest
+// only as far as the orchestrator is concerned
+// we retain the same subnet state for the rest of the peers
+// to avoid re-shaping the subnet with new IPs and routing tables.
+func (o *BasicOrchestrator) revertSubnetManifest() {
+	orchestratorIP := o.subnetManifest.IndexRoutingTable[orchSubnetName] // IMPORTANT: to re-trigger subnet creation during restoration
+	delete(o.subnetManifest.IndexRoutingTable, orchSubnetName)
+	delete(o.subnetManifest.RoutingTable, orchestratorIP)
+	delete(o.subnetManifest.UsedIPs, orchestratorIP)
+	delete(o.subnetManifest.DNSRecords, orchSubnetName)
+
+	log.Infow("reverted subnet manifest",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id,
+	)
 }
 
 // removeNodeFromManifest removes the node from the manifest and its allocations
 func (o *BasicOrchestrator) removeNodeFromManifest(name string) {
 	log.Infof("removing node %s from manifest", name)
+
 	o.lock.Lock()
+	defer o.lock.Unlock()
+
 	n, ok := o.manifest.Node(name)
 	if !ok {
 		return
 	}
-	o.lock.Unlock()
 
-	err := o.removeAllocationsFromSubnet(o.manifest, n.Allocations)
-	if err != nil {
-		log.Errorf(
-			"removeNodeFromManifest: error removing allocations from subnet: %v",
-			err)
+	// Remove allocations from subnet (inline the logic to avoid nested locking)
+	for _, allocName := range n.Allocations {
+		allocManifest, ok := o.manifest.Allocations[allocName]
+		if !ok {
+			log.Warnf(
+				"skipping subnet removal: allocation %s not found in manifest",
+				allocName,
+			)
+			continue
+		}
+
+		ip, ok := o.subnetManifest.IndexRoutingTable[allocName]
+		if !ok {
+			log.Warnf(
+				"skipping subnet removal: allocation %s not found in index routing table",
+				allocName,
+			)
+			continue
+		}
+
+		// Remove the IP from the used IPs map
+		delete(o.subnetManifest.UsedIPs, ip)
+
+		// Remove the routing table entry
+		delete(o.subnetManifest.RoutingTable, ip)
+
+		// Remove the index routing table entry
+		delete(o.subnetManifest.IndexRoutingTable, allocName)
+
+		// Remove any DNS records associated with this allocation
+		if allocManifest.DNSName != "" {
+			delete(o.subnetManifest.DNSRecords, allocManifest.DNSName)
+		}
+
+		log.Debugf("Removed allocation %s with IP %s from subnet", allocName, ip)
 	}
 
-	o.lock.Lock()
-	defer o.lock.Unlock()
+	// Clean up allocations and remove node
 	for _, a := range n.Allocations {
 		//  be careful with redundant allocations
 		alloc := o.manifest.Allocations[a]

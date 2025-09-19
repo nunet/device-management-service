@@ -32,10 +32,10 @@ import (
 
 	"gitlab.com/nunet/device-management-service/api"
 	clover_db "gitlab.com/nunet/device-management-service/db/clover"
-	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -178,7 +178,12 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	}
 
 	onboardRepo := clover_db.NewGenericEntityRepository[types.OnboardingConfig](db)
-	orchestratorRepo := clover_db.NewGenericRepository[jobtypes.OrchestratorView](db)
+
+	// Create deployment store for orchestrator registry
+	deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create deployment store: %w", err)
+	}
 
 	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardRepo)
 	if err != nil {
@@ -255,8 +260,13 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
-		orchestratorRepo, geoip2db, hostLocation, portConfig, volumeTracker,
-		volumeController, contractStore, paymentsStore, usageStore, txStore,
+		geoip2db, hostLocation, portConfig, volumeTracker,
+		volumeController,
+		contractStore,
+		paymentsStore,
+		usageStore,
+		txStore,
+		deploymentStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -366,7 +376,7 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"machine_resources",
 			"onboarding_config",
 			"resource_allocation",
-			"orchestrator_view",
+			"deployments",
 			"gpu",
 			"contracts",
 			"contracts_keys",

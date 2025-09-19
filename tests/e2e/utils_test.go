@@ -250,6 +250,7 @@ type mockNode struct {
 
 	privKey    crypto.PrivKey
 	shutdownCh chan struct{}
+	stopped    bool // tracks if the node has been stopped
 }
 
 func newMockNode(
@@ -287,6 +288,7 @@ func newMockNode(
 		capCtx:      capCtx,
 		privKey:     pkey,
 		shutdownCh:  make(chan struct{}),
+		stopped:     false,
 	}, nil
 }
 

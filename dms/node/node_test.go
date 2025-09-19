@@ -46,7 +46,12 @@ func TestNode_createOrchestrator(t *testing.T) {
 		node, _, _ := newMockNode(t, substrate)
 
 		// use the real orchestrator for this test
-		node.orchestratorRegistry = orchestrator.NewRegistry()
+		// Create a deployment store for the test
+		db, err := cloverDB.NewMemDB([]string{"deployments"})
+		require.NoError(t, err)
+		deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
+		require.NoError(t, err)
+		node.orchestratorRegistry = orchestrator.NewRegistry(deploymentStore)
 
 		ctx := context.Background()
 		orch, err := node.createOrchestrator(ctx, jobtypes.EnsembleConfig{})
@@ -62,7 +67,12 @@ func TestNode_createOrchestrator(t *testing.T) {
 		node, _, _ := newMockNode(t, substrate)
 
 		// use the real orchestrator for this test
-		node.orchestratorRegistry = orchestrator.NewRegistry()
+		// Create a deployment store for the test
+		db, err := cloverDB.NewMemDB([]string{"deployments"})
+		require.NoError(t, err)
+		deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
+		require.NoError(t, err)
+		node.orchestratorRegistry = orchestrator.NewRegistry(deploymentStore)
 
 		ctx := context.Background()
 		ensembleConfig := jobtypes.EnsembleConfig{
@@ -127,7 +137,9 @@ func TestNew(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, mockResourceManager)
 	// onboardR := dmsclover.NewOnboardingConfig(db)
-	orchestR := cloverDB.NewGenericRepository[jobtypes.OrchestratorView](db)
+	// Create deployment store for orchestrator registry
+	deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
+	require.NoError(t, err)
 	// onboardingManager, err := onboarding.New(context.Background(), mockResourceManager, mockHardwareManager, onboardR)
 	// require.NoError(t, err)
 	geoip2db, err := geoip2.FromBytes(geoLite2Country)
@@ -147,7 +159,6 @@ func TestNew(t *testing.T) {
 			mockResourceManager,
 			&bt.Scheduler{},
 			mockHardwareManager,
-			orchestR,
 			geoip2db,
 			geolocation.Geolocation{},
 			PortConfig{},
@@ -157,6 +168,7 @@ func TestNew(t *testing.T) {
 			&payment.Store{},
 			&usage.Store{},
 			&transaction.Store{},
+			deploymentStore,
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "onboarding is nil")
@@ -175,7 +187,6 @@ func TestNew(t *testing.T) {
 			mockResourceManager,
 			&bt.Scheduler{},
 			mockHardwareManager,
-			orchestR,
 			geoip2db,
 			geolocation.Geolocation{},
 			PortConfig{},
@@ -185,6 +196,7 @@ func TestNew(t *testing.T) {
 			&payment.Store{},
 			&usage.Store{},
 			&transaction.Store{},
+			deploymentStore,
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "root capability context is nil")
@@ -202,7 +214,6 @@ func TestNew(t *testing.T) {
 			mockResourceManager,
 			&bt.Scheduler{},
 			mockHardwareManager,
-			orchestR,
 			geoip2db,
 			geolocation.Geolocation{},
 			PortConfig{},
@@ -212,6 +223,7 @@ func TestNew(t *testing.T) {
 			&payment.Store{},
 			&usage.Store{},
 			&transaction.Store{},
+			deploymentStore,
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "hostID is empty")
@@ -230,7 +242,6 @@ func TestNew(t *testing.T) {
 			mockResourceManager,
 			&bt.Scheduler{},
 			mockHardwareManager,
-			orchestR,
 			geoip2db,
 			geolocation.Geolocation{},
 			PortConfig{},
@@ -240,6 +251,7 @@ func TestNew(t *testing.T) {
 			&payment.Store{},
 			&usage.Store{},
 			&transaction.Store{},
+			deploymentStore,
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "network is nil")
@@ -258,7 +270,6 @@ func TestNew(t *testing.T) {
 			mockResourceManager,
 			&bt.Scheduler{},
 			mockHardwareManager,
-			orchestR,
 			geoip2db,
 			geolocation.Geolocation{},
 			PortConfig{},
@@ -268,6 +279,7 @@ func TestNew(t *testing.T) {
 			&payment.Store{},
 			&usage.Store{},
 			&transaction.Store{},
+			deploymentStore,
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, node)

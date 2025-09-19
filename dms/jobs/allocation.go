@@ -163,6 +163,13 @@ func NewAllocation(
 		createdAt:            time.Now(),
 		contractEventHandler: contractEventHandler,
 	}
+
+	log.Debugw("allocation_created",
+		"labels", string(observability.LabelAllocation),
+		"allocationID", allocation.ID,
+		"executionID", allocation.executionID,
+	)
+
 	return allocation, nil
 }
 
