@@ -28,7 +28,7 @@ for log_file in $LOG_PATH; do
     echo "DMS logs: $log_file"
     echo "##### ##### #####"
     if [ -f "$log_file" ]; then
-        cat "$log_file" | jq -c 'select(.error != null)' | fblog -a did -a error
+        cat "$log_file" | jq -c 'select(.error != null)' | fblog -a did -a error -a stack_trace
     fi
     echo ""
 done
