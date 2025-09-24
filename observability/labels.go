@@ -169,9 +169,6 @@ func (l *labelInjectionCore) Write(ent zapcore.Entry, fields []zapcore.Field) er
 	finalFields = l.gatherFields(ent, fields, finalFields)
 	finalFields = append(finalFields, zap.String("transaction.id", rootTransaction.TraceContext().Trace.String()))
 
-	if ent.Message == "test" {
-		print()
-	}
 	return l.next.Write(ent, finalFields)
 }
 
@@ -225,12 +222,17 @@ func (l *labelInjectionCore) gatherFields(
 		)
 		spanID := activeSpans[len(activeSpans)-1].TraceContext().Span.String()
 		end()
-		// bind this log msg to this err span
-		finalFields = append(finalFields, zap.String("span.id", spanID))
-		//
-		// bind non-err logs to traces
+		// bind this log msg to this err span, add the stack trace
+		// sTraceStr, _ := json.Marshal(sTrace)
+		for i, v := range sTrace {
+			sTrace[i] = strings.Replace(v, "\t", "    ", 1)
+		}
+		finalFields = append(finalFields,
+			zap.String("span.id", spanID),
+			zap.Dict("stack_trace", zap.Strings("_", sTrace)))
 
 	case len(activeSpans) > 0:
+		// bind non-err logs to traces
 		latestSpan := activeSpans[len(activeSpans)-1]
 		finalFields = append(finalFields, zap.String("span.id", latestSpan.TraceContext().Span.String()))
 
