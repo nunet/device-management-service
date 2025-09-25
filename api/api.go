@@ -9,7 +9,9 @@
 package api
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -90,7 +92,8 @@ func (rs *Server) SetupRoutes() {
 // Run starts the server on the specified port
 func (rs *Server) Run() error {
 	addr := fmt.Sprintf("%s:%d", rs.config.Addr, rs.config.Port)
-	if err := rs.router.Run(addr); err != nil {
+	log.Infow("rest_server_starting", "addr", addr)
+	if err := rs.router.Run(addr); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Errorw("rest_server_run_failure", "addr", addr, "error", err)
 		return err
 	}

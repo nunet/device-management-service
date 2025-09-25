@@ -78,8 +78,7 @@ Or manually create a dms_config.json file and refer to the README for available 
 				log.Infof("Shutting down after receiving %v...\n", sig)
 
 				dmsInstance.Stop()
-				// TODO is a graceful exit an error?
-				os.Exit(1)
+				os.Exit(0)
 			}()
 
 			err = dmsInstance.Run()

@@ -73,8 +73,8 @@ func WithRateLimiter(limiter RateLimiter) DispatchOption {
 func NewDispatch(sctx SecurityContext, opt ...DispatchOption) *Dispatch {
 	k := &Dispatch{
 		sctx:      sctx,
-		q:         make(chan Envelope),
-		vq:        make(chan Envelope),
+		q:         make(chan Envelope, 100),
+		vq:        make(chan Envelope, 100),
 		behaviors: make(map[string]*BehaviorState),
 		options: DispatchOptions{
 			GCInterval: DefaultDispatchGCInterval,
@@ -151,6 +151,8 @@ func (k *Dispatch) Receive(msg Envelope) error {
 		return nil
 	case <-k.ctx.Done():
 		return k.ctx.Err()
+	default:
+		return fmt.Errorf("k.queue full")
 	}
 }
 
@@ -167,7 +169,12 @@ func (k *Dispatch) recv() {
 				continue
 			}
 
-			k.vq <- msg
+			select {
+			case k.vq <- msg:
+				// ok
+			default:
+				log.Errorf("k.vq full, dropping message from %s", msg.From)
+			}
 		case <-k.ctx.Done():
 			return
 		}
@@ -209,6 +216,7 @@ func (k *Dispatch) dispatch() {
 					"error", err.Error(),
 					"labels", string(observability.LabelNode),
 				)
+				// TODO? msg without an answer
 				continue
 			}
 
