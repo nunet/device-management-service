@@ -318,7 +318,8 @@ func startSpan(ctx context.Context, operationName string, keyValues ...interface
 	// create a new span
 	span, _ := apm.StartSpan(ctx, operationName, "custom")
 	if span.Dropped() {
-		log.Warn("Span dropped: " + operationName)
+		// TODO causes an inf loop
+		// log.Warn("Span dropped: " + operationName)
 		return func() {}
 	}
 	activeSpans = append(activeSpans, span)
