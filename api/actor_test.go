@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	dmsConfig "gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
@@ -65,7 +66,7 @@ func TestActorHandle(t *testing.T) {
 			P2P:  nil,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -90,7 +91,7 @@ func TestActorHandle(t *testing.T) {
 			P2P:  testNet,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -121,7 +122,7 @@ func TestActorSendMessage(t *testing.T) {
 			P2P:  nil,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 		envelope := actor.Envelope{}
 		envelopeJSON, _ := json.Marshal(envelope)
 		req, _ := http.NewRequest("POST", "/api/v1/actor/send", bytes.NewBuffer(envelopeJSON))
@@ -156,7 +157,7 @@ func TestActorSendMessage(t *testing.T) {
 			P2P:  testNet,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 		envelope := actor.Envelope{
 			To: actor.Handle{
 				Address: actor.Address{
@@ -194,7 +195,7 @@ func TestActorSendMessage(t *testing.T) {
 			P2P:  testNet,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 		invalidJSON := []byte(`{"invalid":"json"}`)
 		req, _ := http.NewRequest("POST", "/api/v1/actor/send", bytes.NewBuffer(invalidJSON))
 		req.Header.Set("Content-Type", "application/json")
@@ -217,7 +218,7 @@ func TestActorInvoke(t *testing.T) {
 			P2P:  nil,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 		envelope := actor.Envelope{}
 		envelopeJSON, _ := json.Marshal(envelope)
 		req, _ := http.NewRequest("POST", "/api/v1/actor/invoke", bytes.NewBuffer(envelopeJSON))
@@ -245,7 +246,7 @@ func TestActorInvoke(t *testing.T) {
 			P2P:  testNet,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		envelope := actor.Envelope{
 			From: actor.Handle{
@@ -313,7 +314,7 @@ func TestActorInvoke(t *testing.T) {
 			P2P:  testNet,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 		invalidJSON := []byte(`{"invalid":}`)
 
 		req, _ := http.NewRequest("POST", "/api/v1/actor/invoke", bytes.NewBuffer(invalidJSON))
@@ -338,7 +339,7 @@ func TestActorBroadcast(t *testing.T) {
 			P2P:  nil,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		envelope := actor.Envelope{
 			From: actor.Handle{
@@ -380,7 +381,7 @@ func TestActorBroadcast(t *testing.T) {
 			P2P:  testNet,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		invalidJSON := []byte(`{"invalid-json"}`)
 
@@ -406,7 +407,7 @@ func TestActorBroadcast(t *testing.T) {
 			P2P:  testNet1,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		envelope := actor.Envelope{
 			From: actor.Handle{
@@ -471,7 +472,7 @@ func TestActorBroadcast(t *testing.T) {
 			P2P:  testNet,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		envelope := actor.Envelope{
 			From: actor.Handle{
@@ -519,7 +520,7 @@ func TestActorBroadcast(t *testing.T) {
 			P2P:  testNet1,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		envelope := actor.Envelope{
 			From: actor.Handle{
@@ -608,7 +609,7 @@ func TestActorBroadcast(t *testing.T) {
 			P2P:  testNet1,
 			Port: 8080,
 			Addr: "localhost",
-		})
+		}, &dmsConfig.DefaultConfig)
 
 		envelope := actor.Envelope{
 			From: actor.Handle{

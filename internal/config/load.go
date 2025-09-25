@@ -43,6 +43,13 @@ var DefaultConfig = Config{
 		PortAvailableRangeTo:   65536,
 		StorageCADirectory:     fmt.Sprintf("%s/.nunet/storage_ca_directory", homeDir),
 		StorageBricksDir:       fmt.Sprintf("%s/.nunet/storage_bricks_dir", homeDir),
+		PaymentProvider: PaymentProvider{
+			Mode:                  false,
+			EthereumRPCURL:        "https://ethereum-sepolia-rpc.publicnode.com",
+			NtxContractAddress:    "0xB37216b70a745129966E553cF8Ee2C51e1cB359A", // TSTNTX
+			EthereumRPCToken:      "",
+			StartingBlockScanning: "0x8D7374",
+		},
 	},
 	Rest: Rest{
 		Addr: "127.0.0.1",

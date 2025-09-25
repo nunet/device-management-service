@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -51,15 +52,17 @@ func setupRouter(middlewares []gin.HandlerFunc) *gin.Engine {
 
 // Server represents a REST server
 type Server struct {
-	router *gin.Engine
-	config *ServerConfig
+	router    *gin.Engine
+	config    *ServerConfig
+	dmsConfig *config.Config
 }
 
 // NewServer creates a new REST server
-func NewServer(config *ServerConfig) *Server {
+func NewServer(config *ServerConfig, dmsConfig *config.Config) *Server {
 	rs := &Server{
-		router: setupRouter(config.Middlewares),
-		config: config,
+		router:    setupRouter(config.Middlewares),
+		config:    config,
+		dmsConfig: dmsConfig,
 	}
 
 	log.Infow("rest_server_init_success", "addr", config.Addr, "port", config.Port)
@@ -71,10 +74,21 @@ func (rs *Server) HealthCheck(c *gin.Context) {
 	c.JSON(200, gin.H{"status": "ok"})
 }
 
+// Config returns dms config
+func (rs *Server) Config(c *gin.Context) {
+	if rs.dmsConfig.General.Debug {
+		c.JSON(200, gin.H{"config": rs.dmsConfig})
+	} else {
+		c.JSON(200, gin.H{"config": "allowed in debug mode"})
+	}
+}
+
 // SetupRoutes sets up all the endpoint routes
 func (rs *Server) SetupRoutes() {
 	// /health route
 	rs.router.GET("/health", rs.HealthCheck)
+
+	rs.router.GET("/config", rs.Config)
 
 	v1 := rs.router.Group("/api/v1")
 	// /actor routes
