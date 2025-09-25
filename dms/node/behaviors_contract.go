@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -37,8 +38,6 @@ const (
 	waitForParticipantSigsTimeout = 30 * time.Minute
 
 	invokeSignRequestTimeout = 2 * time.Minute
-
-	ntxContractEthAddress = "0xf0d33beda4d734c72684b5f9abbebf715d0a7935"
 )
 
 // handleContractUsagesCalculate produces the usages and forwards them to
@@ -438,23 +437,31 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 	}
 
 	c := client.NewClient(n.dmsConfig.PaymentProvider.EthereumRPCURL, n.dmsConfig.PaymentProvider.EthereumRPCToken)
-	txs, err := client.GetERC20Transfers(c, ntxContractEthAddress, payment.Contract.PaymentDetails.ProviderAddr, "0x1", "latest")
+	txs, err := client.GetERC20Transfers(c, n.dmsConfig.PaymentProvider.NtxContractAddress, payment.Contract.PaymentDetails.ProviderAddr, n.dmsConfig.PaymentProvider.StartingBlockScanning, "latest")
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get erc20 transfer: %w", err))
 		return
 	}
 	verified := false
+	errorMsg := ""
+
 	for _, tx := range txs {
-		if tx.TxHash == req.TxHash {
-			if tx.From != payment.Contract.PaymentDetails.RequesterAddr {
+		if strings.EqualFold(tx.TxHash, req.TxHash) {
+			if !strings.EqualFold(tx.From, payment.Contract.PaymentDetails.RequesterAddr) {
 				handleErr(fmt.Errorf("requester transaction address %s doesn't match the one in transaction: %s", payment.Contract.PaymentDetails.RequesterAddr, tx.From))
 				return
 			}
 
-			ok, _ := compareDecimals(tx.Amount, payment.Amount)
+			ok, err := compareDecimals(tx.Amount, payment.Amount)
+			if err != nil {
+				errorMsg = err.Error() + " tx amount: " + tx.Amount + " payment amount: " + payment.Amount
+			}
 			if ok {
 				verified = true
+			} else {
+				errorMsg = "not verified: tx amount: " + tx.Amount + " payment amount: " + payment.Amount
 			}
+
 			break
 		}
 	}
@@ -467,7 +474,11 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 			resp.Error = err.Error()
 		}
 	} else {
-		resp.Error = "not verified"
+		if errorMsg != "" {
+			resp.Error = errorMsg
+		} else {
+			resp.Error = "not verified"
+		}
 	}
 
 	n.sendReply(msg, resp)
@@ -675,5 +686,5 @@ func compareDecimals(a, b string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return af.Cmp(bf) == 1, nil
+	return af.Cmp(bf) >= 0, nil
 }

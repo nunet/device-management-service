@@ -13,6 +13,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	dmsConfig "gitlab.com/nunet/device-management-service/internal/config"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -24,7 +26,7 @@ func TestNewServer(t *testing.T) {
 		Addr: "localhost",
 		Port: 8080,
 	}
-	server := NewServer(config)
+	server := NewServer(config, &dmsConfig.DefaultConfig)
 
 	assert.NotNil(t, server)
 	assert.NotNil(t, server.router)
@@ -39,7 +41,7 @@ func TestSetupRoutes(t *testing.T) {
 		Addr: "localhost",
 		Port: 8080,
 	}
-	server := NewServer(config)
+	server := NewServer(config, &dmsConfig.DefaultConfig)
 	server.SetupRoutes()
 
 	// Test that all expected routes exist
@@ -85,7 +87,7 @@ func TestHealthCheck(t *testing.T) {
 		Addr: "localhost",
 		Port: 8080,
 	}
-	server := NewServer(config)
+	server := NewServer(config, &dmsConfig.DefaultConfig)
 
 	server.HealthCheck(c)
 	assert.Equal(t, http.StatusOK, w.Code)

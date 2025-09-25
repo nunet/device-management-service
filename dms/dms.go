@@ -285,7 +285,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	// Add APM middleware by appending to restConfig.MidW
 	restConfig.Middlewares = append(restConfig.Middlewares, apmgin.Middleware(gin.Default()))
 
-	rServer := api.NewServer(&restConfig)
+	rServer := api.NewServer(&restConfig, gcfg)
 	rServer.SetupRoutes()
 
 	return &DMS{

@@ -39,9 +39,11 @@ type General struct {
 }
 
 type PaymentProvider struct {
-	Mode             bool   `mapstructure:"mode" json:"mode"`
-	EthereumRPCURL   string `mapstructure:"ethereum_rpc_url" json:"ethereum_rpc_url"`
-	EthereumRPCToken string `mapstructure:"ethereum_rpc_token" json:"ethereum_rpc_token"`
+	Mode                  bool   `mapstructure:"mode" json:"mode"`
+	EthereumRPCURL        string `mapstructure:"ethereum_rpc_url" json:"ethereum_rpc_url"`
+	EthereumRPCToken      string `mapstructure:"ethereum_rpc_token" json:"ethereum_rpc_token"`
+	NtxContractAddress    string `mapstructure:"ntx_contract_address" json:"ntx_contract_address"`
+	StartingBlockScanning string `mapstructure:"starting_block_scanning" json:"starting_block_scanning"`
 }
 
 type Rest struct {
