@@ -181,6 +181,7 @@ func (a *BasicActor) handleMessage(data []byte, srcPeerID peer.ID) {
 		return
 	}
 
+	// TODO no err?
 	_ = a.Receive(msg)
 }
 
