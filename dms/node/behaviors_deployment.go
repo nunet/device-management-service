@@ -155,8 +155,7 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 		return
 	}
 
-	childCtx := context.WithoutCancel(n.ctx)
-	orch, err := n.createOrchestrator(childCtx, request.Ensemble)
+	orch, err := n.createOrchestrator(n.ctx, request.Ensemble)
 	if err != nil {
 		log.Warnw("orchestrator_creation_failure",
 			"labels", []string{string(observability.LabelDeployment)},

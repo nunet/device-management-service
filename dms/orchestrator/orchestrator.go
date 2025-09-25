@@ -44,7 +44,7 @@ var (
 	MinEnsembleUpdateTimeout  = 15 * time.Second
 
 	SubnetCreateTimeout  = 2 * time.Minute
-	SubnetDestroyTimeout = 60 * time.Second
+	SubnetDestroyTimeout = 10 * time.Second
 
 	MaxBidMultiplier = 8
 	MaxPermutations  = 1_000_000
@@ -136,15 +136,17 @@ func NewOrchestrator(
 		return nil, fmt.Errorf("failed to create subnet manifest: %w", err)
 	}
 
+	childCtx, childCancel := context.WithCancel(ctx)
 	o := &BasicOrchestrator{
 		actor:                 oActor,
 		id:                    id,
 		cfg:                   cfg,
-		ctx:                   ctx,
+		ctx:                   childCtx,
+		cancel:                childCancel,
 		fs:                    fs,
 		workDir:               workDir,
 		subnetManifest:        subnet,
-		supervisor:            NewSupervisor(ctx, oActor, id),
+		supervisor:            NewSupervisor(childCtx, oActor, id),
 		nodeIDGenerator:       nodeIDGenerator,
 		allocationIDGenerator: allocationIDGenerator,
 		statusSubscribers:     make(map[chan jtypes.DeploymentStatus]struct{}),
@@ -193,8 +195,7 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 	}
 
 	// If we've reached a terminal state, close all subscriber channels
-	if status == jtypes.DeploymentStatusRunning ||
-		status == jtypes.DeploymentStatusFailed ||
+	if status == jtypes.DeploymentStatusFailed ||
 		status == jtypes.DeploymentStatusCompleted {
 		for ch := range o.statusSubscribers {
 			close(ch)
@@ -461,10 +462,6 @@ deploy:
 		go o.monitorOnlyTaskManifest()
 		o.updateManifest(manifestAfterProvision)
 
-		o.lock.Lock()
-		o.ctx, o.cancel = context.WithCancel(context.Background())
-		o.lock.Unlock()
-
 		log.Infof("deployment successful")
 		o.setStatus(jtypes.DeploymentStatusRunning)
 
@@ -481,6 +478,8 @@ deploy:
 // Stop stops the orchestrator
 func (o *BasicOrchestrator) Stop() {
 	// TODO
+
+	o.cancel()
 
 	err := o.actor.Stop()
 	if err != nil {

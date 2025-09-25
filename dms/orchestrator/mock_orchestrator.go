@@ -222,6 +222,7 @@ func (m *MockOrchestratorRegistry) NewOrchestrator(
 }
 
 func (m *MockOrchestratorRegistry) RestoreDeployment(
+	_ context.Context,
 	_ actor.Actor, _ string, _ jtypes.EnsembleConfig,
 	_ jtypes.EnsembleManifest, _ jtypes.DeploymentStatus,
 	_ jtypes.DeploymentSnapshot,

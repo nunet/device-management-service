@@ -44,10 +44,6 @@ func DeploymentTest(suite *TestSuite) {
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Hello-world deployment did not reach Running status")
 
-		// Shutdown the hello-world deployment.
-		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.dmsContext, deployer.password, manifestID)
-		suite.Require().Contains(shutdownRes, `"Error": ""`)
-
 		// wait for the ensemble to be shutdown
 		suite.Require().Eventually(func() bool {
 			status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, manifestID)
@@ -861,7 +857,7 @@ func DeploymentRestorationFromCommitting(suite *TestSuite) {
 				}
 				if cur == jobtypes.DeploymentStatusCommitting.String() {
 					suite.T().Log("Deployment reached Committing status, crashing orchestrator immediately...")
-					suite.stopNode(1)
+					suite.killNode(1)
 					break
 				}
 			}

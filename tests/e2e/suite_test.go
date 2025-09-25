@@ -411,6 +411,49 @@ func (s *TestSuite) stopNode(index int) {
 	}, 10*time.Second, 100*time.Millisecond, fmt.Sprintf("process %d not terminated for node %d", pid, index))
 }
 
+// killNode kills a specific node by killing the dms process
+func (s *TestSuite) killNode(index int) {
+	node, ok := s.nodes[index]
+	s.Require().True(ok)
+	s.Require().NotNil(node)
+
+	if node.stopped {
+		return
+	}
+
+	// Read the PID file
+	data, err := os.ReadFile(filepath.Join(node.config.General.UserDir, "proc.pid"))
+	if err != nil {
+		return
+	}
+
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		return
+	}
+
+	// Get process handle
+	proc := getProc(int32(pid))
+	if proc == nil {
+		node.stopped = true
+		return
+	}
+
+	err = proc.Kill()
+	if err != nil {
+		s.T().Logf("failed to kill process %d: %v", pid, err)
+	}
+
+	// Wait for process to actually terminate with timeout
+	s.Require().Eventually(func() bool {
+		if exists, _ := proc.IsRunning(); !exists {
+			node.stopped = true
+			return true
+		}
+		return false
+	}, 10*time.Second, 100*time.Millisecond, fmt.Sprintf("process %d not terminated for node %d", pid, index))
+}
+
 // setupTestNetwork creates a network of nodes and grants mutual access to all nodes.
 func (s *TestSuite) setupTestNetwork() {
 	cacheKeys := os.Getenv(envE2ECacheKeys) == "1"
