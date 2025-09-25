@@ -78,7 +78,7 @@ func (o *BasicOrchestrator) WriteAllocationLogs(
 	)
 	allocDir := filepath.Join(ensembleDir, allocName)
 
-	err := o.fs.MkdirAll(allocDir, 0o744)
+	err := o.fs.MkdirAll(allocDir, 0o755)
 	if err != nil {
 		return "", fmt.Errorf("failed to create allocation directory %s: %w", allocDir, err)
 	}
