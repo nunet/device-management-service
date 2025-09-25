@@ -149,7 +149,7 @@ func (h *MemoryHost) SendMessage(
 	if h.pid.String() == hostID {
 		handler, ok := h.msgHandlers[string(env.Type)]
 		if !ok {
-			return errors.New("virtual: no handler for msgType")
+			return fmt.Errorf("virtual: no handler for msgType: %q", string(env.Type))
 		}
 		handler(env.Data, h.pid)
 		return nil
@@ -166,7 +166,7 @@ func (h *MemoryHost) SendMessage(
 	handler, ok := targetHost.msgHandlers[string(env.Type)]
 	targetHost.mx.RUnlock()
 	if !ok {
-		return errors.New("virtual: no handler for msgType")
+		return fmt.Errorf("virtual: no handler for msgType: %q", string(env.Type))
 	}
 
 	handler(env.Data, h.pid)

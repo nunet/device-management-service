@@ -382,6 +382,7 @@ func (n *Node) restoreDeployments() error {
 		orchestrator, err := n.
 			orchestratorRegistry.
 			RestoreDeployment(
+				n.ctx,
 				childActor,
 				d.OrchestratorID,
 				d.Cfg,

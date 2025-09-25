@@ -101,6 +101,9 @@ func TestOrchestratorWithCustomGenerators(t *testing.T) {
 	// Wait for deployment to complete
 	for status := range statusCh {
 		t.Logf("Deployment status changed to: %s", status)
+		if status == jtypes.DeploymentStatusRunning {
+			break
+		}
 	}
 
 	select {

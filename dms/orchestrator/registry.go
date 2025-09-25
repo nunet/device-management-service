@@ -33,6 +33,7 @@ type Registry interface {
 	) (Orchestrator, error)
 	// RestoreDeployment restores deployments where the status is either provisioning, committing or running
 	RestoreDeployment(
+		ctx context.Context,
 		actr actor.Actor, id string, cfg jtypes.EnsembleConfig,
 		manifest jtypes.EnsembleManifest, status jtypes.DeploymentStatus,
 		restoreInfo jtypes.DeploymentSnapshot,
@@ -92,6 +93,7 @@ func (f *basicRegistry) NewOrchestrator(
 		return nil, ErrOrchestratorExists
 	}
 
+	// NewOrchestrator creates a new orchestrator with a new context
 	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg, nodeIDGenerator, allocationIDGenerator)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
@@ -105,43 +107,46 @@ func (f *basicRegistry) NewOrchestrator(
 		return nil, fmt.Errorf("failed to save orchestrator: %w", err)
 	}
 
-	// Persist deployment on every status change so listing is always up to date
-	go func(watchCtx context.Context, orch Orchestrator) {
-		statusCh := orch.StatusChannel(watchCtx)
-		for {
-			select {
-			case _, ok := <-statusCh:
-				if !ok {
-					return
-				}
-				log.Debugw("status changed, saving orchestrator...",
-					"labels", []string{string(observability.LabelDeployment)},
-					"orchestratorID", orch.ID(),
-					"status", orch.Status().String(),
-				)
-				if err := f.SaveOrchestrator(orch); err != nil {
-					log.Errorw("save_deployment_on_status_change_error",
-						"labels", []string{string(observability.LabelDeployment)},
-						"ensembleID", orch.ID(),
-						"error", err,
-					)
-				}
-			case <-watchCtx.Done():
-				return
-			}
-		}
-	}(ctx, o)
-
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.orchestrators[id] = o
 
+	// save deployment on status change, use the orchestrator's context
+	f.saveDeploymentOnStatusChange(o.ctx, o)
+
 	return o, nil
+}
+
+func (f *basicRegistry) saveDeploymentOnStatusChange(ctx context.Context, o Orchestrator) {
+	go func() {
+		prevStatus := o.Status()
+		statusCh := o.StatusChannel(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case status := <-statusCh:
+				if status == prevStatus {
+					continue
+				}
+				prevStatus = status
+				log.Debugw("status changed, saving deployment...",
+					"labels", []string{string(observability.LabelDeployment)},
+					"orchestratorID", o.ID(),
+					"status", o.Status().String(),
+				)
+				if err := f.SaveOrchestrator(o); err != nil {
+					log.Errorw("failed to save orchestrator on status change", "error", err)
+				}
+			}
+		}
+	}()
 }
 
 // restoreDeployment restores deployments where the status is either provisioning, committing or running
 // TODO: restore subnetManifest if necessary
-func restoreDeployment(
+func (f *basicRegistry) restoreDeployment(
+	ctx context.Context,
 	actr actor.Actor, id string,
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
 	status jtypes.DeploymentStatus, restoreInfo jtypes.DeploymentSnapshot,
@@ -149,7 +154,7 @@ func restoreDeployment(
 	allocationIDGenerator types.AllocationIDGenerator,
 ) (Orchestrator, error) {
 	log.Infow("restoring deployment", "id", id, "status", status)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 
 	o := &BasicOrchestrator{
 		id:                    id,
@@ -183,6 +188,12 @@ func restoreDeployment(
 		for nodeID, bid := range restoreInfo.Candidates {
 			o.revertNodeDeployment(cfg, nodeID, bid.Handle())
 		}
+
+		// save deployment on status change, use the orchestrator's context
+		f.saveDeploymentOnStatusChange(o.ctx, o)
+
+		go o.monitorOnlyTaskManifest()
+		go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 
 		return o, o.deploy(cfg, manifest, restoreInfo.Expiry)
 	}
@@ -232,6 +243,13 @@ func restoreDeployment(
 				"labels", []string{string(observability.LabelDeployment)},
 				"orchestratorID", id,
 			)
+
+			// save deployment on status change, use the orchestrator's context
+			f.saveDeploymentOnStatusChange(o.ctx, o)
+
+			go o.monitorOnlyTaskManifest()
+			go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
+
 			return o, o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
 		}
 
@@ -273,8 +291,10 @@ func restoreDeployment(
 		}
 	}
 
-	go o.monitorOnlyTaskManifest()
+	// save deployment on status change, use the orchestrator's context
+	f.saveDeploymentOnStatusChange(o.ctx, o)
 
+	go o.monitorOnlyTaskManifest()
 	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 
 	return o, nil
@@ -282,6 +302,7 @@ func restoreDeployment(
 
 // RestoreDeployment creates an orchestrator and attempts to restore its deployment
 func (f *basicRegistry) RestoreDeployment(
+	ctx context.Context,
 	actr actor.Actor, id string, cfg jtypes.EnsembleConfig,
 	manifest jtypes.EnsembleManifest, status jtypes.DeploymentStatus, restoreInfo jtypes.DeploymentSnapshot,
 	subnetManifest jtypes.SubnetManifest,
@@ -295,7 +316,7 @@ func (f *basicRegistry) RestoreDeployment(
 	}
 	f.lock.RUnlock()
 
-	o, err := restoreDeployment(actr, id, cfg, manifest, status, restoreInfo, subnetManifest, allocationIDGenerator)
+	o, err := f.restoreDeployment(ctx, actr, id, cfg, manifest, status, restoreInfo, subnetManifest, allocationIDGenerator)
 	if err != nil {
 		return nil, fmt.Errorf("failed to restore deployment: %w", err)
 	}
@@ -303,28 +324,6 @@ func (f *basicRegistry) RestoreDeployment(
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.orchestrators[id] = o
-
-	// Persist deployment on every status change so listing is always up to date
-	go func(watchCtx context.Context, orch Orchestrator) {
-		statusCh := orch.StatusChannel(watchCtx)
-		for {
-			select {
-			case _, ok := <-statusCh:
-				if !ok {
-					return
-				}
-				if err := f.SaveOrchestrator(orch); err != nil {
-					log.Errorw("save_deployment_on_status_change_error",
-						"labels", []string{string(observability.LabelDeployment)},
-						"ensembleID", orch.ID(),
-						"error", err,
-					)
-				}
-			case <-watchCtx.Done():
-				return
-			}
-		}
-	}(o.(*BasicOrchestrator).ctx, o)
 
 	return o, nil
 }

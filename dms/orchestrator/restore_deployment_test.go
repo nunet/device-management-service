@@ -9,6 +9,7 @@
 package orchestrator
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -63,10 +64,6 @@ func TestRestoreDeployment(t *testing.T) {
 				OK: true,
 			})
 			require.NoError(t, err)
-
-			reply.To = msg.From
-			reply.From = provider.handle
-
 			require.NoError(t, provider.actor.Send(reply))
 		}))
 
@@ -112,7 +109,7 @@ func TestRestoreDeployment(t *testing.T) {
 			Orchestrator: orch.actor.Handle(),
 			Metadata:     map[string]string{},
 			Allocations: map[string]jtypes.AllocationManifest{
-				"alloc1": {
+				"node1.alloc1": {
 					ID:      fmt.Sprintf("%s_alloc1", restoreEnsembleID),
 					DNSName: "alloc1.internal",
 					Type:    jtypes.AllocationTypeService,
@@ -171,6 +168,7 @@ func TestRestoreDeployment(t *testing.T) {
 		t.Logf("Snapshot candidates: %+v", snapshot.Candidates)
 
 		o, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -571,6 +569,7 @@ func TestRestoreDeployment(t *testing.T) {
 
 		// Test restoring deployment from provisioning state with two providers
 		o, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1194,6 +1193,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// The test should timeout because the redeployment will keep failing
 		// due to the subnet not existing after revert on both orchestrator and provider
 		restoredOrch, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			ensembleID,
 			cfg,
@@ -1358,6 +1358,7 @@ func TestRestoreDeployment(t *testing.T) {
 
 		// Test restoring deployment from provisioning state
 		o, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1498,6 +1499,7 @@ func TestRestoreDeployment(t *testing.T) {
 
 		// Test restoring deployment from running state
 		o, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1561,6 +1563,7 @@ func TestRestoreDeployment(t *testing.T) {
 
 		// Test restoring deployment with subnet join
 		o, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1615,6 +1618,7 @@ func TestRestoreDeployment(t *testing.T) {
 
 		// Test restoring deployment with multiple allocations
 		o, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1668,6 +1672,7 @@ func TestRestoreDeployment(t *testing.T) {
 
 		// Test restoring deployment with invalid state (should still work but not restore)
 		o, err := registry.RestoreDeployment(
+			context.Background(),
 			orch.actor,
 			restoreEnsembleID,
 			cfg,

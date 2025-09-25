@@ -190,6 +190,7 @@ func TestRegistry(t *testing.T) {
 
 		// Test restoring deployment
 		o, err := registry.RestoreDeployment(
+			ctx,
 			orch.actor,
 			ensembleID,
 			cfg,
@@ -206,6 +207,7 @@ func TestRegistry(t *testing.T) {
 
 		// Test restoring deployment with existing ID
 		_, err = registry.RestoreDeployment(
+			ctx,
 			orch.actor,
 			ensembleID,
 			cfg,
