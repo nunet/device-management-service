@@ -37,7 +37,7 @@ import (
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 
-	"gitlab.com/nunet/device-management-service/lib/sys"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 
 	cid "github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"

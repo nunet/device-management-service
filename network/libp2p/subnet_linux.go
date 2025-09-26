@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"net"
 
-	"gitlab.com/nunet/device-management-service/lib/sys"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 )
 
 func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error {

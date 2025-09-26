@@ -28,6 +28,7 @@ import (
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
@@ -94,6 +95,20 @@ func initialize(fs afero.Fs, cfg *config.Config, env env.EnvironmentProvider) {
 		if err != nil {
 			log.Warnf("unable to set libp2p logging: %v", err)
 		}
+	}
+
+	// create the iptables NUNET chain if it doesn't exist, flush any rules in there and create jump rules
+	err := sys.CreateNuNetChain()
+	if err != nil {
+		log.Errorf("unable to create iptables NUNET chain: %v", err)
+	}
+	err = sys.FlushNuNetChain()
+	if err != nil {
+		log.Errorf("unable to flush iptables NUNET chain: %v", err)
+	}
+	err = sys.AddJumpRules()
+	if err != nil {
+		log.Errorf("unable to add iptables NUNET jump rules: %v", err)
 	}
 }
 

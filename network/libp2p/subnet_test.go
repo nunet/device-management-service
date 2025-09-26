@@ -33,8 +33,8 @@ import (
 	layers "github.com/google/gopacket/layers"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
-	sys "gitlab.com/nunet/device-management-service/lib/sys"
 	"gitlab.com/nunet/device-management-service/observability"
+	sys "gitlab.com/nunet/device-management-service/utils/sys"
 )
 
 func TestSubnetCreate(t *testing.T) {
