@@ -481,9 +481,6 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.DeploymentPruneBehavior: {
 			fn: n.handleDeploymentPrune,
 		},
-		behaviors.DeploymentClearBehavior: {
-			fn: n.handleDeploymentClear,
-		},
 		behaviors.DeploymentDeleteBehavior: {
 			fn: n.handleDeploymentDelete,
 		},

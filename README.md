@@ -726,16 +726,20 @@ nunet actor cmd --context user /dms/node/deployment/list
 ```
 
 **Prune old deployments:**
-Remove deployments older than a specified duration (e.g., 7 days, 30 days):
-```shell
-nunet actor cmd --context user /dms/node/deployment/prune --days-old 7
-nunet actor cmd --context user /dms/node/deployment/prune --days-old 30
-```
+Remove deployments before a specified datetime or duration, or remove all deployments with status greater than Running:
 
-**Clear all deployment history:**
-Remove all deployment records from the database:
 ```shell
-nunet actor cmd --context user /dms/node/deployment/clear --all
+# Remove deployments before a specific datetime (RFC3339 format)
+nunet actor cmd --context user /dms/node/deployment/prune --before "2023-01-01T00:00:00Z"
+
+# Remove deployments before a duration (days, hours, minutes, seconds)
+nunet actor cmd --context user /dms/node/deployment/prune --before "7d"
+nunet actor cmd --context user /dms/node/deployment/prune --before "2h"
+nunet actor cmd --context user /dms/node/deployment/prune --before "30m"
+nunet actor cmd --context user /dms/node/deployment/prune --before "1s"
+
+# Remove all deployments with status greater than Running (Failed and Completed)
+nunet actor cmd --context user /dms/node/deployment/prune --all
 ```
 
 **Delete a specific deployment:**
@@ -744,7 +748,7 @@ Remove a specific deployment by its orchestrator ID:
 nunet actor cmd --context user /dms/node/deployment/delete --orchestrator-id <deployment-id>
 ```
 
-These commands help you manage storage space and maintain a clean deployment history. The prune command is particularly useful for removing old, completed deployments while keeping recent ones for reference. The delete command allows you to remove specific deployments that are no longer needed.
+These commands help you manage storage space and maintain a clean deployment history. The prune command is particularly useful for removing old deployments based on time criteria or removing all deployments with terminal statuses (Failed and Completed) while keeping active deployments (<=Running). The delete command allows you to remove specific deployments that are no longer needed.
 
 ### REST Endpoints
 

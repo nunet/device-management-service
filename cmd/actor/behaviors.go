@@ -985,47 +985,27 @@ Examples:
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.DeploymentPruneRequest)
 
-			cmd.Flags().IntVarP(&p.OlderThanDays, "days-old", "o", 30, "remove deployments older than N days")
+			cmd.Flags().StringVar(&p.Before, "before", "", "remove deployments created before this time: RFC3339 or duration (e.g. 1m, 1h, 1s, 1d)")
+			cmd.Flags().BoolVarP(&p.All, "all", "a", false, "remove all deployments whose status is greater than Running")
 		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
 			req, ok := opts.Payload.(*node.DeploymentPruneRequest)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
 			}
+			if req.Before == "" && !req.All {
+				return nil, fmt.Errorf("must provide --before or --all")
+			}
 			return dmsClient.DeploymentPrune(ctx, *req, opts.MsgOpts...)
 		},
 		Short: "Prune old deployments",
 		Long: `Invokes the /dms/node/deployment/prune behavior on an actor
 
-This behavior removes deployments older than the specified number of days.
+This behavior removes deployments before a specified datetime or duration, or deletes all deployments with status greater than Running when --all is used.
 
 Examples:
-  nunet actor cmd --context user /dms/node/deployment/prune --older-than-days 7`,
-	},
-
-	// /dms/node/deployment/clear
-	behaviors.DeploymentClearBehavior: {
-		Action:  bInvoke,
-		Payload: func() any { return &node.DeploymentClearRequest{} },
-		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.DeploymentClearRequest)
-
-			cmd.Flags().BoolVarP(&p.All, "all", "a", false, "clear all deployments (required)")
-		},
-		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*node.DeploymentClearRequest)
-			if !ok {
-				return nil, fmt.Errorf("failed to decode payload")
-			}
-			return dmsClient.DeploymentClear(ctx, *req, opts.MsgOpts...)
-		},
-		Short: "Clear all deployments",
-		Long: `Invokes the /dms/node/deployment/clear behavior on an actor
-
-This behavior removes all deployment history from the node.
-
-Examples:
-  nunet actor cmd --context user /dms/node/deployment/clear --all`,
+	  nunet actor cmd --context user /dms/node/deployment/prune --before 2025-01-01T00:00:00Z
+	  nunet actor cmd --context user /dms/node/deployment/prune --all`,
 	},
 
 	// /dms/node/deployment/status
