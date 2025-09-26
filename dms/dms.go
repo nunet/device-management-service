@@ -113,7 +113,7 @@ func initialize(fs afero.Fs, cfg *config.Config, env env.EnvironmentProvider) {
 }
 
 func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPassphrase, contextName string) (*DMS, error) {
-	log.Debugf("starting dms with config: %v", gcfg)
+	log.Debugf("starting dms with config: %+v", gcfg)
 	if contextName == "" {
 		contextName = node.DefaultContextName
 	}

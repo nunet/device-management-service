@@ -34,7 +34,7 @@ var (
 
 var DefaultConfig = Config{
 	General: General{
-		Env:                    "test",
+		Env:                    "production",
 		UserDir:                fmt.Sprintf("%s/.nunet", homeDir),
 		WorkDir:                fmt.Sprintf("%s/nunet", homeDir),
 		DataDir:                fmt.Sprintf("%s/nunet/data", homeDir),
