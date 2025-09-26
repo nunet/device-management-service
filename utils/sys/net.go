@@ -21,6 +21,7 @@ type TunTapMode int
 const (
 	NetTunMode TunTapMode = iota
 	NetTapMode
+	NuNetIptablesChain = "NUNET"
 )
 
 // NetInterface defines the interface for network interfaces (TUN/TAP)

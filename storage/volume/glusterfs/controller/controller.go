@@ -21,7 +21,7 @@ import (
 
 	logging "github.com/ipfs/go-log/v2"
 	dmscrypto "gitlab.com/nunet/device-management-service/lib/crypto"
-	"gitlab.com/nunet/device-management-service/lib/sys"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 )
 
 var log = logging.Logger("actor")

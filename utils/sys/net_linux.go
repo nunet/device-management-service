@@ -219,10 +219,130 @@ func ForwardingEnabled() (bool, error) {
 	return false, nil
 }
 
+// CreateNuNetChain creates a custom iptables chain on filter and nat tables
+func CreateNuNetChain() error {
+	if !chainExist("filter", NuNetIptablesChain) {
+		out, err := iptables([]string{
+			"-t", "filter", "-N", NuNetIptablesChain,
+		})
+		if err != nil {
+			return fmt.Errorf("error creating chain: %w, output: %s", err, out)
+		}
+	}
+	if !chainExist("nat", NuNetIptablesChain) {
+		out, err := iptables([]string{
+			"-t", "nat", "-N", NuNetIptablesChain,
+		})
+		if err != nil {
+			return fmt.Errorf("error creating chain: %w, output: %s", err, out)
+		}
+	}
+
+	return nil
+}
+
+// FlushNuNetChain flushes the custom iptables chain on filter and nat tables
+func FlushNuNetChain() error {
+	if err := flushChain("filter", NuNetIptablesChain); err != nil {
+		return fmt.Errorf("error flushing filter chain: %w", err)
+	}
+	if err := flushChain("nat", NuNetIptablesChain); err != nil {
+		return fmt.Errorf("error flushing nat chain: %w", err)
+	}
+	return nil
+}
+
+// chainExist checks if the specified chain exists on the specified table
+func chainExist(table, chain string) bool {
+	args := []string{
+		"-t", table, "-L", chain,
+	}
+	_, err := iptables(args)
+	return err == nil
+}
+
+// flushChain flushes all rules in the specified chain
+func flushChain(table, chain string) error {
+	args := []string{
+		"-t", table, "-F", chain,
+	}
+	if chainExist(table, chain) {
+		out, err := iptables(args)
+		if err != nil {
+			return fmt.Errorf("error creating chain: %w, output: %s", err, out)
+		}
+	}
+	return nil
+}
+
+// AddJumpRules adds a jump rule from FORWARD, OUTPUT, and PREROUTING chains to NUNET chain
+func AddJumpRules() error {
+	// FORWARD
+	args := []string{"FORWARD", "-t", "filter", "-j", NuNetIptablesChain}
+	if !iptRuleExist(args...) {
+		err := iptAppendRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding jump rule: %w", err)
+		}
+	}
+
+	// OUTPUT
+	args = []string{"OUTPUT", "-t", "nat", "-j", NuNetIptablesChain}
+	if !iptRuleExist(args...) {
+		err := iptAppendRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding jump rule: %w", err)
+		}
+	}
+
+	// PREROUTING
+	args = []string{"PREROUTING", "-t", "nat", "-j", NuNetIptablesChain}
+	if !iptRuleExist(args...) {
+		err := iptAppendRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding jump rule: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// DelJumpRule deletes a jump rule from src chain+table to dest chain
+func DelJumpRules() error {
+	// FORWARD
+	args := []string{"FORWARD", "-t", "filter", "-j", NuNetIptablesChain}
+	if iptRuleExist(args...) {
+		err := iptDeleteRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding jump rule: %w", err)
+		}
+	}
+
+	// OUTPUT
+	args = []string{"OUTPUT", "-t", "nat", "-j", NuNetIptablesChain}
+	if iptRuleExist(args...) {
+		err := iptDeleteRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding jump rule: %w", err)
+		}
+	}
+
+	// PREROUTING
+	args = []string{"PREROUTING", "-t", "nat", "-j", NuNetIptablesChain}
+	if iptRuleExist(args...) {
+		err := iptDeleteRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding jump rule: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // AddDNATRule adds a DNAT rule to iptables PRERROUTING chain
 func AddDNATRule(protocol, sourcePort, destIP, destPort string) error {
 	args := []string{
-		"PREROUTING", "-t", "nat", "-p", protocol,
+		NuNetIptablesChain, "-t", "nat", "-p", protocol,
 		"--dport", sourcePort, "-j", "DNAT",
 		"--to-destination", destIP + ":" + destPort,
 	}
@@ -235,13 +355,14 @@ func AddDNATRule(protocol, sourcePort, destIP, destPort string) error {
 			)
 		}
 	}
+
 	return nil
 }
 
-// DelDNATRule deletes a DNAT rule to iptables PRERROUTING chain if it exists
+// DelDNATRule deletes a DNAT rule to iptables PREROUTING chain if it exists
 func DelDNATRule(protocol, sourcePort, destIP, destPort string) error {
 	args := []string{
-		"PREROUTING", "-t", "nat", "-p", protocol,
+		NuNetIptablesChain, "-t", "nat", "-p", protocol,
 		"--dport", sourcePort, "-j", "DNAT",
 		"--to-destination", destIP + ":" + destPort,
 	}
@@ -257,7 +378,7 @@ func DelDNATRule(protocol, sourcePort, destIP, destPort string) error {
 // AddForwardRule adds an ip:port FORWARD rule to iptables
 func AddForwardRule(protocol, destIP, destPort string) error {
 	args := []string{
-		"FORWARD", "-t", "filter",
+		NuNetIptablesChain, "-t", "filter",
 		"-p", protocol, "-d", destIP,
 		"--dport", destPort, "-j", "ACCEPT",
 	}
@@ -273,14 +394,14 @@ func AddForwardRule(protocol, destIP, destPort string) error {
 // DelForwardRule deletes an ip:port FORWARD rule if it exists
 func DelForwardRule(protocol, destIP, destPort string) error {
 	args := []string{
-		"FORWARD", "-t", "filter",
+		NuNetIptablesChain, "-t", "filter",
 		"-p", protocol, "-d", destIP,
 		"--dport", destPort, "-j", "ACCEPT",
 	}
 	if iptRuleExist(args...) {
 		err := iptDeleteRule(args...)
 		if err != nil {
-			return fmt.Errorf("error adding froward rule: %w", err)
+			return fmt.Errorf("error deleting forward rule: %w", err)
 		}
 	}
 	return nil
@@ -292,7 +413,7 @@ func DelForwardRule(protocol, destIP, destPort string) error {
 // sudo iptables -t nat -A OUTPUT -p tcp --dport 7224 -o lo -j DNAT --to-destination 10.49.64.3:7224
 func AddOutputNatRule(protocol, destIP, destPort, ifaceName string) error {
 	args := []string{
-		"OUTPUT", "-t", "nat", "-p", protocol,
+		NuNetIptablesChain, "-t", "nat", "-p", protocol,
 		"--dport", destPort, "-o", ifaceName,
 		"-j", "DNAT", "--to-destination", destIP + ":" + destPort,
 	}
@@ -308,7 +429,7 @@ func AddOutputNatRule(protocol, destIP, destPort, ifaceName string) error {
 // DelOutputNatRule deletes an output chain dnat rule
 func DelOutputNatRule(protocol, destIP, destPort, ifaceName string) error {
 	args := []string{
-		"OUTPUT", "-t", "nat", "-p", protocol,
+		NuNetIptablesChain, "-t", "nat", "-p", protocol,
 		"--dport", destPort, "-o", ifaceName,
 		"-j", "DNAT", "--to-destination", destIP + ":" + destPort,
 	}
@@ -324,7 +445,7 @@ func DelOutputNatRule(protocol, destIP, destPort, ifaceName string) error {
 // AddForwardIntRule adds a FORWARD between interfaces rule to iptables
 func AddForwardIntRule(inInt, outInt string) error {
 	args := []string{
-		"FORWARD", "-t", "filter",
+		NuNetIptablesChain, "-t", "filter",
 		"-i", inInt, "-o", outInt, "-j", "ACCEPT",
 	}
 	if !iptRuleExist(args...) {
@@ -339,7 +460,7 @@ func AddForwardIntRule(inInt, outInt string) error {
 // DelForwardIntRule deletes a FORWARD between interfaces rule if it exists
 func DelForwardIntRule(inInt, outInt string) error {
 	args := []string{
-		"FORWARD", "-t", "filter",
+		NuNetIptablesChain, "-t", "filter",
 		"-i", inInt, "-o", outInt, "-j", "ACCEPT",
 	}
 	if iptRuleExist(args...) {
@@ -413,7 +534,7 @@ func DelRelEstRule(chain string) error {
 
 // iptDeleteRule deletes the specified rule from the iptables chain
 func iptDeleteRule(rule ...string) error {
-	out, err := execCmd("iptables", append([]string{"-D"}, rule...))
+	out, err := iptables(append([]string{"-D"}, rule...))
 	if err != nil {
 		return fmt.Errorf("error deleting rule: %w, output: %s", err, out)
 	}
@@ -421,7 +542,7 @@ func iptDeleteRule(rule ...string) error {
 }
 
 func iptAppendRule(rule ...string) error {
-	out, err := execCmd("iptables", append([]string{"-A"}, rule...))
+	out, err := iptables(append([]string{"-A"}, rule...))
 	if err != nil {
 		return fmt.Errorf("error appending rule: %w, output: %s", err, out)
 	}
@@ -429,12 +550,12 @@ func iptAppendRule(rule ...string) error {
 }
 
 func iptRuleExist(rule ...string) bool {
-	_, err := execCmd("iptables", append([]string{"-C"}, rule...))
+	_, err := iptables(append([]string{"-C"}, rule...))
 	return err == nil
 }
 
-func execCmd(command string, args []string) (string, error) {
-	cmd := exec.Command(command, args...)
+func iptables(args []string) (string, error) {
+	cmd := exec.Command("iptables", args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		AmbientCaps: []uintptr{
 			unix.CAP_NET_ADMIN,
@@ -443,7 +564,7 @@ func execCmd(command string, args []string) (string, error) {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("failed to execute command: %q: %w", command, err)
+		return string(output), fmt.Errorf("failed to execute command: iptables %q: %w", args, err)
 	}
 	return string(output), nil
 }

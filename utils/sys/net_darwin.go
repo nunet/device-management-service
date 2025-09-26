@@ -78,55 +78,70 @@ func (n *netiface) DelRoute(route string) error {
 
 // ForwardingEnabled checks if IP forwarding is enabled
 func ForwardingEnabled() (bool, error) {
-	return false, fmt.Errorf("forwarding check not available on darwin")
+	return false, fmt.Errorf("darwin not supported yet")
+}
+
+// CreateNuNetChain creates a new NUNET chain
+func CreateNuNetChain() error {
+	return fmt.Errorf("darwin not supported yet")
+}
+
+// FlushNuNetChain flushes the NUNET chain
+func FlushNuNetChain() error {
+	return fmt.Errorf("darwin not supported yet")
+}
+
+// AddJumpRules adds jump rules to iptables NUNET chain
+func AddJumpRules() error {
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // AddDNATRule adds a DNAT rule to iptables PRERROUTING chain
 func AddDNATRule(protocol, sourceIP, sourcePort, destIP, destPort string) error {
-	return fmt.Errorf("add dnat rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // DelDNATRule deletes a DNAT rule to iptables PRERROUTING chain if it exists
 func DelDNATRule(protocol, sourceIP, sourcePort, destIP, destPort string) error {
-	return fmt.Errorf("del dnat rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // AddForwardRule adds an ip:port FORWARD rule to iptables
 func AddForwardRule(protocol, destIP, destPort string) error {
-	return fmt.Errorf("add forward rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // DelForwardRule deletes an ip:port FORWARD rule if it exists
 func DelForwardRule(protocol, destIP, destPort string) error {
-	return fmt.Errorf("del forward rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // AddForwardIntRule adds a FORWARD between interfaces rule to iptables
 func AddForwardIntRule(inInt, outInt string) error {
-	return fmt.Errorf("add forward interface rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // DelForwardIntRule deletes a FORWARD between interfaces rule if it exists
 func DelForwardIntRule(inInt, outInt string) error {
-	return fmt.Errorf("del forward interface rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // AddMasqueradeRule adds a MASQUERADE rule to iptables POSTROUTING chain
 func AddMasqueradeRule() error {
-	return fmt.Errorf("add masquerade rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // DelMasqueradeRule deletes a MASQUERADE rule from the POSTROUTING chain if it exists
 func DelMasqueradeRule() error {
-	return fmt.Errorf("del masquerade rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // AddRelEstRule adds a RELATED,ESTABLISHED rule to specified chain of iptables
 func AddRelEstRule(chain string) error {
-	return fmt.Errorf("add related,established rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }
 
 // DelRelEstRule deletes a RELATED,ESTABLISHED rule from the specified chain if it exists
 func DelRelEstRule(chain string) error {
-	return fmt.Errorf("del related,established rule not available on darwin")
+	return fmt.Errorf("darwin not supported yet")
 }

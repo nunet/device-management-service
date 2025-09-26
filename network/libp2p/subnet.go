@@ -32,7 +32,7 @@ import (
 	"github.com/google/gopacket/layers"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 
-	"gitlab.com/nunet/device-management-service/lib/sys"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 )
 
 const (
