@@ -209,7 +209,7 @@ func (l *labelInjectionCore) gatherFields(
 		skipFrames := 13
 		// get a stack trace
 		sTrace := strings.Split(string(debug.Stack()), "\n")[skipFrames:]
-		if sTrace[len(sTrace)-1] == "" {
+		if len(sTrace) > 0 && sTrace[len(sTrace)-1] == "" {
 			sTrace = sTrace[:len(sTrace)-1]
 		}
 
@@ -220,7 +220,13 @@ func (l *labelInjectionCore) gatherFields(
 			// format stack for Kibana
 			"stack_trace", strings.Join(sTrace, "\n ------ "),
 		)
-		spanID := activeSpans[len(activeSpans)-1].TraceContext().Span.String()
+		var spanID string
+		if len(activeSpans) > 0 {
+			spanID = activeSpans[len(activeSpans)-1].TraceContext().Span.String()
+		} else {
+			// fallback: não há spans ativos
+			spanID = "no-active-span"
+		}
 		end()
 		// bind this log msg to this err span, add the stack trace
 		// sTraceStr, _ := json.Marshal(sTrace)
