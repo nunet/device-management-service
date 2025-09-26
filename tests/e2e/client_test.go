@@ -788,7 +788,7 @@ func (c *Client) deploymentLogs(context, passphrase, deploymentID, allocationNam
 	}
 
 	if resp.Error != "" {
-		return node.DeploymentLogsResponse{}, fmt.Errorf(resp.Error)
+		return node.DeploymentLogsResponse{}, fmt.Errorf("deployment logs error: %s", resp.Error)
 	}
 
 	return resp, nil
