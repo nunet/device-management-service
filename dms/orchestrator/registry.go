@@ -54,10 +54,6 @@ type Registry interface {
 	GetAllDeployments() ([]*jtypes.OrchestratorView, error)
 	// GetDeploymentsByStatus retrieves deployments filtered by status
 	GetDeploymentsByStatus(status jtypes.DeploymentStatus) ([]*jtypes.OrchestratorView, error)
-	// PruneDeployments removes old deployments
-	PruneDeployments(olderThan time.Time) error
-	// ClearDeployments removes all deployments
-	ClearDeployments() error
 	// DeleteDeployment removes a specific deployment by orchestrator ID
 	DeleteDeployment(orchestratorID string) error
 	// GetDeployment retrieves a deployment from store by ID
@@ -381,7 +377,8 @@ func (f *basicRegistry) SaveOrchestrator(orchestrator Orchestrator) error {
 	}
 	view := &jtypes.OrchestratorView{
 		BaseDBModel: types.BaseDBModel{
-			ID: orchestrator.ID(),
+			ID:        orchestrator.ID(),
+			CreatedAt: time.Now(),
 		},
 		OrchestratorID:     orchestrator.ID(),
 		Cfg:                orchestrator.Config(),
@@ -403,16 +400,6 @@ func (f *basicRegistry) GetAllDeployments() ([]*jtypes.OrchestratorView, error) 
 // GetDeploymentsByStatus retrieves deployments filtered by status
 func (f *basicRegistry) GetDeploymentsByStatus(status jtypes.DeploymentStatus) ([]*jtypes.OrchestratorView, error) {
 	return f.store.GetAll(&status)
-}
-
-// PruneDeployments removes old deployments
-func (f *basicRegistry) PruneDeployments(olderThan time.Time) error {
-	return f.store.Prune(olderThan)
-}
-
-// ClearDeployments removes all deployments
-func (f *basicRegistry) ClearDeployments() error {
-	return f.store.Clear()
 }
 
 // DeleteDeployment removes a specific deployment by orchestrator ID

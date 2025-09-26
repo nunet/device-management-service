@@ -75,6 +75,7 @@ type Orchestrator interface {
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
+	Done() <-chan struct{}
 }
 
 type BasicOrchestrator struct {
@@ -660,4 +661,8 @@ func isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
 		}
 	}
 	return true
+}
+
+func (o *BasicOrchestrator) Done() <-chan struct{} {
+	return o.ctx.Done()
 }

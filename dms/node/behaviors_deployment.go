@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -570,7 +572,8 @@ func (n *Node) updateDeployment(_ orchestrator.Orchestrator) error {
 // Deployment pruning and clearing commands
 
 type DeploymentPruneRequest struct {
-	OlderThanDays int `json:"older_than_days"`
+	Before string `json:"before,omitempty"`
+	All    bool   `json:"all,omitempty"`
 }
 
 type DeploymentPruneResponse struct {
@@ -580,6 +583,8 @@ type DeploymentPruneResponse struct {
 
 func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 	defer msg.Discard()
+
+	fmt.Println("pruning deployments...")
 
 	handleErr := func(err error) {
 		log.Errorw("deployment_prune_error",
@@ -594,68 +599,98 @@ func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 		return
 	}
 
-	if request.OlderThanDays <= 0 {
-		handleErr(errors.New("older_than_days must be greater than 0"))
+	if request.All {
+		// delete all deployments whose status is greater than Running
+		statuses := []jobtypes.DeploymentStatus{
+			jobtypes.DeploymentStatusFailed,
+			jobtypes.DeploymentStatusCompleted,
+		}
+		for _, s := range statuses {
+			views, err := n.orchestratorRegistry.GetDeploymentsByStatus(s)
+			if err != nil {
+				handleErr(fmt.Errorf("failed to list deployments by status %s: %w", s.String(), err))
+				return
+			}
+			for _, v := range views {
+				if err := n.orchestratorRegistry.DeleteDeployment(v.OrchestratorID); err != nil {
+					handleErr(fmt.Errorf("failed to delete deployment %s: %w", v.OrchestratorID, err))
+					return
+				}
+			}
+		}
+		log.Infow("deployments_pruned_by_status",
+			"labels", []string{string(observability.LabelDeployment)},
+			"mode", "all_status_gt_running")
+		n.sendReply(msg, DeploymentPruneResponse{OK: true})
 		return
 	}
 
-	// Calculate the cutoff time
-	cutoffTime := time.Now().AddDate(0, 0, -request.OlderThanDays)
-
-	// Prune deployments older than the cutoff time
-	if err := n.orchestratorRegistry.PruneDeployments(cutoffTime); err != nil {
-		handleErr(fmt.Errorf("failed to prune deployments: %w", err))
+	if strings.TrimSpace(request.Before) == "" {
+		handleErr(errors.New("before must be provided unless --all is used"))
 		return
 	}
 
+	// parse supported formats: duration (1s,1m,1h,1d) and datetime (RFC3339, common)
+	var cutoffTime time.Time
+	// Try duration forms first
+	before := strings.TrimSpace(request.Before)
+	if strings.HasSuffix(before, "d") {
+		// days is not a standard Go duration; handle explicitly
+		daysStr := strings.TrimSuffix(before, "d")
+		if daysStr == "" {
+			handleErr(fmt.Errorf("invalid before duration: %s", before))
+			return
+		}
+		if nDays, err := strconv.Atoi(daysStr); err == nil && nDays > 0 {
+			cutoffTime = time.Now().AddDate(0, 0, -nDays)
+		} else {
+			handleErr(fmt.Errorf("invalid before duration days: %s", before))
+			return
+		}
+	} else if dur, err := time.ParseDuration(before); err == nil {
+		cutoffTime = time.Now().Add(-dur)
+	} else {
+		// Try datetime formats
+		var parseErr error
+		for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"} {
+			if t, err := time.Parse(layout, before); err == nil {
+				cutoffTime = t
+				parseErr = nil
+				break
+			}
+			parseErr = err
+			continue
+		}
+		if cutoffTime.IsZero() {
+			handleErr(fmt.Errorf("invalid before value: %w", parseErr))
+			return
+		}
+	}
+
+	// delete all deployments whose status is greater than Running
+	statuses := []jobtypes.DeploymentStatus{
+		jobtypes.DeploymentStatusFailed,
+		jobtypes.DeploymentStatusCompleted,
+	}
+	for _, s := range statuses {
+		views, err := n.orchestratorRegistry.GetDeploymentsByStatus(s)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to list deployments by status %s: %w", s.String(), err))
+			return
+		}
+		for _, v := range views {
+			if v.CreatedAt.Before(cutoffTime) {
+				if err := n.orchestratorRegistry.DeleteDeployment(v.OrchestratorID); err != nil {
+					handleErr(fmt.Errorf("failed to delete deployment %s: %w", v.OrchestratorID, err))
+					return
+				}
+			}
+		}
+	}
 	log.Infow("deployments_pruned",
 		"labels", []string{string(observability.LabelDeployment)},
-		"older_than_days", request.OlderThanDays,
-		"cutoff_time", cutoffTime)
-
+		"mode", "before")
 	n.sendReply(msg, DeploymentPruneResponse{OK: true})
-}
-
-type DeploymentClearRequest struct {
-	All bool `json:"all"`
-}
-
-type DeploymentClearResponse struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
-}
-
-func (n *Node) handleDeploymentClear(msg actor.Envelope) {
-	defer msg.Discard()
-
-	handleErr := func(err error) {
-		log.Errorw("deployment_clear_error",
-			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
-		n.sendReply(msg, DeploymentClearResponse{Error: err.Error()})
-	}
-
-	var request DeploymentClearRequest
-	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		handleErr(fmt.Errorf("error unmarshalling deployment clear request: %s", err))
-		return
-	}
-
-	if !request.All {
-		handleErr(errors.New("all must be true to clear all deployments"))
-		return
-	}
-
-	// Clear all deployments
-	if err := n.orchestratorRegistry.ClearDeployments(); err != nil {
-		handleErr(fmt.Errorf("failed to clear deployments: %w", err))
-		return
-	}
-
-	log.Infow("deployments_cleared",
-		"labels", []string{string(observability.LabelDeployment)})
-
-	n.sendReply(msg, DeploymentClearResponse{OK: true})
 }
 
 type DeploymentDeleteRequest struct {

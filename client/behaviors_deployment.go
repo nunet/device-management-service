@@ -164,23 +164,6 @@ func (c *Client) DeploymentPrune(ctx context.Context, req node.DeploymentPruneRe
 	return response, err
 }
 
-func (c *Client) DeploymentClear(ctx context.Context, req node.DeploymentClearRequest, opts ...Option) (node.DeploymentClearResponse, error) {
-	var response node.DeploymentClearResponse
-
-	resp, err := c.InvokeBehavior(
-		ctx,
-		behaviors.DeploymentClearBehavior,
-		req,
-		opts...,
-	)
-	if err != nil {
-		return response, fmt.Errorf("%s: %w", behaviors.DeploymentClearBehavior, err)
-	}
-
-	err = c.unmarshalResponse(resp, &response)
-	return response, err
-}
-
 func (c *Client) DeploymentDelete(ctx context.Context, req node.DeploymentDeleteRequest, opts ...Option) (node.DeploymentDeleteResponse, error) {
 	var response node.DeploymentDeleteResponse
 

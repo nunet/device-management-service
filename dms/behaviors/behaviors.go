@@ -38,7 +38,6 @@ const (
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 	DeploymentPruneBehavior    = "/dms/node/deployment/prune"
-	DeploymentClearBehavior    = "/dms/node/deployment/clear"
 	DeploymentDeleteBehavior   = "/dms/node/deployment/delete"
 
 	AllocationsListBehavior = "/dms/node/allocations/list"

@@ -184,6 +184,10 @@ func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.Deploy
 	return make(chan jtypes.DeploymentStatus)
 }
 
+func (m *MockOrchestrator) Done() <-chan struct{} {
+	return nil
+}
+
 type MockOrchestratorRegistry struct {
 	lock          sync.RWMutex
 	orchestrators map[string]Orchestrator // map of orchestrators
@@ -267,14 +271,6 @@ func (m *MockOrchestratorRegistry) GetAllDeployments() ([]*jtypes.OrchestratorVi
 
 func (m *MockOrchestratorRegistry) GetDeploymentsByStatus(_ jtypes.DeploymentStatus) ([]*jtypes.OrchestratorView, error) {
 	return nil, nil
-}
-
-func (m *MockOrchestratorRegistry) PruneDeployments(_ time.Time) error {
-	return nil
-}
-
-func (m *MockOrchestratorRegistry) ClearDeployments() error {
-	return nil
 }
 
 func (m *MockOrchestratorRegistry) DeleteDeployment(_ string) error {

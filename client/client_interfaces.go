@@ -219,9 +219,6 @@ type ActorDeploymentBehaviorClient interface {
 	// DeploymentPrune removes old deployments
 	DeploymentPrune(ctx context.Context, req node.DeploymentPruneRequest, opts ...Option) (node.DeploymentPruneResponse, error)
 
-	// DeploymentClear removes all deployments
-	DeploymentClear(ctx context.Context, req node.DeploymentClearRequest, opts ...Option) (node.DeploymentClearResponse, error)
-
 	// DeploymentDelete removes a specific deployment
 	DeploymentDelete(ctx context.Context, req node.DeploymentDeleteRequest, opts ...Option) (node.DeploymentDeleteResponse, error)
 }
