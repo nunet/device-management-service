@@ -852,6 +852,7 @@ func (b *BidCoordinator) makeResidualBidRequest(
 		V1: &jtypes.EnsembleConfigV1{
 			Allocations: make(map[string]jtypes.AllocationConfig),
 			Nodes:       make(map[string]jtypes.NodeConfig),
+			Contracts:   cfg.Contracts(),
 		},
 	}
 
@@ -929,7 +930,7 @@ func (b *BidCoordinator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfi
 
 	// Log contract information
 	if len(v1Config.Contracts) > 0 {
-		log.Infow("including contracts in bid request",
+		log.Debugf("including contracts in bid request",
 			"labels", []string{string(observability.LabelDeployment)},
 			"orchestratorID", b.eid,
 			"contractCount", len(v1Config.Contracts))
