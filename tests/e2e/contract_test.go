@@ -66,6 +66,39 @@ func DeployWithContractTest(suite *TestSuite) {
 		contractDID, err := getContractID(cmdOut)
 		suite.Require().NoError(err)
 
+		// contract should not be valid at this point because its not signed
+		// by all parties
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// do a deployment before approving the contract, it should fail
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-contract.yaml")
+		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"`
+		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
+		suite.Require().NoError(err)
+
+		deploymentResult := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"))
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		// deployment should not go through, lets check after 10 seconds
+		// the status should ne Preparing
+		time.Sleep(10 * time.Second)
+		status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusPreparing.String(), extractStatus(status))
+
 		// check the list and see the contract that is not approved yet localy
 		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
 		fmt.Println(cmdOut, err)
@@ -85,23 +118,13 @@ func DeployWithContractTest(suite *TestSuite) {
 		// before we deploy
 		time.Sleep(time.Second * 6)
 
-		// deploy
-		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract.yaml")
-		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-contract.yaml")
-		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
-		suite.Require().NoError(err)
-		contractsContent := `contracts:
-  contract1:
-    did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"`
-		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
-		suite.Require().NoError(err)
+		// now that we accepted we will redeploy
 
-		deploymentResult := requester.client.deploy(
+		deploymentResult = requester.client.deploy(
 			suite.T(), requester.userContext, requester.password,
 			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"))
 		suite.Contains(deploymentResult, `"Status": "OK"`)
-		manifestID := extractEnsembleID(deploymentResult)
+		manifestID = extractEnsembleID(deploymentResult)
 
 		// Wait until the deployment status is "Running".
 		suite.Require().Eventually(func() bool {
@@ -197,7 +220,7 @@ func DeployWithContractTest(suite *TestSuite) {
 		// validate contract
 		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
 		suite.Require().NoError(err)
-		validResult, err := extractValidationResponse(cmdOut)
+		validResult, err = extractValidationResponse(cmdOut)
 		suite.Require().NoError(err)
 		suite.Require().Equal("false", validResult)
 	})

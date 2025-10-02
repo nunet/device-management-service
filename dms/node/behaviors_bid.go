@@ -187,7 +187,12 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 				return
 			}
 
-			log.Infof("contract_verification_success: %v", request.Request[0].V1.Contracts)
+			log.Debugf("contract_verification_success: %v", request.Request[0].V1.Contracts)
+		} else {
+			log.Debugf(
+				"contracts_empty",
+				"labels", string(observability.LabelDeployment),
+			)
 		}
 	}
 
