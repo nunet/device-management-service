@@ -146,8 +146,9 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 	}()
 
 	n.sendReply(msg, contracts.CreateContractResponseBehaviour{
-		ContractDID: contractActor.ContractDID.URI,
-		PubKey:      hex.EncodeToString(pkBytes),
+		ContractRequest: request,
+		ContractDID:     contractActor.ContractDID.URI,
+		PubKey:          hex.EncodeToString(pkBytes),
 	})
 }
 

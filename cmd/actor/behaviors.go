@@ -547,10 +547,8 @@ var registeredBehaviors = map[string]*behaviorConfig{
 			if err != nil {
 				return nil, fmt.Errorf("failed to read contract file: %w", err)
 			}
+
 			var contractReq contracts.CreateContractRequestBehaviour
-
-			fmt.Println("contractReq ", string(data))
-
 			err = json.Unmarshal(data, &contractReq)
 			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal create contract request payload: %w", err)
