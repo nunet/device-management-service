@@ -20,6 +20,7 @@ import (
 	"github.com/cucumber/godog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
 )
@@ -114,11 +115,36 @@ func deploymentIs(ctx context.Context, spName, status string) (context.Context, 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
-	require.Eventually(t, func() bool {
-		ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
-		return strings.EqualFold(ensembleStatus, status)
-	}, 60*time.Second, 1*time.Second)
+	var wantStatus string
+	switch status {
+	case "fail":
+		// currently, invalid ensembles will be stuck at bidding phase,
+		// thus always displaying preparing status
+		// if we see preparing 3 times in a row we consider a failed deployment
+		wantStatus = jobtypes.DeploymentStatusPreparing.String()
+		wantSeen := 3
+		seen := 0
+		wait := 1 * time.Second
+
+		for range wantSeen {
+			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
+			assert.NoError(t, err)
+			if strings.EqualFold(ensembleStatus, wantStatus) {
+				seen++
+			} else {
+				break
+			}
+			time.Sleep(wait)
+		}
+		assert.Equal(t, wantSeen, seen, "wanted %s status %d times, got %d", wantStatus, wantSeen, seen)
+	default:
+		wantStatus = status
+		require.Eventually(t, func() bool {
+			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
+			assert.NoError(t, err)
+			return strings.EqualFold(ensembleStatus, wantStatus)
+		}, 60*time.Second, 1*time.Second)
+	}
 
 	return tc.Unwrap(), nil
 }

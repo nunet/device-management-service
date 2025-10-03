@@ -25,12 +25,19 @@ type (
 	ensembleFileCtxKey struct{}
 	manifestCtxKey     struct{}
 	allocRespCtxKey    struct{}
+	contractInfoKey    struct{}
 )
 
 // TestCtx is a wrapper of Context
 // It allows for some type safety and it's more elegant
 type TestCtx struct {
 	ctx context.Context
+}
+
+// TODO: Temporary wrapper for contract
+type ContractData struct {
+	HostDID string
+	DID     string
 }
 
 func NewTestCtx(ctx context.Context) *TestCtx {
@@ -123,5 +130,19 @@ func (t *TestCtx) AllocationResponses() ([]string, error) {
 func (t *TestCtx) WithAllocationResponses(r []string) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, allocRespCtxKey{}, r),
+	}
+}
+
+func (t *TestCtx) Contract() (ContractData, error) {
+	data, ok := t.ctx.Value(contractInfoKey{}).(ContractData)
+	if !ok {
+		return ContractData{}, fmt.Errorf("no contract DID available on context")
+	}
+	return data, nil
+}
+
+func (t *TestCtx) WithContract(c ContractData) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, contractInfoKey{}, c),
 	}
 }

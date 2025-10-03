@@ -36,7 +36,7 @@ import (
 var opts = godog.Options{
 	Output:        colors.Colored(os.Stdout),
 	Format:        "pretty",
-	StopOnFailure: true,
+	StopOnFailure: false,
 }
 
 func init() {

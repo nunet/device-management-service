@@ -12,10 +12,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
 // Context represents a named context within a node
@@ -26,13 +28,15 @@ type Context struct {
 }
 
 func (c *Context) Grant(did string) (token string, err error) {
-	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap grant --context %s --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-30 %s",
-		c.Name, did))
+	expire := time.Now().AddDate(1, 0, 0).Format(time.DateOnly)
+	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap grant --context %s --cap /dms/deployment --cap /public --cap /broadcast --cap /dms/tokenomics --topic /nunet --expiry %s %s",
+		c.Name, expire, did))
 }
 
 func (c *Context) Delegate(did string) (token string, err error) {
-	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap delegate --context %s --cap /dms/deployment --cap /public --cap /broadcast --topic /nunet --expiry 2025-12-30 %s",
-		c.Name, did))
+	expire := time.Now().AddDate(1, 0, 0).Format(time.DateOnly)
+	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap delegate --context %s --cap /dms/deployment --cap /public --cap /broadcast --cap /dms/tokenomics --topic /nunet --expiry %s %s",
+		c.Name, expire, did))
 }
 
 func (c *Context) Anchor(kind, arg string) error {
@@ -195,6 +199,99 @@ func (c *Context) StopEnsemble(id string) error {
 	}
 	if resp.Error != "" {
 		return fmt.Errorf("failed to shutdown deployment: %s", resp.Error)
+	}
+	return nil
+}
+
+func (c *Context) CreateContract(contractFile, destDID string) (contracts.CreateContractResponseBehaviour, error) {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/create --contract-file %s --dest %s --timeout 1m", c.Name, contractFile, destDID))
+	if err != nil {
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to call contract create behavior: %w", err)
+	}
+	var resp contracts.CreateContractResponseBehaviour
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to create contract: %s", resp.Error)
+	}
+	return resp, nil
+}
+
+func (c *Context) ContractStatus(contractDID, hostDID string) (*contracts.Contract, error) {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/state --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract state behavior: %w", err)
+	}
+	var resp contracts.ContractStatusResponseBehaviour
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("failed to get contract status: %s", resp.Error)
+	}
+	return &resp.Contract, nil
+}
+
+func (c *Context) ListContracts() ([]*contracts.Contract, error) {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/list_incoming --timeout 5s", c.Name))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract list_incoming behavior: %s", out)
+	}
+	var resp contracts.ContractListIncomingResponseBehaviour
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("failed to get list of contracts: %s", resp.Error)
+	}
+	return resp.Contracts, nil
+}
+
+func (c *Context) ApproveContract(contractDID string) error {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/approve_local --contract-did %s --timeout 1m", c.Name, contractDID))
+	if err != nil {
+		return fmt.Errorf("failed to call contract approve_local behavior: %w", err)
+	}
+	var resp contracts.ContractApproveLocalResponseBehaviour
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("failed to approve contract: %s", resp.Error)
+	}
+	if !resp.Success {
+		return fmt.Errorf("failed to approve contract")
+	}
+	return nil
+}
+
+func (c *Context) CompleteContract(contractDID, hostDID string) error {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/complete --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
+	if err != nil {
+		return fmt.Errorf("failed to call contract complete behavior: %w", err)
+	}
+	var resp contracts.ContractCompletionResponseBehaviour
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("failed to complete contract: %s", resp.Error)
+	}
+	return nil
+}
+
+func (c *Context) TerminateContract(contractDID, hostDID string) error {
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/terminate --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
+	if err != nil {
+		return fmt.Errorf("failed to call contract terminate behavior: %w", err)
+	}
+	var resp contracts.ContractTerminationResponseBehaviour
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("failed to terminate contract: %s", resp.Error)
 	}
 	return nil
 }

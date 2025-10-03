@@ -78,7 +78,7 @@ func (n *Node) CreateContext(name string) (*Context, error) {
 
 	context := &Context{
 		Name: name,
-		DID:  did,
+		DID:  strings.TrimSpace(did),
 		node: n,
 	}
 

@@ -140,9 +140,10 @@ type ContractStatusResponseBehaviour struct {
 }
 
 type CreateContractResponseBehaviour struct {
-	ContractDID string `json:"contract_did"`
-	PubKey      string `json:"pub_key"`
-	Error       string `json:"error"`
+	ContractRequest CreateContractRequestBehaviour `json:"contract_request"`
+	ContractDID     string                         `json:"contract_did"`
+	PubKey          string                         `json:"pub_key"`
+	Error           string                         `json:"error"`
 }
 
 type ProposeContractResponseBehaviour struct {

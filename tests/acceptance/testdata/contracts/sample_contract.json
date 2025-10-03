@@ -1,0 +1,52 @@
+{
+    "solution_enabler_did": {
+        "uri": "{{solutionEnablerDID}}"
+    },
+    "payment_validator_did": {
+        "uri": "{{paymentValidatorDID}}"
+    },
+    "resource_configuration": {
+        "cpu": {
+            "clock_speed": 0,
+            "cores": 1
+        },
+        "ram": {
+            "size": 1024
+        },
+        "disk": {
+            "size": 1024
+        }
+    },
+    "termination_option": {
+        "allowed": true,
+        "notice_period": 86400000000000
+    },
+    "penalties": [
+        {
+            "condition": "late",
+            "penalty": 100
+        }
+    ],
+    "payment_details": {
+        "requester_addr": "{{requesterAddr}}",
+        "provider_addr": "{{providerAddr}}",
+        "currency": "NTX",
+        "fees_per_allocation": "{{amount}}",
+        "timestamp": "0001-01-01T00:00:00Z",
+        "payment_type": "blockchain",
+        "blockchain": "ETHEREUM"
+    },
+    "contract_terms": "Standard contract terms",
+    "contract_participants": {
+        "provider": {
+            "uri": "{{providerDID}}"
+        },
+        "requestor": {
+            "uri": "{{requesterDID}}"
+        }
+    },
+    "duration": {
+        "start_date": "2024-07-12T18:14:06.993552133+03:00",
+        "end_date": "2028-07-12T18:14:06.99355218+03:00"
+    }
+}
