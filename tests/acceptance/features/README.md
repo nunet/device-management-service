@@ -33,7 +33,7 @@ This document outlines the defined features and scenarios used for acceptance te
 | [Organization Management](#feature-organization-management) ([.feature](./organization_management.feature)) | Join, create, and manage private and public organizations. | Facilitators | Feature | Implemented | Not started |  |
 | [Posemesh](#feature-posemesh) ([.feature](./posemesh.feature)) | Launch Posemesh nodes. | Service Providers | Testnet - Requires infrastructure as DDNS, Proxy, CA. | In progress | Not started |  |
 | [Resource Management](#feature-resource-management) ([.feature](./resource_management.feature)) | As a Computer Provider I want to manage the computational resources of my machine (onboard/offboard) And ensure deployments running on my machine stay within declared limits And ensure resources are correctly freed once the deployment finishes | Resource Providers | Feature or Testnet | Implemented | Not started |  |
-| [Service Deployment](#feature-service-deployment) ([.feature](./service_deployment_modified.feature)) | As a Service Provider I want to launch services on peers So that I can send requests to them and enable inter-service communication | Service Providers | Feature or Testnet | Implemented | In progress | Main scenario implemented in subnet feature file. |
+| [Service Deployment](#feature-service-deployment) ([.feature](./service_deployment.feature)) | As a Service Provider I want to launch a service on a peer So that I can send a request to it | Service Providers | Feature or Testnet | Implemented | In progress | Main scenario implemented in subnet feature file. |
 | [Stateful Deployment](#feature-stateful-deployment) ([.feature](./stateful_deployment.feature)) | Handle deployments with data persistence across reboots or environments. | Service Providers | Feature or Testnet - Requires GlusterFS infrastructure. | Implemented | Not started |  |
 | [Supervision](#feature-supervision) ([.feature](./supervision.feature)) | Monitor and react to deployment or system failures automatically. | Service and Resource Providers | Feature or Testnet | Not implemented | Not started |  |
 | [System and Peer Status](#feature-system-and-peer-status) ([.feature](./system_and_peer_status.feature)) | View DMS status, peer information, and peer connectivity. | Resource Providers | Feature or TestNet | Implemented | Not started |  |
@@ -97,7 +97,6 @@ This document outlines the defined features and scenarios used for acceptance te
 
 **Scenarios:**
 - 
-- Remove node in running ensemble
 - Retrieve output from execution
 
 ---
@@ -155,10 +154,11 @@ This document outlines the defined features and scenarios used for acceptance te
 
 **Scenarios:**
 - 
-- Add a node to the ensemble
-- Add an allocation to a node
-- Remove a node from the ensemble
-- Remove an allocation from a node
+- Add a node to running ensemble
+- Add allocation to running ensemble
+- Remove a node from running ensemble
+- Remove allocation from running ensemble
+- Update node in running ensemble
 
 ---
 
@@ -266,14 +266,13 @@ _(Scenarios to be defined)_
 
 ### Feature: Service Deployment
 
-*As a Service Provider I want to launch services on peers So that I can send requests to them and enable inter-service communication*
+*As a Service Provider I want to launch a service on a peer So that I can send a request to it*
 
 **Scenarios:**
 - 
-- Deploy a service and send requests from other nodes
-- Deploy a service and send requests using DNS addresses
-- Redeploy a service and send requests from other nodes
-- Redeploy a service and send requests using DNS addresses
+- Launch a service in a node and send a request
+- Launch multiple services in different deployments on the same peer
+- Launch multiple services in the same deployment and send a request
 
 ---
 

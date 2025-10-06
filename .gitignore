@@ -15,8 +15,11 @@ test/e2e/dms
 test/e2e/testdata/dms*
 test/e2e/testdata/storage
 
-# dms logs
+# dms acc tests logs
 tests/acceptance/testdata/*.txt
+tests/acceptance/testdata/*.jsonl
+tests/acceptance/testdata/logs/*.txt
+tests/acceptance/testdata/logs/*.jsonl
 
 /glusterfs_certificates
 

@@ -42,7 +42,7 @@ func (n *Node) RunDMSCmd(cmd string) (string, error) {
 	return n.RunCMD([]string{"sh", "-c", fullCmd})
 }
 
-// RunDMSCmd is a wrapper for running the DMS CLI
+// RunDMSCmdBackground is a wrapper for running the DMS CLI
 func (n *Node) RunDMSCmdBackground(cmd string) error {
 	fullCmd := fmt.Sprintf("DMS_PASSPHRASE=123 %s", cmd)
 	return n.RunCMDBackground([]string{"sh", "-c", fullCmd})
@@ -239,7 +239,7 @@ func (n *Node) InstallDocker() error {
 
 func (n *Node) PruneResolved() error {
 	dest := "/root/netplan.sh"
-	if err := n.UploadFile(FindTestdata("netplan.sh"), dest, 0o755); err != nil {
+	if err := n.UploadFile(FindTestdata("scripts/netplan.sh"), dest, 0o755); err != nil {
 		return err
 	}
 	_, err := n.RunCMD([]string{"bash", "-c", dest})
@@ -247,7 +247,7 @@ func (n *Node) PruneResolved() error {
 		return err
 	}
 	dest = "/root/resolv.sh"
-	if err := n.UploadFile(FindTestdata("resolv.sh"), dest, 0o755); err != nil {
+	if err := n.UploadFile(FindTestdata("scripts/resolv.sh"), dest, 0o755); err != nil {
 		return err
 	}
 	_, err = n.RunCMD([]string{"bash", "-c", dest})

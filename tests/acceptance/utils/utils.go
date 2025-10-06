@@ -9,6 +9,7 @@
 package utils
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -61,7 +62,7 @@ func FindTestdata(name string) string {
 	return filepath.Join(here, "..", "tests", "acceptance", "testdata", name)
 }
 
-func UploadEnsemble(node *Node, source string) (dest string, err error) {
+func UploadFile(node *Node, source string) (dest string, err error) {
 	file := filepath.Base(source)
 	dest = filepath.Join("/root", file)
 	err = node.UploadFile(source, dest, 0o755)
@@ -69,6 +70,31 @@ func UploadEnsemble(node *Node, source string) (dest string, err error) {
 		return "", err
 	}
 	return dest, nil
+}
+
+func UploadScripts(node *Node, ensemble string) (err error) {
+	// Upload scripts listed in the ensemble file if needed
+	output, err := node.RunCMD([]string{"yq", "e", ".scripts // [] | .[]", ensemble})
+	if err != nil {
+		return err
+	}
+	out := strings.TrimSpace(output)
+	for scriptName := range strings.SplitSeq(out, "\n") {
+		if scriptName == "" {
+			continue
+		}
+		scriptPath := fmt.Sprintf("scripts/%s", scriptName)
+		file := FindTestdata(scriptPath)
+
+		script, err := UploadFile(node, file)
+		if err != nil {
+			return err
+		}
+		if script == "" {
+			return fmt.Errorf("script is empty")
+		}
+	}
+	return nil
 }
 
 // NodeWithDMS retrieves a node and its DMS context from the node map

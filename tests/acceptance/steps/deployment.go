@@ -82,11 +82,15 @@ func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (co
 	ensemblePath := fmt.Sprintf("ensembles/%s", ensembleName)
 	file := utils.FindTestdata(ensemblePath)
 
-	ensemble, err := utils.UploadEnsemble(sp, file)
+	ensemble, err := utils.UploadFile(sp, file)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	tc = tc.WithEnsembleFile(ensemble)
+
+	// Upload scripts listed in the ensemble file if needed
+	err = utils.UploadScripts(sp, ensemble)
+	assert.NoError(t, err)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node1.peer = \"%s\"", cpInfo.ID), ensemble})
 	assert.NoError(t, err)

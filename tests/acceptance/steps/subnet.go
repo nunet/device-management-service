@@ -95,7 +95,7 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 	assert.NoError(t, err)
 
 	file := utils.FindTestdata("ensembles/multiple_nginx.yaml")
-	ensemble, err := utils.UploadEnsemble(sp, file)
+	ensemble, err := utils.UploadFile(sp, file)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
