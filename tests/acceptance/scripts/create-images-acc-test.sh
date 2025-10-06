@@ -83,6 +83,9 @@ build_instance() {
        # Start Docker service
        systemctl start docker
 
+       # Install ethtool
+       apt install ethtool -y
+
        # Reset machine-id
        truncate -s 0 /etc/machine-id
        rm /var/lib/dbus/machine-id

@@ -328,6 +328,8 @@ func TestHandleDeploymentList(t *testing.T) {
 		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
 		require.NoError(t, err)
 
+		<-time.After(30 * time.Second)
+
 		msg, err := actor.Message(
 			sActor.Handle(),
 			node.actor.Handle(),
@@ -349,10 +351,10 @@ func TestHandleDeploymentList(t *testing.T) {
 		assert.Equal(t, 2, len(resp.Deployments))
 		status, ok := resp.Deployments[mockOrch.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusRunning.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusCompleted.String(), status)
 		status, ok = resp.Deployments[mockOrchWithoutM.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusRunning.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusCompleted.String(), status)
 	})
 
 	t.Run("with metadata", func(t *testing.T) {

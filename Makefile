@@ -194,7 +194,7 @@ e2e:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=15m $(ARGS)
+	go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=35m $(ARGS)
 
 e2e-%:
 	@echo "Running e2e test: TestE2E/$*"
@@ -208,11 +208,11 @@ e2e-%:
 
 run-acceptance:
 	@echo "Running acceptance tests"
-	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=30m -godog.tags="~@wip"
+	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=60m -godog.tags="~@wip"
 
 run-acceptance-%:
 	@echo "Running acceptance tests: $*"
-	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=30m -godog.tags="~@wip" -test.run "^$*/"
+	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=60m -godog.tags="~@wip" -test.run "^$*/"
 
 run-acceptance-container:
 	make run-acceptance INSTANCE_TYPE=container

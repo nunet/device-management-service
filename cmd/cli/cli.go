@@ -11,6 +11,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -38,13 +39,14 @@ func CmdStreams(cmd *cobra.Command) Streams {
 }
 
 type DmsCLI struct {
-	env                env.EnvironmentProvider
-	fs                 afero.Fs
-	defaultConfig      *config.Config
-	configLoader       *config.Loader
-	passphraseProvider passphrase.Provider
-	keystoreProvider   keystore.KeyStore
-	clientFn           func(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient, error)
+	env                 env.EnvironmentProvider
+	fs                  afero.Fs
+	defaultConfig       *config.Config
+	configLoader        *config.Loader
+	passphraseProvider  passphrase.Provider
+	keystoreProvider    keystore.KeyStore
+	clientFn            func(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient, error)
+	clientFnWithTimeout func(cfg *config.Config, sctx actor.SecurityContext, timeout time.Duration) (client.DmsClient, error)
 }
 
 func (c *DmsCLI) Env() env.EnvironmentProvider {
@@ -83,6 +85,14 @@ func (c *DmsCLI) NewClient(sctx actor.SecurityContext) (client.DmsClient, error)
 	return c.clientFn(cfg, sctx)
 }
 
+func (c *DmsCLI) NewClientWithTimeout(sctx actor.SecurityContext, timeout time.Duration) (client.DmsClient, error) {
+	cfg, err := c.Config()
+	if err != nil {
+		return nil, err
+	}
+	return c.clientFnWithTimeout(cfg, sctx, timeout)
+}
+
 func New(opts ...func(*DmsCLI)) *DmsCLI {
 	cli := &DmsCLI{}
 
@@ -116,6 +126,17 @@ func New(opts ...func(*DmsCLI)) *DmsCLI {
 				Host:      fmt.Sprintf("%s:%d", cfg.Rest.Addr, cfg.Rest.Port),
 				APIPrefix: "/api",
 				Version:   "v1",
+			}, sctx)
+		}
+	}
+
+	if cli.clientFnWithTimeout == nil {
+		cli.clientFnWithTimeout = func(cfg *config.Config, sctx actor.SecurityContext, timeout time.Duration) (client.DmsClient, error) {
+			return client.NewClient(client.Config{
+				Host:           fmt.Sprintf("%s:%d", cfg.Rest.Addr, cfg.Rest.Port),
+				APIPrefix:      "/api",
+				Version:        "v1",
+				RequestTimeout: timeout,
 			}, sctx)
 		}
 	}

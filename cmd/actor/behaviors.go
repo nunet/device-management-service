@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
@@ -65,11 +66,33 @@ func (b *behaviorConfig) Run(ctx context.Context, dmsCli *cli.DmsCLI, opts actor
 		return fmt.Errorf("could not create security context: %w", err)
 	}
 
-	// Now call newClient with the correct arguments
-	dmsClient, err := dmsCli.NewClient(sctx)
-	if err != nil {
-		return fmt.Errorf("could not create client: %w", err)
+	// Check if timeout was set via -t flag
+	var timeout time.Duration
+	for _, opt := range opts.MsgOpts {
+		// Apply the option to a temporary MessageOptions to check if it sets timeout
+		tempOpts := &client.MessageOptions{}
+		opt(tempOpts)
+		if tempOpts.Timeout > 0 {
+			timeout = tempOpts.Timeout
+			break
+		}
 	}
+
+	var dmsClient client.DmsClient
+	if timeout > 0 {
+		// Create client with timeout from -t flag
+		dmsClient, err = dmsCli.NewClientWithTimeout(sctx, timeout)
+		if err != nil {
+			return fmt.Errorf("could not create client with timeout: %w", err)
+		}
+	} else {
+		// Create client with default timeout
+		dmsClient, err = dmsCli.NewClient(sctx)
+		if err != nil {
+			return fmt.Errorf("could not create client: %w", err)
+		}
+	}
+
 	res, err := b.RunFn(ctx, dmsCli, dmsClient, opts)
 	if err != nil {
 		return fmt.Errorf("could not run behavior: %w", err)
@@ -1178,7 +1201,6 @@ Examples:
 			}
 
 			req.Ensemble = *cfg
-
 			return dmsClient.DeploymentUpdate(ctx, *req, opts.MsgOpts...)
 		},
 	},
