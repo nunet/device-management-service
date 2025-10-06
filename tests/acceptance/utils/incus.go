@@ -345,3 +345,19 @@ func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string)
 
 	return nodes, nil
 }
+
+// GetNode gets an instance already created on a given Incus server (unix or remote URL).
+func GetNode(clients []incus.InstanceServer, name string) (*Node, error) {
+	for _, client := range clients {
+		_, _, err := client.GetInstance(name)
+		if err == nil {
+			node := &Node{
+				Name:     name,
+				Client:   client,
+				Contexts: make(map[string]*Context),
+			}
+			return node, nil
+		}
+	}
+	return nil, fmt.Errorf("failed to find instance %s on any provided Incus server", name)
+}

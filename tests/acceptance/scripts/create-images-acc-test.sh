@@ -100,5 +100,5 @@ build_instance() {
 # ======================================================================
 # Run for VM and container
 # ======================================================================
-build_instance "${INSTANCE_VM_NAME}" "${IMAGE_VM_ALIAS}" true
 build_instance "${INSTANCE_CONTAINER_NAME}" "${IMAGE_CONTAINER_ALIAS}" false
+build_instance "${INSTANCE_VM_NAME}" "${IMAGE_VM_ALIAS}" true

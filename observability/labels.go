@@ -224,7 +224,6 @@ func (l *labelInjectionCore) gatherFields(
 		if len(activeSpans) > 0 {
 			spanID = activeSpans[len(activeSpans)-1].TraceContext().Span.String()
 		} else {
-			// fallback: não há spans ativos
 			spanID = "no-active-span"
 		}
 		end()

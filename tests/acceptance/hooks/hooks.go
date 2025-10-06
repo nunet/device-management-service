@@ -32,7 +32,7 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 
 	clients, err := utils.ConnectToClients(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to incus clients: %w", err)
+		return nil, fmt.Errorf("failed to connect to clients: %w", err)
 	}
 
 	start := time.Now()
@@ -77,7 +77,7 @@ func CleanupNodes() error {
 
 	clients, err := utils.ConnectToClients(config)
 	if err != nil {
-		return fmt.Errorf("failed to connect to incus clients: %w", err)
+		return fmt.Errorf("failed to connect to clients: %w", err)
 	}
 
 	// cleanup all leftovers if any
@@ -122,7 +122,7 @@ func SaveLogs(ctx context.Context) error {
 			continue
 		}
 
-		dest := filepath.Join(dutils.CurrentFileDirectory(), "..", "tests", "acceptance", "testdata")
+		dest := filepath.Join(dutils.CurrentFileDirectory(), "..", "tests", "acceptance", "testdata", "logs")
 		err = os.MkdirAll(dest, 0o755)
 		if err != nil {
 			return err
