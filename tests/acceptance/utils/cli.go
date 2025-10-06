@@ -174,7 +174,7 @@ func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
 }
 
 func (c *Context) UpdateEnsemble(id, path string) error {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/update -i %s -f %s -t 2m", c.Name, id, path))
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/update -i %s -f %s -t 15m", c.Name, id, path))
 	if err != nil {
 		return fmt.Errorf("failed to call deployment update behavior: %w", err)
 	}

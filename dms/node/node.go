@@ -393,7 +393,7 @@ func (n *Node) restoreDeployments() error {
 				types.NewDefaultAllocationIDGenerator(),
 			)
 		if err != nil {
-			log.Errorf("restore orchestrator %s: %v", d.OrchestratorID, err)
+			log.Errorf("restoring deployment %s failed: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
 			continue
 		}
@@ -720,11 +720,13 @@ func (n *Node) Start() error {
 		return err
 	}
 
-	if err := n.restoreDeployments(); err != nil {
-		log.Errorw("restoring deployments failed",
-			"labels", string(observability.LabelNode),
-			"error", err)
-	}
+	go func() {
+		if err := n.restoreDeployments(); err != nil {
+			log.Errorw("restoring deployments failed",
+				"labels", string(observability.LabelNode),
+				"error", err)
+		}
+	}()
 
 	n.running.Store(true)
 	go n.gcBidState()

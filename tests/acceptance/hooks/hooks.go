@@ -59,6 +59,10 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to make dms executable at node %d: %w", idx, err)
 		}
+		err = n.ConfigureVMNetworkingForQUIC()
+		if err != nil {
+			return nil, fmt.Errorf("failed to configure VM networking for QUIC: %w", err)
+		}
 	}
 
 	fmt.Printf("finished setting up nodes, time elapsed: %.1fs\n", time.Since(start).Seconds())

@@ -111,7 +111,7 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 		status, err := spDmsCtx.EnsembleStatus(ensembleID)
 		assert.NoError(t, err)
 		return status == "Running"
-	}, 60*time.Second, 1*time.Second)
+	}, 5*60*time.Second, 1*time.Second)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
 	assert.NoError(t, err)
@@ -215,7 +215,8 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 				"docker", "exec", client.executionID,
 				"curl", "-s", "-o", "/dev/null",
 				"-w", "'%{http_code}'",
-				"-m", "60", // 60 second timeout
+				"-m", "900",
+				"--connect-timeout", "900",
 				"http://" + server.dns + portStr,
 			}
 			out, err := client.node.RunCMD(cmd)

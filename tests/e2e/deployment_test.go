@@ -898,6 +898,8 @@ func DeploymentRestorationFromCommitting(suite *TestSuite) {
 			suite.Contains(result, `"Status": "CONNECTED"`)
 		}
 
+		time.Sleep(60 * time.Second)
+
 		// After restoration, the deployment should have progressed from Committing to Running
 		// This is expected behavior - the orchestrator automatically continues the deployment process
 		statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
@@ -1024,5 +1026,111 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 			status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
 			return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 5*60*time.Second, 2*time.Second)
+	})
+}
+
+// DeploymentRestorationFromPreparing tests restoration when crash occurs at Preparing
+func DeploymentRestorationFromPreparing(suite *TestSuite) {
+	suite.Run("DeploymentRestorationFromPreparing", func() {
+		suite.Require().Len(suite.nodes, 3)
+		deployer := suite.nodes[1]
+
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		suite.Contains(deployRes, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deployRes)
+
+		// Wait for deployment to reach Preparing status and crash immediately
+		suite.T().Log("Waiting for deployment to reach Preparing status...")
+		deadline := time.Now().Add(60 * time.Second)
+		seen := make([]string, 0, 16)
+		last := ""
+
+		for time.Now().Before(deadline) {
+			statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err == nil {
+				cur := extractStatus(statusStr)
+				if cur != last {
+					seen = append(seen, cur)
+					last = cur
+					suite.T().Log("Deployment status:", cur)
+				}
+				if cur == jobtypes.DeploymentStatusPreparing.String() {
+					suite.T().Log("Deployment reached Preparing status, crashing orchestrator immediately...")
+					suite.stopNode(1)
+					break
+				}
+			}
+			// High frequency check to catch Preparing status reliably
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// If we didn't find Preparing status, fail the test
+		if last != jobtypes.DeploymentStatusPreparing.String() {
+			suite.T().Fatalf("deployment %s did not reach Preparing status within 60s (seen: %v)", ensembleID, seen)
+		}
+
+		// Restart orchestrator node
+		go suite.startNode(1)
+
+		// Wait until restarted node is ready
+		suite.Require().Eventually(func() bool {
+			stats, err := suite.nodes[1].client.self(suite.T(), suite.nodes[1].dmsContext, suite.nodes[1].password)
+			if err != nil {
+				suite.T().Logf("Node not ready yet, error: %v", err)
+				return false
+			}
+			suite.T().Logf("Node ready, ID: %s", stats.ID)
+			return stats.ID != ""
+		}, 60*time.Second, 2*time.Second)
+
+		// Reconnect the restarted node to the existing network
+		// This is crucial for the node to be able to send bid requests
+		for i := 0; i < len(suite.nodes); i++ {
+			if i == 1 {
+				continue // Skip the restarted node itself
+			}
+			otherNode := suite.nodes[i]
+			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
+			suite.Require().NoError(err)
+
+			result := deployer.client.connect(suite.T(), deployer.userContext, deployer.password, otherHostID.ID)
+			suite.Contains(result, `"Status": "CONNECTED"`)
+		}
+
+		time.Sleep(30 * time.Second) // wait for the deployment to be restored
+
+		// After restoration, the deployment should have progressed from Preparing to Running
+		// This is expected behavior - the orchestrator automatically continues the deployment process
+		suite.T().Log("=== PHASE 4: Checking deployment status after restoration ===")
+		statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
+		currentStatus := extractStatus(statusStr)
+		suite.T().Logf("=== DEPLOYMENT STATUS AFTER RESTORATION: %s ===", currentStatus)
+		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), currentStatus, "expected Running after restoration from Preparing")
+
+		// Then it should stay Running or progress to Completed
+		suite.T().Log("=== PHASE 5: Waiting for deployment to stay Running or progress to Completed ===")
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("=== ERROR GETTING DEPLOYMENT STATUS: %v ===", err)
+				return false
+			}
+			cur := extractStatus(status)
+			suite.T().Logf("=== CURRENT DEPLOYMENT STATUS: %s ===", cur)
+			return cur == jobtypes.DeploymentStatusRunning.String() || cur == jobtypes.DeploymentStatusCompleted.String()
+		}, 5*60*time.Second, 5*time.Second, "deployment did not stay Running or progress to Completed after restoration")
+
+		// Cleanup (only if not already completed)
+		finalStatus, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		if err == nil && extractStatus(finalStatus) != jobtypes.DeploymentStatusCompleted.String() {
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Contains(shutdownRes, `"Error": ""`)
+			suite.Require().Eventually(func() bool {
+				status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+				return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+			}, 5*60*time.Second, 2*time.Second)
+		}
 	})
 }

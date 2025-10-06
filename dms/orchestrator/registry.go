@@ -174,6 +174,26 @@ func (f *basicRegistry) restoreDeployment(
 
 	log.Infow("restored deployment", "id", id, "status", status)
 
+	if o.status == jtypes.DeploymentStatusPreparing {
+		log.Debugw("restoring deployment from manifest",
+			"labels", []string{string(observability.LabelDeployment)},
+			"orchestratorID", id,
+		)
+		// save deployment on status change, use the orchestrator's context
+		f.saveDeploymentOnStatusChange(o.ctx, o)
+
+		err := o.deploy(cfg, manifest, restoreInfo.Expiry)
+		if err != nil {
+			o.setStatus(jtypes.DeploymentStatusFailed)
+			return o, fmt.Errorf("failed to deploy deployment: %w", err)
+		}
+
+		go o.monitorOnlyTaskManifest()
+		go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
+
+		return o, nil
+	}
+
 	if o.status == jtypes.DeploymentStatusCommitting {
 		log.Debugw("reverting deployment of old candidates and restarting deployment from the beginning",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -188,10 +208,16 @@ func (f *basicRegistry) restoreDeployment(
 		// save deployment on status change, use the orchestrator's context
 		f.saveDeploymentOnStatusChange(o.ctx, o)
 
+		err := o.deploy(cfg, manifest, restoreInfo.Expiry)
+		if err != nil {
+			o.setStatus(jtypes.DeploymentStatusFailed)
+			return o, fmt.Errorf("failed to deploy deployment: %w", err)
+		}
+
 		go o.monitorOnlyTaskManifest()
 		go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 
-		return o, o.deploy(cfg, manifest, restoreInfo.Expiry)
+		return o, nil
 	}
 
 	if o.status == jtypes.DeploymentStatusProvisioning {
@@ -243,10 +269,16 @@ func (f *basicRegistry) restoreDeployment(
 			// save deployment on status change, use the orchestrator's context
 			f.saveDeploymentOnStatusChange(o.ctx, o)
 
+			err := o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
+			if err != nil {
+				o.setStatus(jtypes.DeploymentStatusFailed)
+				return o, fmt.Errorf("failed to deploy deployment: %w", err)
+			}
+
 			go o.monitorOnlyTaskManifest()
 			go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 
-			return o, o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
+			return o, nil
 		}
 
 		log.Infow("provisioning restoration completed successfully",
@@ -254,18 +286,32 @@ func (f *basicRegistry) restoreDeployment(
 			"orchestratorID", id,
 		)
 
-		o.updateManifest(manifestAfterProvision)
+		// save deployment on status change, use the orchestrator's context
+		f.saveDeploymentOnStatusChange(o.ctx, o)
 
+		o.updateManifest(manifestAfterProvision)
 		o.setStatus(jtypes.DeploymentStatusRunning)
+
+		go o.monitorOnlyTaskManifest()
+		go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
+
+		return o, nil
 	}
 
 	if o.status == jtypes.DeploymentStatusRunning {
+		// save deployment on status change, use the orchestrator's context
+		f.saveDeploymentOnStatusChange(o.ctx, o)
+
 		if o.manifest.Subnet.Join {
 			if _, ok := o.subnetManifest.IndexRoutingTable[orchSubnetName]; ok {
 				handleError := func(err error) (Orchestrator, error) {
 					log.Errorf("failed to join subnet: %s", err)
 					o.revert(cfg, manifest)
-					return o, o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry)
+					if err := o.deploy(cfg, o.newManifest(cfg), restoreInfo.Expiry); err != nil {
+						o.setStatus(jtypes.DeploymentStatusFailed)
+						return o, fmt.Errorf("failed to deploy deployment: %w", err)
+					}
+					return o, nil
 				}
 
 				provisioner := NewProvisioner(ctx, cancel, o.actor, o.subnetManifest, o.allocationIDGenerator)
@@ -285,13 +331,10 @@ func (f *basicRegistry) restoreDeployment(
 				}
 			}
 		}
+
+		go o.monitorOnlyTaskManifest()
+		go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 	}
-
-	// save deployment on status change, use the orchestrator's context
-	f.saveDeploymentOnStatusChange(o.ctx, o)
-
-	go o.monitorOnlyTaskManifest()
-	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 
 	return o, nil
 }

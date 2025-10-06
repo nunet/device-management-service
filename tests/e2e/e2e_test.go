@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 9
+		testSuites         = 10
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -144,4 +144,15 @@ func TestE2E(t *testing.T) {
 	// 	}
 	// 	suite.Run(t, provisioning)
 	// })
+
+	t.Run("DeploymentRestorationFromPreparing", func(t *testing.T) {
+		preparing := &TestSuite{
+			numNodes:      3,
+			Name:          "deployment_restoration_from_preparing",
+			restPortIndex: ports[16],
+			p2pPortIndex:  ports[17],
+			runner:        DeploymentRestorationFromPreparing,
+		}
+		suite.Run(t, preparing)
+	})
 }

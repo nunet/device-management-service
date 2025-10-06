@@ -135,8 +135,8 @@ func (s *Supervisor) startSupervision() {
 						log.Errorf("failed to perform healthcheck for allocation %s: %s", allocation.ID, err)
 					}
 				}(allocation)
-				wg.Wait()
 			}
+			wg.Wait()
 		}
 	}
 }

@@ -240,6 +240,7 @@ require (
 
 require (
 	github.com/aws/smithy-go v1.22.1 // indirect
+	github.com/creack/pty v1.1.18 // indirect
 	github.com/cucumber/gherkin/go/v26 v26.2.0 // indirect
 	github.com/cucumber/messages/go/v21 v21.0.1 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect

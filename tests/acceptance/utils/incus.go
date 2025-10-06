@@ -172,6 +172,111 @@ func CreateInstance(c incus.InstanceServer, instanceType, name string) error {
 	return startOp.Wait()
 }
 
+func findVMNetworkMainInterface(c incus.InstanceServer, name string) (string, error) {
+	// Find main network interface (exclude 'lo')
+	ifaceCmd := []string{"sh", "-c", "ip route | grep default | awk '{print $5}'"}
+	ifaceOut, err := RunCommandInInstance(c, name, ifaceCmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to detect network interface: %v", err)
+	}
+	iface := strings.TrimSpace(ifaceOut)
+	return iface, nil
+}
+
+// ConfigureVMNetworkingForQUIC applies network optimizations for QUIC connections in VMs
+// This addresses the root causes of QUIC connection failures in VM environments:
+// - Increases UDP timeouts for QUIC's connectionless nature
+// - Optimizes network buffers for QUIC's multiplexed streams
+// - Disables network interface optimizations that interfere with QUIC
+// - Configures firewall rules for QUIC traffic
+func ConfigureVMNetworkingForQUIC(c incus.InstanceServer, name string) error {
+	iface, err := findVMNetworkMainInterface(c, name)
+	if err != nil {
+		return err
+	}
+
+	// Network optimizations for QUIC in VM environments
+	networkConfig := []string{
+		// Enable IP forwarding for better packet routing
+		"echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf",
+		"echo 'net.ipv4.conf.all.accept_redirects = 0' >> /etc/sysctl.conf",
+
+		// Optimize network buffer sizes for QUIC
+		"echo 'net.core.rmem_max = 134217728' >> /etc/sysctl.conf",
+		"echo 'net.core.wmem_max = 134217728' >> /etc/sysctl.conf",
+		"echo 'net.core.rmem_default = 262144' >> /etc/sysctl.conf",
+		"echo 'net.core.wmem_default = 262144' >> /etc/sysctl.conf",
+
+		// Optimize for QUIC's UDP-based transport
+		"echo 'net.ipv4.udp_mem = 102400 873800 16777216' >> /etc/sysctl.conf",
+		"echo 'net.ipv4.udp_rmem_min = 8192' >> /etc/sysctl.conf",
+		"echo 'net.ipv4.udp_wmem_min = 8192' >> /etc/sysctl.conf",
+
+		// Apply sysctl settings immediately
+		"sysctl -p",
+
+		// Configure iptables rules for QUIC traffic (port 9000 and common QUIC ports)
+		"iptables -A INPUT -p udp --dport 9000 -j ACCEPT",
+		"iptables -A INPUT -p udp --dport 4800 -j ACCEPT", // Common QUIC port from logs
+		"iptables -A INPUT -p udp --dport 3091 -j ACCEPT", // Another QUIC port from logs
+		"iptables -A FORWARD -p udp --dport 9000 -j ACCEPT",
+		"iptables -A FORWARD -p udp --dport 4800 -j ACCEPT",
+		"iptables -A FORWARD -p udp --dport 3091 -j ACCEPT",
+
+		// Disable network interface optimizations that can interfere with QUIC
+		fmt.Sprintf("ethtool -K %s gro off || true", iface), // Disable generic receive offload
+		fmt.Sprintf("ethtool -K %s tso off || true", iface), // Disable TCP segmentation offload
+		fmt.Sprintf("ethtool -K %s gso off || true", iface), // Disable generic segmentation offload
+		fmt.Sprintf("ethtool -K %s ufo off || true", iface), // Disable UDP fragmentation offload
+
+		// Set network interface to use optimal settings for QUIC
+		fmt.Sprintf("ethtool -G %s rx 1024 tx 1024 || true", iface), // Increase ring buffer sizes
+	}
+
+	for _, cmd := range networkConfig {
+		// Add a small delay between commands to avoid overwhelming the VM agent
+		time.Sleep(100 * time.Millisecond)
+
+		_, err := RunCommandInInstance(c, name, []string{"sh", "-c", cmd})
+		if err != nil {
+			// Log warning but don't fail - some commands might not work in all VM environments
+			fmt.Printf("Warning: failed to apply network config '%s' to VM %s: %v\n", cmd, name, err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+// VerifyVMNetworkingForQUIC verifies that the QUIC networking optimizations were applied correctly
+func VerifyVMNetworkingForQUIC(c incus.InstanceServer, name string) error {
+	iface, err := findVMNetworkMainInterface(c, name)
+	if err != nil {
+		return err
+	}
+
+	verificationCommands := []string{
+		"sysctl net.ipv4.ip_forward",
+		"sysctl net.netfilter.nf_conntrack_udp_timeout",
+		"sysctl net.core.rmem_max",
+		"iptables -L INPUT | grep 9000",
+		fmt.Sprintf("ethtool -k %s | grep -E '(gro|tso|gso|ufo)'", iface),
+	}
+
+	for _, cmd := range verificationCommands {
+		// Add a small delay between verification commands
+		time.Sleep(50 * time.Millisecond)
+
+		_, err := RunCommandInInstance(c, name, []string{"sh", "-c", cmd})
+		if err != nil {
+			fmt.Printf("Warning: failed to verify config '%s' in VM %s: %v\n", cmd, name, err)
+			return err
+		}
+	}
+
+	return nil
+}
+
 func RunCommandInInstance(c incus.InstanceServer, name string, command []string) (string, error) {
 	execReq := api.InstanceExecPost{
 		Command:     command,

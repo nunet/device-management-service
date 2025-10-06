@@ -1361,31 +1361,27 @@ func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAdd
 		}
 	}()
 
-	ai, err := l.DHT.FindPeer(context.Background(), target)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find peer: %w", err)
-	}
-
-	// 1st step: check if we have a public QUIC address for the target
-	// If we do, we can directly dial it.
+	// 1st step: check if we have cached QUIC addresses in peerstore
+	// This should be checked BEFORE trying DHT lookup
 	var udpAddr *net.UDPAddr
 	rawQuicAddrs := getRawQUICAddrs(l.Host.Peerstore().Addrs(target))
 	for _, a := range rawQuicAddrs {
 		fmt.Println("found address", a, "for target", target)
 		if onlyPublicAddress {
 			if manet.IsPublicAddr(a) && isQUICAddr(a) {
-				udpAddr, err = quicAddrToNetAddr(a)
+				addr, err := quicAddrToNetAddr(a)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
 				}
+				udpAddr = addr
 			}
 		} else {
 			if isQUICAddr(a) {
-				udpAddr, err = quicAddrToNetAddr(a)
+				addr, err := quicAddrToNetAddr(a)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
 				}
-
+				udpAddr = addr
 				break
 			}
 		}
@@ -1397,10 +1393,39 @@ func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAdd
 		return conn, &addr, err
 	}
 
-	// 2nd step: connect to the target via a relay address.
-	// If we don't have a public QUIC address for the target,
-	// we need to connect to it via a relay address.
+	// 2nd step: try DHT lookup if no cached addresses found
+	var ai peer.AddrInfo
+	var err error
+	if ai, err = l.DHT.FindPeer(context.Background(), target); err != nil {
+		log.Debugf("DHT FindPeer failed for %s: %v", target, err)
+		// Check if peer is already connected - use existing connection info
+		if l.PeerConnected(target) {
+			log.Debugf("Peer %s is already connected, using existing connection", target)
+			addrs := l.Host.Peerstore().Addrs(target)
+			if len(addrs) > 0 {
+				ai = peer.AddrInfo{ID: target, Addrs: addrs}
+				log.Debugf("Using existing connection addresses for %s", target)
+			} else {
+				return nil, nil, fmt.Errorf("peer is connected but no addresses in peerstore: %w", err)
+			}
+		} else {
+			// Try to use any cached addresses from peerstore even if DHT failed
+			cachedAddrs := l.Host.Peerstore().Addrs(target)
+			if len(cachedAddrs) > 0 {
+				log.Debugf("DHT failed but found cached addresses for %s, attempting connection", target)
+				ai = peer.AddrInfo{ID: target, Addrs: cachedAddrs}
+			} else {
+				return nil, nil, fmt.Errorf("failed to find peer: %w", err)
+			}
+		}
+	} else {
+		log.Debugf("DHT FindPeer succeeded for %s", target)
+	}
+
 	if err := l.Host.Connect(context.Background(), ai); err != nil {
+		if ai.ID == "" {
+			return nil, nil, fmt.Errorf("failed to find peer via DHT and no cached addresses available: %w", err)
+		}
 		return nil, nil, fmt.Errorf("failed to connect to peer: %w", err)
 	}
 
@@ -1472,7 +1497,7 @@ func dialSubnetQUICLayer(l *Libp2p, tr *quic.Transport, addr *net.UDPAddr, servN
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate self signed certificate: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	log.Debugf("dialing QUIC address: %s", addr)
 	conn, err := tr.Dial(
@@ -1488,7 +1513,11 @@ func dialSubnetQUICLayer(l *Libp2p, tr *quic.Transport, addr *net.UDPAddr, servN
 			ServerName:               fmt.Sprintf("%s.nunet.internal", servName),
 		},
 		&quic.Config{
-			EnableDatagrams: true,
+			EnableDatagrams:      true,
+			MaxIdleTimeout:       2 * 60 * time.Second, // Increase idle timeout
+			HandshakeIdleTimeout: 2 * 60 * time.Second, // Explicit handshake timeout
+			KeepAlivePeriod:      2 * 60 * time.Second, // Send keep-alive packets
+			MaxIncomingStreams:   1000,
 		},
 	)
 	if err != nil {

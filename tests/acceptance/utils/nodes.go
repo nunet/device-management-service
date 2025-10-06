@@ -53,6 +53,22 @@ func (n *Node) WaitForInstanceReady() error {
 	return WaitForInstanceReady(n.Client, n.Name, 60*time.Second)
 }
 
+// ConfigureVMNetworkingForQUIC configures and verifies network optimizations for QUIC connections in VMs
+func (n *Node) ConfigureVMNetworkingForQUIC() error {
+	if err := ConfigureVMNetworkingForQUIC(n.Client, n.Name); err != nil {
+		// Log warning but don't fail VM creation - networking config is optional
+		fmt.Printf("Warning: failed to configure VM networking for QUIC in %s: %v\n", n.Name, err)
+	} else {
+		fmt.Printf("Successfully configured VM networking for QUIC: %s\n", n.Name)
+
+		// Verify the configuration was applied correctly
+		if err := VerifyVMNetworkingForQUIC(n.Client, n.Name); err != nil {
+			fmt.Printf("Warning: failed to verify VM networking configuration in %s: %v\n", n.Name, err)
+		}
+	}
+	return nil
+}
+
 // UploadFile uploads a local file to the instance.
 func (n *Node) UploadFile(localPath, remotePath string, mode int) error {
 	return UploadFileToInstance(n.Client, n.Name, localPath, remotePath, mode)

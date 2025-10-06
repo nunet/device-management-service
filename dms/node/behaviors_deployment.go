@@ -584,7 +584,9 @@ type DeploymentPruneResponse struct {
 func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 	defer msg.Discard()
 
-	fmt.Println("pruning deployments...")
+	log.Infow("deployment_prune_started",
+		"labels", []string{string(observability.LabelDeployment)},
+		"msg", msg)
 
 	handleErr := func(err error) {
 		log.Errorw("deployment_prune_error",
