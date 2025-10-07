@@ -148,6 +148,11 @@ func (k *Dispatch) RemoveBehavior(behavior string) {
 func (k *Dispatch) Receive(msg Envelope) error {
 	select {
 	case k.q <- msg:
+		// check if closed to avoid cancellation/select race
+		if k.ctx.Err() != nil {
+			log.Debugf("context closed, dropping message from %s", msg.From)
+			return k.ctx.Err()
+		}
 		return nil
 	case <-k.ctx.Done():
 		return k.ctx.Err()
