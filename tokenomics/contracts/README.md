@@ -129,11 +129,11 @@ The complex contract management follows this multi-party process:
 #### Architecture Diagrams
 
 <p align="center">
-  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/complex_contract_deployment.png?ref_type=heads&inline=true" width="100%" alt="Complex Contract Deployment Diagram">
+  <img src="./specs/complex_contract_deployment.png" width="100%" alt="Complex Contract Deployment Diagram">
 </p>
 
 <p align="center">
-  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/complex_contract_sequence.png?ref_type=heads&inline=true" width="100%" alt="Complex Contract Sequence Diagram">
+  <img src="./specs/complex_contract_sequence.png" width="100%" alt="Complex Contract Sequence Diagram">
 </p>
 
 ---
@@ -160,7 +160,7 @@ NuNet Platform
 Based on the detailed design from [GitLab Issue #371](https://gitlab.com/nunet/architecture/-/issues/371#note_2219820898):
 
 <p align="center">
-  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/contract_architecture_diagram.png?ref_type=heads&inline=true" width="100%" alt="Conceptual Contract Architecture Diagram">
+  <img src="./specs/contract_architecture_diagram.png" width="100%" alt="Conceptual Contract Architecture Diagram">
 </p>
 
 
@@ -171,7 +171,7 @@ Based on the detailed design from [GitLab Issue #371](https://gitlab.com/nunet/a
 ### 1. **Electronic Rights Transfer Protocol (ERTP) Integration**
 - **E-rights**: Digital representations of property rights to assets
 - **Contract Objects**: Special nuActors that execute contract logic
-- **Issuers**: Authorities that validate digital asset rights (we are not daling with them explicitly in our contract logic)
+- **Issuers**: Authorities that validate digital asset rights (we are not dealing with them explicitly in our contract logic)
 - **Contract Hosts**: Trusted execution environments
 
 ### 2. **Object Capability Security Model**
@@ -183,11 +183,11 @@ Based on the detailed design from [GitLab Issue #371](https://gitlab.com/nunet/a
 - All contracts modeled as deterministic state machines
 - Well-defined side effects for input/output operations
 - Support for both automated logic and dispute resolution mechanisms
-- (currently only partially implemented as not needed for externally defined contracts to work -- which is the first iteration of contract package implemenation)
+- (currently only partially implemented as not needed for externally defined contracts to work -- which is the first iteration of contract package implementation)
 
 ### 4. **Blockchain-Agnostic Design**
 - Current implementation uses trusted third parties (NuNet Solutions)
-- Architecture supports adding blockchain based papyment layers or even migration to blockchain-based execution;
+- Architecture supports adding blockchain based payment layers or even migration to blockchain-based execution;
 - Object capability security maintained across execution environments
 
 ---
@@ -210,7 +210,7 @@ An authority that validates digital assets of its kind. Can be:
 - Asset owner (simple cases)
 - Third-party validation service  
 - Blockchain-based validator
-Our main usecase does not require explicit definition of issuers (owners of machines have right to delegate access to their compute resources without explicit proof, just by having physical access to a machine). Therefore issues are not defined in current implementation of contract package.
+Our main usecase does not require explicit definition of issuers (owners of machines have right to delegate access to their compute resources without explicit proof, just by having physical access to a machine). Therefore issuers are not defined in current implementation of contract package.
 
 #### **Contract Host** 
 Trusted third party executing contract logic and maintaining records:
@@ -256,7 +256,6 @@ Proof of property rights to assets bound by contract terms. Enable secure asset 
 - **Issuing**: Contract host issues capabilities via nuActor dispatch
 - **Verification**: Capability checking for contract execution
 - **Delegation**: Contract-based capability grants to parties
-Follows secure programming 
 
 ---
 

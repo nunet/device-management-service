@@ -1,14 +1,14 @@
 .TH NUNET 1 "September 2024" "NuNet CLI" "User Commands"
 
 .SH NAME
-nunet \- command-line interface for the NuNet ecosystem
+nunet \- command-line interface for the device management service (DMS)
 
 .SH SYNOPSIS
 .B nunet
 [\fIOPTIONS\fR] \fICOMMAND\fR
 
 .SH DESCRIPTION
-The NuNet Command-Line Interface (CLI) is a powerful tool for interacting with the NuNet ecosystem. It enables users to manage network configurations, control capabilities, handle cryptographic keys and interact with actors.
+The NuNet Command-Line Interface (CLI) is a powerful tool for interacting with the NuNet Device Management Service (DMS). It enables users to manage network configurations, control capabilities, handle cryptographic keys and interact with actors.
 
 .SH COMMANDS
 .TP
@@ -254,6 +254,443 @@ Expiration time.
 Timeout duration.
 .RE
 
+The \fBactor cmd\fR command is used to send messages to an actor through the command line. There are behaviors specifically designated for use with the command line.
+The following are the implemented behaviors and their associated capabilities:
+.TP
+.B /public/hello
+Invoke a "hello" message for a polite introduction.
+.RS
+Examples:
+.B nunet actor cmd --context user /public/hello
+.B nunet actor cmd --context user /public/hello --dest <did/peer_id/actor_handle>
+.RE
+
+.TP
+.B /broadcast/hello
+Broadcast a "hello" message to a topic for polite introduction.
+.RS
+Examples:
+.B nunet actor cmd --context user /broadcast/hello
+.RE
+
+.TP
+.B /public/status
+Retrieve actor status and resources information.
+.RS
+Examples:
+.B nunet actor cmd --context user /public/status
+.B nunet actor cmd --context user /public/status --dest <did/peer_id/actor_handle>
+.RE
+
+.TP
+.B /dms/node/status
+Invoke a "status discovery" message for fleet discovery.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/status
+.B nunet actor cmd --context user /dms/node/status --dest <did/peer_id/actor_handle>
+.RE
+
+.TP
+.B /broadcast/dms/status
+Broadcast a "status discovery" message to topic /nunet/status for fleet discovery.
+.RS
+Examples:
+.B nunet actor cmd --context user /broadcast/dms/status
+.RE
+
+.TP
+.B /dms/node/peers/list
+List connected peers.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/peers/list
+.B nunet actor cmd --context user /dms/node/peers/list [--dest <did/peer_id/actor_handle>]
+.RE
+
+.TP
+.B /dms/node/peers/self
+Get peer's ID and addresses.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/peers/self
+.B nunet actor cmd --context user /dms/node/peers/self [--dest <did/peer_id/actor_handle>]
+.RE
+
+.TP
+.B /dms/node/peers/ping
+Ping a peer.
+.RS
+\fB--host\fR \fISTRING\fR (required): host address to ping
+Examples:
+.B nunet actor cmd --context user /dms/node/peers/ping --host <peer_id>
+.RE
+
+.TP
+.B /dms/node/peers/dht
+List peers connected to DHT.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/peers/dht
+.RE
+
+.TP
+.B /dms/node/peers/connect
+Connect to a peer.
+.RS
+\fB--address\fR \fISTRING\fR (required): peer address to connect to
+Examples:
+.B nunet actor cmd --context user /dms/node/peers/connect --address /p2p/<peer_id>
+.RE
+
+.TP
+.B /dms/node/peers/score
+Retrieve gossipsub broadcast score.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/peers/score
+.RE
+
+.TP
+.B /dms/node/onboarding/onboard
+Onboard a node to the network.
+.RS
+\fB--ram\fR, \fB--cpu\fR, \fB--disk\fR (required): set resources to reserve
+Examples:
+.B nunet actor cmd --context user /dms/node/onboarding/onboard --disk 1 --ram 1 --cpu 2
+.RE
+
+.TP
+.B /dms/node/onboarding/offboard
+Offboard a node from the network.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/onboarding/offboard
+.RE
+
+.TP
+.B /dms/node/onboarding/status
+Retrieve onboarding status of a node.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/onboarding/status
+.RE
+
+.TP
+.B /dms/node/deployment/list
+List deployments.
+.RS
+\fB--filter\fR: metadata filter (optional)
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/list --filter "<metadata_key>=<metadata_value>"
+.RE
+
+.TP
+.B /dms/node/deployment/prune
+Prune old deployments.
+.RS
+\fB--before\fR: remove deployments created before this time
+\fB--all\fR: remove all deployments whose status is greater than Running
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/prune --before 2025-01-01T00:00:00Z
+.B nunet actor cmd --context user /dms/node/deployment/prune --all
+.RE
+
+.TP
+.B /dms/node/deployment/status
+Get deployment status.
+.RS
+\fB--id\fR \fISTRING\fR (required): deployment ID
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>
+.RE
+
+.TP
+.B /dms/node/deployment/logs
+Get deployment logs.
+.RS
+\fB--id\fR \fISTRING\fR (required): ensemble ID
+\fB--allocation\fR \fISTRING\fR (required): allocation name
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/logs --id <deployment_id> --allocation <allocation_name>
+.RE
+
+.TP
+.B /dms/node/deployment/manifest
+Get deployment manifest.
+.RS
+\fB--id\fR \fISTRING\fR (required): deployment ID
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/manifest --id <deployment_id>
+.RE
+
+.TP
+.B /dms/node/deployment/shutdown
+Shutdown a deployment.
+.RS
+\fB--id\fR \fISTRING\fR (required): deployment ID
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/shutdown --id <deployment_id>
+.RE
+
+.TP
+.B /dms/node/deployment/new
+Create a new deployment.
+.RS
+\fB--spec-file\fR: path to ensemble specification file
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/new --spec-file <ensemble.yaml>
+.RE
+
+.TP
+.B /dms/node/deployment/update
+Update an existing deployment.
+.RS
+\fB--spec-file\fR: path to ensemble specification file
+\fB--id\fR \fISTRING\fR (required): ensemble ID
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/update --spec-file <ensemble.yaml> --id <ensemble_id>
+.RE
+
+.TP
+.B /dms/node/resources/allocated
+Get allocated resources.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/resources/allocated
+.RE
+
+.TP
+.B /dms/node/resources/free
+Get free resources.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/resources/free
+.RE
+
+.TP
+.B /dms/node/resources/onboarded
+Get onboarded resources.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/resources/onboarded
+.RE
+
+.TP
+.B /dms/node/allocations/list
+List allocations.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/allocations/list
+.RE
+
+.TP
+.B /dms/node/logger/config
+Adjust logger settings.
+.RS
+\fB--level\fR, \fB--url\fR, \fB--interval\fR, \fB--api-key\fR, \fB--apm-url\fR, \fB--enable-elastic\fR
+Examples:
+.TP
+.B nunet actor cmd --context user /dms/node/logger/config --level debug
+.TP
+.B nunet actor cmd --context user /dms/node/logger/config --url <elasticsearch-url>
+.TP
+.B nunet actor cmd --context user /dms/node/logger/config --interval 10
+.TP
+.B nunet actor cmd --context user /dms/node/logger/config --api-key <api-key>
+.TP
+.B nunet actor cmd --context user /dms/node/logger/config --apm-url <apm-url>
+.TP
+.B nunet actor cmd --context user /dms/node/logger/config --enable-elastic
+.TP
+.RE
+
+.TP
+.B /dms/node/hardware/spec
+Get hardware specifications.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/hardware/spec
+.RE
+
+.TP
+.B /dms/node/hardware/usage
+Get hardware usage.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/node/hardware/usage
+.RE
+
+.TP
+.B /dms/cap/list
+List capabilities.
+.RS
+\fB--context\fR: context name
+Examples:
+.B nunet actor cmd --context user /dms/cap/list
+.RE
+
+.TP
+.B /dms/cap/anchor
+Add capability anchors.
+.RS
+\fB--root\fR, \fB--require\fR, \fB--provide\fR, \fB--revoke\fR (one required)
+Examples:
+.B nunet actor cmd --context user /dms/cap/anchor --root did
+.B nunet actor cmd --context user /dms/cap/anchor --require token
+.B nunet actor cmd --context user /dms/cap/anchor --provide token
+.B nunet actor cmd --context user /dms/cap/anchor --revoke token
+.RE
+
+.TP
+.B /dms/node/deployment/delete
+Delete a specific deployment.
+.RS
+\fB--id\fR \fISTRING\fR (required): deployment ID
+Examples:
+.B nunet actor cmd --context user /dms/node/deployment/delete --id <deployment-id>
+.RE
+
+.TP
+.B /dms/volume/create
+Create a new volume.
+.RS
+\fB--name\fR, \fB--client-pem-file\fR, \fB--ca-output-dir\fR (all required)
+Examples:
+.B nunet actor cmd --context user /dms/volume/create --name <volname> --client-pem-file <filename>
+.RE
+
+.TP
+.B /dms/volume/delete
+Delete a volume.
+.RS
+\fB--name\fR \fISTRING\fR (required): volume name
+Examples:
+.B nunet actor cmd --context user /dms/volume/delete --name <volname>
+.RE
+
+.TP
+.B /dms/volume/start
+Start a volume.
+.RS
+\fB--name\fR \fISTRING\fR (required): volume name
+Examples:
+.B nunet actor cmd --context user /dms/volume/start --name <volname>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/create
+Create a new contract.
+.RS
+\fB--contract-file\fR \fISTRING\fR (required): contract file path
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/create --contract-file <file> --dest <did_of_solution_enabler>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/aprove_local
+Send a contract approval request.
+.RS
+\fB--contract-did\fR \fISTRING\fR (required)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/aprove_local --contract-did <did>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/list_incoming
+List incoming contracts.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/list_incoming
+.RE
+
+.TP
+.B /dms/tokenomics/contract/transactions/list
+List contract transactions.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/transactions/list
+.RE
+
+.TP
+.B /dms/tokenomics/contract/transactions/confirm
+Confirm a contract transaction.
+.RS
+\fB--unique-id\fR \fISTRING\fR (required)
+\fB--tx-hash\fR \fISTRING\fR (required)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/usages/calculate
+Send a usage calculation request.
+.RS
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate
+.RE
+
+.TP
+.B /dms/tokenomics/contract/payment/status
+Send a payment status request.
+.RS
+\fB--unique-id\fR \fISTRING\fR (required)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/payment/status --unique-id <uniqueid>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/state
+Send a contract state request.
+.RS
+\fB--contract-did\fR \fISTRING\fR (required)
+\fB--contract-host-did\fR \fISTRING\fR (optional)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/state --contract-did <did> --contract-host-did <hostdid>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/validate
+Send a contract validate request.
+.RS
+\fB--contract-did\fR \fISTRING\fR (required)
+\fB--contract-host-did\fR \fISTRING\fR (optional)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/validate --contract-did <did> --contract-host-did <hostdid>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/complete
+Send a contract complete request.
+.RS
+\fB--contract-did\fR \fISTRING\fR (required)
+\fB--contract-host-did\fR \fISTRING\fR (optional)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/complete --contract-did <did> --contract-host-did <hostdid>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/terminate
+Send a contract termination request.
+.RS
+\fB--contract-did\fR \fISTRING\fR (required)
+\fB--contract-host-did\fR \fISTRING\fR (optional)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/terminate --contract-did <did> --contract-host-did <hostdid>
+.RE
+
+.TP
+.B /dms/tokenomics/contract/settle
+Send a contract settle request.
+.RS
+\fB--contract-did\fR \fISTRING\fR (required)
+\fB--contract-host-did\fR \fISTRING\fR (optional)
+Examples:
+.B nunet actor cmd --context user /dms/tokenomics/contract/settle --contract-did <did> --contract-host-did <hostdid>
+.RE
+
+
+
 .SH GPU MANAGEMENT
 Manage GPU resources.
 
@@ -336,158 +773,6 @@ Start the Device Management Service (DMS). The DMS is a system application for r
 Capability context name (default: "dms").
 .RE
 
-.SH BEHAVIORS AND CAPABILITIES
-The following are the implemented behaviors and their associated capabilities:
-
-.TP
-.B /dms/node/peers/ping
-\fRPeerPingBehavior: Ping a peer to check if it is alive.
-.TP
-.B /dms/node/peers/list
-\fRPeersListBehavior: List peers visible to the node.
-.TP
-.B /dms/node/peers/self
-\fRPeerSelfBehavior: Get the peer id and listening address of the node.
-.TP
-.B /dms/node/peers/dht
-\fRPeerDHTBehavior: Get the peers in DHT of the node along with their DHT parameters.
-.TP
-.B /dms/node/peers/connect
-\fRPeerConnectBehavior: Connect to a peer.
-.TP
-.B /dms/node/peers/score
-\fRPeerScoreBehavior: Get the libp2p pubsub peer score of peers.
-
-.TP
-.B /dms/node/onboarding/onboard
-\fROnboardBehavior: Onboard the node as a compute provider.
-.TP
-.B /dms/node/onboarding/offboard
-\fROffboardBehavior: Offboard the node as a compute provider.
-.TP
-.B /dms/node/onboarding/status
-\fROnboardStatusBehavior: Get the onboarding status.
-
-.TP
-.B /dms/node/deployment/new
-\fRNewDeploymentBehavior: Start a new deployment on the node.
-.TP
-.B /dms/node/deployment/list
-\fRDeploymentListBehavior: List all the deployments orchestrated by the node.
-.TP
-.B /dms/node/deployment/logs
-\fRDeploymentLogsBehavior: Get the logs of a particular deployment.
-.TP
-.B /dms/node/deployment/status
-\fRDeploymentStatusBehavior: Get the status of a deployment.
-.TP
-.B /dms/node/deployment/manifest
-\fRDeploymentManifestBehavior: Get the manifest of a deployment.
-.TP
-.B /dms/node/deployment/shutdown
-\fRDeploymentShutdownBehavior: Shutdown a deployment.
-
-.TP
-.B /dms/node/resources/allocated
-\fRResourcesAllocatedBehavior: Get the amount of resources allocated to Allocations running on the node.
-.TP
-.B /dms/node/resources/free
-\fRResourcesFreeBehavior: Get the amount of resources that are free to be allocated on the node.
-.TP
-.B /dms/node/resources/onboarded
-\fRResourcesOnboardedBehavior: Get the amount of resources the node is onboarded with.
-.TP
-.B /dms/node/hardware/spec
-\fRHardwareSpecBehavior: Get the hardware resource specification of the machine.
-.TP
-.B /dms/node/hardware/usage
-\fRHardwareUsageBehavior: Get the full resource usage on the machine.
-
-.TP
-.B /dms/node/logger/config
-\fRLoggerConfigBehavior: Configure the logger/observability config of the node.
-
-.TP
-.B /dms/deployment/request
-\fRBidRequestBehavior: Request a bid from the compute provider for a specific ensemble.
-.TP
-.B /dms/deployment/bid
-\fRBidReplyBehavior: Reply to a bid request from an orchestrator.
-.TP
-.B /dms/deployment/commit
-\fRCommitDeploymentBehavior: Temporarily commit the resources the provider bid on.
-.TP
-.B /dms/deployment/allocate
-\fRAllocationDeploymentBehavior: Allocate the resources the provider bid on.
-.TP
-.B /dms/deployment/revert
-\fRRevertDeploymentBehavior: Revert any commit or allocation done during a deployment.
-
-.TP
-.B /dms/cap/list
-\fRCapListBehavior: Get a list of all the capabilities another node had.
-.TP
-.B /dms/cap/anchor
-\fRCapAnchorBehavior: Anchor capability tokens on another node.
-
-.TP
-.B /public/hello
-\fRPublicHelloBehavior: Get a hello message from a node.
-.TP
-.B /public/status
-\fRPublicStatusBehavior: Get the total resource amount on the machine.
-.TP
-.B /broadcast/hello
-\fRBroadcastHelloBehavior: Broadcast a hello message and get replies from nodes.
-
-.TP
-.B /dms/allocation/start
-\fRAllocationStartBehavior: Start an allocation after a deployment.
-.TP
-.B /dms/allocation/restart
-\fRAllocationRestartBehavior: Restart an allocation after a deployment has been started.
-.TP
-.B /dms/actor/healthcheck/register
-\fRRegisterHealthcheckBehavior: Register a new healthcheck mechanism for an allocation.
-
-.TP
-.B /dms/allocation/subnet/add-peer
-\fRSubnetAddPeerBehavior: Add a peer to a subnet.
-.TP
-.B /dms/allocation/subnet/remove-peer
-\fRSubnetRemovePeerBehavior: Remove a peer from a subnet.
-.TP
-.B /dms/allocation/subnet/accept-peer
-\fRSubnetAcceptPeerBehavior: Accept a peer in a subnet.
-.TP
-.B /dms/allocation/subnet/map-port
-\fRSubnetMapPortBehavior: Map a port in a subnet.
-.TP
-.B /dms/allocation/subnet/unmap-port
-\fRSubnetUnmapPortBehavior: Unmap a port in a subnet.
-.TP
-.B /dms/allocation/subnet/dns/add-records
-\fRSubnetDNSAddRecordsBehavior: Add DNS records to a subnet.
-.TP
-.B /dms/allocation/subnet/dns/remove-records
-\fRSubnetDNSRemoveRecordsBehavior: Remove DNS records from a subnet.
-
-.TP
-.B /dms/ensemble/<ENSEMBLE_ID>
-\fREnsembleNamespace: Interact with ensembles on the node.
-.TP
-.B /dms/ensemble/<ENSEMBLE_ID>/allocation/logs
-\fRAllocationLogsBehavior: Get the logs of an allocation in an ensemble.
-.TP
-.B /dms/ensemble/<ENSEMBLE_ID>/allocation/shutdown
-\fRAllocationShutdownBehavior: Shutdown an allocation in an ensemble.
-.TP
-.B /dms/ensemble/<ENSEMBLE_ID>/node/subnet/create
-\fRSubnetCreateBehavior: Create a new subnet for an ensemble.
-.TP
-.B /dms/ensemble/<ENSEMBLE_ID>/node/subnet/destroy
-\fRSubnetDestroyBehavior: Destroy a subnet for an ensemble.
-
 .SH EXAMPLES
 .TP
 Generate a new keypair:
@@ -540,7 +825,7 @@ Invoke a predefined command on an actor:
 
 .SH NOTES
 .IP \[bu] 2
-Some commands may require root or administrator privileges.
+Some commands may require root privileges.
 .IP \[bu]
 Be cautious when configuring network settings to avoid disrupting network connectivity.
 .IP \[bu]
