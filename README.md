@@ -56,6 +56,7 @@
       - [Running DMS](#running-dms)
     - [Provide Compute Resources to the Network](#provide-compute-resources-to-the-network)
     - [Deploy Jobs on the Network](#deploy-jobs-on-the-network)
+    - [Contracts](#contracts)
     - [REST Endpoints](#rest-endpoints)
   - [Configuration](#configuration)
     - [Config file](#config-file)
@@ -749,6 +750,13 @@ nunet actor cmd --context user /dms/node/deployment/delete --orchestrator-id <de
 ```
 
 These commands help you manage storage space and maintain a clean deployment history. The prune command is particularly useful for removing old deployments based on time criteria or removing all deployments with terminal statuses (Failed and Completed) while keeping active deployments (<=Running). The delete command allows you to remove specific deployments that are no longer needed.
+
+### Contracts
+
+NuNet's contracts and tokenomics architecture integrates Agoric's Electronic Rights Transfer Protocol (ERTP) with an object capability model to enable secure, decentralized economic contracts for compute resource sharing. The system supports both simple bilateral contract management and more complex, multi-party workflows coordinated by a solution enabler, with a focus on capability-based security, deterministic contract logic, and blockchain-agnostic design. Core components include contract objects implemented as nuActors, a contract database for persistent storage, and capability management for secure asset access and delegation. The architecture is designed for extensibility, supporting both current trusted third-party execution and future blockchain-based enhancements.
+
+For more on contracts, please refer to the [tokenomics package](./tokenomics/) and the [README in contracts](./tokenomics/contracts/README.md).
+
 
 ### REST Endpoints
 
