@@ -132,7 +132,7 @@ func NewClientWithTransport(cfg Config, transport http.RoundTripper, securityCon
 	// Create HTTP client
 	httpClient := &http.Client{
 		Transport: transport,
-		Timeout:   cfg.RequestTimeout,
+		Timeout:   cfg.RequestTimeout + 100*time.Millisecond, // extra time to avoid race
 	}
 
 	client := &Client{
