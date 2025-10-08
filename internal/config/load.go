@@ -74,26 +74,36 @@ var DefaultConfig = Config{
 		FileDescriptors: 512,
 	},
 	Observability: Observability{
-		Logging: Logging{
-			Level: "INFO",
-			File:  fmt.Sprintf("%s/nunet/logs/nunet-dms.log", homeDir),
-			Rotation: Rotation{
-				MaxSizeMB:  100,
-				MaxBackups: 3,
-				MaxAgeDays: 28,
-			},
-		},
-		Elastic: Elastic{
-			URL:                "http://localhost:9200",
-			Index:              "nunet-dms",
-			FlushInterval:      5,
-			Enabled:            false,
-			APIKey:             "",
-			InsecureSkipVerify: true,
-		},
+		// TODO bind in observability
+		// Logging: Logging{
+		// 	Level: "INFO",
+		// 	File:  fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),
+		// 	Rotation: Rotation{
+		// 		MaxSizeMB:  100,
+		// 		MaxBackups: 3,
+		// 		MaxAgeDays: 28,
+		// 	},
+		// },
+		// Elastic: Elastic{
+		// 	URL:                "https://telemetry.nunet.io",
+		// 	Index:              "nunet-dms",
+		// 	FlushInterval:      5,
+		// 	Enabled:            false,
+		// 	APIKey:             "",
+		// 	InsecureSkipVerify: true,
+		// },
+		// TODO remove once /observability migrates to nested structs
+		ElasticsearchURL:     "https://telemetry.nunet.io",
+		ElasticsearchIndex:   "nunet-dms",
+		FlushInterval:        5,
+		ElasticsearchEnabled: false,
+		ElasticsearchAPIKey:  "",
+		InsecureSkipVerify:   true,
+		LogLevel:             "INFO",
+		LogFile:              fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),
 	},
 	APM: APM{
-		ServerURL:   "http://apm.telemetry.nunet.io",
+		ServerURL:   "https://apm.telemetry.nunet.io",
 		ServiceName: "nunet-dms",
 		Environment: "production",
 		APIKey:      "",

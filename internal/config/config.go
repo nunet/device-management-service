@@ -71,12 +71,12 @@ type Job struct {
 // Observability
 
 type Observability struct {
-	// Preferred structured layout
+	// Preferred structured layout TODO bind in observability
 	Logging Logging `mapstructure:"logging" json:"logging"`
 	Elastic Elastic `mapstructure:"elastic" json:"elastic"`
 
 	// -----------------------------------------------------------------
-	// DEPRECATED – will be removed in v0.7.
+	// TODO DEPRECATED – will be removed once tbe migration to nested structs is complete.
 	// They are kept so that v0.6 can still read existing config files.
 	// Loader.readAndUnmarshal() transparently migrates them into
 	// the new `observability.logging` block at runtime.
