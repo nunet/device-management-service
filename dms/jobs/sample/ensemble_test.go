@@ -13,11 +13,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
@@ -31,7 +33,11 @@ func TestEnsemble(t *testing.T) {
 	var config jobs.EnsembleConfig
 
 	// Parse the YAML
-	err = parser.Parse(parser.SpecTypeEnsembleV1, data, &config)
+	err = parser.Decode(parser.SpecTypeEnsembleV1, data, &config, &parser.Options{
+		Env:        env.OSEnvironment{},
+		Fs:         afero.Afero{Fs: afero.NewOsFs()},
+		WorkingDir: ".",
+	})
 	require.NoError(t, err, "Failed to parse sample ensemble")
 
 	// Verify the transformed and validated config
@@ -41,6 +47,8 @@ func TestEnsemble(t *testing.T) {
 	assert.NotEmpty(t, config.V1.Allocations, "Allocations should be present")
 	assert.NotEmpty(t, config.V1.Scripts, "Scripts should be present")
 	assert.NotNil(t, config.V1.Supervisor, "Supervisor should be present")
+	assert.Equal(t, config.V1.Contracts["contract1"].DID, "did:contract1")
+	assert.Equal(t, config.V1.Contracts["contract2"].DID, "did:contract2")
 
 	// Verify node configuration
 	node1, ok := config.V1.Nodes["node1"]

@@ -18,10 +18,10 @@ var ErrNoFreeResources = errors.New("no free resources")
 
 // Resources represents the resources of the machine
 type Resources struct {
-	CPU  CPU  `json:"cpu"`
-	GPUs GPUs `json:"gpus,omitempty"`
-	RAM  RAM  `json:"ram"`
-	Disk Disk `json:"disk"`
+	CPU  CPU  `json:"cpu" yaml:"cpu"`
+	GPUs GPUs `json:"gpus,omitempty" yaml:"gpus,omitempty"`
+	RAM  RAM  `json:"ram" yaml:"ram"`
+	Disk Disk `json:"disk" yaml:"disk"`
 }
 
 // implements the Calculable and Comparable interfaces

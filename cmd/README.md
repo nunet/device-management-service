@@ -160,60 +160,6 @@ nunet run
 This starts the Nunet DMS with the default "dms" context.
 
 
-## TAP Command
-
-
-### `nunet tap`
-
-
-**Purpose:** Creates a TAP (network tap) interface to bridge the host network with a virtual machine (VM). It also configures network settings like IP forwarding and iptables rules.
-
-
-**Key Points:**
-
-
-* **Root Privileges Required:** This command necessitates root or administrator privileges for execution due to its manipulation of network interfaces and system-level settings.
-
-
-**Usage:**
-
-
-```bash
-nunet tap [main_interface] [vm_interface] [CIDR] [flags]
-```
-
-**Arguments:**
-
-
-* **`main_interface`:** (e.g., eth0) The name of the existing network interface on your host machine that you want to bridge with the TAP interface.
-
-* **`vm_interface`:** (e.g., tap0) The name you want to assign to the newly created TAP interface.
-
-* **`CIDR`:** (e.g., 172.16.0.1/24) The Classless Inter-Domain Routing (CIDR) notation specifying the IP address range and subnet mask for the TAP interface. This ensures that the VM or container connected to the TAP has its own IP address within the specified network.
-
-
-**Flags:**
-
-
-* `-h, --help`: Displays help information for the `tap` command.
-
-
-**Example:**
-```bash
-
-sudo nunet tap eth0 tap0 172.16.0.1/24
-```
-
-This command will create a TAP interface named 'tap0' bridged to your host's 'eth0' interface. The 'tap0' interface will be assigned an IP address of '172.16.0.1' with a subnet mask of '/24'. This configuration allows a VM connected to 'tap0' to access the network through your host's 'eth0' interface.
-
-
-**Important Notes:**
-
-
-* Ensure you have the necessary permissions to execute this command.
-
-* Be cautious when configuring network settings, as incorrect configurations can disrupt your network connectivity.
-
 ## GPU Command
 
 ### `nunet gpu`

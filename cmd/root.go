@@ -46,9 +46,11 @@ func NewRootCMD(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd.AddCommand(actor.NewActorCmd(dmsCli))
 	cmd.AddCommand(newConfigCmd(dmsCli))
 	cmd.AddCommand(newVersionCmd())
-	cmd.AddCommand(newTapCommand())
 	cmd.AddCommand(newGPUCommand())
 	cmd.AddCommand(newNetworkCommand(dmsCli))
+	cmd.AddCommand(newTranslateCmd(dmsCli))
+	cmd.AddCommand(newValidateCmd(dmsCli))
+
 	return cmd
 }
 

@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package config
 
 // Config aggregates all sub-sections that can be loaded from the config file.
@@ -12,6 +20,7 @@ type Config struct {
 }
 
 type General struct {
+	Env                      string `mapstructure:"env" json:"env"`
 	UserDir                  string `mapstructure:"user_dir"                   json:"user_dir"`
 	WorkDir                  string `mapstructure:"work_dir"                   json:"work_dir"`
 	DataDir                  string `mapstructure:"data_dir"                   json:"data_dir"`
@@ -25,6 +34,16 @@ type General struct {
 	StorageCADirectory       string `mapstructure:"storage_ca_directory"       json:"storage_ca_directory"`
 	StorageBricksDir         string `mapstructure:"storage_bricks_dir"         json:"storage_bricks_dir"`
 	StorageGlusterfsHostname string `mapstructure:"storage_glusterfs_hostname" json:"storage_glusterfs_hostname"`
+
+	PaymentProvider PaymentProvider `mapstructure:"payment_provider" json:"payment_provider"`
+}
+
+type PaymentProvider struct {
+	Mode                  bool   `mapstructure:"mode" json:"mode"`
+	EthereumRPCURL        string `mapstructure:"ethereum_rpc_url" json:"ethereum_rpc_url"`
+	EthereumRPCToken      string `mapstructure:"ethereum_rpc_token" json:"ethereum_rpc_token"`
+	NtxContractAddress    string `mapstructure:"ntx_contract_address" json:"ntx_contract_address"`
+	StartingBlockScanning string `mapstructure:"starting_block_scanning" json:"starting_block_scanning"`
 }
 
 type Rest struct {
@@ -41,8 +60,8 @@ type Profiler struct {
 type P2P struct {
 	ListenAddress   []string `mapstructure:"listen_address" json:"listen_address"`
 	BootstrapPeers  []string `mapstructure:"bootstrap_peers" json:"bootstrap_peers"`
-	Memory          int      `mapstructure:"memory"          json:"memory"`
-	FileDescriptors int      `mapstructure:"fd"              json:"fd"`
+	Memory          int      `mapstructure:"memory" json:"memory"`
+	FileDescriptors int      `mapstructure:"fd" json:"fd"`
 }
 
 type Job struct {
@@ -52,12 +71,12 @@ type Job struct {
 // Observability
 
 type Observability struct {
-	// Preferred structured layout
+	// Preferred structured layout TODO bind in observability
 	Logging Logging `mapstructure:"logging" json:"logging"`
 	Elastic Elastic `mapstructure:"elastic" json:"elastic"`
 
 	// -----------------------------------------------------------------
-	// DEPRECATED – will be removed in v0.7.
+	// TODO DEPRECATED – will be removed once tbe migration to nested structs is complete.
 	// They are kept so that v0.6 can still read existing config files.
 	// Loader.readAndUnmarshal() transparently migrates them into
 	// the new `observability.logging` block at runtime.
@@ -103,6 +122,8 @@ type APM struct {
 	ServiceName string `mapstructure:"service_name" json:"service_name"`
 	Environment string `mapstructure:"environment"  json:"environment"`
 	APIKey      string `mapstructure:"api_key"      json:"api_key"`
+	// SecretToken is a legacy API key used for local ELK deployments.
+	SecretToken string `mapstructure:"secret_token"      json:"secret_token"`
 }
 
 // Convenience helpers

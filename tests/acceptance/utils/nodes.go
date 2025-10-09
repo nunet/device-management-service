@@ -1,8 +1,17 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package utils
 
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	incus "github.com/lxc/incus/client"
 )
@@ -33,10 +42,31 @@ func (n *Node) RunDMSCmd(cmd string) (string, error) {
 	return n.RunCMD([]string{"sh", "-c", fullCmd})
 }
 
-// RunDMSCmd is a wrapper for running the DMS CLI
+// RunDMSCmdBackground is a wrapper for running the DMS CLI
 func (n *Node) RunDMSCmdBackground(cmd string) error {
 	fullCmd := fmt.Sprintf("DMS_PASSPHRASE=123 %s", cmd)
 	return n.RunCMDBackground([]string{"sh", "-c", fullCmd})
+}
+
+// WaitForInstanceReady waits a instance to be running and ready to be used
+func (n *Node) WaitForInstanceReady() error {
+	return WaitForInstanceReady(n.Client, n.Name, 60*time.Second)
+}
+
+// ConfigureVMNetworkingForQUIC configures and verifies network optimizations for QUIC connections in VMs
+func (n *Node) ConfigureVMNetworkingForQUIC() error {
+	if err := ConfigureVMNetworkingForQUIC(n.Client, n.Name); err != nil {
+		// Log warning but don't fail VM creation - networking config is optional
+		fmt.Printf("Warning: failed to configure VM networking for QUIC in %s: %v\n", n.Name, err)
+	} else {
+		fmt.Printf("Successfully configured VM networking for QUIC: %s\n", n.Name)
+
+		// Verify the configuration was applied correctly
+		if err := VerifyVMNetworkingForQUIC(n.Client, n.Name); err != nil {
+			fmt.Printf("Warning: failed to verify VM networking configuration in %s: %v\n", n.Name, err)
+		}
+	}
+	return nil
 }
 
 // UploadFile uploads a local file to the instance.
@@ -64,7 +94,7 @@ func (n *Node) CreateContext(name string) (*Context, error) {
 
 	context := &Context{
 		Name: name,
-		DID:  did,
+		DID:  strings.TrimSpace(did),
 		node: n,
 	}
 
@@ -142,9 +172,9 @@ func (n *Node) GetOnboardingResources() (ramGB float64, cpuCores float64, diskGB
 		return 0, 0, 0, fmt.Errorf("failed to get total disk: %w", err)
 	}
 
-	ramGB = totalRAM * 0.2
-	cpuCores = float64(totalCPUCores) * 0.2
-	diskGB = totalDisk * 0.2
+	ramGB = totalRAM * 0.7
+	cpuCores = float64(totalCPUCores) * 0.7
+	diskGB = totalDisk * 0.7
 
 	return ramGB, cpuCores, diskGB, nil
 }
@@ -225,7 +255,7 @@ func (n *Node) InstallDocker() error {
 
 func (n *Node) PruneResolved() error {
 	dest := "/root/netplan.sh"
-	if err := n.UploadFile(FindTestdata("netplan.sh"), dest, 0o755); err != nil {
+	if err := n.UploadFile(FindTestdata("scripts/netplan.sh"), dest, 0o755); err != nil {
 		return err
 	}
 	_, err := n.RunCMD([]string{"bash", "-c", dest})
@@ -233,10 +263,30 @@ func (n *Node) PruneResolved() error {
 		return err
 	}
 	dest = "/root/resolv.sh"
-	if err := n.UploadFile(FindTestdata("resolv.sh"), dest, 0o755); err != nil {
+	if err := n.UploadFile(FindTestdata("scripts/resolv.sh"), dest, 0o755); err != nil {
 		return err
 	}
 	_, err = n.RunCMD([]string{"bash", "-c", dest})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *Node) InstallYQ() error {
+	_, err := n.RunCMD([]string{"apt-get", "update"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"apt-get", "install", "-y", "wget"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"wget", "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64", "-O", "/usr/local/bin/yq"})
+	if err != nil {
+		return err
+	}
+	_, err = n.RunCMD([]string{"chmod", "+x", "/usr/local/bin/yq"})
 	if err != nil {
 		return err
 	}

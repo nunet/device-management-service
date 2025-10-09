@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package jobs
 
 import (
@@ -16,6 +24,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -92,6 +102,9 @@ type Allocation struct {
 	// selfRelease will use node's releaseAllocation mechanism
 	selfRelease func() error
 
+	Contracts            map[string]types.ContractConfig
+	contractEventHandler *eventhandler.EventHandler
+
 	createdAt time.Time
 	startedAt time.Time
 }
@@ -108,6 +121,7 @@ func NewAllocation(
 	network network.Network,
 	executor types.Executor,
 	selfRelease func() error,
+	contractEventHandler *eventhandler.EventHandler,
 ) (*Allocation, error) {
 	if network == nil {
 		return nil, fmt.Errorf("network is nil")
@@ -140,14 +154,22 @@ func NewAllocation(
 		status:       AllocationPending,
 		network:      network,
 		executor:     executor,
+		selfRelease:  selfRelease,
 		state: struct {
 			subnetIP    string
 			gatewayIP   string
 			portMapping map[int]int
 		}{},
-		selfRelease: selfRelease,
-		createdAt:   time.Now(),
+		createdAt:            time.Now(),
+		contractEventHandler: contractEventHandler,
 	}
+
+	log.Debugw("allocation_created",
+		"labels", string(observability.LabelAllocation),
+		"allocationID", allocation.ID,
+		"executionID", allocation.executionID,
+	)
+
 	return allocation, nil
 }
 
@@ -418,6 +440,18 @@ func (a *Allocation) Cleanup() error {
 // it won't return errors right away but try to clean up
 // all the other steps
 func (a *Allocation) Terminate(ctx context.Context) error {
+	for _, v := range a.Contracts {
+		evt := events.StopAllocation{
+			Type:         events.StopAllocationEvent,
+			AllocationID: a.ID,
+		}
+		a.contractEventHandler.Push(eventhandler.Event{
+			ContractHostDID: v.Host,
+			ContractDID:     v.DID,
+			Payload:         evt,
+		})
+	}
+
 	status := a.Status(ctx)
 	if status.Status != AllocationStopped && status.Status != AllocationCompleted {
 		err := a.Stop(ctx)

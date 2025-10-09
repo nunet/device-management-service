@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,7 +44,7 @@ var (
 	MinEnsembleUpdateTimeout  = 15 * time.Second
 
 	SubnetCreateTimeout  = 2 * time.Minute
-	SubnetDestroyTimeout = 30 * time.Second
+	SubnetDestroyTimeout = 10 * time.Second
 
 	MaxBidMultiplier = 8
 	MaxPermutations  = 1_000_000
@@ -69,10 +70,12 @@ type Orchestrator interface {
 	StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus
 	Status() jtypes.DeploymentStatus
 	Manifest() jtypes.EnsembleManifest
+	SubnetManifest() jtypes.SubnetManifest
 	Config() jtypes.EnsembleConfig
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
+	Done() <-chan struct{}
 }
 
 type BasicOrchestrator struct {
@@ -87,11 +90,15 @@ type BasicOrchestrator struct {
 	id             string
 	cfg            jtypes.EnsembleConfig
 	manifest       jtypes.EnsembleManifest
-	subnetManifest SubnetManifest
+	subnetManifest jtypes.SubnetManifest
 	status         jtypes.DeploymentStatus
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
 	supervisor         *Supervisor
+
+	// ID generators
+	nodeIDGenerator       types.NodeIDGenerator
+	allocationIDGenerator types.AllocationIDGenerator
 
 	// Status subscribers
 	statusSubscribers     map[chan jtypes.DeploymentStatus]struct{}
@@ -107,9 +114,22 @@ func NewOrchestrator(
 	id string,
 	oActor actor.Actor,
 	cfg jtypes.EnsembleConfig,
+	nodeIDGenerator types.NodeIDGenerator,
+	allocationIDGenerator types.AllocationIDGenerator,
 ) (*BasicOrchestrator, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
+	}
+
+	// Validate generators at instantiation time
+	validator := types.NewDefaultGeneratorValidator()
+
+	if err := validator.ValidateNodeIDGenerator(nodeIDGenerator); err != nil {
+		return nil, fmt.Errorf("invalid node ID generator: %w", err)
+	}
+
+	if err := validator.ValidateAllocationIDGenerator(allocationIDGenerator); err != nil {
+		return nil, fmt.Errorf("invalid allocation ID generator: %w", err)
 	}
 
 	subnet, err := newSubnetManifest()
@@ -117,16 +137,20 @@ func NewOrchestrator(
 		return nil, fmt.Errorf("failed to create subnet manifest: %w", err)
 	}
 
+	childCtx, childCancel := context.WithCancel(ctx)
 	o := &BasicOrchestrator{
-		actor:             oActor,
-		id:                id,
-		cfg:               cfg,
-		ctx:               ctx,
-		fs:                fs,
-		workDir:           workDir,
-		subnetManifest:    subnet,
-		supervisor:        NewSupervisor(ctx, oActor, id),
-		statusSubscribers: make(map[chan jtypes.DeploymentStatus]struct{}),
+		actor:                 oActor,
+		id:                    id,
+		cfg:                   cfg,
+		ctx:                   childCtx,
+		cancel:                childCancel,
+		fs:                    fs,
+		workDir:               workDir,
+		subnetManifest:        subnet,
+		supervisor:            NewSupervisor(childCtx, oActor, id),
+		nodeIDGenerator:       nodeIDGenerator,
+		allocationIDGenerator: allocationIDGenerator,
+		statusSubscribers:     make(map[chan jtypes.DeploymentStatus]struct{}),
 	}
 
 	orchestratorBehaviors := map[string]func(actor.Envelope){
@@ -141,6 +165,10 @@ func NewOrchestrator(
 	}
 
 	return o, nil
+}
+
+func (o *BasicOrchestrator) SetStatus(status jtypes.DeploymentStatus) {
+	o.setStatus(status)
 }
 
 func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
@@ -168,8 +196,7 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 	}
 
 	// If we've reached a terminal state, close all subscriber channels
-	if status == jtypes.DeploymentStatusRunning ||
-		status == jtypes.DeploymentStatusFailed ||
+	if status == jtypes.DeploymentStatusFailed ||
 		status == jtypes.DeploymentStatusCompleted {
 		for ch := range o.statusSubscribers {
 			close(ch)
@@ -220,6 +247,7 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 	log.Debugw("initializing manifest",
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", o.id)
+
 	o.manifest = o.newManifest(o.cfg)
 
 	if err := o.deploy(o.cfg, o.manifest, expiry); err != nil {
@@ -232,6 +260,12 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 	return nil
 }
 
+func (o *BasicOrchestrator) NewManifest(
+	cfg jtypes.EnsembleConfig,
+) jtypes.EnsembleManifest {
+	return o.newManifest(cfg)
+}
+
 func (o *BasicOrchestrator) newManifest(
 	cfg jtypes.EnsembleConfig,
 ) jtypes.EnsembleManifest {
@@ -242,29 +276,96 @@ func (o *BasicOrchestrator) newManifest(
 		Metadata:     cfg.V1.Metadata,
 		Allocations:  make(map[string]jtypes.AllocationManifest),
 		Nodes:        make(map[string]jtypes.NodeManifest),
+		Contracts:    make(map[string]jtypes.ContractManifest),
+		Subnet:       cfg.V1.Subnet,
 	}
 
-	for name, alloc := range cfg.Allocations() {
-		amf := jtypes.AllocationManifest{
-			ID:          types.ConstructAllocationID(o.id, name),
-			DNSName:     alloc.DNSName + ".internal",
-			Healthcheck: alloc.HealthCheck,
-			Status:      jtypes.AllocationPending,
-			Ports:       make(map[int]int),
-			Type:        alloc.Type,
+	for name, v := range cfg.Contracts() {
+		manifest.Contracts[name] = jtypes.ContractManifest{
+			ID:   name,
+			DID:  v.DID,
+			Host: v.Host,
 		}
-		manifest.Allocations[name] = amf
 	}
-	for name, node := range cfg.Nodes() {
+
+	for name, node := range cfg.NodesWithGenerator(o.nodeIDGenerator) {
+		nodeAllocations := make([]string, 0)
+		for _, allocName := range node.Allocations {
+			_, ok := cfg.Allocation(allocName)
+			if !ok {
+				log.Errorf("allocation %s not found in ensemble config, skipping", allocName)
+				continue
+			}
+
+			// Generate manifest key using generator
+			allocKey, err := o.allocationIDGenerator.GenerateManifestKey(name, allocName)
+			if err != nil {
+				log.Errorf("failed to generate manifest key for %s.%s: %v", name, allocName, err)
+				continue
+			}
+			nodeAllocations = append(nodeAllocations, allocKey)
+		}
+
+		standbyNodes := make([]string, 0)
+		if node.Redundancy > 0 {
+			for i := 1; i <= node.Redundancy; i++ {
+				standbyNodeID, err := o.nodeIDGenerator.GenerateStandbyNodeID(name, i)
+				if err != nil {
+					log.Errorf("failed to generate standby node ID for %s-%d: %v", name, i, err)
+					continue
+				}
+				standbyNodes = append(standbyNodes, standbyNodeID)
+			}
+		}
+
+		// Create primary node entry
 		nmf := jtypes.NodeManifest{
-			ID:          name,
-			Allocations: node.Allocations,
-			Peer:        node.Peer,
+			ID:           name,
+			Allocations:  nodeAllocations,
+			Peer:         node.Peer,
+			StandbyNodes: standbyNodes,
 		}
 		manifest.Nodes[name] = nmf
 	}
 
-	manifest.Subnet = cfg.V1.Subnet
+	// Now create allocation entries
+	for nodeID, nodeManifest := range manifest.Nodes {
+		for _, allocKey := range nodeManifest.Allocations {
+			parts := strings.Split(allocKey, ".")
+			if len(parts) != 2 {
+				log.Errorf("invalid allocation key format: %s, skipping", allocKey)
+				continue
+			}
+			configAllocName := parts[1]
+			alloc, ok := cfg.Allocation(configAllocName)
+			if !ok {
+				log.Errorf("allocation %s not found in ensemble config, skipping", configAllocName)
+				continue
+			}
+
+			isStandby := nodeManifest.RedundancyRole == jtypes.RoleStandby
+
+			// Generate full allocation ID using generator
+			fullAllocID, err := o.allocationIDGenerator.GenerateFullAllocationID(o.id, nodeID, configAllocName)
+			if err != nil {
+				log.Errorf("failed to generate full allocation ID for %s.%s: %v", nodeID, configAllocName, err)
+				continue
+			}
+
+			amf := jtypes.AllocationManifest{
+				ID:              fullAllocID,
+				Type:            alloc.Type,
+				NodeID:          nodeID,
+				DNSName:         alloc.DNSName + ".internal",
+				Healthcheck:     alloc.HealthCheck,
+				Status:          jtypes.AllocationPending,
+				Ports:           make(map[int]int),
+				RedundancyGroup: configAllocName,
+				IsStandby:       isStandby,
+			}
+			manifest.Allocations[allocKey] = amf
+		}
+	}
 
 	return manifest
 }
@@ -300,7 +401,7 @@ deploy:
 			return fmt.Errorf("failed to create bidder: %w", err)
 		}
 
-		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), expiry)
+		candidateDeployment, err := bidCoordinator.bid(jtypes.NewEnsembleCfgReader(cfg), o.deploymentSnapshot.Candidates, expiry)
 		if err != nil {
 			if errors.Is(err, ErrCandidateNotFound) {
 				log.Warnf("candidate deployment not found, redeploying: %v", err)
@@ -315,7 +416,7 @@ deploy:
 		o.deploymentSnapshot.Candidates = candidateDeployment
 		o.setStatus(jtypes.DeploymentStatusCommitting)
 
-		committer := NewCommitter(o.ctx, o.id, o.actor)
+		committer := NewCommitter(o.ctx, o.id, o.actor, o.allocationIDGenerator, o.nodeIDGenerator)
 
 		manifestAfterCommit, err := committer.commit(
 			jtypes.NewEnsembleCfgReader(cfg),
@@ -345,7 +446,7 @@ deploy:
 		// 3. provision the network and start the allocations
 		o.setStatus(jtypes.DeploymentStatusProvisioning)
 
-		provisioner := NewProvisioner(o.ctx, o.cancel, o.actor, o.subnetManifest)
+		provisioner := NewProvisioner(o.ctx, o.cancel, o.actor, o.subnetManifest, o.allocationIDGenerator)
 		manifestAfterProvision, err := provisioner.Provision(
 			jtypes.NewEnsembleCfgReader(cfg),
 			jtypes.NewManifestReader(manifestAfterCommit))
@@ -355,18 +456,12 @@ deploy:
 				"error", err,
 				"orchestratorID", o.id)
 
-			o.lock.Lock()
 			o.revert(cfg, manifestAfterCommit)
-			o.lock.Unlock()
 			continue deploy
 		}
 
 		go o.monitorOnlyTaskManifest()
 		o.updateManifest(manifestAfterProvision)
-
-		o.lock.Lock()
-		o.ctx, o.cancel = context.WithCancel(context.Background())
-		o.lock.Unlock()
 
 		log.Infof("deployment successful")
 		o.setStatus(jtypes.DeploymentStatusRunning)
@@ -384,6 +479,8 @@ deploy:
 // Stop stops the orchestrator
 func (o *BasicOrchestrator) Stop() {
 	// TODO
+
+	o.cancel()
 
 	err := o.actor.Stop()
 	if err != nil {
@@ -469,6 +566,13 @@ func (o *BasicOrchestrator) Manifest() jtypes.EnsembleManifest {
 	defer o.lock.Unlock()
 
 	return o.manifest.Clone()
+}
+
+func (o *BasicOrchestrator) SubnetManifest() jtypes.SubnetManifest {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	return o.subnetManifest
 }
 
 func (o *BasicOrchestrator) ManifestNodesPeerIDs() []string {
@@ -557,4 +661,8 @@ func isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
 		}
 	}
 	return true
+}
+
+func (o *BasicOrchestrator) Done() <-chan struct{} {
+	return o.ctx.Done()
 }

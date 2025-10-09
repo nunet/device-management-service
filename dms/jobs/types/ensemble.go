@@ -39,16 +39,17 @@ type EnsembleConfig struct {
 
 // EnsembleConfigV1 is version 1 of the configuration for an ensemble
 type EnsembleConfigV1 struct {
-	EscalationStrategy EscalationStrategy          `json:"escalation_strategy"`     // escalation strategy (redeploy|teardown)
-	Allocations        map[string]AllocationConfig `json:"allocations"`             // (named) allocations in the ensemble
-	Nodes              map[string]NodeConfig       `json:"nodes"`                   // (named) nodes in the ensemble
-	Edges              []EdgeConstraint            `json:"edges,omitempty"`         // network edge constraints
-	Supervisor         SupervisorConfig            `json:"supervisor,omitempty"`    // supervision structure
-	Keys               map[string]string           `json:"keys,omitempty"`          // (named) ssh public keys relevant to the allocation
-	Scripts            map[string][]byte           `json:"scripts,omitempty"`       // (named) provisioning scripts
-	Subnet             SubnetConfig                `json:"subnet,omitempty"`        // subnet config
-	ExcludePeers       []string                    `json:"exclude_peers,omitempty"` // list of peers to not deploy on
-	Metadata           map[string]string           `json:"metadata,omitempty"`      // metadata (arbitrary key-value pairs)
+	EscalationStrategy EscalationStrategy              `json:"escalation_strategy" yaml:"escalation_strategy"`         // escalation strategy (redeploy|teardown)
+	Allocations        map[string]AllocationConfig     `json:"allocations" yaml:"allocations"`                         // (named) allocations in the ensemble
+	Nodes              map[string]NodeConfig           `json:"nodes" yaml:"nodes"`                                     // (named) nodes in the ensemble
+	Edges              []EdgeConstraint                `json:"edges,omitempty" yaml:"edges,omitempty"`                 // network edge constraints
+	Supervisor         SupervisorConfig                `json:"supervisor,omitempty" yaml:"supervisor,omitempty"`       // supervision structure
+	Keys               map[string]string               `json:"keys,omitempty" yaml:"keys,omitempty"`                   // (named) ssh public keys relevant to the allocation
+	Scripts            map[string][]byte               `json:"scripts,omitempty" yaml:"scripts,omitempty"`             // (named) provisioning scripts
+	Subnet             SubnetConfig                    `json:"subnet,omitempty" yaml:"subnet,omitempty"`               // subnet config
+	ExcludePeers       []string                        `json:"exclude_peers,omitempty" yaml:"exclude_peers,omitempty"` // list of peers to not deploy on
+	Metadata           map[string]string               `json:"metadata,omitempty" yaml:"metadata,omitempty"`           // metadata (arbitrary key-value pairs)
+	Contracts          map[string]types.ContractConfig `json:"contracts,omitempty" yaml:"contracts,omitempty"`         // (named) contracts between parties
 }
 
 type EscalationStrategy string
@@ -60,17 +61,17 @@ const (
 
 // AllocationConfig is the configuration of an allocation
 type AllocationConfig struct {
-	Executor        AllocationExecutor        `json:"executor"`                   // the executor of the allocation
-	Type            AllocationType            `json:"type"`                       // the type of allocation (service vs task)
-	Resources       types.Resources           `json:"resources"`                  // the HW resources required by the allocation
-	Execution       types.SpecConfig          `json:"execution"`                  // the allocation execution configuration
-	DNSName         string                    `json:"dns_name,omitempty"`         // the internal DNS name of the allocation
-	Keys            []types.AllocationKey     `json:"keys,omitempty"`             // names of the authorized ssh keys for the allocation
-	Provision       []string                  `json:"provision,omitempty"`        // names of provisioning scripts to run (in order)
-	HealthCheck     types.HealthCheckManifest `json:"healthcheck,omitempty"`      // name of the health check script
-	Volumes         []types.VolumeConfig      `json:"volumes,omitempty"`          // unified storage configuration (optional)
-	FailureRecovery AllocationFailureRecovery `json:"failure_recovery,omitempty"` // failure recovery (stay_down|one_for_one|one_for_all|rest_for_one)
-	DependsOn       []string                  `json:"depends_on,omitempty"`       // list of allocations that this allocation depends on
+	Executor        AllocationExecutor        `json:"executor" yaml:"executor"`                                     // the executor of the allocation
+	Type            AllocationType            `json:"type" yaml:"type"`                                             // the type of allocation (service vs task)
+	Resources       types.Resources           `json:"resources" yaml:"resources"`                                   // the HW resources required by the allocation
+	Execution       types.SpecConfig          `json:"execution" yaml:"execution"`                                   // the allocation execution configuration
+	DNSName         string                    `json:"dns_name,omitempty" yaml:"dns_name,omitempty"`                 // the internal DNS name of the allocation
+	Keys            []types.AllocationKey     `json:"keys,omitempty" yaml:"keys,omitempty"`                         // names of the authorized ssh keys for the allocation
+	Provision       []string                  `json:"provision,omitempty" yaml:"provision,omitempty"`               // names of provisioning scripts to run (in order)
+	HealthCheck     types.HealthCheckManifest `json:"healthcheck,omitempty" yaml:"healthcheck,omitempty"`           // name of the health check script
+	Volume          []types.VolumeConfig      `json:"volume,omitempty" yaml:"volume,omitempty"`                     // unified storage configuration (optional)
+	FailureRecovery AllocationFailureRecovery `json:"failure_recovery,omitempty" yaml:"failure_recovery,omitempty"` // failure recovery (stay_down|one_for_one|one_for_all|rest_for_one)
+	DependsOn       []string                  `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`             // list of allocations that this allocation depends on
 }
 
 // AllocationFailureRecovery
@@ -85,12 +86,12 @@ const (
 
 // NodeConfig is the configuration of a distinct DMS node
 type NodeConfig struct {
-	Allocations     []string            `json:"allocations"`                // list of allocation IDs
-	Ports           []PortConfig        `json:"ports,omitempty"`            // list of port mappings
-	Location        LocationConstraints `json:"location,omitempty"`         // location constraints
-	Peer            string              `json:"peer,omitempty"`             // peer ID to use for this node
-	Redundancy      int                 `json:"redundancy,omitempty"`       // number of redundant nodes
-	FailureRecovery NodeFailureRecovery `json:"failure_recovery,omitempty"` // failure recovery (stay_down|restart|redeploy)
+	Allocations     []string            `json:"allocations" yaml:"allocations"`                               // list of allocation IDs
+	Ports           []PortConfig        `json:"ports,omitempty" yaml:"ports,omitempty"`                       // list of port mappings
+	Location        LocationConstraints `json:"location,omitempty" yaml:"location,omitempty"`                 // location constraints
+	Peer            string              `json:"peer,omitempty" yaml:"peer,omitempty"`                         // peer ID to use for this node
+	Redundancy      int                 `json:"redundancy,omitempty" yaml:"redundancy,omitempty"`             // number of redundant nodes
+	FailureRecovery NodeFailureRecovery `json:"failure_recovery,omitempty" yaml:"failure_recovery,omitempty"` // failure recovery (stay_down|restart|redeploy)
 	// TODO contract information
 }
 
@@ -105,47 +106,47 @@ const (
 
 // LocationConstraints provides the node location placement constraints
 type LocationConstraints struct {
-	Accept []Location `json:"accept,omitempty"` // list of accepted locations
-	Reject []Location `json:"reject,omitempty"` // list of rejected locations
+	Accept []Location `json:"accept,omitempty" yaml:"accept,omitempty"` // list of accepted locations
+	Reject []Location `json:"reject,omitempty" yaml:"reject,omitempty"` // list of rejected locations
 }
 
 // Location is a geographical location on Planet Earth
 type Location struct {
-	Continent string `json:"continent,omitempty"` // geographical region
-	Country   string `json:"country,omitempty"`   // country code
-	City      string `json:"city,omitempty"`      // city name
-	ASN       uint   `json:"asn,omitempty"`       // autonomous system number
-	ISP       string `json:"isp,omitempty"`       // internet service provider
+	Continent string `json:"continent,omitempty" yaml:"continent,omitempty"` // geographical region
+	Country   string `json:"country,omitempty" yaml:"country,omitempty"`     // country code
+	City      string `json:"city,omitempty" yaml:"city,omitempty"`           // city name
+	ASN       uint   `json:"asn,omitempty" yaml:"asn,omitempty"`             // autonomous system number
+	ISP       string `json:"isp,omitempty" yaml:"isp,omitempty"`             // internet service provider
 }
 
 // PortConfig is the configuration for a port mapping a public port to a private port
 // in an allocation
 type PortConfig struct {
-	Public     int    `json:"public"`     // public port number
-	Private    int    `json:"private"`    // private port number
-	Allocation string `json:"allocation"` // allocation ID
+	Public     int    `json:"public" yaml:"public"`         // public port number
+	Private    int    `json:"private" yaml:"private"`       // private port number
+	Allocation string `json:"allocation" yaml:"allocation"` // allocation ID
 }
 
 // EdgeConstraint is a constraint for a network edge between two nodes
 type EdgeConstraint struct {
-	S   string `json:"s"`             // source node ID
-	T   string `json:"t"`             // target node ID
-	RTT uint   `json:"rtt,omitempty"` // round trip time in milliseconds
-	BW  uint   `json:"bw,omitempty"`  // bandwidth in bits per second
+	S   string `json:"s" yaml:"s"`                         // source node ID
+	T   string `json:"t" yaml:"t"`                         // target node ID
+	RTT uint   `json:"rtt,omitempty" yaml:"rtt,omitempty"` // round trip time in milliseconds
+	BW  uint   `json:"bw,omitempty" yaml:"bw,omitempty"`   // bandwidth in bits per second
 }
 
 // SupervisorConfig is the supervisory structure configuration for the ensemble
 type SupervisorConfig struct {
-	Strategy    SupervisorStrategy `json:"strategy,omitempty"`    // supervision strategy
-	Allocations []string           `json:"allocations,omitempty"` // list of allocation IDs
-	Children    []SupervisorConfig `json:"children,omitempty"`    // list of child supervisors
+	Strategy    SupervisorStrategy `json:"strategy,omitempty" yaml:"strategy,omitempty"`       // supervision strategy
+	Allocations []string           `json:"allocations,omitempty" yaml:"allocations,omitempty"` // list of allocation IDs
+	Children    []SupervisorConfig `json:"children,omitempty" yaml:"children,omitempty"`       // list of child supervisors
 }
 
 // SupervisorStrategy is the name of a supervision strategy
 type SupervisorStrategy string
 
 type SubnetConfig struct {
-	Join bool `json:"join,omitempty"` // for orchestrator to join the subnet
+	Join bool `json:"join,omitempty" yaml:"join,omitempty"` // for orchestrator to join the subnet
 }
 
 const (
@@ -163,6 +164,15 @@ func (e *EnsembleConfig) Validate() error {
 	return nil
 }
 
+func (e *EnsembleConfig) Contracts() map[string]types.ContractConfig {
+	return e.V1.Contracts
+}
+
+func (e *EnsembleConfig) Contract(contractID string) (types.ContractConfig, bool) {
+	c, ok := e.V1.Contracts[contractID]
+	return c, ok
+}
+
 func (e *EnsembleConfig) Allocations() map[string]AllocationConfig {
 	return e.V1.Allocations
 }
@@ -172,13 +182,82 @@ func (e *EnsembleConfig) Allocation(name string) (AllocationConfig, bool) {
 	return a, ok
 }
 
+// buildStandbyNodes constructs standby node configurations for nodes with redundancy
+func buildStandbyNodes(nodes map[string]NodeConfig, nodeIDGenerator types.NodeIDGenerator) map[string]NodeConfig {
+	standbyNodes := make(map[string]NodeConfig)
+	for nodeID, nodeConfig := range nodes {
+		if nodeConfig.Redundancy == 0 {
+			continue
+		}
+		for i := 1; i <= nodeConfig.Redundancy; i++ {
+			standbyNodeID, err := nodeIDGenerator.GenerateStandbyNodeID(nodeID, i)
+			if err != nil {
+				// Log error and skip this standby node
+				continue
+			}
+			ncfg := NodeConfig{
+				Allocations:     nodeConfig.Allocations,
+				Ports:           nodeConfig.Ports,
+				Location:        nodeConfig.Location,
+				FailureRecovery: nodeConfig.FailureRecovery,
+			}
+			standbyNodes[standbyNodeID] = ncfg
+		}
+	}
+	return standbyNodes
+}
+
+// Nodes returns a map of all nodes including standby nodes (using default generator)
 func (e *EnsembleConfig) Nodes() map[string]NodeConfig {
+	return e.NodesWithGenerator(types.NewDefaultNodeIDGenerator())
+}
+
+// NodesWithGenerator returns a map of all nodes including standby nodes using the provided generator
+func (e *EnsembleConfig) NodesWithGenerator(nodeIDGenerator types.NodeIDGenerator) map[string]NodeConfig {
+	result := make(map[string]NodeConfig)
+
+	// First add all primary nodes
+	for nodeID, nodeConfig := range e.V1.Nodes {
+		result[nodeID] = nodeConfig
+	}
+
+	// Then add standby nodes
+	for nodeID, nodeConfig := range buildStandbyNodes(e.V1.Nodes, nodeIDGenerator) {
+		result[nodeID] = nodeConfig
+	}
+
+	return result
+}
+
+// PrimaryNodes returns only the primary nodes (no standby nodes)
+func (e *EnsembleConfig) PrimaryNodes() map[string]NodeConfig {
 	return e.V1.Nodes
 }
 
-func (e *EnsembleConfig) Node(node string) (NodeConfig, bool) {
-	n, ok := e.V1.Nodes[node]
-	return n, ok
+func (e *EnsembleConfig) Node(nodeID string) (NodeConfig, bool) {
+	return e.NodeWithGenerator(nodeID, types.NewDefaultNodeIDGenerator())
+}
+
+func (e *EnsembleConfig) NodeWithGenerator(nodeID string, nodeIDGenerator types.NodeIDGenerator) (NodeConfig, bool) {
+	// Check if it's a primary node directly from the configuration
+	if n, ok := e.V1.Nodes[nodeID]; ok {
+		return n, true
+	}
+
+	// Check if it's a standby node using the generator
+	isStandby, primaryNodeID, standbyIndex, err := nodeIDGenerator.ParseNodeID(nodeID)
+	if err != nil || !isStandby {
+		return NodeConfig{}, false
+	}
+
+	// Get the primary node
+	primaryNode, ok := e.V1.Nodes[primaryNodeID]
+	if !ok || standbyIndex < 1 || standbyIndex > primaryNode.Redundancy {
+		return NodeConfig{}, false
+	}
+
+	// Return a copy of the primary node config for this standby
+	return primaryNode, true
 }
 
 func (e *EnsembleConfig) AllocationsForNode(node string) map[string]AllocationConfig {

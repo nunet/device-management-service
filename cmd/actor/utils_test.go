@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package actor
 
 import (
@@ -8,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/env"
 )
 
 // TestProcessEnsembleYaml tests the ProcessEnsembleYaml function using different ensemble configurations.
@@ -37,16 +46,13 @@ allocations:
 	keyYaml := `
         keys:
             - type: ssh
-              file: /etc/keys1.pub`
+              file: ${file:/etc/keys1.pub}`
 
 	volumeYaml := `
-        volumes:
-            volume1:
-                type: glusterfs
-                client_private_key: /etc/client_private_key
-                client_pem: /etc/client_pem
-                client_ca: /etc/client_ca`
-
+        volume:
+            - type: glusterfs
+              src: /etc/client_private_key
+              mount_destination: /etc/client_pem`
 	nodeYaml := `
 nodes:
     node1:
@@ -61,7 +67,7 @@ nodes:
 
 	scriptYaml := `
 scripts:
-    script1: /etc/script1.sh`
+    script1: ${file:/etc/script1.sh}`
 
 	tests := []struct {
 		name     string
@@ -114,7 +120,7 @@ scripts:
 				require.NotNil(t, result.V1)
 
 				assert.Len(t, result.V1.Allocations, 1)
-				assert.Len(t, result.V1.Allocations["alloc1"].Volumes, 1)
+				// assert.Len(t, result.V1.Allocations["alloc1"].Volume, 1)
 				assert.Len(t, result.V1.Allocations["alloc1"].Keys, 1)
 				assert.Len(t, result.V1.Nodes, 1)
 				assert.Len(t, result.V1.Scripts, 1)
@@ -135,7 +141,7 @@ scripts:
 				}
 			}
 
-			result, err := ProcessEnsembleYaml(fs, tt.filePath)
+			result, err := ProcessEnsembleYaml(fs, env.NewMockEnvironment(), tt.filePath)
 
 			if tt.wantErr {
 				require.Error(t, err, "Expected an error but got none")

@@ -137,14 +137,14 @@ func (m *defaultHardwareManager) GetFreeResources() (types.Resources, error) {
 }
 
 // CheckCapacity checks if the machine has enough resources to commit/allocate.
-func (m *defaultHardwareManager) CheckCapacity(resources types.Resources) (bool, error) {
+func (m *defaultHardwareManager) CheckCapacity(expected types.Resources) (bool, error) {
 	// Check if there are enough free resources on the machine to allocate
 	freeResources, err := m.GetFreeResources()
 	if err != nil {
 		return false, fmt.Errorf("get free resources: %w", err)
 	}
 
-	if err := freeResources.Subtract(resources); err != nil {
+	if err := freeResources.Subtract(expected); err != nil {
 		return false, fmt.Errorf("no free resources on the machine: %w", err)
 	}
 

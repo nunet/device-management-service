@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package observability
 
 import (
@@ -13,10 +21,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/olivere/elastic/v7"
+	"github.com/stretchr/testify/assert"
 	"gitlab.com/nunet/device-management-service/internal/config"
-	"go.elastic.co/apm"
 	"go.elastic.co/apm/transport"
+	"go.elastic.co/apm/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -197,12 +207,13 @@ func TestPreflightCheckES(t *testing.T) {
 	}
 }
 
-// StartTrace paths
-func TestStartTraceVariants(t *testing.T) {
+// StartSpan paths
+func TestStartSpan(t *testing.T) {
 	tr, _ := apm.NewTracerOptions(apm.TracerOptions{ServiceName: "unit", Transport: transport.Discard})
 
 	tracerMutex.Lock()
 	oldTracer, oldNoOp := currentTracer, tracingNoOpMode
+	// TODO
 	currentTracer, tracingNoOpMode = tr, false
 	tracerMutex.Unlock()
 
@@ -212,20 +223,45 @@ func TestStartTraceVariants(t *testing.T) {
 		tracerMutex.Unlock()
 	})
 
-	// brand‑new tx
-	txBefore := tr.Stats().TransactionsSent
-	done := StartTrace("tx‑op")
-	done()
-	tr.Flush(nil)
-	if tr.Stats().TransactionsSent-txBefore != 1 {
-		t.Fatalf("transaction not recorded")
-	}
-
 	// nested span
 	parent := tr.StartTransaction("parent", "req")
 	ctx := apm.ContextWithTransaction(context.Background(), parent)
 	spBefore := tr.Stats().SpansSent
-	done2 := StartTrace(ctx, "child")
+	done2 := StartSpan(ctx, "child")
+	done2()
+	parent.End()
+	tr.Flush(nil)
+	if tr.Stats().SpansSent-spBefore != 1 {
+		t.Fatalf("span not recorded")
+	}
+}
+
+// StartSpan paths
+func TestStartSpanGin(t *testing.T) {
+	// test tracecontext
+	t.Setenv("ELASTIC_APM_TRACEPARENT", "00-841827e1f7ef0495b7cde61893d1d83f-841827e1f7ef0495-01")
+	t.Setenv("ELASTIC_APM_TRACESTATE", "es=s:1")
+
+	tr, _ := apm.NewTracerOptions(apm.TracerOptions{ServiceName: "unit", Transport: transport.Discard})
+	initRootTrace(tr)
+
+	tracerMutex.Lock()
+	oldTracer, oldNoOp := currentTracer, tracingNoOpMode
+	// TODO
+	currentTracer, tracingNoOpMode = tr, false
+	tracerMutex.Unlock()
+
+	t.Cleanup(func() {
+		tracerMutex.Lock()
+		currentTracer, tracingNoOpMode = oldTracer, oldNoOp
+		tracerMutex.Unlock()
+	})
+
+	// nested span
+	parent := tr.StartTransaction("parent", "req")
+	ctx := &gin.Context{Request: &http.Request{}}
+	spBefore := tr.Stats().SpansSent
+	done2 := StartSpan(ctx, "child")
 	done2()
 	parent.End()
 	tr.Flush(nil)
@@ -437,10 +473,12 @@ func TestTracerNoOpAfterSetNoOp(t *testing.T) {
 		tracerMutex.Unlock()
 	})
 
+	initRootTrace(tr)
+
 	// enable global no-op
 	SetNoOpMode(true)
 
-	done := StartTrace("noop-tx")
+	done := StartSpan("noop-tx")
 	done()
 	tr.Flush(nil)
 
@@ -451,11 +489,11 @@ func TestTracerNoOpAfterSetNoOp(t *testing.T) {
 	// disable global no-op and ensure traffic resumes
 	SetNoOpMode(false)
 
-	done2 := StartTrace("active-tx")
+	done2 := StartSpan("active-tx")
 	done2()
 	tr.Flush(nil)
 
-	if got := tr.Stats().TransactionsSent; got == 0 {
+	if tr.Stats().SpansSent == 0 {
 		t.Fatalf("transactions were not sent after no-op disabled")
 	}
 }
@@ -713,4 +751,16 @@ func TestSetElasticsearchEndpointDisabledMode(t *testing.T) {
 
 		obsCfg.ElasticsearchURL = oldURL
 	})
+}
+
+func TestCollectSystemMetrics(t *testing.T) {
+	metrics := collectSystemMetrics()
+
+	keys := []string{
+		"cpuUsage", "ramUsed", "ramTotal", "diskUsed", "diskTotal", "uptime", "load15", "rxBytes",
+		"txBytes",
+	}
+	for _, key := range keys {
+		assert.Contains(t, metrics, key, "expected metric '%s' to be present", key)
+	}
 }

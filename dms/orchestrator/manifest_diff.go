@@ -10,53 +10,143 @@ package orchestrator
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
-// newConfigForAddedNodes builds a new ensemble config based on
-// a base ensemble config + new nodes
-func newConfigForAddedNodes(
-	alreadyDeployedNodes []string,
+func newConfigForDeploymentUpdate(
 	oldCfg, modifiedCfg jtypes.EnsembleConfig,
+	existingNodes map[string]string,
 ) (jtypes.EnsembleConfig, error) {
-	addedNodes := identifyNewNodes(oldCfg, modifiedCfg)
-	if len(addedNodes) == 0 {
-		return jtypes.EnsembleConfig{}, fmt.Errorf("new config for nodes: no new nodes")
-	}
-
-	nodesCfg := jtypes.EnsembleConfig{
-		V1: &jtypes.EnsembleConfigV1{
-			Allocations:  make(map[string]jtypes.AllocationConfig),
-			Nodes:        addedNodes,
-			Scripts:      modifiedCfg.V1.Scripts,
-			Keys:         modifiedCfg.V1.Keys,
-			Edges:        modifiedCfg.EdgeConstraints(),
-			Supervisor:   modifiedCfg.V1.Supervisor,
-			ExcludePeers: alreadyDeployedNodes,
-		},
-	}
-
-	// add their allocations
-	allocationsNames := make([]string, 0)
-	for _, node := range nodesCfg.Nodes() {
-		allocationsNames = append(allocationsNames, node.Allocations...)
-	}
-
+	nodes := make(map[string]jtypes.NodeConfig)
 	allocations := make(map[string]jtypes.AllocationConfig)
-	for _, name := range allocationsNames {
-		alloc, ok := modifiedCfg.Allocation(name)
-		if !ok {
-			return jtypes.EnsembleConfig{},
-				fmt.Errorf("new config for nodes: allocation %s not found", name)
+	excludePeers := modifiedCfg.V1.ExcludePeers
+
+	for n, ncfg := range modifiedCfg.Nodes() {
+		newAllocations, err := identifyNewAllocations(oldCfg, modifiedCfg, n)
+		if err != nil {
+			return jtypes.EnsembleConfig{}, err
 		}
-		allocations[name] = alloc
+
+		if peer, ok := existingNodes[n]; ok {
+			ncfg.Peer = peer
+			if len(newAllocations) == 0 {
+				excludePeers = append(excludePeers, peer)
+			}
+		}
+
+		for alloc, acfg := range newAllocations {
+			allocations[alloc] = acfg
+		}
+		ncfg.Allocations = utils.MapKeysToSlice(newAllocations)
+
+		var ports []jtypes.PortConfig
+		for _, port := range ncfg.Ports {
+			if slices.Contains(ncfg.Allocations, port.Allocation) {
+				ports = append(ports, port)
+			}
+		}
+		ncfg.Ports = ports
+
+		nodes[n] = ncfg
 	}
 
-	nodesCfg.V1.Allocations = allocations
+	return jtypes.EnsembleConfig{
+		V1: &jtypes.EnsembleConfigV1{
+			EscalationStrategy: modifiedCfg.V1.EscalationStrategy,
+			Allocations:        allocations,
+			Nodes:              nodes,
+			Scripts:            modifiedCfg.V1.Scripts,
+			Keys:               modifiedCfg.V1.Keys,
+			Edges:              modifiedCfg.EdgeConstraints(),
+			Supervisor:         modifiedCfg.V1.Supervisor,
+			ExcludePeers:       excludePeers,
+			Subnet:             modifiedCfg.Subnet(),
+			Metadata:           modifiedCfg.V1.Metadata,
+		},
+	}, nil
+}
 
-	return nodesCfg, nil
+// identifyNewAllocations returns the set of allocations for a node that are new in the modifiedConfig
+func identifyNewAllocations(
+	currentConfig, modifiedConfig jtypes.EnsembleConfig,
+	node string,
+) (map[string]jtypes.AllocationConfig, error) {
+	allocations := make(map[string]jtypes.AllocationConfig)
+	ncfg, ok := modifiedConfig.Node(node)
+	if !ok {
+		return allocations, nil
+	}
+	var currentAllocations []string
+	if cfg, ok := currentConfig.Node(node); ok {
+		currentAllocations = cfg.Allocations
+	}
+	for _, alloc := range ncfg.Allocations {
+		if slices.Contains(currentAllocations, alloc) {
+			continue
+		}
+		if allocConfig, ok := modifiedConfig.Allocation(alloc); ok {
+			allocations[alloc] = allocConfig
+		} else {
+			return nil, fmt.Errorf("allocation %s not found", alloc)
+		}
+	}
+	return allocations, nil
+}
+
+// identifyRemovedAllocations returns the set of allocations for a node that are removed in the modifiedConfig
+func identifyRemovedAllocations(
+	currentConfig, modifiedConfig jtypes.EnsembleConfig,
+	node string,
+) map[string]jtypes.AllocationConfig {
+	allocations := make(map[string]jtypes.AllocationConfig)
+	ncfg, ok := modifiedConfig.Node(node)
+	if !ok {
+		return allocations
+	}
+	if cfg, ok := currentConfig.Node(node); ok {
+		for _, alloc := range cfg.Allocations {
+			if !slices.Contains(ncfg.Allocations, alloc) {
+				if allocConfig, ok := currentConfig.Allocation(alloc); ok {
+					allocations[alloc] = allocConfig
+				}
+			}
+		}
+	}
+	return allocations
+}
+
+// identifyRemovedNodes returns the set of nodes that are removed in the modifiedConfig
+func identifyRemovedNodes(
+	currentConfig, modifiedConfig jtypes.EnsembleConfig,
+) map[string]jtypes.NodeConfig {
+	nodes := make(map[string]jtypes.NodeConfig)
+
+	for name, node := range currentConfig.Nodes() {
+		if _, exists := modifiedConfig.Node(name); !exists {
+			nodes[name] = node
+		}
+	}
+
+	return nodes
+}
+
+// identifyRelocatedNodes returns the set of node names whose Peer is changed
+// between currentConfig and modifiedConfig. These will be treated as remove+add (relocation).
+func identifyRelocatedNodes(currentConfig, modifiedConfig jtypes.EnsembleConfig) map[string]jtypes.NodeConfig {
+	nodes := make(map[string]jtypes.NodeConfig)
+
+	for name, currCfg := range currentConfig.Nodes() {
+		if modCfg, ok := modifiedConfig.Node(name); ok {
+			if currCfg.Peer != modCfg.Peer {
+				nodes[name] = currCfg
+			}
+		}
+	}
+	return nodes
 }
 
 // newConfigForRemovedNodes builds a new ensemble config based on
@@ -64,15 +154,13 @@ func newConfigForAddedNodes(
 func newConfigForRemovedNodes(
 	oldCfg, modifieCfg jtypes.EnsembleConfig,
 ) (jtypes.EnsembleConfig, error) {
-	removedNodes := identifyRemovedNodes(oldCfg, modifieCfg)
-	if len(removedNodes) == 0 {
-		return jtypes.EnsembleConfig{}, fmt.Errorf("new config for nodes: no removed nodes")
-	}
+	nodes := identifyRemovedNodes(oldCfg, modifieCfg)
+	maps.Copy(nodes, identifyRelocatedNodes(oldCfg, modifieCfg))
 
 	nodesCfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
 			Allocations: make(map[string]jtypes.AllocationConfig),
-			Nodes:       removedNodes,
+			Nodes:       nodes,
 			Scripts:     modifieCfg.V1.Scripts,
 			Keys:        modifieCfg.V1.Keys,
 			Edges:       modifieCfg.EdgeConstraints(),
@@ -136,43 +224,16 @@ func manifestOnlyForNodes(mf jtypes.EnsembleManifest, nodes []string,
 	return newMf, nil
 }
 
-func identifyNewNodes(
-	currentConfig, modifiedConfig jtypes.EnsembleConfig,
-) map[string]jtypes.NodeConfig {
-	nodes := make(map[string]jtypes.NodeConfig)
-
-	for name, node := range modifiedConfig.Nodes() {
-		if _, exists := currentConfig.Node(name); !exists {
-			nodes[name] = node
-		}
-	}
-	return nodes
-}
-
-func identifyRemovedNodes(
-	currentConfig, modifiedConfig jtypes.EnsembleConfig,
-) map[string]jtypes.NodeConfig {
-	nodes := make(map[string]jtypes.NodeConfig)
-
-	for name, node := range currentConfig.Nodes() {
-		if _, exists := modifiedConfig.Node(name); !exists {
-			nodes[name] = node
-		}
-	}
-
-	return nodes
-}
-
 // validateEnsembleUpdate checks if a given ensemble modification is valid
+// A node with it's peer changed is considered as relocated and will be treated as a new node.
 //
 // Invalid modifications:
 // - Removing supervisor
 // - Changing node location
-// - Changing node's peer
 //
 // Unsupported modifications:
-// - Changing node's ports (excepting when adding for new node's allocations)
-// - Adding edge constraints for already deployed nodes
+// - Changing node's ports (except when adding for new node's allocations)
+// - Adding edge constraints for already deployed nodes, unless at least one endpoint is a relocated node
 // - Changing supervisor strategy
 func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig) error {
 	// 1. Supervisor must not be removed
@@ -184,16 +245,12 @@ func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig)
 	// 2. Validate existing nodes
 	for name, currNode := range currentConfig.Nodes() {
 		modNode, ok := modifiedConfig.Node(name)
-		if !ok {
+		if !ok || modNode.Peer != currNode.Peer {
 			continue
 		}
 
 		if !validateLocationConstraintsUpdate(currNode.Location, modNode.Location) {
 			return fmt.Errorf("invalid modification: changing node location for node '%s' is not allowed", name)
-		}
-
-		if currNode.Peer != modNode.Peer {
-			return fmt.Errorf("invalid modification: changing node's peer for node '%s' is not allowed", name)
 		}
 
 		// Track new allocations
@@ -207,6 +264,10 @@ func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig)
 		// Validate existing port configurations
 		for _, currPort := range currNode.Ports {
 			if _, isNew := newAllocs[currPort.Allocation]; isNew {
+				continue
+			}
+			// If the allocation is removed, skip validation for the port
+			if !slices.Contains(modNode.Allocations, currPort.Allocation) {
 				continue
 			}
 			found := false
@@ -225,12 +286,17 @@ func validateEnsembleUpdate(currentConfig, modifiedConfig jtypes.EnsembleConfig)
 	}
 
 	// 3. Edge constraints: no new edges between already deployed nodes
+	// Allow new edges if at least one endpoint is a relocated node (peer changed)
 	existing := currentConfig.Nodes()
+	relocated := identifyRelocatedNodes(currentConfig, modifiedConfig)
 	for _, edge := range modifiedConfig.V1.Edges {
-		if _, sExists := existing[edge.S]; !sExists {
-			continue
-		}
-		if _, tExists := existing[edge.T]; !tExists {
+		_, sExists := existing[edge.S]
+		_, tExists := existing[edge.T]
+		_, sReloc := relocated[edge.S]
+		_, tReloc := relocated[edge.T]
+
+		// Allow if either endpoint is a new node or a relocated node
+		if !sExists || !tExists || sReloc || tReloc {
 			continue
 		}
 

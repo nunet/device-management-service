@@ -1,117 +1,69 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package steps
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
-	"golang.org/x/sync/errgroup"
 )
-
-const orgName = "org"
 
 // Deployment registers all step definitions for deployment feature
 func Deployment(ctx *godog.ScenarioContext) {
 	ctx.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-		return hooks.SetupNodes(ctx, 3)
-	})
-	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		err := hooks.SaveLogs(ctx)
-		if err != nil {
+		if err := hooks.CleanupNodes(); err != nil {
 			return ctx, err
 		}
-		return hooks.TeardownNodes(ctx)
+		return ctx, nil
+	})
+	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		if err := hooks.SaveLogs(ctx); err != nil {
+			return ctx, err
+		}
+		if err := hooks.CleanupNodes(); err != nil {
+			return ctx, err
+		}
+		return ctx, nil
 	})
 
-	ctx.Step(`^"([^"]*)" has deployed docker_hello\.yaml on "([^"]*)"$`, hasDeployedDockerHelloOn)
-	ctx.Step(`^"([^"]*)" deployment is completed$`, deploymentIsCompleted)
+	ctx.Step(`^the following nodes$`, theFollowingNodes)
+	ctx.Step(`^"([^"]*)" has deployed "([^"]*)" on "([^"]*)"$`, hasDeployedOn)
+	ctx.Step(`^"([^"]*)" deployment is (\w+)$`, deploymentIs)
 	ctx.Step(`^"([^"]*)" ensemble should return "([^"]*)"$`, ensembleShouldReturn)
 }
 
-func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (context.Context, error) {
+func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (context.Context, error) {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodes, err := tc.Nodes()
+	nodeMap, err := tc.NodeMap()
 	assert.NoError(t, err)
-	assert.NotEmpty(t, nodes)
+	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	cpName = strings.ToLower(cpName)
-
-	nodeMap := map[string]*utils.Node{
-		spName:  nodes[0],
-		cpName:  nodes[1],
-		orgName: nodes[2],
-	}
-
-	sp := nodeMap[spName]
-	cp := nodeMap[cpName]
-	org := nodeMap[orgName]
-
-	tc = tc.WithNodeMap(nodeMap)
-
-	// only Bob (compute provider) needs Docker
-	// launch goroutine while setting up capabilities
-	// docker should be available before DMS starts
-	g := new(errgroup.Group)
-	g.Go(func() error {
-		return cp.InstallDocker()
-	})
-
-	spUserCtx, spDmsCtx, err := sp.InitialCaps(spName)
-	assert.NoError(t, err)
-	assert.NotNil(t, spUserCtx)
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	cpUserCtx, cpDmsCtx, err := cp.InitialCaps(cpName)
-	assert.NoError(t, err)
-	assert.NotNil(t, cpUserCtx)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	assert.NotNil(t, cp)
 	assert.NotNil(t, cpDmsCtx)
-
-	orgCtx, err := org.CreateContext(orgName)
-	assert.NoError(t, err, "could not create org")
-	assert.NotNil(t, orgCtx)
-
-	// update nodeMap with the latest node objects that have updated contexts
-	nodeMap = map[string]*utils.Node{
-		spName:  sp,
-		cpName:  cp,
-		orgName: org,
-	}
-	// update ctx after nodes have been updated with capability contexts
-	tc = tc.WithNodeMap(nodeMap)
-
-	err = utils.SetupPrivateNetwork(spUserCtx, spDmsCtx, orgCtx)
-	assert.NoError(t, err)
-
-	err = utils.SetupPrivateNetwork(cpUserCtx, cpDmsCtx, orgCtx)
-	assert.NoError(t, err)
-
-	err = spDmsCtx.Run()
-	assert.NoError(t, err)
-
-	// wait for dms to start on sp
-	require.Eventually(t, func() bool {
-		return sp.IsDMSRunning(9999)
-	}, 20*time.Second, 500*time.Millisecond)
-
-	// check if Docker was installed successfully
-	assert.NoError(t, g.Wait())
-
-	err = cpDmsCtx.Run()
-	assert.NoError(t, err)
-
-	// wait for dms to start on cp
-	require.Eventually(t, func() bool {
-		return cp.IsDMSRunning(9999)
-	}, 20*time.Second, 500*time.Millisecond)
 
 	spInfo, err := spDmsCtx.PeerAddr()
 	assert.NoError(t, err)
@@ -128,13 +80,21 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	err = spDmsCtx.Connect(cpAddr)
 	assert.NoError(t, err)
 
-	err = cpDmsCtx.Onboard()
-	assert.NoError(t, err)
+	ensemblePath := fmt.Sprintf("ensembles/%s", ensembleName)
+	file := utils.FindTestdata(ensemblePath)
 
-	file := utils.FindTestdata("ensembles/docker_hello.yaml")
-	ensemble, err := utils.UploadEnsemble(sp, file)
+	ensemble, err := utils.UploadFile(sp, file)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
+
+	tc = tc.WithEnsembleFile(ensemble)
+
+	// Upload scripts listed in the ensemble file if needed
+	err = utils.UploadScripts(sp, ensemble)
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node1.peer = \"%s\"", cpInfo.ID), ensemble})
+	assert.NoError(t, err)
 
 	ensembleID, err := spDmsCtx.Deploy(ensemble)
 	assert.NoError(t, err)
@@ -144,7 +104,7 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	return tc.Unwrap(), nil
 }
 
-func deploymentIsCompleted(ctx context.Context, spName string) (context.Context, error) {
+func deploymentIs(ctx context.Context, spName, status string) (context.Context, error) {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
@@ -152,20 +112,43 @@ func deploymentIsCompleted(ctx context.Context, spName string) (context.Context,
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	sp := nodeMap[spName]
+	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
-	require.Eventually(t, func() bool {
-		spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-		assert.True(t, ok)
-		status, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
-		return status == "Completed"
-	}, 60*time.Second, 1*time.Second)
+	var wantStatus string
+	switch status {
+	case "fail":
+		// currently, invalid ensembles will be stuck at bidding phase,
+		// thus always displaying preparing status
+		// if we see preparing 3 times in a row we consider a failed deployment
+		wantStatus = jobtypes.DeploymentStatusPreparing.String()
+		wantSeen := 3
+		seen := 0
+		wait := 1 * time.Second
+
+		for range wantSeen {
+			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
+			assert.NoError(t, err)
+			if strings.EqualFold(ensembleStatus, wantStatus) {
+				seen++
+			} else {
+				break
+			}
+			time.Sleep(wait)
+		}
+		assert.Equal(t, wantSeen, seen, "wanted %s status %d times, got %d", wantStatus, wantSeen, seen)
+	default:
+		wantStatus = status
+		require.Eventually(t, func() bool {
+			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
+			assert.NoError(t, err)
+			return strings.EqualFold(ensembleStatus, wantStatus)
+		}, 60*time.Second, 1*time.Second)
+	}
 
 	return tc.Unwrap(), nil
 }
@@ -178,26 +161,30 @@ func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
-	spName = strings.ToLower(spName)
-	sp := nodeMap[spName]
+	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
-	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
-	assert.True(t, ok)
-
 	manifest, err := spDmsCtx.Manifest(ensembleID)
 	assert.NoError(t, err)
 	assert.NotNil(t, manifest)
 
-	path, err := spDmsCtx.LogsFromAllocation(ensembleID, "alloc1")
+	allocs := slices.Collect(maps.Keys(manifest.Allocations))
+	assert.NotEmpty(t, allocs)
+
+	alloc := allocs[0]
+
+	path, err := spDmsCtx.LogsFromAllocation(ensembleID, alloc)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, path)
 
-	// TODO: keep it consistent on DMS, rename log file as stdout.log instead
-	out, err := sp.RunCMD([]string{"cat", filepath.Join(path, "stdout.logs")})
+	logFile := "stdout.log"
+
+	out, err := sp.RunCMD([]string{"cat", filepath.Join(path, logFile)})
 	assert.NoError(t, err)
 	assert.Contains(t, out, expected)
 	return nil

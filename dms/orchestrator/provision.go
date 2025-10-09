@@ -12,6 +12,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +22,8 @@ import (
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils"
 )
 
 const orchSubnetName = "orchestrator"
@@ -28,10 +32,11 @@ var monitorOnlyTaskManifestInterval = time.Second * 10
 
 // Provisioner handles the provisioning process for ensemble deployment
 type Provisioner struct {
-	ctx            context.Context
-	cancel         context.CancelFunc
-	actor          actor.Actor
-	subnetManifest SubnetManifest
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	actor                 actor.Actor
+	subnetManifest        jtypes.SubnetManifest
+	allocationIDGenerator types.AllocationIDGenerator
 
 	lock sync.Mutex
 }
@@ -41,13 +46,15 @@ func NewProvisioner(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	actor actor.Actor,
-	subnetManifest SubnetManifest,
+	subnetManifest jtypes.SubnetManifest,
+	allocationIDGenerator types.AllocationIDGenerator,
 ) *Provisioner {
 	return &Provisioner{
-		ctx:            ctx,
-		cancel:         cancel,
-		actor:          actor,
-		subnetManifest: subnetManifest,
+		ctx:                   ctx,
+		cancel:                cancel,
+		actor:                 actor,
+		subnetManifest:        subnetManifest,
+		allocationIDGenerator: allocationIDGenerator,
 	}
 }
 
@@ -79,55 +86,64 @@ func (p *Provisioner) Provision(
 	return manifest, nil
 }
 
-func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.EnsembleManifest, error) {
-	for allocName := range manifest.Allocations {
-		err := p.addAllocationToSubnet(manifest, allocName)
+func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest, skipCreate ...string) (jtypes.EnsembleManifest, error) {
+	for allocManifestKey := range manifest.Allocations {
+		err := p.addAllocationToSubnet(manifest, allocManifestKey)
 		if err != nil {
 			return manifest,
-				fmt.Errorf("error adding allocation %s to subnet: %w", allocName, err)
+				fmt.Errorf("error adding allocation %s to subnet: %w", allocManifestKey, err)
 		}
 
-		err = manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
-			alloc.PrivAddr = p.subnetManifest.IndexRoutingTable[allocName]
+		err = manifest.UpdateAllocation(allocManifestKey, func(alloc *jtypes.AllocationManifest) {
+			alloc.PrivAddr = p.subnetManifest.IndexRoutingTable[allocManifestKey]
 		})
 		if err != nil {
-			return manifest, fmt.Errorf("error updating allocation %s: %w", allocName, err)
+			return manifest, fmt.Errorf("error updating allocation %s: %w", allocManifestKey, err)
 		}
 	}
 
 	// handles to request subnetcreate
 	subCreateHandles := []actor.Handle{}
-	for _, node := range manifest.Nodes {
-		subCreateHandles = append(subCreateHandles, node.Handle)
-	}
-
 	// subnet config requests (add peer, dns, port map)
 	subReqs := []subnetRequest{}
-	for allocName, allocManifest := range manifest.Allocations {
-		subReqs = append(subReqs, subnetRequest{
-			handle: allocManifest.Handle,
-			ip:     p.subnetManifest.IndexRoutingTable[allocName],
-			peerID: manifest.Nodes[allocManifest.NodeID].Peer,
-			ports:  allocManifest.Ports,
-		})
+	for _, nodeManifest := range manifest.Nodes {
+		if !slices.Contains(skipCreate, nodeManifest.ID) {
+			subCreateHandles = append(subCreateHandles, nodeManifest.Handle)
+		}
+		fmt.Println("allocations in manifest.Nodes", nodeManifest.Allocations)
+		for _, allocID := range nodeManifest.Allocations {
+			allocManifest, ok := manifest.Allocations[allocID]
+			if !ok {
+				log.Warnf("provisioning subnet: allocation %s not found in manifest, skipping", allocID)
+				continue
+			}
+			fmt.Println("ip", p.subnetManifest.IndexRoutingTable[allocID], "allocID", allocID)
+			subReqs = append(subReqs, subnetRequest{
+				handle: allocManifest.Handle,
+				ip:     p.subnetManifest.IndexRoutingTable[allocID],
+				peerID: manifest.Nodes[allocManifest.NodeID].Peer,
+				ports:  allocManifest.Ports,
+			})
+		}
 	}
 
 	if manifest.Subnet.Join { // orchestrator should join the subnet
-		ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
-		log.Debug("Generated IP %s for orchestrator", ip)
-		if err != nil {
-			return manifest, fmt.Errorf("error getting next IP: %w", err)
-		}
-		p.subnetManifest.RoutingTable[ip.String()] = p.actor.Handle().Address.HostID
-		p.subnetManifest.IndexRoutingTable[orchSubnetName] = ip.String()
-		p.subnetManifest.UsedIPs[ip.String()] = true
+		if _, ok := p.subnetManifest.IndexRoutingTable[orchSubnetName]; !ok {
+			ip, err := netutils.GetNextIP(p.subnetManifest.CIDR, p.subnetManifest.UsedIPs)
+			log.Debug("Generated IP %s for orchestrator", ip)
+			if err != nil {
+				return manifest, fmt.Errorf("error getting next IP: %w", err)
+			}
+			p.subnetManifest.RoutingTable[ip.String()] = p.actor.Handle().Address.HostID
+			p.subnetManifest.IndexRoutingTable[orchSubnetName] = ip.String()
+			p.subnetManifest.UsedIPs[ip.String()] = true
 
-		subCreateHandles = append(subCreateHandles, p.actor.Supervisor())
-		p.subnetManifest.DNSRecords[orchSubnetName] = p.subnetManifest.IndexRoutingTable[orchSubnetName]
+			subCreateHandles = append(subCreateHandles, p.actor.Supervisor())
+			p.subnetManifest.DNSRecords[orchSubnetName] = p.subnetManifest.IndexRoutingTable[orchSubnetName]
+		}
 	}
 
-	// 1.a create subnet in each peer
-	err := p.createSubnet(manifest.ID, subReqs, p.subnetManifest.RoutingTable, subCreateHandles)
+	err := p.createSubnet(manifest.ID, p.subnetManifest.RoutingTable, subCreateHandles)
 	if err != nil {
 		return manifest, fmt.Errorf("error creating subnet: %w", err)
 	}
@@ -135,13 +151,17 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest) (jtypes.
 	// if orchestrator should join subnet, setup with one behavior
 	// this doesn't look very good but let's address with #893
 	if manifest.Subnet.Join {
-		err := p.orchestratorJoinSubnet(manifest.ID, p.subnetManifest.IndexRoutingTable, p.subnetManifest.DNSRecords)
+		err := p.orchestratorJoinSubnet(manifest.ID, p.subnetManifest.IndexRoutingTable, p.subnetManifest.RoutingTable, p.subnetManifest.DNSRecords)
 		if err != nil {
 			return manifest, fmt.Errorf("error joining subnet: %w", err)
 		}
 	}
 
 	// 1.b create and plug IPs
+	log.Infof("Adding %d peers to subnet %s", len(subReqs), manifest.ID)
+	for i, req := range subReqs {
+		log.Infof("Subnet request %d: Handle=%s, IP=%s, PeerID=%s", i, req.handle, req.ip, req.peerID)
+	}
 	err = p.subnetAddPeer(manifest.ID, subReqs)
 	if err != nil {
 		return manifest, fmt.Errorf("error adding peers to subnet: %w", err)
@@ -166,7 +186,6 @@ func (p *Provisioner) provisionAllocations(
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
 ) (jtypes.EnsembleManifest, error) {
 	var wg sync.WaitGroup
-	var aggErr error
 
 	interim := map[string][]string{} // a map of verteces to edges (their dependencies)
 	for allocName, allocCfg := range cfg.Allocations() {
@@ -179,63 +198,112 @@ func (p *Provisioner) provisionAllocations(
 	}
 
 	allocStatuses := make(map[string]jtypes.AllocationStatus)
-	for _, allocs := range orderedAllocs {
-		wg = sync.WaitGroup{}
-		for _, allocName := range allocs {
+	for nodeKey, nodeManifest := range manifest.Nodes {
+		if nodeManifest.RedundancyRole == jtypes.RoleStandby {
+			continue // skip standby nodes' allocations
+		}
+		for _, allocs := range orderedAllocs {
+			wg = sync.WaitGroup{}
 			errCh := make(chan error, len(allocs))
-			wg.Add(1)
-			go func(allocManifest jtypes.AllocationManifest) {
-				defer wg.Done()
-
-				msg, err := actor.Message(
-					p.actor.Handle(),
-					allocManifest.Handle,
-					behaviors.AllocationStartBehavior,
-					behaviors.AllocationStartRequest{
-						SubnetIP:    p.subnetManifest.IndexRoutingTable[allocName],
-						GatewayIP:   p.subnetManifest.GatewayIP,
-						PortMapping: allocManifest.Ports,
-					},
-					actor.WithMessageExpiry(actor.MakeExpiry(AllocationStartTimeout)),
-				)
+			for _, allocName := range allocs {
+				allocKey, err := p.allocationIDGenerator.GenerateManifestKey(nodeKey, allocName)
 				if err != nil {
-					errCh <- fmt.Errorf("error creating allocation start message: %w", err)
-					return
+					log.Errorf("failed to generate manifest key for %s.%s: %v", nodeKey, allocName, err)
+					continue
 				}
-
-				replyCh, err := p.actor.Invoke(msg)
-				if err != nil {
-					errCh <- fmt.Errorf("error invoking allocation start: %w", err)
-					return
+				// TODO: this is a temporary hack, we need to find better ways to handle this
+				rawNodeAllocations := make([]string, 0)
+				for _, alloc := range nodeManifest.Allocations {
+					parts := strings.Split(alloc, ".")
+					if len(parts) != 2 {
+						log.Errorf("invalid allocation key format: %s, skipping", alloc)
+						continue
+					}
+					rawNodeAllocations = append(rawNodeAllocations, parts[1])
 				}
+				if !utils.SliceContains(rawNodeAllocations, allocName) {
+					log.Debugf("skipping allocation %s because it's not on node %s", allocName, nodeKey)
+					continue
+				}
+				wg.Add(1)
+				go func(allocManifest jtypes.AllocationManifest, allocKey string) {
+					defer wg.Done()
 
-				ticker := time.NewTicker(AllocationStartTimeout)
-				defer ticker.Stop()
+					// Determine if this is a standby allocation
+					isStandby := allocManifest.IsStandby
+					nodeManifest := manifest.Nodes[allocManifest.NodeID]
+					if nodeManifest.RedundancyRole == jtypes.RoleStandby {
+						isStandby = true
+					}
 
-				var reply actor.Envelope
-				select {
-				case reply = <-replyCh:
-					defer reply.Discard()
-
-					var response behaviors.AllocationStartResponse
-					if err := json.Unmarshal(reply.Message, &response); err != nil {
-						errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
+					msg, err := actor.Message(
+						p.actor.Handle(),
+						allocManifest.Handle,
+						behaviors.AllocationStartBehavior,
+						behaviors.AllocationStartRequest{
+							SubnetIP:    p.subnetManifest.IndexRoutingTable[allocKey],
+							GatewayIP:   p.subnetManifest.GatewayIP,
+							PortMapping: allocManifest.Ports,
+						},
+						actor.WithMessageExpiry(actor.MakeExpiry(AllocationStartTimeout)),
+					)
+					if err != nil {
+						errCh <- fmt.Errorf("error creating allocation start message: %w", err)
 						return
 					}
 
-					if !response.OK {
-						allocStatuses[allocName] = jtypes.AllocationFailed
-						errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
+					replyCh, err := p.actor.Invoke(msg)
+					if err != nil {
+						errCh <- fmt.Errorf("error invoking allocation start: %w", err)
 						return
 					}
-				case <-ticker.C:
-					errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
-					return
-				}
 
-				log.Infof("allocation successfully started on peer %s for allocation %s", &allocManifest.Handle.DID, manifest.ID)
-				allocStatuses[allocName] = jtypes.AllocationRunning
-			}(manifest.Allocations[allocName])
+					ticker := time.NewTicker(AllocationStartTimeout)
+					defer ticker.Stop()
+
+					var reply actor.Envelope
+					select {
+					case reply = <-replyCh:
+						defer reply.Discard()
+
+						var response behaviors.AllocationStartResponse
+						if err := json.Unmarshal(reply.Message, &response); err != nil {
+							errCh <- fmt.Errorf("error unmarshalling allocation start response: %w", err)
+							return
+						}
+
+						if !response.OK {
+							allocStatuses[allocKey] = jtypes.AllocationFailed
+							errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
+							return
+						}
+					case <-ticker.C:
+						errCh <- fmt.Errorf("timeout starting allocation: %w", ErrDeploymentFailed)
+						return
+					}
+
+					statusMsg := "started"
+					status := jtypes.AllocationRunning
+					if isStandby {
+						statusMsg = "prepared in standby mode"
+						status = jtypes.AllocationStandby
+					}
+
+					allocStatuses[allocKey] = status
+					log.Infof("allocation successfully %s started on peer %s for allocation %s", statusMsg, &allocManifest.Handle.DID, allocManifest.ID)
+				}(manifest.Allocations[allocKey], allocKey)
+			}
+
+			wg.Wait()
+
+			for allocKey, status := range allocStatuses {
+				if alloc, ok := manifest.Allocations[allocKey]; ok {
+					alloc.Status = status
+					manifest.Allocations[allocKey] = alloc
+				} else {
+					log.Warnf("allocation %s not found in manifest", allocKey)
+				}
+			}
 
 			wg.Wait()
 
@@ -244,12 +312,15 @@ func (p *Provisioner) provisionAllocations(
 					alloc.Status = status
 				})
 				if err != nil {
-					aggErr = err
+					log.Warnf("error updating allocation status: %s", err)
+					go func() {
+						errCh <- err
+					}()
 				}
 			}
 
 			close(errCh)
-			if aggregateErrors(errCh) != nil {
+			if aggErr := aggregateErrors(errCh); aggErr != nil {
 				return manifest, aggErr
 			}
 		}

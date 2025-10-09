@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package node
 
 import (
@@ -40,8 +48,8 @@ import (
 )
 
 const (
-	portRangeFrom = 3000
-	portRangeTo   = 3100
+	portRangeFrom = 30000
+	portRangeTo   = 30100
 
 	MockTotalCPU  = 12
 	MockTotalRAM  = 32 * 1024 * 1024 * 1024  // 32 GB
@@ -57,7 +65,7 @@ func createKey(t *testing.T, fs afero.Fs, basePath, contextKey, passphrase strin
 	t.Helper()
 
 	keyStoreDir := filepath.Join(basePath, KeystoreDir)
-	ks, err := keystore.New(fs, keyStoreDir)
+	ks, err := keystore.New(fs, keyStoreDir, false)
 	require.NoError(t, err)
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
@@ -103,7 +111,7 @@ func newLibp2pNetwork(t *testing.T, mockFs afero.Fs, bootstrap []multiaddr.Multi
 			Server:                  false,
 			Scheduler:               scheduler,
 			CustomNamespace:         "/nunet-dht-1/",
-			ListenAddress:           []string{"/ip4/0.0.0.0/tcp/0"},
+			ListenAddress:           []string{"/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic-v1"},
 			GracePeriodMs:           1000,
 			PeerCountDiscoveryLimit: 40,
 			GossipMaxMessageSize:    2 << 16,
@@ -241,7 +249,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		"machine_resources",
 		"onboarding_config",
 		"resource_allocation",
-		"orchestrator_view",
+		"deployments",
 	})
 	require.NoError(t, err)
 
@@ -274,7 +282,6 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	require.NotNil(t, mockResourceManager)
 
 	onboardR := cloverDB.NewGenericEntityRepository[types.OnboardingConfig](db)
-	orchestR := cloverDB.NewGenericRepository[jobtypes.OrchestratorView](db)
 
 	onboardingManager, err := onboarding.New(context.Background(), mockResourceManager, mockHardwareManager, onboardR)
 	require.NoError(t, err)
@@ -288,6 +295,8 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	scheduler := backgroundtasks.NewScheduler(1, time.Second)
 
 	vNet, priv := setupTestNetwork(t, substrate)
+
+	subnetStatus = make(map[string]int)
 
 	// allocator, nP2PNet, priv := newMockAllocator(t, substrate)
 	allocator := newAllocator(
@@ -317,14 +326,12 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	node.resourceManager = mockResourceManager
 	node.scheduler = scheduler
 	node.hostID = vNet.GetHostID().String()
-	node.orchestratorRepo = orchestR
 	node.hostLocation = hostLocation
 	node.volumeController = &controller.GlusterController{}
 	node.volumeOwners = make(map[string]string)
 	node.geoIP = geoip2db
 	node.fs = mockFs
 	node.ctx, node.cancel = context.WithCancel(context.Background())
-	node.orchestratorRepo = cloverDB.NewGenericRepository[jobtypes.OrchestratorView](db)
 	node.orchestratorRegistry = orchestrator.NewMockOrchestratorRegistry()
 	node.bids = make(map[string]*bidState)
 	node.answeredBids = make(map[string][]uint64)
@@ -371,6 +378,160 @@ func newMockNodeWithSender(t *testing.T, behavior string) (*Node, *actor.BasicAc
 
 	netSubstrate := network.NewSubstrate()
 	node, nRootTrust, nRootDID := newMockNode(t, netSubstrate)
+
+	// sender actor
+	sNet, sPriv := setupTestNetwork(t, netSubstrate)
+
+	sActor, sActorCap, sRootTrust, sRootDID := newActor(t, sPriv, sNet)
+	err := sActor.Start()
+	assert.NoError(t, err)
+
+	actor.AllowReciprocal(t, node.actor.Security().Capability(), nRootTrust, nRootDID, sRootDID, behavior)
+	actor.AllowReciprocal(t, sActorCap, sRootTrust, sRootDID, nRootDID, behavior)
+
+	return node, sActor, sNet
+}
+
+// newMockNodeWithOrchestratorRegistry creates a mock node with real orchestrator registry (for testing persistence)
+func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substrate) (*Node, did.TrustContext, did.DID) {
+	t.Helper()
+
+	// var geoLite2Country []byte
+	geoip2db, err := geoip2.FromBytes(geoLite2Country)
+	require.NoError(t, err)
+	require.NotNil(t, geoip2db)
+
+	mockFs := afero.Afero{Fs: afero.NewMemMapFs()}
+
+	// config
+	dcfg := config.DefaultConfig
+	dcfg.Observability.ElasticsearchEnabled = false
+
+	// mock database
+	db, err := cloverDB.NewMemDB([]string{
+		"free_resources",
+		"request_tracker",
+		"onboarded_resources",
+		"machine_resources",
+		"onboarding_config",
+		"resource_allocation",
+		"deployments", // Use the new deployments collection
+	})
+	require.NoError(t, err)
+
+	repos := resources.ManagerRepos{
+		OnboardedResources: cloverDB.NewGenericEntityRepository[types.OnboardedResources](db),
+		ResourceAllocation: cloverDB.NewGenericRepository[types.ResourceAllocation](db),
+	}
+
+	onboardR := cloverDB.NewGenericEntityRepository[types.OnboardingConfig](db)
+
+	// Create deployment store for orchestrator registry
+	deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
+	require.NoError(t, err)
+
+	mockHardwareManager := hardware.NewMockHardwareManager(
+		types.MachineResources{
+			Resources: types.Resources{
+				CPU:  types.CPU{Cores: MockTotalCPU},
+				RAM:  types.RAM{Size: MockTotalRAM},   // 32 GB
+				Disk: types.Disk{Size: MockTotalDisk}, // 100 GB
+			},
+		},
+		types.Resources{
+			CPU:  types.CPU{Cores: MockTotalCPU},
+			RAM:  types.RAM{Size: MockTotalRAM},   // 32 GB
+			Disk: types.Disk{Size: MockTotalDisk}, // 100 GB
+		},
+		types.Resources{
+			CPU:  types.CPU{Cores: 2},
+			RAM:  types.RAM{Size: 2 * 1024 * 1024 * 1024},  // 2 GB
+			Disk: types.Disk{Size: 2 * 1024 * 1024 * 1024}, // 2 GB
+		},
+	)
+	mockResourceManager, err := resources.NewResourceManager(repos, mockHardwareManager)
+	require.NoError(t, err)
+	require.NotNil(t, mockResourceManager)
+
+	onboardingManager, err := onboarding.New(context.Background(), mockResourceManager, mockHardwareManager, onboardR)
+	require.NoError(t, err)
+
+	hostLocation := geolocation.Geolocation{
+		Continent: dcfg.HostContinent,
+		Country:   dcfg.HostCountry,
+		City:      dcfg.HostCity,
+	}
+
+	scheduler := backgroundtasks.NewScheduler(1, time.Second)
+
+	vNet, priv := setupTestNetwork(t, substrate)
+
+	subnetStatus = make(map[string]int)
+
+	// allocator, nP2PNet, priv := newMockAllocator(t, substrate)
+	allocator := newAllocator(
+		&storage.VolumeTracker{},
+		newPortAllocator(
+			PortConfig{
+				AvailableRangeFrom: portRangeFrom,
+				AvailableRangeTo:   portRangeTo,
+			},
+		),
+		mockResourceManager,
+		mockHardwareManager,
+		vNet,
+		mockFs,
+		dcfg.WorkDir,
+		vNet.GetHostID().String(),
+	)
+	nActor, nActorCap, nRootTrust, nRootDID := newActor(t, priv, vNet)
+
+	node := &Node{}
+	node.onboarding = onboardingManager
+	node.allocator = allocator
+	node.network = vNet
+	node.actor = nActor
+	node.rootCap = nActorCap
+	node.hardware = mockHardwareManager
+	node.resourceManager = mockResourceManager
+	node.scheduler = scheduler
+	node.hostID = vNet.GetHostID().String()
+	node.hostLocation = hostLocation
+	node.volumeController = &controller.GlusterController{}
+	node.volumeOwners = make(map[string]string)
+	node.geoIP = geoip2db
+	node.fs = mockFs
+	node.ctx, node.cancel = context.WithCancel(context.Background())
+	node.orchestratorRegistry = orchestrator.NewRegistry(deploymentStore) // Use real registry
+	node.bids = make(map[string]*bidState)
+	node.answeredBids = make(map[string][]uint64)
+	node.peers = make(map[peer.ID]*peerState)
+	node.dmsConfig = dcfg
+	node.ctx, node.cancel = context.WithCancel(context.Background())
+	node.executors = make(map[string]executorMetadata)
+	node.executors[string(jobtypes.ExecutorDocker)] = executorMetadata{
+		executor:      &docker.Executor{},
+		executionType: jobtypes.ExecutorDocker,
+	}
+
+	dmsBehaviors := node.getDMSBehaviors()
+	for behavior, handler := range dmsBehaviors {
+		err := node.actor.AddBehavior(behavior, handler.fn, handler.opts...)
+		require.NoError(t, err, "failed to add behavior %s", behavior)
+	}
+
+	err = node.actor.Start()
+	require.NoError(t, err)
+
+	return node, nRootTrust, nRootDID
+}
+
+// newMockNodeWithOrchestratorRegistryAndSender creates a mock node with real orchestrator registry and sender actor
+func newMockNodeWithOrchestratorRegistryAndSender(t *testing.T, behavior string) (*Node, *actor.BasicActor, network.Network) {
+	t.Helper()
+
+	netSubstrate := network.NewSubstrate()
+	node, nRootTrust, nRootDID := newMockNodeWithOrchestratorRegistry(t, netSubstrate)
 
 	// sender actor
 	sNet, sPriv := setupTestNetwork(t, netSubstrate)

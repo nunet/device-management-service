@@ -10,8 +10,15 @@ package libp2p
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
+	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
+	"github.com/quic-go/quic-go"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -21,14 +28,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
-	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
-	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
+	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ws "github.com/libp2p/go-libp2p/p2p/transport/websocket"
 	webtransport "github.com/libp2p/go-libp2p/p2p/transport/webtransport"
@@ -36,12 +42,13 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	mafilt "github.com/whyrusleeping/multiaddr-filter"
 
+	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 // NewHost returns a new libp2p host with dht and other related settings.
-func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p peer.ID) float64, scoreInspect pubsub.ExtendedPeerScoreInspectFn) (host.Host, *dht.IpfsDHT, *pubsub.PubSub, error) {
+func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p peer.ID) float64, scoreInspect pubsub.ExtendedPeerScoreInspectFn) (host.Host, *dht.IpfsDHT, *pubsub.PubSub, *net.UDPConn, *RawQUICTransport, error) {
 	newPeer := make(chan peer.AddrInfo)
 
 	var idht *dht.IpfsDHT
@@ -51,7 +58,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		connmgr.WithGracePeriod(time.Duration(config.GracePeriodMs)*time.Millisecond),
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	filter := ma.NewFilters()
@@ -69,7 +76,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 
 	ps, err := pstoremem.NewPeerstore()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	var libp2pOpts []libp2p.Option
@@ -108,10 +115,66 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 
 	mgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(scaled))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	libp2pOpts = append(libp2pOpts, libp2p.ListenAddrStrings(config.ListenAddress...),
+	// get quic port from listen address
+	quicPort := 0
+	hasQUICPort := false
+	for _, addr := range config.ListenAddress {
+		maddr := ma.StringCast(addr)
+		maddrComps := ma.Split(maddr)
+		for _, comp := range maddrComps {
+			if comp.Protocol().Code == ma.P_UDP {
+				quicPort, err = strconv.Atoi(comp.Value())
+				if err != nil {
+					log.Errorf("failed to parse QUIC port from address %s: %v", addr, err)
+					return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse QUIC port from address %s: %v", addr, err)
+				}
+				log.Infof("QUIC port found in address %s: %d", addr, quicPort)
+				hasQUICPort = true
+				break
+			}
+		}
+	}
+
+	// quic port must be set
+	if !hasQUICPort {
+		log.Errorf("QUIC port not found in listen addresses")
+		return nil, nil, nil, nil, nil, fmt.Errorf("QUIC port not found in listen addresses")
+	}
+
+	udpConn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: quicPort})
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("failed to create UDP listener: %w", err)
+	}
+	rqtr := NewRawQUICTransport(udpConn)
+	newReuse := func(statelessResetKey quic.StatelessResetKey, tokenGeneratorKey quic.TokenGeneratorKey) (*quicreuse.ConnManager, error) {
+		reuseConnM, err := quicreuse.NewConnManager(
+			statelessResetKey,
+			tokenGeneratorKey,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create reuse: %w", err)
+		}
+
+		trDone, err := reuseConnM.LendTransport("udp4", rqtr, udpConn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add transport to reuse: %w", err)
+		}
+
+		go func() {
+			// wait for the connection manager to be done to close the raw quic transport
+			<-trDone
+			log.Info("closing raw quic transport")
+			rqtr.Close()
+		}()
+
+		return reuseConnM, nil
+	}
+
+	libp2pOpts = append(libp2pOpts,
+		libp2p.ListenAddrStrings(config.ListenAddress...),
 		libp2p.ResourceManager(mgr),
 		libp2p.Identity(config.PrivateKey),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
@@ -121,23 +184,23 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		libp2p.Peerstore(ps),
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.Security(noise.ID, noise.New),
-		// libp2p.NoListenAddrs,
 		libp2p.ChainOptions(
 			libp2p.Transport(tcp.NewTCPTransport),
-			libp2p.Transport(quic.NewTransport),
+			libp2p.Transport(libp2pquic.NewTransport),
 			libp2p.Transport(webtransport.New),
 			libp2p.Transport(ws.New),
 		),
-		// libp2p.EnableNATService(),
 		libp2p.ConnectionManager(connmgr),
+		libp2p.EnableNATService(),
+		libp2p.EnableAutoNATv2(),
 		libp2p.EnableRelay(),
-		libp2p.EnableHolePunching(),
 		libp2p.EnableRelayService(
 			relay.WithLimit(&relay.RelayLimit{
 				Duration: 5 * time.Minute,
 				Data:     1 << 21, // 2 MiB
 			}),
 		),
+		// TODO debug: disable relay
 		libp2p.EnableAutoRelayWithPeerSource(
 			func(ctx context.Context, num int) <-chan peer.AddrInfo {
 				r := make(chan peer.AddrInfo)
@@ -164,6 +227,8 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 			autorelay.WithMaxCandidates(3),
 			autorelay.WithNumRelays(2),
 		),
+		libp2p.EnableHolePunching(holepunch.WithAddrFilter(&quicAddrFilter{})),
+		libp2p.QUICReuse(newReuse),
 	)
 
 	if config.Server {
@@ -173,31 +238,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 
 	host, err := libp2p.New(libp2pOpts...)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// dht with old prefix for backward compatibility
-	// TODO: deprecate this once enough nodes are updated to use the new prefix #1089
-	bwDHTOpts := []dht.Option{
-		dht.ProtocolPrefix(protocol.ID("")), // no prefix
-		dht.NamespacedValidator(strings.ReplaceAll(config.CustomNamespace, "/", ""), dhtValidator{PS: ps, customNamespace: config.DHTPrefix}),
-		dht.Mode(dht.ModeAutoServer),
-	}
-	bwDHT, err := dht.New(ctx, host, bwDHTOpts...)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	err = bwDHT.Bootstrap(ctx)
-	if err != nil {
-		log.Errorw("failed to bootstrap backward dht",
-			"labels", string(observability.LabelNode),
-			"error", err,
-		)
-	} else {
-		log.Infow("backward dht bootstrap completed",
-			"labels", string(observability.LabelNode),
-		)
+		return nil, nil, nil, nil, nil, err
 	}
 
 	go watchForNewPeers(ctx, host, newPeer)
@@ -226,7 +267,6 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		),
 		pubsub.WithPeerExchange(true),
 		pubsub.WithPeerScoreInspect(scoreInspect, time.Second),
-		pubsub.WithMessageSigning(true),
 		pubsub.WithStrictSignatureVerification(true),
 	}
 	if config.GossipMaxMessageSize > 0 {
@@ -235,9 +275,9 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	gossip, err := pubsub.NewGossipSub(ctx, host, optsPS...)
 	// gossip, err := pubsub.NewGossipSubWithRouter(ctx, host, pubsub.DefaultGossipSubRouter(host), optsPS...)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	return host, idht, gossip, nil
+	return host, idht, gossip, udpConn, rqtr, nil
 }
 
 func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.AddrInfo) {

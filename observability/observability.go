@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package observability
 
 import (
@@ -112,8 +120,10 @@ func initLogger(observabilityConfig config.Observability) error {
 		return nil
 	}
 
-	// 1. Check if GOLOG_LOG_LEVEL is set. If so, let that override any config-based level
-	if envLogLevel := os.Getenv("GOLOG_LOG_LEVEL"); envLogLevel != "" {
+	// 1. Check if DMS_OBSERVE_LEVEL and GOLOG_LOG_LEVEL is set. If so, let that override any config-based level
+	if envLogLevel := os.Getenv("DMS_OBSERVE_LEVEL"); envLogLevel != "" {
+		observabilityConfig.LogLevel = envLogLevel
+	} else if envLogLevel := os.Getenv("GOLOG_LOG_LEVEL"); envLogLevel != "" {
 		observabilityConfig.LogLevel = envLogLevel
 	}
 
@@ -186,11 +196,16 @@ func parseLogLevel(levelStr string) (zapcore.Level, error) {
 	return level, nil
 }
 
+func utcTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	// Use zapcore.ISO8601TimeEncoder on the UTC time.
+	zapcore.ISO8601TimeEncoder(t.UTC(), enc)
+}
+
 // createConsoleCore creates a console logging core
 func createConsoleCore(levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = utcTimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 
 	consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
@@ -202,7 +217,7 @@ func createConsoleCore(levelEnabler zapcore.LevelEnabler) zapcore.Core {
 func createFileCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) zapcore.Core {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = utcTimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 
 	fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
@@ -217,7 +232,7 @@ func createFileCore(observabilityConfig config.Observability, levelEnabler zapco
 	return zapcore.NewCore(fileEncoder, fileWS, levelEnabler)
 }
 
-// createElasticsearchCore creates an Elasticsearch logging core with “preflight” fallback
+// createElasticsearchCore creates an Elasticsearch logging core with "preflight" fallback
 func createElasticsearchCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) (zapcore.Core, error) {
 	// Basic validations
 	if observabilityConfig.ElasticsearchURL == "" {
@@ -244,7 +259,7 @@ func createElasticsearchCore(observabilityConfig config.Observability, levelEnab
 
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = timestampKey
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeTime = utcTimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 
 	esEncoder := zapcore.NewJSONEncoder(encoderConfig)
@@ -482,7 +497,7 @@ func (b *bufferedElasticsearchSyncer) Flush() {
 
 	_, err := bulkRequest.Do(flushCtx)
 	if err != nil {
-		// If it’s a 401, disable ES immediately (atomic, no global lock)
+		// If it's a 401, disable ES immediately (atomic, no global lock)
 		if esErr, ok := err.(*elastic.Error); ok && esErr.Status == 401 {
 			disableES()
 			return
@@ -568,7 +583,7 @@ func (e *eventEmitterCore) With(fields []zapcore.Field) zapcore.Core {
 }
 
 func (e *eventEmitterCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
-	if e.Enabled(entry.Level) {
+	if e.LevelEnabler.Enabled(entry.Level) {
 		return ce.AddCore(entry, e)
 	}
 	return ce

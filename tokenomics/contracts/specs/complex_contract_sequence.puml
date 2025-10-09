@@ -1,0 +1,84 @@
+@startuml Complex Contract Management Sequence
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam monochrome false
+skinparam shadowing false
+
+title Complex Contract Management - Multi-Party Workflow Sequence
+
+participant "Solution Enabler\n(SE)" as SE
+participant "Compute Provider\n(CP)" as CP
+participant "Solution Provider\n(SP)" as SP
+participant "Contract Host\n(with database and Ocaps verifier)" as ContractHost
+participant "Contract Actors" as ContractActors
+participant "SP Computer" as SPComputer
+participant "CP Computer" as CPComputer
+
+== Phase 1: SE Creates Contract with CP ==
+
+SE -> ContractHost : 1. Create SE-to-CP contract
+activate ContractHost
+
+CP -> ContractHost : 2. Sign contract
+ContractHost -> ContractActors : 3. Contract actor creation (Contract-DID-1)
+activate ContractActors
+
+== Phase 2: SE Creates Contract with SP ==
+
+SE -> ContractHost : 4. Create SE-to-SP contract
+
+SP -> ContractHost : 5. Sign contract
+ContractHost -> ContractActors : 6. Contract actor creation (Contract-DID-2)
+
+deactivate ContractHost
+
+== Phase 3: SP Requests Deployment ==
+
+SPComputer -> CPComputer : 7. Deployment request (includes SP-DID and deployment specs)
+activate CPComputer
+
+== Phase 4: CP Verifies Contract Chain ==
+
+CPComputer -> ContractActors : 8. Query contract existence and verify complex contract chain (SP-DID, CP-DID)
+
+ContractActors -> ContractHost : 9. Request chain verification
+activate ContractHost
+
+note over ContractHost
+  Ocap chain verification process:
+  1. Find contracts where CP is party
+  2. Find contracts where SP is party  
+  3. Check if same SE in both
+  4. Verify transparency properties
+  5. Validate capability delegation
+end note
+
+alt Contract chain valid
+    ContractHost -> ContractActors : 10a. Valid contract chain confirmed (SE-DID)
+    deactivate ContractHost
+    ContractActors -> CPComputer : 11a. Valid contract chain confirmed (SE-DID)
+    
+    == Phase 5: Deployment and Execution ==
+    
+    CPComputer -> SPComputer : 12a. Accept deployment - deploy and execute
+    activate SPComputer
+    
+    SPComputer -> CPComputer : 13. Job completion notification
+    deactivate SPComputer
+    
+else Contract chain invalid
+    ContractHost -> ContractActors : 10b. Invalid contract chain
+    deactivate ContractHost
+    ContractActors -> CPComputer : 11b. Invalid contract chain
+    CPComputer -> SPComputer : 12b. Deployment rejected
+    note right of CPComputer
+      Error: "No valid contract chain
+      found with Solution Enabler"
+    end note
+end
+
+deactivate CPComputer
+deactivate ContractActors
+
+@enduml

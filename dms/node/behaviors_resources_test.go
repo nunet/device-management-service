@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package node
 
 import (
@@ -13,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/null"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -88,6 +97,8 @@ func TestHandleAllocatedResources(t *testing.T) {
 				},
 			},
 			nullExecutor,
+			map[string]types.ContractConfig{},
+			eventhandler.New(ctx, 1, 1, time.Second, time.Second, node.handleContractEvents),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)
@@ -218,6 +229,8 @@ func TestHandleFreeResources(t *testing.T) {
 				},
 			},
 			nullExecutor,
+			map[string]types.ContractConfig{},
+			eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)

@@ -39,7 +39,7 @@ func TestDHT_Validate(t *testing.T) {
 		customNamespace: customNamespace,
 	}
 
-	priv, pub, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	priv, pub, err := crypto.GenerateEd25519Key(rand.Reader)
 	require.NoError(t, err)
 
 	pubRaw, err := pub.Raw()
@@ -149,7 +149,7 @@ func TestDHT_Select(t *testing.T) {
 }
 
 func TestDHT_SendMessage(t *testing.T) {
-	hosts := newNetwork(t, 2, false)
+	hosts := newNetwork(t, 2, false, "test")
 	require.Len(t, hosts, 2)
 	hostAlice := hosts[0]
 	hostBob := hosts[1]
@@ -170,7 +170,7 @@ func TestDHT_SendMessage(t *testing.T) {
 
 		// Unmarshal the message
 		msg := new(dht_pb.Message)
-		err = msg.Unmarshal(bytes)
+		err = proto.Unmarshal(bytes, msg)
 		require.NoError(t, err)
 
 		// Verify the message content
@@ -202,7 +202,7 @@ func TestDHT_SendMessage(t *testing.T) {
 }
 
 func TestDHT_SendRequest(t *testing.T) {
-	hosts := newNetwork(t, 2, false)
+	hosts := newNetwork(t, 2, false, "test")
 	require.Len(t, hosts, 2)
 	hostAlice := hosts[0]
 	hostBob := hosts[1]
@@ -232,7 +232,7 @@ func TestDHT_SendRequest(t *testing.T) {
 
 		// Unmarshal the request
 		msg := new(dht_pb.Message)
-		err = msg.Unmarshal(bytes)
+		err = proto.Unmarshal(bytes, msg)
 		require.NoError(t, err)
 
 		// Verify the message content

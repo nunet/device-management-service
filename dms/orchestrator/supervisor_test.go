@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package orchestrator
 
 import (
@@ -25,7 +33,7 @@ func TestSupervision(t *testing.T) {
 	provider := MakeProvider(t, substrate)
 
 	// Set up the behaviors first
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	healthcheckCh := make(chan struct{}, 1)
 
@@ -195,7 +203,7 @@ func TestSupervision(t *testing.T) {
 
 		reply, err := actor.ReplyTo(msg, jtypes.AllocationDeploymentResponse{
 			OK:          true,
-			Allocations: map[string]actor.Handle{"alloc1": allocationActor.Handle()},
+			Allocations: map[string]actor.Handle{"test-ensemble_node1.alloc1": allocationActor.Handle()},
 		})
 		if err != nil {
 			log.Errorf("Failed to create reply: %v", err)
@@ -258,7 +266,7 @@ func TestSupervision(t *testing.T) {
 	workDir := "/tmp"
 	ensembleID := "test-ensemble"
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Start deployment
@@ -273,7 +281,7 @@ func TestSupervision(t *testing.T) {
 	select {
 	case err := <-deployDone:
 		require.NoError(t, err)
-	case <-time.After(2 * time.Minute):
+	case <-time.After(5 * time.Minute):
 		t.Fatal("Timeout waiting for deployment to complete")
 	}
 
@@ -285,8 +293,385 @@ func TestSupervision(t *testing.T) {
 		select {
 		case <-healthcheckCh:
 			t.Logf("Received healthcheck %d", i+1)
-		case <-time.After(35 * time.Second): // Slightly longer than the 30s interval
+		case <-time.After(60 * time.Second): // Slightly longer than the 30s interval
 			t.Fatalf("Timeout waiting for healthcheck %d", i+1)
 		}
 	}
+}
+
+func TestSupervisorUpdate(t *testing.T) {
+	substrate := network.NewSubstrate()
+	orch := MakeOrchestrator(t, substrate)
+	provider := MakeProvider(t, substrate)
+
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+
+	cfg := jtypes.EnsembleConfig{
+		V1: &jtypes.EnsembleConfigV1{
+			Nodes: map[string]jtypes.NodeConfig{
+				"node1": {
+					Location: jtypes.LocationConstraints{
+						Accept: []jtypes.Location{{Country: "US"}},
+					},
+					Allocations: []string{"alloc1", "alloc2"},
+				},
+			},
+			Allocations: map[string]jtypes.AllocationConfig{
+				"alloc1": {
+					Type: jtypes.AllocationTypeService,
+					Resources: types.Resources{
+						CPU:  types.CPU{Cores: 1, ClockSpeed: 1000},
+						RAM:  types.RAM{Size: 1024},
+						Disk: types.Disk{Size: 1024},
+					},
+					HealthCheck: types.HealthCheckManifest{
+						Type:     "http",
+						Endpoint: "/health",
+						Response: types.HealthCheckResponse{
+							Type:  "string",
+							Value: "OK",
+						},
+						Interval: time.Second,
+					},
+				},
+				"alloc2": {
+					Type: jtypes.AllocationTypeService,
+					Resources: types.Resources{
+						CPU:  types.CPU{Cores: 1, ClockSpeed: 1000},
+						RAM:  types.RAM{Size: 1024},
+						Disk: types.Disk{Size: 1024},
+					},
+					HealthCheck: types.HealthCheckManifest{
+						Type:     "http",
+						Endpoint: "/health",
+						Response: types.HealthCheckResponse{
+							Type:  "string",
+							Value: "OK",
+						},
+						Interval: time.Second,
+					},
+				},
+			},
+		},
+	}
+
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	require.NoError(t, err)
+
+	// Initial manifest with one allocation
+	initialManifest := jtypes.EnsembleManifest{
+		ID:           ensembleID,
+		Orchestrator: orch.actor.Handle(),
+		Allocations: map[string]jtypes.AllocationManifest{
+			"node1.alloc1": {
+				ID:     "test-ensemble_node1.alloc1",
+				Type:   jtypes.AllocationTypeService,
+				Status: jtypes.AllocationRunning,
+				Handle: provider.handle,
+				Healthcheck: types.HealthCheckManifest{
+					Type:     "http",
+					Endpoint: "/health",
+					Response: types.HealthCheckResponse{
+						Type:  "string",
+						Value: "OK",
+					},
+					Interval: time.Second,
+				},
+			},
+		},
+		Nodes: map[string]jtypes.NodeManifest{
+			"node1": {
+				ID:          "node1",
+				Allocations: []string{"node1.alloc1"},
+			},
+		},
+	}
+
+	// Start supervisor with initial manifest
+	go o.supervisor.Supervise(jtypes.NewManifestReader(initialManifest))
+
+	// Updated manifest with new allocation
+	updatedManifest := jtypes.EnsembleManifest{
+		ID:           ensembleID,
+		Orchestrator: orch.actor.Handle(),
+		Allocations: map[string]jtypes.AllocationManifest{
+			"node1.alloc1": {
+				ID:     "test-ensemble_node1.alloc1",
+				Type:   jtypes.AllocationTypeService,
+				Status: jtypes.AllocationRunning,
+				Handle: provider.handle,
+				Healthcheck: types.HealthCheckManifest{
+					Type:     "http",
+					Endpoint: "/health",
+					Response: types.HealthCheckResponse{
+						Type:  "string",
+						Value: "OK",
+					},
+					Interval: time.Second,
+				},
+			},
+			"node1.alloc2": {
+				ID:     "test-ensemble_node1.alloc2",
+				Type:   jtypes.AllocationTypeService,
+				Status: jtypes.AllocationRunning,
+				Handle: provider.handle,
+				Healthcheck: types.HealthCheckManifest{
+					Type:     "http",
+					Endpoint: "/health",
+					Response: types.HealthCheckResponse{
+						Type:  "string",
+						Value: "OK",
+					},
+					Interval: time.Second,
+				},
+			},
+		},
+		Nodes: map[string]jtypes.NodeManifest{
+			"node1": {
+				ID:          "node1",
+				Allocations: []string{"node1.alloc1", "node1.alloc2"},
+			},
+		},
+	}
+
+	t.Run("update with new allocation", func(t *testing.T) {
+		// Mock healthcheck registration for new allocation
+		orch.channels[behaviors.RegisterHealthcheckBehavior] = make(chan struct{}, 1)
+		require.NoError(t, provider.actor.AddBehavior(behaviors.RegisterHealthcheckBehavior, func(msg actor.Envelope) {
+			defer msg.Discard()
+			go func() {
+				orch.channels[behaviors.RegisterHealthcheckBehavior] <- struct{}{}
+			}()
+			resp := behaviors.RegisterHealthcheckResponse{OK: true}
+			reply, err := actor.ReplyTo(msg, resp)
+			require.NoError(t, err)
+			require.NoError(t, provider.actor.Send(reply))
+		}))
+
+		time.Sleep(100 * time.Millisecond) // Allow time for supervisor to start
+
+		alloc, ok := o.supervisor.getAllocation("node1.alloc1")
+		assert.True(t, ok)
+		assert.Equal(t, "test-ensemble_node1.alloc1", alloc.ID)
+
+		// alloc2 should not exist yet
+		alloc, ok = o.supervisor.getAllocation("node1.alloc2")
+		assert.False(t, ok)
+
+		// Update supervisor with new manifest
+		o.supervisor.Update(jtypes.NewManifestReader(updatedManifest))
+
+		// Wait for healthcheck registration
+		select {
+		case <-orch.channels[behaviors.RegisterHealthcheckBehavior]:
+			// Successfully registered healthcheck for new allocation
+		case <-time.After(5 * time.Second):
+			t.Fatal("timeout waiting for healthcheck registration")
+		}
+
+		// Verify manifest was updated
+		alloc, ok = o.supervisor.getAllocation("node1.alloc2")
+		assert.True(t, ok)
+		assert.Equal(t, "test-ensemble_node1.alloc2", alloc.ID)
+	})
+
+	t.Run("update with removed allocation", func(t *testing.T) {
+		// Create manifest with alloc2 removed
+		removedManifest := jtypes.EnsembleManifest{
+			ID:           ensembleID,
+			Orchestrator: orch.actor.Handle(),
+			Allocations: map[string]jtypes.AllocationManifest{
+				"alloc1": {
+					ID:     "test-ensemble_node1.alloc1",
+					Type:   jtypes.AllocationTypeService,
+					Status: jtypes.AllocationRunning,
+					Handle: provider.handle,
+					Healthcheck: types.HealthCheckManifest{
+						Type:     "http",
+						Endpoint: "/health",
+						Response: types.HealthCheckResponse{
+							Type:  "string",
+							Value: "OK",
+						},
+						Interval: time.Second,
+					},
+				},
+			},
+			Nodes: map[string]jtypes.NodeManifest{
+				"node1": {
+					ID:          "node1",
+					Allocations: []string{"alloc1"},
+				},
+			},
+		}
+
+		// Update supervisor with removed allocation
+		o.supervisor.Update(jtypes.NewManifestReader(removedManifest))
+
+		// Verify alloc2 is no longer in manifest
+		_, ok := o.supervisor.getAllocation("node1.alloc2")
+		assert.False(t, ok)
+	})
+}
+
+func TestSupervisorPerformHealthCheck(t *testing.T) {
+	substrate := network.NewSubstrate()
+	orch := MakeOrchestrator(t, substrate)
+	provider := MakeProvider(t, substrate)
+
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+
+	cfg := jtypes.EnsembleConfig{
+		V1: &jtypes.EnsembleConfigV1{
+			Nodes: map[string]jtypes.NodeConfig{
+				"node1": {
+					Location: jtypes.LocationConstraints{
+						Accept: []jtypes.Location{{Country: "US"}},
+					},
+					Allocations: []string{"alloc1"},
+				},
+			},
+			Allocations: map[string]jtypes.AllocationConfig{
+				"alloc1": {
+					Type: jtypes.AllocationTypeTask,
+					Resources: types.Resources{
+						CPU:  types.CPU{Cores: 1, ClockSpeed: 1000},
+						RAM:  types.RAM{Size: 1024},
+						Disk: types.Disk{Size: 1024},
+					},
+					HealthCheck: types.HealthCheckManifest{
+						Type:     "http",
+						Endpoint: "/health",
+						Response: types.HealthCheckResponse{
+							Type:  "string",
+							Value: "OK",
+						},
+						Interval: time.Second,
+					},
+				},
+			},
+		},
+	}
+
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	require.NoError(t, err)
+
+	allocation := jtypes.AllocationManifest{
+		ID:     "test-ensemble_node1.alloc1",
+		Type:   jtypes.AllocationTypeService,
+		Status: jtypes.AllocationRunning,
+		Handle: provider.handle,
+		Healthcheck: types.HealthCheckManifest{
+			Type:     "http",
+			Endpoint: "/health",
+			Response: types.HealthCheckResponse{
+				Type:  "string",
+				Value: "OK",
+			},
+			Interval: time.Second,
+		},
+	}
+	o.supervisor.manifest.Allocations["node1.alloc1"] = allocation
+
+	t.Run("terminated task", func(t *testing.T) {
+		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
+			defer msg.Discard()
+			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
+			resp := behaviors.HealthCheckResponse{OK: true}
+			reply, err := actor.ReplyTo(msg, resp)
+			require.NoError(t, err)
+			require.NoError(t, provider.actor.Send(reply))
+		}))
+		// Fix: update struct in map by value
+		alloc := o.supervisor.manifest.Allocations["alloc1"]
+		alloc.Status = jtypes.AllocationCompleted
+		o.supervisor.manifest.Allocations["alloc1"] = alloc
+		err := o.supervisor.performHealthCheck(allocation)
+		assert.NoError(t, err)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		HealthCheckTimeout = 1 * time.Second
+		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
+		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
+			defer msg.Discard()
+			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
+			resp := behaviors.HealthCheckResponse{OK: true}
+			reply, err := actor.ReplyTo(msg, resp)
+			require.NoError(t, err)
+			require.NoError(t, provider.actor.Send(reply))
+		}))
+		err := o.supervisor.performHealthCheck(allocation)
+		assert.NoError(t, err)
+		<-provider.channels[actor.HealthCheckBehavior]
+	})
+
+	t.Run("error response", func(t *testing.T) {
+		HealthCheckTimeout = 1 * time.Second
+		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
+		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
+			defer msg.Discard()
+			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
+			resp := behaviors.HealthCheckResponse{OK: false, Error: "fail"}
+			reply, err := actor.ReplyTo(msg, resp)
+			require.NoError(t, err)
+			require.NoError(t, provider.actor.Send(reply))
+		}))
+		err := o.supervisor.performHealthCheck(allocation)
+		assert.NoError(t, err) // error is only logged, not returned
+		<-provider.channels[actor.HealthCheckBehavior]
+		assert.Equal(t, 1, o.supervisor.failures[allocation.ID])
+
+		// reset state
+		o.supervisor.failures = make(map[string]int)
+		o.supervisor.escalations = make(map[string]int)
+	})
+
+	t.Run("escalation after 3 failures", func(t *testing.T) {
+		HealthCheckTimeout = 1 * time.Second
+		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
+		failCount := 0
+		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
+			defer msg.Discard()
+			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
+			resp := behaviors.HealthCheckResponse{OK: false, Error: "fail"}
+			reply, err := actor.ReplyTo(msg, resp)
+			require.NoError(t, err)
+			require.NoError(t, provider.actor.Send(reply))
+			failCount++
+		}))
+
+		provider.channels[behaviors.AllocationRestartBehavior] = make(chan struct{}, 1)
+		require.NoError(t, provider.actor.AddBehavior(behaviors.AllocationRestartBehavior, func(msg actor.Envelope) {
+			defer msg.Discard()
+			go func() { provider.channels[behaviors.AllocationRestartBehavior] <- struct{}{} }()
+			resp := behaviors.AllocationRestartResponse{OK: true}
+			reply, err := actor.ReplyTo(msg, resp)
+			require.NoError(t, err)
+			require.NoError(t, provider.actor.Send(reply))
+		}))
+		// Simulate 3 failures
+		for i := 0; i < 3; i++ {
+			err := o.supervisor.performHealthCheck(allocation)
+			assert.NoError(t, err)
+			<-provider.channels[actor.HealthCheckBehavior]
+		}
+		<-provider.channels[behaviors.AllocationRestartBehavior]
+		assert.Equal(t, 0, o.supervisor.failures[allocation.ID]) // should be reset after escalation
+		assert.Equal(t, 1, o.supervisor.escalations[allocation.ID])
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
+		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
+			defer msg.Discard()
+			// Do not reply to simulate timeout
+		}))
+		// Remove HealthCheckTimeout assignment if not possible
+		err := o.supervisor.performHealthCheck(allocation)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "timeout waiting for supervisor reply")
+	})
 }

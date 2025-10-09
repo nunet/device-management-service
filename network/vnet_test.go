@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package network_test
 
 import (
@@ -363,7 +371,7 @@ func TestMiscNetworkMethods(t *testing.T) {
 		charlieID := createEntity(t)
 		daveID := createEntity(t)
 		rt := map[string]string{aliceID.String(): aliceIP, bobID.String(): bobIP}
-		assert.NoError(t, alice.CreateSubnet(context.Background(), subnetID, rt))
+		assert.NoError(t, alice.CreateSubnet(context.Background(), "192.168.0.0/24", subnetID, rt))
 
 		// Destroy subnet
 		assert.NoError(t, alice.DestroySubnet(subnetID))

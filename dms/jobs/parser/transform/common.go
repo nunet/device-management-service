@@ -10,12 +10,15 @@ package transform
 
 import (
 	"fmt"
+	"maps"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
+	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
-// SpecConfigTransformer converts a map to a map with a "type" field and a "params" field.
-func SpecConfigTransformer(specName string) TransformerFunc {
+// ToSpecConfigTransformer converts a map to a map with a "type" field and a "params" field.
+func ToSpecConfigTransformer(specName string) TransformerFunc {
 	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
 		if data == nil {
 			return nil, nil
@@ -34,6 +37,25 @@ func SpecConfigTransformer(specName string) TransformerFunc {
 		}
 		result["type"] = spec["type"]
 		result["params"] = params
+
+		return result, nil
+	}
+}
+
+func FlattenSpecConfigTransformer(specName string) TransformerFunc {
+	return func(_ *map[string]any, data any, _ tree.Path) (any, error) {
+		if data == nil {
+			return nil, nil
+		}
+
+		spec, ok := data.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid %s configuration: %v", specName, data)
+		}
+
+		result := make(map[string]any)
+		result["type"] = spec["type"]
+		maps.Copy(result, spec["params"].(map[string]any))
 
 		return result, nil
 	}
@@ -61,5 +83,98 @@ func MapToNamedSliceTransformer(name string) TransformerFunc {
 			result = append(result, v)
 		}
 		return result, nil
+	}
+}
+
+// NamedSliceToMapTransformer converts a map of maps to a slice of maps and assigns the key to the "name" field.
+func NamedSliceToMapTransformer(name string) TransformerFunc {
+	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+		if data == nil {
+			return nil, nil
+		}
+		maps, ok := data.([]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid %s configuration: %v", name, data)
+		}
+
+		result := make(map[string]any)
+		for i, v := range maps {
+			if v == nil {
+				v = map[string]any{}
+			}
+			m, ok := v.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid %s configuration: %v", name, data)
+			}
+			k, ok := m["name"].(string)
+			if !ok || k == "" {
+				k = fmt.Sprintf("%s_%d", name, i+1)
+			} else {
+				delete(m, "name")
+			}
+			result[k] = m
+		}
+		return result, nil
+	}
+}
+
+func ParseWithDefaultUnit(name string, defaultUnit string) TransformerFunc {
+	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+		v, err := convert.ParseSIWithDefaultUnit(data, defaultUnit)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %v", name, err)
+		}
+		return v, nil
+	}
+}
+
+func ParseBytesWithDefaultUnit(name string, defaultUnit string) TransformerFunc {
+	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+		v, err := convert.ParseBytesWithDefaultUnit(data, defaultUnit)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %v", name, err)
+		}
+		return v, nil
+	}
+}
+
+func ToBytesWithDefaultUnit(name string, defaultUnit string) TransformerFunc {
+	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+		v, err := convert.ParseBytesWithDefaultUnit(data, defaultUnit)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %v", name, err)
+		}
+		return v, nil
+	}
+}
+
+func ToBytesFormat(name string) TransformerFunc {
+	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+		v, err := convert.ToBytesFormat(data)
+		if err != nil {
+			fmt.Printf("%s: %v, %T\n", name, data, data)
+			return nil, fmt.Errorf("invalid %s value: %v", name, data)
+		}
+		return v, nil
+	}
+}
+
+func ToSIFormatWithUnit(name string, unit string) TransformerFunc {
+	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+		v, err := convert.ToSIFormatWithUnit(data, unit)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %v", name, err)
+		}
+		return v, nil
+	}
+}
+
+func ParseDuration(name string) TransformerFunc {
+	return func(_ *map[string]interface{}, data any, _ tree.Path) (any, error) {
+		v, ok := data.(string)
+		if !ok || v == "" {
+			return nil, fmt.Errorf("invalid %s value: %v", name, data)
+		}
+		return time.ParseDuration(v)
 	}
 }

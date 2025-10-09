@@ -6,7 +6,7 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package libp2p_test
+package libp2p
 
 import (
 	"testing"
@@ -14,8 +14,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
-
-	"gitlab.com/nunet/device-management-service/network/libp2p"
 )
 
 const (
@@ -37,7 +35,7 @@ func generatePeerID(t *testing.T) peer.ID {
 
 func TestRouteTable_AddGet(t *testing.T) {
 	t.Parallel()
-	rt := libp2p.NewRoutingTable()
+	rt := NewRoutingTable()
 	aliceID := generatePeerID(t)
 	bobID := generatePeerID(t)
 
@@ -76,7 +74,7 @@ func TestRouteTable_AddGet(t *testing.T) {
 
 func TestRouteTable_Remove(t *testing.T) {
 	t.Parallel()
-	rt := libp2p.NewRoutingTable()
+	rt := NewRoutingTable()
 	aliceID := generatePeerID(t)
 
 	rt.Add(aliceID, testIP1)
@@ -105,7 +103,7 @@ func TestRouteTable_Remove(t *testing.T) {
 
 func TestRouteTable_RemoveByIP(t *testing.T) {
 	t.Parallel()
-	rt := libp2p.NewRoutingTable()
+	rt := NewRoutingTable()
 	aliceID := generatePeerID(t)
 
 	rt.Add(aliceID, testIP1)
@@ -123,7 +121,7 @@ func TestRouteTable_RemoveByIP(t *testing.T) {
 
 func TestRouteTable_All(t *testing.T) {
 	t.Parallel()
-	rt := libp2p.NewRoutingTable()
+	rt := NewRoutingTable()
 
 	// Test with empty table
 	all := rt.All()
@@ -145,7 +143,7 @@ func TestRouteTable_All(t *testing.T) {
 
 func TestRouteTable_Clear(t *testing.T) {
 	t.Parallel()
-	rt := libp2p.NewRoutingTable()
+	rt := NewRoutingTable()
 	aliceID := generatePeerID(t)
 	bobID := generatePeerID(t)
 

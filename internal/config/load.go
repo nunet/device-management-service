@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package config
 
 import (
@@ -11,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -25,6 +34,7 @@ var (
 
 var DefaultConfig = Config{
 	General: General{
+		Env:                    "production",
 		UserDir:                fmt.Sprintf("%s/.nunet", homeDir),
 		WorkDir:                fmt.Sprintf("%s/nunet", homeDir),
 		DataDir:                fmt.Sprintf("%s/nunet/data", homeDir),
@@ -33,6 +43,13 @@ var DefaultConfig = Config{
 		PortAvailableRangeTo:   65536,
 		StorageCADirectory:     fmt.Sprintf("%s/.nunet/storage_ca_directory", homeDir),
 		StorageBricksDir:       fmt.Sprintf("%s/.nunet/storage_bricks_dir", homeDir),
+		PaymentProvider: PaymentProvider{
+			Mode:                  false,
+			EthereumRPCURL:        "https://ethereum-sepolia-rpc.publicnode.com",
+			NtxContractAddress:    "0xB37216b70a745129966E553cF8Ee2C51e1cB359A", // TSTNTX
+			EthereumRPCToken:      "",
+			StartingBlockScanning: "0x8D7374",
+		},
 	},
 	Rest: Rest{
 		Addr: "127.0.0.1",
@@ -49,9 +66,6 @@ var DefaultConfig = Config{
 			"/ip4/0.0.0.0/udp/9000/quic-v1",
 		},
 		BootstrapPeers: []string{
-			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",
-			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
-			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
 			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWHzew9HTYzywFuvTHGK5Yzoz7qAhMfxagtCvhvjheoBQ3",
 			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWJMtMN1mTNRfgMqUygT7eSXamVzc9ihpSjeairm9PebmB",
 			"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWKjSodxxi7UfRHzuk7eGgUF49MoPUCJvtva9K12TqDDsi",
@@ -60,26 +74,36 @@ var DefaultConfig = Config{
 		FileDescriptors: 512,
 	},
 	Observability: Observability{
-		Logging: Logging{
-			Level: "INFO",
-			File:  fmt.Sprintf("%s/nunet/logs/nunet-dms.log", homeDir),
-			Rotation: Rotation{
-				MaxSizeMB:  100,
-				MaxBackups: 3,
-				MaxAgeDays: 28,
-			},
-		},
-		Elastic: Elastic{
-			URL:                "http://localhost:9200",
-			Index:              "nunet-dms",
-			FlushInterval:      5,
-			Enabled:            false,
-			APIKey:             "",
-			InsecureSkipVerify: true,
-		},
+		// TODO bind in observability
+		// Logging: Logging{
+		// 	Level: "INFO",
+		// 	File:  fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),
+		// 	Rotation: Rotation{
+		// 		MaxSizeMB:  100,
+		// 		MaxBackups: 3,
+		// 		MaxAgeDays: 28,
+		// 	},
+		// },
+		// Elastic: Elastic{
+		// 	URL:                "https://telemetry.nunet.io",
+		// 	Index:              "nunet-dms",
+		// 	FlushInterval:      5,
+		// 	Enabled:            false,
+		// 	APIKey:             "",
+		// 	InsecureSkipVerify: true,
+		// },
+		// TODO remove once /observability migrates to nested structs
+		ElasticsearchURL:     "https://telemetry.nunet.io",
+		ElasticsearchIndex:   "nunet-dms",
+		FlushInterval:        5,
+		ElasticsearchEnabled: false,
+		ElasticsearchAPIKey:  "",
+		InsecureSkipVerify:   true,
+		LogLevel:             "INFO",
+		LogFile:              fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),
 	},
 	APM: APM{
-		ServerURL:   "http://apm.telemetry.nunet.io",
+		ServerURL:   "https://apm.telemetry.nunet.io",
 		ServiceName: "nunet-dms",
 		Environment: "production",
 		APIKey:      "",
@@ -175,7 +199,7 @@ func (l *Loader) init() {
 // stores the result. Subsequent calls are cheap no-ops.
 func (l *Loader) Load() (*Config, error) {
 	var err error
-	l.once.Do(func() { err = l.readAndUnmarshal() })
+	l.once.Do(func() { err = l.Reload() })
 	return l.cfg, err
 }
 
@@ -349,7 +373,10 @@ func (l *Loader) readAndUnmarshal() error {
 		return fmt.Errorf("read config: %w", err)
 	}
 
-	if err := l.v.UnmarshalExact(l.cfg); err != nil {
+	if err := l.v.UnmarshalExact(
+		l.cfg,
+		func(c *mapstructure.DecoderConfig) { c.ZeroFields = true },
+	); err != nil {
 		return fmt.Errorf("unmarshal config: %w", err)
 	}
 

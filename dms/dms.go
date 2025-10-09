@@ -18,24 +18,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
+	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
 	clover_db "gitlab.com/nunet/device-management-service/db/clover"
-	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
+	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/dms/resources"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -47,6 +48,10 @@ import (
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
+	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -91,10 +96,24 @@ func initialize(fs afero.Fs, cfg *config.Config, env env.EnvironmentProvider) {
 			log.Warnf("unable to set libp2p logging: %v", err)
 		}
 	}
+
+	// create the iptables NUNET chain if it doesn't exist, flush any rules in there and create jump rules
+	err := sys.CreateNuNetChain()
+	if err != nil {
+		log.Errorf("unable to create iptables NUNET chain: %v", err)
+	}
+	err = sys.FlushNuNetChain()
+	if err != nil {
+		log.Errorf("unable to flush iptables NUNET chain: %v", err)
+	}
+	err = sys.AddJumpRules()
+	if err != nil {
+		log.Errorf("unable to add iptables NUNET jump rules: %v", err)
+	}
 }
 
 func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPassphrase, contextName string) (*DMS, error) {
-	log.Debugf("starting dms with config: %v", gcfg)
+	log.Debugf("starting dms with config: %+v", gcfg)
 	if contextName == "" {
 		contextName = node.DefaultContextName
 	}
@@ -104,22 +123,6 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	if btPeers != "" {
 		peers := strings.Split(btPeers, ",")
 		gcfg.P2P.BootstrapPeers = peers
-	} else {
-		// force new bootstrap nodes in config if the original config file has not been
-		// edited by the user
-		// TODO: to be removed once we decommission the old nodes: #1089
-		modBootstrapPeers, updateCfg := getBootstrapNodes(gcfg.P2P.BootstrapPeers)
-		if updateCfg {
-			log.Infof("updating config file with new bootstrap peers: %v", modBootstrapPeers)
-
-			ldr := config.NewLoader(config.WithFS(fs), config.WithConfig(gcfg)) // singleton loader
-
-			if err := ldr.Set("p2p.bootstrap_peers", modBootstrapPeers); err != nil {
-				log.Errorf("unable to update config file with new bootstrap peers: %v", err)
-			}
-
-			gcfg.P2P.BootstrapPeers = modBootstrapPeers
-		}
 	}
 
 	initialize(fs, gcfg, env)
@@ -145,7 +148,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	log.Debugf("loaded geoip2 database: %v", geoip2db)
 
 	keyStoreDir := filepath.Join(gcfg.UserDir, node.KeystoreDir)
-	keyStore, err := keystore.New(fs, keyStoreDir)
+	keyStore, err := keystore.New(fs, keyStoreDir, false)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create keystore: %w", err)
 	}
@@ -163,6 +166,22 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
 	}
 
+	contractStore, err := store.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create contract store: %w", err)
+	}
+
+	// payment validator
+	paymentsStore, err := payment.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create payment store: %w", err)
+	}
+
+	usageStore, err := usage.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create usage store: %w", err)
+	}
+
 	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
 		OnboardedResources: clover_db.NewGenericEntityRepository[types.OnboardedResources](db),
@@ -174,19 +193,25 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	}
 
 	onboardRepo := clover_db.NewGenericEntityRepository[types.OnboardingConfig](db)
-	orchestratorRepo := clover_db.NewGenericRepository[jobtypes.OrchestratorView](db)
+
+	// Create deployment store for orchestrator registry
+	deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create deployment store: %w", err)
+	}
 
 	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardRepo)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create onboarding manager: %w", err)
 	}
 
-	bootstrapPeers := make([]multiaddr.Multiaddr, len(gcfg.P2P.BootstrapPeers))
-	for i, addr := range gcfg.P2P.BootstrapPeers {
-		bootstrapPeers[i], _ = multiaddr.NewMultiaddr(addr)
+	bootstrapPeers := make([]ma.Multiaddr, len(gcfg.BootstrapPeers))
+	for i, addr := range gcfg.BootstrapPeers {
+		bootstrapPeers[i], _ = ma.NewMultiaddr(addr)
 	}
 
 	cfg := &types.Libp2pConfig{
+		Env:                     gcfg.General.Env,
 		PrivateKey:              privK,
 		BootstrapPeers:          bootstrapPeers,
 		Rendezvous:              "nunet-test",
@@ -196,6 +221,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		CustomNamespace:         "/nunet-dht-1/",
 		ListenAddress:           gcfg.P2P.ListenAddress,
 		PeerCountDiscoveryLimit: 40,
+		GracePeriodMs:           20000, // 20 seconds
 		Memory:                  gcfg.P2P.Memory,
 		FileDescriptors:         gcfg.P2P.FileDescriptors,
 	}
@@ -241,11 +267,21 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 
 	volumeTracker := storage.NewVolumeTracker()
 
+	txStore, err := transaction.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transaction store: %w", err)
+	}
+
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
-		orchestratorRepo, geoip2db, hostLocation, portConfig, volumeTracker,
+		geoip2db, hostLocation, portConfig, volumeTracker,
 		volumeController,
+		contractStore,
+		paymentsStore,
+		usageStore,
+		txStore,
+		deploymentStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -264,7 +300,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	// Add APM middleware by appending to restConfig.MidW
 	restConfig.Middlewares = append(restConfig.Middlewares, apmgin.Middleware(gin.Default()))
 
-	rServer := api.NewServer(&restConfig)
+	rServer := api.NewServer(&restConfig, gcfg)
 	rServer.SetupRoutes()
 
 	return &DMS{
@@ -291,6 +327,11 @@ func (d *DMS) Run() error {
 		}
 	}()
 
+	err = d.Node.StartContracts()
+	if err != nil {
+		log.Errorf("failed to start contracts from db: %v", err)
+	}
+
 	return nil
 }
 
@@ -310,6 +351,7 @@ func (d *DMS) Stop() {
 	}
 	log.Infof("network stopped")
 
+	observability.Shutdown()
 	// TODO: stop rest server
 }
 
@@ -349,9 +391,14 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"machine_resources",
 			"onboarding_config",
 			"resource_allocation",
-			"orchestrator_view",
+			"deployments",
 			"gpu",
-			"contract",
+			"contracts",
+			"contracts_keys",
+			"contracts_payments",
+			"service_provider_transactions",
+			"contracts_usage",
+			"usage_metadata",
 		},
 	)
 }
@@ -434,41 +481,4 @@ func LoadOrCreateCapCtx(
 	}
 
 	return capCtx, nil
-}
-
-// getBootstrapNodes is a temporary function to get bootstrap nodes that contain the new
-// bootstrap nodes if the user has not set any custom bootstrap nodes or already has the new
-// nodes in the config.
-// TODO: it should be removed once we decommission the old nodes: #1089
-func getBootstrapNodes(configNodes []string) ([]string, bool) {
-	oldNodes := [3]string{
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmQ2irHa8aFTLRhkbkQCRrounE4MbttNp8ki7Nmys4F9NP",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/Qmf16N2ecJVWufa29XKLNyiBxKWqVPNZXjbL3JisPcGqTw",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/QmTkWP72uECwCsiiYDpCFeTrVeUM9huGTPsg3m6bHxYQFZ",
-	}
-
-	newNodes := [3]string{
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWHzew9HTYzywFuvTHGK5Yzoz7qAhMfxagtCvhvjheoBQ3",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWJMtMN1mTNRfgMqUygT7eSXamVzc9ihpSjeairm9PebmB",
-		"/dnsaddr/bootstrap.p2p.nunet.io/p2p/12D3KooWKjSodxxi7UfRHzuk7eGgUF49MoPUCJvtva9K12TqDDsi",
-	}
-
-	noO := 0
-	for _, node := range configNodes {
-		for _, nN := range newNodes {
-			if strings.Contains(node, nN) {
-				return configNodes, false
-			}
-		}
-
-		if !slices.Contains(oldNodes[:], node) {
-			noO++
-		}
-	}
-
-	if noO == 0 && len(configNodes) != 0 {
-		return slices.Concat(configNodes, newNodes[:]), true
-	}
-
-	return configNodes, false
 }

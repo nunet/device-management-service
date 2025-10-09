@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package utils
 
 import (
@@ -11,17 +19,25 @@ import (
 // We could use a map directly, but empty struct
 // has a better performance if it grows too large
 type (
-	nodesCtxKey     struct{}
-	nodeMapCtxKey   struct{}
-	ensembleCtxKey  struct{}
-	manifestCtxKey  struct{}
-	allocRespCtxKey struct{}
+	nodesCtxKey        struct{}
+	nodeMapCtxKey      struct{}
+	ensembleIDCtxKey   struct{}
+	ensembleFileCtxKey struct{}
+	manifestCtxKey     struct{}
+	allocRespCtxKey    struct{}
+	contractInfoKey    struct{}
 )
 
 // TestCtx is a wrapper of Context
 // It allows for some type safety and it's more elegant
 type TestCtx struct {
 	ctx context.Context
+}
+
+// TODO: Temporary wrapper for contract
+type ContractData struct {
+	HostDID string
+	DID     string
 }
 
 func NewTestCtx(ctx context.Context) *TestCtx {
@@ -62,7 +78,7 @@ func (t *TestCtx) WithNodeMap(m map[string]*Node) *TestCtx {
 }
 
 func (t *TestCtx) EnsembleID() (string, error) {
-	id, ok := t.ctx.Value(ensembleCtxKey{}).(string)
+	id, ok := t.ctx.Value(ensembleIDCtxKey{}).(string)
 	if !ok {
 		return "", fmt.Errorf("no ensemble ID available on context")
 	}
@@ -71,14 +87,28 @@ func (t *TestCtx) EnsembleID() (string, error) {
 
 func (t *TestCtx) WithEnsembleID(id string) *TestCtx {
 	return &TestCtx{
-		ctx: context.WithValue(t.ctx, ensembleCtxKey{}, id),
+		ctx: context.WithValue(t.ctx, ensembleIDCtxKey{}, id),
+	}
+}
+
+func (t *TestCtx) EnsembleFile() (string, error) {
+	path, ok := t.ctx.Value(ensembleFileCtxKey{}).(string)
+	if !ok {
+		return "", fmt.Errorf("no ensemble file available on context")
+	}
+	return path, nil
+}
+
+func (t *TestCtx) WithEnsembleFile(path string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, ensembleFileCtxKey{}, path),
 	}
 }
 
 func (t *TestCtx) Manifest() (*jobtypes.EnsembleManifest, error) {
 	manifest, ok := t.ctx.Value(manifestCtxKey{}).(*jobtypes.EnsembleManifest)
 	if !ok {
-		return nil, fmt.Errorf("no ensemble ID available on context")
+		return nil, fmt.Errorf("no manifest available on context")
 	}
 	return manifest, nil
 }
@@ -100,5 +130,19 @@ func (t *TestCtx) AllocationResponses() ([]string, error) {
 func (t *TestCtx) WithAllocationResponses(r []string) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, allocRespCtxKey{}, r),
+	}
+}
+
+func (t *TestCtx) Contract() (ContractData, error) {
+	data, ok := t.ctx.Value(contractInfoKey{}).(ContractData)
+	if !ok {
+		return ContractData{}, fmt.Errorf("no contract DID available on context")
+	}
+	return data, nil
+}
+
+func (t *TestCtx) WithContract(c ContractData) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, contractInfoKey{}, c),
 	}
 }

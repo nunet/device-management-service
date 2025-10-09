@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package orchestrator
 
 import (
@@ -25,16 +33,6 @@ const (
 
 var orchestratorJoinTimeout = 2 * time.Minute
 
-type SubnetManifest struct {
-	CIDR              string            `json:"cidr"`
-	GatewayIP         string            `json:"gateway_ip"`
-	BroadcastIP       string            `json:"broadcast_ip"`
-	UsedIPs           map[string]bool   `json:"used_ips"`
-	RoutingTable      map[string]string `json:"routing_table"` // ip -> peerID
-	IndexRoutingTable map[string]string `json:"index_routing_table"`
-	DNSRecords        map[string]string `json:"dns_records"`
-}
-
 type subnetRequest struct {
 	handle actor.Handle
 	ip     string
@@ -46,6 +44,7 @@ type SubnetCreateRequest struct {
 	SubnetID     string
 	IP           string
 	RoutingTable map[string]string
+	CIDR         string
 }
 
 type SubnetCreateResponse struct {
@@ -59,7 +58,8 @@ type SubnetJoinRequest struct {
 	IP       string
 
 	// map of domain_name:ip
-	Records map[string]string
+	RoutingTable map[string]string
+	Records      map[string]string
 }
 
 type SubnetJoinResponse struct {
@@ -67,7 +67,7 @@ type SubnetJoinResponse struct {
 	Error string
 }
 
-func newSubnetManifest() (SubnetManifest, error) {
+func newSubnetManifest() (jtypes.SubnetManifest, error) {
 	cidr, err := netutils.GetRandomCIDRInRange(
 		24,
 		net.ParseIP("10.0.0.0"),
@@ -75,7 +75,7 @@ func newSubnetManifest() (SubnetManifest, error) {
 		[]string{},
 	)
 	if err != nil {
-		return SubnetManifest{}, fmt.Errorf("error getting random CIDR: %w", err)
+		return jtypes.SubnetManifest{}, fmt.Errorf("error getting random CIDR: %w", err)
 	}
 
 	parts := strings.Split(strings.Split(cidr, "/")[0], ".")
@@ -86,7 +86,7 @@ func newSubnetManifest() (SubnetManifest, error) {
 		broadcastIP: true,
 	}
 
-	return SubnetManifest{
+	return jtypes.SubnetManifest{
 		CIDR:              cidr,
 		GatewayIP:         gatewayIP,
 		BroadcastIP:       broadcastIP,
@@ -208,23 +208,24 @@ func (p *Provisioner) newSubnetRequests(mf jtypes.EnsembleManifest) ([]subnetReq
 
 func (p *Provisioner) createSubnet(
 	manifestID string,
-	subReqs []subnetRequest, routingTable map[string]string,
+	routingTable map[string]string,
 	subCreateHandles []actor.Handle,
 ) error {
-	errCh := make(chan error, len(subReqs))
+	errCh := make(chan error, len(subCreateHandles))
 	wg := sync.WaitGroup{}
 
 	for _, handle := range subCreateHandles {
 		wg.Add(1)
-		go func() {
+		go func(h actor.Handle) {
 			defer wg.Done()
 			msg, err := actor.Message(
 				p.actor.Handle(),
-				handle,
+				h,
 				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, manifestID),
 				SubnetCreateRequest{
 					SubnetID:     manifestID,
 					RoutingTable: routingTable,
+					CIDR:         p.subnetManifest.CIDR,
 				},
 				actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 			)
@@ -258,8 +259,8 @@ func (p *Provisioner) createSubnet(
 				return
 			}
 
-			log.Info("subnet successfully created on peer", handle)
-		}()
+			log.Infof("subnet %s successfully created on peer %v", manifestID, h)
+		}(handle)
 	}
 
 	wg.Wait()
@@ -524,17 +525,20 @@ func (p *Provisioner) mapPorts(manifestID string, subReqs []subnetRequest) error
 // TODO: maybe this hsould go to the createSubnet method
 func (p *Provisioner) orchestratorJoinSubnet(
 	manifestID string,
-	indexRoutingTable map[string]string, dnsRecords map[string]string,
+	indexRoutingTable map[string]string, routingTable map[string]string, dnsRecords map[string]string,
 ) error {
+	behaviorName := fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, manifestID)
+
 	msg, err := actor.Message(
 		p.actor.Handle(),
 		p.actor.Supervisor(),
-		fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, manifestID),
+		behaviorName,
 		SubnetJoinRequest{
-			SubnetID: manifestID,
-			IP:       indexRoutingTable[orchSubnetName],
-			PeerID:   p.actor.Handle().Address.HostID,
-			Records:  dnsRecords,
+			SubnetID:     manifestID,
+			IP:           indexRoutingTable[orchSubnetName],
+			PeerID:       p.actor.Handle().Address.HostID,
+			RoutingTable: routingTable,
+			Records:      dnsRecords,
 		},
 		actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 	)

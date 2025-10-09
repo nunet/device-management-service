@@ -39,8 +39,8 @@ type GenericRepositoryClover[T repositories.ModelType] struct {
 func NewGenericRepository[T repositories.ModelType](
 	db *clover.DB,
 ) repositories.GenericRepository[T] {
-	endTrace := observability.StartTrace("clover_db_repo_init_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("clover_db_repo_init")
+	defer endSpan()
 	collection := strcase.ToSnake(reflect.TypeOf(*new(T)).Name())
 	logger.Infow("clover_db_repo_init_success", "collection", collection)
 	return &GenericRepositoryClover[T]{db: db, collection: collection}
@@ -68,8 +68,8 @@ func (repo *GenericRepositoryClover[T]) queryWithID(
 
 // Create adds a new record to the repository and returns the created data.
 func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, error) {
-	endTrace := observability.StartTrace(ctx, "clover_db_create_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "clover_db_create")
+	defer endSpan()
 
 	var model T
 	doc := toCloverDoc(data)
@@ -93,8 +93,8 @@ func (repo *GenericRepositoryClover[T]) Create(ctx context.Context, data T) (T, 
 
 // Get retrieves a record by its identifier.
 func (repo *GenericRepositoryClover[T]) Get(ctx context.Context, id interface{}) (T, error) {
-	endTrace := observability.StartTrace(ctx, "clover_db_get_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "clover_db_get")
+	defer endSpan()
 
 	var model T
 	doc, err := repo.db.FindById(repo.collection, id.(string))
@@ -122,8 +122,8 @@ func (repo *GenericRepositoryClover[T]) Update(
 	id interface{},
 	data T,
 ) (T, error) {
-	endTrace := observability.StartTrace(ctx, "clover_db_update_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "clover_db_update")
+	defer endSpan()
 
 	updates := toCloverDoc(data).AsMap()
 	updates["UpdatedAt"] = time.Now()
@@ -141,8 +141,8 @@ func (repo *GenericRepositoryClover[T]) Update(
 
 // Delete removes a record by its identifier.
 func (repo *GenericRepositoryClover[T]) Delete(ctx context.Context, id interface{}) error {
-	endTrace := observability.StartTrace(ctx, "clover_db_delete_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "clover_db_delete")
+	defer endSpan()
 
 	err := repo.db.Delete(
 		repo.queryWithID(id, false),
@@ -161,8 +161,8 @@ func (repo *GenericRepositoryClover[T]) Find(
 	ctx context.Context,
 	query repositories.Query[T],
 ) (T, error) {
-	endTrace := observability.StartTrace(ctx, "clover_db_find_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "clover_db_find")
+	defer endSpan()
 
 	var model T
 	q := repo.query(false)
@@ -192,8 +192,8 @@ func (repo *GenericRepositoryClover[T]) FindAll(
 	ctx context.Context,
 	query repositories.Query[T],
 ) ([]T, error) {
-	endTrace := observability.StartTrace(ctx, "clover_db_find_all_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "clover_db_find_all")
+	defer endSpan()
 
 	var models []T
 	var modelParsingErr error

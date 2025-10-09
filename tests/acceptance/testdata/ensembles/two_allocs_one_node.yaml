@@ -1,0 +1,41 @@
+version: "V1"
+nginx_wrapper: &nginx_service
+  type: service
+  executor: docker
+  resources:
+    cpu:
+      cores: 1
+    gpus: []
+    ram:
+      size: 0.5
+    disk:
+      size: 0.5
+  execution:
+    type: docker
+    image: nginxdemos/hello:plain-text
+    working_directory: /
+  keys: []
+  provision: []
+  healthcheck:
+    type: command
+    exec: ["nginx", "-t"]
+    response:
+      type: string
+      value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
+allocations:
+  nginx1: *nginx_service
+  nginx2: *nginx_service
+nodes:
+  node1:
+    allocations:
+      - nginx1
+      - nginx2
+    ports:
+      - private: 80
+        public: 50001
+        allocation: nginx1
+      - private: 80
+        public: 50002
+        allocation: nginx2
+subnet:
+  join: true

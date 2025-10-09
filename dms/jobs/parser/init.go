@@ -10,19 +10,16 @@ package parser
 
 import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/ensemblev1"
+	"gitlab.com/nunet/device-management-service/dms/jobs/parser/types"
 )
 
 var registry *Registry
 
 func init() {
 	registry = &Registry{
-		parsers: make(map[SpecType]Parser),
+		parsers: make(map[SpecType]types.Parser),
 	}
 
 	// Register Nunet parser.
-	ensembleV1Parser := NewBasicParser(
-		ensemblev1.NewEnsemblev1Transformer(),
-		ensemblev1.NewEnsembleV1Validator(),
-	)
-	registry.RegisterParser(SpecTypeEnsembleV1, ensembleV1Parser)
+	registry.RegisterParser(SpecTypeEnsembleV1, ensemblev1.NewEnsemblev1Parser())
 }

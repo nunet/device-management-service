@@ -15,6 +15,7 @@
 package tree
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -207,4 +208,274 @@ func (s *PathTestSuite) TestFindParentWithKey() {
 			s.Equal(test.expected, result, "Test case: %s", test.name)
 		})
 	}
+}
+
+func (s *PathTestSuite) TestString() {
+	tests := []struct {
+		input    Path
+		expected string
+	}{
+		{"a.b.c", "a.b.c"},
+		{"root.child", "root.child"},
+		{"one", "one"},
+		{"", ""},
+		{"complex.path.with.many.parts", "complex.path.with.many.parts"},
+	}
+
+	for _, test := range tests {
+		s.Equal(test.expected, test.input.String())
+	}
+}
+
+func (s *PathTestSuite) TestMatchParts() {
+	tests := []struct {
+		name         string
+		pathParts    []string
+		patternParts []string
+		expected     bool
+	}{
+		{
+			name:         "exact match",
+			pathParts:    []string{"a", "b", "c"},
+			patternParts: []string{"a", "b", "c"},
+			expected:     true,
+		},
+		{
+			name:         "single wildcard match",
+			pathParts:    []string{"a", "b", "c"},
+			patternParts: []string{"a", "*", "c"},
+			expected:     true,
+		},
+		{
+			name:         "multiple wildcard match",
+			pathParts:    []string{"a", "b", "c", "d"},
+			patternParts: []string{"a", "**"},
+			expected:     true,
+		},
+		{
+			name:         "multiple wildcard in middle",
+			pathParts:    []string{"a", "b", "c", "d", "e"},
+			patternParts: []string{"a", "**", "e"},
+			expected:     true,
+		},
+		{
+			name:         "list pattern match",
+			pathParts:    []string{"a", "b", "[0]"},
+			patternParts: []string{"a", "b", "[]"},
+			expected:     true,
+		},
+		{
+			name:         "list pattern no match",
+			pathParts:    []string{"a", "b", "c"},
+			patternParts: []string{"a", "b", "[]"},
+			expected:     false,
+		},
+		{
+			name:         "pattern longer than path",
+			pathParts:    []string{"a", "b"},
+			patternParts: []string{"a", "b", "c"},
+			expected:     false,
+		},
+		{
+			name:         "path longer than pattern without wildcard",
+			pathParts:    []string{"a", "b", "c", "d"},
+			patternParts: []string{"a", "b", "c"},
+			expected:     false,
+		},
+		{
+			name:         "no match different parts",
+			pathParts:    []string{"a", "b", "c"},
+			patternParts: []string{"a", "x", "c"},
+			expected:     false,
+		},
+		{
+			name:         "empty path and pattern",
+			pathParts:    []string{},
+			patternParts: []string{},
+			expected:     true,
+		},
+		{
+			name:         "empty path with pattern",
+			pathParts:    []string{},
+			patternParts: []string{"a"},
+			expected:     false,
+		},
+		{
+			name:         "complex multiple wildcard",
+			pathParts:    []string{"services", "web", "ports", "80", "protocol"},
+			patternParts: []string{"**", "ports", "**"},
+			expected:     true,
+		},
+		{
+			name:         "list with different index",
+			pathParts:    []string{"items", "[5]", "value"},
+			patternParts: []string{"items", "[]", "value"},
+			expected:     true,
+		},
+		{
+			name:         "malformed list path",
+			pathParts:    []string{"items", "5]", "value"},
+			patternParts: []string{"items", "[]", "value"},
+			expected:     false,
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			result := matchParts(test.pathParts, test.patternParts)
+			s.Equal(test.expected, result, "Test case: %s", test.name)
+		})
+	}
+}
+
+func (s *PathTestSuite) TestWalk() {
+	s.Run("simple map traversal", func() {
+		data := map[string]any{
+			"key1": "value1",
+			"key2": map[string]any{
+				"nested": "nestedValue",
+			},
+		}
+
+		var visitedPaths []string
+		walkFunc := func(_ *any, path Path) error {
+			visitedPaths = append(visitedPaths, path.String())
+			return nil
+		}
+
+		dataAny := any(data)
+		err := Walk(&dataAny, "", walkFunc)
+		s.NoError(err)
+
+		expectedPaths := []string{"", "key1", "key2", "key2.nested"}
+		s.ElementsMatch(expectedPaths, visitedPaths)
+	})
+
+	s.Run("array traversal", func() {
+		data := []any{
+			"item1",
+			map[string]any{
+				"key": "value",
+			},
+			"item3",
+		}
+
+		var visitedPaths []string
+		walkFunc := func(_ *any, path Path) error {
+			visitedPaths = append(visitedPaths, path.String())
+			return nil
+		}
+
+		dataAny := any(data)
+		err := Walk(&dataAny, "root", walkFunc)
+		s.NoError(err)
+
+		expectedPaths := []string{"root", "root.[0]", "root.[1]", "root.[1].key", "root.[2]"}
+		s.ElementsMatch(expectedPaths, visitedPaths)
+	})
+
+	s.Run("complex nested structure", func() {
+		data := map[string]any{
+			"allocations": map[string]any{
+				"web": map[string]any{
+					"resources": map[string]any{
+						"cpu": map[string]any{
+							"cores":       2,
+							"clock_speed": "2GHz",
+						},
+						"ram": map[string]any{
+							"size": "8GB",
+						},
+					},
+				},
+			},
+		}
+
+		var visitedPaths []string
+		walkFunc := func(_ *any, path Path) error {
+			visitedPaths = append(visitedPaths, path.String())
+			return nil
+		}
+
+		dataAny := any(data)
+		err := Walk(&dataAny, "", walkFunc)
+		s.NoError(err)
+
+		expectedPaths := []string{
+			"",
+			"allocations",
+			"allocations.web",
+			"allocations.web.resources",
+			"allocations.web.resources.cpu",
+			"allocations.web.resources.cpu.cores",
+			"allocations.web.resources.cpu.clock_speed",
+			"allocations.web.resources.ram",
+			"allocations.web.resources.ram.size",
+		}
+		s.ElementsMatch(expectedPaths, visitedPaths)
+	})
+
+	s.Run("walk function returns error", func() {
+		data := map[string]any{
+			"key1": "value1",
+			"key2": "value2",
+		}
+
+		walkFunc := func(_ *any, path Path) error {
+			if path.String() == "key1" {
+				return fmt.Errorf("test error")
+			}
+			return nil
+		}
+
+		dataAny := any(data)
+		err := Walk(&dataAny, "", walkFunc)
+		s.Error(err)
+		s.Contains(err.Error(), "test error")
+	})
+
+	s.Run("walk modifies data", func() {
+		data := map[string]any{
+			"key1": "value1",
+			"nested": map[string]any{
+				"key2": "value2",
+			},
+		}
+
+		walkFunc := func(node *any, _ Path) error {
+			if str, ok := (*node).(string); ok && str == "value1" {
+				*node = "modified_value1"
+			}
+			if str, ok := (*node).(string); ok && str == "value2" {
+				*node = "modified_value2"
+			}
+			return nil
+		}
+
+		dataAny := any(data)
+		err := Walk(&dataAny, "", walkFunc)
+		s.NoError(err)
+
+		modifiedData := dataAny.(map[string]any)
+		s.Equal("modified_value1", modifiedData["key1"])
+		nestedData := modifiedData["nested"].(map[string]any)
+		s.Equal("modified_value2", nestedData["key2"])
+	})
+
+	s.Run("walk with primitive types", func() {
+		data := "simple string"
+
+		var visitedPaths []string
+		walkFunc := func(_ *any, path Path) error {
+			visitedPaths = append(visitedPaths, path.String())
+			return nil
+		}
+
+		dataAny := any(data)
+		err := Walk(&dataAny, "root", walkFunc)
+		s.NoError(err)
+
+		expectedPaths := []string{"root"}
+		s.Equal(expectedPaths, visitedPaths)
+	})
 }

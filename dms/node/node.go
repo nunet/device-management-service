@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -24,7 +25,6 @@ import (
 	"github.com/spf13/afero"
 
 	"gitlab.com/nunet/device-management-service/actor"
-	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
@@ -33,29 +33,52 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
+	"gitlab.com/nunet/device-management-service/tokenomics"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
-	helloMinDelay         = 10 * time.Second
-	helloMaxDelay         = 20 * time.Second
-	helloTimeout          = 3 * time.Second
-	helloAttempts         = 3
-	clearCommitsFrequency = 60 * time.Second
+	helloMinDelay = 10 * time.Second
+	helloMaxDelay = 20 * time.Second
+	helloTimeout  = 3 * time.Second
+	helloAttempts = 3
 
-	grantAllocationCapsFreq = 1 * time.Hour
+	clearCommitsFrequency    = 60 * time.Second
+	ensembleMonitorFrequency = 10 * time.Second
+	grantAllocationCapsFreq  = 1 * time.Hour
 
 	rootProto = "actor/root/messages/0.0.1"
 
-	RestoreDeadlineCommitting   = 1 * time.Minute
-	RestoreDeadlineProvisioning = 1 * time.Minute
-	RestoreDeadlineRunning      = 5 * time.Minute
-	bidStateGCInterval          = time.Minute
+	// TODO: We should consider a restoration deadline down the line (see code at restoreDeployments)
+	// RestoreDeadlineCommitting   = 1 * time.Minute
+	// RestoreDeadlineProvisioning = 1 * time.Minute
+	// RestoreDeadlineRunning      = 5 * time.Minute
+	bidStateGCInterval = time.Minute
+
+	// contract event handler config
+	eventHandlerWorkers   = 2
+	eventHandlerQueueSize = 200
+	eventHandlerBaseDelay = 5 * time.Second
+	eventHandlerMaxDelay  = 15 * time.Second
+)
+
+// TODO issue #1154 - better handle transient allocations
+// temporary subnet status handling - 1 = active , 0 = destroyed
+var (
+	subnetStatusMx sync.Mutex
+	subnetStatus   map[string]int
 )
 
 type peerState struct {
@@ -105,9 +128,6 @@ type Node struct {
 	answeredBids map[string][]uint64
 	running      atomic.Bool
 
-	// db state
-	orchestratorRepo repositories.GenericRepository[jobtypes.OrchestratorView]
-
 	// volume controller
 	volumeController controller.GlusterControllerInterface
 	volumeOwners     map[string]string // mapping volume name with did
@@ -118,6 +138,16 @@ type Node struct {
 	fs                   afero.Afero
 	ctx                  context.Context
 	cancel               func()
+
+	// contract store
+	contractStore    *store.Store
+	paymentStore     *payment.Store
+	usageStore       *usage.Store
+	contractActors   []*tokenomics.ContractActor
+	transactionStore *transaction.Store
+
+	// contract event handler
+	contractEventHandler *eventhandler.EventHandler
 }
 
 // createActor creates an actor.
@@ -152,10 +182,14 @@ func New(cfg config.Config, fs afero.Afero,
 	resourceManager types.ResourceManager,
 	scheduler *bt.Scheduler,
 	hardware types.HardwareManager,
-	orchestratorRepo repositories.GenericRepository[jobtypes.OrchestratorView],
 	geoIP types.GeoIPLocator, hostLocation geolocation.Geolocation,
 	portConfig PortConfig, vt *storage.VolumeTracker,
 	volumeController controller.GlusterControllerInterface,
+	contractStore *store.Store,
+	paymentStore *payment.Store,
+	usageStore *usage.Store,
+	transactionStore *transaction.Store,
+	deploymentStore orchestrator.DeploymentStore,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -178,6 +212,23 @@ func New(cfg config.Config, fs afero.Afero,
 	if geoIP == nil {
 		return nil, errors.New("geoIP is nil")
 	}
+	if contractStore == nil {
+		return nil, errors.New("contract store is nil")
+	}
+	if paymentStore == nil {
+		return nil, errors.New("payment store is nil")
+	}
+	if usageStore == nil {
+		return nil, errors.New("usage store is nil")
+	}
+	if transactionStore == nil {
+		return nil, errors.New("transaction store is nil")
+	}
+	if deploymentStore == nil {
+		return nil, errors.New("deployment store is nil")
+	}
+
+	subnetStatus = make(map[string]int)
 
 	rootDID := rootCap.DID()
 	rootTrust := rootCap.Trust()
@@ -223,15 +274,22 @@ func New(cfg config.Config, fs afero.Afero,
 		executors:            make(map[string]executorMetadata),
 		ctx:                  ctx,
 		cancel:               cancel,
-		orchestratorRepo:     orchestratorRepo,
-		orchestratorRegistry: orchestrator.NewRegistry(),
+		orchestratorRegistry: orchestrator.NewRegistry(deploymentStore),
 		geoIP:                geoIP,
 		hostLocation:         hostLocation,
 		dmsConfig:            cfg,
 		fs:                   fs,
 		volumeController:     volumeController,
 		volumeOwners:         make(map[string]string),
+		contractStore:        contractStore,
+		paymentStore:         paymentStore,
+		usageStore:           usageStore,
+		transactionStore:     transactionStore,
+		contractActors:       make([]*tokenomics.ContractActor, 0),
 	}
+
+	// setup contract event handler
+	n.contractEventHandler = eventhandler.New(ctx, eventHandlerWorkers, eventHandlerQueueSize, eventHandlerBaseDelay, eventHandlerMaxDelay, n.handleContractEvents)
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
 		cancel()
@@ -243,12 +301,6 @@ func New(cfg config.Config, fs afero.Afero,
 		if err := nodeActor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
 			return nil, fmt.Errorf("adding %s behavior: %w", behavior, err)
 		}
-	}
-
-	if err := n.restoreDeployments(); err != nil {
-		log.Errorw("restoring deployments failed",
-			"labels", string(observability.LabelNode),
-			"error", err)
 	}
 
 	return n, nil
@@ -277,47 +329,23 @@ func (n *Node) saveDeployments() error {
 }
 
 func (n *Node) restoreDeployments() error {
-	query := n.orchestratorRepo.GetQuery()
-	query.Conditions = append(
-		query.Conditions,
-		repositories.LTE("Status", jobtypes.DeploymentStatusRunning),
-	)
-
-	// TODO: delete old orchestrator views
-	orchestratorsViews, err := n.orchestratorRepo.FindAll(n.ctx, query)
+	// Get all deployments from store (source of truth)
+	allDeployments, err := n.orchestratorRegistry.GetAllDeployments()
 	if err != nil {
-		if errors.Is(err, repositories.ErrNotFound) {
-			return nil
-		}
-		return fmt.Errorf("query the database for hanging deployments: %w", err)
+		return fmt.Errorf("failed to get all deployments: %w", err)
 	}
 
 	var failedToRestore []string
-	for _, d := range orchestratorsViews {
-		if d.Status < jobtypes.DeploymentStatusCommitting {
-			log.Warnf("deployment %s was not previously committed; ignoring restoration", d.OrchestratorID)
+	for _, d := range allDeployments {
+		// Only restore deployments in restorable states
+		if !isRestorableStatus(d.Status) {
+			log.Debugf("deployment %s has non-restorable status %d; skipping", d.OrchestratorID, d.Status)
 			continue
 		}
 
-		// Check restore deadline based on deployment status
-		// TODO: on the compute provider side, if the deployer stops to answer
-		// for more than the restore deadlines, they should free any resources alocated
-		// and consider the deployment as canceled
-		var restoreDeadline time.Duration
-		switch d.Status {
-		case jobtypes.DeploymentStatusCommitting:
-			restoreDeadline = RestoreDeadlineCommitting
-		case jobtypes.DeploymentStatusProvisioning:
-			restoreDeadline = RestoreDeadlineProvisioning
-		case jobtypes.DeploymentStatusRunning:
-			restoreDeadline = RestoreDeadlineRunning
-		default:
-			log.Warnf("deployment %s has unknown restorable status %d; ignoring", d.OrchestratorID, d.Status)
-			continue
-		}
-
-		if time.Since(d.CreatedAt) > restoreDeadline {
-			log.Warnf("deployment %s exceeded restore deadline; skipping", d.OrchestratorID)
+		// Check if deployment is still valid (not based on time)
+		if !isDeploymentStillValid(d) {
+			log.Warnf("deployment %s is no longer valid; skipping", d.OrchestratorID)
 			continue
 		}
 
@@ -331,7 +359,7 @@ func (n *Node) restoreDeployments() error {
 
 		childActor, err := n.actor.CreateChild(
 			d.OrchestratorID,
-			d.Manifest.Orchestrator,
+			n.actor.Handle(),
 			actor.WithPrivKey(pvkey),
 		)
 		if err != nil {
@@ -345,9 +373,27 @@ func (n *Node) restoreDeployments() error {
 			continue
 		}
 
-		orchestrator, err := n.orchestratorRegistry.RestoreDeployment(childActor, d.OrchestratorID, d.Cfg, d.Manifest, d.Status, d.DeploymentSnapshot)
+		if d.Manifest.Subnet.Join {
+			if err := n.addOrchestratorBehaviors(childActor, d.OrchestratorID); err != nil {
+				return fmt.Errorf("adding behaviors for orch to join subnet: %w", err)
+			}
+		}
+
+		orchestrator, err := n.
+			orchestratorRegistry.
+			RestoreDeployment(
+				n.ctx,
+				childActor,
+				d.OrchestratorID,
+				d.Cfg,
+				d.Manifest,
+				d.Status,
+				d.DeploymentSnapshot,
+				d.SubnetManifest,
+				types.NewDefaultAllocationIDGenerator(),
+			)
 		if err != nil {
-			log.Errorf("restore orchestrator %s: %v", d.OrchestratorID, err)
+			log.Errorf("restoring deployment %s failed: %v", d.OrchestratorID, err)
 			failedToRestore = append(failedToRestore, d.OrchestratorID)
 			continue
 		}
@@ -432,6 +478,12 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.DeploymentShutdownBehavior: {
 			fn: n.handleDeploymentShutdown,
 		},
+		behaviors.DeploymentPruneBehavior: {
+			fn: n.handleDeploymentPrune,
+		},
+		behaviors.DeploymentDeleteBehavior: {
+			fn: n.handleDeploymentDelete,
+		},
 		behaviors.AllocationsListBehavior: {
 			fn: n.handleAllocationsList,
 		},
@@ -501,9 +553,82 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 				actor.WithBehaviorTopic(behaviors.BroadcastStatusDiscoveryTopic),
 			},
 		},
+		// solution enabler
+		behaviors.ContractCreateBehavior: {
+			fn: n.handleNewContract,
+		},
+		behaviors.ContractUsagesCalculateBehavior: {
+			fn: n.handleContractUsagesCalculate,
+		},
+		// listerner by service provider and compute provider
+		behaviors.ContractProposeBehavior: {
+			fn: n.handleContractPropose,
+		},
+		// used by compute provider to accpet a contract
+		behaviors.ContractApproveLocalBehavior: {
+			fn: n.handleContractApprovalLocal,
+		},
+		// used by compute provider to list incoming contracts
+		behaviors.ContractListIncomingBehavior: {
+			fn: n.handleListIncomingContracts,
+		},
+
+		// used by payment validator
+		behaviors.ContractUsageBehavior: {
+			fn: n.handleIncomingContractUsage,
+		},
+
+		// used by SP and CP
+		behaviors.ContractTransactionBehavior: {
+			fn: n.handleIncomingTransaction,
+		},
+		behaviors.ContractPaymentStatusBehavior: {
+			fn: n.handlePaymentStatus,
+		},
+		// used by payment validator to validate payment
+		behaviors.ContractPaymentValidationRequestBehavior: {
+			fn: n.handleContractPaymentValidationRequestFromContractHost,
+		},
+		behaviors.ContractListLocalTransactionsBehavior: {
+			fn: n.handleListLocalTransactions,
+		},
+
+		behaviors.ContractConfirmLocalTransactionBehavior: {
+			fn: n.handleConfirmLocalTransaction,
+		},
 	}
 
 	return dmsBehaviors
+}
+
+func (n *Node) addOrchestratorBehaviors(actr actor.Actor, ensembleID string) error {
+	orchBehaviors := map[string]struct {
+		fn   func(actor.Envelope)
+		opts []actor.BehaviorOption
+	}{
+		fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetCreate,
+		},
+		fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetDestroy,
+		},
+		fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, ensembleID): {
+			fn: n.handleSubnetJoin,
+		},
+	}
+
+	for behavior, handler := range orchBehaviors {
+		if err := n.actor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
+			return fmt.Errorf("adding %s behavior: %w", behavior, err)
+		}
+	}
+	err := n.actor.Security().Grant(actr.Handle().DID, n.actor.Handle().DID, []ucan.Capability{
+		ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
+	}, time.Hour)
+	if err != nil {
+		return fmt.Errorf("granting subnet caps to self orchestrator: %w", err)
+	}
+	return nil
 }
 
 func (n *Node) gcBidState() {
@@ -595,6 +720,14 @@ func (n *Node) Start() error {
 		return err
 	}
 
+	go func() {
+		if err := n.restoreDeployments(); err != nil {
+			log.Errorw("restoring deployments failed",
+				"labels", string(observability.LabelNode),
+				"error", err)
+		}
+	}()
+
 	n.running.Store(true)
 	go n.gcBidState()
 	go n.geolocate()
@@ -675,9 +808,10 @@ func (n *Node) createOrchestrator(ctx context.Context,
 		return nil, fmt.Errorf("start child actor: %w", err)
 	}
 
-	orchestrator, err := n.orchestratorRegistry.NewOrchestrator(
+	orch, err := n.orchestratorRegistry.NewOrchestrator(
 		ctx, n.fs, n.dmsConfig.WorkDir,
 		ensembleID, childActor, ensemble,
+		types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new orchestrator: %w", err)
@@ -686,35 +820,12 @@ func (n *Node) createOrchestrator(ctx context.Context,
 	// if orchestrator needs to join subnet, add the subnet behaviors under ensemble namespace
 	// and grant the caps
 	if ensemble.Subnet().Join {
-		dmsBehaviors := map[string]struct {
-			fn   func(actor.Envelope)
-			opts []actor.BehaviorOption
-		}{
-			fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID): {
-				fn: n.handleSubnetCreate,
-			},
-			fmt.Sprintf(behaviors.SubnetDestroyBehavior.DynamicTemplate, ensembleID): {
-				fn: n.handleSubnetDestroy,
-			},
-			fmt.Sprintf(behaviors.SubnetJoinBehavior.DynamicTemplate, ensembleID): {
-				fn: n.handleSubnetJoin,
-			},
-		}
-		for behavior, handler := range dmsBehaviors {
-			if err := n.actor.AddBehavior(behavior, handler.fn, handler.opts...); err != nil {
-				return nil, fmt.Errorf("adding %s behavior for orch to join subnet: %w", behavior, err)
-			}
-		}
-
-		err := n.actor.Security().Grant(childActor.Handle().DID, n.actor.Handle().DID, []ucan.Capability{
-			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
-		}, time.Hour)
-		if err != nil {
-			return nil, fmt.Errorf("granting subnet caps to self orchestrator: %w", err)
+		if err := n.addOrchestratorBehaviors(childActor, ensembleID); err != nil {
+			return nil, fmt.Errorf("adding behaviors for orch to join subnet: %w", err)
 		}
 	}
 
-	return orchestrator, nil
+	return orch, nil
 }
 
 // TODO: make send reply a helper func from actor pkg
@@ -758,4 +869,192 @@ func (n *Node) GetBidRequests() []jobs.BidRequest {
 	}
 
 	return reqs
+}
+
+func (n *Node) addContractActor(a *tokenomics.ContractActor) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	n.contractActors = append(n.contractActors, a)
+}
+
+func (n *Node) collectUsagesAndForwardToPaymentProviders() (int, error) {
+	total := 0
+	lastProcessedAt, _ := n.usageStore.GetLastProcessedAt()
+	now := time.Now()
+
+	usages, err := n.usageStore.CountAllocationsByContract(lastProcessedAt, now)
+	if err != nil {
+		return total, fmt.Errorf("failed to get usages: %w", err)
+	}
+
+	type paymentForwardToProviderRequest struct {
+		AllocationsUsed int
+		Contract        contracts.Contract
+	}
+
+	allPayments := make([]paymentForwardToProviderRequest, 0)
+
+	for contractDID, v := range usages {
+		c, err := n.contractStore.GetContract(contractDID)
+		if err != nil {
+			log.Warnf("contract %s was not found on this host", contractDID)
+			continue
+		}
+
+		request := paymentForwardToProviderRequest{
+			Contract:        *c,
+			AllocationsUsed: v,
+		}
+		allPayments = append(allPayments, request)
+	}
+	err = n.usageStore.SaveLastProcessedAt(now)
+	if err != nil {
+		return 0, fmt.Errorf("failed to save last processed usage: %w", err)
+	}
+
+	for _, v := range allPayments {
+		req := contracts.ContractUsageRequestBehavior{
+			UniqueID: uuid.NewString(),
+			Contract: v.Contract,
+			Usages:   v.AllocationsUsed,
+		}
+
+		// construct destination address
+		destination, err := actor.HandleFromDID(v.Contract.PaymentValidatorDID.URI)
+		if err != nil {
+			log.Errorf("failed to get handle of payment provider")
+			continue
+		}
+		envelope, err := n.invokeBehaviour(destination, behaviors.ContractUsageBehavior, req, invokeMessageTimeout)
+		if envelope.Message == nil || err != nil {
+			log.Errorf("failed to update payment status of contract host: %v", err)
+			continue
+		}
+		total++
+	}
+
+	return total, nil
+}
+
+func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {
+	msg, err := actor.Message(
+		n.actor.Handle(),
+		destination,
+		behavior,
+		payload,
+		actor.WithMessageExpiry(actor.MakeExpiry(timeout)),
+	)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to create contract actor message: %w", err)
+	}
+
+	replyCh, err := n.actor.Invoke(msg)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to invoke message: %w", err)
+	}
+
+	ticker := time.NewTicker(timeout)
+	defer ticker.Stop()
+
+	var reply actor.Envelope
+	select {
+	case reply = <-replyCh:
+		defer reply.Discard()
+
+		return reply, nil
+
+	case <-ticker.C:
+		return actor.Envelope{}, errors.New("failed to receive reply due to timeout")
+	}
+}
+
+func (n *Node) handleContractEvents(event eventhandler.Event) error {
+	hostDID, err := did.FromString(event.ContractHostDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host did: %w", err)
+	}
+	pubKey, err := did.PublicKeyFromDID(hostDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host public key from did: %w", err)
+	}
+
+	pid, err := peer.IDFromPublicKey(pubKey)
+	if err != nil {
+		return fmt.Errorf("failed to get peer id: %w", err)
+	}
+
+	// get actor public key
+	contractActorDID, err := did.FromString(event.ContractDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts actor did: %w", err)
+	}
+	pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
+	}
+
+	destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, event.ContractDID, pid.String())
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host handle: %w", err)
+	}
+
+	bts, err := json.Marshal(event.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event object: %w", err)
+	}
+
+	req := contracts.ContractEventRequestBehaviour{
+		Payload: bts,
+	}
+	reply, err := n.invokeBehaviour(destination, behaviors.ContractEventsBehavior, req, invokeMessageTimeout)
+	if err != nil {
+		return fmt.Errorf("failed to send message to contract host: %w", err)
+	}
+
+	var respEnvelope contracts.ContractEventResponseBehaviour
+	err = json.Unmarshal(reply.Message, &respEnvelope)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
+	}
+
+	if respEnvelope.Error != "" {
+		return fmt.Errorf("failed to process contract event: %s", respEnvelope.Error)
+	}
+
+	return nil
+}
+
+// isRestorableStatus checks if a deployment status is restorable
+// TODO: This will be implemented later with more sophisticated logic
+// For now, all deployments with status <= Running are considered restorable
+func isRestorableStatus(status jobtypes.DeploymentStatus) bool {
+	// TODO: Implement more sophisticated restorable status logic
+	// This should consider:
+	// - Deployment lifecycle state
+	// - Resource allocation status
+	// - Compute provider availability
+	// - Network connectivity requirements
+	// For now we will keep it as true until this logic has been designed.
+	return status <= jobtypes.DeploymentStatusRunning
+}
+
+// isDeploymentStillValid checks if a deployment is still valid for restoration
+// TODO: This will be implemented later with comprehensive validation
+// For now, all deployments are considered valid
+func isDeploymentStillValid(_ *jobtypes.OrchestratorView) bool {
+	// TODO: Implement comprehensive deployment validation
+	// This should check:
+	// - Deployment configuration is still valid
+	// - Required resources are still available
+	// - Network configuration is still accessible
+	// - Compute provider is still responsive
+	// - Deployment hasn't been explicitly cancelled
+	// - Resource quotas haven't been exceeded
+	// - Security policies haven't changed
+	//
+	// Note: Compute providers should also implement similar validation
+	// on their side to ensure resources are still available and
+	// haven't been reclaimed due to extended downtime
+	return true
 }

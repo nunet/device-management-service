@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -227,6 +229,8 @@ type Allocator interface {
 		orchestrator actor.Handle,
 		job jobs.Job,
 		executor types.Executor,
+		contracts map[string]types.ContractConfig,
+		contractEventHandler *eventhandler.EventHandler,
 	) (*jobs.Allocation, error)
 	// Release releases allocated resources and ports for an allocation.
 	Release(ctx context.Context, allocationID string) error
@@ -248,10 +252,11 @@ type allocator struct {
 	resources types.ResourceManager
 	hardware  types.HardwareManager
 
-	allocations map[string]*jobs.Allocation
-	commits     map[string]int64
-	workDir     string
-	hostID      string
+	allocations        map[string]*jobs.Allocation
+	monitoredEnsembles map[string]struct{}
+	commits            map[string]int64
+	workDir            string
+	hostID             string
 
 	lock   sync.Mutex
 	fs     afero.Afero
@@ -276,18 +281,19 @@ func newAllocator(
 ) *allocator {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &allocator{
-		ports:         portAllocator,
-		resources:     resourceManager,
-		hardware:      hardwareManager,
-		network:       network,
-		allocations:   make(map[string]*jobs.Allocation),
-		fs:            fs,
-		workDir:       workDir,
-		hostID:        hostID,
-		commits:       make(map[string]int64),
-		ctx:           ctx,
-		cancel:        cancel,
-		volumeTracker: vt,
+		ports:              portAllocator,
+		resources:          resourceManager,
+		hardware:           hardwareManager,
+		network:            network,
+		allocations:        make(map[string]*jobs.Allocation),
+		monitoredEnsembles: make(map[string]struct{}),
+		fs:                 fs,
+		workDir:            workDir,
+		hostID:             hostID,
+		commits:            make(map[string]int64),
+		ctx:                ctx,
+		cancel:             cancel,
+		volumeTracker:      vt,
 	}
 }
 
@@ -295,7 +301,72 @@ func (a *allocator) Run() error {
 	// start a ticker to clear the commits after expiry
 	a.clearCommits()
 
+	// start monitoring ensemble allocations for cleanup
+	a.monitorEnsembleAllocations()
+
 	return nil
+}
+
+func (a *allocator) registerEnsembleMonitor(ensembleID string) {
+	log.Debugf("Registering monitoring allocations for ensemble %s", ensembleID)
+	a.monitoredEnsembles[ensembleID] = struct{}{}
+}
+
+func (a *allocator) monitorEnsembleAllocations() {
+	doneStatuses := []jobs.AllocationStatus{jobs.AllocationCompleted, jobs.AllocationTerminated}
+	log.Debugf("Starting monitoring ensemble allocations")
+
+	cleanupFinishedEnsemble := func(ensembleID string, allocationIDs []string) {
+		log.Debugf("Cleaning up ensemble %s", ensembleID)
+
+		// TODO issue #1154 - better handle transient allocations
+		subnetStatusMx.Lock()
+		if stat, ok := subnetStatus[ensembleID]; ok && stat == 1 {
+			if err := a.network.DestroySubnet(ensembleID); err != nil {
+				log.Warnf("Monitor Ensemble: failed to destroy subnet (it may already be destroyed) %s: %v", ensembleID, err)
+			}
+			subnetStatus[ensembleID] = 0 // mark as destroyed
+		}
+		subnetStatusMx.Unlock()
+
+		for _, allocID := range allocationIDs {
+			if err := a.Release(a.ctx, allocID); err != nil {
+				log.Errorf("Monitor Ensemble: failed to release allocation %s: %v", allocID, err)
+			}
+		}
+		a.lock.Lock()
+		defer a.lock.Unlock()
+		delete(a.monitoredEnsembles, ensembleID)
+	}
+
+	go func() {
+		ticker := time.NewTicker(ensembleMonitorFrequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				doneAllocs := make(map[string][]string)
+				running := make(map[string]struct{})
+				for id, alloc := range a.allocations {
+					ensembleID := types.EnsembleIDFromAllocationID(id)
+					status := alloc.Status(a.ctx).Status
+					if slices.Contains(doneStatuses, status) {
+						doneAllocs[ensembleID] = append(doneAllocs[ensembleID], id)
+						continue
+					}
+					running[ensembleID] = struct{}{}
+				}
+
+				for ensembleID := range a.monitoredEnsembles {
+					if _, ok := running[ensembleID]; !ok {
+						cleanupFinishedEnsemble(ensembleID, doneAllocs[ensembleID])
+					}
+				}
+			case <-a.ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 func (a *allocator) Commit(ctx context.Context,
@@ -446,6 +517,8 @@ func (a *allocator) Allocate(
 	orchestrator actor.Handle,
 	job jobs.Job,
 	executor types.Executor,
+	contracts map[string]types.ContractConfig,
+	contractEventHandler *eventhandler.EventHandler,
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
 	a.lock.Lock()
@@ -487,10 +560,13 @@ func (a *allocator) Allocate(
 		a.network,
 		executor,
 		func() error { return a.Release(ctx, allocationID) },
+		contractEventHandler,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation: %w", err)
 	}
+
+	allocation.Contracts = contracts
 
 	// start the allocation
 	err = allocation.Start()
@@ -501,6 +577,8 @@ func (a *allocator) Allocate(
 	// delete the commit and store the allocation
 	delete(a.commits, allocationID)
 	a.allocations[allocationID] = allocation
+
+	a.registerEnsembleMonitor(types.EnsembleIDFromAllocationID(allocation.ID))
 
 	return allocation, nil
 }
@@ -519,6 +597,12 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 	allocation, ok := a.allocations[allocationID]
 	if !ok {
 		log.Warnf("allocation %s not found", allocationID)
+
+		// The reason we are not returning an error is because
+		// for instance when shutting down a deployment with allocations of type TASK
+		// the allocation is not found in the allocator because it was already terminated
+		// and we don't want to return an error in this case
+		// return fmt.Errorf("failed to release allocation: allocation %s not found", allocationID)
 		return nil
 	}
 
@@ -529,7 +613,7 @@ func (a *allocator) Release(ctx context.Context, allocationID string) error {
 	// status as Completed rather than Terminated
 	err := allocation.Terminate(ctx)
 	if err != nil {
-		log.Warnf("terminate allocation: %v", err)
+		log.Errorf("terminate allocation: %v", err)
 		return fmt.Errorf("terminate allocation: %w", err)
 	}
 

@@ -1,16 +1,29 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package node
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"slices"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -73,6 +86,57 @@ func (n *Node) location() jobtypes.Location {
 	}
 }
 
+func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) error {
+	// handle payment verification logic in future
+	for _, v := range bidContracts {
+		hostDID, err := did.FromString(v.Host)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts host did: %w", err)
+		}
+		pubKey, err := did.PublicKeyFromDID(hostDID)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts host public key from did: %w", err)
+		}
+
+		pid, err := peer.IDFromPublicKey(pubKey)
+		if err != nil {
+			return fmt.Errorf("failed to get peer id: %w", err)
+		}
+
+		// get actor public key
+		contractActorDID, err := did.FromString(v.DID)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts actor did: %w", err)
+		}
+		pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
+		if err != nil {
+			return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
+		}
+
+		destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, v.DID, pid.String())
+		if err != nil {
+			return fmt.Errorf("failed to get contracts host handle: %w", err)
+		}
+
+		req := contracts.ContractValidateRequestBehaviour{ContractDID: v.DID}
+		reply, err := n.invokeBehaviour(destination, behaviors.ContractValidationBehavior, req, invokeMessageTimeout)
+		if err != nil {
+			return fmt.Errorf("failed to send message to contract host: %w", err)
+		}
+		var respEnvelope contracts.ContractValidateResponseBehaviour
+		err = json.Unmarshal(reply.Message, &respEnvelope)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
+		}
+
+		if !respEnvelope.Valid {
+			return fmt.Errorf("contract is invalid")
+		}
+	}
+
+	return nil
+}
+
 // TODO: ignore bid if our location is rejected or not included on accepted
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
@@ -107,6 +171,29 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 			"error", err,
 		)
 		return
+	}
+
+	// contracts are global at ensemble level so they apply
+	// to all nodes
+	if len(request.Request) > 0 {
+		if len(request.Request[0].V1.Contracts) > 0 {
+			err := n.verifyContract(request.Request[0].V1.Contracts)
+			if err != nil {
+				log.Errorw(
+					"contract_verification_error",
+					"labels", string(observability.LabelDeployment),
+					"error", err,
+				)
+				return
+			}
+
+			log.Debugf("contract_verification_success: %v", request.Request[0].V1.Contracts)
+		} else {
+			log.Debugf(
+				"contracts_empty",
+				"labels", string(observability.LabelDeployment),
+			)
+		}
 	}
 
 	machineResources, err := n.hardware.GetMachineResources()
@@ -205,6 +292,10 @@ loop:
 	if err := n.allocator.CheckAvailability(toAnswer.V1.PublicPorts.Static, toAnswer.V1.PublicPorts.Dynamic, toAnswer.V1.Resources); err != nil {
 		log.Debugw("no_resource_availability_for_bid",
 			"labels", string(observability.LabelDeployment),
+			"nodeID", toAnswer.V1.NodeID,
+			"staticPorts", toAnswer.V1.PublicPorts.Static,
+			"dynamicPorts", toAnswer.V1.PublicPorts.Dynamic,
+			"resources", toAnswer.V1.Resources,
 			"error", err)
 		return
 	}
@@ -240,6 +331,13 @@ loop:
 			"error", err)
 		return
 	}
+
+	log.Infow("sending_bid_response",
+		"labels", string(observability.LabelDeployment),
+		"ensembleID", request.ID,
+		"nodeID", toAnswer.V1.NodeID,
+		"peerID", n.hostID,
+		"nonce", request.Nonce)
 
 	n.sendReply(msg, bid)
 	n.storeBid(request.ID, request.Nonce, toAnswer)

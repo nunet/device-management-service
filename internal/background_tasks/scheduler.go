@@ -9,6 +9,7 @@
 package backgroundtasks
 
 import (
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -72,12 +73,10 @@ func (s *Scheduler) RemoveTask(taskID int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for i, task := range s.tasks {
-		if task.ID == taskID {
-			s.tasks = append(s.tasks[:i], s.tasks[i+1:]...)
-			return
-		}
-	}
+	// Use slices.DeleteFunc to safely remove the task
+	s.tasks = slices.DeleteFunc(s.tasks, func(task *Task) bool {
+		return task.ID == taskID
+	})
 }
 
 // Start begins the scheduler's task execution loop.

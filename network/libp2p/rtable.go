@@ -9,6 +9,7 @@
 package libp2p
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -41,12 +42,14 @@ func (rt *rtable) Add(peerID peer.ID, addr string) {
 	rt.mx.Lock()
 	defer rt.mx.Unlock()
 
-	if _, ok := rt.idx[peerID]; ok {
-		rt.idx[peerID] = append(rt.idx[peerID], addr)
-	} else {
+	if _, ok := rt.idx[peerID]; !ok {
 		rt.idx[peerID] = make([]string, 0)
-		rt.idx[peerID] = append(rt.idx[peerID], addr)
 	}
+	// Skip if the IP already exists
+	if slices.Contains(rt.idx[peerID], addr) {
+		return
+	}
+	rt.idx[peerID] = append(rt.idx[peerID], addr)
 	rt.revIdx[addr] = peerID
 }
 
@@ -59,11 +62,10 @@ func (rt *rtable) Remove(peerID peer.ID, ip string) {
 		return
 	}
 
-	for i, addr := range addrs {
-		if addr == ip {
-			rt.idx[peerID] = append(addrs[:i], addrs[i+1:]...)
-		}
-	}
+	// Use slices.DeleteFunc to safely remove the IP address
+	rt.idx[peerID] = slices.DeleteFunc(addrs, func(addr string) bool {
+		return addr == ip
+	})
 
 	if len(rt.idx[peerID]) == 0 {
 		delete(rt.idx, peerID)

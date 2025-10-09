@@ -7,15 +7,19 @@ maint-scripts/inventory.yaml
 !test/*.json
 .env
 .idea
+.run
 device-management-service
 executor/firecracker/testdata
 
-test/integration/dms
-test/integration/testdata/dms*
-test/integration/testdata/storage
+test/e2e/dms
+test/e2e/testdata/dms*
+test/e2e/testdata/storage
 
-# dms logs
+# dms acc tests logs
 tests/acceptance/testdata/*.txt
+tests/acceptance/testdata/*.jsonl
+tests/acceptance/testdata/logs/*.txt
+tests/acceptance/testdata/logs/*.jsonl
 
 /glusterfs_certificates
 
@@ -35,6 +39,7 @@ cover.out
 
 # others
 .aider*
+CONVENTIONS.md
 sync_remote.sh
 
 # emacs
@@ -43,3 +48,20 @@ sync_remote.sh
 # builds
 builds/
 coverage.out
+coverage.txt
+coverage.html
+junit.xml
+
+# acceptance tests
+acc-test-cfg.yml
+cloud-init.yaml
+glusterfs-key
+glusterfs-key.pub
+
+# e2e tests
+tests/e2e/dms
+tests/e2e/testdata/basic_tests/
+tests/e2e/testdata/deployment_assert_subnet/
+tests/e2e/testdata/deployment_tests/
+tests/e2e/testdata/deployment_updates/
+tests/e2e/testdata/deployment_with_contracts_tests/

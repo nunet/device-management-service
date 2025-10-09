@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package client
 
 import (
@@ -6,6 +14,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
 // MessageOptions contains common options for actor message operations
@@ -130,6 +139,7 @@ type ActorBehaviorsClient interface {
 	ActorCapBehaviorClient
 	ActorLoggerBehaviorClient
 	ActorVolumeBehaviorClient
+	ActorContractBehaviorClient
 }
 
 // ActorPublicBehaviorClient provides methods for public behaviors
@@ -205,6 +215,12 @@ type ActorDeploymentBehaviorClient interface {
 
 	// DeploymentUpdate updates a running deployment
 	DeploymentUpdate(ctx context.Context, req node.UpdateDeploymentRequest, opts ...Option) (node.UpdateDeploymentResponse, error)
+
+	// DeploymentPrune removes old deployments
+	DeploymentPrune(ctx context.Context, req node.DeploymentPruneRequest, opts ...Option) (node.DeploymentPruneResponse, error)
+
+	// DeploymentDelete removes a specific deployment
+	DeploymentDelete(ctx context.Context, req node.DeploymentDeleteRequest, opts ...Option) (node.DeploymentDeleteResponse, error)
 }
 
 // ActorAllocationsBehaviorClient provides methods for allocations view
@@ -258,4 +274,20 @@ type ActorVolumeBehaviorClient interface {
 
 	// StartVolume starts a volume
 	StartVolume(ctx context.Context, req node.StartVolumeRequest, opts ...Option) (node.StartVolumeResponse, error)
+}
+
+// ActorContractBehaviorClient provides methods for contracts
+type ActorContractBehaviorClient interface {
+	NewContract(ctx context.Context, req contracts.CreateContractRequestBehaviour, opts ...Option) (contracts.CreateContractResponseBehaviour, error)
+	ContractStatus(ctx context.Context, req contracts.ContractStatusRequestBehaviour, opts ...Option) (contracts.ContractStatusResponseBehaviour, error)
+	ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequestBehaviour, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error)
+	ListIncoming(ctx context.Context, opts ...Option) (contracts.ContractListIncomingResponseBehaviour, error)
+	ListTransactions(ctx context.Context, opts ...Option) (contracts.ContractListLocalTransactionsResponse, error)
+	CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error)
+	ConfirmTransaction(ctx context.Context, req contracts.ContractConfirmLocalTransactionRequest, opts ...Option) (contracts.ContractConfirmLocalTransactionResponse, error)
+	GetPaymentStatus(ctx context.Context, req contracts.ContractPaymentStatusRequest, opts ...Option) (contracts.ContractPaymentStatusResponse, error)
+	TerminateContract(ctx context.Context, req contracts.ContractTerminationRequestBehaviour, opts ...Option) (contracts.ContractTerminationResponseBehaviour, error)
+	CompleteContract(ctx context.Context, req contracts.ContractCompletionRequestBehaviour, opts ...Option) (contracts.ContractCompletionResponseBehaviour, error)
+	ValidateContract(ctx context.Context, req contracts.ContractValidateRequestBehaviour, opts ...Option) (contracts.ContractValidateResponseBehaviour, error)
+	SettleContract(ctx context.Context, req contracts.ContractSettleRequestBehaviour, opts ...Option) (contracts.ContractSettleResponseBehaviour, error)
 }

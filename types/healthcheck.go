@@ -21,16 +21,16 @@ const (
 )
 
 type HealthCheckResponse struct {
-	Type  string `json:"type"` // TODO: examples of types
-	Value string `json:"value"`
+	Type  string `json:"type" yaml:"type"` // TODO: examples of types
+	Value string `json:"value" yaml:"value"`
 }
 
 type HealthCheckManifest struct {
-	Type     string              `json:"type"`     // type of healthcheck (command, http)
-	Exec     []string            `json:"exec"`     // command to execute
-	Endpoint string              `json:"endpoint"` // endpoint to check
-	Response HealthCheckResponse `json:"response"` // expected response
-	Interval time.Duration       `json:"interval"` // interval between healthchecks
+	Type     string              `json:"type" yaml:"type"`                             // type of healthcheck (command, http)
+	Exec     []string            `json:"exec" yaml:"exec"`                             // command to execute
+	Endpoint string              `json:"endpoint,omitempty" yaml:"endpoint,omitempty"` // endpoint to check
+	Response HealthCheckResponse `json:"response,omitempty" yaml:"response,omitempty"` // expected response
+	Interval time.Duration       `json:"interval" yaml:"interval"`                     // interval between healthchecks
 }
 
 func NewHealthCheck(mf HealthCheckManifest, fn func(HealthCheckManifest) error) (func() error, error) {

@@ -236,31 +236,34 @@ func (ctx *BasicCapabilityContext) cleanUpTokens() {
 	now := time.Now().UnixNano()
 	for _, anchor := range ctx.getRequireAnchors() {
 		tokenList := ctx.getRequireTokens(anchor)
-		for i, t := range tokenList {
-			if err := t.Verify(ctx.trust, uint64(now), ctx.revoke); err != nil {
-				tokenList = append(tokenList[:i], tokenList[i+1:]...)
-			}
-		}
+		// Use slices.DeleteFunc to safely remove invalid tokens
+		tokenList = slices.DeleteFunc(tokenList, func(t *Token) bool {
+			return t.Verify(ctx.trust, uint64(now), ctx.revoke) != nil
+		})
+		ctx.mx.Lock()
 		ctx.require[anchor] = tokenList
+		ctx.mx.Unlock()
 	}
 
 	for _, anchor := range ctx.getProvideAnchors() {
 		tokenList := ctx.getProvideTokens(anchor)
-		for i, t := range tokenList {
-			if err := t.Verify(ctx.trust, uint64(now), ctx.revoke); err != nil {
-				tokenList = append(tokenList[:i], tokenList[i+1:]...)
-			}
-		}
+		// Use slices.DeleteFunc to safely remove invalid tokens
+		tokenList = slices.DeleteFunc(tokenList, func(t *Token) bool {
+			return t.Verify(ctx.trust, uint64(now), ctx.revoke) != nil
+		})
+		ctx.mx.Lock()
 		ctx.provide[anchor] = tokenList
+		ctx.mx.Unlock()
 	}
 
 	for subject, tokenList := range ctx.tokens {
-		for i, t := range tokenList {
-			if err := t.Verify(ctx.trust, uint64(now), ctx.revoke); err != nil {
-				tokenList = append(tokenList[:i], tokenList[i+1:]...)
-			}
-		}
+		// Use slices.DeleteFunc to safely remove invalid tokens
+		tokenList = slices.DeleteFunc(tokenList, func(t *Token) bool {
+			return t.Verify(ctx.trust, uint64(now), ctx.revoke) != nil
+		})
+		ctx.mx.Lock()
 		ctx.tokens[subject] = tokenList
+		ctx.mx.Unlock()
 	}
 }
 

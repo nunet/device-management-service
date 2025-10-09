@@ -1,11 +1,21 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package cli
 
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/client"
@@ -29,12 +39,14 @@ func CmdStreams(cmd *cobra.Command) Streams {
 }
 
 type DmsCLI struct {
-	env                env.EnvironmentProvider
-	fs                 afero.Fs
-	defaultConfig      *config.Config
-	configLoader       *config.Loader
-	passphraseProvider passphrase.Provider
-	clientFn           func(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient, error)
+	env                 env.EnvironmentProvider
+	fs                  afero.Fs
+	defaultConfig       *config.Config
+	configLoader        *config.Loader
+	passphraseProvider  passphrase.Provider
+	keystoreProvider    keystore.KeyStore
+	clientFn            func(cfg *config.Config, sctx actor.SecurityContext) (client.DmsClient, error)
+	clientFnWithTimeout func(cfg *config.Config, sctx actor.SecurityContext, timeout time.Duration) (client.DmsClient, error)
 }
 
 func (c *DmsCLI) Env() env.EnvironmentProvider {
@@ -61,12 +73,24 @@ func (c *DmsCLI) NewPassphrase(key string) (string, error) {
 	return c.passphraseProvider.NewPassphrase(key)
 }
 
+func (c *DmsCLI) Keystore() keystore.KeyStore {
+	return c.keystoreProvider
+}
+
 func (c *DmsCLI) NewClient(sctx actor.SecurityContext) (client.DmsClient, error) {
 	cfg, err := c.Config()
 	if err != nil {
 		return nil, err
 	}
 	return c.clientFn(cfg, sctx)
+}
+
+func (c *DmsCLI) NewClientWithTimeout(sctx actor.SecurityContext, timeout time.Duration) (client.DmsClient, error) {
+	cfg, err := c.Config()
+	if err != nil {
+		return nil, err
+	}
+	return c.clientFnWithTimeout(cfg, sctx, timeout)
 }
 
 func New(opts ...func(*DmsCLI)) *DmsCLI {
@@ -106,6 +130,17 @@ func New(opts ...func(*DmsCLI)) *DmsCLI {
 		}
 	}
 
+	if cli.clientFnWithTimeout == nil {
+		cli.clientFnWithTimeout = func(cfg *config.Config, sctx actor.SecurityContext, timeout time.Duration) (client.DmsClient, error) {
+			return client.NewClient(client.Config{
+				Host:           fmt.Sprintf("%s:%d", cfg.Rest.Addr, cfg.Rest.Port),
+				APIPrefix:      "/api",
+				Version:        "v1",
+				RequestTimeout: timeout,
+			}, sctx)
+		}
+	}
+
 	return cli
 }
 
@@ -130,6 +165,12 @@ func WithConfig(cfg *config.Config) func(*DmsCLI) {
 func WithPassphraseProvider(pp passphrase.Provider) func(*DmsCLI) {
 	return func(cli *DmsCLI) {
 		cli.passphraseProvider = pp
+	}
+}
+
+func WithKeystoreProvider(ks keystore.KeyStore) func(*DmsCLI) {
+	return func(cli *DmsCLI) {
+		cli.keystoreProvider = ks
 	}
 }
 

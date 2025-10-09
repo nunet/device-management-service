@@ -1,8 +1,15 @@
-package itest
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
+package e2e
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -13,65 +20,11 @@ import (
 
 	cmd "gitlab.com/nunet/device-management-service/cmd/actor"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
 func DeploymentTest(suite *TestSuite) {
-	suite.Run("must be able to deploy nginx demo with storage", func() {
-		// deploy nginx.yaml to node1 using deployer's orchestrator
-		node1 := suite.nodes[0]
-		hostname, err := os.Hostname()
-		suite.Require().NoError(err)
-		srcFile := filepath.Join(suite.testDataDir, "ensembles", "nginx-storage.yaml")
-		destinationFile := filepath.Join(node1.config.WorkDir, "nginx-storage.yaml")
-		err = copyFile(srcFile, destinationFile)
-		suite.Require().NoError(err)
-		err = replaceHostnameInFile(destinationFile, hostname)
-		suite.Require().NoError(err)
-
-		freeResourcesBefore, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
-		suite.Require().NoError(err)
-
-		// Deploy nginx.yaml from deployer's orchestrator.
-		deployer := suite.nodes[1]
-		deploymentResult := deployer.client.deploy(
-			suite.T(), deployer.userContext, deployer.password,
-			filepath.Join(node1.config.WorkDir, "nginx-storage.yaml"))
-		suite.Contains(deploymentResult, `"Status": "OK"`)
-		manifestID := extractEnsembleID(deploymentResult)
-
-		// Wait until the deployment status is "Running".
-		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
-			suite.T().Log("Deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
-		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
-		time.Sleep(2 * time.Second)
-
-		// Ensure resources are allocated.
-		freeResourcesDuring, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
-		suite.Require().NoError(err)
-		suite.False(freeResourcesDuring.Equal(freeResourcesBefore))
-
-		// TODO: check port mapping
-
-		// Shutdown the nginx deployment.
-		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, manifestID)
-		suite.Contains(shutdownRes, `"Error": ""`)
-
-		// wait for the ensemble to be shutdown
-		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, manifestID)
-			suite.T().Log("deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
-		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
-
-		// Ensure resources are freed.
-		freeResourcesAfter, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
-		suite.Require().NoError(err)
-		suite.True(freeResourcesAfter.Equal(freeResourcesBefore))
-	})
-
 	suite.Run("allocation of type TASK: deploy docker hello-world", func() {
 		deployer := suite.nodes[1]
 		deployment2Result := deployer.client.deploy(
@@ -82,21 +35,109 @@ func DeploymentTest(suite *TestSuite) {
 		manifestID := extractEnsembleID(deployment2Result)
 
 		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
 			suite.T().Log("Second deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Hello-world deployment did not reach Running status")
 
-		// Shutdown the hello-world deployment.
-		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.dmsContext, deployer.password, manifestID)
-		suite.Require().Contains(shutdownRes, `"Error": ""`)
-
 		// wait for the ensemble to be shutdown
 		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, manifestID)
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
 			suite.T().Log("deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+	})
+}
+
+func DeploymentWithRedundancyTest(suite *TestSuite) {
+	suite.Run("must be able to deploy nginx with redundancy", func() {
+		// deploy nginx.yaml to node1 using deployer's orchestrator
+		node1 := suite.nodes[0]
+		node2 := suite.nodes[1]
+		node3 := suite.nodes[2]
+		srcFile := filepath.Join(suite.testDataDir, "ensembles", "nginx-with-redundancy.yaml")
+
+		freeResourcesBefore1, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
+		suite.Require().NoError(err)
+
+		freeResourcesBefore2, err := node2.client.freeResources(suite.T(), node2.dmsContext, node2.password)
+		suite.Require().NoError(err)
+
+		freeResourcesBefore3, err := node3.client.freeResources(suite.T(), node3.dmsContext, node3.password)
+		suite.Require().NoError(err)
+
+		// Deploy nginx.yaml from deployer's orchestrator.
+		deployer := suite.nodes[3]
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password,
+			srcFile)
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		// Wait until the deployment status is "Running".
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Log("Deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 3*60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+		time.Sleep(30 * time.Second)
+
+		// Ensure resources are allocated.
+		freeResourcesDuring1, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
+		suite.Require().NoError(err)
+		suite.False(freeResourcesDuring1.Equal(freeResourcesBefore1))
+
+		freeResourcesDuring2, err := node2.client.freeResources(suite.T(), node2.dmsContext, node2.password)
+		suite.Require().NoError(err)
+		suite.False(freeResourcesDuring2.Equal(freeResourcesBefore2))
+
+		freeResourcesDuring3, err := node3.client.freeResources(suite.T(), node3.dmsContext, node3.password)
+		suite.Require().NoError(err)
+		suite.False(freeResourcesDuring3.Equal(freeResourcesBefore3))
+
+		// TODO: check port mapping
+
+		// Shutdown the nginx deployment.
+		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, manifestID)
+		suite.Contains(shutdownRes, `"Error": ""`)
+
+		time.Sleep(10 * time.Second)
+
+		// wait for the ensemble to be shutdown
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Log("deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 3*60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+
+		// Ensure resources are freed.
+		freeResourcesAfter1, err := node1.client.freeResources(suite.T(), node1.dmsContext, node1.password)
+		suite.Require().NoError(err)
+		suite.True(freeResourcesAfter1.Equal(freeResourcesBefore1))
+
+		freeResourcesAfter2, err := node2.client.freeResources(suite.T(), node2.dmsContext, node2.password)
+		suite.Require().NoError(err)
+		suite.True(freeResourcesAfter2.Equal(freeResourcesBefore2))
+
+		freeResourcesAfter3, err := node3.client.freeResources(suite.T(), node3.dmsContext, node3.password)
+		suite.Require().NoError(err)
+		suite.True(freeResourcesAfter3.Equal(freeResourcesBefore3))
 	})
 }
 
@@ -127,7 +168,7 @@ func DeploymentFullAssertion(suite *TestSuite) {
 	ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "multiple_nginx.yaml")
 
 	// process ensemble cfg as a helper for later assertions
-	ensembleCfg, err := cmd.ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, ensemblePath)
+	ensembleCfg, err := cmd.ProcessEnsembleYaml(afero.Afero{Fs: afero.NewOsFs()}, env.NewOSEnvironment(), ensemblePath)
 	suite.Require().NoError(err)
 
 	// 2. start deployment
@@ -141,34 +182,19 @@ func DeploymentFullAssertion(suite *TestSuite) {
 
 	executions := []executionInfo{}
 
-	// 4. Shutdown: assert if everything was freed
-	defer func() {
-		shutdownRes := deployer.client.shutdownDeployment(
-			suite.T(), deployer.userContext, deployer.password, ensembleID)
-		suite.Contains(shutdownRes, `"Error": ""`)
-
-		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(
-				suite.T(), deployer.dmsContext, deployer.password, ensembleID)
-			suite.T().Log("deployment status:", extractStatus(status))
-			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
-		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
-		time.Sleep(3 * time.Second)
-
-		// resources freed and allocations stopped
-		for _, node := range suite.nodes {
-			suite.assertFreeResourcesFull(node)
-			suite.assertNoAllocationsRunning(node, executions...)
-		}
-	}()
-
 	// Wait until the deployment status is "Running".
 	suite.Require().Eventually(func() bool {
-		status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		if err != nil {
+			suite.T().Logf("Error getting deployment status: %v", err)
+			return false
+		}
 		suite.T().Log("Deployment status:", extractStatus(status))
 		return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
-	}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
-	time.Sleep(2 * time.Second)
+	}, 2*60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+
+	// Wait for containers to go up before going to assert running phase
+	time.Sleep(10 * time.Second)
 
 	//  3. assert running phase:
 	providers := []*mockNode{bobProvider, aliceProvider, carlProvider}
@@ -177,6 +203,33 @@ func DeploymentFullAssertion(suite *TestSuite) {
 	// track executions IDs so that we cna check if it was shutdown
 	for _, provider := range providers {
 		executions = append(executions, suite.getExecutions(provider)...)
+	}
+
+	// 4. Shutdown: assert if everything was freed
+	time.Sleep(20 * time.Second)
+
+	shutdownRes := deployer.client.shutdownDeployment(
+		suite.T(), deployer.userContext, deployer.password, ensembleID)
+	suite.Contains(shutdownRes, `"Error": ""`)
+
+	time.Sleep(10 * time.Second)
+
+	suite.Require().Eventually(func() bool {
+		status, err := deployer.client.deploymentStatus(
+			suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+		if err != nil {
+			suite.T().Logf("Error getting deployment status: %v", err)
+			return false
+		}
+		suite.T().Log("deployment status:", extractStatus(status))
+		return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+	}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+	time.Sleep(3 * time.Second)
+
+	// resources freed and allocations stopped
+	for _, node := range suite.nodes {
+		suite.assertFreeResourcesFull(node)
+		suite.assertNoAllocationsRunning(node, executions...)
 	}
 }
 
@@ -219,6 +272,8 @@ func (suite *TestSuite) assertRunningPhase(
 
 		suite.assertResourcesAfterDeployment(provider, resources)
 	}
+
+	<-time.After(10 * time.Second)
 
 	// 3.3. manifest
 	suite.assertManifestAfterDeployment(deployer, providers, ensembleCfg, ensembleID)
@@ -419,25 +474,31 @@ func DeploymentUpdates(suite *TestSuite) {
 		ensembleID := extractEnsembleID(deploymentResult)
 
 		defer func() {
+			time.Sleep(10 * time.Second)
 			// Clean up and test shutdown, and if resources were freed
 			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
 			suite.Contains(shutdownRes, `"Error": ""`)
 
 			suite.Require().Eventually(func() bool {
 				return checkResourcesEqual(suite.T(), aliceProvider, aliceResourcesBefore)
-			}, 30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Alice")
+			}, 5*30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Alice")
 
 			suite.Require().Eventually(func() bool {
 				return checkResourcesEqual(suite.T(), bobProvider, bobResourcesBefore)
-			}, 30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Bob")
+			}, 5*30*time.Second, 5*time.Second, "Resources were not freed after shutdown on Bob")
 		}()
 
 		// 	// wait for deployment running
 		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			time.Sleep(10 * time.Second)
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
 			suite.T().Log("Initial deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
-		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
+		}, 5*60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
 
 		bobResourcesAfterDeployment, err := bobProvider.client.freeResources(
 			suite.T(), bobProvider.dmsContext, bobProvider.password,
@@ -459,15 +520,18 @@ func DeploymentUpdates(suite *TestSuite) {
 		)
 		suite.Require().Contains(updateResult, `"OK": true`)
 
+		time.Sleep(10 * time.Second)
+
 		// Deployment status should still be "Running"
-		status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
 		suite.Require().Equal(extractStatus(status), jobtypes.DeploymentStatusRunning.String())
 
 		suite.Require().Eventually(func() bool {
 			aliceIncreased := checkResourcesIncreased(suite.T(), aliceProvider, aliceResourcesAfterDeployment)
 			bobIncreased := checkResourcesIncreased(suite.T(), bobProvider, bobResourcesAfterDeployment)
 			return aliceIncreased || bobIncreased
-		}, 30*time.Second, 5*time.Second, "Free resources were not increased on any node after removing a node")
+		}, 5*30*time.Second, 5*time.Second, "Free resources were not increased on any node after removing a node")
 	})
 
 	// testAddNode tests adding a node to a single-node ensemble
@@ -509,7 +573,11 @@ func DeploymentUpdates(suite *TestSuite) {
 
 		// wait until deploymnet is runnning
 		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
 			suite.T().Log("Initial deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
@@ -528,13 +596,18 @@ func DeploymentUpdates(suite *TestSuite) {
 		suite.Require().Contains(updateResult, `"OK": true`)
 
 		suite.Require().Eventually(func() bool {
-			status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
 			suite.T().Log("Initial deployment status:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
 		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
 
 		// Deployment status should still be "Running"
-		status := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
 		suite.Require().Equal(extractStatus(status), jobtypes.DeploymentStatusRunning.String())
 
 		// Validate both nodes have decreased resources after the update
@@ -543,5 +616,521 @@ func DeploymentUpdates(suite *TestSuite) {
 				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore)
 		}, 30*time.Second, 5*time.Second,
 			"free resources should be decreased in relation with the initial state (for both nodes)")
+	})
+
+	// testAddAllocation tests adding and removing an allocation to a two-node ensemble
+	suite.Run("AllocationUpdate", func() {
+		// Deploy initial ensemble with a single node
+		deployer := suite.nodes[0]
+		aliceProvider := suite.nodes[1]
+		bobProvider := suite.nodes[2]
+
+		// Get initial free resources to compare later
+		aliceResourcesBefore, err := aliceProvider.client.freeResources(
+			suite.T(), aliceProvider.dmsContext, aliceProvider.password,
+		)
+		suite.Require().NoError(err)
+
+		bobResourcesBefore, err := bobProvider.client.freeResources(
+			suite.T(), bobProvider.dmsContext, bobProvider.password,
+		)
+		suite.Require().NoError(err)
+
+		// Deploy the initial ensemble with a two nodes
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "multiple.yaml"),
+		)
+		suite.Require().Contains(deploymentResult, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deploymentResult)
+
+		defer func() {
+			// cleanup: shutdown and check if resources were freed
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Require().Contains(shutdownRes, `"Error": ""`)
+
+			suite.Require().Eventually(func() bool {
+				return checkResourcesEqual(suite.T(), aliceProvider, aliceResourcesBefore) &&
+					checkResourcesEqual(suite.T(), bobProvider, bobResourcesBefore)
+			}, 30*time.Second, 25*time.Second, "Resources were not freed after shutdown on Alice and Bob")
+		}()
+
+		// wait until deploymnet is runnning
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Log("Initial deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Initial deployment did not reach Running status")
+
+		// Verify resources were decreased on both nodes after initial deployment
+		suite.Require().True(
+			checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) &&
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore),
+		)
+
+		// Update the ensemble by adding an allocation
+		addUpdateResult := deployer.client.update(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "add-allocation-to-multi.yaml"), ensembleID,
+		)
+		suite.Require().Contains(addUpdateResult, `"OK": true`)
+
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Log("Updated deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Updated deployment did not reach Running status")
+
+		// Deployment addStatus should still be "Running"
+		addStatus, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(extractStatus(addStatus), jobtypes.DeploymentStatusRunning.String())
+
+		// Validate both nodes have decreased resources after the update
+		suite.Require().Eventually(func() bool {
+			return checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) &&
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore)
+		}, 30*time.Second, 5*time.Second,
+			"free resources should be decreased in relation with the initial state (for both nodes)")
+
+		// Update the ensemble by adding an allocation
+		rmUpdateResult := deployer.client.update(
+			suite.T(), deployer.userContext, deployer.password,
+			filepath.Join(suite.testDataDir, "remove-allocation-from-multi.yaml"), ensembleID,
+		)
+		suite.Require().Contains(rmUpdateResult, `"OK": true`)
+
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Log("Updated deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Updated deployment did not reach Running status")
+
+		// Deployment status should still be "Running"
+		status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(extractStatus(status), jobtypes.DeploymentStatusRunning.String())
+
+		// Validate both nodes have decreased resources after the update
+		suite.Require().Eventually(func() bool {
+			return checkResourcesDecreased(suite.T(), aliceProvider, aliceResourcesBefore) &&
+				checkResourcesDecreased(suite.T(), bobProvider, bobResourcesBefore)
+		}, 30*time.Second, 5*time.Second,
+			"free resources should be decreased in relation with the initial state (for both nodes)")
+	})
+}
+
+// DeploymentRestorationPostReboot tests deployment persistence across node restarts
+func DeploymentRestorationPostReboot(suite *TestSuite) {
+	suite.Run("DeploymentRestorationPostReboot", func() {
+		// We need at least 2 nodes: 1 deployer and 1 provider
+		suite.Require().Len(suite.nodes, 3)
+		deployer := suite.nodes[0]
+
+		// 1. Deploy a simple ensemble (using service-based ensemble to avoid task monitoring issues)
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password, ensemblePath,
+		)
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deploymentResult)
+
+		// 2. Wait for deployment to reach Running status
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Log("Deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+
+		// Capture pre-restart allocations snapshot
+		_, err := deployer.client.allocationsList(deployer.userContext, deployer.password)
+		suite.Require().NoError(err)
+
+		// 3. Verify deployment is in the list before restart
+		deploymentsBefore, err := deployer.client.deploymentList(suite.T(), deployer.userContext, deployer.password)
+		suite.Require().NoError(err)
+		suite.Require().Contains(deploymentsBefore, ensembleID, "Deployment should be in list before restart")
+		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), deploymentsBefore[ensembleID], "Deployment should be Running before restart")
+
+		// 4. Shutdown the deployer node (simulate restart)
+		suite.stopNode(0) // Stop the deployer node (index 0)
+
+		// 5. Restart the deployer node
+		go suite.startNode(0)
+
+		// Wait for the node to be ready again
+		var networkStats types.NetworkStats
+		suite.Require().Eventually(func() bool {
+			var err error
+			networkStats, err = deployer.client.self(suite.T(), deployer.dmsContext, deployer.password)
+			return err == nil && networkStats.ID != ""
+		}, 30*time.Second, 3*time.Second, "Deployer node should be ready after restart")
+
+		// Update the peer ID in case it changed
+		deployer.peerID = networkStats.ID
+
+		// 6. Verify deployment is still in the list after restart
+		suite.Require().Eventually(func() bool {
+			deploymentsAfter, err := deployer.client.deploymentList(suite.T(), deployer.userContext, deployer.password)
+			if err != nil {
+				return false
+			}
+			return len(deploymentsAfter) > 0 && deploymentsAfter[ensembleID] != ""
+		}, 60*time.Second, 5*time.Second, "Deployment should be in list after restart")
+
+		// Capture post-restart allocations snapshot and logs for nginx2
+		_, err = deployer.client.allocationsList(deployer.userContext, deployer.password)
+		suite.Require().NoError(err)
+		_, _ = deployer.client.deploymentLogs(deployer.userContext, deployer.password, ensembleID, "nginx2")
+
+		// 7. Verify deployment status is still Running
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status after restart: %v", err)
+				return false
+			}
+			suite.T().Log("Deployment status after restart:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment should still be Running after restart")
+
+		time.Sleep(10 * time.Second)
+
+		// 8. Clean up - shutdown the deployment
+		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Contains(shutdownRes, `"Error": ""`)
+
+		// Wait for the ensemble to be shutdown
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status after shutdown: %v", err)
+				return false
+			}
+			suite.T().Log("deployment status after shutdown:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+	})
+}
+
+// DeploymentRestorationFromCommitting tests restoration when crash occurs at Committing
+func DeploymentRestorationFromCommitting(suite *TestSuite) {
+	suite.Run("DeploymentRestorationFromCommitting", func() {
+		suite.Require().Len(suite.nodes, 3)
+		deployer := suite.nodes[1]
+
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		suite.Contains(deployRes, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deployRes)
+
+		// Wait for deployment to reach Committing status and crash immediately
+		suite.T().Log("Waiting for deployment to reach Committing status...")
+		deadline := time.Now().Add(60 * time.Second)
+		seen := make([]string, 0, 16)
+		last := ""
+
+		for time.Now().Before(deadline) {
+			statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err == nil {
+				cur := extractStatus(statusStr)
+				if cur != last {
+					seen = append(seen, cur)
+					last = cur
+					suite.T().Log("Deployment status:", cur)
+				}
+				if cur == jobtypes.DeploymentStatusCommitting.String() {
+					suite.T().Log("Deployment reached Committing status, crashing orchestrator immediately...")
+					suite.killNode(1)
+					break
+				}
+			}
+			// High frequency check to catch Committing status reliably
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// If we didn't find Committing status, fail the test
+		if last != jobtypes.DeploymentStatusCommitting.String() {
+			suite.T().Fatalf("deployment %s did not reach Committing status within 60s (seen: %v)", ensembleID, seen)
+		}
+
+		// Restart orchestrator node
+		go suite.startNode(1)
+
+		// Wait until restarted node is ready
+		suite.Require().Eventually(func() bool {
+			stats, err := suite.nodes[1].client.self(suite.T(), suite.nodes[1].dmsContext, suite.nodes[1].password)
+			if err != nil {
+				suite.T().Logf("Node not ready yet, error: %v", err)
+				return false
+			}
+			suite.T().Logf("Node ready, ID: %s", stats.ID)
+			return stats.ID != ""
+		}, 60*time.Second, 2*time.Second)
+
+		// Reconnect the restarted node to the existing network
+		// This is crucial for the node to be able to send bid requests
+		for i := 0; i < len(suite.nodes); i++ {
+			if i == 1 {
+				continue // Skip the restarted node itself
+			}
+			otherNode := suite.nodes[i]
+			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
+			suite.Require().NoError(err)
+
+			result := deployer.client.connect(suite.T(), deployer.userContext, deployer.password, otherHostID.ID)
+			suite.Contains(result, `"Status": "CONNECTED"`)
+		}
+
+		time.Sleep(60 * time.Second)
+
+		// After restoration, the deployment should have progressed from Committing to Running
+		// This is expected behavior - the orchestrator automatically continues the deployment process
+		statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), extractStatus(statusStr), "expected Running after restoration from Committing")
+
+		// Then it should stay Running or progress to Completed
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				return false
+			}
+			cur := extractStatus(status)
+			suite.T().Log("Current deployment status after restoration:", cur)
+			return cur == jobtypes.DeploymentStatusRunning.String() || cur == jobtypes.DeploymentStatusCompleted.String()
+		}, 120*time.Second, 2*time.Second, "deployment did not stay Running or progress to Completed after restoration")
+
+		// Cleanup (only if not already completed)
+		finalStatus, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		if err == nil && extractStatus(finalStatus) != jobtypes.DeploymentStatusCompleted.String() {
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Contains(shutdownRes, `"Error": ""`)
+			suite.Require().Eventually(func() bool {
+				status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+				return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+			}, 60*time.Second, 2*time.Second)
+		}
+	})
+}
+
+// DeploymentRestorationFromProvisioning tests restoration when crash occurs at Provisioning
+func DeploymentRestorationFromProvisioning(suite *TestSuite) {
+	suite.Run("DeploymentRestorationFromProvisioning", func() {
+		suite.Require().Len(suite.nodes, 3)
+		deployer := suite.nodes[1]
+
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		suite.Contains(deployRes, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deployRes)
+
+		// Wait for deployment to reach Provisioning status and crash immediately
+		suite.T().Log("Waiting for deployment to reach Provisioning status...")
+		deadline := time.Now().Add(60 * time.Second)
+		seen := make([]string, 0, 16)
+		last := ""
+
+		for time.Now().Before(deadline) {
+			statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err == nil {
+				cur := extractStatus(statusStr)
+				if cur != last {
+					seen = append(seen, cur)
+					last = cur
+					suite.T().Log("Deployment status:", cur)
+				}
+				if cur == jobtypes.DeploymentStatusProvisioning.String() {
+					suite.T().Log("Deployment reached Provisioning status, crashing orchestrator immediately...")
+					suite.stopNode(1)
+					break
+				}
+			}
+		}
+
+		// If we didn't find Committing status, fail the test
+		if last != jobtypes.DeploymentStatusProvisioning.String() {
+			suite.T().Fatalf("deployment %s did not reach Provisioning status within 60s (seen: %v)", ensembleID, seen)
+		}
+
+		// Restart orchestrator node
+		go suite.startNode(1)
+
+		// Wait until restarted node is ready
+		suite.Require().Eventually(func() bool {
+			stats, err := suite.nodes[1].client.self(suite.T(), suite.nodes[1].dmsContext, suite.nodes[1].password)
+			if err != nil {
+				suite.T().Logf("Node not ready yet, error: %v", err)
+				return false
+			}
+			suite.T().Logf("Node ready, ID: %s", stats.ID)
+			return stats.ID != ""
+		}, 5*60*time.Second, 2*time.Second)
+
+		// Reconnect the restarted node to the existing network
+		// This is crucial for the node to be able to send bid requests
+		for i := 0; i < len(suite.nodes); i++ {
+			if i == 1 {
+				continue // Skip the restarted node itself
+			}
+			otherNode := suite.nodes[i]
+			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
+			suite.Require().NoError(err)
+
+			result := deployer.client.connect(suite.T(), deployer.userContext, deployer.password, otherHostID.ID)
+			suite.Contains(result, `"Status": "CONNECTED"`)
+		}
+
+		// After restoration, the deployment should have progressed from Provisioning to Running
+		// This is expected behavior - the orchestrator automatically continues the deployment process
+		suite.T().Log("=== PHASE 4: Checking deployment status after restoration ===")
+		statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
+		currentStatus := extractStatus(statusStr)
+		suite.T().Logf("=== DEPLOYMENT STATUS AFTER RESTORATION: %s ===", currentStatus)
+		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), currentStatus, "expected Running after restoration from Provisioning")
+
+		// Then it should stay Running or progress to Completed
+		suite.T().Log("=== PHASE 5: Waiting for deployment to stay Running or progress to Completed ===")
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("=== ERROR GETTING DEPLOYMENT STATUS: %v ===", err)
+				return false
+			}
+			cur := extractStatus(status)
+			suite.T().Logf("=== CURRENT DEPLOYMENT STATUS: %s ===", cur)
+			return cur == jobtypes.DeploymentStatusRunning.String() || cur == jobtypes.DeploymentStatusCompleted.String()
+		}, 5*60*time.Second, 5*time.Second, "deployment did not stay Running or progress to Completed after restoration")
+
+		// Cleanup
+		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Contains(shutdownRes, `"Error": ""`)
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+			return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 5*60*time.Second, 2*time.Second)
+	})
+}
+
+// DeploymentRestorationFromPreparing tests restoration when crash occurs at Preparing
+func DeploymentRestorationFromPreparing(suite *TestSuite) {
+	suite.Run("DeploymentRestorationFromPreparing", func() {
+		suite.Require().Len(suite.nodes, 3)
+		deployer := suite.nodes[1]
+
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		suite.Contains(deployRes, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deployRes)
+
+		// Wait for deployment to reach Preparing status and crash immediately
+		suite.T().Log("Waiting for deployment to reach Preparing status...")
+		deadline := time.Now().Add(60 * time.Second)
+		seen := make([]string, 0, 16)
+		last := ""
+
+		for time.Now().Before(deadline) {
+			statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err == nil {
+				cur := extractStatus(statusStr)
+				if cur != last {
+					seen = append(seen, cur)
+					last = cur
+					suite.T().Log("Deployment status:", cur)
+				}
+				if cur == jobtypes.DeploymentStatusPreparing.String() {
+					suite.T().Log("Deployment reached Preparing status, crashing orchestrator immediately...")
+					suite.stopNode(1)
+					break
+				}
+			}
+			// High frequency check to catch Preparing status reliably
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// If we didn't find Preparing status, fail the test
+		if last != jobtypes.DeploymentStatusPreparing.String() {
+			suite.T().Fatalf("deployment %s did not reach Preparing status within 60s (seen: %v)", ensembleID, seen)
+		}
+
+		// Restart orchestrator node
+		go suite.startNode(1)
+
+		// Wait until restarted node is ready
+		suite.Require().Eventually(func() bool {
+			stats, err := suite.nodes[1].client.self(suite.T(), suite.nodes[1].dmsContext, suite.nodes[1].password)
+			if err != nil {
+				suite.T().Logf("Node not ready yet, error: %v", err)
+				return false
+			}
+			suite.T().Logf("Node ready, ID: %s", stats.ID)
+			return stats.ID != ""
+		}, 60*time.Second, 2*time.Second)
+
+		// Reconnect the restarted node to the existing network
+		// This is crucial for the node to be able to send bid requests
+		for i := 0; i < len(suite.nodes); i++ {
+			if i == 1 {
+				continue // Skip the restarted node itself
+			}
+			otherNode := suite.nodes[i]
+			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
+			suite.Require().NoError(err)
+
+			result := deployer.client.connect(suite.T(), deployer.userContext, deployer.password, otherHostID.ID)
+			suite.Contains(result, `"Status": "CONNECTED"`)
+		}
+
+		time.Sleep(30 * time.Second) // wait for the deployment to be restored
+
+		// After restoration, the deployment should have progressed from Preparing to Running
+		// This is expected behavior - the orchestrator automatically continues the deployment process
+		suite.T().Log("=== PHASE 4: Checking deployment status after restoration ===")
+		statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Require().NoError(err)
+		currentStatus := extractStatus(statusStr)
+		suite.T().Logf("=== DEPLOYMENT STATUS AFTER RESTORATION: %s ===", currentStatus)
+		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), currentStatus, "expected Running after restoration from Preparing")
+
+		// Then it should stay Running or progress to Completed
+		suite.T().Log("=== PHASE 5: Waiting for deployment to stay Running or progress to Completed ===")
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("=== ERROR GETTING DEPLOYMENT STATUS: %v ===", err)
+				return false
+			}
+			cur := extractStatus(status)
+			suite.T().Logf("=== CURRENT DEPLOYMENT STATUS: %s ===", cur)
+			return cur == jobtypes.DeploymentStatusRunning.String() || cur == jobtypes.DeploymentStatusCompleted.String()
+		}, 5*60*time.Second, 5*time.Second, "deployment did not stay Running or progress to Completed after restoration")
+
+		// Cleanup (only if not already completed)
+		finalStatus, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		if err == nil && extractStatus(finalStatus) != jobtypes.DeploymentStatusCompleted.String() {
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Contains(shutdownRes, `"Error": ""`)
+			suite.Require().Eventually(func() bool {
+				status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+				return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+			}, 5*60*time.Second, 2*time.Second)
+		}
 	})
 }

@@ -25,14 +25,15 @@ func resolveDNS(query *dns.Msg, records map[string]string) *dns.Msg {
 	for _, question := range query.Question {
 		if question.Qtype != dns.TypeA {
 			// We only support A records
-			m.SetRcode(query, dns.RcodeNotImplemented)
+			m.SetRcode(query, dns.RcodeSuccess)
+			m.Answer = []dns.RR{}
 			continue
 		}
 
 		ip, ok := records[strings.TrimSuffix(question.Name, ".")]
 		if !ok {
-			// Not found in our map, set answer to NXDOMAIN
-			m.SetRcode(query, int(dns.ExtendedErrorCodeStaleNXDOMAINAnswer))
+			// Not found in our map, set answer to SRVFAIL for request to fallthrough to the next nameserver
+			m.SetRcode(query, dns.RcodeServerFailure)
 			continue
 		}
 
@@ -59,7 +60,7 @@ func handleDNSQuery(packet []byte, records map[string]string) ([]byte, error) {
 
 	// Resolve the DNS query
 	response := resolveDNS(msg, records)
-	log.Debug("DNS query resolved successfully", "response", response)
+	log.Debugw("DNS query resolved successfully", "response", response)
 
 	// Encode the response message into a UDP packet
 	responseBytes, err := response.Pack()

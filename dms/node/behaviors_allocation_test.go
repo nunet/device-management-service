@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package node
 
 import (
@@ -155,6 +163,7 @@ func TestHandleSubnetDestroy(t *testing.T) {
 		err = node.network.CreateSubnet(
 			context.Background(),
 			subnetID,
+			"192.168.0.0/24",
 			map[string]string{"192.168.1.1": nVnet.GetHostID().String()})
 		require.NoError(t, err)
 
@@ -234,6 +243,7 @@ func TestHandleSubnetJoin(t *testing.T) {
 		err = node.network.CreateSubnet(
 			context.Background(),
 			subnetID,
+			"192.168.0.0/24",
 			map[string]string{"192.168.1.1": sVnet.GetHostID().String()})
 		require.NoError(t, err)
 
@@ -302,6 +312,7 @@ func TestCreateAllocation(t *testing.T) {
 				},
 			},
 			orchHandle,
+			map[string]types.ContractConfig{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported executor type: null")
@@ -316,6 +327,7 @@ func TestCreateAllocation(t *testing.T) {
 				},
 			},
 			orchHandle,
+			map[string]types.ContractConfig{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported executor type: firecracker")
@@ -343,6 +355,7 @@ func TestCreateAllocation(t *testing.T) {
 				},
 			},
 			orchHandle,
+			map[string]types.ContractConfig{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "allocation not committed")
@@ -382,6 +395,7 @@ func TestCreateAllocation(t *testing.T) {
 				},
 			},
 			orchHandle,
+			map[string]types.ContractConfig{},
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc)
@@ -498,7 +512,7 @@ func TestCreateAllocations(t *testing.T) {
 		require.NoError(t, err)
 
 		allocations := map[string]jobtypes.AllocationDeploymentConfig{
-			allocationName: {
+			allocationID: {
 				Type:      "task",
 				Resources: resrc,
 				Execution: types.SpecConfig{
@@ -511,7 +525,7 @@ func TestCreateAllocations(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, allocHandles)
 		assert.Len(t, allocHandles, 1)
-		assert.Contains(t, allocHandles, allocationName)
+		assert.Contains(t, allocHandles, allocationID)
 	})
 }
 
@@ -659,7 +673,7 @@ func TestHandleAllocationDeployment(t *testing.T) {
 			jobtypes.AllocationDeploymentRequest{
 				EnsembleID: ensembleID,
 				Allocations: map[string]jobtypes.AllocationDeploymentConfig{
-					allocationName: {
+					allocationID: {
 						Type:      "task",
 						Resources: resrc,
 						Execution: types.SpecConfig{
@@ -684,7 +698,7 @@ func TestHandleAllocationDeployment(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, resp.OK)
 		assert.NotNil(t, resp.Allocations)
-		assert.Contains(t, resp.Allocations, allocationName)
+		assert.Contains(t, resp.Allocations, allocationID)
 	})
 }
 
@@ -804,6 +818,7 @@ func TestHandleAllocationShutdown(t *testing.T) {
 				},
 			},
 			supervisorHandle,
+			map[string]types.ContractConfig{},
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc)
@@ -919,6 +934,7 @@ func TestHandleAllocationsList(t *testing.T) {
 		alloc1, err := node.createAllocation(
 			allocationID1, jobtypes.AllocationType("task"),
 			job, supervisorHandle,
+			map[string]types.ContractConfig{},
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc1)
@@ -926,6 +942,7 @@ func TestHandleAllocationsList(t *testing.T) {
 		alloc2, err := node.createAllocation(
 			allocationID2, jobtypes.AllocationType("task"),
 			job, supervisorHandle,
+			map[string]types.ContractConfig{},
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc2)

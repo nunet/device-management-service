@@ -1,7 +1,16 @@
-package itest
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
+package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
@@ -102,11 +111,15 @@ func (s *TestSuite) assertManifestAfterDeployment(
 		s.Require().NoError(err)
 
 		// Add this node to the expected manifest
+		allocKeys := make([]string, len(nodeConfig.Allocations))
+		for i, allocName := range nodeConfig.Allocations {
+			allocKeys[i] = fmt.Sprintf("%s.%s", nodeName, allocName)
+		}
 		expectedManifest.Nodes[nodeName] = jobtypes.NodeManifest{
 			ID:          nodeName,
 			Peer:        matchedProvider.peerID,
 			PubAddrss:   []string{}, // We don't validate this
-			Allocations: nodeConfig.Allocations,
+			Allocations: allocKeys,
 			Handle: actor.Handle{
 				ID:  providerHandleID,
 				DID: matchedProvider.capCtx.DID(),
@@ -137,7 +150,7 @@ func (s *TestSuite) assertManifestAfterDeployment(
 		s.Require().NotEmpty(nodeName, "Could not find node for allocation %s", allocName)
 
 		provider := nodeToProvider[nodeName]
-		allocID := types.ConstructAllocationID(ensembleID, allocName)
+		allocID := types.ConstructAllocationID(ensembleID, fmt.Sprintf("%s.%s", nodeName, allocName))
 
 		// Determine status based on allocation type
 		var expectedStatus jobtypes.AllocationStatus
@@ -152,7 +165,7 @@ func (s *TestSuite) assertManifestAfterDeployment(
 		allocProviderHandleID, err := crypto.IDFromPublicKey(pubk)
 		s.Require().NoError(err)
 
-		expectedManifest.Allocations[allocName] = jobtypes.AllocationManifest{
+		expectedManifest.Allocations[fmt.Sprintf("%s.%s", nodeName, allocName)] = jobtypes.AllocationManifest{
 			ID:          allocID,
 			Type:        allocConfig.Type,
 			NodeID:      nodeName,
@@ -219,15 +232,18 @@ func (s *TestSuite) assertAllocationsRunning(
 
 	expectedAllocsIDs := make(map[string]bool)
 	for _, alloc := range allocationsNames {
-		expectedAllocsIDs[types.ConstructAllocationID(ensembleID, alloc)] = true
+		expectedAllocsIDs[alloc] = true
 	}
-
 	for _, alloc := range allocations {
-		_, ok := expectedAllocsIDs[alloc.ID]
+		key, err := types.ParseManifestKey(alloc.ID, ensembleID)
+		s.Require().NoError(err)
+		_, ok := expectedAllocsIDs[key.AllocationName]
 		s.Assert().True(ok, "Expected allocation %s to be running", alloc.ID)
 
 		if alloc.Executor == string(types.ExecutorTypeDocker) {
+			fmt.Println("alloc.ExecutionID", alloc.ExecutionID)
 			containerRunning, err := isContainerRunning(alloc.ExecutionID)
+			fmt.Println("containerRunning", containerRunning)
 			s.Assert().NoError(err)
 			s.Assert().True(containerRunning, "Expected container to be running")
 		}

@@ -1,0 +1,200 @@
+---
+- hosts:
+  - glusterfs_clients
+  - "{{ groups.glusterfs_servers | first }}"
+  remote_user: root
+  vars:
+    test_volume_name: gvtest
+    org_name: glusterfs
+  environment:
+    ORG_NAME: glusterfs
+  tasks:
+  - name: Include vars
+    include_vars: ../vars/main.yml
+  - name: Read configs
+    include_tasks: ../tasks/read-config.yml
+
+  - name: Run DMS test
+    environment:
+      DMS_PASSPHRASE: '{{ role_config.dms_passphrase }}'
+    block:
+    - name: 'Patch nunet service: change DMS start user'
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system/nunet.service
+        regexp: '^User='
+        line: User=root
+      when: inventory_hostname == glusterfs_main_node or inventory_hostname in groups.glusterfs_clients
+    - name: 'Patch nunet service: load environment variables'
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system/nunet.service
+        insertafter: '^Environment=' 
+        line: EnvironmentFile=/root/dms.sh
+      when: inventory_hostname == glusterfs_main_node or inventory_hostname in groups.glusterfs_clients
+    - name: Populate /root/dms.sh
+      ansible.builtin.copy:
+        dest: "/root/dms.sh"
+        content: |
+          DMS_PASSPHRASE='{{ role_config.dms_passphrase }}'
+          GOLOG_LOG_LEVEL=debug
+        mode: u=rx,g=rx,o=rx
+    - name: Enable and start systemd service
+      ansible.builtin.systemd_service:
+        name: nunet.service
+        enabled: yes
+        state: restarted
+        daemon_reload: yes
+      when: inventory_hostname == glusterfs_main_node or inventory_hostname in groups.glusterfs_clients
+    - name: Configure DMS for Glusterfs
+      ansible.builtin.shell: |
+        cd /root/.nunet/
+        nunet config set general.storage_mode true
+        nunet config set general.storage_ca_directory /root/.nunet/storage_ca_directory
+        nunet config set general.storage_bricks_dir /data/bricks
+        nunet config set general.storage_glusterfs_hostname {{ hostvars[glusterfs_main_node].ansible_host }}
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ glusterfs_main_node }}"
+      run_once: true
+
+    - name: Create nunet folder for glusterfs key
+      ansible.builtin.file:
+        path: /root/.nunet/storage_ca_directory/glusterfs_nodes
+        state: directory
+    - name: Copy certificate to nunet folder
+      ansible.builtin.copy:
+        src: /etc/ssl/glusterfs.pem
+        dest: /root/.nunet/storage_ca_directory/glusterfs_nodes
+        remote_src: true
+
+    - name: Initialize DMS context
+      shell: |
+        nunet cap new dms --force
+      args:
+        executable: /bin/bash
+    - name: Get client dms DID
+      shell: |
+        nunet key did dms
+      args:
+        executable: /bin/bash
+      register: client_dms_did
+      delegate_to: '{{ groups.glusterfs_clients[0] }}'
+      run_once: true
+    - name: Get server dms DID
+      shell: |
+        nunet key did dms
+      args:
+        executable: /bin/bash
+      register: server_dms_did
+      delegate_to: '{{ glusterfs_main_node }}'
+      run_once: true
+    - debug:
+        msg:
+          client_dms_did: "{{ client_dms_did.stdout }}"
+          server_dms_did: "{{ server_dms_did.stdout }}"
+      delegate_to: 127.0.0.1
+      run_once: true
+
+    - name: Root client DMS
+      shell: |
+        nunet cap anchor --context dms --root '{{ server_dms_did.stdout }}'
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ groups.glusterfs_clients[0] }}"
+      run_once: true
+    - name: Root server DMS
+      shell: |
+        nunet cap anchor --context dms --root '{{ client_dms_did.stdout }}'
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ glusterfs_main_node }}"
+      run_once: true
+
+    - name: Restart DMS
+      ansible.builtin.systemd_service:
+        name: nunet.service
+        state: restarted
+
+    - name: Get server peer ID
+      shell: |
+        sleep 8
+        nunet actor cmd --context dms /dms/node/peers/self
+      args:
+        executable: /bin/bash
+      delegate_to: '{{ glusterfs_main_node }}'
+      run_once: true
+      register: server_peer_id
+    - name: Get client peer ID
+      shell: |
+        sleep 8
+        nunet actor cmd --context dms /dms/node/peers/self
+      args:
+        executable: /bin/bash
+      delegate_to: '{{ groups.glusterfs_clients[0] }}'
+      run_once: true
+      register: client_peer_id
+    - debug:
+        msg:
+          server_peer_id: "{{ (server_peer_id.stdout | from_json).id }}"
+          client_peer_id: "{{ (client_peer_id.stdout | from_json).id }}"
+      delegate_to: 127.0.0.1
+      run_once: true
+
+    - name: Test DMS connection from client
+      shell: |
+        nunet actor cmd --context dms /dms/node/peers/connect --address '/p2p/{{ (server_peer_id.stdout | from_json).id }}'
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ groups.glusterfs_clients[0] }}"
+      run_once: true
+    - name: Test DMS connection from server
+      shell: |
+        nunet actor cmd --context dms /dms/node/peers/connect --address '/p2p/{{ (client_peer_id.stdout | from_json).id }}'
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ glusterfs_main_node }}"
+      run_once: true
+    - name: Test creation of volume through actor cmd
+      shell: |
+        mkdir -p /root/glusterfs_certificates
+        cp /etc/ssl/glusterfs.{pem,key} /root/glusterfs_certificates
+        nunet actor cmd --timeout 20s --context dms /dms/volume/create --name {{ test_volume_name }} --client-pem-file /root/glusterfs_certificates/glusterfs.pem --ca-output-dir "/root/glusterfs_certificates/"  --dest {{ (server_peer_id.stdout | from_json).id }}
+      retries: 3
+      delay: 5
+      args:
+        executable: /bin/bash
+      delegate_to: '{{ groups.glusterfs_clients[0] }}'
+      run_once: true
+    - name: Test start of volume through actor cmd
+      shell: |
+        nunet actor cmd --timeout 20s --context dms /dms/volume/start --name {{ test_volume_name }} --dest {{ (server_peer_id.stdout | from_json).id }}
+      retries: 3
+      delay: 5
+      args:
+        executable: /bin/bash
+      delegate_to: '{{ groups.glusterfs_clients[0] }}'
+      run_once: true   
+    - name: Test delete of volume through actor cmd
+      shell: |
+        nunet actor cmd --timeout 20s --context dms /dms/volume/delete --name {{ test_volume_name }} --dest {{ (server_peer_id.stdout | from_json).id }}
+      retries: 3
+      delay: 5
+      args:
+        executable: /bin/bash
+      delegate_to: '{{ groups.glusterfs_clients[0] }}'
+      run_once: true
+
+    rescue:
+    - name: Something went wront with the tests, pausing until you can investigate, after which the VMs will be reset
+      ansible.builtin.pause:
+
+    always:
+    - name: Stop DMS service 
+      ansible.builtin.systemd_service:
+        name: nunet.service
+        state: stopped
+    - name: Remove DMS configs
+      ansible.builtin.file:
+        path: /root/.nunet
+        state: absent
+        
+

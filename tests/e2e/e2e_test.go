@@ -10,7 +10,7 @@
 
 //go:build e2e || !unit
 
-package itest
+package e2e
 
 import (
 	"testing"
@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 5
+		testSuites         = 10
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -62,33 +62,37 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentTests)
 	})
 
-	t.Run("DeploymentWithVolumesTests", func(t *testing.T) {
+	t.Run("DeploymentWithRedundancy", func(t *testing.T) {
 		t.Parallel()
-		t.Skip("not implemented")
-
-		err := supportsGluster()
-		if err != nil {
-			t.Skipf("glusterfs not supported, skipping gluster tests: %v", err)
-		} else {
-			setupGlusterfsServer(t)
-		}
-
-		deploymentWithVolumesTests := &TestSuite{
-			numNodes:      3,
-			Name:          "deployment_with_volumes_tests",
+		deploymentWithRedundancyTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_redundancy_tests",
 			restPortIndex: ports[4],
 			p2pPortIndex:  ports[5],
-			runner:        DeployWithVolumeTest,
+			runner:        DeploymentWithRedundancyTest,
 		}
-		suite.Run(t, deploymentWithVolumesTests)
+		suite.Run(t, deploymentWithRedundancyTests)
+	})
+
+	t.Run("DeploymentWithContracts", func(t *testing.T) {
+		t.Parallel()
+
+		deploymentWithContractsTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_tests",
+			restPortIndex: ports[6],
+			p2pPortIndex:  ports[7],
+			runner:        DeployWithContractTest,
+		}
+		suite.Run(t, deploymentWithContractsTests)
 	})
 
 	t.Run("DeploymentUpdates", func(t *testing.T) {
 		deploymentUpdates := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_updates",
-			restPortIndex: ports[6],
-			p2pPortIndex:  ports[7],
+			restPortIndex: ports[8],
+			p2pPortIndex:  ports[9],
 			runner:        DeploymentUpdates,
 		}
 		suite.Run(t, deploymentUpdates)
@@ -98,10 +102,57 @@ func TestE2E(t *testing.T) {
 		deploymentFullAssertion := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_assert_subnet",
-			restPortIndex: ports[8],
-			p2pPortIndex:  ports[9],
+			restPortIndex: ports[10],
+			p2pPortIndex:  ports[11],
 			runner:        DeploymentFullAssertion,
 		}
 		suite.Run(t, deploymentFullAssertion)
+	})
+
+	t.Run("DeploymentRestorationPostReboot", func(t *testing.T) {
+		deploymentRestoration := &TestSuite{
+			numNodes:      3,
+			Name:          "deployment_restoration_post_reboot",
+			restPortIndex: ports[12],
+			p2pPortIndex:  ports[13],
+			runner:        DeploymentRestorationPostReboot,
+		}
+		suite.Run(t, deploymentRestoration)
+	})
+
+	t.Run("DeploymentRestorationFromCommitting", func(t *testing.T) {
+		committing := &TestSuite{
+			numNodes:      3,
+			Name:          "deployment_restoration_from_committing",
+			restPortIndex: ports[14],
+			p2pPortIndex:  ports[15],
+			runner:        DeploymentRestorationFromCommitting,
+		}
+		suite.Run(t, committing)
+	})
+
+	// Disabled because too flaky since 'Provisioning' status is too quick to catch
+	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
+	// test case
+	// t.Run("DeploymentRestorationFromProvisioning", func(t *testing.T) {
+	// 	provisioning := &TestSuite{
+	// 		numNodes:      3,
+	// 		Name:          "deployment_restoration_from_provisioning",
+	// 		restPortIndex: ports[16],
+	// 		p2pPortIndex:  ports[17],
+	// 		runner:        DeploymentRestorationFromProvisioning,
+	// 	}
+	// 	suite.Run(t, provisioning)
+	// })
+
+	t.Run("DeploymentRestorationFromPreparing", func(t *testing.T) {
+		preparing := &TestSuite{
+			numNodes:      3,
+			Name:          "deployment_restoration_from_preparing",
+			restPortIndex: ports[16],
+			p2pPortIndex:  ports[17],
+			runner:        DeploymentRestorationFromPreparing,
+		}
+		suite.Run(t, preparing)
 	})
 }

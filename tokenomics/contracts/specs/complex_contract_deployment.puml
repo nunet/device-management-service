@@ -1,0 +1,61 @@
+@startuml Complex Contract Management Deployment Architecture
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam monochrome false
+skinparam shadowing false
+
+title Complex Contract Management - Multi-Party Architecture
+
+node "Solution Enabler (SE)" as SE
+node "Compute Provider (CP)" as CP
+node "Solution Provider (SP)" as SP
+
+node "Contract Host" as ContractHost {
+    database "Contract Database" as ContractDB {
+        [SE-to-CP Contract Objects]
+        [SE-to-SP Contract Objects]
+    }
+    
+    [Contract Execution Engine]
+    [Ocap Chain Verifier]
+}
+
+rectangle "Settlement and payment layer" as Settlement {
+    [Offline Accounting]
+    [NTX Utility / Blockchain]
+}
+
+' SE relationships
+SE --> ContractHost : "Creates contract objects"
+ContractHost --> Settlement : "Initiates payment requests and records transactions"
+
+' CP relationships  
+CP <--> SE : "SE-to-CP contract (with transparency property)"
+CP --> ContractHost: "Signs Contracts"
+
+' SP relationships
+SP <--> SE : "SE-to-SP contract (with transparency property)" 
+SP --> ContractHost: "Signs Contracts"
+
+
+' Contract Host internals
+[Contract Execution Engine] --> ContractDB
+[Ocap Chain Verifier] --> ContractDB
+[Ocap Chain Verifier] --> [SE-to-CP Contract Objects]
+[Ocap Chain Verifier] --> [SE-to-SP Contract Objects]
+
+note left of [Ocap Chain Verifier]
+  Contract transparency implemented via 
+  ocap chain verification logic.
+  Contracts have transparency properties
+  that allow ocap delegation checking.
+end note
+
+note bottom of Settlement
+  SE coordinates settlement across
+  all contract participants through
+  offline accounting or blockchain
+end note
+
+@enduml

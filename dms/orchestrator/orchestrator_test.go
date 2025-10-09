@@ -1,9 +1,18 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package orchestrator
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +24,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -69,13 +79,13 @@ func TestOrchestratorDeploy(t *testing.T) {
 		},
 	}
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	// Create orchestrator with orchestrator mock
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Start deployment in a goroutine
@@ -109,6 +119,9 @@ func TestOrchestratorDeploy(t *testing.T) {
 			assert.Equal(t, expectedStatuses[statusIndex], status)
 			statusIndex++
 		}
+		if status == jtypes.DeploymentStatusRunning {
+			break
+		}
 	}
 
 	select {
@@ -131,9 +144,317 @@ func TestOrchestratorDeploy(t *testing.T) {
 	assert.Equal(t, provider.peerID.String(), node.Peer)
 
 	// Verify allocation was deployed
-	alloc, ok := manifest.Allocations["alloc1"]
+	alloc, ok := manifest.Allocations["node1.alloc1"]
 	assert.True(t, ok)
 	assert.Equal(t, "node1", alloc.NodeID)
+}
+
+func TestOrchestratorDeployWithRedundancy(t *testing.T) {
+	BidRequestTimeout = 1 * time.Second
+	CommitDeploymentTimeout = 1 * time.Second
+	VerifyEdgeConstraintTimeout = 1 * time.Second
+	AllocationDeploymentTimeout = 1 * time.Second
+	AllocationStartTimeout = 1 * time.Second
+	AllocationShutdownTimeout = 1 * time.Second
+
+	substrate := network.NewSubstrate()
+
+	orch := MakeOrchestrator(t, substrate)
+	provider1 := MakeProvider(t, substrate)
+	provider2 := MakeProvider(t, substrate)
+	provider3 := MakeProvider(t, substrate)
+
+	cfg := jtypes.EnsembleConfig{
+		V1: &jtypes.EnsembleConfigV1{
+			Nodes: map[string]jtypes.NodeConfig{
+				"node1": {
+					Location: jtypes.LocationConstraints{
+						Accept: []jtypes.Location{
+							{Country: "US"},
+						},
+					},
+					Allocations:     []string{"alloc1"},
+					Redundancy:      2,
+					FailureRecovery: jtypes.NodeFailureRecoveryStayDown,
+				},
+			},
+			Allocations: map[string]jtypes.AllocationConfig{
+				"alloc1": {
+					Type: jtypes.AllocationTypeService,
+					Resources: types.Resources{
+						CPU: types.CPU{
+							Cores:      1,
+							ClockSpeed: 1000,
+						},
+						RAM: types.RAM{
+							Size: 1024,
+						},
+						Disk: types.Disk{
+							Size: 1024,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Set up behaviors for all providers
+	provider1.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
+	provider2.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
+	provider3.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
+
+	mx := sync.Mutex{}
+	nodesPeerIDs := make(map[string]string)
+
+	// Override provider2 to return a bid response for the first standby node
+	require.NoError(t, provider1.actor.AddBehavior(behaviors.BidRequestBehavior, func(msg actor.Envelope) {
+		go func() {
+			select {
+			case provider1.channels[msg.Behavior] <- struct{}{}:
+			default:
+			}
+		}()
+		defer msg.Discard()
+
+		var request jtypes.EnsembleBidRequest
+		if err := json.Unmarshal(msg.Message, &request); err != nil {
+			t.Fatalf("unmarshal bid request: %s", err)
+		}
+
+		mx.Lock()
+		nodesPeerIDs[request.Request[0].V1.NodeID] = provider1.handle.Address.HostID
+		mx.Unlock()
+
+		// send bid response
+		bid := jtypes.Bid{
+			V1: &jtypes.BidV1{
+				EnsembleID: request.ID,
+				NodeID:     request.Request[0].V1.NodeID,
+				Peer:       provider1.handle.Address.HostID,
+				Location:   jtypes.Location{Country: "US"},
+				Handle:     provider1.handle,
+			},
+		}
+
+		// sign the bid using the provider's private key
+		// Create DID provider for signing
+		providerDID := did.NewProvider(provider1.actor.Handle().DID, provider1.priv)
+
+		// Sign the bid
+		if err := bid.Sign(providerDID); err != nil {
+			fmt.Printf("Failed to sign bid: %v\n", err)
+			return
+		}
+
+		var opt []actor.MessageOption
+		if msg.IsBroadcast() {
+			opt = append(opt, actor.WithMessageSource(provider1.actor.Handle()))
+		}
+
+		reply, err := actor.ReplyTo(msg, bid, opt...)
+		if err != nil {
+			t.Fatalf("creating reply: %s", err)
+		}
+
+		reply.To = msg.From
+		reply.From = provider1.handle
+
+		if err := provider1.actor.Send(reply); err != nil {
+			t.Fatalf("sending bid response: %s", err)
+		}
+	}, []actor.BehaviorOption{
+		actor.WithBehaviorTopic(behaviors.BidRequestTopic),
+	}...))
+
+	// Override provider2 to return a bid response for the first standby node
+	require.NoError(t, provider2.actor.AddBehavior(behaviors.BidRequestBehavior, func(msg actor.Envelope) {
+		go func() {
+			select {
+			case provider2.channels[msg.Behavior] <- struct{}{}:
+			default:
+			}
+		}()
+		defer msg.Discard()
+
+		var request jtypes.EnsembleBidRequest
+		if err := json.Unmarshal(msg.Message, &request); err != nil {
+			t.Fatalf("unmarshal bid request: %s", err)
+		}
+
+		mx.Lock()
+		nodesPeerIDs[request.Request[1].V1.NodeID] = provider2.handle.Address.HostID
+		mx.Unlock()
+		// send bid response
+		bid := jtypes.Bid{
+			V1: &jtypes.BidV1{
+				EnsembleID: request.ID,
+				NodeID:     request.Request[1].V1.NodeID,
+				Peer:       provider2.handle.Address.HostID,
+				Location:   jtypes.Location{Country: "US"},
+				Handle:     provider2.handle,
+			},
+		}
+
+		// sign the bid using the provider's private key
+		// Create DID provider for signing
+		providerDID := did.NewProvider(provider2.actor.Handle().DID, provider2.priv)
+
+		// Sign the bid
+		if err := bid.Sign(providerDID); err != nil {
+			fmt.Printf("Failed to sign bid: %v\n", err)
+			return
+		}
+
+		var opt []actor.MessageOption
+		if msg.IsBroadcast() {
+			opt = append(opt, actor.WithMessageSource(provider2.actor.Handle()))
+		}
+
+		reply, err := actor.ReplyTo(msg, bid, opt...)
+		if err != nil {
+			t.Fatalf("creating reply: %s", err)
+		}
+
+		reply.To = msg.From
+		reply.From = provider2.handle
+
+		if err := provider2.actor.Send(reply); err != nil {
+			t.Fatalf("sending bid response: %s", err)
+		}
+	}, []actor.BehaviorOption{
+		actor.WithBehaviorTopic(behaviors.BidRequestTopic),
+	}...))
+
+	// Override provider3 to return a bid response for the second standby node
+	require.NoError(t, provider3.actor.AddBehavior(behaviors.BidRequestBehavior, func(msg actor.Envelope) {
+		go func() {
+			select {
+			case provider3.channels[msg.Behavior] <- struct{}{}:
+			default:
+			}
+		}()
+		defer msg.Discard()
+
+		var request jtypes.EnsembleBidRequest
+		if err := json.Unmarshal(msg.Message, &request); err != nil {
+			t.Fatalf("unmarshal bid request: %s", err)
+		}
+
+		bid := jtypes.Bid{
+			V1: &jtypes.BidV1{
+				EnsembleID: request.ID,
+				NodeID:     request.Request[2].V1.NodeID,
+				Peer:       provider3.handle.Address.HostID,
+				Location:   jtypes.Location{Country: "US"},
+				Handle:     provider3.handle,
+			},
+		}
+
+		mx.Lock()
+		nodesPeerIDs[request.Request[2].V1.NodeID] = provider3.handle.Address.HostID
+		mx.Unlock()
+
+		// sign the bid using the provider's private key
+		// Create DID provider for signing
+		providerDID := did.NewProvider(provider3.actor.Handle().DID, provider3.priv)
+
+		// Sign the bid
+		if err := bid.Sign(providerDID); err != nil {
+			fmt.Printf("Failed to sign bid: %v\n", err)
+			return
+		}
+
+		var opt []actor.MessageOption
+		if msg.IsBroadcast() {
+			opt = append(opt, actor.WithMessageSource(provider3.actor.Handle()))
+		}
+
+		reply, err := actor.ReplyTo(msg, bid, opt...)
+		if err != nil {
+			t.Fatalf("creating reply: %s", err)
+		}
+
+		reply.To = msg.From
+		reply.From = provider3.handle
+
+		if err := provider3.actor.Send(reply); err != nil {
+			t.Fatalf("sending bid response: %s", err)
+		}
+	}, []actor.BehaviorOption{
+		actor.WithBehaviorTopic(behaviors.BidRequestTopic),
+	}...))
+
+	// Create orchestrator with orchestrator mock
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	require.NoError(t, err)
+
+	// Start deployment in a goroutine
+	expiry := time.Now().Add(2 * time.Minute)
+	deployDone := make(chan error, 1)
+	go func() {
+		t.Helper()
+		deployDone <- o.Deploy(expiry)
+		close(deployDone)
+	}()
+
+	select {
+	case err := <-deployDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Minute):
+		t.Fatal("Timeout waiting for deployment to complete")
+	}
+
+	// Verify final state
+	assert.Equal(t, jtypes.DeploymentStatusRunning, o.Status())
+
+	manifest := o.Manifest()
+	assert.NotEmpty(t, manifest.Nodes)
+	assert.NotEmpty(t, manifest.Allocations)
+
+	// Verify nodes were deployed with redundancy
+	node, ok := manifest.Nodes["node1"]
+	assert.True(t, ok)
+	assert.Equal(t, nodesPeerIDs["node1"], node.Peer)
+	assert.Equal(t, jtypes.RolePrimary, node.RedundancyRole)
+	assert.Len(t, node.StandbyNodes, 2)
+
+	// Verify standby nodes were created
+	standby1, ok := manifest.Nodes["node1-standby-1"]
+	assert.True(t, ok)
+	assert.Equal(t, jtypes.RoleStandby, standby1.RedundancyRole)
+	assert.Equal(t, "node1", standby1.PrimaryNode)
+	assert.Equal(t, 1, standby1.StandbyIndex)
+	assert.Equal(t, nodesPeerIDs["node1-standby-1"], standby1.Peer)
+
+	standby2, ok := manifest.Nodes["node1-standby-2"]
+	assert.True(t, ok)
+	assert.Equal(t, jtypes.RoleStandby, standby2.RedundancyRole)
+	assert.Equal(t, "node1", standby2.PrimaryNode)
+	assert.Equal(t, 2, standby2.StandbyIndex)
+	assert.Equal(t, nodesPeerIDs["node1-standby-2"], standby2.Peer)
+
+	// Verify allocation was deployed
+	alloc, ok := manifest.Allocations["node1.alloc1"]
+	assert.True(t, ok)
+	assert.Equal(t, "node1", alloc.NodeID)
+	assert.False(t, alloc.IsStandby)
+	assert.Equal(t, "alloc1", alloc.RedundancyGroup)
+
+	// Verify standby allocations were created
+	standbyAlloc1, ok := manifest.Allocations["node1-standby-1.alloc1"]
+	assert.True(t, ok)
+	assert.Equal(t, "node1-standby-1", standbyAlloc1.NodeID)
+	assert.True(t, standbyAlloc1.IsStandby)
+	assert.Equal(t, "alloc1", standbyAlloc1.RedundancyGroup)
+
+	standbyAlloc2, ok := manifest.Allocations["node1-standby-2.alloc1"]
+	assert.True(t, ok)
+	assert.Equal(t, "node1-standby-2", standbyAlloc2.NodeID)
+	assert.True(t, standbyAlloc2.IsStandby)
+	assert.Equal(t, "alloc1", standbyAlloc2.RedundancyGroup)
 }
 
 func TestOrchestratorID(t *testing.T) {
@@ -175,7 +496,7 @@ func TestOrchestratorID(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	assert.Equal(t, ensembleID, o.ID())
@@ -220,7 +541,7 @@ func TestOrchestratorConfig(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	config := o.Config()
@@ -267,7 +588,7 @@ func TestOrchestratorStatus(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Initial status should be Preparing
@@ -335,12 +656,12 @@ func TestOrchestratorManifest(t *testing.T) {
 		},
 	}
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Start deployment in a goroutine
@@ -361,6 +682,9 @@ func TestOrchestratorManifest(t *testing.T) {
 	// Wait for deployment to complete
 	for status := range statusCh {
 		t.Logf("Deployment status changed to: %s", status)
+		if status == jtypes.DeploymentStatusRunning {
+			break
+		}
 	}
 
 	select {
@@ -383,7 +707,7 @@ func TestOrchestratorManifest(t *testing.T) {
 	assert.Equal(t, provider.peerID.String(), node.Peer)
 
 	// Verify allocation was deployed
-	alloc, ok := manifest.Allocations["alloc1"]
+	alloc, ok := manifest.Allocations["node1.alloc1"]
 	assert.True(t, ok)
 	assert.Equal(t, "node1", alloc.NodeID)
 }
@@ -427,7 +751,7 @@ func TestOrchestratorActorPrivateKey(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	privKey := o.ActorPrivateKey()
@@ -473,7 +797,7 @@ func TestOrchestratorDeploymentSnapshot(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	snapshot := o.DeploymentSnapshot()
@@ -519,7 +843,7 @@ func TestOrchestratorStatusChannel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	statusCh := o.StatusChannel(ctx)
@@ -581,7 +905,7 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 		},
 	}
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	behavior := fmt.Sprintf(behaviors.AllocationLogsBehavior.DynamicTemplate, "test-ensemble")
 	require.NoError(t, provider.actor.AddBehavior(behavior, func(msg actor.Envelope) {
@@ -613,7 +937,7 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Start deployment in a goroutine
@@ -649,7 +973,7 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 	assert.Equal(t, jtypes.DeploymentStatusRunning, o.Status())
 
 	// Test GetAllocationLogs
-	logs, err := o.GetAllocationLogs("alloc1")
+	logs, err := o.GetAllocationLogs("node1.alloc1")
 	require.NoError(t, err)
 	assert.Equal(t, "ok", string(logs.Stdout))
 }
@@ -659,7 +983,7 @@ func TestHandleTaskTermination(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -695,7 +1019,7 @@ func TestHandleTaskTermination(t *testing.T) {
 
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Deploy the ensemble
@@ -721,11 +1045,11 @@ func TestHandleTaskTermination(t *testing.T) {
 		{
 			name: "successful task termination",
 			notification: behaviors.TaskTerminationNotification{
-				AllocationID: "test-ensemble_alloc1",
+				AllocationID: "test-ensemble_node1.alloc1",
 				Status:       string(jtypes.AllocationCompleted),
 			},
 			checkStatus: func(t *testing.T, o *BasicOrchestrator) {
-				alloc, ok := o.manifest.Allocations["alloc1"]
+				alloc, ok := o.manifest.Allocations["node1.alloc1"]
 				if !ok {
 					t.Fatal("allocation not found in manifest")
 				}
@@ -737,7 +1061,7 @@ func TestHandleTaskTermination(t *testing.T) {
 		{
 			name: "task termination with error",
 			notification: behaviors.TaskTerminationNotification{
-				AllocationID: "test-ensemble_alloc1",
+				AllocationID: "test-ensemble_node1.alloc1",
 				Status:       string(jtypes.AllocationFailed),
 				Error: behaviors.TerminationError{
 					ExitCode: 1,
@@ -745,7 +1069,7 @@ func TestHandleTaskTermination(t *testing.T) {
 				},
 			},
 			checkStatus: func(t *testing.T, o *BasicOrchestrator) {
-				alloc, ok := o.manifest.Allocations["alloc1"]
+				alloc, ok := o.manifest.Allocations["node1.alloc1"]
 				if !ok {
 					t.Fatal("allocation not found in manifest")
 				}
@@ -757,13 +1081,13 @@ func TestHandleTaskTermination(t *testing.T) {
 		{
 			name: "task termination with logs",
 			notification: behaviors.TaskTerminationNotification{
-				AllocationID: "test-ensemble_alloc1",
+				AllocationID: "test-ensemble_node1.alloc1",
 				Status:       string(jtypes.AllocationCompleted),
 				Stdout:       []byte("test stdout"),
 				Stderr:       []byte("test stderr"),
 			},
 			checkStatus: func(t *testing.T, o *BasicOrchestrator) {
-				alloc, ok := o.manifest.Allocations["alloc1"]
+				alloc, ok := o.manifest.Allocations["node1.alloc1"]
 				if !ok {
 					t.Fatal("allocation not found in manifest")
 				}
@@ -835,19 +1159,19 @@ func TestWriteAllocationLogs(t *testing.T) {
 
 	ctx := context.Background()
 	fs := afero.Afero{Fs: afero.NewMemMapFs()}
-	o, err := NewOrchestrator(ctx, fs, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, fs, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Write allocation logs
 	stdout := []byte("test stdout")
 	stderr := []byte("test stderr")
-	allocDir, err := o.WriteAllocationLogs("alloc1", stdout, stderr)
+	allocDir, err := o.WriteAllocationLogs("node1.alloc1", stdout, stderr)
 	require.NoError(t, err)
 	assert.NotEmpty(t, allocDir)
 
-	stdoutContent, err := fs.ReadFile("/tmp/deployments/test-ensemble/alloc1/stdout.logs")
+	stdoutContent, err := fs.ReadFile(fmt.Sprintf("/tmp/deployments/%s/node1.alloc1/stdout.log", ensembleID))
 	require.NoError(t, err)
-	stderrContent, err := fs.ReadFile("/tmp/deployments/test-ensemble/alloc1/stderr.logs")
+	stderrContent, err := fs.ReadFile(fmt.Sprintf("/tmp/deployments/%s/node1.alloc1/stderr.log", ensembleID))
 	require.NoError(t, err)
 	assert.Equal(t, stdout, stdoutContent)
 	assert.Equal(t, stderr, stderrContent)
@@ -855,14 +1179,16 @@ func TestWriteAllocationLogs(t *testing.T) {
 
 func TestAllocNameFromID(t *testing.T) {
 	// Test allocation name extraction
-	allocID := "test-ensemble_alloc1"
-	allocName := allocNameFromID(allocID)
+	allocID := "test-ensemble_node1.alloc1"
+	allocIDStruct, err := types.ParseAllocationID(allocID)
+	require.NoError(t, err)
+	allocName := allocIDStruct.ConfigName()
 	assert.Equal(t, "alloc1", allocName)
 
 	// Test invalid allocation ID
 	invalidID := "invalid-id"
-	allocName = allocNameFromID(invalidID)
-	assert.Empty(t, allocName)
+	_, err = types.ParseAllocationID(invalidID)
+	assert.Error(t, err)
 }
 
 func TestVerifyEdgeConstraints(t *testing.T) {
@@ -1065,16 +1391,16 @@ func TestRevertNodeDeployment(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Set up test manifest
-	manifest := jtypes.EnsembleManifest{
+	o.manifest = jtypes.EnsembleManifest{
 		ID:           ensembleID,
 		Orchestrator: orch.actor.Handle(),
 		Allocations: map[string]jtypes.AllocationManifest{
 			"alloc1": {
-				ID:     "test-ensemble_alloc1",
+				ID:     "test-ensemble_node1.alloc1",
 				Type:   jtypes.AllocationTypeService,
 				Status: jtypes.AllocationRunning,
 			},
@@ -1087,7 +1413,6 @@ func TestRevertNodeDeployment(t *testing.T) {
 			},
 		},
 	}
-	o.manifest = manifest
 
 	// Test successful revert
 	t.Run("successful revert", func(t *testing.T) {
@@ -1097,6 +1422,17 @@ func TestRevertNodeDeployment(t *testing.T) {
 			defer func() {
 				provider.channels[msg.Behavior] <- struct{}{}
 			}()
+
+			// Send reply for invoke-style messaging
+			reply, err := actor.ReplyTo(msg, DeploymentRevertResponse{
+				OK: true,
+			})
+			require.NoError(t, err)
+
+			reply.To = msg.From
+			reply.From = provider.handle
+
+			require.NoError(t, provider.actor.Send(reply))
 		}))
 
 		o.revertNodeDeployment(cfg, "node1", provider.handle)
@@ -1105,42 +1441,91 @@ func TestRevertNodeDeployment(t *testing.T) {
 		// Verify node was removed from manifest
 		_, ok := o.manifest.Nodes["node1"]
 		assert.False(t, ok)
-		_, ok = o.manifest.Allocations["alloc1"]
+		_, ok = o.manifest.Allocations["test-ensemble_node1.alloc1"]
 		assert.False(t, ok)
 	})
 
 	// Test revert failure
 	t.Run("revert failure", func(t *testing.T) {
 		// Reset manifest
-		o.manifest = manifest
+		o.manifest = jtypes.EnsembleManifest{
+			ID:           ensembleID,
+			Orchestrator: orch.actor.Handle(),
+			Allocations: map[string]jtypes.AllocationManifest{
+				"alloc1": {
+					ID:     "test-ensemble_node1.alloc1",
+					Type:   jtypes.AllocationTypeService,
+					Status: jtypes.AllocationRunning,
+				},
+			},
+			Nodes: map[string]jtypes.NodeManifest{
+				"node1": {
+					ID:          "node1",
+					Allocations: []string{"alloc1"},
+					Handle:      provider.handle,
+				},
+			},
+		}
 
+		fmt.Println("manifest", o.manifest)
 		provider.channels[behaviors.DeploymentRevertBehavior] = make(chan struct{}, 1)
 		require.NoError(t, provider.actor.AddBehavior(behaviors.DeploymentRevertBehavior, func(msg actor.Envelope) {
 			defer msg.Discard()
 			defer func() {
 				provider.channels[msg.Behavior] <- struct{}{}
 			}()
+
+			// Send failure reply for invoke-style messaging
+			reply, err := actor.ReplyTo(msg, DeploymentRevertResponse{
+				OK:    false,
+				Error: "simulated revert failure",
+			})
+			require.NoError(t, err)
+
+			reply.To = msg.From
+			reply.From = provider.handle
+
+			require.NoError(t, provider.actor.Send(reply))
 		}))
 
 		o.revertNodeDeployment(cfg, "node1", provider.handle)
 		<-provider.channels[behaviors.DeploymentRevertBehavior]
 
-		// Verify node was still removed from manifest despite failure
+		// Verify node wasn't removed from manifest cause of failure
 		_, ok := o.manifest.Nodes["node1"]
-		assert.False(t, ok)
+		assert.True(t, ok)
 		_, ok = o.manifest.Allocations["alloc1"]
-		assert.False(t, ok)
+		assert.True(t, ok)
 	})
 
 	// Test non-existent node
 	t.Run("non-existent node", func(t *testing.T) {
-		// Reset manifest
-		o.manifest = manifest
-
+		o.manifest = jtypes.EnsembleManifest{
+			ID:           ensembleID,
+			Orchestrator: orch.actor.Handle(),
+			Allocations: map[string]jtypes.AllocationManifest{
+				"alloc1": {
+					ID:     "test-ensemble_node1.alloc1",
+					Type:   jtypes.AllocationTypeService,
+					Status: jtypes.AllocationRunning,
+				},
+			},
+			Nodes: map[string]jtypes.NodeManifest{
+				"node1": {
+					ID:          "node1",
+					Allocations: []string{"alloc1"},
+					Handle:      provider.handle,
+				},
+			},
+		}
 		o.revertNodeDeployment(cfg, "non-existent", provider.handle)
 
-		// Verify manifest is unchanged
-		assert.Equal(t, manifest, o.manifest)
+		_, ok := o.manifest.Nodes["non-existent"]
+		assert.False(t, ok)
+		_, ok = o.manifest.Nodes["node1"]
+		assert.True(t, ok)
+		_, ok = o.manifest.Allocations["alloc1"]
+		assert.True(t, ok)
 	})
 }
 
@@ -1207,7 +1592,7 @@ func TestRevert(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Set up test manifest
@@ -1248,6 +1633,17 @@ func TestRevert(t *testing.T) {
 		defer func() {
 			provider.channels[msg.Behavior] <- struct{}{}
 		}()
+
+		// Send reply for invoke-style messaging
+		reply, err := actor.ReplyTo(msg, DeploymentRevertResponse{
+			OK: true,
+		})
+		require.NoError(t, err)
+
+		reply.To = msg.From
+		reply.From = provider.handle
+
+		require.NoError(t, provider.actor.Send(reply))
 	}))
 
 	// Test successful revert
@@ -1316,7 +1712,7 @@ func TestRemoveNodeFromManifest(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Set up test manifest
@@ -1364,7 +1760,7 @@ func TestShutdown(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -1401,7 +1797,7 @@ func TestShutdown(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	deploy := func() {
@@ -1958,7 +2354,7 @@ func TestMonitorOnlyTaskManifest(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Test with only task manifest
@@ -2102,13 +2498,14 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 		},
 	}
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
-	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest)
+	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest, types.NewDefaultAllocationIDGenerator())
 
 	// Prepare routing table and DNS records
 	indexRoutingTable := map[string]string{"orchestrator": "10.0.0.2"}
+	routingTable := map[string]string{"10.0.0.2": p.actor.Handle().Address.HostID}
 	dnsRecords := map[string]string{"orchestrator": "10.0.0.2"}
 
 	t.Run("success", func(t *testing.T) {
@@ -2137,7 +2534,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 			},
 		}
 
-		err = p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
+		err = p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, routingTable, dnsRecords)
 		assert.NoError(t, err)
 		<-ch
 	})
@@ -2154,7 +2551,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 			require.NoError(t, orch.actor.Send(reply))
 		}))
 
-		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, routingTable, dnsRecords)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "join failed")
 	})
@@ -2167,7 +2564,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 		}))
 		orchestratorJoinTimeout = 1 * time.Second
 
-		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, dnsRecords)
+		err := p.orchestratorJoinSubnet(ensembleID, indexRoutingTable, routingTable, dnsRecords)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "timeout joining orchestrator to subnet")
 	})
@@ -2213,7 +2610,7 @@ func TestEscalateFailure(t *testing.T) {
 		},
 	}
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Prepare allocation manifest
@@ -2273,383 +2670,6 @@ func TestEscalateFailure(t *testing.T) {
 
 		FailureEscalationTimeout = 1 * time.Second
 		err := o.supervisor.escalateFailure(allocManifest)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "timeout waiting for supervisor reply")
-	})
-}
-
-func TestSupervisorUpdate(t *testing.T) {
-	substrate := network.NewSubstrate()
-	orch := MakeOrchestrator(t, substrate)
-	provider := MakeProvider(t, substrate)
-
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	cfg := jtypes.EnsembleConfig{
-		V1: &jtypes.EnsembleConfigV1{
-			Nodes: map[string]jtypes.NodeConfig{
-				"node1": {
-					Location: jtypes.LocationConstraints{
-						Accept: []jtypes.Location{{Country: "US"}},
-					},
-					Allocations: []string{"alloc1", "alloc2"},
-				},
-			},
-			Allocations: map[string]jtypes.AllocationConfig{
-				"alloc1": {
-					Type: jtypes.AllocationTypeService,
-					Resources: types.Resources{
-						CPU:  types.CPU{Cores: 1, ClockSpeed: 1000},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 1024},
-					},
-					HealthCheck: types.HealthCheckManifest{
-						Type:     "http",
-						Endpoint: "/health",
-						Response: types.HealthCheckResponse{
-							Type:  "string",
-							Value: "OK",
-						},
-						Interval: time.Second,
-					},
-				},
-				"alloc2": {
-					Type: jtypes.AllocationTypeService,
-					Resources: types.Resources{
-						CPU:  types.CPU{Cores: 1, ClockSpeed: 1000},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 1024},
-					},
-					HealthCheck: types.HealthCheckManifest{
-						Type:     "http",
-						Endpoint: "/health",
-						Response: types.HealthCheckResponse{
-							Type:  "string",
-							Value: "OK",
-						},
-						Interval: time.Second,
-					},
-				},
-			},
-		},
-	}
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
-	require.NoError(t, err)
-
-	// Initial manifest with one allocation
-	initialManifest := jtypes.EnsembleManifest{
-		ID:           ensembleID,
-		Orchestrator: orch.actor.Handle(),
-		Allocations: map[string]jtypes.AllocationManifest{
-			"alloc1": {
-				ID:     "test-ensemble_alloc1",
-				Type:   jtypes.AllocationTypeService,
-				Status: jtypes.AllocationRunning,
-				Handle: provider.handle,
-				Healthcheck: types.HealthCheckManifest{
-					Type:     "http",
-					Endpoint: "/health",
-					Response: types.HealthCheckResponse{
-						Type:  "string",
-						Value: "OK",
-					},
-					Interval: time.Second,
-				},
-			},
-		},
-		Nodes: map[string]jtypes.NodeManifest{
-			"node1": {
-				ID:          "node1",
-				Allocations: []string{"alloc1"},
-			},
-		},
-	}
-
-	// Start supervisor with initial manifest
-	go o.supervisor.Supervise(jtypes.NewManifestReader(initialManifest))
-
-	// Updated manifest with new allocation
-	updatedManifest := jtypes.EnsembleManifest{
-		ID:           ensembleID,
-		Orchestrator: orch.actor.Handle(),
-		Allocations: map[string]jtypes.AllocationManifest{
-			"alloc1": {
-				ID:     "test-ensemble_alloc1",
-				Type:   jtypes.AllocationTypeService,
-				Status: jtypes.AllocationRunning,
-				Handle: provider.handle,
-				Healthcheck: types.HealthCheckManifest{
-					Type:     "http",
-					Endpoint: "/health",
-					Response: types.HealthCheckResponse{
-						Type:  "string",
-						Value: "OK",
-					},
-					Interval: time.Second,
-				},
-			},
-			"alloc2": {
-				ID:     "test-ensemble_alloc2",
-				Type:   jtypes.AllocationTypeService,
-				Status: jtypes.AllocationRunning,
-				Handle: provider.handle,
-				Healthcheck: types.HealthCheckManifest{
-					Type:     "http",
-					Endpoint: "/health",
-					Response: types.HealthCheckResponse{
-						Type:  "string",
-						Value: "OK",
-					},
-					Interval: time.Second,
-				},
-			},
-		},
-		Nodes: map[string]jtypes.NodeManifest{
-			"node1": {
-				ID:          "node1",
-				Allocations: []string{"alloc1", "alloc2"},
-			},
-		},
-	}
-
-	t.Run("update with new allocation", func(t *testing.T) {
-		// Mock healthcheck registration for new allocation
-		orch.channels[behaviors.RegisterHealthcheckBehavior] = make(chan struct{}, 1)
-		require.NoError(t, provider.actor.AddBehavior(behaviors.RegisterHealthcheckBehavior, func(msg actor.Envelope) {
-			defer msg.Discard()
-			go func() {
-				orch.channels[behaviors.RegisterHealthcheckBehavior] <- struct{}{}
-			}()
-			resp := behaviors.RegisterHealthcheckResponse{OK: true}
-			reply, err := actor.ReplyTo(msg, resp)
-			require.NoError(t, err)
-			require.NoError(t, provider.actor.Send(reply))
-		}))
-
-		time.Sleep(100 * time.Millisecond) // Allow time for supervisor to start
-
-		alloc, ok := o.supervisor.getAllocation("alloc1")
-		assert.True(t, ok)
-		assert.Equal(t, "test-ensemble_alloc1", alloc.ID)
-
-		// alloc2 should not exist yet
-		alloc, ok = o.supervisor.getAllocation("alloc2")
-		assert.False(t, ok)
-
-		// Update supervisor with new manifest
-		o.supervisor.Update(jtypes.NewManifestReader(updatedManifest))
-
-		// Wait for healthcheck registration
-		select {
-		case <-orch.channels[behaviors.RegisterHealthcheckBehavior]:
-			// Successfully registered healthcheck for new allocation
-		case <-time.After(5 * time.Second):
-			t.Fatal("timeout waiting for healthcheck registration")
-		}
-
-		// Verify manifest was updated
-		alloc, ok = o.supervisor.getAllocation("alloc2")
-		assert.True(t, ok)
-		assert.Equal(t, "test-ensemble_alloc2", alloc.ID)
-	})
-
-	t.Run("update with removed allocation", func(t *testing.T) {
-		// Create manifest with alloc2 removed
-		removedManifest := jtypes.EnsembleManifest{
-			ID:           ensembleID,
-			Orchestrator: orch.actor.Handle(),
-			Allocations: map[string]jtypes.AllocationManifest{
-				"alloc1": {
-					ID:     "test-ensemble_alloc1",
-					Type:   jtypes.AllocationTypeService,
-					Status: jtypes.AllocationRunning,
-					Handle: provider.handle,
-					Healthcheck: types.HealthCheckManifest{
-						Type:     "http",
-						Endpoint: "/health",
-						Response: types.HealthCheckResponse{
-							Type:  "string",
-							Value: "OK",
-						},
-						Interval: time.Second,
-					},
-				},
-			},
-			Nodes: map[string]jtypes.NodeManifest{
-				"node1": {
-					ID:          "node1",
-					Allocations: []string{"alloc1"},
-				},
-			},
-		}
-
-		// Update supervisor with removed allocation
-		o.supervisor.Update(jtypes.NewManifestReader(removedManifest))
-
-		// Verify alloc2 is no longer in manifest
-		_, ok := o.supervisor.getAllocation("alloc2")
-		assert.False(t, ok)
-	})
-}
-
-func TestSupervisorPerformHealthCheck(t *testing.T) {
-	substrate := network.NewSubstrate()
-	orch := MakeOrchestrator(t, substrate)
-	provider := MakeProvider(t, substrate)
-
-	ctx := context.Background()
-	fs := afero.NewMemMapFs()
-
-	cfg := jtypes.EnsembleConfig{
-		V1: &jtypes.EnsembleConfigV1{
-			Nodes: map[string]jtypes.NodeConfig{
-				"node1": {
-					Location: jtypes.LocationConstraints{
-						Accept: []jtypes.Location{{Country: "US"}},
-					},
-					Allocations: []string{"alloc1"},
-				},
-			},
-			Allocations: map[string]jtypes.AllocationConfig{
-				"alloc1": {
-					Type: jtypes.AllocationTypeTask,
-					Resources: types.Resources{
-						CPU:  types.CPU{Cores: 1, ClockSpeed: 1000},
-						RAM:  types.RAM{Size: 1024},
-						Disk: types.Disk{Size: 1024},
-					},
-					HealthCheck: types.HealthCheckManifest{
-						Type:     "http",
-						Endpoint: "/health",
-						Response: types.HealthCheckResponse{
-							Type:  "string",
-							Value: "OK",
-						},
-						Interval: time.Second,
-					},
-				},
-			},
-		},
-	}
-
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
-	require.NoError(t, err)
-
-	allocation := jtypes.AllocationManifest{
-		ID:     "test-ensemble_alloc1",
-		Type:   jtypes.AllocationTypeService,
-		Status: jtypes.AllocationRunning,
-		Handle: provider.handle,
-		Healthcheck: types.HealthCheckManifest{
-			Type:     "http",
-			Endpoint: "/health",
-			Response: types.HealthCheckResponse{
-				Type:  "string",
-				Value: "OK",
-			},
-			Interval: time.Second,
-		},
-	}
-	o.supervisor.manifest.Allocations["alloc1"] = allocation
-
-	t.Run("terminated task", func(t *testing.T) {
-		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
-			defer msg.Discard()
-			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
-			resp := behaviors.HealthCheckResponse{OK: true}
-			reply, err := actor.ReplyTo(msg, resp)
-			require.NoError(t, err)
-			require.NoError(t, provider.actor.Send(reply))
-		}))
-		// Fix: update struct in map by value
-		alloc := o.supervisor.manifest.Allocations["alloc1"]
-		alloc.Status = jtypes.AllocationCompleted
-		o.supervisor.manifest.Allocations["alloc1"] = alloc
-		err := o.supervisor.performHealthCheck(allocation)
-		assert.NoError(t, err)
-	})
-
-	t.Run("success", func(t *testing.T) {
-		HealthCheckTimeout = 1 * time.Second
-		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
-		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
-			defer msg.Discard()
-			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
-			resp := behaviors.HealthCheckResponse{OK: true}
-			reply, err := actor.ReplyTo(msg, resp)
-			require.NoError(t, err)
-			require.NoError(t, provider.actor.Send(reply))
-		}))
-		err := o.supervisor.performHealthCheck(allocation)
-		assert.NoError(t, err)
-		<-provider.channels[actor.HealthCheckBehavior]
-	})
-
-	t.Run("error response", func(t *testing.T) {
-		HealthCheckTimeout = 1 * time.Second
-		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
-		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
-			defer msg.Discard()
-			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
-			resp := behaviors.HealthCheckResponse{OK: false, Error: "fail"}
-			reply, err := actor.ReplyTo(msg, resp)
-			require.NoError(t, err)
-			require.NoError(t, provider.actor.Send(reply))
-		}))
-		err := o.supervisor.performHealthCheck(allocation)
-		assert.NoError(t, err) // error is only logged, not returned
-		<-provider.channels[actor.HealthCheckBehavior]
-		assert.Equal(t, 1, o.supervisor.failures[allocation.ID])
-
-		// reset state
-		o.supervisor.failures = make(map[string]int)
-		o.supervisor.escalations = make(map[string]int)
-	})
-
-	t.Run("escalation after 3 failures", func(t *testing.T) {
-		HealthCheckTimeout = 1 * time.Second
-		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
-		failCount := 0
-		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
-			defer msg.Discard()
-			go func() { provider.channels[actor.HealthCheckBehavior] <- struct{}{} }()
-			resp := behaviors.HealthCheckResponse{OK: false, Error: "fail"}
-			reply, err := actor.ReplyTo(msg, resp)
-			require.NoError(t, err)
-			require.NoError(t, provider.actor.Send(reply))
-			failCount++
-		}))
-
-		provider.channels[behaviors.AllocationRestartBehavior] = make(chan struct{}, 1)
-		require.NoError(t, provider.actor.AddBehavior(behaviors.AllocationRestartBehavior, func(msg actor.Envelope) {
-			defer msg.Discard()
-			go func() { provider.channels[behaviors.AllocationRestartBehavior] <- struct{}{} }()
-			resp := behaviors.AllocationRestartResponse{OK: true}
-			reply, err := actor.ReplyTo(msg, resp)
-			require.NoError(t, err)
-			require.NoError(t, provider.actor.Send(reply))
-		}))
-		// Simulate 3 failures
-		for i := 0; i < 3; i++ {
-			err := o.supervisor.performHealthCheck(allocation)
-			assert.NoError(t, err)
-			<-provider.channels[actor.HealthCheckBehavior]
-		}
-		<-provider.channels[behaviors.AllocationRestartBehavior]
-		assert.Equal(t, 0, o.supervisor.failures[allocation.ID]) // should be reset after escalation
-		assert.Equal(t, 1, o.supervisor.escalations[allocation.ID])
-	})
-
-	t.Run("timeout", func(t *testing.T) {
-		provider.channels[actor.HealthCheckBehavior] = make(chan struct{}, 1)
-		require.NoError(t, provider.actor.AddBehavior(actor.HealthCheckBehavior, func(msg actor.Envelope) {
-			defer msg.Discard()
-			// Do not reply to simulate timeout
-		}))
-		// Remove HealthCheckTimeout assignment if not possible
-		err := o.supervisor.performHealthCheck(allocation)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "timeout waiting for supervisor reply")
 	})
@@ -2839,30 +2859,21 @@ func TestProvisionSubnet(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	subnetManifest, err := newSubnetManifest()
 	require.NoError(t, err)
-	p := NewProvisioner(ctx, cancel, orch.actor, subnetManifest)
+	p := NewProvisioner(ctx, cancel, orch.actor, subnetManifest, types.NewDefaultAllocationIDGenerator())
 
 	const ensembleID = "test-ensemble"
 
-	// Test provisioning subnet
-	subReqs := []subnetRequest{
-		{
-			handle: provider.handle,
-			ip:     "10.0.0.2",
-			peerID: "peer1",
-			ports:  map[int]int{8080: 8080},
-		},
-	}
 	routingTable := map[string]string{
-		"peer1": "10.0.0.2",
+		"10.0.0.2": provider.peerID.String(),
 	}
 	subCreateHandles := []actor.Handle{provider.handle}
-	err = p.createSubnet(ensembleID, subReqs, routingTable, subCreateHandles)
+	err = p.createSubnet(ensembleID, routingTable, subCreateHandles)
 	require.NoError(t, err)
 	<-provider.channels[fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, ensembleID)]
 }
@@ -2905,7 +2916,7 @@ func TestIsOnlyTaskManifest(t *testing.T) {
 
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	// Initialize manifest
@@ -2930,7 +2941,10 @@ func TestIsOnlyTaskManifest(t *testing.T) {
 			},
 		},
 	}
-	o.manifest = o.newManifest(cfg)
+	nodeConfig := cfg.V1.Nodes["node1"]
+	nodeConfig.Allocations = append(nodeConfig.Allocations, "alloc2")
+	cfg.V1.Nodes["node1"] = nodeConfig
+	o.manifest = o.newManifest(o.cfg)
 
 	// Test manifest with mixed allocations
 	assert.False(t, isOnlyTaskManifest(o.manifest))
@@ -2941,7 +2955,7 @@ func TestSubnetAddPeer(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -2978,14 +2992,14 @@ func TestSubnetAddPeer(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	subnetManifest, err := newSubnetManifest()
 	require.NoError(t, err)
-	p := NewProvisioner(ctx, cancel, orch.actor, subnetManifest)
+	p := NewProvisioner(ctx, cancel, orch.actor, subnetManifest, types.NewDefaultAllocationIDGenerator())
 
 	// Initialize manifest
 	o.manifest = o.newManifest(cfg)
@@ -3009,7 +3023,7 @@ func TestAddDNSRecords(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -3046,10 +3060,10 @@ func TestAddDNSRecords(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
-	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest)
+	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest, types.NewDefaultAllocationIDGenerator())
 
 	// Initialize manifest
 	o.manifest = o.newManifest(cfg)
@@ -3076,7 +3090,7 @@ func TestMapPorts(t *testing.T) {
 	orch := MakeOrchestrator(t, substrate)
 	provider := MakeProvider(t, substrate)
 
-	provider.MockDeploymentBehaviors(t)
+	provider.MockDeploymentBehaviors(t, ensembleID, nil, orch.actor)
 
 	cfg := jtypes.EnsembleConfig{
 		V1: &jtypes.EnsembleConfigV1{
@@ -3113,10 +3127,10 @@ func TestMapPorts(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg)
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
 	require.NoError(t, err)
 
-	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest)
+	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest, types.NewDefaultAllocationIDGenerator())
 
 	// Initialize manifest
 	o.manifest = o.newManifest(cfg)

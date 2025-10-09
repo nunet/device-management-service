@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package orchestrator
 
 import (
@@ -26,7 +34,7 @@ type MockOrchestrator struct {
 	id             string
 	cfg            jtypes.EnsembleConfig
 	manifest       jtypes.EnsembleManifest
-	subnetManifest SubnetManifest
+	subnetManifest jtypes.SubnetManifest
 	status         jtypes.DeploymentStatus
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
@@ -50,7 +58,7 @@ func NewMockOrchestrator(
 		ctx:                ctx,
 		fs:                 fs,
 		workDir:            workDir,
-		subnetManifest:     SubnetManifest{},
+		subnetManifest:     jtypes.SubnetManifest{},
 		deploymentSnapshot: jtypes.DeploymentSnapshot{},
 		nonce:              0,
 		supervisor:         NewSupervisor(ctx, oActor, id),
@@ -80,12 +88,12 @@ func (m *MockOrchestrator) newManifest(
 
 	for name, alloc := range cfg.Allocations() {
 		amf := jtypes.AllocationManifest{
-			ID:          types.ConstructAllocationID(m.id, name),
+			ID:          types.NewAllocationID(m.id, "mock-node", name).String(),
+			Type:        alloc.Type,
+			NodeID:      "mock-node",
 			DNSName:     alloc.DNSName + ".internal",
 			Healthcheck: alloc.HealthCheck,
 			Status:      jtypes.AllocationPending,
-			Ports:       make(map[int]int),
-			Type:        alloc.Type,
 		}
 		manifest.Allocations[name] = amf
 	}
@@ -137,6 +145,13 @@ func (m *MockOrchestrator) Manifest() jtypes.EnsembleManifest {
 	return m.manifest.Clone()
 }
 
+func (m *MockOrchestrator) SubnetManifest() jtypes.SubnetManifest {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	return m.subnetManifest
+}
+
 func (m *MockOrchestrator) Config() jtypes.EnsembleConfig {
 	return jtypes.EnsembleConfig{}
 }
@@ -165,6 +180,14 @@ func (m *MockOrchestrator) Update(_ jtypes.EnsembleConfig, _ time.Time) error {
 	return nil
 }
 
+func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.DeploymentStatus {
+	return make(chan jtypes.DeploymentStatus)
+}
+
+func (m *MockOrchestrator) Done() <-chan struct{} {
+	return nil
+}
+
 type MockOrchestratorRegistry struct {
 	lock          sync.RWMutex
 	orchestrators map[string]Orchestrator // map of orchestrators
@@ -182,6 +205,7 @@ func NewMockOrchestratorRegistry() *MockOrchestratorRegistry {
 func (m *MockOrchestratorRegistry) NewOrchestrator(
 	ctx context.Context, fs afero.Afero, workDir string,
 	id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
+	_ types.NodeIDGenerator, _ types.AllocationIDGenerator,
 ) (Orchestrator, error) {
 	m.lock.RLock()
 	if _, ok := m.orchestrators[id]; ok {
@@ -202,9 +226,12 @@ func (m *MockOrchestratorRegistry) NewOrchestrator(
 }
 
 func (m *MockOrchestratorRegistry) RestoreDeployment(
+	_ context.Context,
 	_ actor.Actor, _ string, _ jtypes.EnsembleConfig,
 	_ jtypes.EnsembleManifest, _ jtypes.DeploymentStatus,
 	_ jtypes.DeploymentSnapshot,
+	_ jtypes.SubnetManifest,
+	_ types.AllocationIDGenerator,
 ) (Orchestrator, error) {
 	return nil, nil
 }
@@ -233,6 +260,48 @@ func (m *MockOrchestratorRegistry) GetOrchestrator(id string) (Orchestrator, err
 
 func (m *MockOrchestratorRegistry) DeleteOrchestrator(_ string) {}
 
-func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.DeploymentStatus {
-	return make(chan jtypes.DeploymentStatus)
+// Methods for deployment persistence (mock implementations)
+func (m *MockOrchestratorRegistry) SaveOrchestrator(_ Orchestrator) error {
+	return nil
+}
+
+func (m *MockOrchestratorRegistry) GetAllDeployments() ([]*jtypes.OrchestratorView, error) {
+	return nil, nil
+}
+
+func (m *MockOrchestratorRegistry) GetDeploymentsByStatus(_ jtypes.DeploymentStatus) ([]*jtypes.OrchestratorView, error) {
+	return nil, nil
+}
+
+func (m *MockOrchestratorRegistry) DeleteDeployment(_ string) error {
+	return nil
+}
+
+func (m *MockOrchestratorRegistry) GetDeployment(orchestratorID string) (*jtypes.OrchestratorView, error) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	orch, ok := m.orchestrators[orchestratorID]
+	if !ok {
+		return nil, ErrOrchestratorNotFound
+	}
+
+	// Convert orchestrator to OrchestratorView
+	privKey := orch.ActorPrivateKey()
+	privKeyBytes, err := crypto.PrivateKeyToBytes(privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal private key: %w", err)
+	}
+
+	view := &jtypes.OrchestratorView{
+		OrchestratorID:     orch.ID(),
+		Cfg:                orch.Config(),
+		Manifest:           orch.Manifest(),
+		SubnetManifest:     orch.SubnetManifest(),
+		Status:             orch.Status(),
+		DeploymentSnapshot: orch.DeploymentSnapshot(),
+		PrivKey:            privKeyBytes,
+	}
+
+	return view, nil
 }

@@ -46,9 +46,6 @@ const (
 //	@Failure		500	{object}	object	"handle id is invalid"
 //	@Router			/actor/handle [get]
 func (rs *Server) ActorHandle(c *gin.Context) {
-	endTrace := observability.StartTrace(c, "actor_handle_retrieve_duration")
-	defer endTrace()
-
 	if rs.config.P2P == nil {
 		log.Errorw("actor_handle_retrieve_failure", "error", ErrHostNotInitialized)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": ErrHostNotInitialized})
@@ -95,8 +92,8 @@ func (rs *Server) ActorHandle(c *gin.Context) {
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/send [post]
 func (rs *Server) ActorSendMessage(c *gin.Context) {
-	endTrace := observability.StartTrace(c, "actor_send_message_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(c, "actor_send_message")
+	defer endSpan()
 
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {
@@ -139,9 +136,6 @@ func (rs *Server) ActorSendMessage(c *gin.Context) {
 //		@Failure		500	{object}	object	"failed to send message to destination"
 //		@Router			/actor/invoke [post]
 func (rs *Server) ActorInvoke(c *gin.Context) {
-	endTrace := observability.StartTrace(c, "actor_invoke_duration")
-	defer endTrace()
-
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {
 		log.Errorw("actor_invoke_failure", "error", err.Error())
@@ -214,8 +208,8 @@ func (rs *Server) ActorInvoke(c *gin.Context) {
 //				@Failure		500	{object}	object	"failed to publish message"
 //				@Router			/actor/broadcast [post]
 func (rs *Server) ActorBroadcast(c *gin.Context) {
-	endTrace := observability.StartTrace(c, "actor_broadcast_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(c, "actor_broadcast")
+	defer endSpan()
 
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {

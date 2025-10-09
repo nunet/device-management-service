@@ -19,7 +19,8 @@ version=$(echo $fullVersion | cut -c 2-)
 
 mkdir -p $outputDir
 
-for arch in amd64 arm64 arm32_v6l arm32_v7l; do
+BUILD_ARCHS="${BUILD_ARCHS:-amd64 arm64 arm32_v6l arm32_v7l}"
+for arch in $BUILD_ARCHS; do
 
     debarch=$arch
     if [[ $arch == "arm32_v6l" ]]; then

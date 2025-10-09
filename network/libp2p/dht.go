@@ -73,8 +73,8 @@ func (l *Libp2p) connectToBootstrapNodes(ctx context.Context) error {
 
 // Start dht bootstrapper
 func (l *Libp2p) bootstrapDHT(ctx context.Context) error {
-	endTrace := observability.StartTrace(ctx, "libp2p_bootstrap_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan(ctx, "libp2p_bootstrap")
+	defer endSpan()
 
 	if err := l.DHT.Bootstrap(ctx); err != nil {
 		log.Errorw("libp2p_bootstrap_failure",
@@ -223,8 +223,8 @@ type dhtValidator struct {
 
 // Validate validates an item placed into the dht.
 func (d dhtValidator) Validate(key string, value []byte) error {
-	endTrace := observability.StartTrace("libp2p_dht_validate_duration")
-	defer endTrace()
+	endSpan := observability.StartSpan("libp2p_dht_validate")
+	defer endSpan()
 
 	// empty value is considered deleting an item from the dht
 	if len(value) == 0 {
@@ -253,7 +253,7 @@ func (d dhtValidator) Validate(key string, value []byte) error {
 		return fmt.Errorf("%w envelope: %w", types.ErrUnmarshal, err)
 	}
 
-	pubKey, err := crypto.UnmarshalSecp256k1PublicKey(envelope.PublicKey)
+	pubKey, err := crypto.UnmarshalEd25519PublicKey(envelope.PublicKey)
 	if err != nil {
 		log.Errorw("libp2p_dht_validate_failure",
 			"labels", string(observability.LabelNode),
@@ -324,7 +324,7 @@ func (m *dhtMessenger) SendRequest(ctx context.Context, p peer.ID, msg *dht_pb.M
 	defer r.ReleaseMsg(bytes)
 
 	reply := new(dht_pb.Message)
-	if err := reply.Unmarshal(bytes); err != nil {
+	if err := proto.Unmarshal(bytes, reply); err != nil {
 		_ = s.Reset()
 		return nil, fmt.Errorf("unmarshal message: %w", err)
 	}

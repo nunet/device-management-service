@@ -58,9 +58,14 @@ type OrchestratorView struct {
 	OrchestratorID     string
 	Cfg                EnsembleConfig
 	Manifest           EnsembleManifest
+	SubnetManifest     SubnetManifest
 	Status             DeploymentStatus
 	DeploymentSnapshot DeploymentSnapshot
 	PrivKey            []byte
+
+	// Fields for persistence
+	CompletedAt  *time.Time // nil if not completed
+	ErrorMessage string     // for failed deployments
 }
 
 type DeploymentSnapshot struct {

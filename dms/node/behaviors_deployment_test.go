@@ -1,3 +1,11 @@
+// Copyright 2024, Nunet
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
 package node
 
 import (
@@ -15,6 +23,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/executor/null"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -283,41 +292,43 @@ func TestHandleNewDeployment(t *testing.T) {
 func TestHandleDeploymentList(t *testing.T) {
 	t.Parallel()
 
-	// Add behavior to test
-	node, sActor, _ := newMockNodeWithSender(t, behaviors.DeploymentListBehavior)
-
-	// seed deployment data
-	eCfgWithMetadata := jobtypes.EnsembleConfig{
-		V1: &jobtypes.EnsembleConfigV1{
-			Metadata:    map[string]string{"name": "test-deploy"},
-			Allocations: map[string]jobtypes.AllocationConfig{},
-			Nodes:       map[string]jobtypes.NodeConfig{},
-			Supervisor:  jobtypes.SupervisorConfig{},
-			Subnet:      jobtypes.SubnetConfig{},
-		},
-	}
-	mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
-	require.NoError(t, err)
-	require.NotNil(t, mockOrch)
-	err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
-	require.NoError(t, err)
-
-	eCfgWithoutMetadata := jobtypes.EnsembleConfig{
-		V1: &jobtypes.EnsembleConfigV1{
-			Allocations: map[string]jobtypes.AllocationConfig{},
-			Nodes:       map[string]jobtypes.NodeConfig{},
-			Supervisor:  jobtypes.SupervisorConfig{},
-			Subnet:      jobtypes.SubnetConfig{},
-		},
-	}
-	mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
-	require.NoError(t, err)
-	require.NotNil(t, mockOrchWithoutM)
-	err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
-	require.NoError(t, err)
-
 	t.Run("without metadata filtering expect all", func(t *testing.T) {
 		t.Parallel()
+
+		// Add behavior to test
+		node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentListBehavior)
+
+		// seed deployment data
+		eCfgWithMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Metadata:    map[string]string{"name": "test-deploy"},
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrch)
+		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
+
+		eCfgWithoutMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrchWithoutM)
+		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
+
+		<-time.After(30 * time.Second)
 
 		msg, err := actor.Message(
 			sActor.Handle(),
@@ -340,14 +351,47 @@ func TestHandleDeploymentList(t *testing.T) {
 		assert.Equal(t, 2, len(resp.Deployments))
 		status, ok := resp.Deployments[mockOrch.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusCompleted.String(), status)
 		status, ok = resp.Deployments[mockOrchWithoutM.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusCompleted.String(), status)
 	})
 
 	t.Run("with metadata", func(t *testing.T) {
 		t.Parallel()
+
+		// Add behavior to test
+		node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentListBehavior)
+
+		// seed deployment data
+		eCfgWithMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Metadata:    map[string]string{"name": "test-deploy"},
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrch)
+		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
+
+		eCfgWithoutMetadata := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrchWithoutM)
+		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
+		require.NoError(t, err)
 
 		msg, err := actor.Message(
 			sActor.Handle(),
@@ -374,7 +418,7 @@ func TestHandleDeploymentList(t *testing.T) {
 		assert.Equal(t, 1, len(resp.Deployments))
 		status, ok := resp.Deployments[mockOrch.ID()]
 		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), status)
+		assert.Equal(t, jobtypes.DeploymentStatusRunning.String(), status)
 	})
 }
 
@@ -760,6 +804,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
 		)
 		require.NoError(t, err)
+		msg.Options.ReplyTo = fmt.Sprintf("/dms/actor/replyto/%d", 1)
 
 		node.handleDeploymentRevert(msg)
 		time.Sleep(2 * time.Second) // give some time for the revert to process
@@ -809,6 +854,8 @@ func TestHandleDeploymentRevert(t *testing.T) {
 				},
 			},
 			nullExecutor,
+			map[string]types.ContractConfig{},
+			eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)
@@ -1005,4 +1052,219 @@ func TestHandleDeploymentUpdate(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, resp.OK)
 	})
+}
+
+// Prune tests using real orchestrators and registry
+func TestHandleDeploymentPrune_Before_RFC3339(t *testing.T) {
+	t.Parallel()
+	node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentPruneBehavior)
+
+	// Create three deployments with spacing to get different CreatedAt
+	eCfg := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{},
+			Nodes:       map[string]jobtypes.NodeConfig{},
+			Supervisor:  jobtypes.SupervisorConfig{},
+			Subnet:      jobtypes.SubnetConfig{},
+		},
+	}
+
+	o1, err := node.createOrchestrator(context.Background(), eCfg)
+	require.NoError(t, err)
+	require.NotNil(t, o1)
+	require.NoError(t, o1.Deploy(time.Now().Add(2*time.Minute)))
+	o1.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+
+	o2, err := node.createOrchestrator(context.Background(), eCfg)
+	require.NoError(t, err)
+	require.NotNil(t, o2)
+	require.NoError(t, o2.Deploy(time.Now().Add(2*time.Minute)))
+	o2.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusFailed)
+
+	time.Sleep(3 * time.Second)
+	o3, err := node.createOrchestrator(context.Background(), eCfg)
+	require.NoError(t, err)
+	require.NotNil(t, o3)
+	require.NoError(t, o3.Deploy(time.Now().Add(2*time.Minute)))
+	o3.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+
+	dep, err := node.orchestratorRegistry.GetAllDeployments()
+	require.NoError(t, err)
+	require.NotNil(t, dep)
+	var cutoff time.Time
+	for _, d := range dep {
+		if d.OrchestratorID == o3.ID() {
+			cutoff = d.CreatedAt.Add(-1 * time.Second)
+		}
+	}
+
+	<-time.After(10 * time.Second) // wait for the status watcher to update the deployment in the store
+
+	msg, err := actor.Message(
+		sActor.Handle(),
+		node.actor.Handle(),
+		behaviors.DeploymentPruneBehavior,
+		DeploymentPruneRequest{Before: cutoff.Format(time.RFC3339)},
+	)
+	require.NoError(t, err)
+	replyCh, err := sActor.Invoke(msg)
+	require.NoError(t, err)
+	reply := <-replyCh
+	defer reply.Discard()
+
+	var resp DeploymentPruneResponse
+	require.NoError(t, json.Unmarshal(reply.Message, &resp))
+	require.True(t, resp.OK)
+
+	remaining, err := node.orchestratorRegistry.GetAllDeployments()
+	require.NoError(t, err)
+	ids := map[string]bool{}
+	for _, v := range remaining {
+		ids[v.OrchestratorID] = true
+	}
+	assert.False(t, ids[o1.ID()])
+	assert.False(t, ids[o2.ID()])
+	assert.True(t, ids[o3.ID()])
+}
+
+func TestHandleDeploymentPrune_Before_Durations(t *testing.T) {
+	t.Parallel()
+	node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentPruneBehavior)
+
+	eCfg := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{},
+			Nodes:       map[string]jobtypes.NodeConfig{},
+			Supervisor:  jobtypes.SupervisorConfig{},
+			Subnet:      jobtypes.SubnetConfig{},
+		},
+	}
+
+	// Create older
+	old, err := node.createOrchestrator(context.Background(), eCfg)
+	require.NoError(t, err)
+	require.NoError(t, old.Deploy(time.Now().Add(2*time.Minute)))
+	old.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+
+	// wait > 1s to test seconds duration
+	time.Sleep(2 * time.Second)
+	newer, err := node.createOrchestrator(context.Background(), eCfg)
+	require.NoError(t, err)
+	require.NoError(t, newer.Deploy(time.Now().Add(2*time.Minute)))
+	newer.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+
+	<-time.After(5 * time.Second) // wait for the status watcher to update the deployment in the store
+
+	// 1s should remove old, keep newer
+	msg, err := actor.Message(
+		sActor.Handle(),
+		node.actor.Handle(),
+		behaviors.DeploymentPruneBehavior,
+		DeploymentPruneRequest{Before: "6s"}, // 7s passed since creating the old deployment
+	)
+	require.NoError(t, err)
+	replyCh, err := sActor.Invoke(msg)
+	require.NoError(t, err)
+	<-replyCh
+
+	rem, err := node.orchestratorRegistry.GetAllDeployments()
+	require.NoError(t, err)
+	ids := map[string]bool{}
+	for _, v := range rem {
+		ids[v.OrchestratorID] = true
+	}
+	assert.False(t, ids[old.ID()])
+	assert.True(t, ids[newer.ID()])
+
+	// 1m, 1h, 1d should not delete newer (and old is already gone)
+	for _, dur := range []string{"1m", "1h", "1d"} {
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentPruneBehavior,
+			DeploymentPruneRequest{Before: dur},
+		)
+		require.NoError(t, err)
+		replyCh, err := sActor.Invoke(msg)
+		require.NoError(t, err)
+		<-replyCh
+		rem, err = node.orchestratorRegistry.GetAllDeployments()
+		require.NoError(t, err)
+
+		require.NotEmpty(t, rem)
+	}
+}
+
+func TestHandleDeploymentPrune_All(t *testing.T) {
+	t.Parallel()
+	node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentPruneBehavior)
+
+	eCfg := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{},
+			Nodes:       map[string]jobtypes.NodeConfig{},
+			Supervisor:  jobtypes.SupervisorConfig{},
+			Subnet:      jobtypes.SubnetConfig{},
+		},
+	}
+
+	prep, _ := node.createOrchestrator(context.Background(), eCfg)
+	err := prep.Deploy(time.Now().Add(2 * time.Minute))
+	require.NoError(t, err)
+	orch, err := node.orchestratorRegistry.GetOrchestrator(prep.ID())
+	require.NoError(t, err)
+	require.NotNil(t, orch)
+	<-orch.(*orchestrator.BasicOrchestrator).Done() // because task monitor will set status to completed on 0 allocations
+	// wait for the status watcher to update the deployment in the store
+	<-time.After(10 * time.Second)
+	// save new status manually cause status watcher has quit since the orchestrator context has been cancelled
+	prep.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusPreparing)
+	require.NoError(t, node.orchestratorRegistry.SaveOrchestrator(prep))
+	// default status preparing
+
+	run, _ := node.createOrchestrator(context.Background(), eCfg)
+	err = run.Deploy(time.Now().Add(2 * time.Minute))
+	require.NoError(t, err)
+	orch, err = node.orchestratorRegistry.GetOrchestrator(run.ID())
+	require.NoError(t, err)
+	require.NotNil(t, orch)
+	<-orch.(*orchestrator.BasicOrchestrator).Done() // because task monitor will set status to completed on 0 allocations
+	// wait for the status watcher to update the deployment in the store
+	<-time.After(10 * time.Second)
+	run.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusRunning)
+	// save new status manually cause status watcher has quit since the orchestrator context has been cancelled
+	require.NoError(t, node.orchestratorRegistry.SaveOrchestrator(run))
+
+	fail, _ := node.createOrchestrator(context.Background(), eCfg)
+	err = fail.Deploy(time.Now().Add(2 * time.Minute))
+	require.NoError(t, err)
+	fail.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusFailed)
+
+	comp, _ := node.createOrchestrator(context.Background(), eCfg)
+	_ = comp.Deploy(time.Now().Add(2 * time.Minute))
+	comp.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+
+	<-time.After(5 * time.Second) // wait for the status watcher to update the deployment in the store
+
+	msg, err := actor.Message(
+		sActor.Handle(),
+		node.actor.Handle(),
+		behaviors.DeploymentPruneBehavior,
+		DeploymentPruneRequest{All: true},
+	)
+	require.NoError(t, err)
+	replyCh, err := sActor.Invoke(msg)
+	require.NoError(t, err)
+	<-replyCh
+
+	rem, err := node.orchestratorRegistry.GetAllDeployments()
+	require.NoError(t, err)
+	ids := map[string]bool{}
+	for _, v := range rem {
+		ids[v.OrchestratorID] = true
+	}
+	assert.True(t, ids[prep.ID()])
+	assert.True(t, ids[run.ID()])
+	assert.False(t, ids[fail.ID()])
+	assert.False(t, ids[comp.ID()])
 }
