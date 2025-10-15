@@ -930,7 +930,7 @@ func (s *subnet) parseIPPacket(rawPacket []byte) (srcPort int, destPort int, src
 		destPort = int(tcp.DstPort)
 	}
 
-	return
+	return srcPort, destPort, srcIP, destIP, err
 }
 
 func (s *subnet) dialIPProxy(

@@ -1,9 +1,7 @@
 // force pipeline trigger
 module gitlab.com/nunet/device-management-service
 
-go 1.24
-
-toolchain go1.24.3
+go 1.25
 
 require (
 	github.com/NVIDIA/go-nvml v0.12.4-0

@@ -41,7 +41,7 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 	tc := utils.NewTestCtx(ctx)
 
 	nodes, err := parseNodesTable(table)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodes)
 
 	// get all unique organizations, since all nodes
@@ -57,7 +57,7 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 	// amount of nodes and orgs
 	total := len(nodes) + len(orgs)
 	instances, err := hooks.SetupNodes(total)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, instances)
 
 	assert.Len(t, instances, total)
@@ -88,7 +88,7 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 		assert.True(t, ok)
 
 		orgCtx, err := instance.CreateContext(org)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		orgMap[org] = orgCtx
 	}
@@ -99,10 +99,10 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 		assert.True(t, ok)
 
 		err := instance.PruneResolved()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		userCtx, dmsCtx, err := instance.InitialCaps(node.name)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, userCtx)
 		assert.NotNil(t, dmsCtx)
 
@@ -110,10 +110,10 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 		assert.True(t, ok)
 
 		err = utils.SetupPrivateNetwork(userCtx, dmsCtx, orgCtx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
-		err = dmsCtx.Run()
-		assert.NoError(t, err)
+		err = dmsCtx.Run(t)
+		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			return instance.IsDMSRunning(9999)

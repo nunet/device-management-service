@@ -11,15 +11,18 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/cucumber/godog"
+	dmsnode "gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
 	dutils "gitlab.com/nunet/device-management-service/utils"
-	"golang.org/x/exp/maps"
 )
 
 // SetupNodes connects to Incus, spin up number of specified machines and
@@ -112,24 +115,28 @@ func CleanupNodes() error {
 func SaveLogs(ctx context.Context) error {
 	fmt.Println("saving logs...")
 	tc := utils.NewTestCtx(ctx)
+	t := godog.T(ctx)
 
 	timestamp := time.Now().Unix()
 	nodes, _ := tc.Nodes()
 	if len(nodes) == 0 {
 		nm, _ := tc.NodeMap()
-		nodes = maps.Values(nm)
+		nodes = slices.Collect(maps.Values(nm))
 	}
 
 	for i, n := range nodes {
-		logs, err := n.RunCMD([]string{"cat", "dms-logs.txt"})
-		if err != nil {
-			continue
-		}
-
+		// init destination
 		dest := filepath.Join(dutils.CurrentFileDirectory(), "..", "tests", "acceptance", "testdata", "logs")
-		err = os.MkdirAll(dest, 0o755)
+		err := os.MkdirAll(dest, 0o755)
 		if err != nil {
 			return err
+		}
+
+		// terminal output
+		logs, err := n.RunCMD([]string{"cat", "dms-logs.txt"})
+		if err != nil {
+			t.Errorf("no stdout for %d", i)
+			continue
 		}
 
 		filename := fmt.Sprintf("dms_logs_node_%d-%d.txt", i, timestamp)
@@ -138,6 +145,40 @@ func SaveLogs(ctx context.Context) error {
 		err = os.WriteFile(path, []byte(logs), 0o644)
 		if err != nil {
 			return err
+		}
+
+		// JSONL logs
+		src := "/root/nunet/logs/nunet-dms-logs.jsonl"
+		target := filepath.Join(dest, fmt.Sprintf("dms_logs_node_%d-%d.jsonl", i, timestamp))
+		if err := utils.DownloadFile(n.Client, n.Name, src, target); err != nil {
+			t.Errorf("failed to download jsonl logs for %d: %s", i, err)
+		}
+
+		// flight recorder
+		src = "/root/nunet/logs/flightrec.trace"
+		names := []string{"alice", "bob", "charlie"}
+		if os.Getenv(dmsnode.EnvFlightrecSec) != "" {
+
+			// create dump and download
+			// TODO dont guess, reduce non-determinism (with unified file/ctx names?)
+			var nodeName string
+			for _, name := range names {
+				if _, err = n.RunDMSCmd(fmt.Sprintf("nunet -c %s-dms actor cmd /dms/debug/flightrec", name)); err == nil {
+					t.Logf("created flight recorder dump for %s (%d)", name, i)
+					nodeName = name
+					break
+				}
+			}
+			if nodeName == "" {
+				t.Errorf("failed to create flight recorder dump %d: %s", i, err)
+			}
+
+			target = filepath.Join(dest, fmt.Sprintf("flightrec_%d-%d.%s.trace", i, timestamp, nodeName))
+
+			// download
+			if err := utils.DownloadFile(n.Client, n.Name, src, target); err != nil {
+				t.Errorf("failed to download flight recorder dump %d: %s", i, err)
+			}
 		}
 	}
 	return nil

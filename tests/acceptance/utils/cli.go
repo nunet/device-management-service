@@ -11,16 +11,20 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/cucumber/godog"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
+	dmsnode "gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
 // Context represents a named context within a node
+// TODO pass godog.TestingT
 type Context struct {
 	Name string
 	DID  string
@@ -45,8 +49,20 @@ func (c *Context) Anchor(kind, arg string) error {
 	return err
 }
 
-func (c *Context) Run() error {
-	return c.node.RunDMSCmdBackground(fmt.Sprintf("GOLOG_LOG_LEVEL=debug nunet run -c %s > dms-logs.txt 2>&1", c.Name))
+func (c *Context) Run(t godog.TestingT) error {
+	frSec := os.Getenv(dmsnode.EnvFlightrecSec)
+	if frSec != "" {
+		t.Log("starting DMS with " + frSec + "sec flight recorder")
+	}
+
+	// TODO use api.(InstanceExecPost).Environment
+	return c.node.RunDMSCmdBackground(fmt.Sprintf(
+		// env
+		"GOLOG_LOG_LEVEL=debug "+
+			"%s=%s "+
+			// cmd
+			"nunet run -c %s > dms-logs.txt 2>&1",
+		dmsnode.EnvFlightrecSec, frSec, c.Name))
 }
 
 func (c *Context) PeerAddr() (*node.PeerAddrInfoResponse, error) {

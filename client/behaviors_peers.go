@@ -117,3 +117,20 @@ func (c *Client) PeerScore(ctx context.Context, msgOpts ...Option) (node.PeerSco
 	err = c.unmarshalResponse(resp, &response)
 	return response, err
 }
+
+func (c *Client) Flightrec(ctx context.Context, msgOpts ...Option) (node.PingResponse, error) {
+	var response node.PingResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DebugFlightrecBehavior,
+		nil,
+		msgOpts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DebugFlightrecBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}

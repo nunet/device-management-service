@@ -10,6 +10,10 @@ package node
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime/trace"
+	"sync"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -109,4 +113,41 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 
 	resp.OK = true
 	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleFlightrec(msg actor.Envelope) {
+	defer msg.Discard()
+
+	if n.flightrec == nil {
+		return
+	}
+
+	go captureSnapshot(n.flightrec, filepath.Join(n.dmsConfig.WorkDir, "logs", "flightrec.trace"))
+	n.sendReply(msg, PingResponse{})
+}
+
+var once sync.Once
+
+// captureSnapshot captures a flight recorder snapshot.
+func captureSnapshot(fr *trace.FlightRecorder, path string) {
+	// once.Do ensures that the provided function is executed only once.
+	once.Do(func() {
+		f, err := os.Create(path)
+		if err != nil {
+			log.Errorw("opening_snapshot", "file", f.Name(), "error", err)
+			return
+		}
+		defer f.Close() // ignore error
+
+		// WriteTo writes the flight recorder data to the provided io.Writer.
+		_, err = fr.WriteTo(f)
+		if err != nil {
+			log.Errorw("writing_snapshot", "file", f.Name(), "error", err)
+			return
+		}
+
+		// Stop the flight recorder after the snapshot has been taken.
+		fr.Stop()
+		log.Infow("flightrec_captured", "file", f.Name())
+	})
 }

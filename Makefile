@@ -210,6 +210,16 @@ run-acceptance:
 	@echo "Running acceptance tests"
 	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=60m -godog.tags="~@wip"
 
+run-acceptance-record:
+	@echo "Running acceptance tests with a flight recorder"
+	env \
+		DMS_FLIGHTREC_SEC=60 \
+		make run-acceptance
+
+clean-acceptance:
+	incus stop acc-test-node-0 acc-test-node-1 acc-test-node-2 acc-test-node-3
+	rm tests/acceptance/testdata/logs/*
+
 run-acceptance-%:
 	@echo "Running acceptance tests: $*"
 	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -test.v ./tests/acceptance/ -tags=acceptance -timeout=60m -godog.tags="~@wip" -test.run "^$*/"
