@@ -11,6 +11,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -313,6 +314,7 @@ func RunBackgroundCommandInInstance(c incus.InstanceServer, name string, command
 		Command:     command,
 		WaitForWS:   true,
 		Interactive: false,
+		// TODO Environment
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -352,6 +354,24 @@ func UploadFileToInstance(c incus.InstanceServer, name, localPath, remotePath st
 
 	if err := c.CreateInstanceFile(name, remotePath, args); err != nil {
 		return fmt.Errorf("failed to upload file to instance: %w", err)
+	}
+
+	return nil
+}
+
+func DownloadFile(c incus.InstanceServer, instance, instancePath, hostPath string) error {
+	r, _, err := c.GetInstanceFile(instance, instancePath)
+	if err != nil {
+		return fmt.Errorf("failed to get file: %w", err)
+	}
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	if err := os.WriteFile(hostPath, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 
 	return nil

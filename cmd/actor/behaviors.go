@@ -890,6 +890,20 @@ This behavior retrieves a snapshot of the peer's gossipsub broadcast score.
 Examples:
   nunet actor cmd --context user /dms/node/peers/score`,
 	},
+	// /dms/debug/flightrec
+	behaviors.DebugFlightrecBehavior: {
+		Action: bInvoke,
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			return dmsClient.Flightrec(ctx, opts.MsgOpts...)
+		},
+		Short: "Dumps a flight recorder snapshot",
+		Long: `Invokes the /dms/debug/flightrec behavior on an actor
+
+This behavior dumps a flight recorder snapshot.
+
+Examples:
+  nunet actor cmd --context user /dms/debug/flightrec`,
+	},
 	// /dms/node/onboarding/onboard
 	behaviors.OnboardBehavior: {
 		Action:  bInvoke,

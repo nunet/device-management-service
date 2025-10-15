@@ -27,8 +27,6 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
-	"gitlab.com/nunet/device-management-service/observability"
-	"gitlab.com/nunet/device-management-service/utils/sys"
 	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
@@ -46,6 +44,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
@@ -53,6 +52,7 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 )
 
 //go:embed node/data/GeoLite2-Country.mmdb

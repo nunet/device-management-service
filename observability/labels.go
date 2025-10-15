@@ -98,7 +98,7 @@ func GetLabelRoutingConfig(labels []string) (skipES bool, esIndex string) {
 			esIndex = cfg.ESIndex
 		}
 	}
-	return
+	return skipES, esIndex
 }
 
 func newLabelInjectionCore(next zapcore.Core, enabler zapcore.LevelEnabler) zapcore.Core {

@@ -179,6 +179,9 @@ type ActorPeersBehaviorClient interface {
 
 	// PeersScore retrieves the score of peers
 	PeerScore(ctx context.Context, opts ...Option) (node.PeerScoreResponse, error)
+
+	// Flightrec dump a flight recorder snapshot
+	Flightrec(ctx context.Context, opts ...Option) (node.PingResponse, error)
 }
 
 // ActorOnboardingBehaviorClient provides methods for onboarding

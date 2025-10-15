@@ -53,7 +53,7 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 	tc := utils.NewTestCtx(ctx)
 
 	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
 	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
@@ -69,52 +69,52 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 	assert.NotNil(t, otherCPDmsCtx)
 
 	spInfo, err := spDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, spInfo)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, cpInfo)
 
 	otherCPInfo, err := otherCPDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, otherCPInfo)
 
 	cpAddr, err := utils.MultiaddrFromCLI(cpInfo)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, cpAddr)
 
 	otherCPAddr, err := utils.MultiaddrFromCLI(otherCPInfo)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, otherCPAddr)
 
 	err = spDmsCtx.Connect(cpAddr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = spDmsCtx.Connect(otherCPAddr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	file := utils.FindTestdata("ensembles/multiple_nginx.yaml")
 	ensemble, err := utils.UploadFile(sp, file)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	tc = tc.WithEnsembleFile(ensemble)
 
 	ensembleID, err := spDmsCtx.Deploy(ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	tc = tc.WithEnsembleID(ensembleID)
 
 	require.Eventually(t, func() bool {
 		status, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return status == "Running"
 	}, 5*60*time.Second, 1*time.Second)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, manifest)
 
 	tc = tc.WithManifest(manifest)
@@ -127,7 +127,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 	tc := utils.NewTestCtx(ctx)
 
 	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
 	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
@@ -139,15 +139,15 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 	assert.NotNil(t, otherCPDmsCtx)
 
 	manifest, err := tc.Manifest()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, manifest)
 
 	cpAllocs, err := cpDmsCtx.AllocationList()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, cpAllocs)
 
 	otherCPAllocs, err := otherCPDmsCtx.AllocationList()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, otherCPAllocs)
 
 	allocMap := make(map[string][]jobs.AllocationInfo)
@@ -156,7 +156,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 	allocMap[strings.ToLower(otherCPName)] = otherCPAllocs
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	type execution struct {
 		dns         string
@@ -220,7 +220,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 				"http://" + server.dns + portStr,
 			}
 			out, err := client.node.RunCMD(cmd)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotEmpty(t, out)
 
 			codeQuotes := strings.TrimSpace(out)
@@ -241,7 +241,7 @@ func shouldGetAOKResponse(ctx context.Context) error {
 	tc := utils.NewTestCtx(ctx)
 
 	responses, err := tc.AllocationResponses()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, responses)
 
 	for _, resp := range responses {
@@ -256,7 +256,7 @@ func restartsTheDeployment(ctx context.Context, spName string) (context.Context,
 	tc := utils.NewTestCtx(ctx)
 
 	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
 	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
@@ -264,41 +264,41 @@ func restartsTheDeployment(ctx context.Context, spName string) (context.Context,
 	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	status, err := spDmsCtx.EnsembleStatus(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "Running", status)
 
 	err = spDmsCtx.StopEnsemble(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// assert it has really shutdown
 	require.Eventually(t, func() bool {
 		status, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return status == "Completed"
 	}, 60*time.Second, 1*time.Second)
 
 	ensemble, err := tc.EnsembleFile()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	ensembleID, err = spDmsCtx.Deploy(ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	tc = tc.WithEnsembleID(ensembleID)
 
 	require.Eventually(t, func() bool {
 		status, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return status == "Running"
 	}, 60*time.Second, 1*time.Second)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, manifest)
 
 	tc = tc.WithManifest(manifest)

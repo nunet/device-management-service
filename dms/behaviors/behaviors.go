@@ -118,6 +118,8 @@ const (
 	ContractTransactionBehavior             = TokenomicNamespace + "/contract/transaction"
 	ContractListLocalTransactionsBehavior   = TokenomicNamespace + "/contract/transactions/list"
 	ContractConfirmLocalTransactionBehavior = TokenomicNamespace + "/contract/transactions/confirm"
+
+	DebugFlightrecBehavior = "/dms/debug/flightrec"
 )
 
 var (

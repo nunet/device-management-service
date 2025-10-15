@@ -16,7 +16,6 @@ linters:
     - unconvert
     - unparam
     - unused
-    - whitespace
   exclusions:
     generated: lax
     presets:

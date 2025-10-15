@@ -64,7 +64,7 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	tc := utils.NewTestCtx(ctx)
 
 	nodes, err := tc.Nodes()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodes)
 
 	spName = strings.ToLower(spName)
@@ -92,12 +92,12 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	})
 
 	spUserCtx, spDmsCtx, err := sp.InitialCaps(spName)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, spUserCtx)
 	assert.NotNil(t, spDmsCtx)
 
 	cpUserCtx, cpDmsCtx, err := cp.InitialCaps(cpName)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, cpUserCtx)
 	assert.NotNil(t, cpDmsCtx)
 
@@ -136,46 +136,46 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	err = cpUserCtx.JoinOrg(cpDmsCtx, orgCtx.DID, orgGrantToBob)
 	assert.NoError(t, err, "cp could not join the org")
 
-	err = spDmsCtx.Run()
-	assert.NoError(t, err)
+	err = spDmsCtx.Run(t)
+	require.NoError(t, err)
 
 	// wait for dms to start
 	require.Eventually(t, func() bool {
 		out, err := sp.RunCMD([]string{"ss", "-tnlp"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return strings.Contains(out, ":9999")
 	}, 20*time.Second, 500*time.Millisecond)
 
 	// check if Docker was installed successfully
 	assert.NoError(t, g.Wait())
 
-	err = cpDmsCtx.Run()
-	assert.NoError(t, err)
+	err = cpDmsCtx.Run(t)
+	require.NoError(t, err)
 
 	// wait for dms to start
 	require.Eventually(t, func() bool {
 		out, err := cp.RunCMD([]string{"ss", "-tnlp"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return strings.Contains(out, ":9999")
 	}, 20*time.Second, 500*time.Millisecond)
 
 	spInfo, err := spDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, spInfo)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, cpInfo)
 
 	cpAddr, err := utils.MultiaddrFromCLI(cpInfo)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, cpAddr)
 
 	err = spDmsCtx.Connect(cpAddr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = cpDmsCtx.Onboard()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// upload ensemble configuration to VM
 	here := dutils.CurrentFileDirectory()
@@ -183,16 +183,16 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 	spEnsemble := "/root/docker_hello.yaml"
 
 	err = sp.UploadFile(localEnsemble, spEnsemble, 0o755)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// update the ensemble configuration to specify compute provider peer ID
 	updateCmd := fmt.Sprintf("sed -i 's/failure_recovery: stay_down/failure_recovery: stay_down\\n        peer: %s/' %s",
 		cpInfo.ID, spEnsemble)
 	_, err = sp.RunCMD([]string{"sh", "-c", updateCmd})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	ensembleID, err := spDmsCtx.Deploy(spEnsemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	tc = tc.WithEnsembleID(ensembleID)
 	return tc.Unwrap(), nil
@@ -203,21 +203,21 @@ func deploymentIsCompleted(ctx context.Context, spName string) (context.Context,
 	tc := utils.NewTestCtx(ctx)
 
 	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
 	spName = strings.ToLower(spName)
 	sp := nodeMap[spName]
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	require.Eventually(t, func() bool {
 		spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
 		assert.True(t, ok)
 		status, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return status == "Completed"
 	}, 20*time.Second, 1*time.Second)
 
@@ -229,30 +229,30 @@ func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	tc := utils.NewTestCtx(ctx)
 
 	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodeMap)
 
 	spName = strings.ToLower(spName)
 	sp := nodeMap[spName]
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	spDmsCtx, ok := sp.Contexts[spName+utils.DefaultDMSSuffix]
 	assert.True(t, ok)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, manifest)
 
 	path, err := spDmsCtx.LogsFromAllocation(ensembleID, "node1.alloc1")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, path)
 
 	// TODO: keep it consistent on DMS, rename log file as stdout.log instead
 	out, err := sp.RunCMD([]string{"cat", filepath.Join(path, "stdout.log")})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, out, expected)
 	return nil
 }
