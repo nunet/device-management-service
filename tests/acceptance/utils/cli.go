@@ -18,7 +18,6 @@ import (
 	"github.com/cucumber/godog"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/dms/node"
 	dmsnode "gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
@@ -65,12 +64,12 @@ func (c *Context) Run(t godog.TestingT) error {
 		dmsnode.EnvFlightrecSec, frSec, c.Name))
 }
 
-func (c *Context) PeerAddr() (*node.PeerAddrInfoResponse, error) {
+func (c *Context) PeerAddr() (*dmsnode.PeerAddrInfoResponse, error) {
 	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/peers/self", c.Name))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call self behavior: %w", err)
 	}
-	var resp node.PeerAddrInfoResponse
+	var resp dmsnode.PeerAddrInfoResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -82,7 +81,7 @@ func (c *Context) Connect(target string) error {
 	if err != nil {
 		return fmt.Errorf("failed to call connect behavior: %w", err)
 	}
-	var resp node.PeerConnectResponse
+	var resp dmsnode.PeerConnectResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -104,7 +103,7 @@ func (c *Context) Onboard() error {
 	// TODO: see a better way to remove this from output....
 	trimmed := strings.Replace(out, "Skipping GPU selection.", "", 1)
 
-	var resp node.OnboardResponse
+	var resp dmsnode.OnboardResponse
 	if err = json.Unmarshal([]byte(trimmed), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -119,7 +118,7 @@ func (c *Context) Deploy(ensemble string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to call deployment new behavior: %s", out)
 	}
-	var resp node.NewDeploymentResponse
+	var resp dmsnode.NewDeploymentResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return "", fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -134,7 +133,7 @@ func (c *Context) EnsembleStatus(id string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to call deployment status behavior: %s", out)
 	}
-	var resp node.DeploymentStatusResponse
+	var resp dmsnode.DeploymentStatusResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return "", fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -149,7 +148,7 @@ func (c *Context) LogsFromAllocation(ensembleID, allocName string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("failed to call deployment logs behavior: %s", out)
 	}
-	var resp node.DeploymentLogsResponse
+	var resp dmsnode.DeploymentLogsResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return "", fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -164,7 +163,7 @@ func (c *Context) Manifest(ensembleID string) (*jobtypes.EnsembleManifest, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to call deployment manifest behavior: %s", out)
 	}
-	var resp node.DeploymentManifestResponse
+	var resp dmsnode.DeploymentManifestResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -179,7 +178,7 @@ func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to call allocation list manifest behavior: %s", out)
 	}
-	var resp node.AllocationsListResponse
+	var resp dmsnode.AllocationsListResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -194,7 +193,7 @@ func (c *Context) UpdateEnsemble(id, path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to call deployment update behavior: %w", err)
 	}
-	var resp node.UpdateDeploymentResponse
+	var resp dmsnode.UpdateDeploymentResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -209,7 +208,7 @@ func (c *Context) StopEnsemble(id string) error {
 	if err != nil {
 		return fmt.Errorf("failed to call deployment shutdown behavior: %s", out)
 	}
-	var resp node.DeploymentShutdownResponse
+	var resp dmsnode.DeploymentShutdownResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
