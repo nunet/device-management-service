@@ -264,6 +264,9 @@ type allocator struct {
 	cancel context.CancelFunc
 
 	volumeTracker *storage.VolumeTracker
+
+	// Push-based liveness configuration
+	pushLivenessEnabled bool
 }
 
 var _ Allocator = (*allocator)(nil)
@@ -278,22 +281,24 @@ func newAllocator(
 	fs afero.Afero,
 	workDir,
 	hostID string,
+	pushLivenessEnabled bool,
 ) *allocator {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &allocator{
-		ports:              portAllocator,
-		resources:          resourceManager,
-		hardware:           hardwareManager,
-		network:            network,
-		allocations:        make(map[string]*jobs.Allocation),
-		monitoredEnsembles: make(map[string]struct{}),
-		fs:                 fs,
-		workDir:            workDir,
-		hostID:             hostID,
-		commits:            make(map[string]int64),
-		ctx:                ctx,
-		cancel:             cancel,
-		volumeTracker:      vt,
+		ports:               portAllocator,
+		resources:           resourceManager,
+		hardware:            hardwareManager,
+		network:             network,
+		allocations:         make(map[string]*jobs.Allocation),
+		monitoredEnsembles:  make(map[string]struct{}),
+		fs:                  fs,
+		workDir:             workDir,
+		hostID:              hostID,
+		commits:             make(map[string]int64),
+		ctx:                 ctx,
+		cancel:              cancel,
+		volumeTracker:       vt,
+		pushLivenessEnabled: pushLivenessEnabled,
 	}
 }
 
@@ -561,6 +566,7 @@ func (a *allocator) Allocate(
 		executor,
 		func() error { return a.Release(ctx, allocationID) },
 		contractEventHandler,
+		a.pushLivenessEnabled,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation: %w", err)

@@ -50,6 +50,7 @@ var DefaultConfig = Config{
 			EthereumRPCToken:      "",
 			StartingBlockScanning: "0x8D7374",
 		},
+		PushLivenessEnabled: true,
 	},
 	Rest: Rest{
 		Addr: "127.0.0.1",

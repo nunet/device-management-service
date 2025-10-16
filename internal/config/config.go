@@ -35,7 +35,8 @@ type General struct {
 	StorageBricksDir         string `mapstructure:"storage_bricks_dir"         json:"storage_bricks_dir"`
 	StorageGlusterfsHostname string `mapstructure:"storage_glusterfs_hostname" json:"storage_glusterfs_hostname"`
 
-	PaymentProvider PaymentProvider `mapstructure:"payment_provider" json:"payment_provider"`
+	PaymentProvider     PaymentProvider `mapstructure:"payment_provider" json:"payment_provider"`
+	PushLivenessEnabled bool
 }
 
 type PaymentProvider struct {

@@ -154,13 +154,15 @@ func NewOrchestrator(
 	}
 
 	orchestratorBehaviors := map[string]func(actor.Envelope){
-		behaviors.NotifyTaskTerminationBehavior: o.handleTaskTermination,
+		behaviors.NotifyTaskTerminationBehavior:    o.handleTaskTermination,
+		behaviors.NotifyAllocationLivenessBehavior: o.handleAllocationLiveness,
+		behaviors.NotifyAllocationStatusBehavior:   o.handleAllocationStatusUpdate,
 	}
 
 	for b, handler := range orchestratorBehaviors {
 		err := o.actor.AddBehavior(b, handler)
 		if err != nil {
-			return nil, fmt.Errorf("add allocation start behavior to allocation actor: %w", err)
+			return nil, fmt.Errorf("add behavior %s to orchestrator actor: %w", b, err)
 		}
 	}
 

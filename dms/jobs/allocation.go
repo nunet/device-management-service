@@ -11,6 +11,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"math"
 	"path/filepath"
 	"sync"
 	"time"
@@ -32,6 +33,11 @@ import (
 
 const (
 	deleteLogsAfter = 30 * time.Minute
+
+	// Liveness reporting configuration
+	livenessReportInterval = 30 * time.Second
+	livenessReportTimeout  = 2 * time.Minute
+	livenessMaxRetries     = 3
 )
 
 // AllocationInfo gathers useful internal information for external callers
@@ -72,6 +78,15 @@ type Job struct {
 }
 
 // Allocation represents an allocation
+// allocationLiveness contains state for push-based liveness reporting
+type allocationLiveness struct {
+	enabled        bool
+	interval       time.Duration
+	sequenceNumber int64
+	cancel         context.CancelFunc
+	lock           sync.Mutex
+}
+
 type Allocation struct {
 	ID           string
 	allocType    jobtypes.AllocationType
@@ -107,6 +122,9 @@ type Allocation struct {
 
 	createdAt time.Time
 	startedAt time.Time
+
+	// Liveness reporting state
+	liveness allocationLiveness
 }
 
 // NewAllocation creates a new allocation given the actor.
@@ -122,6 +140,7 @@ func NewAllocation(
 	executor types.Executor,
 	selfRelease func() error,
 	contractEventHandler *eventhandler.EventHandler,
+	enablePushLiveness bool,
 ) (*Allocation, error) {
 	if network == nil {
 		return nil, fmt.Errorf("network is nil")
@@ -164,10 +183,15 @@ func NewAllocation(
 		contractEventHandler: contractEventHandler,
 	}
 
+	// Initialize liveness reporting state
+	allocation.liveness.enabled = enablePushLiveness
+	allocation.liveness.interval = livenessReportInterval
+
 	log.Debugw("allocation_created",
 		"labels", string(observability.LabelAllocation),
 		"allocationID", allocation.ID,
 		"executionID", allocation.executionID,
+		"push_liveness_enabled", enablePushLiveness,
 	)
 
 	return allocation, nil
@@ -263,8 +287,14 @@ func (a *Allocation) Run(
 		return fmt.Errorf("start executor: %w", err)
 	}
 
+	// Update status (lock already held from function start)
+	oldStatus := a.status
 	a.startedAt = time.Now()
 	a.status = AllocationRunning
+
+	// Send status change notification (must be done with lock released)
+	// Release lock temporarily to avoid blocking on message send
+	a.sendStatusChangeNotification(oldStatus, AllocationRunning, "allocation started")
 
 	// NEW: Log the resources we've assigned for this run
 	log.Infow("allocation_run_started",
@@ -277,6 +307,9 @@ func (a *Allocation) Run(
 
 	if a.allocType == jobtypes.AllocationTypeTask {
 		go a.handleExecutionExit(ctx)
+	} else {
+		// Start periodic liveness reporting for service allocations
+		a.startLivenessReporting(ctx)
 	}
 
 	return nil
@@ -504,6 +537,9 @@ func (a *Allocation) stopActor() error {
 // it won't return errors right away but try to clean up
 // all the other steps
 func (a *Allocation) Stop(ctx context.Context) error {
+	// Stop liveness reporting first
+	a.stopLivenessReporting()
+
 	err := a.stopActor()
 	if err != nil {
 		return fmt.Errorf("stop actor: %w", err)
@@ -637,5 +673,250 @@ func (a *Allocation) Info() AllocationInfo {
 		UsingPorts:   utils.MapKeysToSlice(a.state.portMapping),
 		CreatedAt:    a.createdAt,
 		StartedAt:    a.startedAt,
+	}
+}
+
+// startLivenessReporting starts periodic push-based liveness reporting
+// Only for service allocations - tasks use handleTransience
+func (a *Allocation) startLivenessReporting(ctx context.Context) {
+	if a.allocType == jobtypes.AllocationTypeTask {
+		return // Tasks already push via handleTransience
+	}
+
+	if !a.liveness.enabled {
+		log.Debugw("push_liveness_disabled",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID)
+		return
+	}
+
+	livenessCtx, cancel := context.WithCancel(ctx)
+	a.liveness.lock.Lock()
+	a.liveness.cancel = cancel
+	a.liveness.lock.Unlock()
+
+	log.Infow("starting_push_liveness_reporting",
+		"labels", string(observability.LabelAllocation),
+		"allocationID", a.ID,
+		"interval", a.liveness.interval,
+		"note", "passive collection only, pull checks remain authoritative")
+
+	go func() {
+		// Send initial heartbeat immediately
+		if err := a.sendLivenessReport(livenessCtx); err != nil {
+			log.Debugw("initial_liveness_report_failed",
+				"labels", string(observability.LabelAllocation),
+				"allocationID", a.ID,
+				"error", err)
+		}
+
+		ticker := time.NewTicker(a.liveness.interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-livenessCtx.Done():
+				log.Debugw("stopping_liveness_reporting",
+					"labels", string(observability.LabelAllocation),
+					"allocationID", a.ID)
+				return
+			case <-ticker.C:
+				if err := a.sendLivenessReport(livenessCtx); err != nil {
+					log.Debugw("liveness_report_failed",
+						"labels", string(observability.LabelAllocation),
+						"allocationID", a.ID,
+						"error", err)
+					// Continue trying - don't stop on failure
+				}
+			}
+		}
+	}()
+}
+
+// sendLivenessReport sends a single liveness notification
+func (a *Allocation) sendLivenessReport(ctx context.Context) error {
+	a.lock.Lock()
+	currentStatus := a.status
+	a.lock.Unlock()
+
+	// Increment sequence number
+	a.liveness.lock.Lock()
+	a.liveness.sequenceNumber++
+	seqNum := a.liveness.sequenceNumber
+	a.liveness.lock.Unlock()
+
+	// Perform self health check
+	health := a.performSelfHealthCheck(ctx)
+
+	// Optionally gather resource usage
+	var resourceUsage *behaviors.AllocationResourceUsage
+	if usage, err := a.gatherResourceUsage(ctx); err == nil {
+		resourceUsage = usage
+	}
+
+	notification := behaviors.AllocationLivenessNotification{
+		AllocationID:   a.ID,
+		Status:         string(currentStatus),
+		Timestamp:      time.Now().Unix(),
+		SequenceNumber: seqNum,
+		Health:         health,
+		ResourceUsage:  resourceUsage,
+		Version:        "0.1",
+	}
+
+	return a.sendToOrchestratorWithRetry(
+		ctx,
+		behaviors.NotifyAllocationLivenessBehavior,
+		notification,
+		livenessMaxRetries,
+	)
+}
+
+// performSelfHealthCheck runs registered healthcheck (if any)
+func (a *Allocation) performSelfHealthCheck(ctx context.Context) behaviors.HealthStatus {
+	a.lock.Lock()
+	healthcheck := a.healthcheck
+	a.lock.Unlock()
+
+	if healthcheck == nil {
+		return behaviors.HealthStatus{
+			Healthy:       true,
+			LastCheckTime: time.Now().Unix(),
+			CheckType:     behaviors.HealthCheckTypeNone,
+			Message:       "no healthcheck configured",
+		}
+	}
+
+	// Run with timeout
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- healthcheck()
+		close(errChan)
+	}()
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return behaviors.HealthStatus{
+				Healthy:       false,
+				LastCheckTime: time.Now().Unix(),
+				CheckType:     behaviors.HealthCheckTypeSelf,
+				Message:       fmt.Sprintf("healthcheck failed: %v", err),
+			}
+		}
+		return behaviors.HealthStatus{
+			Healthy:       true,
+			LastCheckTime: time.Now().Unix(),
+			CheckType:     behaviors.HealthCheckTypeSelf,
+			Message:       "healthcheck passed",
+		}
+	case <-checkCtx.Done():
+		return behaviors.HealthStatus{
+			Healthy:       false,
+			LastCheckTime: time.Now().Unix(),
+			CheckType:     behaviors.HealthCheckTypeSelf,
+			Message:       "healthcheck timeout",
+		}
+	}
+}
+
+// gatherResourceUsage collects resource metrics (optional)
+// TODO: Implement when executor supports stats collection
+// This would require adding a GetStats method to the Executor interface
+func (a *Allocation) gatherResourceUsage(_ context.Context) (*behaviors.AllocationResourceUsage, error) {
+	// Currently not implemented - no executor supports stats yet
+	// Return nil to indicate stats are unavailable
+	// Future implementation would:
+	// 1. Define ExecutorStats interface with GetStats method
+	// 2. Check if executor implements the interface
+	// 3. Call GetStats and return the metrics
+	return nil, fmt.Errorf("executor stats not implemented")
+}
+
+// sendToOrchestratorWithRetry sends with exponential backoff
+func (a *Allocation) sendToOrchestratorWithRetry(
+	ctx context.Context,
+	behavior string,
+	payload interface{},
+	maxRetries int,
+) error {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 2^(attempt-1) seconds (1s, 2s, 4s, 8s...)
+			backoff := time.Duration(math.Pow(2, float64(attempt-1))) * time.Second
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+
+		msg, err := actor.Message(
+			a.Actor.Handle(),
+			a.orchestrator,
+			behavior,
+			payload,
+			actor.WithMessageExpiry(uint64(time.Now().Add(livenessReportTimeout).UnixNano())),
+		)
+		if err != nil {
+			lastErr = fmt.Errorf("create message: %w", err)
+			continue
+		}
+
+		if err := a.Actor.Send(msg); err != nil {
+			lastErr = fmt.Errorf("send attempt %d: %w", attempt+1, err)
+			continue
+		}
+
+		return nil // Success
+	}
+
+	return fmt.Errorf("failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+// sendStatusChangeNotification sends immediate notification when status changes
+func (a *Allocation) sendStatusChangeNotification(oldStatus, newStatus AllocationStatus, reason string) {
+	if !a.liveness.enabled {
+		return
+	}
+
+	update := behaviors.AllocationStatusUpdate{
+		AllocationID: a.ID,
+		OldStatus:    string(oldStatus),
+		NewStatus:    string(newStatus),
+		Timestamp:    time.Now().Unix(),
+		Reason:       reason,
+	}
+
+	msg, err := actor.Message(
+		a.Actor.Handle(),
+		a.orchestrator,
+		behaviors.NotifyAllocationStatusBehavior,
+		update,
+		actor.WithMessageExpiry(uint64(time.Now().Add(livenessReportTimeout).UnixNano())),
+	)
+	if err != nil {
+		log.Debugf("failed to create status update message: %v", err)
+		return
+	}
+
+	if err := a.Actor.Send(msg); err != nil {
+		log.Debugf("failed to send status update: %v", err)
+	}
+}
+
+// stopLivenessReporting stops the liveness reporting goroutine
+func (a *Allocation) stopLivenessReporting() {
+	a.liveness.lock.Lock()
+	defer a.liveness.lock.Unlock()
+
+	if a.liveness.cancel != nil {
+		a.liveness.cancel()
+		a.liveness.cancel = nil
 	}
 }

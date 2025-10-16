@@ -257,9 +257,10 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, fmt.Errorf("create node actor: %w", err)
 	}
 
+	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID, cfg.General.PushLivenessEnabled)
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
-		allocator:            newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID),
+		allocator:            allocator,
 		hostID:               hostID,
 		network:              net,
 		bids:                 make(map[string]*bidState),
