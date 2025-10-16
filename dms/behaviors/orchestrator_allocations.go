@@ -18,6 +18,15 @@ import (
 // TODO: keep here temporarily. We must organize types and behavior payloads.
 // issue: https://gitlab.com/nunet/device-management-service/-/issues/893
 
+// HealthCheckType represents the type of health check performed
+type HealthCheckType string
+
+const (
+	HealthCheckTypeNone     HealthCheckType = "none"     // No healthcheck configured
+	HealthCheckTypeSelf     HealthCheckType = "self"     // Allocation self-reported health
+	HealthCheckTypeExecutor HealthCheckType = "executor" // Executor-level health check
+)
+
 type SubnetAddPeerRequest struct {
 	SubnetID string
 	PeerID   string
@@ -147,4 +156,49 @@ type TerminationError struct {
 type AllocationRestartResponse struct {
 	OK    bool
 	Error string
+}
+
+// AllocationLivenessNotification is sent periodically by service allocations
+// to report their health and status to the orchestrator
+// NOTE: This is for observability only, pull-based healthchecks remain authoritative
+type AllocationLivenessNotification struct {
+	AllocationID   string `json:"allocation_id"`
+	Status         string `json:"status"`          // Current allocation status
+	Timestamp      int64  `json:"timestamp"`       // Unix timestamp of report
+	SequenceNumber int64  `json:"sequence_number"` // Monotonic counter to detect missed heartbeats
+
+	// Health information (self-reported)
+	Health HealthStatus `json:"health"`
+
+	// Optional: Resource usage metrics
+	ResourceUsage *AllocationResourceUsage `json:"resource_usage,omitempty"`
+
+	Version string `json:"version"` // Protocol version for future compatibility
+}
+
+// AllocationResourceUsage contains resource metrics from the executor
+type AllocationResourceUsage struct {
+	CPUUsagePercent  float64 `json:"cpu_usage_percent"`
+	MemoryUsedBytes  int64   `json:"memory_used_bytes"`
+	MemoryLimitBytes int64   `json:"memory_limit_bytes"`
+	NetworkRxBytes   int64   `json:"network_rx_bytes"`
+	NetworkTxBytes   int64   `json:"network_tx_bytes"`
+}
+
+// HealthStatus contains self-reported health check results
+type HealthStatus struct {
+	Healthy       bool            `json:"healthy"`
+	LastCheckTime int64           `json:"last_check_time"`
+	Message       string          `json:"message,omitempty"`
+	CheckType     HealthCheckType `json:"check_type,omitempty"` // Type of health check performed
+}
+
+// AllocationStatusUpdate is sent when allocation status changes significantly
+// (e.g., starting, stopping, failing)
+type AllocationStatusUpdate struct {
+	AllocationID string `json:"allocation_id"`
+	OldStatus    string `json:"old_status"`
+	NewStatus    string `json:"new_status"`
+	Timestamp    int64  `json:"timestamp"`
+	Reason       string `json:"reason,omitempty"`
 }

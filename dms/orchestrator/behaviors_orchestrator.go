@@ -16,6 +16,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -100,4 +101,98 @@ func (o *BasicOrchestrator) WriteAllocationLogs(
 	}
 
 	return allocDir, nil
+}
+
+// handleAllocationLiveness passively records push heartbeats
+// NOTE: This does NOT affect health decisions - supervisor's pull checks remain authoritative
+func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var notification behaviors.AllocationLivenessNotification
+
+	if err := json.Unmarshal(msg.Message, &notification); err != nil {
+		log.Debugw("unmarshalling_liveness_notification_failed",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		return
+	}
+
+	// Log for observability (passive collection only)
+	log.Debugw("received_allocation_heartbeat",
+		"labels", []string{string(observability.LabelDeployment)},
+		"ensembleID", o.id,
+		"allocationID", notification.AllocationID,
+		"sequence", notification.SequenceNumber,
+		"status", notification.Status,
+		"healthy", notification.Health.Healthy,
+		"check_type", notification.Health.CheckType)
+
+	// Log warning if allocation self-reports unhealthy
+	// (just for observability, doesn't change supervisor behavior)
+	if !notification.Health.Healthy {
+		log.Warnw("allocation_self_reported_unhealthy",
+			"labels", []string{string(observability.LabelDeployment)},
+			"allocationID", notification.AllocationID,
+			"message", notification.Health.Message,
+			"check_type", notification.Health.CheckType,
+			"note", "supervisor pull checks remain authoritative")
+	}
+
+	// Log resource usage if provided
+	if notification.ResourceUsage != nil {
+		log.Debugw("allocation_resource_usage",
+			"labels", []string{string(observability.LabelDeployment)},
+			"allocationID", notification.AllocationID,
+			"cpu_percent", notification.ResourceUsage.CPUUsagePercent,
+			"memory_used_bytes", notification.ResourceUsage.MemoryUsedBytes,
+			"memory_limit_bytes", notification.ResourceUsage.MemoryLimitBytes)
+	}
+}
+
+// handleAllocationStatusUpdate receives immediate status change notifications
+func (o *BasicOrchestrator) handleAllocationStatusUpdate(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var update behaviors.AllocationStatusUpdate
+
+	if err := json.Unmarshal(msg.Message, &update); err != nil {
+		log.Debugw("unmarshalling_status_update_failed",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		return
+	}
+
+	// Log the status change (observability)
+	log.Infow("allocation_status_changed",
+		"labels", []string{string(observability.LabelDeployment)},
+		"ensembleID", o.id,
+		"allocationID", update.AllocationID,
+		"old_status", update.OldStatus,
+		"new_status", update.NewStatus,
+		"reason", update.Reason)
+
+	// Optionally update manifest for faster visibility
+	// Supervisor's pull checks will validate and correct if needed
+	allocID, err := types.ParseAllocationID(update.AllocationID)
+	if err != nil {
+		log.Debugf("failed to parse allocation ID %s: %v", update.AllocationID, err)
+		return
+	}
+
+	manifestKey := allocID.ManifestKey()
+
+	o.lock.Lock()
+	if a, ok := o.manifest.Allocations[manifestKey]; ok {
+		// Store push status as supplementary info
+		oldManifestStatus := a.Status
+		a.Status = jtypes.AllocationStatus(update.NewStatus)
+		o.manifest.Allocations[manifestKey] = a
+
+		log.Debugw("updated_manifest_from_push",
+			"allocationID", update.AllocationID,
+			"old_manifest_status", oldManifestStatus,
+			"new_push_status", update.NewStatus,
+			"note", "supervisor pull checks remain authoritative")
+	}
+	o.lock.Unlock()
 }

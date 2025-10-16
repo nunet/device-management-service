@@ -85,6 +85,11 @@ const (
 
 	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
 
+	// Push-based liveness and status reporting
+	// Allocations invoke these on the orchestrator to report their state
+	NotifyAllocationLivenessBehavior = OrchestratorNamespace + "/allocation/liveness"
+	NotifyAllocationStatusBehavior   = OrchestratorNamespace + "/allocation/status"
+
 	TokenomicNamespace           = "/dms/tokenomics"
 	ContractCreateBehavior       = TokenomicNamespace + "/contract/create"
 	ContractApproveLocalBehavior = TokenomicNamespace + "/contract/approve_local"
