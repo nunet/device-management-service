@@ -137,8 +137,9 @@ type ContractApproveLocalRequestCmd struct {
 }
 
 type ContractConfirmLocalTransactionCmd struct {
-	UniqueID string
-	TxHash   string
+	UniqueID   string
+	TxHash     string
+	Blockchain string
 }
 
 type ContractPaymentStatusCmd struct {
@@ -448,8 +449,10 @@ var registeredBehaviors = map[string]*behaviorConfig{
 			p := payload.(*ContractConfirmLocalTransactionCmd)
 			cmd.Flags().StringVarP(&p.UniqueID, "unique-id", "", "", "transaction unique id (required)")
 			cmd.Flags().StringVarP(&p.TxHash, "tx-hash", "", "", "transaction hash (required)")
+			cmd.Flags().StringVarP(&p.Blockchain, "blockchain", "", "", "which blockchain was used (required)")
 			_ = cmd.MarkFlagRequired("unique-id")
 			_ = cmd.MarkFlagRequired("tx-hash")
+			_ = cmd.MarkFlagRequired("blockchain")
 		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
 			req, ok := opts.Payload.(*ContractConfirmLocalTransactionCmd)
@@ -458,8 +461,9 @@ var registeredBehaviors = map[string]*behaviorConfig{
 			}
 
 			request := contracts.ContractConfirmLocalTransactionRequest{
-				UniqueID: req.UniqueID,
-				TxHash:   req.TxHash,
+				UniqueID:   req.UniqueID,
+				TxHash:     req.TxHash,
+				Blockchain: req.Blockchain,
 			}
 
 			resp, err := dmsClient.ConfirmTransaction(ctx, request, opts.MsgOpts...)
@@ -476,7 +480,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 							
 							Examples:
 							
-							  nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash> `,
+							  nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash> --blockchain ETHEREUM`,
 	},
 	// /dms/tokenomics/contract/transactions/list
 	behaviors.ContractListLocalTransactionsBehavior: {

@@ -45,6 +45,11 @@ type PaymentProvider struct {
 	EthereumRPCToken      string `mapstructure:"ethereum_rpc_token" json:"ethereum_rpc_token"`
 	NtxContractAddress    string `mapstructure:"ntx_contract_address" json:"ntx_contract_address"`
 	StartingBlockScanning string `mapstructure:"starting_block_scanning" json:"starting_block_scanning"`
+
+	BlockFrostAPIURL     string `mapstructure:"block_frost_api_url" json:"block_frost_api_url"`
+	BlockFrostAPIKey     string `mapstructure:"block_frost_api_key" json:"block_frost_api_key"`
+	CardanoAssetName     string `mapstructure:"cardano_asset_name" json:"cardano_asset_name"`
+	CardanoAssetPolicyID string `mapstructure:"cardano_asset_policy_id" json:"cardano_asset_policy_id"`
 }
 
 type Rest struct {

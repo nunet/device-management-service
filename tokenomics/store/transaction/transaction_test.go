@@ -13,6 +13,7 @@ import (
 
 	"github.com/ostafen/clover/v2"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // setupTestDB initializes a temporary Clover DB for tests
@@ -40,8 +41,15 @@ func TestUpsert_NewTransaction(t *testing.T) {
 		UniqueID:            "tx1",
 		PaymentValidatorDID: "val1",
 		ContractDID:         "contract1",
-		ToAddress:           "address1",
-		Amount:              "100",
+		ToAddress: []types.PaymentAddressInfo{
+			{
+				Blockchain:    "ETHEREUM",
+				Currency:      "NTX",
+				RequesterAddr: "sdds",
+				ProviderAddr:  "sd",
+			},
+		},
+		Amount: "100",
 	}
 
 	err := store.Upsert(tx)

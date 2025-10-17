@@ -28,13 +28,17 @@
         }
     ],
     "payment_details": {
-        "requester_addr": "{{requesterAddr}}",
-        "provider_addr": "{{providerAddr}}",
-        "currency": "NTX",
+        "addresses": [
+            {
+                "requester_addr": "{{requesterAddr}}",
+                "provider_addr": "{{providerAddr}}",
+                "currency": "NTX",
+                "blockchain": "ETHEREUM"
+            }
+        ],
         "fees_per_allocation": "{{amount}}",
         "timestamp": "0001-01-01T00:00:00Z",
-        "payment_type": "blockchain",
-        "blockchain": "ETHEREUM"
+        "payment_type": "blockchain"
     },
     "contract_terms": "Standard contract terms",
     "contract_participants": {

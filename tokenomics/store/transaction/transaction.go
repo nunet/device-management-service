@@ -17,6 +17,7 @@ import (
 	"github.com/ostafen/clover/v2"
 	"github.com/ostafen/clover/v2/document"
 	"github.com/ostafen/clover/v2/query"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -25,13 +26,13 @@ const (
 
 // Transaction struct
 type Transaction struct {
-	UniqueID            string `json:"unique_id"`
-	PaymentValidatorDID string `json:"payment_validator_did"`
-	ContractDID         string `json:"contract_did"`
-	ToAddress           string `json:"to_address"`
-	Amount              string `json:"amount"`
-	Status              string `json:"status"`
-	TxHash              string `json:"tx_hash"`
+	UniqueID            string                     `json:"unique_id"`
+	PaymentValidatorDID string                     `json:"payment_validator_did"`
+	ContractDID         string                     `json:"contract_did"`
+	ToAddress           []types.PaymentAddressInfo `json:"to_address"`
+	Amount              string                     `json:"amount"`
+	Status              string                     `json:"status"`
+	TxHash              string                     `json:"tx_hash"`
 }
 
 type Store struct {

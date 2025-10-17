@@ -56,8 +56,9 @@ type ContractListLocalTransactionsResponse struct {
 }
 
 type ContractConfirmLocalTransactionRequest struct {
-	UniqueID string `json:"unique_id"`
-	TxHash   string `json:"tx_hash"`
+	UniqueID   string `json:"unique_id"`
+	TxHash     string `json:"tx_hash"`
+	Blockchain string `json:"blockchain"`
 }
 
 type ContractConfirmLocalTransactionResponse struct {
@@ -65,11 +66,11 @@ type ContractConfirmLocalTransactionResponse struct {
 }
 
 type TransactionForServiceProviderRequest struct {
-	UniqueID            string `json:"unique_id"`
-	PaymentValidatorDID string `json:"payment_validator_did"`
-	ContractDID         string `json:"contract_did"`
-	ToAddress           string `json:"to_address"`
-	Amount              string `json:"amount"`
+	UniqueID            string                     `json:"unique_id"`
+	PaymentValidatorDID string                     `json:"payment_validator_did"`
+	ContractDID         string                     `json:"contract_did"`
+	ToAddress           []types.PaymentAddressInfo `json:"to_address"`
+	Amount              string                     `json:"amount"`
 }
 
 type TransactionForServiceProviderResponse struct {
@@ -95,8 +96,9 @@ type ContractEventResponseBehaviour struct {
 }
 
 type ContractPaymentValidationRequestBehavior struct {
-	TxHash   string `json:"tx_hash"`
-	UniqueID string `json:"unique_id"`
+	TxHash     string `json:"tx_hash"`
+	UniqueID   string `json:"unique_id"`
+	Blockchain string `json:"blockchain"`
 }
 
 type ContractPaymentValidationResponseBehavior struct {
