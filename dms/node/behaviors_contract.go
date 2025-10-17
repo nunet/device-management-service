@@ -24,11 +24,13 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/tokenomics"
-	"gitlab.com/nunet/device-management-service/tokenomics/client"
+	cardanoClient "gitlab.com/nunet/device-management-service/tokenomics/client/cardano"
+	ethereumClient "gitlab.com/nunet/device-management-service/tokenomics/client/ethereum"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -38,6 +40,9 @@ const (
 	waitForParticipantSigsTimeout = 30 * time.Minute
 
 	invokeSignRequestTimeout = 2 * time.Minute
+
+	cardanoBlockchain  = "CARDANO"
+	ethereumBlockchain = "ETHEREUM"
 )
 
 // handleContractUsagesCalculate produces the usages and forwards them to
@@ -436,35 +441,120 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 		handleErr(fmt.Errorf("failed to find payment with unique id: %s", req.UniqueID))
 		return
 	}
-
-	c := client.NewClient(n.dmsConfig.PaymentProvider.EthereumRPCURL, n.dmsConfig.PaymentProvider.EthereumRPCToken)
-	txs, err := client.GetERC20Transfers(c, n.dmsConfig.PaymentProvider.NtxContractAddress, payment.Contract.PaymentDetails.ProviderAddr, n.dmsConfig.PaymentProvider.StartingBlockScanning, "latest")
-	if err != nil {
-		handleErr(fmt.Errorf("failed to get erc20 transfer: %w", err))
-		return
-	}
 	verified := false
 	errorMsg := ""
 
-	for _, tx := range txs {
-		if strings.EqualFold(tx.TxHash, req.TxHash) {
-			if !strings.EqualFold(tx.From, payment.Contract.PaymentDetails.RequesterAddr) {
-				handleErr(fmt.Errorf("requester transaction address %s doesn't match the one in transaction: %s", payment.Contract.PaymentDetails.RequesterAddr, tx.From))
-				return
+	switch req.Blockchain {
+	case ethereumBlockchain:
+		ethAddr := types.PaymentAddressInfo{}
+		foundEthAddr := false
+		for _, v := range payment.Contract.PaymentDetails.Addresses {
+			if v.Blockchain == ethereumBlockchain {
+				ethAddr = v
+				foundEthAddr = true
+				break
 			}
-
-			ok, err := compareDecimals(tx.Amount, payment.Amount)
-			if err != nil {
-				errorMsg = err.Error() + " tx amount: " + tx.Amount + " payment amount: " + payment.Amount
-			}
-			if ok {
-				verified = true
-			} else {
-				errorMsg = "not verified: tx amount: " + tx.Amount + " payment amount: " + payment.Amount
-			}
-
-			break
 		}
+		if !foundEthAddr {
+			handleErr(fmt.Errorf("ethereum address was not found in payment addresses: %w", err))
+			return
+		}
+
+		c := ethereumClient.NewClient(
+			n.dmsConfig.PaymentProvider.EthereumRPCURL,
+			n.dmsConfig.PaymentProvider.EthereumRPCToken,
+		)
+		txs, err := ethereumClient.GetERC20Transfers(
+			c,
+			n.dmsConfig.PaymentProvider.NtxContractAddress,
+			ethAddr.ProviderAddr,
+			n.dmsConfig.PaymentProvider.StartingBlockScanning,
+			"latest",
+		)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get erc20 transfer: %w", err))
+			return
+		}
+
+		for _, tx := range txs {
+			if strings.EqualFold(tx.TxHash, req.TxHash) {
+				if !strings.EqualFold(tx.From, ethAddr.RequesterAddr) {
+					handleErr(fmt.Errorf("requester transaction address %s doesn't match the one in transaction: %s", ethAddr.RequesterAddr, tx.From))
+					return
+				}
+
+				ok, err := compareDecimals(tx.Amount, payment.Amount)
+				if err != nil {
+					errorMsg = err.Error() + " tx amount: " + tx.Amount + " payment amount: " + payment.Amount
+				}
+				if ok {
+					verified = true
+				} else {
+					errorMsg = "not verified: tx amount: " + tx.Amount + " payment amount: " + payment.Amount
+				}
+
+				break
+			}
+		}
+
+	case cardanoBlockchain:
+		cardanoAddr := types.PaymentAddressInfo{}
+		foundCardanoAddr := false
+		for _, v := range payment.Contract.PaymentDetails.Addresses {
+			if v.Blockchain == cardanoBlockchain {
+				cardanoAddr = v
+				foundCardanoAddr = true
+				break
+			}
+		}
+		if !foundCardanoAddr {
+			handleErr(fmt.Errorf("cardano address was not found in payment addresses: %w", err))
+			return
+		}
+
+		client := cardanoClient.NewClient(
+			n.dmsConfig.PaymentProvider.BlockFrostAPIKey,
+			n.dmsConfig.PaymentProvider.BlockFrostAPIURL,
+		)
+		asset := n.dmsConfig.PaymentProvider.CardanoAssetPolicyID + hex.EncodeToString([]byte(n.dmsConfig.PaymentProvider.CardanoAssetName))
+		txs, err := client.FindTxsToAddressForAsset(n.ctx, asset, cardanoAddr.ProviderAddr)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get cardano transactions: %w", err))
+			return
+		}
+
+		for _, tx := range txs {
+			if strings.EqualFold(tx.TxHash, req.TxHash) {
+				foundFrom := false
+				for _, v := range tx.FromAddrs {
+					if v == cardanoAddr.RequesterAddr {
+						foundFrom = true
+						break
+					}
+				}
+
+				if !foundFrom {
+					handleErr(fmt.Errorf("requester transaction address not found: %s", cardanoAddr.RequesterAddr))
+					return
+				}
+
+				ok, err := compareDecimals(tx.Quantity, payment.Amount)
+				if err != nil {
+					errorMsg = err.Error() + " tx amount: " + tx.Quantity + " payment amount: " + payment.Amount
+				}
+				if ok {
+					verified = true
+				} else {
+					errorMsg = "not verified: tx amount: " + tx.Quantity + " payment amount: " + payment.Amount
+				}
+
+				break
+			}
+		}
+
+	default:
+		handleErr(fmt.Errorf("unsupported blockchain payment info: %s", req.Blockchain))
+		return
 	}
 
 	resp := contracts.ContractPaymentValidationResponseBehavior{}
@@ -505,8 +595,9 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 	}
 
 	paymentValidationReq := contracts.ContractPaymentValidationRequestBehavior{
-		TxHash:   req.TxHash,
-		UniqueID: req.UniqueID,
+		TxHash:     req.TxHash,
+		UniqueID:   req.UniqueID,
+		Blockchain: req.Blockchain,
 	}
 	paymentProvider, err := actor.HandleFromDID(paymentProviderDID)
 	if err != nil {
@@ -646,7 +737,7 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 		PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
 		UniqueID:            req.UniqueID,
 		ContractDID:         req.Contract.ContractDID,
-		ToAddress:           req.Contract.PaymentDetails.ProviderAddr,
+		ToAddress:           req.Contract.PaymentDetails.Addresses,
 		Amount:              finalAmount,
 	}
 	go func() {

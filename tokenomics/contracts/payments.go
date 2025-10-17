@@ -10,6 +10,8 @@ package contracts
 
 import (
 	"time"
+
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -21,11 +23,8 @@ type PaymentType string
 
 // Payment represents a payment transaction
 type PaymentDetails struct {
-	PaymentType       PaymentType `json:"payment_type"`
-	RequesterAddr     string      `json:"requester_addr"`
-	ProviderAddr      string      `json:"provider_addr"`
-	Currency          string      `json:"currency"`
-	Timestamp         time.Time   `json:"timestamp"`
-	FeesPerAllocation string      `json:"fees_per_allocation"`
-	Blockchain        string      `json:"blockchain"` // ETHEREUM, CARDANO etc..
+	PaymentType       PaymentType                `json:"payment_type"`
+	Timestamp         time.Time                  `json:"timestamp"`
+	FeesPerAllocation string                     `json:"fees_per_allocation"`
+	Addresses         []types.PaymentAddressInfo `json:"addresses"`
 }

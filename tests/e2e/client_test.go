@@ -339,7 +339,7 @@ func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniq
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/transactions/confirm", "--unique-id", uniqueID, "--tx-hash", txHash, "--timeout", "5s"}
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/transactions/confirm", "--unique-id", uniqueID, "--tx-hash", txHash, "--blockchain", "ETHEREUM", "--timeout", "5s"}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
