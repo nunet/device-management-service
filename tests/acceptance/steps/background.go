@@ -11,6 +11,8 @@ package steps
 import (
 	"context"
 	"fmt"
+	"maps"
+	"math/rand"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
+	"golang.org/x/sync/errgroup"
 )
 
 type tableNode struct {
@@ -54,38 +57,27 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 	}
 
 	// now create instances based on the total
-	// amount of nodes and orgs
-	total := len(nodes) + len(orgs)
+	// amount of nodes
+	total := len(nodes)
 	instances, err := hooks.SetupNodes(total)
 	require.NoError(t, err)
 	assert.NotEmpty(t, instances)
 
 	assert.Len(t, instances, total)
 
-	// here we disambiguate the concept of node/org
-	// to assign each one of them a unique instance
-	// regardless of their role
-	allNodes := []string{}
-	allNodes = append(allNodes, orgs...)
-	for _, node := range nodes {
-		allNodes = append(allNodes, node.name)
-	}
-	assert.Len(t, allNodes, total)
-
 	// map nodes to unique instances
 	nodeToInstance := make(map[string]*utils.Node)
-	for i, node := range allNodes {
+	for i, node := range nodes {
 		instance := instances[i]
-		nodeToInstance[node] = instance
+		nodeToInstance[node.name] = instance
 	}
 
-	tc = tc.WithNodeMap(nodeToInstance)
-
-	// all setup for orgs
 	orgMap := make(map[string]*utils.Context)
+	allInstances := slices.Collect(maps.Keys(nodeToInstance))
+
 	for _, org := range orgs {
-		instance, ok := nodeToInstance[org]
-		assert.True(t, ok)
+		i := rand.Intn(len(allInstances))
+		instance := instances[i]
 
 		orgCtx, err := instance.CreateContext(org)
 		require.NoError(t, err)
@@ -93,36 +85,57 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 		orgMap[org] = orgCtx
 	}
 
+	tc = tc.WithNodeMap(nodeToInstance)
+
+	g := new(errgroup.Group)
+
 	// all setup for nodes (sp/cp)
 	for _, node := range nodes {
-		instance, ok := nodeToInstance[node.name]
-		assert.True(t, ok)
+		g.Go(func() error {
+			instance, ok := nodeToInstance[node.name]
+			if !ok {
+				return fmt.Errorf("instance for node %s not found", node.name)
+			}
 
-		err := instance.PruneResolved()
-		require.NoError(t, err)
+			if err := instance.PruneResolved(); err != nil {
+				return err
+			}
 
-		userCtx, dmsCtx, err := instance.InitialCaps(node.name)
-		require.NoError(t, err)
-		assert.NotNil(t, userCtx)
-		assert.NotNil(t, dmsCtx)
+			userCtx, dmsCtx, err := instance.InitialCaps(node.name)
+			if err != nil {
+				return err
+			}
+			assert.NotNil(t, userCtx)
+			assert.NotNil(t, dmsCtx)
 
-		orgCtx, ok := orgMap[node.org]
-		assert.True(t, ok)
+			orgCtx, ok := orgMap[node.org]
+			if !ok {
+				return fmt.Errorf("org context for %s not found", node.org)
+			}
 
-		err = utils.SetupPrivateNetwork(userCtx, dmsCtx, orgCtx)
-		require.NoError(t, err)
+			if err := utils.SetupPrivateNetwork(userCtx, dmsCtx, orgCtx); err != nil {
+				return err
+			}
 
-		err = dmsCtx.Run(t)
-		require.NoError(t, err)
+			if err := dmsCtx.Run(t); err != nil {
+				return err
+			}
 
-		require.Eventually(t, func() bool {
-			return instance.IsDMSRunning(9999)
-		}, 20*time.Second, 500*time.Millisecond)
+			assert.Eventually(t, func() bool {
+				return instance.IsDMSRunning(9999)
+			}, 20*time.Second, 500*time.Millisecond)
 
-		if node.onboarded {
-			assert.NoError(t, dmsCtx.Onboard())
-		}
+			if node.onboarded {
+				if err := dmsCtx.Onboard(); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	}
+
+	err = g.Wait()
+	require.NoError(t, err)
 
 	return tc.Unwrap(), nil
 }
