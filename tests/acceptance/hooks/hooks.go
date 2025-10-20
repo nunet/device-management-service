@@ -23,6 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
 	dutils "gitlab.com/nunet/device-management-service/utils"
+	"golang.org/x/sync/errgroup"
 )
 
 // SetupNodes connects to Incus, spin up number of specified machines and
@@ -48,24 +49,28 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 	here := dutils.CurrentFileDirectory()
 	remoteDMSPath := "/usr/local/bin/nunet"
 	localPath := filepath.Join(here, "..", "builds", "dms_linux_amd64")
-	for idx, n := range nodes {
-		err := n.WaitForInstanceReady()
-		if err != nil {
-			return nil, fmt.Errorf("instance not ready: %w", err)
-		}
-		err = n.UploadFile(localPath, remoteDMSPath, 0o755)
-		if err != nil {
-			return nil, fmt.Errorf("failed to upload file to node %d: %w", idx, err)
-		}
 
-		_, err = n.RunCMD([]string{"chmod", "+x", "/usr/local/bin/nunet"})
-		if err != nil {
-			return nil, fmt.Errorf("failed to make dms executable at node %d: %w", idx, err)
-		}
-		err = n.ConfigureVMNetworkingForQUIC()
-		if err != nil {
-			return nil, fmt.Errorf("failed to configure VM networking for QUIC: %w", err)
-		}
+	g := new(errgroup.Group)
+	for _, node := range nodes {
+		g.Go(func() error {
+			if err := node.WaitForInstanceReady(); err != nil {
+				return fmt.Errorf("instance %s not ready: %w", node.Name, err)
+			}
+			if err := node.UploadFile(localPath, remoteDMSPath, 0o755); err != nil {
+				return fmt.Errorf("failed to upload file to node %s: %w", node.Name, err)
+			}
+
+			if _, err := node.RunCMD([]string{"chmod", "+x", "/usr/local/bin/nunet"}); err != nil {
+				return fmt.Errorf("failed to make dms executable at node %s: %w", node.Name, err)
+			}
+			if err := node.ConfigureVMNetworkingForQUIC(); err != nil {
+				return fmt.Errorf("failed to configure VM networking for QUIC on %s: %w", node.Name, err)
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	fmt.Printf("finished setting up nodes, time elapsed: %.1fs\n", time.Since(start).Seconds())
