@@ -256,15 +256,15 @@ func (ctx *BasicCapabilityContext) cleanUpTokens() {
 		ctx.mx.Unlock()
 	}
 
+	ctx.mx.Lock()
 	for subject, tokenList := range ctx.tokens {
 		// Use slices.DeleteFunc to safely remove invalid tokens
 		tokenList = slices.DeleteFunc(tokenList, func(t *Token) bool {
 			return t.Verify(ctx.trust, uint64(now), ctx.revoke) != nil
 		})
-		ctx.mx.Lock()
 		ctx.tokens[subject] = tokenList
-		ctx.mx.Unlock()
 	}
+	ctx.mx.Unlock()
 }
 
 func (ctx *BasicCapabilityContext) ListRoots() ([]did.DID, TokenList, TokenList, TokenList) {
