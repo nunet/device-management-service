@@ -34,11 +34,7 @@ import (
 )
 
 const (
-	invokeMessageTimeout          = 20 * time.Second
-	retryMessageTimeout           = 5
-	getSignatureRetries           = 500 * 24
-	waitForParticipantSigsTimeout = 30 * time.Minute
-
+	invokeMessageTimeout     = 20 * time.Second
 	invokeSignRequestTimeout = 2 * time.Minute
 
 	cardanoBlockchain  = "CARDANO"
@@ -355,13 +351,13 @@ func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 	}
 
 	var signResp contracts.ContractSignResponseBehaviour
-	if err := json.Unmarshal(reply.Message, &signReq); err != nil {
+	if err := json.Unmarshal(reply.Message, &signResp); err != nil {
 		handleErr(fmt.Errorf("failed to unmarshal contract host response: %w", err))
 		return
 	}
 
 	if signResp.Error != "" {
-		handleErr(fmt.Errorf("error from contract host: %w", err))
+		handleErr(fmt.Errorf("error from contract host: %s", signResp.Error))
 		return
 	}
 
@@ -762,9 +758,11 @@ func calculateTotal(numItems int, feePerItem string) (string, error) {
 		return "", fmt.Errorf("invalid fee: %v", err)
 	}
 
-	total := float64(numItems) * fee
+	numItemsBig := big.NewFloat(float64(numItems))
+	feeBig := big.NewFloat(fee)
+	totalBig := new(big.Float).Mul(numItemsBig, feeBig)
 
-	totalStr := fmt.Sprintf("%.6f", total)
+	totalStr := fmt.Sprintf("%.6f", totalBig)
 	return totalStr, nil
 }
 
