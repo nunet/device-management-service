@@ -204,55 +204,6 @@ func (n *Node) InitialCaps(name string) (userCtx, dmsCtx *Context, err error) {
 	return userCtx, dmsCtx, nil
 }
 
-func (n *Node) InstallDocker() error {
-	_, err := n.RunCMD([]string{"apt-get", "update"})
-	if err != nil {
-		return fmt.Errorf("failed to update apt at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"apt-get", "install", "-y", "ca-certificates", "curl"})
-	if err != nil {
-		return fmt.Errorf("failed to install prerequisites at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"install", "-m", "0755", "-d", "/etc/apt/keyrings"})
-	if err != nil {
-		return fmt.Errorf("failed to create keyring directory at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"curl", "-fsSL", "https://download.docker.com/linux/ubuntu/gpg", "-o", "/etc/apt/keyrings/docker.asc"})
-	if err != nil {
-		return fmt.Errorf("failed to download Docker GPG key at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"chmod", "a+r", "/etc/apt/keyrings/docker.asc"})
-	if err != nil {
-		return fmt.Errorf("failed to set permissions on Docker GPG key at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"sh", "-c", "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${UBUNTU_CODENAME:-$VERSION_CODENAME}) stable\" | tee /etc/apt/sources.list.d/docker.list > /dev/null"})
-	if err != nil {
-		return fmt.Errorf("failed to add Docker repository at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"apt-get", "update"})
-	if err != nil {
-		return fmt.Errorf("failed to update apt after adding Docker repository at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"apt-get", "install", "-y", "docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin", "docker-compose-plugin"})
-	if err != nil {
-		return fmt.Errorf("failed to install Docker packages at node %s: %w", n.Name, err)
-	}
-
-	_, err = n.RunCMD([]string{"systemctl", "start", "docker"})
-	if err != nil {
-		return fmt.Errorf("failed to start Docker daemon %s: %w", n.Name, err)
-	}
-
-	return nil
-}
-
 func (n *Node) PruneResolved() error {
 	dest := "/root/netplan.sh"
 	if err := n.UploadFile(FindTestdata("scripts/netplan.sh"), dest, 0o755); err != nil {
@@ -267,26 +218,6 @@ func (n *Node) PruneResolved() error {
 		return err
 	}
 	_, err = n.RunCMD([]string{"bash", "-c", dest})
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (n *Node) InstallYQ() error {
-	_, err := n.RunCMD([]string{"apt-get", "update"})
-	if err != nil {
-		return err
-	}
-	_, err = n.RunCMD([]string{"apt-get", "install", "-y", "wget"})
-	if err != nil {
-		return err
-	}
-	_, err = n.RunCMD([]string{"wget", "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64", "-O", "/usr/local/bin/yq"})
-	if err != nil {
-		return err
-	}
-	_, err = n.RunCMD([]string{"chmod", "+x", "/usr/local/bin/yq"})
 	if err != nil {
 		return err
 	}

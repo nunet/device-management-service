@@ -83,14 +83,6 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 
 	tc = tc.WithNodeMap(nodeMap)
 
-	// only Bob (compute provider) needs Docker
-	// launch goroutine while setting up capabilities
-	// docker should be available before DMS starts
-	g := new(errgroup.Group)
-	g.Go(func() error {
-		return cp.InstallDocker()
-	})
-
 	spUserCtx, spDmsCtx, err := sp.InitialCaps(spName)
 	require.NoError(t, err)
 	assert.NotNil(t, spUserCtx)
@@ -145,9 +137,6 @@ func hasDeployedDockerHelloOn(ctx context.Context, spName, cpName string) (conte
 		require.NoError(t, err)
 		return strings.Contains(out, ":9999")
 	}, 20*time.Second, 500*time.Millisecond)
-
-	// check if Docker was installed successfully
-	assert.NoError(t, g.Wait())
 
 	err = cpDmsCtx.Run(t)
 	require.NoError(t, err)
