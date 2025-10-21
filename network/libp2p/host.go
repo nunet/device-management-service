@@ -303,9 +303,10 @@ func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.Add
 		}
 
 		if ev, ok := ev.(event.EvtPeerIdentificationCompleted); ok {
-			var identPeer peer.AddrInfo
-			identPeer.ID = ev.Peer
-			copy(identPeer.Addrs, ev.ListenAddrs)
+			identPeer := peer.AddrInfo{
+				ID:    ev.Peer,
+				Addrs: ev.ListenAddrs,
+			}
 			go handleNewPeers(ctx, identPeer, newPeer)
 		}
 	}
