@@ -486,3 +486,158 @@ func GetNode(clients []incus.InstanceServer, name string) (*Node, error) {
 	}
 	return nil, fmt.Errorf("failed to find instance %s on any provided Incus server", name)
 }
+
+// CreateIsolatedNATNetwork creates a completely isolated network with NAT enabled
+// This simulates a separate NAT router that nodes behind it must traverse
+func CreateIsolatedNATNetwork(c incus.InstanceServer, networkName string) error {
+	// Check if network already exists and delete if so
+	_, _, err := c.GetNetwork(networkName)
+	if err == nil {
+		fmt.Printf("[NETWORK] Network %s already exists, deleting...\n", networkName)
+		err = c.DeleteNetwork(networkName)
+		if err != nil {
+			return fmt.Errorf("failed to delete existing network %s: %w", networkName, err)
+		}
+	}
+
+	// Create new isolated network WITHOUT NAT (we'll handle NAT in the namespace)
+	// Each network gets its own subnet to ensure complete isolation
+	networkPost := api.NetworksPost{
+		Name: networkName,
+		NetworkPut: api.NetworkPut{
+			Config: map[string]string{
+				"ipv4.address": "auto",    // Auto-assign a unique subnet
+				"ipv4.nat":     "false",   // Disable Incus NAT - we control it via namespace
+				"ipv4.dhcp":    "true",    // Enable DHCP
+				"ipv6.address": "none",    // Disable IPv6 for simplicity
+				"dns.mode":     "dynamic", // DNS for name resolution
+			},
+		},
+	}
+
+	fmt.Printf("[NETWORK] Creating isolated network: %s\n", networkName)
+	err = c.CreateNetwork(networkPost)
+	if err != nil {
+		return fmt.Errorf("failed to create network %s: %w", networkName, err)
+	}
+
+	// Verify network was created
+	network, _, err := c.GetNetwork(networkName)
+	if err != nil {
+		return fmt.Errorf("failed to verify network %s: %w", networkName, err)
+	}
+
+	subnet := network.Config["ipv4.address"]
+	fmt.Printf("[NETWORK] Network %s created with subnet: %s\n", networkName, subnet)
+
+	return nil
+}
+
+// CreateInstanceWithNetwork creates an instance attached to a specific network
+// This ensures the instance communicates through that network's NAT
+func CreateInstanceWithNetwork(c incus.InstanceServer, instanceType, name, networkName string) error {
+	var req api.InstancesPost
+
+	switch instanceType {
+	case ContainerType:
+		req = api.InstancesPost{
+			Name: name,
+			InstancePut: api.InstancePut{
+				Architecture: "x86_64",
+				Config: map[string]string{
+					"security.nesting":                     "true",
+					"security.syscalls.intercept.mknod":    "true",
+					"security.syscalls.intercept.setxattr": "true",
+					"boot.host_shutdown_action":            "force-stop",
+				},
+				Devices: map[string]map[string]string{
+					"eth0": {
+						"type":    "nic",
+						"network": networkName,
+						"name":    "eth0",
+					},
+				},
+				Ephemeral: true,
+			},
+			Source: api.InstanceSource{
+				Type:  "image",
+				Alias: DefaultImageContainer,
+			},
+		}
+	default:
+		// VM instance type
+		req = api.InstancesPost{
+			Name: name,
+			InstancePut: api.InstancePut{
+				Architecture: "x86_64",
+				Config: map[string]string{
+					"boot.host_shutdown_action": "force-stop",
+					"limits.cpu":                "4",
+					"limits.memory":             "2GiB",
+				},
+				Devices: map[string]map[string]string{
+					"root": {
+						"type": "disk",
+						"path": "/",
+						"pool": "default",
+					},
+					"eth0": {
+						"type":    "nic",
+						"network": networkName,
+						"name":    "eth0",
+					},
+				},
+				Ephemeral: true,
+			},
+			Source: api.InstanceSource{
+				Type:  "image",
+				Alias: DefaultImageVM,
+			},
+			Type: "virtual-machine",
+		}
+	}
+
+	op, err := c.CreateInstance(req)
+	if err != nil {
+		return fmt.Errorf("failed to create instance: %w", err)
+	}
+
+	if err := op.Wait(); err != nil {
+		return fmt.Errorf("failed to wait for instance creation: %w", err)
+	}
+
+	startReq := api.InstanceStatePut{
+		Action:   "start",
+		Timeout:  -1,
+		Force:    true,
+		Stateful: false,
+	}
+
+	startOp, err := c.UpdateInstanceState(name, startReq, "")
+	if err != nil {
+		return fmt.Errorf("failed to start instance: %w", err)
+	}
+
+	return startOp.Wait()
+}
+
+// GetInstanceType returns the instance type from environment
+// Exported version for use in other packages
+func GetInstanceType() string {
+	return getInstanceType()
+}
+
+// GetNetworkSubnet returns the IPv4 subnet CIDR for a given network
+func GetNetworkSubnet(c incus.InstanceServer, networkName string) (string, error) {
+	network, _, err := c.GetNetwork(networkName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get network %s: %w", networkName, err)
+	}
+
+	subnet := network.Config["ipv4.address"]
+	if subnet == "" {
+		return "", fmt.Errorf("network %s has no ipv4.address configured", networkName)
+	}
+
+	return subnet, nil
+}

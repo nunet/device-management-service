@@ -23,5 +23,6 @@ RUN apt update && apt install -y --no-install-recommends \
   make \
   golang \
   git \
+  iptables \
   && rm -rf /var/lib/apt/lists/*
 RUN pipx install --include-deps ansible
