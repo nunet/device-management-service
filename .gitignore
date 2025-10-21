@@ -55,10 +55,11 @@ cloud-init.yaml
 glusterfs-key
 glusterfs-key.pub
 
-# e2e tests
+# e2e tests TODO group in a dir
 tests/e2e/dms
 tests/e2e/testdata/basic_tests/
 tests/e2e/testdata/deployment_assert_subnet/
 tests/e2e/testdata/deployment_tests/
 tests/e2e/testdata/deployment_updates/
 tests/e2e/testdata/deployment_with_contracts_tests/
+tests/e2e/testdata/deployment_restoration_post_reboot

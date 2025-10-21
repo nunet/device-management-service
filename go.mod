@@ -224,8 +224,12 @@ require (
 require github.com/avast/retry-go v3.0.0+incompatible
 
 require (
+	github.com/alexflint/go-arg v1.6.0
+	github.com/bitfield/script v0.24.1
 	github.com/compose-spec/compose-go/v2 v2.8.1
 	github.com/cucumber/godog v0.15.0
+	github.com/itchyny/gojq v0.12.13
+	github.com/lithammer/dedent v1.1.0
 	github.com/lxc/incus v0.7.0
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/olivere/elastic/v7 v7.0.32
@@ -239,10 +243,11 @@ require (
 )
 
 require (
+	github.com/alexflint/go-scalar v1.2.0 // indirect
 	github.com/aws/smithy-go v1.22.1 // indirect
-	github.com/creack/pty v1.1.18 // indirect
 	github.com/cucumber/gherkin/go/v26 v26.2.0 // indirect
 	github.com/cucumber/messages/go/v21 v21.0.1 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/gofrs/uuid v4.3.1+incompatible // indirect
@@ -251,6 +256,7 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-memdb v1.3.4 // indirect
+	github.com/itchyny/timefmt-go v0.1.5 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/libp2p/go-yamux/v5 v5.0.1 // indirect
 	github.com/mattn/go-shellwords v1.0.12 // indirect
@@ -275,6 +281,7 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
+	mvdan.cc/sh/v3 v3.7.0 // indirect
 )
 
 require (

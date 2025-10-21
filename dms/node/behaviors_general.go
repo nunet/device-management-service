@@ -122,19 +122,21 @@ func (n *Node) handleFlightrec(msg actor.Envelope) {
 		return
 	}
 
-	go captureSnapshot(n.flightrec, filepath.Join(n.dmsConfig.WorkDir, "logs", "flightrec.trace"))
+	go captureSnapshot(n.flightrec, filepath.Join(n.dmsConfig.WorkDir, "logs"), "flightrec.trace")
 	n.sendReply(msg, PingResponse{})
 }
 
 var once sync.Once
 
 // captureSnapshot captures a flight recorder snapshot.
-func captureSnapshot(fr *trace.FlightRecorder, path string) {
+func captureSnapshot(fr *trace.FlightRecorder, dir, filename string) {
 	// once.Do ensures that the provided function is executed only once.
 	once.Do(func() {
-		f, err := os.Create(path)
+		_ = os.MkdirAll(dir, 0o755)
+
+		f, err := os.Create(filepath.Join(dir, filename))
 		if err != nil {
-			log.Errorw("opening_snapshot", "file", f.Name(), "error", err)
+			log.Errorw("opening_flightrec", "file", f.Name(), "error", err)
 			return
 		}
 		defer f.Close() // ignore error
@@ -142,7 +144,7 @@ func captureSnapshot(fr *trace.FlightRecorder, path string) {
 		// WriteTo writes the flight recorder data to the provided io.Writer.
 		_, err = fr.WriteTo(f)
 		if err != nil {
-			log.Errorw("writing_snapshot", "file", f.Name(), "error", err)
+			log.Errorw("writing_flightrec", "file", f.Name(), "error", err)
 			return
 		}
 
