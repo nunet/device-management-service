@@ -69,7 +69,8 @@ type subnet struct {
 		conns map[string]*connectip.Conn // key: IP string
 	}
 
-	portMapping map[string]*struct {
+	portMappingMx sync.Mutex
+	portMapping   map[string]*struct {
 		destPort string
 		destIP   string
 		srcIP    string
@@ -192,7 +193,20 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 
 	s.info.rtable.Clear()
 
-	for sourcePort, mapping := range s.portMapping {
+	// Create snapshot of port mappings to avoid holding lock during cleanup
+	s.portMappingMx.Lock()
+	mappingsSnapshot := make(map[string]*struct {
+		destPort string
+		destIP   string
+		srcIP    string
+	})
+	for k, v := range s.portMapping {
+		mappingsSnapshot[k] = v
+	}
+	s.portMappingMx.Unlock()
+
+	// Now iterate over snapshot
+	for sourcePort, mapping := range mappingsSnapshot {
 		err := l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
 		if err != nil {
 			log.Errorf("failed to unmap port %s: %v", sourcePort, err)
