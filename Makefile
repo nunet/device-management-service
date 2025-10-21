@@ -344,3 +344,7 @@ license:
 testdata: $(testdata_objects)
 	@echo "Preparing test data..."
 	@echo "Nothing to do at the moment."
+
+flightrec-pprof:
+	go tool trace -pprof=net flightrec.trace > flightrec-net.pprof
+	go tool trace -pprof=syscall flightrec.trace > flightrec-syscall.pprof

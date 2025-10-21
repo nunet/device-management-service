@@ -301,6 +301,7 @@ func New(cfg config.Config, fs afero.Afero,
 
 	// set up the flight recorder
 	if secsNum, _ := strconv.Atoi(os.Getenv(EnvFlightrecSec)); secsNum > 0 {
+		log.Infow("flight recorder enabled", "secs", secsNum)
 		fr := trace.NewFlightRecorder(trace.FlightRecorderConfig{
 			MinAge:   time.Duration(secsNum) * time.Second,
 			MaxBytes: 5 * types.MB,

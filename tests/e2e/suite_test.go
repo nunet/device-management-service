@@ -290,6 +290,8 @@ func (s *TestSuite) startNode(index int) {
 	if tracePrefix != "" {
 		tracePrefix += "/"
 	}
+	// TODO observability.EnvFlightrecSec
+	envFlightrec := os.Getenv("DMS_FLIGHTREC_SEC")
 	cmd.Env = append(os.Environ(),
 		// define a name for Kibana
 		"ELASTIC_APM_SERVICE_NODE_NAME="+tracePrefix+"E2E-"+s.T().Name()+"-node-"+idxS,
@@ -297,6 +299,7 @@ func (s *TestSuite) startNode(index int) {
 		// log levels
 		"GOLOG_LOG_LEVEL=debug",
 		"DMS_OBSERVE_LEVEL=debug",
+		"DMS_FLIGHTREC_SEC="+envFlightrec,
 	)
 	// nest under a test span
 	if s.rootTrace != nil {
@@ -332,6 +335,15 @@ func (s *TestSuite) startNode(index int) {
 	// Start a goroutine to wait for shutdown.
 	go func() {
 		<-node.shutdownCh
+
+		// handle flight recorder
+		if secsNum, _ := strconv.Atoi(envFlightrec); secsNum > 0 {
+			_, err = node.client.debugFlightrec(s.T(), node.dmsContext, node.password)
+			if err != nil {
+				s.T().Logf("failed to get flight recorder: %v", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 
 		// Try graceful shutdown first
 		if err := cmd.Process.Signal(os.Interrupt); err != nil {

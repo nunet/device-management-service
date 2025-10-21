@@ -241,7 +241,9 @@ func (k *Dispatch) dispatch() {
 				k.sctx.Discard(msg)
 			}
 
-			log.Debugf("dispatching message from %s to %s", msg.From, msg.Behavior)
+			log.Debugw("dispatching_message",
+				"msg_from", msg.From,
+				"behavior", msg.Behavior)
 			go func() {
 				defer k.options.Limiter.Release(msg)
 				endSpan := observability.StartSpan("Dispatch: "+msg.Behavior, "FromDID", msg.From.DID)

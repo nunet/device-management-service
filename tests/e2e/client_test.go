@@ -793,3 +793,19 @@ func (c *Client) deploymentLogs(context, passphrase, deploymentID, allocationNam
 
 	return resp, nil
 }
+
+func (c *Client) debugFlightrec(t *testing.T, context, passphrase string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/debug/flightrec"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("createVolume response: ", buf.String())
+	return buf.String(), err
+}
