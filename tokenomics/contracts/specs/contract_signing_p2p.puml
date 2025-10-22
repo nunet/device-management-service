@@ -1,0 +1,64 @@
+@startuml Deployment with Contract Sequence Diagram
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+
+title Contract Signing Sequence -- external, P2P
+
+actor "Requester\n(Service Provider)" as Requester
+participant "Requester DMS" as ReqDMS
+participant "Contract Host\n(Solution Enabler)" as ContractHost
+participant "Contract Actor" as ContractActor
+database "Contract Database" as ContractDB
+actor "Provider\n(Compute Provider)" as Provider
+participant "Provider DMS" as ProvDMS
+'participant "Payment Validator" as PaymentValidator
+'participant "Blockchain RPC" as MockRPC
+
+== Contract Creation Phase ==
+
+group Contract Establishment
+    Requester -> ReqDMS: Create contract file\n(sample.json)
+    note right
+        Contract includes:
+        - Solution Enabler DID
+        - Provider DID
+        - Requester DID
+        - Payment Validator DID
+        - Resource configuration
+        - Payment details
+        - Duration
+    end note
+
+    ReqDMS -> ContractHost: **ContractCreateBehavior**\nCreate contract request\n(to Contract Host DID)
+    ContractHost -> ContractDB ** : Store contract (DRAFT state)
+    ContractHost -> ContractActor ** : Spawn contract actor
+    activate ContractActor
+    ContractActor -> ContractActor: Initialize with contract DID
+    ContractHost --> ReqDMS: Contract DID
+    note right: Contract created but\nnot yet signed by all parties
+end
+
+== Contract Approval Phase ==
+
+group Provider Approval
+    Provider -> ProvDMS: **ContractListIncomingBehavior**\nList incoming contracts
+    ProvDMS -> ContractDB: Query incoming contracts
+    ContractDB --> ProvDMS: List of contracts
+    ProvDMS --> Provider: Show pending contracts
+
+    Provider -> ProvDMS: **ContractApproveLocalBehavior**\nApprove contract (contract DID)
+    ProvDMS -> ProvDMS: Sign contract locally
+    ProvDMS -> ContractHost: **ContractProposeBehavior**\nSend signature
+    ContractHost -> ContractActor: Process approval
+    ContractActor -> ContractDB: Update contract signatures
+    ContractActor -> ContractActor: Transition state:\nDRAFT → ACCEPTED
+    ContractActor -> ContractDB: Update state
+    ContractHost --> ProvDMS: Approval confirmed
+    ProvDMS --> Provider: Contract approved
+end
+
+@enduml

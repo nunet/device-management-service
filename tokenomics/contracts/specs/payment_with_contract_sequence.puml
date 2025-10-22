@@ -1,0 +1,117 @@
+@startuml Deployment with Contract Sequence Diagram
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+
+title Payment with Contract Sequence
+
+actor "Requester\n(Service Provider)" as Requester
+participant "Requester DMS" as ReqDMS
+participant "Contract Host\n(Solution Enabler)" as ContractHost
+participant "Contract Actor" as ContractActor
+database "Contract Database" as ContractDB
+actor "Provider\n(Compute Provider)" as Provider
+participant "Provider DMS" as ProvDMS
+participant "Payment Validator" as PaymentValidator
+participant "Blockchain RPC" as MockRPC
+
+== Usage Tracking and Payment Phase ==
+
+group Usage Calculation
+    ContractHost -> ContractHost: **ContractUsagesCalculateBehavior**\nCalculate contract usages
+    ContractHost -> ContractActor: Request usage data
+    ContractActor -> ContractActor: Calculate resource usage
+    note right
+        Tracks:
+        - CPU time
+        - Memory usage
+        - Duration
+    end note
+    ContractActor --> ContractHost: Usage metrics
+end
+
+group Send Usage to Payment Provider
+    ContractHost -> PaymentValidator: **ContractUsageBehavior**\nSend aggregated usages
+    note right
+        Includes:
+        - Unique ID
+        - Contract DID
+        - Usage amount
+    end note
+    PaymentValidator -> PaymentValidator: Store usage record
+    PaymentValidator --> ContractHost: Usage recorded
+
+    PaymentValidator -> ReqDMS: **ContractTransactionBehavior**\nNotify transaction
+    note right
+        Transaction details:
+        - Unique ID
+        - To address (Provider)
+        - Amount
+        - Status: unpaid
+    end note
+    ReqDMS -> ReqDMS: Store transaction locally
+end
+
+group Payment Confirmation
+    Requester -> ReqDMS: **ContractListLocalTransactionsBehavior**\nList local transactions
+    ReqDMS -> ReqDMS: Query local transactions
+    ReqDMS --> Requester: Transaction list\n(status: unpaid)
+    
+    Requester -[#blue,bold]-> Requester: <color:blue> <b>Execute blockchain payment</b>
+    skinparam NoteBorderColor blue
+    skinparam NoteBorderThickness 3
+    note right
+        <color:blue><b>Off-chain action with wallet interaction via NuNet Appliance:
+        <color:blue><b>Requester sends payment via blockchain
+        <color:blue><b>and obtains transaction hash
+    end note
+    skinparam NoteBorderColor black
+    skinparam NoteBorderThickness 1
+
+    Requester -> ReqDMS: **ContractConfirmLocalTransactionBehavior**\nConfirm payment\n(unique_id, tx_hash)
+    ReqDMS -> ReqDMS: Update transaction status
+    ReqDMS -> PaymentValidator: **ContractPaymentValidationRequestBehavior**\nValidate payment\n(unique_id, tx_hash)
+
+    PaymentValidator -> MockRPC: Query transaction\n(tx_hash)
+    note right
+        RPC validates:
+        - Transaction exists
+        - Correct addresses
+        - Correct amount
+    end note
+    MockRPC --> PaymentValidator: Transaction details\n(confirmed)
+
+    PaymentValidator -> PaymentValidator: Mark transaction as paid
+    PaymentValidator --> ReqDMS: Payment validated
+    ReqDMS -> ReqDMS: Update local status: **paid**
+    ReqDMS --> Requester: Payment confirmed
+
+    Requester -> ReqDMS: **ContractListLocalTransactionsBehavior**\nList transactions again
+    ReqDMS --> Requester: Transaction list\n(status: **paid**)
+end
+
+group Payment Status Verification - All Parties
+    Requester -> ReqDMS: **ContractPaymentStatusBehavior**\nCheck payment status
+    ReqDMS -> PaymentValidator: Query status (unique_id)
+    PaymentValidator --> ReqDMS: Paid: **true**
+    ReqDMS --> Requester: Payment confirmed
+
+    Provider -> ProvDMS: **ContractPaymentStatusBehavior**\nCheck payment status
+    ProvDMS -> PaymentValidator: Query status (unique_id)
+    PaymentValidator --> ProvDMS: Paid: **true**
+    ProvDMS --> Provider: Payment confirmed
+
+    ContractHost -> PaymentValidator: **ContractPaymentStatusBehavior**\nCheck payment status
+    PaymentValidator --> ContractHost: Paid: **true**
+
+    note over Requester, PaymentValidator
+        All three parties (Requester, Provider,
+        Contract Host) verify payment status
+        from Payment Validator
+    end note
+end
+
+@enduml
