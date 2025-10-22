@@ -1,0 +1,61 @@
+@startuml Deployment with Contract Sequence Diagram
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+
+title Deploying with Contracts Sequence
+
+actor "Requester\n(Service Provider)" as Requester
+participant "Requester DMS" as ReqDMS
+participant "Contract Host\n(Solution Enabler)" as ContractHost
+participant "Contract Actor" as ContractActor
+database "Contract Database" as ContractDB
+'actor "Provider\n(Compute Provider)" as Provider
+participant "Provider DMS" as ProvDMS
+'participant "Payment Validator" as PaymentValidator
+'participant "Blockchain RPC" as MockRPC
+
+== Deployment Execution Phase ==
+
+group Deployment Attempt (Before Approval)
+    Requester -> ReqDMS: Deploy with contract\n(hello-contract.yaml)
+    note right
+        Ensemble includes:
+        - Contract DID
+        - Contract Host DID
+    end note
+    ReqDMS -> ProvDMS: Request deployment
+    ProvDMS -> ContractHost: Validate contract for deployment
+    ContractHost -> ContractActor: Check contract validity
+    ContractActor --> ContractHost: Invalid (not accepted)
+    ContractHost --> ProvDMS: Contract not valid
+    ProvDMS --> ReqDMS: Cannot proceed
+    ReqDMS --> Requester: Deployment status: **Preparing**
+    note right: Deployment stuck in Preparing\nbecause contract not approved
+end
+
+group Successful Deployment
+    Requester -> ReqDMS: Deploy with contract\n(retry with approved contract)
+    ReqDMS -> ProvDMS: Request deployment
+    ProvDMS -> ContractHost: **ContractValidationBehavior**\nValidate contract
+    ContractHost -> ContractActor: Check contract
+    ContractActor -> ContractDB: Get contract
+    ContractActor --> ContractHost: Valid: **true** (ACCEPTED)
+    ContractHost --> ProvDMS: Contract valid
+    ProvDMS -> ProvDMS: Accept deployment
+    ProvDMS -> ProvDMS: Start job execution
+    ProvDMS --> ReqDMS: Deployment accepted
+
+    loop Monitor deployment status (max 60s)
+        Requester -> ReqDMS: Check deployment status
+        ReqDMS --> Requester: Status update
+    end
+
+    ReqDMS --> Requester: Deployment status: **Running**
+    note right: Job successfully running\non Provider's resources
+end
+
+@enduml

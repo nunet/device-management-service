@@ -1,0 +1,55 @@
+@startuml Deployment with Contract Sequence Diagram
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+
+title Contract Status Checks
+
+actor "Requester\n(Service Provider)" as Requester
+participant "Requester DMS" as ReqDMS
+participant "Contract Host\n(Solution Enabler)" as ContractHost
+participant "Contract Actor" as ContractActor
+database "Contract Database" as ContractDB
+actor "Provider\n(Compute Provider)" as Provider
+participant "Provider DMS" as ProvDMS
+'participant "Payment Validator" as PaymentValidator
+'participant "Blockchain RPC" as MockRPC
+
+== State Transition Summary ==
+
+note over ContractActor
+    **Contract State Transitions:**
+    DRAFT → ACCEPTED → SETTLED → TERMINATED
+end note
+
+== Contract Status Checks ==
+
+group Invalid Contract Check: 'not all parties signed'
+    Provider -> ProvDMS: **ContractValidationBehavior**\nValidate contract
+    ProvDMS -> ContractHost: Request validation\n(contract DID)
+    ContractHost -> ContractActor: Check contract status
+    ContractActor -> ContractDB: Get contract
+    ContractActor --> ContractHost: Not all parties signed
+    ContractHost --> ProvDMS: Valid: **false**
+    ProvDMS --> Provider: Contract not valid
+
+    note over Requester, Provider
+        Contract is invalid because Provider
+        has not yet approved/signed it
+    end note
+end
+
+group Contract Status Check: ACCEPTED
+    Requester -> ReqDMS: **ContractStatusBehavior**\nCheck contract status
+    ReqDMS -> ContractHost: Request status (contract DID)
+    ContractHost -> ContractActor: Get current state
+    ContractActor -> ContractDB: Fetch contract
+    ContractActor --> ContractHost: Contract details
+    ContractHost --> ReqDMS: State: **ACCEPTED**
+    ReqDMS --> Requester: Contract is accepted
+end
+
+@enduml
