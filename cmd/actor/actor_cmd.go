@@ -87,3 +87,14 @@ func newActorCmdCmd(dmsCli *cli.DmsCLI, behavior string, behaviorCfg *behaviorCo
 
 	return cmd
 }
+
+// NewActorCmdWrapper is a factory for creating actor command aliases.
+func NewActorCmdWrapper(dmsCli *cli.DmsCLI, behavior string) (*cobra.Command, error) {
+	behaviorCfg, ok := registeredBehaviors[behavior]
+	if !ok {
+		return nil, fmt.Errorf("unknown behavior: %s", behavior)
+	}
+	cmd := newActorCmdCmd(dmsCli, behavior, behaviorCfg)
+	useMessageOptsFlags(cmd, true)
+	return cmd, nil
+}
