@@ -3,7 +3,7 @@ module gitlab.com/nunet/device-management-service
 
 go 1.25
 
-toolchain go1.25.2
+toolchain go1.25.3
 
 require (
 	github.com/NVIDIA/go-nvml v0.12.4-0
