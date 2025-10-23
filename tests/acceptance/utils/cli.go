@@ -114,7 +114,7 @@ func (c *Context) Onboard() error {
 }
 
 func (c *Context) Deploy(ensemble string) (string, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/new -f %s -t 2m", c.Name, ensemble))
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet -c %s deploy -f %s -t 2m", c.Name, ensemble))
 	if err != nil {
 		return "", fmt.Errorf("failed to call deployment new behavior: %s", out)
 	}
@@ -174,7 +174,7 @@ func (c *Context) Manifest(ensembleID string) (*jobtypes.EnsembleManifest, error
 }
 
 func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/allocations/list", c.Name))
+	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet -c %s get allocations", c.Name))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call allocation list manifest behavior: %s", out)
 	}
