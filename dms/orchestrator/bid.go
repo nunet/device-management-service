@@ -231,10 +231,15 @@ func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, candidates map[
 	}
 
 	for n, bids := range bidMap {
-		log.Infof("node %s has %d bids", n, len(bids))
+		bidList := make([]string, 0, len(bids))
 		for _, bid := range bids {
-			log.Infof("    bid from %s", bid.Peer())
+			bidList = append(bidList, bid.Peer())
 		}
+		log.Infow("node has bids",
+			"labels", []string{string(observability.LabelDeployment)},
+			"name", n, "amount", len(bids),
+			// TODO remove once arrays supported in log scripts
+			"bids", struct{ Peers []string }{bidList})
 	}
 
 	// 4. Iterate through the candidates trying to find one that satisfies the
@@ -264,7 +269,7 @@ func (b *BidCoordinator) requestBids(
 	cfg jtypes.EnsembleConfig,
 	bidRequest jtypes.EnsembleBidRequest, expiry time.Time,
 ) (chan jtypes.Bid, chan struct{}, time.Time, error) {
-	log.Debugf("requesting bids: %+v", bidRequest)
+	log.Debugw("requesting_bids", "labels", []string{string(observability.LabelDeployment)}, "request", bidRequest)
 
 	bidExpiryTime := time.Now().Add(BidRequestTimeout)
 	if expiry.Before(bidExpiryTime) {

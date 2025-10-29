@@ -129,7 +129,7 @@ func (k *Dispatch) AddBehavior(behavior string, continuation Behavior, opt ...Be
 		}
 	}
 
-	log.Infof("registered behaviour: %s", behavior)
+	log.Infow("registered_behaviour", "labels", []string{string(observability.LabelNode)}, "behavior", behavior)
 
 	k.mx.Lock()
 	defer k.mx.Unlock()
@@ -209,6 +209,7 @@ func (k *Dispatch) dispatch() {
 			if msg.IsBroadcast() {
 				if err := k.sctx.RequireBroadcast(msg, b.opt.Topic, b.opt.Capability); err != nil {
 					k.mx.Unlock()
+					// TODO Warnw
 					log.Warnf("broadcast message from %s does not have the required capability %s %s: %s", msg.From, b.opt.Capability, string(msg.Capability), err)
 					continue
 				}
@@ -241,9 +242,11 @@ func (k *Dispatch) dispatch() {
 				k.sctx.Discard(msg)
 			}
 
-			log.Debugw("dispatching_message",
+			log.Debugw("dispatching_message", "labels", string(observability.LabelNode),
 				"msg_from", msg.From,
-				"behavior", msg.Behavior)
+				"behavior", msg.Behavior,
+				"broadcast", msg.IsBroadcast(),
+			)
 			go func() {
 				defer k.options.Limiter.Release(msg)
 				endSpan := observability.StartSpan("Dispatch: "+msg.Behavior, "FromDID", msg.From.DID)

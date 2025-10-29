@@ -158,9 +158,19 @@ func (p *Provisioner) provisionSubnet(manifest jtypes.EnsembleManifest, skipCrea
 	}
 
 	// 1.b create and plug IPs
-	log.Infof("Adding %d peers to subnet %s", len(subReqs), manifest.ID)
+	log.Infow("adding peers to subnet",
+		"labels", []string{string(observability.LabelDeployment)},
+		"peerCount", len(subReqs),
+		"manifestID", manifest.ID,
+	)
 	for i, req := range subReqs {
-		log.Infof("Subnet request %d: Handle=%s, IP=%s, PeerID=%s", i, req.handle, req.ip, req.peerID)
+		log.Infow("subnet request details",
+			"labels", []string{string(observability.LabelDeployment)},
+			"requestIndex", i,
+			"handle", req.handle,
+			"ip", req.ip,
+			"peerID", req.peerID,
+		)
 	}
 	err = p.subnetAddPeer(manifest.ID, subReqs)
 	if err != nil {
@@ -290,7 +300,12 @@ func (p *Provisioner) provisionAllocations(
 					}
 
 					allocStatuses[allocKey] = status
-					log.Infof("allocation successfully %s started on peer %s for allocation %s", statusMsg, &allocManifest.Handle.DID, allocManifest.ID)
+					log.Infow("allocation successfully started on peer",
+						"labels", []string{string(observability.LabelDeployment)},
+						"orchestratorID", manifest.ID,
+						"peerID", nodeManifest.Peer,
+						"status", statusMsg,
+						"handle", allocManifest.Handle)
 				}(manifest.Allocations[allocKey], allocKey)
 			}
 

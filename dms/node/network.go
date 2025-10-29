@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	"gitlab.com/nunet/device-management-service/observability"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -242,7 +243,7 @@ func (n *Node) sayHello(p peer.ID) {
 			n.peers[p] = st
 		}
 		n.lock.Unlock()
-		log.Infof("got hello response from %s", handle.Address.HostID)
+		log.Infow("got hello response from", "labels", string(observability.LabelNode), "hostID", handle.Address.HostID)
 
 	case <-time.After(time.Until(msg.Expiry())):
 		n.lock.Lock()
@@ -255,6 +256,6 @@ func (n *Node) sayHello(p peer.ID) {
 			}
 		}
 		n.lock.Unlock()
-		logConn.Debugf("hello timeout for %s", handle.Address.HostID)
+		logConn.Debugw("hello timeout", "labels", string(observability.LabelNode), "hostID", handle.Address.HostID)
 	}
 }

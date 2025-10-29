@@ -30,7 +30,8 @@ func (o *BasicOrchestrator) handleTaskTermination(msg actor.Envelope) {
 		return
 	}
 
-	log.Infof("notification: task %s terminated with status: %s", req.AllocationID, req.Status)
+	log.Infow("task_terminated", "labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id, "allocationID", req.AllocationID, "status", req.Status)
 
 	// Parse the allocation ID to get the manifest key
 	allocID, err := types.ParseAllocationID(req.AllocationID)
@@ -66,7 +67,8 @@ func (o *BasicOrchestrator) handleTaskTermination(msg actor.Envelope) {
 		return
 	}
 
-	log.Infof("allocation logs for %s written to %s (ensemble: %s)", manifestKey, allocDir, o.id)
+	log.Infow("allocation_logs_saved", "labels", []string{string(observability.LabelDeployment)},
+		"manifest", manifestKey, "path", allocDir, "orchestratorID", o.id)
 }
 
 func (o *BasicOrchestrator) WriteAllocationLogs(

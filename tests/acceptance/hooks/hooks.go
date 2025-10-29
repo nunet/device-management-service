@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
-	dmsnode "gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
 	dutils "gitlab.com/nunet/device-management-service/utils"
@@ -162,7 +162,7 @@ func SaveLogs(ctx context.Context) error {
 		// flight recorder
 		src = "/root/nunet/logs/flightrec.trace"
 		names := []string{"alice", "bob", "charlie"}
-		if os.Getenv(dmsnode.EnvFlightrecSec) != "" {
+		if os.Getenv(observability.EnvFlightrecSec) != "" {
 
 			// create dump and download
 			// TODO dont guess, reduce non-determinism (with unified file/ctx names?)

@@ -281,7 +281,7 @@ func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig)
 	o.Lock.Lock()
 	defer o.Lock.Unlock()
 
-	log.Debugf("onboarding machine with config: %+v", config)
+	log.Debugw("onboarding machine with config", "labels", string(observability.LabelNode), "config", config)
 
 	if err := o.validatePrerequisites(config); err != nil {
 		return types.OnboardingConfig{}, fmt.Errorf("could not validate onboarding prerequisites: %w", err)

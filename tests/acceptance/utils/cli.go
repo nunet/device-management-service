@@ -19,6 +19,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	dmsnode "gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
@@ -49,7 +50,7 @@ func (c *Context) Anchor(kind, arg string) error {
 }
 
 func (c *Context) Run(t godog.TestingT) error {
-	frSec := os.Getenv(dmsnode.EnvFlightrecSec)
+	frSec := os.Getenv(observability.EnvFlightrecSec)
 	if frSec != "" {
 		t.Log("starting DMS with " + frSec + "sec flight recorder")
 	}
@@ -61,7 +62,7 @@ func (c *Context) Run(t godog.TestingT) error {
 			"%s=%s "+
 			// cmd
 			"nunet run -c %s > dms-logs.txt 2>&1",
-		dmsnode.EnvFlightrecSec, frSec, c.Name))
+		observability.EnvFlightrecSec, frSec, c.Name))
 }
 
 func (c *Context) PeerAddr() (*dmsnode.PeerAddrInfoResponse, error) {

@@ -120,8 +120,12 @@ func (c *Committer) updateManifestAllocations(
 				alloc.IsStandby = nodeManifest.RedundancyRole == jtypes.RoleStandby
 				alloc.RedundancyGroup = allocID.ConfigName()
 				manifest.Allocations[allocName] = alloc
-				log.Infof("adding allocation to manifest, allocation: %s, node: %s, handle: %s, isStandby: %v",
-					allocName, alloc.NodeID, alloc.Handle, alloc.IsStandby)
+				log.Infow("adding allocation to manifest", "labels", []string{string(observability.LabelDeployment)},
+					// TODO allocationID?
+					"allocation", allocName,
+					"nodeID", alloc.NodeID,
+					"handle", alloc.Handle,
+					"isStandby", alloc.IsStandby)
 			}
 		}
 	}

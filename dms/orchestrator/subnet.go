@@ -21,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	netutils "gitlab.com/nunet/device-management-service/network/utils"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/utils"
 )
 
@@ -165,7 +166,8 @@ func (o *BasicOrchestrator) removeAllocationsFromSubnet(
 			delete(o.subnetManifest.DNSRecords, allocManifest.DNSName)
 		}
 
-		log.Debugf("Removed allocation %s with IP %s from subnet", allocName, ip)
+		log.Debugw("Removed allocation with IP from subnet", "labels", []string{string(observability.LabelDeployment)},
+			"allocationID", allocName, "ip", ip)
 	}
 
 	return nil
@@ -259,7 +261,9 @@ func (p *Provisioner) createSubnet(
 				return
 			}
 
-			log.Infof("subnet %s successfully created on peer %v", manifestID, h)
+			log.Infow("subnet successfully created on peer",
+				"labels", []string{string(observability.LabelDeployment)},
+				"manifestID", manifestID, "handle", h)
 		}(handle)
 	}
 
@@ -322,7 +326,8 @@ func (p *Provisioner) subnetAddPeer(manifestID string, subReqs []subnetRequest) 
 				return
 			}
 
-			log.Info("peer successfully added to subnet on peer", req.handle)
+			log.Infow("peer successfully added to subnet on peer",
+				"labels", []string{string(observability.LabelDeployment)}, "handle", req.handle)
 		}()
 	}
 
@@ -385,7 +390,7 @@ func (p *Provisioner) addDNSRecords(
 				return
 			}
 
-			log.Info("DNS records successfully added to subnet on peer", req.handle)
+			log.Infow("DNS records successfully added to subnet on peer", "handle", req.handle)
 		}()
 	}
 
@@ -448,7 +453,7 @@ func (p *Provisioner) removeDNSRecords(
 				return
 			}
 
-			log.Info("DNS records successfully removed from subnet on peer", req.handle)
+			log.Infow("DNS records successfully removed from subnet on peer", "handle", req.handle)
 		}()
 	}
 

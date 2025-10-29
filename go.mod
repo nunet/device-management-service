@@ -226,6 +226,7 @@ require github.com/avast/retry-go v3.0.0+incompatible
 require (
 	github.com/alexflint/go-arg v1.6.0
 	github.com/bitfield/script v0.24.1
+	github.com/buildkite/terminal-to-html v3.2.0+incompatible
 	github.com/compose-spec/compose-go/v2 v2.8.1
 	github.com/cucumber/godog v0.15.0
 	github.com/itchyny/gojq v0.12.13
