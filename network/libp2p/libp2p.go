@@ -655,23 +655,25 @@ func (l *Libp2p) Connect(ctx context.Context, peerMultiAddr string) error {
 		return fmt.Errorf("peer multiaddress is empty")
 	}
 
-	log.Infof("Creating multiaddress from peerMultiAddr: %s", peerMultiAddr)
+	log.Infow("Creating multiaddress from peerMultiAddr", "labels", string(observability.LabelNode),
+		"addr", peerMultiAddr)
 	peerAddr, err := multiaddr.NewMultiaddr(peerMultiAddr)
 	if err != nil {
-		log.Infof("Invalid multiaddress: %v", err)
+		log.Errorw("Invalid multiaddress", "labels", string(observability.LabelNode), "error", err)
 		return fmt.Errorf("invalid multiaddress: %w", err)
 	}
 
-	log.Infof("Resolving peer info from multiaddress")
+	log.Infow("Resolving peer info from multiaddress", "labels", string(observability.LabelNode))
 	addrInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
 	if err != nil {
-		log.Infof("Could not resolve peer info: %v", err)
+		log.Infow("Could not resolve peer info", "labels", string(observability.LabelNode), "error", err)
 		return fmt.Errorf("could not resolve peer info: %w", err)
 	}
 
-	log.Infof("Connecting to peer: %s", peerMultiAddr)
+	log.Infow("Connecting to peer", "labels", string(observability.LabelNode), "addr", peerMultiAddr)
 	if err := l.Host.Connect(ctx, *addrInfo); err != nil {
-		log.Infof("Failed to connect to peer %s: %v", peerMultiAddr, err)
+		log.Errorw("Failed to connect to peer", "labels", string(observability.LabelNode),
+			"addr", peerMultiAddr, "error", err)
 		return fmt.Errorf("failed to connect to peer %s: %w", peerMultiAddr, err)
 	}
 

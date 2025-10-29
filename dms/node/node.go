@@ -15,9 +15,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"runtime/trace"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -75,10 +72,6 @@ const (
 	eventHandlerQueueSize = 200
 	eventHandlerBaseDelay = 5 * time.Second
 	eventHandlerMaxDelay  = 15 * time.Second
-
-	// EnvFlightrecSec triggers a flight recorder to start recording a specified number of seconds, which later can be
-	// saved into a trace file.
-	EnvFlightrecSec = "DMS_FLIGHTREC_SEC"
 )
 
 // TODO issue #1154 - better handle transient allocations
@@ -155,9 +148,6 @@ type Node struct {
 
 	// contract event handler
 	contractEventHandler *eventhandler.EventHandler
-
-	// internal tracing
-	flightrec *trace.FlightRecorder
 }
 
 // createActor creates an actor.
@@ -300,18 +290,7 @@ func New(cfg config.Config, fs afero.Afero,
 	}
 
 	// set up the flight recorder
-	if secsNum, _ := strconv.Atoi(os.Getenv(EnvFlightrecSec)); secsNum > 0 {
-		log.Infow("flight recorder enabled", "secs", secsNum)
-		fr := trace.NewFlightRecorder(trace.FlightRecorderConfig{
-			MinAge:   time.Duration(secsNum) * time.Second,
-			MaxBytes: 5 * types.MB,
-		})
-		if err := fr.Start(); err != nil {
-			log.Errorw("flightrec_start", "error", err)
-		} else {
-			n.flightrec = fr
-		}
-	}
+	observability.FlightrecInit()
 
 	// setup contract event handler
 	n.contractEventHandler = eventhandler.New(ctx, eventHandlerWorkers, eventHandlerQueueSize, eventHandlerBaseDelay, eventHandlerMaxDelay, n.handleContractEvents)

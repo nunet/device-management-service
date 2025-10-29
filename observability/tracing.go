@@ -13,7 +13,10 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"path/filepath"
+	"runtime/trace"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,9 +29,16 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 	"gitlab.com/nunet/device-management-service/internal/config"
+	"gitlab.com/nunet/device-management-service/types"
 	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/transport"
 	"go.elastic.co/apm/v2"
+)
+
+const (
+	// EnvFlightrecSec triggers a flight recorder to start recording a specified number of seconds, which later can be
+	// saved into a trace file.
+	EnvFlightrecSec = "DMS_FLIGHTREC_SEC"
 )
 
 var (
@@ -43,6 +53,10 @@ var (
 	activeSpans []*apm.Span
 	// latestSpanID of the last span created, used in case of no active spans.
 	latestSpanID string
+	// internal tracing
+	flightrec            *trace.FlightRecorder
+	flightrecHandleOnce  sync.Once
+	flightrecCaptureOnce sync.Once
 )
 
 // initTracing initializes or reinitializes the Elastic APM tracer.
@@ -370,4 +384,47 @@ func shutdownTracer() {
 		currentTracer.Close()
 		currentTracer = nil
 	}
+}
+
+// FlightrecInit sets up the flight recorder based on env vars.
+func FlightrecInit() {
+	flightrecHandleOnce.Do(func() {
+		secsNum, _ := strconv.Atoi(os.Getenv(EnvFlightrecSec))
+		if secsNum <= 0 {
+			return
+		}
+
+		flightrec = trace.NewFlightRecorder(trace.FlightRecorderConfig{
+			MinAge:   time.Duration(secsNum) * time.Second,
+			MaxBytes: 5 * types.MB,
+		})
+		if err := flightrec.Start(); err != nil {
+			log.Errorw("flightrec_start", "error", err)
+		}
+	})
+}
+
+// FlightrecCapture captures a flight recorder snapshot.
+func FlightrecCapture(path, file string) {
+	// once.Do ensures that the provided function is executed only once.
+	flightrecCaptureOnce.Do(func() {
+		f, err := os.Create(filepath.Join(path, file))
+		if err != nil {
+			log.Errorw("opening_flightrec", "file", f.Name(), "error", err)
+			return
+		}
+		defer f.Close() // ignore error
+
+		// WriteTo writes the flight recorder data to the provided io.Writer.
+		log.Infow("flightrec_capture", "file", f.Name())
+		_, err = flightrec.WriteTo(f)
+		if err != nil {
+			log.Errorw("writing_flightrec", "file", f.Name(), "error", err)
+			return
+		}
+
+		// Stop the flight recorder after the snapshot has been taken.
+		flightrec.Stop()
+		log.Infow("flightrec_captured", "file", f.Name())
+	})
 }

@@ -24,7 +24,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func DeploymentTest(suite *TestSuite) {
+func DeploymentTests(suite *TestSuite) {
 	suite.Run("allocation of type TASK: deploy docker hello-world", func() {
 		deployer := suite.nodes[1]
 		deployment2Result := deployer.client.deploy(

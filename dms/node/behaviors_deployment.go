@@ -129,8 +129,8 @@ func (n *Node) saveDeployment(orchestrator orchestrator.Orchestrator) error {
 		return fmt.Errorf("save deployment: %w", err)
 	}
 
-	log.Debugf("deployment %s of status %s saved", orchestrator.ID(),
-		orchestrator.Status().String())
+	log.Debugw("deployment_saved", "labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", orchestrator.ID(), "stats", orchestrator.Status().String())
 
 	return nil
 }

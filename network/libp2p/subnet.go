@@ -27,6 +27,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/yosida95/uritemplate/v3"
+	"gitlab.com/nunet/device-management-service/observability"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -861,11 +862,13 @@ func (s *subnet) readPackets(ctx context.Context, iface sys.NetInterface) {
 					log.Debugf("tun device closed, abandoning read loop... (err=%s, subnet=%s)", err, s.info.id)
 					return
 				} else if err != nil {
+					// TODO Errorw
 					log.Debugf("(error): failed to read packet from tun device: %s (subnet=%s)", err, s.info.id)
 					continue
 				}
 
 				if plen == 0 {
+					// TODO Warnw
 					log.Debugf("(error): received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
 					continue
 				}
@@ -881,18 +884,20 @@ func (s *subnet) readPackets(ctx context.Context, iface sys.NetInterface) {
 					continue
 				}
 
-				log.Debugf(
-					"read packet from tun device (tun=%s, subnet=%s, destIP=%s, destPort=%s, srcIP=%s, srcPort=%s)",
-					iface.Name(),
-					s.info.id,
-					destIP,
-					destPort,
-					srcIP,
-					srcPort,
+				log.Debugw(
+					"read packet from tun device",
+					"labels", string(observability.LabelNode),
+					"tun", iface.Name(),
+					"subnet", s.info.id,
+					"destIP", destIP,
+					"destPort", destPort,
+					"srcIP", srcIP,
+					"srcPort", srcPort,
 				)
 
 				// Fix DNS filtering logic - only handle DNS queries, route everything else
 				if destPort == 53 {
+					// TODO Debugw
 					log.Debugf(
 						"handling DNS query (tun=%s, subnet=%s, destIP=%s, destPort=%s, srcIP=%s, srcPort=%s)",
 						iface.Name(),

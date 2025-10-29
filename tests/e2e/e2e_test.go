@@ -57,7 +57,7 @@ func TestE2E(t *testing.T) {
 			Name:          "deployment_tests",
 			restPortIndex: ports[2],
 			p2pPortIndex:  ports[3],
-			runner:        DeploymentTest,
+			runner:        DeploymentTests,
 		}
 		suite.Run(t, deploymentTests)
 	})

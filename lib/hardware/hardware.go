@@ -127,7 +127,8 @@ func (m *defaultHardwareManager) GetFreeResources() (types.Resources, error) {
 		return types.Resources{}, fmt.Errorf("get machine resources: %w", err)
 	}
 
-	log.Debugf("system resource usage: %+v\nsystem resource available: %+v", usage, availableResources)
+	log.Debugw("resources_available", "labels", string(observability.LabelNode), "resources", availableResources)
+	log.Debugw("resources_used", "labels", string(observability.LabelNode), "resources", usage)
 
 	if err := availableResources.Subtract(usage); err != nil {
 		return types.Resources{}, fmt.Errorf("no free resources: %w", err)

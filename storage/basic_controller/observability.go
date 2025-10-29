@@ -26,7 +26,7 @@ const (
 	LogVolumeEncryptNotImplemented = "volume_encrypt_not_implemented"
 	LogVolumeDecryptNotImplemented = "volume_decrypt_not_implemented"
 
-	// Trace names
+	// Factory names
 	TraceVolumeControllerInitDuration = "volume_controller_init"
 	TraceVolumeCreateDuration         = "volume_create"
 	TraceVolumeLockDuration           = "volume_lock"

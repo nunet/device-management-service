@@ -256,7 +256,8 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 		return fmt.Errorf("deploying ensemble: %w", err)
 	}
 
-	log.Infof("deployment successful, starting supervisor",
+	log.Infow("deployment successful, starting supervisor",
+		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", o.id)
 	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 	return nil
@@ -271,7 +272,9 @@ func (o *BasicOrchestrator) NewManifest(
 func (o *BasicOrchestrator) newManifest(
 	cfg jtypes.EnsembleConfig,
 ) jtypes.EnsembleManifest {
-	log.Debugf("creating new manifest based on config %+v", cfg.V1)
+	log.Debugw("creating new manifest",
+		"labels", []string{string(observability.LabelDeployment)},
+		"config", cfg.V1)
 	manifest := jtypes.EnsembleManifest{
 		ID:           o.id,
 		Orchestrator: o.actor.Handle(),
@@ -295,7 +298,9 @@ func (o *BasicOrchestrator) newManifest(
 		for _, allocName := range node.Allocations {
 			_, ok := cfg.Allocation(allocName)
 			if !ok {
-				log.Errorf("allocation %s not found in ensemble config, skipping", allocName)
+				log.Errorw("allocation not found in ensemble config, skipping",
+					"labels", []string{string(observability.LabelAllocation)},
+					"allocation", allocName)
 				continue
 			}
 
@@ -439,11 +444,9 @@ deploy:
 
 		o.updateManifest(manifestAfterCommit)
 
-		mnfJSON, err := manifestAfterCommit.JSON()
-		if err != nil {
-			return fmt.Errorf("failed to marshal manifest: %w", err)
-		}
-		log.Debugf("manifest after commit:\n", string(mnfJSON))
+		log.Debugw("manifest after commit",
+			"labels", []string{string(observability.LabelDeployment)},
+			"manifest", manifestAfterCommit)
 
 		// 3. provision the network and start the allocations
 		o.setStatus(jtypes.DeploymentStatusProvisioning)
