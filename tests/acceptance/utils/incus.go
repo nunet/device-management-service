@@ -433,9 +433,9 @@ func ConnectToClients(config *config.Config) ([]incus.InstanceServer, error) {
 	return clients, nil
 }
 
-// CreateNodes creates `howMany` instances on a given Incus server (unix or remote URL).
-func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string) ([]*Node, error) {
-	nodes := make([]*Node, 0, howMany)
+// CreateInstances creates `howMany` instances on a given Incus server (unix or remote URL).
+func CreateInstances(clients []incus.InstanceServer, howMany int, namePrefix string) ([]*Instance, error) {
+	nodes := make([]*Instance, 0, howMany)
 	g := new(errgroup.Group)
 
 	for i := range howMany {
@@ -449,7 +449,7 @@ func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string)
 				return fmt.Errorf("failed to create instance %s: %w", name, err)
 			}
 
-			nodes = append(nodes, &Node{
+			nodes = append(nodes, &Instance{
 				Name:     name,
 				Client:   client,
 				Contexts: make(map[string]*Context),
@@ -472,11 +472,11 @@ func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string)
 }
 
 // GetNode gets an instance already created on a given Incus server (unix or remote URL).
-func GetNode(clients []incus.InstanceServer, name string) (*Node, error) {
+func GetNode(clients []incus.InstanceServer, name string) (*Instance, error) {
 	for _, client := range clients {
 		_, _, err := client.GetInstance(name)
 		if err == nil {
-			node := &Node{
+			node := &Instance{
 				Name:     name,
 				Client:   client,
 				Contexts: make(map[string]*Context),

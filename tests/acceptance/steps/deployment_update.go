@@ -76,15 +76,15 @@ func updatesDeploymentToAddAllocation(ctx context.Context, spName string, count 
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotEmpty(t, sp)
 	assert.NotEmpty(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotEmpty(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
@@ -140,15 +140,15 @@ func deploymentShouldHaveAllocationsRunningOn(ctx context.Context, spName string
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotEmpty(t, sp)
 	assert.NotEmpty(t, spDmsCtx)
 
-	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotEmpty(t, cp)
 	assert.NotEmpty(t, cpDmsCtx)
 
@@ -186,15 +186,15 @@ func updatesDeploymentToRemoveAllocation(ctx context.Context, spName string, cou
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotEmpty(t, sp)
 	assert.NotEmpty(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotEmpty(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
@@ -256,15 +256,15 @@ func updatesDeploymentToRemove(ctx context.Context, spName, cpName string) (cont
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
@@ -301,15 +301,15 @@ func updatesDeploymentToRunOn(ctx context.Context, spName, cpName string) (conte
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
@@ -324,10 +324,10 @@ func updatesDeploymentToRunOn(ctx context.Context, spName, cpName string) (conte
 	require.NoError(t, err)
 	assert.NotEmpty(t, manifest)
 
-	nodes := slices.Sorted(maps.Keys(manifest.Nodes))
-	assert.Len(t, nodes, 1)
+	manifestNodes := slices.Sorted(maps.Keys(manifest.Nodes))
+	assert.Len(t, manifestNodes, 1)
 
-	selected := nodes[0]
+	selected := manifestNodes[0]
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
 	require.NoError(t, err)
@@ -345,15 +345,15 @@ func updatesDeploymentToAdd(ctx context.Context, spName, cpName string) (context
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
@@ -395,14 +395,14 @@ func deploymentShouldBeOn(ctx context.Context, spName, status, cpName string) (c
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
@@ -437,14 +437,14 @@ func deploymentShouldNotBeOn(ctx context.Context, spName, status, cpName string)
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
