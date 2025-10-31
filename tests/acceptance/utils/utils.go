@@ -39,6 +39,61 @@ func MultiaddrFromCLI(info *node.PeerAddrInfoResponse) (string, error) {
 	return addr, nil
 }
 
+func CreateContext(i *Instance, name string) (*Context, error) {
+	name = strings.ToLower(name)
+
+	did, err := i.RunDMSCmd(fmt.Sprintf("nunet key new %s", name))
+	if err != nil {
+		return nil, err
+	}
+	did = strings.TrimSpace(did)
+
+	_, err = i.RunDMSCmd(fmt.Sprintf("nunet cap new %s", name))
+	if err != nil {
+		return nil, err
+	}
+
+	context := &Context{
+		Name:     name,
+		DID:      did,
+		instance: i,
+	}
+
+	i.Contexts[name] = context
+
+	return context, nil
+}
+
+// JoinOrg allows a node to join an existing organization
+func JoinOrg(user, dms *Context, orgDID, grantFromOrg string) error {
+	err := user.Anchor("provide", grantFromOrg)
+	if err != nil {
+		return fmt.Errorf("could not anchor cap: %w", err)
+	}
+
+	grantToken, err := user.Grant(orgDID)
+	if err != nil {
+		return fmt.Errorf("failed to grant: %w", err)
+	}
+
+	err = dms.Anchor("require", grantToken)
+	if err != nil {
+		return err
+	}
+
+	delegateToken, err := user.Delegate(dms.DID)
+	if err != nil {
+		return fmt.Errorf("failed to delegate: %w", err)
+	}
+
+	err = dms.Anchor("provide", delegateToken)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func SetupPrivateNetwork(user, dms, org *Context) error {
 	_, err := user.Grant(org.DID)
 	if err != nil {
@@ -50,7 +105,7 @@ func SetupPrivateNetwork(user, dms, org *Context) error {
 		return err
 	}
 
-	err = user.JoinOrg(dms, org.DID, orgGrant)
+	err = JoinOrg(user, dms, org.DID, orgGrant)
 	if err != nil {
 		return err
 	}
@@ -62,19 +117,30 @@ func FindTestdata(name string) string {
 	return filepath.Join(here, "..", "tests", "acceptance", "testdata", name)
 }
 
-func UploadFile(node *Node, source string) (dest string, err error) {
+func UploadFile(i *Instance, source string) (dest string, err error) {
 	file := filepath.Base(source)
 	dest = filepath.Join("/root", file)
-	err = node.UploadFile(source, dest, 0o755)
+	err = i.UploadFile(source, dest, 0o755)
 	if err != nil {
 		return "", err
 	}
 	return dest, nil
 }
 
-func UploadScripts(node *Node, ensemble string) (err error) {
+// NodeWithDMS retrieves a node from the node map
+func NodeWithDMS(nodeMap map[string]*Node, nodeName string) (*Instance, *Context) {
+	nodeName = strings.ToLower(nodeName)
+	node, ok := nodeMap[nodeName]
+	if !ok {
+		return nil, nil
+	}
+
+	return node.Instance, node.DMS()
+}
+
+func UploadScripts(i *Instance, ensemble string) (err error) {
 	// Upload scripts listed in the ensemble file if needed
-	output, err := node.RunCMD([]string{"yq", "e", ".scripts // [] | .[]", ensemble})
+	output, err := i.RunCMD([]string{"yq", "e", ".scripts // [] | .[]", ensemble})
 	if err != nil {
 		return err
 	}
@@ -86,7 +152,7 @@ func UploadScripts(node *Node, ensemble string) (err error) {
 		scriptPath := fmt.Sprintf("scripts/%s", scriptName)
 		file := FindTestdata(scriptPath)
 
-		script, err := UploadFile(node, file)
+		script, err := UploadFile(i, file)
 		if err != nil {
 			return err
 		}
@@ -95,20 +161,4 @@ func UploadScripts(node *Node, ensemble string) (err error) {
 		}
 	}
 	return nil
-}
-
-// NodeWithDMS retrieves a node and its DMS context from the node map
-func NodeWithDMS(nodeMap map[string]*Node, nodeName string) (*Node, *Context) {
-	nodeName = strings.ToLower(nodeName)
-	node, ok := nodeMap[nodeName]
-	if !ok {
-		return nil, nil
-	}
-
-	dmsCtx, ok := node.Contexts[nodeName+DefaultDMSSuffix]
-	if !ok {
-		return nil, nil
-	}
-
-	return node, dmsCtx
 }

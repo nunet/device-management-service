@@ -52,19 +52,19 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cp)
 	assert.NotNil(t, cpDmsCtx)
 
-	otherCP, otherCPDmsCtx := utils.NodeWithDMS(nodeMap, otherCPName)
+	otherCP, otherCPDmsCtx := utils.NodeWithDMS(nodes, otherCPName)
 	assert.NotNil(t, otherCP)
 	assert.NotNil(t, otherCPDmsCtx)
 
@@ -126,15 +126,15 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cp)
 	assert.NotNil(t, cpDmsCtx)
 
-	otherCP, otherCPDmsCtx := utils.NodeWithDMS(nodeMap, otherCPName)
+	otherCP, otherCPDmsCtx := utils.NodeWithDMS(nodes, otherCPName)
 	assert.NotNil(t, otherCP)
 	assert.NotNil(t, otherCPDmsCtx)
 
@@ -163,7 +163,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 		publicPorts []int
 		executionID string
 		alloc       string
-		node        *utils.Node
+		instance    *utils.Instance
 	}
 	var execs []execution
 	for owner, allocs := range allocMap {
@@ -183,7 +183,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 				ports = append(ports, public)
 			}
 
-			node, ok := nodeMap[owner]
+			node, ok := nodes[owner]
 			if !ok {
 				continue
 			}
@@ -192,7 +192,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 				publicPorts: ports,
 				executionID: alloc.ExecutionID,
 				alloc:       name,
-				node:        node,
+				instance:    node.Instance,
 			}
 			execs = append(execs, exec)
 		}
@@ -219,7 +219,7 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 				"--connect-timeout", "900",
 				"http://" + server.dns + portStr,
 			}
-			out, err := client.node.RunCMD(cmd)
+			out, err := client.instance.RunCMD(cmd)
 			require.NoError(t, err)
 			assert.NotEmpty(t, out)
 
@@ -255,11 +255,11 @@ func restartsTheDeployment(ctx context.Context, spName string) (context.Context,
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 

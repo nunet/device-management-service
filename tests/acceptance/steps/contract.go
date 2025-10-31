@@ -63,17 +63,17 @@ func requestsAContractWithThrough(ctx context.Context, spName, cpName, chName st
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
-	_, chDmsCtx := utils.NodeWithDMS(nodeMap, chName)
+	_, chDmsCtx := utils.NodeWithDMS(nodes, chName)
 	assert.NotNil(t, chDmsCtx)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
@@ -147,10 +147,10 @@ func acceptsTheContract(ctx context.Context, cpName string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	contract, err := tc.Contract()
@@ -192,10 +192,10 @@ func doesNotAcceptTheContract(ctx context.Context, cpName string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	contract, err := tc.Contract()
@@ -226,13 +226,13 @@ func aContractIsCreatedBetweenAnd(ctx context.Context, spName, cpName string) er
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	spDID, err := did.FromString(spDmsCtx.DID)
@@ -266,14 +266,14 @@ func deploysATaskOnWithTheirContract(ctx context.Context, spName, cpName string)
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	contract, err := tc.Contract()
@@ -312,10 +312,10 @@ func contractShouldBeActive(ctx context.Context, spName string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
 	spDID, err := did.FromString(spDmsCtx.DID)
@@ -354,10 +354,10 @@ func marksContractAsCompleted(ctx context.Context, spName string) (context.Conte
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
 	contract, err := tc.Contract()
@@ -373,10 +373,10 @@ func requestsToTerminateTheContract(ctx context.Context, spName string) (context
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
 	contract, err := tc.Contract()
@@ -392,10 +392,10 @@ func shouldSeeContractAs(ctx context.Context, cpName string, status string) erro
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	assert.NoError(t, err)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	cpDID, err := did.FromString(cpDmsCtx.DID)

@@ -53,15 +53,15 @@ func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (co
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cp)
 	assert.NotNil(t, cpDmsCtx)
 
@@ -108,11 +108,11 @@ func deploymentIs(ctx context.Context, spName, status string) (context.Context, 
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
@@ -157,11 +157,11 @@ func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
+	nodes, err := tc.Nodes()
 	require.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 

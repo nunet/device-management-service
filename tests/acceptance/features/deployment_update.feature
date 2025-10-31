@@ -10,7 +10,6 @@ Feature: Deployment Update
       | Bob     | CP   | true      | nunet |
       | Charlie | CP   | true      | nunet |
 
-  @complexity:medium
   Scenario: Add a node to running ensemble
     Given "Alice" has service deployed on "Bob"
     And "Alice" deployment is running
@@ -18,7 +17,6 @@ Feature: Deployment Update
     Then "Alice" deployment should be running on "Charlie"
     And "Alice" deployment should be running on "Bob"
 
-  @complexity:medium
   Scenario: Remove a node from running ensemble
     Given "Alice" has services deployed on "Bob" and "Charlie"
     And "Alice" deployment is running
@@ -26,7 +24,6 @@ Feature: Deployment Update
     Then "Alice" deployment should not be running on "Charlie"
     But "Alice" deployment should be running on "Bob"
 
-  @complexity:medium
   Scenario: Update node in running ensemble
     Given "Alice" has service deployed on "Bob"
     And "Alice" deployment is running
@@ -34,14 +31,12 @@ Feature: Deployment Update
     Then "Alice" deployment should be running on "Charlie"
     But "Alice" deployment should not be running on "Bob"
 
-  @complexity:medium
   Scenario: Add allocation to running ensemble
     Given "Alice" has 1 allocation deployed on "Bob"
     And "Alice" deployment is running
     When "Alice" adds 1 allocation to "Bob"
     Then "Alice" deployment should have 2 allocations running on "Bob"
 
-  @complexity:medium
   Scenario: Remove allocation from running ensemble
     Given "Alice" has 2 allocations deployed on "Bob"
     And "Alice" deployment is running

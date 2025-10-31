@@ -11,10 +11,8 @@ package hooks
 import (
 	"context"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -26,9 +24,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// SetupNodes connects to Incus, spin up number of specified machines and
+// SetupInstances connects to Incus, spin up number of specified machines and
 // uploads DMS binary to all of them.
-func SetupNodes(count int) ([]*utils.Node, error) {
+func SetupInstances(count int) ([]*utils.Instance, error) {
 	config, err := config.Get()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch config: %w", err)
@@ -40,8 +38,8 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 	}
 
 	start := time.Now()
-	fmt.Println("creating nodes...")
-	nodes, err := utils.CreateNodes(clients, count, config.VMsPrefix)
+	fmt.Println("spinning up instances...")
+	nodes, err := utils.CreateInstances(clients, count, config.VMsPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +71,7 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 		return nil, err
 	}
 
-	fmt.Printf("finished setting up nodes, time elapsed: %.1fs\n", time.Since(start).Seconds())
+	fmt.Printf("finished setting up instances, time elapsed: %.1fs\n", time.Since(start).Seconds())
 
 	return nodes, nil
 }
@@ -124,12 +122,8 @@ func SaveLogs(ctx context.Context) error {
 
 	timestamp := time.Now().Unix()
 	nodes, _ := tc.Nodes()
-	if len(nodes) == 0 {
-		nm, _ := tc.NodeMap()
-		nodes = slices.Collect(maps.Values(nm))
-	}
 
-	for i, n := range nodes {
+	for _, n := range nodes {
 		// init destination
 		dest := filepath.Join(dutils.CurrentFileDirectory(), "..", "tests", "acceptance", "testdata", "logs")
 		err := os.MkdirAll(dest, 0o755)
@@ -138,13 +132,13 @@ func SaveLogs(ctx context.Context) error {
 		}
 
 		// terminal output
-		logs, err := n.RunCMD([]string{"cat", "dms-logs.txt"})
+		logs, err := n.Instance.RunCMD([]string{"cat", "dms-logs.txt"})
 		if err != nil {
-			t.Errorf("no stdout for %d", i)
+			t.Errorf("no stdout for %s", n.Name)
 			continue
 		}
 
-		filename := fmt.Sprintf("dms_logs_node_%d-%d.txt", i, timestamp)
+		filename := fmt.Sprintf("%s_%s_logs_%d.txt", n.Name, n.Role, timestamp)
 		path := filepath.Join(dest, filename)
 
 		err = os.WriteFile(path, []byte(logs), 0o644)
@@ -154,37 +148,29 @@ func SaveLogs(ctx context.Context) error {
 
 		// JSONL logs
 		src := "/root/nunet/logs/nunet-dms-logs.jsonl"
-		target := filepath.Join(dest, fmt.Sprintf("dms_logs_node_%d-%d.jsonl", i, timestamp))
-		if err := utils.DownloadFile(n.Client, n.Name, src, target); err != nil {
-			t.Errorf("failed to download jsonl logs for %d: %s", i, err)
+		target := filepath.Join(dest, fmt.Sprintf("%s_%s_logs_%d.txt", n.Name, n.Role, timestamp))
+		if err := utils.DownloadFile(n.Instance.Client, n.Instance.Name, src, target); err != nil {
+			t.Errorf("failed to download jsonl logs for %s: %s", n.Name, err)
 		}
 
 		// flight recorder
 		src = "/root/nunet/logs/flightrec.trace"
-		names := []string{"alice", "bob", "charlie"}
 		if os.Getenv(observability.EnvFlightrecSec) != "" {
 
 			// create dump and download
-			// TODO dont guess, reduce non-determinism (with unified file/ctx names?)
-			var nodeName string
-			for _, name := range names {
-				if _, err = n.RunDMSCmd(fmt.Sprintf("nunet -c %s-dms actor cmd /dms/debug/flightrec", name)); err == nil {
-					t.Logf("created flight recorder dump for %s (%d)", name, i)
-					nodeName = name
-					break
-				}
-			}
-			if nodeName == "" {
-				t.Errorf("failed to create flight recorder dump %d: %s", i, err)
+			if _, err = n.Instance.RunDMSCmd(fmt.Sprintf("nunet -c %s-dms actor cmd /dms/debug/flightrec", n.Name)); err == nil {
+				t.Logf("created flight recorder dump for %s", n.Name)
+				break
 			}
 
-			target = filepath.Join(dest, fmt.Sprintf("flightrec_%d-%d.%s.trace", i, timestamp, nodeName))
+			target = filepath.Join(dest, fmt.Sprintf("flightrec-%d.%s.trace", timestamp, n.Name))
 
 			// download
-			if err := utils.DownloadFile(n.Client, n.Name, src, target); err != nil {
-				t.Errorf("failed to download flight recorder dump %d: %s", i, err)
+			if err := utils.DownloadFile(n.Instance.Client, n.Instance.Name, src, target); err != nil {
+				t.Errorf("failed to download flight recorder dump %s: %s", n.Name, err)
 			}
 		}
+
 	}
 	return nil
 }

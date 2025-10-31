@@ -15,6 +15,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
+// TODO: Deprecate keys in favor of struct fields
 // These are the keys stored into the Context
 // We could use a map directly, but empty struct
 // has a better performance if it grows too large
@@ -31,6 +32,7 @@ type (
 	relayAddressKey      struct{}
 )
 
+// TODO: Define TestCase struct
 // TestCtx is a wrapper of Context
 // It allows for some type safety and it's more elegant
 type TestCtx struct {
@@ -52,29 +54,31 @@ func (t *TestCtx) Unwrap() context.Context {
 	return t.ctx
 }
 
-func (t *TestCtx) Nodes() ([]*Node, error) {
-	nodes, ok := t.ctx.Value(nodesCtxKey{}).([]*Node)
+func (t *TestCtx) Nodes() (map[string]*Node, error) {
+	nodes, ok := t.ctx.Value(nodesCtxKey{}).(map[string]*Node)
 	if !ok {
 		return nil, fmt.Errorf("no nodes available on context")
 	}
 	return nodes, nil
 }
 
-func (t *TestCtx) WithNodes(n []*Node) *TestCtx {
+func (t *TestCtx) WithNodes(n map[string]*Node) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, nodesCtxKey{}, n),
 	}
 }
 
-func (t *TestCtx) NodeMap() (map[string]*Node, error) {
-	nodeMap, ok := t.ctx.Value(nodeMapCtxKey{}).(map[string]*Node)
+// TODO: Deprecate in favor of `Nodes`
+func (t *TestCtx) NodeMap() (map[string]*Instance, error) {
+	nodeMap, ok := t.ctx.Value(nodeMapCtxKey{}).(map[string]*Instance)
 	if !ok {
 		return nil, fmt.Errorf("no node map available on context")
 	}
 	return nodeMap, nil
 }
 
-func (t *TestCtx) WithNodeMap(m map[string]*Node) *TestCtx {
+// TODO: Deprecate in favor of `WithNodes`
+func (t *TestCtx) WithNodeMap(m map[string]*Instance) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, nodeMapCtxKey{}, m),
 	}
