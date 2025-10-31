@@ -23,7 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-const pingTimeout = 1 * time.Second
+const defaultPingTimeout = 20 * time.Second
 
 type PingRequest struct {
 	Host string
@@ -57,7 +57,7 @@ func (n *Node) handlePeerPing(msg actor.Envelope) {
 
 	resp := PingResponse{}
 
-	res, err := n.network.Ping(context.Background(), request.Host, pingTimeout)
+	res, err := n.network.Ping(context.Background(), request.Host, defaultPingTimeout)
 	if err != nil {
 		handleErr(err)
 		return

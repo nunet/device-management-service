@@ -790,6 +790,17 @@ func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Du
 		return types.PingResult{}, err
 	}
 
+	// ensure we are connected to the peer before pinging
+	if l.Host.Network().Connectedness(remotePeer) != network.Connected {
+		err = l.Connect(pingCtx, fmt.Sprintf("/p2p/%s", peerIDAddress))
+		if err != nil {
+			return types.PingResult{
+				Success: false,
+				Error:   err,
+			}, err
+		}
+	}
+
 	pingChan := ping.Ping(pingCtx, l.Host, remotePeer)
 
 	select {
