@@ -176,13 +176,15 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	})
 
 	if err := orch.Deploy(msg.Expiry().Add(-orchestrator.MinEnsembleDeploymentTime)); err != nil {
-		// Orchestrator status is automatically saved to store via status watcher
+		// Manually save the failed status before stopping to ensure it persists
+		if err := n.orchestratorRegistry.SaveOrchestrator(orch); err != nil {
+			log.Warnw("failed to save failed orchestrator", "error", err)
+		}
 		orch.Stop()
 		log.Errorw("ensemble_deployment_error",
 			"labels", []string{string(observability.LabelDeployment)},
 			"ensembleID", orch.ID(),
 			"error", err)
-		n.orchestratorRegistry.DeleteOrchestrator(orch.ID())
 
 		return
 	}
