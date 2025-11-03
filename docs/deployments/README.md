@@ -39,7 +39,7 @@ nodes:
       - alloc1
 ```
 
-For more details about the ensemble configuration format and all possible fields, see the [EnsembleConfig Documentation](../dms/jobs/ensemble_fields_reference.md).
+For more details about the ensemble configuration format and all possible fields, see the [EnsembleConfig Documentation](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/jobs/ensemble.md?ref_type=heads).
 
 ### Deploying Jobs
 
