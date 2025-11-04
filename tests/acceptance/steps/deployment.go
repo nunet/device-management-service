@@ -104,7 +104,7 @@ func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (co
 	return tc.Unwrap(), nil
 }
 
-func deploymentIs(ctx context.Context, spName, status string) (context.Context, error) {
+func deploymentIs(ctx context.Context, spName, status string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
@@ -147,10 +147,10 @@ func deploymentIs(ctx context.Context, spName, status string) (context.Context, 
 			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
 			require.NoError(t, err)
 			return strings.EqualFold(ensembleStatus, wantStatus)
-		}, 60*time.Second, 1*time.Second)
+		}, 60*time.Second, 500*time.Millisecond)
 	}
 
-	return tc.Unwrap(), nil
+	return nil
 }
 
 func ensembleShouldReturn(ctx context.Context, spName, expected string) error {

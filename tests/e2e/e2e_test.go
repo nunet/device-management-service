@@ -155,4 +155,31 @@ func TestE2E(t *testing.T) {
 		}
 		suite.Run(t, preparing)
 	})
+
+	t.Run("DeploymentRestorationFromCommittingTaskAllocation", func(t *testing.T) {
+		t.Parallel()
+		committingTask := &TestSuite{
+			numNodes:      3,
+			Name:          "deployment_restoration_from_committing_task",
+			restPortIndex: ports[16],
+			p2pPortIndex:  ports[17],
+			runner:        DeploymentRestorationFromCommittingTaskAllocation,
+		}
+		suite.Run(t, committingTask)
+	})
+
+	// Disabled because too flaky since 'Provisioning' status is too quick to catch
+	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
+	// test case
+	// t.Run("DeploymentRestorationFromProvisioningTaskAllocation", func(t *testing.T) {
+	// 	t.Parallel()
+	// 	provisioningTask := &TestSuite{
+	// 		numNodes:      3,
+	// 		Name:          "deployment_restoration_from_provisioning_task",
+	// 		restPortIndex: ports[18],
+	// 		p2pPortIndex:  ports[19],
+	// 		runner:        DeploymentRestorationFromProvisioningTaskAllocation,
+	// 	}
+	// 	suite.Run(t, provisioningTask)
+	// })
 }

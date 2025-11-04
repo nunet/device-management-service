@@ -2,9 +2,45 @@
 Feature: Deployment Operations
   View, manage, and interact with active or failed deployments.
 
+  Background:
+    Given the following nodes
+      | nodes   | role | onboarded | org   |
+      | Alice   | SP   | false     | nunet |
+      | Bob     | CP   | true      | nunet |
+
+  Scenario Outline: Maintain history after restart of task
+    Given "Alice" has 1 task <status> on "Bob"
+    And "Alice" restarts DMS
+    When "Alice" list deployments
+    Then "Alice" should see the task restored
+
+  Examples:
+    |     status     |
+    |   "Completed"  |
+    |    "Running"   |
+    |  "Committing"  |
+    | "Provisioning" |
+
+  Scenario Outline: Maintain history after restart of service
+    Given "Alice" has 1 service <status> on "Bob"
+    And "Alice" restarts DMS
+    When "Alice" list deployments
+    Then "Alice" should see the service restored
+
+  Examples:
+    |     status     |
+    |    "Running"   |
+    |  "Committing"  |
+    | "Provisioning" |
+
+  Scenario: Prune deployment
+    Given "Alice" has 1 task completed on "Bob"
+    When "Alice" prunes the deployment
+    Then "Alice" should see deployment list empty
+
   @wip
   @complexity:low
-  Scenario: List all deployments
+  Scenario: List active deployments
 
   @wip
   @complexity:low
@@ -25,4 +61,3 @@ Feature: Deployment Operations
   @wip
   @complexity:low
   Scenario: Shutdown/stop a running deployment
-
