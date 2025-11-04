@@ -30,6 +30,8 @@ type (
 	connectionAttemptKey struct{}
 	natRoutersKey        struct{}
 	relayAddressKey      struct{}
+	tokenMapKey          struct{}
+	orgMapCtxKey         struct{}
 )
 
 // TODO: Define TestCase struct
@@ -193,5 +195,33 @@ func (t *TestCtx) RelayAddress() (string, error) {
 func (t *TestCtx) WithRelayAddress(addr string) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, relayAddressKey{}, addr),
+	}
+}
+
+func (t *TestCtx) TokenMap() (map[string]string, error) {
+	tokenMap, ok := t.ctx.Value(tokenMapKey{}).(map[string]string)
+	if !ok {
+		return nil, fmt.Errorf("no token map available on context")
+	}
+	return tokenMap, nil
+}
+
+func (t *TestCtx) WithTokenMap(m map[string]string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, tokenMapKey{}, m),
+	}
+}
+
+func (t *TestCtx) OrganizationMap() (map[string]*Context, error) {
+	orgMap, ok := t.ctx.Value(orgMapCtxKey{}).(map[string]*Context)
+	if !ok {
+		return nil, fmt.Errorf("no organization map available on context")
+	}
+	return orgMap, nil
+}
+
+func (t *TestCtx) WithOrganizationMap(m map[string]*Context) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, orgMapCtxKey{}, m),
 	}
 }

@@ -165,6 +165,14 @@ func (k *Dispatch) Context() context.Context {
 	return k.ctx
 }
 
+// UpdateSecurityContext updates the security context used by the dispatch.
+// This should be called when the underlying capability context changes.
+func (k *Dispatch) UpdateSecurityContext(newSecurity SecurityContext) {
+	k.mx.Lock()
+	defer k.mx.Unlock()
+	k.sctx = newSecurity
+}
+
 func (k *Dispatch) recv() {
 	for {
 		select {

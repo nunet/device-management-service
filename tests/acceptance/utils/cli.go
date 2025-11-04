@@ -50,6 +50,11 @@ func (c *Context) Anchor(kind, arg string) error {
 	return err
 }
 
+func (c *Context) Revoke(token string) (revokedToken string, err error) {
+	return c.instance.RunDMSCmd(fmt.Sprintf("nunet cap revoke --context %s '%s'",
+		c.Name, token))
+}
+
 func (c *Context) Run(t godog.TestingT) error {
 	frSec := os.Getenv(observability.EnvFlightrecSec)
 	if frSec != "" {
@@ -64,6 +69,11 @@ func (c *Context) Run(t godog.TestingT) error {
 			// cmd
 			"nunet run -c %s > dms-logs.txt 2>&1",
 		observability.EnvFlightrecSec, frSec, c.Name))
+}
+
+func (c *Context) Stop() error {
+	_, err := c.instance.RunCMD([]string{"pkill", "nunet"})
+	return err
 }
 
 func (c *Context) PeerAddr() (*dmsnode.PeerAddrInfoResponse, error) {

@@ -10,6 +10,7 @@ package actor
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -54,6 +55,16 @@ func (c *NoopActor) Context() context.Context  { return c.ctx }
 func (c *NoopActor) Handle() Handle            { return c.handle }
 func (c *NoopActor) Security() SecurityContext { return c.security }
 func (c *NoopActor) Supervisor() Handle        { return c.supervisor }
+
+func (c *NoopActor) UpdateSecurityContext(newSecurity SecurityContext) error {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	if newSecurity == nil {
+		return errors.New("new security context cannot be nil")
+	}
+	c.security = newSecurity
+	return nil
+}
 
 func (c *NoopActor) AddBehavior(name string, behavior Behavior, _ ...BehaviorOption) error {
 	c.mx.Lock()
