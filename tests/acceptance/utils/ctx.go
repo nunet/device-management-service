@@ -27,6 +27,7 @@ type (
 	manifestCtxKey       struct{}
 	allocRespCtxKey      struct{}
 	contractInfoKey      struct{}
+	deploymentsCtxKey    struct{}
 	connectionAttemptKey struct{}
 	natRoutersKey        struct{}
 	relayAddressKey      struct{}
@@ -153,6 +154,20 @@ func (t *TestCtx) Contract() (ContractData, error) {
 func (t *TestCtx) WithContract(c ContractData) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, contractInfoKey{}, c),
+	}
+}
+
+func (t *TestCtx) Deployments() (map[string]string, error) {
+	cfg, ok := t.ctx.Value(deploymentsCtxKey{}).(map[string]string)
+	if !ok {
+		return nil, fmt.Errorf("no allocation response available on context")
+	}
+	return cfg, nil
+}
+
+func (t *TestCtx) WithDeployments(d map[string]string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, deploymentsCtxKey{}, d),
 	}
 }
 

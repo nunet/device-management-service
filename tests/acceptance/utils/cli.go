@@ -71,8 +71,9 @@ func (c *Context) Run(t godog.TestingT) error {
 		observability.EnvFlightrecSec, frSec, c.Name))
 }
 
+// Stop stops a running DMS instance by issuing SIGTERM, which should cause it to exit cleanly.
 func (c *Context) Stop() error {
-	_, err := c.instance.RunCMD([]string{"pkill", "nunet"})
+	_, err := c.instance.RunCMD([]string{"pkill", "-SIGINT", "-f", "nunet"})
 	return err
 }
 
@@ -320,5 +321,53 @@ func (c *Context) TerminateContract(contractDID, hostDID string) error {
 	if resp.Error != "" {
 		return fmt.Errorf("failed to terminate contract: %s", resp.Error)
 	}
+	return nil
+}
+
+func (c *Context) DeploymentList() (map[string]string, error) {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/list", c.Name))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call deployment list behavior: %w", err)
+	}
+	var resp dmsnode.DeploymentListResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	return resp.Deployments, nil
+}
+
+func (c *Context) PruneDeployments() error {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/prune --all", c.Name))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment prune behavior: %w", err)
+	}
+
+	var resp dmsnode.DeploymentPruneResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+
+	if resp.Error != "" {
+		return fmt.Errorf("failed to prune deployments: %s", resp.Error)
+	}
+
+	return nil
+}
+
+func (c *Context) PruneDeploymentsBefore(before time.Time) error {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/prune --before '%s'", c.Name, before.Format(time.RFC3339)))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment prune behavior: %w", err)
+	}
+
+	var resp dmsnode.DeploymentPruneResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+
+	if resp.Error != "" {
+		return fmt.Errorf("failed to prune deployments: %s", resp.Error)
+	}
+
 	return nil
 }
