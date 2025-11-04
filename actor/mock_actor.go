@@ -89,6 +89,18 @@ func (a *MockActor) Security() SecurityContext {
 	return a.security
 }
 
+func (a *MockActor) UpdateSecurityContext(newSecurity SecurityContext) error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	if newSecurity == nil {
+		return errors.New("new security context cannot be nil")
+	}
+
+	a.security = newSecurity
+	return nil
+}
+
 func (a *MockActor) AddBehavior(behavior string, continuation Behavior, opt ...BehaviorOption) error {
 	st := &BehaviorState{
 		cont: continuation,

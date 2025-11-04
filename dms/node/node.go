@@ -31,6 +31,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	"gitlab.com/nunet/device-management-service/internal"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -773,6 +774,72 @@ func (n *Node) Stop() error {
 	log.Infow("node_stopped_successfully",
 		"labels", string(observability.LabelNode))
 	return nil
+}
+
+// ListenForCapabilityContextsUpdates reloads all capability contexts from disk
+func (n *Node) ListenForCapabilityContextsUpdates() error {
+	for {
+		select {
+		case <-internal.ReloadChan:
+			log.Infow("Received SIGUSR1, reloading capability contexts...")
+
+			// Reload the capability context while holding the lock
+			capCtx, err := func() (ucan.CapabilityContext, error) {
+				n.lock.Lock()
+				defer n.lock.Unlock()
+
+				// Reload the DMS capability context
+				// Note: Capability contexts are stored in UserDir, not WorkDir
+				capCtx, err := LoadCapabilityContext(n.rootCap.Trust(), n.fs, n.rootCap.Name(), n.dmsConfig.General.UserDir)
+				if err != nil {
+					return nil, fmt.Errorf("failed to reload DMS capability context: %w", err)
+				}
+
+				n.rootCap = capCtx
+				return capCtx, nil
+			}()
+			if err != nil {
+				log.Errorw("Failed to reload capability context", "error", err)
+				continue
+			}
+
+			// Create a new security context from the updated rootCap (same logic as in New())
+			rootDID := capCtx.DID()
+			rootTrust := capCtx.Trust()
+			anchor, err := rootTrust.GetAnchor(rootDID)
+			if err != nil {
+				log.Errorw("Failed to get root DID anchor", "error", err)
+				continue
+			}
+			pubk := anchor.PublicKey()
+			provider, err := rootTrust.GetProvider(rootDID)
+			if err != nil {
+				log.Errorw("Failed to get root DID provider", "error", err)
+				continue
+			}
+			privk, err := provider.PrivateKey()
+			if err != nil {
+				log.Errorw("Failed to get root private key", "error", err)
+				continue
+			}
+
+			newSecurity, err := actor.NewBasicSecurityContext(pubk, privk, capCtx)
+			if err != nil {
+				log.Errorw("Failed to create new security context", "error", err)
+				continue
+			}
+
+			// Update the actor's security context
+			if err := n.actor.UpdateSecurityContext(newSecurity); err != nil {
+				log.Errorw("Failed to update actor security context", "error", err)
+				continue
+			}
+			log.Infow("Capability contexts reloaded successfully from disk")
+		case <-n.ctx.Done():
+			log.Infow("Node context done, stopping reload loop")
+			return nil
+		}
+	}
 }
 
 func createEnsembleID(peerID string) (string, error) {

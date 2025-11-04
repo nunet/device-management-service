@@ -6,23 +6,29 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package internal
+//go:build acceptance || !unit
+
+package acceptance
 
 import (
-	"os"
-	"os/signal"
-	"syscall"
+	"testing"
+
+	"github.com/cucumber/godog"
+	"gitlab.com/nunet/device-management-service/tests/acceptance/steps"
 )
 
-var (
-	ShutdownChan chan os.Signal
-	ReloadChan   chan os.Signal
-)
+func TestCapabilities(t *testing.T) {
+	o := opts
+	o.TestingT = t
+	o.Paths = []string{"features/capabilities.feature"}
 
-func init() {
-	ShutdownChan = make(chan os.Signal, 1)
-	signal.Notify(ShutdownChan, syscall.SIGINT, syscall.SIGTERM)
+	suite := godog.TestSuite{
+		Name:                "capabilities",
+		Options:             &o,
+		ScenarioInitializer: steps.Capabilities,
+	}
 
-	ReloadChan = make(chan os.Signal, 1)
-	signal.Notify(ReloadChan, syscall.SIGUSR1)
+	if suite.Run() != 0 {
+		t.Fatal("non-zero status returned, failed to run feature tests")
+	}
 }

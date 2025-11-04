@@ -84,6 +84,10 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 		orgMap[orgName] = orgCtx
 	}
 
+	tc = tc.WithOrganizationMap(orgMap)
+
+	tokenMap := make(map[string]string)
+
 	g := new(errgroup.Group)
 
 	// all setup for nodes (sp/cp)
@@ -105,10 +109,11 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 				return fmt.Errorf("org context for %s not found", node.Org)
 			}
 
-			err := utils.SetupPrivateNetwork(node.User(), node.DMS(), orgCtx)
+			token, err := utils.SetupPrivateNetwork(node.User(), node.DMS(), orgCtx)
 			if err != nil {
 				return err
 			}
+			tokenMap[node.Name] = token
 
 			if err := node.DMS().Run(t); err != nil {
 				return err
@@ -130,6 +135,8 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 	err = g.Wait()
 
 	require.NoError(t, err)
+
+	tc = tc.WithTokenMap(tokenMap)
 
 	return tc.Unwrap(), nil
 }

@@ -201,6 +201,23 @@ func (a *BasicActor) Security() SecurityContext {
 	return a.security
 }
 
+func (a *BasicActor) UpdateSecurityContext(newSecurity SecurityContext) error {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+
+	if newSecurity == nil {
+		return errors.New("new security context cannot be nil")
+	}
+
+	// Update the actor's security context
+	a.security = newSecurity
+
+	// Update the dispatch's security context as well
+	a.dispatch.UpdateSecurityContext(newSecurity)
+
+	return nil
+}
+
 func (a *BasicActor) AddBehavior(behavior string, continuation Behavior, opt ...BehaviorOption) error {
 	return a.dispatch.AddBehavior(behavior, continuation, opt...)
 }

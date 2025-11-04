@@ -327,6 +327,14 @@ func (d *DMS) Run() error {
 		}
 	}()
 
+	// Listen for SIGUSR1 to reload capability contexts
+	go func() {
+		err := d.Node.ListenForCapabilityContextsUpdates()
+		if err != nil {
+			log.Errorf("failed to listen for capability contexts updates: %v", err)
+		}
+	}()
+
 	err = d.Node.StartContracts()
 	if err != nil {
 		log.Errorf("failed to start contracts from db: %v", err)
