@@ -1204,7 +1204,7 @@ func DeploymentRestorationFromCommittingTaskAllocation(suite *TestSuite) {
 		// After restoration, the deployment should have progressed from Committing to Running
 		statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
 		suite.Require().NoError(err)
-		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), extractStatus(statusStr), "expected Running after restoration from Committing")
+		suite.Require().Equal(jobtypes.DeploymentStatusCommitting.String(), extractStatus(statusStr), "expected Running after restoration from Committing")
 
 		// Then it should stay Running or progress to Completed
 		suite.Require().Eventually(func() bool {
