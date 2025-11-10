@@ -81,10 +81,10 @@ func TestManifest(t *testing.T) {
 			Orchestrator: getMockActorHandle(t),
 			Allocations:  map[string]AllocationManifest{"alloc1": alloc},
 			Nodes: map[string]NodeManifest{"node1": {
-				ID:        "node1",
-				Peer:      "peer1",
-				Handle:    getMockActorHandle(t),
-				PubAddrss: []string{"pub1"},
+				ID:         "node1",
+				Peer:       "peer1",
+				Handle:     getMockActorHandle(t),
+				PubAddress: []string{"pub1"},
 				Location: Location{
 					Continent: "test-continent",
 					Country:   "test-country",
@@ -137,7 +137,7 @@ func TestManifest(t *testing.T) {
 			require.Equal(t, node.ID, cloneNode.ID)
 			require.Equal(t, node.Peer, cloneNode.Peer)
 			require.Equal(t, node.Handle, cloneNode.Handle)
-			require.Equal(t, node.PubAddrss, cloneNode.PubAddrss)
+			require.Equal(t, node.PubAddress, cloneNode.PubAddress)
 			require.Equal(t, node.Location, cloneNode.Location)
 			require.Equal(t, node.Allocations, cloneNode.Allocations)
 		}

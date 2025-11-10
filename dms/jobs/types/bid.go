@@ -62,6 +62,7 @@ type BidV1 struct {
 	EnsembleID string       // unique identifier for the ensemble
 	NodeID     string       // unique identifier for a node; matches the id of the BidRequest to which this bid pertains
 	Peer       string       // the peer ID of the node
+	PubAddress string       // observed public address of the node
 	Location   Location     // the location of the node
 	Handle     actor.Handle // the handle of the actor submitting the bid
 	Contracts  map[string]types.ContractConfig
@@ -189,4 +190,8 @@ func (b *Bid) Handle() actor.Handle {
 
 func (b *Bid) Location() Location {
 	return b.V1.Location
+}
+
+func (b *Bid) PubAddress() string {
+	return b.V1.PubAddress
 }

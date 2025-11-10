@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -124,6 +125,7 @@ type Node struct {
 	hostID       string
 	geoIP        types.GeoIPLocator
 	hostLocation geolocation.Geolocation
+	publicIP     net.IP
 	peers        map[peer.ID]*peerState
 	bids         map[string]*bidState
 	answeredBids map[string][]uint64
@@ -683,6 +685,10 @@ func (n *Node) geolocate() {
 		log.Errorw("host public IP is nil")
 		return
 	}
+
+	n.lock.Lock()
+	n.publicIP = ip
+	n.lock.Unlock()
 
 	location, err := geolocation.Geolocate(ip, n.geoIP)
 	if err != nil {

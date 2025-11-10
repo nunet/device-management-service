@@ -320,6 +320,7 @@ loop:
 			EnsembleID: request.ID,
 			NodeID:     toAnswer.V1.NodeID,
 			Peer:       n.hostID,
+			PubAddress: n.publicIP.String(),
 			Location:   n.location(),
 			Handle:     n.actor.Handle(),
 		},

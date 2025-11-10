@@ -238,6 +238,7 @@ func (c *Committer) commit(
 		// update manifest node
 		if nmf, ok := manifest.Nodes[n]; ok {
 			nmf.Peer = bid.Peer()
+			nmf.PubAddress = append(nmf.PubAddress, bid.PubAddress())
 			nmf.Handle = bid.Handle()
 			nmf.Location = bid.Location()
 			nmf.RedundancyRole = role
@@ -251,6 +252,7 @@ func (c *Committer) commit(
 			nmf := jtypes.NodeManifest{
 				ID:             n,
 				Peer:           bid.Peer(),
+				PubAddress:     []string{bid.PubAddress()},
 				Handle:         bid.Handle(),
 				Location:       bid.Location(),
 				RedundancyRole: role,
