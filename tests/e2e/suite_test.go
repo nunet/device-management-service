@@ -474,7 +474,7 @@ func (s *TestSuite) setupTestNetwork() {
 	s.T().Logf("%s: setting up %d nodes", s.Name, s.numNodes)
 	for i := 0; i < s.numNodes; i++ {
 		nodeName := fmt.Sprintf("dms%d", i)
-		password := fmt.Sprintf("password%d", i)
+		password := "pass1234"
 		// lock the node in this dir
 		nodeRoot := filepath.Join(s.rootDir, nodeName)
 		cfg := createConfig(

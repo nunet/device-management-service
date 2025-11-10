@@ -173,111 +173,6 @@ func CreateInstance(c incus.InstanceServer, instanceType, name string) error {
 	return startOp.Wait()
 }
 
-func findVMNetworkMainInterface(c incus.InstanceServer, name string) (string, error) {
-	// Find main network interface (exclude 'lo')
-	ifaceCmd := []string{"sh", "-c", "ip route | grep default | awk '{print $5}'"}
-	ifaceOut, err := RunCommandInInstance(c, name, ifaceCmd)
-	if err != nil {
-		return "", fmt.Errorf("failed to detect network interface: %v", err)
-	}
-	iface := strings.TrimSpace(ifaceOut)
-	return iface, nil
-}
-
-// ConfigureVMNetworkingForQUIC applies network optimizations for QUIC connections in VMs
-// This addresses the root causes of QUIC connection failures in VM environments:
-// - Increases UDP timeouts for QUIC's connectionless nature
-// - Optimizes network buffers for QUIC's multiplexed streams
-// - Disables network interface optimizations that interfere with QUIC
-// - Configures firewall rules for QUIC traffic
-func ConfigureVMNetworkingForQUIC(c incus.InstanceServer, name string) error {
-	iface, err := findVMNetworkMainInterface(c, name)
-	if err != nil {
-		return err
-	}
-
-	// Network optimizations for QUIC in VM environments
-	networkConfig := []string{
-		// Enable IP forwarding for better packet routing
-		"echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf",
-		"echo 'net.ipv4.conf.all.accept_redirects = 0' >> /etc/sysctl.conf",
-
-		// Optimize network buffer sizes for QUIC
-		"echo 'net.core.rmem_max = 134217728' >> /etc/sysctl.conf",
-		"echo 'net.core.wmem_max = 134217728' >> /etc/sysctl.conf",
-		"echo 'net.core.rmem_default = 262144' >> /etc/sysctl.conf",
-		"echo 'net.core.wmem_default = 262144' >> /etc/sysctl.conf",
-
-		// Optimize for QUIC's UDP-based transport
-		"echo 'net.ipv4.udp_mem = 102400 873800 16777216' >> /etc/sysctl.conf",
-		"echo 'net.ipv4.udp_rmem_min = 8192' >> /etc/sysctl.conf",
-		"echo 'net.ipv4.udp_wmem_min = 8192' >> /etc/sysctl.conf",
-
-		// Apply sysctl settings immediately
-		"sysctl -p",
-
-		// Configure iptables rules for QUIC traffic (port 9000 and common QUIC ports)
-		"iptables -A INPUT -p udp --dport 9000 -j ACCEPT",
-		"iptables -A INPUT -p udp --dport 4800 -j ACCEPT", // Common QUIC port from logs
-		"iptables -A INPUT -p udp --dport 3091 -j ACCEPT", // Another QUIC port from logs
-		"iptables -A FORWARD -p udp --dport 9000 -j ACCEPT",
-		"iptables -A FORWARD -p udp --dport 4800 -j ACCEPT",
-		"iptables -A FORWARD -p udp --dport 3091 -j ACCEPT",
-
-		// Disable network interface optimizations that can interfere with QUIC
-		fmt.Sprintf("ethtool -K %s gro off || true", iface), // Disable generic receive offload
-		fmt.Sprintf("ethtool -K %s tso off || true", iface), // Disable TCP segmentation offload
-		fmt.Sprintf("ethtool -K %s gso off || true", iface), // Disable generic segmentation offload
-		fmt.Sprintf("ethtool -K %s ufo off || true", iface), // Disable UDP fragmentation offload
-
-		// Set network interface to use optimal settings for QUIC
-		fmt.Sprintf("ethtool -G %s rx 1024 tx 1024 || true", iface), // Increase ring buffer sizes
-	}
-
-	for _, cmd := range networkConfig {
-		// Add a small delay between commands to avoid overwhelming the VM agent
-		time.Sleep(100 * time.Millisecond)
-
-		_, err := RunCommandInInstance(c, name, []string{"sh", "-c", cmd})
-		if err != nil {
-			// Log warning but don't fail - some commands might not work in all VM environments
-			fmt.Printf("Warning: failed to apply network config '%s' to VM %s: %v\n", cmd, name, err)
-			return err
-		}
-	}
-
-	return nil
-}
-
-// VerifyVMNetworkingForQUIC verifies that the QUIC networking optimizations were applied correctly
-func VerifyVMNetworkingForQUIC(c incus.InstanceServer, name string) error {
-	iface, err := findVMNetworkMainInterface(c, name)
-	if err != nil {
-		return err
-	}
-
-	verificationCommands := []string{
-		"sysctl net.ipv4.ip_forward",
-		"sysctl net.netfilter.nf_conntrack_udp_timeout",
-		"sysctl net.core.rmem_max",
-		"iptables -L INPUT | grep 9000",
-		fmt.Sprintf("ethtool -k %s | grep -E '(gro|tso|gso|ufo)'", iface),
-	}
-
-	for _, cmd := range verificationCommands {
-		// Add a small delay between verification commands
-		time.Sleep(50 * time.Millisecond)
-
-		_, err := RunCommandInInstance(c, name, []string{"sh", "-c", cmd})
-		if err != nil {
-			fmt.Printf("Warning: failed to verify config '%s' in VM %s: %v\n", cmd, name, err)
-			return err
-		}
-	}
-
-	return nil
-}
-
 func RunCommandInInstance(c incus.InstanceServer, name string, command []string) (string, error) {
 	execReq := api.InstanceExecPost{
 		Command:     command,
@@ -489,7 +384,7 @@ func GetNode(clients []incus.InstanceServer, name string) (*Instance, error) {
 
 // CreateIsolatedNATNetwork creates a completely isolated network with NAT enabled
 // This simulates a separate NAT router that nodes behind it must traverse
-func CreateIsolatedNATNetwork(c incus.InstanceServer, networkName string) error {
+func CreateIsolatedNATNetwork(c incus.InstanceServer, networkName, subnet string) error {
 	// Check if network already exists and delete if so
 	_, _, err := c.GetNetwork(networkName)
 	if err == nil {
@@ -506,8 +401,8 @@ func CreateIsolatedNATNetwork(c incus.InstanceServer, networkName string) error 
 		Name: networkName,
 		NetworkPut: api.NetworkPut{
 			Config: map[string]string{
-				"ipv4.address": "auto",    // Auto-assign a unique subnet
-				"ipv4.nat":     "false",   // Disable Incus NAT - we control it via namespace
+				"ipv4.address": subnet,    // Auto-assign a unique subnet
+				"ipv4.nat":     "true",    // Enable NAT
 				"ipv4.dhcp":    "true",    // Enable DHCP
 				"ipv6.address": "none",    // Disable IPv6 for simplicity
 				"dns.mode":     "dynamic", // DNS for name resolution
@@ -527,7 +422,7 @@ func CreateIsolatedNATNetwork(c incus.InstanceServer, networkName string) error 
 		return fmt.Errorf("failed to verify network %s: %w", networkName, err)
 	}
 
-	subnet := network.Config["ipv4.address"]
+	subnet = network.Config["ipv4.address"]
 	fmt.Printf("[NETWORK] Network %s created with subnet: %s\n", networkName, subnet)
 
 	return nil
@@ -535,7 +430,13 @@ func CreateIsolatedNATNetwork(c incus.InstanceServer, networkName string) error 
 
 // CreateInstanceWithNetwork creates an instance attached to a specific network
 // This ensures the instance communicates through that network's NAT
-func CreateInstanceWithNetwork(c incus.InstanceServer, instanceType, name, networkName string) error {
+func CreateInstanceWithNetwork(c incus.InstanceServer, instanceType, name, networkName, subnet string) error {
+	// create networks
+	err := CreateIsolatedNATNetwork(c, networkName, subnet)
+	if err != nil {
+		return fmt.Errorf("failed to create network %s: %w", networkName, err)
+	}
+
 	var req api.InstancesPost
 
 	switch instanceType {
@@ -584,7 +485,6 @@ func CreateInstanceWithNetwork(c incus.InstanceServer, instanceType, name, netwo
 					"eth0": {
 						"type":    "nic",
 						"network": networkName,
-						"name":    "eth0",
 					},
 				},
 				Ephemeral: true,
@@ -621,23 +521,108 @@ func CreateInstanceWithNetwork(c incus.InstanceServer, instanceType, name, netwo
 	return startOp.Wait()
 }
 
+func BlockInterInstanceTraffic(c incus.InstanceServer, aclName string, instanceIPs map[string]string, networks []string) error {
+	// rules
+	ingressRules := []api.NetworkACLRule{}
+
+	for instance1Name, instance1IP := range instanceIPs {
+		for instance2Name, instance2IP := range instanceIPs {
+			if instance1Name != instance2Name {
+				ingressRules = append(ingressRules,
+					api.NetworkACLRule{
+						Action:      "reject",
+						Source:      instance1IP,
+						Destination: instance2IP,
+						Description: fmt.Sprintf("Block %s to %s", instance1Name, instance2Name),
+						State:       "enabled",
+					},
+				)
+			}
+		}
+	}
+
+	ingressRules = append(ingressRules,
+		api.NetworkACLRule{
+			Action:      "allow",
+			Description: "Allow all other ingress traffic",
+			State:       "enabled",
+		},
+	)
+
+	egressRules := []api.NetworkACLRule{
+		{
+			Action:      "allow",
+			Description: "Allow all egress traffic",
+			State:       "enabled",
+		},
+	}
+
+	aclPost := api.NetworkACLsPost{
+		NetworkACLPost: api.NetworkACLPost{
+			Name: aclName,
+		},
+		NetworkACLPut: api.NetworkACLPut{
+			Description: "ACL to block communication between two specific instances",
+			Ingress:     ingressRules,
+			Egress:      egressRules,
+		},
+	}
+
+	// delete existing ACL if any
+	_, _, err := c.GetNetworkACL(aclName)
+	if err == nil {
+		fmt.Printf("Network ACL %s already exists, deleting...\n", aclName)
+		err = c.DeleteNetworkACL(aclName)
+		if err != nil {
+			return fmt.Errorf("failed to delete existing network ACL %s: %w", aclName, err)
+		}
+	}
+
+	// create ACL and apply to network
+	err = c.CreateNetworkACL(aclPost)
+	if err != nil {
+		return fmt.Errorf("failed to create network ACL: %w", err)
+	}
+
+	for _, networkName := range networks {
+		network, etag, err := c.GetNetwork(networkName)
+		if err != nil {
+			return fmt.Errorf("failed to get network %s: %w", networkName, err)
+		}
+
+		if network.Config == nil {
+			network.Config = make(map[string]string)
+		}
+
+		netACLs := network.Config["security.acls"]
+		if netACLs != "" {
+			netACLs += ","
+		}
+		netACLs += aclName
+		network.Config["security.acls"] = netACLs
+
+		err = c.UpdateNetwork(networkName, network.NetworkPut, etag)
+		if err != nil {
+			return fmt.Errorf("failed to update network %s with ACL: %w", networkName, err)
+		}
+	}
+
+	return nil
+}
+
+func DeleteACL(c incus.InstanceServer, aclName string) error {
+	_, _, err := c.GetNetworkACL(aclName)
+	if err == nil {
+		err = c.DeleteNetworkACL(aclName)
+		if err != nil {
+			return fmt.Errorf("failed to delete existing network ACL %s: %w", aclName, err)
+		}
+	}
+	return nil
+}
+
 // GetInstanceType returns the instance type from environment
 // Exported version for use in other packages
 func GetInstanceType() string {
 	return getInstanceType()
-}
-
-// GetNetworkSubnet returns the IPv4 subnet CIDR for a given network
-func GetNetworkSubnet(c incus.InstanceServer, networkName string) (string, error) {
-	network, _, err := c.GetNetwork(networkName)
-	if err != nil {
-		return "", fmt.Errorf("failed to get network %s: %w", networkName, err)
-	}
-
-	subnet := network.Config["ipv4.address"]
-	if subnet == "" {
-		return "", fmt.Errorf("network %s has no ipv4.address configured", networkName)
-	}
-
-	return subnet, nil
 }

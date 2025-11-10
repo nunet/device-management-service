@@ -1352,27 +1352,19 @@ func (l *Libp2p) RawQUICConnectLocal(target peer.ID, serverName string) (*quic.C
 }
 
 func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAddress bool) (*quic.Conn, *netip.AddrPort, error) {
-	connected := make(chan struct{}, 1)
-	go func() {
-		sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerConnectednessChanged))
-		if err != nil {
-			log.Fatal("failed to subscribe to peer connectedness changed event: ", err)
-		}
-		defer sub.Close()
-		for ev := range sub.Out() {
-			e := ev.(event.EvtPeerConnectednessChanged)
-			if e.Peer == target {
-				msg := fmt.Sprintf("peer connectedness changed: %s\n", e.Connectedness)
-				for _, c := range l.Host.Network().ConnsToPeer(target) {
-					msg += fmt.Sprintf("\t%s <-> %s\n", c.LocalMultiaddr(), c.RemoteMultiaddr())
+	waitForConnection := func(timeout time.Duration, targetPeer peer.ID) error {
+		select {
+		case <-time.After(timeout):
+			return fmt.Errorf("timed out waiting for connection to peer %s", targetPeer)
+		default:
+			for {
+				if l.Host.Network().Connectedness(target) == network.Connected {
+					return nil
 				}
-				log.Debug(msg)
-				if e.Connectedness == network.Connected {
-					connected <- struct{}{}
-				}
+				time.Sleep(50 * time.Millisecond)
 			}
 		}
-	}()
+	}
 
 	// 1st step: check if we have cached QUIC addresses in peerstore
 	// This should be checked BEFORE trying DHT lookup
@@ -1445,10 +1437,9 @@ func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAdd
 	// As soon as the relayed peer accepts the connection via the relay,
 	// it tries to establish a direction connection back to us using the DCUtR protocol.
 	// We wait for this connection to be established.
-	select {
-	case <-connected:
-	case <-time.After(2 * time.Minute):
-		return nil, nil, fmt.Errorf("timed out waiting for direct (e.g. hole-punched) connection")
+	err = waitForConnection(2*time.Minute, target)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to establish direct connection to peer %s: %w", target, err)
 	}
 
 	// Now that we have a direct connection to the target, we can dial another
@@ -1481,9 +1472,6 @@ connectLoop:
 				directAddr, err = quicAddrToNetAddr(a)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
-				}
-				if directAddr.Port == 10000 {
-					break
 				}
 				break connectLoop
 			}

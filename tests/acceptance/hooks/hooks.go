@@ -61,9 +61,6 @@ func SetupInstances(count int) ([]*utils.Instance, error) {
 			if _, err := node.RunCMD([]string{"chmod", "+x", "/usr/local/bin/nunet"}); err != nil {
 				return fmt.Errorf("failed to make dms executable at node %s: %w", node.Name, err)
 			}
-			if err := node.ConfigureVMNetworkingForQUIC(); err != nil {
-				return fmt.Errorf("failed to configure VM networking for QUIC on %s: %w", node.Name, err)
-			}
 			return nil
 		})
 	}

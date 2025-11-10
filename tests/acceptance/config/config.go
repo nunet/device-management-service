@@ -28,6 +28,7 @@ type Config struct {
 	IncusHosts      []IncusHost `yaml:"incus_hosts"`
 	VMsPrefix       string      `yaml:"vms_prefix"`
 	GlusterfsVMName string      `yaml:"glusterfs_vm_name"`
+	ACLPrefix       string      `yaml:"acl_name"`
 }
 
 // Parse parses a yaml file and returns host config
@@ -83,6 +84,7 @@ func Get() (*Config, error) {
 					Host: "local",
 				},
 			},
+			ACLPrefix: "acc-test-acl",
 		}
 	} else {
 		c, err := Parse(confFile)
@@ -99,6 +101,7 @@ func Get() (*Config, error) {
 			return nil, err
 		}
 		config.VMsPrefix = "acc-test-" + randString
+		config.ACLPrefix = "acc-test-acl"
 
 		if err := saveConfig(confFile, config); err != nil {
 			return nil, err

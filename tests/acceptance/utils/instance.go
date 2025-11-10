@@ -27,6 +27,11 @@ type Instance struct {
 	Contexts map[string]*Context
 }
 
+type NetInfo struct {
+	NetworkName string
+	IPAddress   string
+}
+
 // RunCMD runs a command inside the instance.
 func (i *Instance) RunCMD(cmd []string) (string, error) {
 	return RunCommandInInstance(i.Client, i.Name, cmd)
@@ -115,6 +120,27 @@ func (i *Instance) CPUCores() (int, error) {
 	return cores, nil
 }
 
+func (i *Instance) GetNetInfo() (NetInfo, error) {
+	instState, _, err := i.Client.GetInstanceState(i.Name)
+	if err != nil {
+		return NetInfo{}, fmt.Errorf("failed to get instance state for %s: %w", i.Name, err)
+	}
+
+	netI := NetInfo{}
+
+	for netName, netInfo := range instState.Network {
+		for _, addr := range netInfo.Addresses {
+			if addr.Family == "inet" && addr.Scope == "global" && (strings.HasPrefix(netName, "eth") || strings.HasPrefix(netName, "enp")) {
+				netI.NetworkName = netName
+				netI.IPAddress = addr.Address
+				return netI, nil
+			}
+		}
+	}
+
+	return netI, nil
+}
+
 // OnboardingResources returns an amount of the instance's resources (RAM, CPU cores, and disk)
 // which is the necessary amount for onboarding.
 func (i *Instance) OnboardingResources() (ramGB float64, cpuCores float64, diskGB float64, err error) {
@@ -164,22 +190,6 @@ func (i *Instance) PruneResolved() error {
 	_, err = i.RunCMD([]string{"bash", "-c", dest})
 	if err != nil {
 		return err
-	}
-	return nil
-}
-
-// ConfigureVMNetworkingForQUIC configures and verifies network optimizations for QUIC connections in VMs
-func (i *Instance) ConfigureVMNetworkingForQUIC() error {
-	if err := ConfigureVMNetworkingForQUIC(i.Client, i.Name); err != nil {
-		// Log warning but don't fail VM creation - networking config is optional
-		fmt.Printf("Warning: failed to configure VM networking for QUIC in %s: %v\n", i.Name, err)
-	} else {
-		fmt.Printf("Successfully configured VM networking for QUIC: %s\n", i.Name)
-
-		// Verify the configuration was applied correctly
-		if err := VerifyVMNetworkingForQUIC(i.Client, i.Name); err != nil {
-			fmt.Printf("Warning: failed to verify VM networking configuration in %s: %v\n", i.Name, err)
-		}
 	}
 	return nil
 }
