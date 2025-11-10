@@ -29,8 +29,6 @@ type (
 	contractInfoKey      struct{}
 	deploymentsCtxKey    struct{}
 	connectionAttemptKey struct{}
-	natRoutersKey        struct{}
-	relayAddressKey      struct{}
 	tokenMapKey          struct{}
 	orgMapCtxKey         struct{}
 )
@@ -182,34 +180,6 @@ func (t *TestCtx) ConnectionAttempt() (map[string]interface{}, error) {
 func (t *TestCtx) WithConnectionAttempt(attempt map[string]interface{}) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, connectionAttemptKey{}, attempt),
-	}
-}
-
-func (t *TestCtx) NATRouters() ([]*NATRouterContainer, error) {
-	routers, ok := t.ctx.Value(natRoutersKey{}).([]*NATRouterContainer)
-	if !ok {
-		return nil, fmt.Errorf("no NAT routers available on context")
-	}
-	return routers, nil
-}
-
-func (t *TestCtx) WithNATRouters(routers []*NATRouterContainer) *TestCtx {
-	return &TestCtx{
-		ctx: context.WithValue(t.ctx, natRoutersKey{}, routers),
-	}
-}
-
-func (t *TestCtx) RelayAddress() (string, error) {
-	addr, ok := t.ctx.Value(relayAddressKey{}).(string)
-	if !ok {
-		return "", fmt.Errorf("no relay address available on context")
-	}
-	return addr, nil
-}
-
-func (t *TestCtx) WithRelayAddress(addr string) *TestCtx {
-	return &TestCtx{
-		ctx: context.WithValue(t.ctx, relayAddressKey{}, addr),
 	}
 }
 

@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
-	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/quic-go/quic-go"
 
 	"github.com/libp2p/go-libp2p"
@@ -28,10 +26,12 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
+	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
+	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
@@ -196,11 +196,10 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		libp2p.EnableRelay(),
 		libp2p.EnableRelayService(
 			relay.WithLimit(&relay.RelayLimit{
-				Duration: 5 * time.Minute,
-				Data:     1 << 21, // 2 MiB
+				Duration: 10 * time.Minute,
+				Data:     1 << 22, // 4 MiB
 			}),
 		),
-		// TODO debug: disable relay
 		libp2p.EnableAutoRelayWithPeerSource(
 			func(ctx context.Context, num int) <-chan peer.AddrInfo {
 				r := make(chan peer.AddrInfo)
@@ -221,13 +220,14 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 				}()
 				return r
 			},
-			autorelay.WithBootDelay(time.Minute),
+			autorelay.WithBootDelay(30*time.Second),
 			autorelay.WithBackoff(30*time.Second),
 			autorelay.WithMinCandidates(3),
 			autorelay.WithMaxCandidates(6),
 			autorelay.WithNumRelays(2),
 		),
 		libp2p.EnableHolePunching(holepunch.WithAddrFilter(&quicAddrFilter{})),
+		// libp2p.EnableHolePunching(),
 		libp2p.QUICReuse(newReuse),
 	)
 

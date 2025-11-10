@@ -475,6 +475,9 @@ func (l *Libp2p) startIPProxy() error {
 
 		addr := netip.MustParseAddr(srcIP)
 		route := netip.MustParsePrefix(subnet.info.cidr.String())
+
+		// XXX bad hack - recreating template with correct host so it never fails (dial ip could change if behind nat)
+		template = uritemplate.MustNew(fmt.Sprintf("http://%s/vpn", r.Host))
 		req, err := connectip.ParseRequest(r, template)
 		if err != nil {
 			log.Errorf("failed to parse request: %v", err)
