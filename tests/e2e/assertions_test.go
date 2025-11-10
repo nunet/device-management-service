@@ -118,7 +118,7 @@ func (s *TestSuite) assertManifestAfterDeployment(
 		expectedManifest.Nodes[nodeName] = jobtypes.NodeManifest{
 			ID:          nodeName,
 			Peer:        matchedProvider.peerID,
-			PubAddrss:   []string{}, // We don't validate this
+			PubAddress:  []string{}, // We don't validate this
 			Allocations: allocKeys,
 			Handle: actor.Handle{
 				ID:  providerHandleID,

@@ -69,7 +69,7 @@ type NodeManifest struct {
 	ID             string         `json:"id"`                        // node unique id
 	Peer           string         `json:"peer,omitempty"`            // peer where the node is running
 	Handle         actor.Handle   `json:"handle"`                    // handle of the control actor for the node
-	PubAddrss      []string       `json:"pub_addrss"`                // public IP4/6 address of the node peer
+	PubAddress     []string       `json:"pub_address"`               // public IP4/6 address of the node peer
 	Location       Location       `json:"location"`                  // location of the peer
 	Allocations    []string       `json:"allocations"`               // allocations in the node
 	RedundancyRole RedundancyRole `json:"redundancy_role,omitempty"` // "primary" or "standby"

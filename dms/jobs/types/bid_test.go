@@ -222,6 +222,35 @@ func TestBid(t *testing.T) {
 		}, location)
 	})
 
+	t.Run("must be able to get pub address", func(t *testing.T) {
+		t.Parallel()
+
+		_, pubK, err := crypto.GenerateKeyPair(crypto.Ed25519)
+		require.NoError(t, err)
+
+		peerID, err := peer.IDFromPublicKey(pubK)
+		require.NoError(t, err)
+
+		addr := "192.168.0.1"
+
+		testBid := Bid{
+			V1: &BidV1{
+				EnsembleID: "testEnsembleID",
+				NodeID:     "testNodeID",
+				Peer:       peerID.String(),
+				PubAddress: addr,
+				Location: Location{
+					Continent: "testContinent",
+					Country:   "testCountry",
+					City:      "testCity",
+				},
+				Handle: actor.Handle{},
+			},
+		}
+		pubAddress := testBid.PubAddress()
+		require.Equal(t, addr, pubAddress)
+	})
+
 	t.Run("must be able to validate ensemble bid request", func(t *testing.T) {
 		t.Parallel()
 
