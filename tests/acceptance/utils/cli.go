@@ -371,3 +371,42 @@ func (c *Context) PruneDeploymentsBefore(before time.Time) error {
 
 	return nil
 }
+
+func (c *Context) Hello(receiver *dmsnode.PeerAddrInfoResponse) ([]string, error) {
+	// if receiver is nil, broadcast hello
+	var responses []dmsnode.HelloResponse
+
+	if receiver == nil {
+		out, err := c.instance.RunDMSCmd(
+			fmt.Sprintf("nunet actor cmd -c %s /broadcast/hello --timeout 5s", c.Name))
+		if err != nil {
+			return nil, fmt.Errorf("failed to call /broadcast/hello behavior: %w", err)
+		}
+		if err = json.Unmarshal([]byte(out), &responses); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+		}
+	} else {
+		var resp dmsnode.HelloResponse
+		out, err := c.instance.RunDMSCmd(
+			fmt.Sprintf("nunet actor cmd -c %s /public/hello --dest %s --timeout 5s", c.Name, receiver.ID))
+		if err != nil {
+			// note: direct invocation will error when greeter has no caps
+			// but currently not possible to tell if no caps or other error
+			return nil, fmt.Errorf("failed to call /public/hello behavior: %s", out)
+		}
+		if err = json.Unmarshal([]byte(out), &resp); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+		}
+		responses = append(responses, resp)
+	}
+	if len(responses) == 0 {
+		return nil, fmt.Errorf("no hello responses received")
+	}
+
+	dids := make([]string, 0, len(responses))
+	for _, r := range responses {
+		dids = append(dids, r.DID.String())
+	}
+
+	return dids, nil
+}
