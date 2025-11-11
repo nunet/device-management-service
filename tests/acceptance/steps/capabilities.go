@@ -10,6 +10,8 @@ package steps
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,18 +40,59 @@ func Capabilities(ctx *godog.ScenarioContext) {
 	})
 
 	ctx.Step(`^the following nodes$`, theFollowingNodes)
-	ctx.Step(`^"([^"]*)" has deployed "([^"]*)" on "([^"]*)"$`, hasDeployedOn)
+	ctx.Step(`^"([^"]*)" says hello to "([^"]*)"$`, saysHelloto)
 	ctx.Step(`^"([^"]*)" deployment is (\w+)$`, deploymentIs)
-	ctx.Step(`^"([^"]*)" ensemble should return "([^"]*)"$`, ensembleShouldReturn)
-	ctx.Step(`^"([^"]*)" deployment should not succeed on "([^"]*)"$`, deploymentShouldNotSucceedOn)
-	ctx.Step(`^"([^"]*)" revokes a token from "([^"]*)" via "([^"]*)"$`, revokesATokenFromVia)
+	ctx.Step(`^"([^"]*)" should respond with his <DID>$`, respondsToHelloWithDID)
+	ctx.Step(`^"([^"]*)" should not respond with his <DID>$`, noResponseToHelloWithDID)
+	ctx.Step(`^"([^"]*)" revokes permission from "([^"]*)" via "([^"]*)"$`, revokesATokenFromVia)
+}
+
+func saysHelloto(ctx context.Context, greeterName, receiverName string) (context.Context, error) {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
+
+	greeter, greeterDmsCtx := utils.NodeWithDMS(nodes, greeterName)
+	assert.NotNil(t, greeter)
+	assert.NotNil(t, greeterDmsCtx)
+
+	receiver, receiverDmsCtx := utils.NodeWithDMS(nodes, receiverName)
+	assert.NotNil(t, receiver)
+	assert.NotNil(t, receiverDmsCtx)
+
+	greeterInfo, err := greeterDmsCtx.PeerAddr()
+	require.NoError(t, err)
+	assert.NotNil(t, greeterInfo)
+
+	receiverInfo, err := receiverDmsCtx.PeerAddr()
+	require.NoError(t, err)
+	assert.NotNil(t, receiverInfo)
+
+	receiverAddr, err := utils.MultiaddrFromCLI(receiverInfo)
+	require.NoError(t, err)
+	assert.NotEmpty(t, receiverAddr)
+
+	err = greeterDmsCtx.Connect(receiverAddr)
+	require.NoError(t, err)
+
+	// calling hello with nil receiver so that it's a broadcast.
+	// direct invocation can be ambigious between error due to caps or other issues
+	// broadcast works reliably since peers are already connected
+	response, err := greeterDmsCtx.Hello(nil)
+	require.NoError(t, err)
+
+	tc = tc.WithHelloResponse(response)
+	return tc.Unwrap(), nil
 }
 
 // When "Bob" revokes a token from "Alice" via "nunet"
-// cpName: Bob
-// spName: Alice
+// receiverName: Bob
+// greeterName: Alice
 // orgName: nunet
-func revokesATokenFromVia(ctx context.Context, cpName, spName, orgName string) (context.Context, error) {
+func revokesATokenFromVia(ctx context.Context, receiverName, greeterName, orgName string) (context.Context, error) {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
@@ -68,23 +111,23 @@ func revokesATokenFromVia(ctx context.Context, cpName, spName, orgName string) (
 	orgCtx := utils.GetOrganization(orgMap, orgName)
 	assert.NotEmpty(t, orgCtx)
 
-	_, cpCtx := utils.GetNodeAndContext(nodes, cpName)
-	assert.NotEmpty(t, cpCtx)
+	_, receiverCtx := utils.GetNodeAndContext(nodes, receiverName)
+	assert.NotEmpty(t, receiverCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
-	assert.NotEmpty(t, cpDmsCtx)
+	_, receiverDmsCtx := utils.NodeWithDMS(nodes, receiverName)
+	assert.NotEmpty(t, receiverDmsCtx)
 
-	token, found := tokenMap[strings.ToLower(spName)]
+	token, found := tokenMap[strings.ToLower(greeterName)]
 	assert.True(t, found)
 
-	err = utils.RevokeFromPrivateNetwork(token, cpCtx, cpDmsCtx, orgCtx)
+	err = utils.RevokeFromPrivateNetwork(token, receiverCtx, receiverDmsCtx, orgCtx)
 	require.NoError(t, err)
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 	return tc.Unwrap(), nil
 }
 
-func deploymentShouldNotSucceedOn(ctx context.Context, spName, cpName string) (context.Context, error) {
+func respondsToHelloWithDID(ctx context.Context, expectedResponder string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
@@ -92,46 +135,40 @@ func deploymentShouldNotSucceedOn(ctx context.Context, spName, cpName string) (c
 	require.NoError(t, err)
 	assert.NotEmpty(t, nodes)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
-	assert.NotNil(t, spDmsCtx)
+	responder, responderDmsCtx := utils.NodeWithDMS(nodes, expectedResponder)
+	assert.NotNil(t, responder)
+	assert.NotNil(t, responderDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
-	assert.NotNil(t, cpDmsCtx)
+	responseDIDs, err := tc.HelloResponse()
+	assert.NoError(t, err)
+	assert.NotNil(t, responseDIDs, "no response DIDs")
 
-	ensembleID, err := tc.EnsembleID()
-	require.NoError(t, err)
-	assert.NotEmpty(t, ensembleID)
-
-	timeout := time.After(120 * time.Second)
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	deployed := false
-	hasError := false
-	done := false
-	for !done {
-		select {
-		case <-timeout:
-			done = true
-		case <-ticker.C:
-			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
-			switch {
-			case err != nil:
-				hasError = true
-				done = true
-			case strings.EqualFold(ensembleStatus, "failed"):
-				deployed = false
-				done = true
-			case strings.EqualFold(ensembleStatus, "running"):
-				deployed = true
-				done = true
-			case strings.EqualFold(ensembleStatus, "completed"):
-				deployed = true
-				done = true
-			}
-		}
+	if slices.Contains(responseDIDs, responderDmsCtx.DID) {
+		return nil
 	}
-	require.True(t, hasError || !deployed)
 
-	return tc.Unwrap(), nil
+	return fmt.Errorf("expected DID not found in hello response")
+}
+
+func noResponseToHelloWithDID(ctx context.Context, expectedResponder string) error {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
+
+	responder, responderDmsCtx := utils.NodeWithDMS(nodes, expectedResponder)
+	assert.NotNil(t, responder)
+	assert.NotNil(t, responderDmsCtx)
+
+	responseDIDs, err := tc.HelloResponse()
+	assert.NoError(t, err)
+	assert.NotNil(t, responseDIDs, "no response DIDs")
+
+	if !slices.Contains(responseDIDs, responderDmsCtx.DID) {
+		return nil
+	}
+
+	return fmt.Errorf("DID found in hello response")
 }

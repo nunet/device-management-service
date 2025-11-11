@@ -5,17 +5,11 @@ Feature: Capabilities Management
     Given the following nodes
       | nodes | role | onboarded | org   |
       | Alice | SP   | false     | nunet |
-      | Bob   | CP   | true      | nunet |
+      | Bob   | SP   | false      | nunet |
 
   Scenario Outline: Revoke a previously granted capability
-    Given "Alice" has deployed <ensemble> on "Bob"
-    When "Alice" deployment is completed
-    Then "Alice" ensemble should return <output>
-    When "Bob" revokes a token from "Alice" via "nunet"
-    And "Alice" has deployed <ensemble> on "Bob"
-    Then "Alice" deployment should not succeed on "Bob"
-
-  Examples:
-    | ensemble            | output               |
-    | "docker_hello.yaml" | "Hello from Docker!" |
-
+    Given "Alice" says hello to "Bob"
+    Then "Bob" should respond with his <DID>
+    When "Bob" revokes permission from "Alice" via "nunet"
+    And "Alice" says hello to "Bob"
+    Then "Bob" should not respond with his <DID>

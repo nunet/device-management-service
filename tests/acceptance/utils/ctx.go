@@ -31,6 +31,7 @@ type (
 	connectionAttemptKey struct{}
 	tokenMapKey          struct{}
 	orgMapCtxKey         struct{}
+	didsCtxKey           struct{}
 )
 
 // TODO: Define TestCase struct
@@ -209,4 +210,18 @@ func (t *TestCtx) WithOrganizationMap(m map[string]*Context) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, orgMapCtxKey{}, m),
 	}
+}
+
+func (t *TestCtx) WithHelloResponse(dids []string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, didsCtxKey{}, dids),
+	}
+}
+
+func (t *TestCtx) HelloResponse() ([]string, error) {
+	dids, ok := t.ctx.Value(didsCtxKey{}).([]string)
+	if !ok {
+		return nil, fmt.Errorf("no hello response dids available on context")
+	}
+	return dids, nil
 }
