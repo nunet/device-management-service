@@ -18,8 +18,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/docker/docker/api/types"
+	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -30,6 +31,7 @@ import (
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/types"
 	"go.uber.org/multierr"
 )
 
@@ -44,7 +46,7 @@ type ClientInterface interface {
 		name string,
 		pullImage bool,
 	) (string, error)
-	InspectContainer(ctx context.Context, id string) (types.ContainerJSON, error)
+	InspectContainer(ctx context.Context, id string) (dockertypes.ContainerJSON, error)
 	FollowLogs(ctx context.Context, id string) (stdout, stderr io.Reader, err error)
 	StartContainer(ctx context.Context, containerID string) error
 	WaitContainer(
@@ -71,6 +73,7 @@ type ClientInterface interface {
 	) (io.ReadCloser, error)
 	Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error)
 	CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error
+	ContainerStats(ctx context.Context, containerID string) (types.ExecutorStats, error)
 }
 
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
@@ -164,7 +167,7 @@ func (c *Client) CreateContainer(
 }
 
 // InspectContainer returns detailed information about a Docker container.
-func (c *Client) InspectContainer(ctx context.Context, id string) (types.ContainerJSON, error) {
+func (c *Client) InspectContainer(ctx context.Context, id string) (dockertypes.ContainerJSON, error) {
 	log.Infow("docker_inspect_container_started", "containerID", id)
 	return c.client.ContainerInspect(ctx, id)
 }
@@ -284,12 +287,12 @@ func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) err
 
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(containers))
-	for _, container := range containers {
+	for _, cont := range containers {
 		wg.Add(1)
-		go func(container types.Container, wg *sync.WaitGroup, errCh chan error) {
+		go func(cont dockertypes.Container, wg *sync.WaitGroup, errCh chan error) {
 			defer wg.Done()
-			errCh <- c.RemoveContainer(ctx, container.ID)
-		}(container, &wg, errCh)
+			errCh <- c.RemoveContainer(ctx, cont.ID)
+		}(cont, &wg, errCh)
 	}
 	go func() {
 		wg.Wait()
@@ -587,4 +590,101 @@ func (c *Client) CopyToContainer(ctx context.Context, containerID, dstPath strin
 		"containerID", containerID,
 		"dstPath", dstPath)
 	return nil
+}
+
+// ContainerStats retrieves real-time resource usage stats for a container.
+func (c *Client) ContainerStats(ctx context.Context, containerID string) (types.ExecutorStats, error) {
+	log.Infow("docker_container_stats_started",
+		"containerID", containerID)
+
+	statsResponse, err := c.client.ContainerStats(ctx, containerID, false)
+	if err != nil {
+		log.Errorw("docker_container_stats_failure",
+			"containerID", containerID,
+			"error", err)
+		return types.ExecutorStats{}, errors.Wrap(err, "failed to get container stats")
+	}
+	defer statsResponse.Body.Close()
+
+	// Decode the stats JSON from the response body
+	var dockerStats container.StatsResponse
+	if err := json.NewDecoder(statsResponse.Body).Decode(&dockerStats); err != nil {
+		log.Errorw("docker_container_stats_failure",
+			"containerID", containerID,
+			"error", err)
+		return types.ExecutorStats{}, errors.Wrap(err, "failed to decode container stats")
+	}
+
+	// Calculate CPU usage percentage
+	var cpuPercent float64
+	if dockerStats.CPUStats.SystemUsage > 0 && dockerStats.PreCPUStats.SystemUsage > 0 {
+		cpuDelta := float64(dockerStats.CPUStats.CPUUsage.TotalUsage - dockerStats.PreCPUStats.CPUUsage.TotalUsage)
+		systemDelta := float64(dockerStats.CPUStats.SystemUsage - dockerStats.PreCPUStats.SystemUsage)
+		if systemDelta > 0 {
+			cpuPercent = (cpuDelta / systemDelta) * float64(len(dockerStats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+		}
+	}
+
+	// Calculate memory usage percentage
+	var memoryPercent float64
+	if dockerStats.MemoryStats.Limit > 0 {
+		memoryPercent = (float64(dockerStats.MemoryStats.Usage) / float64(dockerStats.MemoryStats.Limit)) * 100.0
+	}
+
+	// Aggregate network statistics from all interfaces
+	var rxBytes, rxPackets, rxErrors, rxDropped uint64
+	var txBytes, txPackets, txErrors, txDropped uint64
+	for _, network := range dockerStats.Networks {
+		rxBytes += network.RxBytes
+		rxPackets += network.RxPackets
+		rxErrors += network.RxErrors
+		rxDropped += network.RxDropped
+		txBytes += network.TxBytes
+		txPackets += network.TxPackets
+		txErrors += network.TxErrors
+		txDropped += network.TxDropped
+	}
+
+	// Aggregate block I/O statistics
+	var readBytes, writeBytes uint64
+	for _, blkio := range dockerStats.BlkioStats.IoServiceBytesRecursive {
+		switch blkio.Op {
+		case "Read":
+			readBytes += blkio.Value
+		case "Write":
+			writeBytes += blkio.Value
+		}
+	}
+
+	result := types.ExecutorStats{}
+	result.CPUUsage.TotalUsage = dockerStats.CPUStats.CPUUsage.TotalUsage
+	result.CPUUsage.UsageInKernelmode = dockerStats.CPUStats.CPUUsage.UsageInKernelmode
+	result.CPUUsage.UsageInUsermode = dockerStats.CPUStats.CPUUsage.UsageInUsermode
+	result.CPUUsage.Percent = cpuPercent
+
+	result.Memory.Usage = dockerStats.MemoryStats.Usage
+	result.Memory.MaxUsage = dockerStats.MemoryStats.MaxUsage
+	result.Memory.Limit = dockerStats.MemoryStats.Limit
+	result.Memory.Percent = memoryPercent
+
+	result.Network.RxBytes = rxBytes
+	result.Network.RxPackets = rxPackets
+	result.Network.RxErrors = rxErrors
+	result.Network.RxDropped = rxDropped
+	result.Network.TxBytes = txBytes
+	result.Network.TxPackets = txPackets
+	result.Network.TxErrors = txErrors
+	result.Network.TxDropped = txDropped
+
+	result.BlockIO.ReadBytes = readBytes
+	result.BlockIO.WriteBytes = writeBytes
+
+	result.Timestamp = time.Now().UnixMilli()
+
+	log.Infow("docker_container_stats_success",
+		"containerID", containerID,
+		"cpuPercent", cpuPercent,
+		"memoryPercent", memoryPercent)
+
+	return result, nil
 }

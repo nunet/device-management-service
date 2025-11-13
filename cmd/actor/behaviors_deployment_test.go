@@ -154,7 +154,18 @@ func TestDeploymentStatusBehavior(t *testing.T) {
 			name: "valid id",
 			args: []string{"--id", "test_id"},
 			expectedReq: node.DeploymentStatusRequest{
-				ID: "test_id",
+				ID:           "test_id",
+				IncludeUsage: false,
+			},
+			opts:    client.NewMessageOptions(),
+			wantErr: false,
+		},
+		{
+			name: "include usage flag",
+			args: []string{"--id", "test_id", "--include-usage"},
+			expectedReq: node.DeploymentStatusRequest{
+				ID:           "test_id",
+				IncludeUsage: true,
 			},
 			opts:    client.NewMessageOptions(),
 			wantErr: false,

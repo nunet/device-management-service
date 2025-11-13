@@ -92,7 +92,7 @@ func extractEnsembleID(input string) string {
 }
 
 func extractStatus(input string) string {
-	re := regexp.MustCompile(`"Status":\s*"(.*?)"`)
+	re := regexp.MustCompile(`"status":\s*"(.*?)"`)
 
 	matches := re.FindStringSubmatch(input)
 

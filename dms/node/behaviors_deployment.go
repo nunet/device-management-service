@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
@@ -32,8 +33,9 @@ import (
 
 // MinDeploymentTime minimum time for deployment
 const (
-	MinDeploymentTime       = time.Minute - time.Second
-	MinUpdateDeploymentTime = 2 * (time.Minute - time.Second) // TODO: tune this
+	MinDeploymentTime             = time.Minute - time.Second
+	MinUpdateDeploymentTime       = 2 * (time.Minute - time.Second) // TODO: tune this
+	allocationStatsRequestTimeout = 20 * time.Second
 )
 
 var (
@@ -305,12 +307,14 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 }
 
 type DeploymentStatusRequest struct {
-	ID string
+	ID           string `json:"id"`
+	IncludeUsage bool   `json:"include_usage,omitempty"`
 }
 
 type DeploymentStatusResponse struct {
-	Status string
-	Error  string
+	Status          string                          `json:"status"`
+	Error           string                          `json:"error"`
+	AllocationUsage map[string]*types.ExecutorStats `json:"allocation_usage,omitempty"`
 }
 
 func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
@@ -339,6 +343,46 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 	}
 
 	resp.Status = deployment.Status.String()
+
+	if request.IncludeUsage {
+		orch, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
+			return
+		}
+
+		manifest := orch.Manifest()
+		usage := make(map[string]*types.ExecutorStats, len(manifest.Allocations))
+
+		for allocID, allocManifest := range manifest.Allocations {
+			reply, err := n.invokeBehaviour(
+				allocManifest.Handle,
+				behaviors.AllocationStatsBehavior,
+				behaviors.AllocationStatsRequest{},
+				allocationStatsRequestTimeout,
+			)
+			if err != nil {
+				handleErr(fmt.Errorf("failed to invoke allocation stats for %s: %w", allocID, err))
+				return
+			}
+
+			var statsResp behaviors.AllocationStatsResponse
+			if err := json.Unmarshal(reply.Message, &statsResp); err != nil {
+				handleErr(fmt.Errorf("failed to decode allocation stats response for %s: %w", allocID, err))
+				return
+			}
+
+			if !statsResp.OK {
+				handleErr(fmt.Errorf("allocation %s stats error: %s", allocID, statsResp.Error))
+				return
+			}
+
+			usage[allocID] = statsResp.Stats
+		}
+
+		resp.AllocationUsage = usage
+	}
+
 	n.sendReply(msg, resp)
 }
 

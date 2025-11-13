@@ -432,6 +432,40 @@ func (e *Executor) Exec(ctx context.Context, executionID string, command []strin
 	return e.client.Exec(ctx, h.containerID, command)
 }
 
+// Stats returns the resource usage stats for a container. errors if the execution is not found or stats cannot be retrieved.
+func (e *Executor) Stats(ctx context.Context, executionID string) (*types.ExecutorStats, error) {
+	endSpan := observability.StartSpan(ctx, "docker_executor_stats")
+	defer endSpan()
+
+	log.Infow("docker_executor_stats_begin",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executionID", executionID)
+
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		log.Errorw("docker_executor_stats_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"executionID", executionID,
+			"error", "execution not found")
+		return nil, fmt.Errorf("execution (%s) not found", executionID)
+	}
+
+	stats, err := e.client.ContainerStats(ctx, handler.containerID)
+	if err != nil {
+		log.Errorw("docker_executor_stats_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"executionID", executionID,
+			"error", err)
+		return nil, fmt.Errorf("failed to get container stats: %w", err)
+	}
+
+	log.Infow("docker_executor_stats_success",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executionID", executionID)
+
+	return &stats, nil
+}
+
 // copyKeysToContainer copies the keys from the request to the
 // container, respecting each key's destination path when necessary
 func (e *Executor) copyKeysToContainer(ctx context.Context,

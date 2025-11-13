@@ -71,8 +71,9 @@ const (
 	OrchestratorNamespace = "/dms/orchestrator"
 	NodeNamespace         = "/dms/node"
 
-	AllocationStartBehavior     = "/dms/allocation/start"
-	AllocationRestartBehavior   = "/dms/allocation/restart"
+	AllocationStartBehavior     = AllocationNamespace + "/start"
+	AllocationRestartBehavior   = AllocationNamespace + "/restart"
+	AllocationStatsBehavior     = AllocationNamespace + "/stats"
 	RegisterHealthcheckBehavior = "/dms/actor/healthcheck/register"
 
 	SubnetAddPeerBehavior          = AllocationNamespace + "/subnet/add-peer"
