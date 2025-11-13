@@ -206,6 +206,27 @@ e2e-%:
 	make setcap_e2e
 	go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=15m -run "TestE2E/$*" $(ARGS)
 
+nix-e2e:
+	@echo "Running e2e tests using nix flake build"
+	@set -e; \
+	if ! command -v nix >/dev/null 2>&1; then \
+		echo "Error: nix is not installed or not in PATH"; exit 1; \
+	fi; \
+	OUT_PATH="$$(nix build .#nunet --no-link --print-out-paths | tail -n1)"; \
+	BIN_PATH="$$OUT_PATH/bin/device-management-service"; \
+	echo "Using nix-built binary: $$BIN_PATH"; \
+	cp -f "$$BIN_PATH" tests/e2e/dms; \
+	$(MAKE) setcap_e2e; \
+	if ! docker image inspect nunet-glusterfs-client >/dev/null 2>&1; then \
+		echo "Docker image nunet-glusterfs-client not found. Building..."; \
+		$(MAKE) build-nunet-glusterfs-client; \
+	fi; \
+	
+	CGO_LDFLAGS="-Wl,-z,lazy" go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=35m $(ARGS)
+
+nix-e2e-%:
+	@$(MAKE) nix-e2e ARGS='-run "TestE2E/$*"' E2E_TIMEOUT=15m
+
 run-acceptance:
 	@echo "Running acceptance tests"
 	INSTANCE_TYPE=$(INSTANCE_TYPE) go test -failfast -test.v ./tests/acceptance/ -tags=acceptance -timeout=60m -godog.tags="~@wip"
