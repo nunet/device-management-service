@@ -255,6 +255,10 @@ func (m *mockExecutor) SetShouldFail(shouldFail bool) {
 	m.shouldFail = shouldFail
 }
 
+func (m *mockExecutor) Stats(_ context.Context, _ string) (*types.ExecutorStats, error) {
+	return nil, nil
+}
+
 // TestServiceAllocationSendsLivenessHeartbeats tests that service allocations
 // send periodic liveness heartbeats to the orchestrator
 func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {

@@ -1054,6 +1054,7 @@ Examples:
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.DeploymentStatusRequest)
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			cmd.Flags().BoolVarP(&p.IncludeUsage, "include-usage", "u", false, "include allocation resource usage statistics")
 			_ = cmd.MarkFlagRequired("id")
 		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
@@ -1069,7 +1070,8 @@ Examples:
 This behavior retrieves the status of a specific deployment.
 
 Examples:
-  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>`,
+  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>
+  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id> --include-usage`,
 	},
 
 	// /dms/node/deployment/logs

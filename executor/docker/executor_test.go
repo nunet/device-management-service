@@ -443,6 +443,41 @@ func (s *ExecutorTestSuite) TestExec() {
 	s.Empty(stderr)
 }
 
+// TestStats tests the Stats method of the Docker executor.
+func (s *ExecutorTestSuite) TestStats() {
+	ctx := context.Background()
+	request := s.newExecutionRequest(persistentCmd)
+
+	err := s.executor.Start(ctx, request)
+	s.NoError(err)
+
+	err = s.executor.WaitForStatus(ctx, request.ExecutionID, types.ExecutionStatusRunning, nil)
+	s.NoError(err)
+
+	// Get stats for the running container
+	stats, err := s.executor.Stats(ctx, request.ExecutionID)
+	s.NoError(err)
+	s.NotNil(stats)
+
+	// Verify stats structure is populated
+	s.Greater(stats.Timestamp, int64(0), "Timestamp should be set")
+	s.GreaterOrEqual(stats.CPUUsage.TotalUsage, uint64(0), "CPU total usage should be non-negative")
+	s.GreaterOrEqual(stats.CPUUsage.Percent, 0.0, "CPU percent should be non-negative")
+	s.GreaterOrEqual(stats.Memory.Usage, uint64(0), "Memory usage should be non-negative")
+	s.GreaterOrEqual(stats.Memory.Limit, uint64(0), "Memory limit should be non-negative")
+	s.GreaterOrEqual(stats.Memory.Percent, 0.0, "Memory percent should be non-negative")
+
+	// Test for non-existent execution
+	stats, err = s.executor.Stats(ctx, "non-existent-execution")
+	s.Error(err)
+	s.Nil(stats)
+	s.Contains(err.Error(), "execution (non-existent-execution) not found")
+
+	// Clean up
+	err = s.executor.Cancel(ctx, request.ExecutionID)
+	s.NoError(err)
+}
+
 // Test RunJobWithInitScripts tests the Run method of the Docker executor with ProvisionScripts.
 //
 // CI/CD: if the runner is within a container/VM, `/tmp/nunet/` need to be mounted to it since

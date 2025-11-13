@@ -88,6 +88,50 @@ func (a *Allocation) handleAllocationRestart(msg actor.Envelope) {
 	a.sendReply(msg, resp)
 }
 
+func (a *Allocation) handleAllocationStats(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var resp behaviors.AllocationStatsResponse
+	if len(msg.Message) > 0 {
+		var req behaviors.AllocationStatsRequest
+		if err := json.Unmarshal(msg.Message, &req); err != nil {
+			resp.Error = err.Error()
+			a.sendReply(msg, resp)
+			return
+		}
+	}
+
+	if a.executor == nil {
+		err := fmt.Errorf("allocation executor not initialized")
+		log.Errorw("allocation_stats_executor_nil",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID,
+			"error", err,
+		)
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	stats, err := a.executor.Stats(context.TODO(), a.executionID) // TODO: fix context.TODO()
+	if err != nil {
+		err = fmt.Errorf("failed to retrieve allocation stats: %w", err)
+		log.Errorw("allocation_stats_failure",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID,
+			"executionID", a.executionID,
+			"error", err,
+		)
+		resp.Error = err.Error()
+		a.sendReply(msg, resp)
+		return
+	}
+
+	resp.OK = true
+	resp.Stats = stats
+	a.sendReply(msg, resp)
+}
+
 func (a *Allocation) handleRegisterHealthcheck(msg actor.Envelope) {
 	defer msg.Discard()
 

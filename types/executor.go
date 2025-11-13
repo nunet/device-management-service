@@ -78,6 +78,9 @@ type Executor interface {
 
 	// Exec executes a command in a container and returns the exit code, output, and an error if the operation fails.
 	Exec(ctx context.Context, containerID string, command []string) (int, string, string, error)
+
+	// Stats returns the resource usage stats for a container. errors if the execution is not found or stats cannot be retrieved.
+	Stats(ctx context.Context, executionID string) (*ExecutorStats, error)
 }
 
 // ExecutorType is the type of the executor
@@ -112,6 +115,46 @@ var (
 	_ Comparable[Executors] = (*Executors)(nil)
 	_ Calculable[Executors] = (*Executors)(nil)
 )
+
+// ExecutorStats represents resource usage stats for an executor.
+type ExecutorStats struct {
+	// CPU usage
+	CPUUsage struct {
+		TotalUsage        uint64  `json:"total_usage"`         // total CPU time consumed in nanoseconds
+		UsageInKernelmode uint64  `json:"usage_in_kernelmode"` // time spent in kernel mode in nanoseconds
+		UsageInUsermode   uint64  `json:"usage_in_usermode"`   // time spent in user mode in nanoseconds
+		Percent           float64 `json:"percent"`             // usage percentage
+	} `json:"cpu_usage"`
+
+	// memory usage
+	Memory struct {
+		Usage    uint64  `json:"usage"`     // memory usage in bytes
+		MaxUsage uint64  `json:"max_usage"` // max memory usage in bytes
+		Limit    uint64  `json:"limit"`     // memory limit in bytes
+		Percent  float64 `json:"percent"`   // memory usage percentage
+	} `json:"memory"`
+
+	// network
+	Network struct {
+		RxBytes   uint64 `json:"rx_bytes"`   // total bytes received
+		RxPackets uint64 `json:"rx_packets"` // total packets received
+		RxErrors  uint64 `json:"rx_errors"`  // total receive errors
+		RxDropped uint64 `json:"rx_dropped"` // total receive packets dropped
+		TxBytes   uint64 `json:"tx_bytes"`   // total bytes transmitted
+		TxPackets uint64 `json:"tx_packets"` // total packets transmitted
+		TxErrors  uint64 `json:"tx_errors"`  // total transmit errors
+		TxDropped uint64 `json:"tx_dropped"` // total transmit packets dropped
+	} `json:"network"`
+
+	// block I/O
+	BlockIO struct {
+		ReadBytes  uint64 `json:"read_bytes"`  // total bytes read from block devices
+		WriteBytes uint64 `json:"write_bytes"` // total bytes written to block devices
+	} `json:"block_io"`
+
+	// timestamp when stats were collected (Unix milliseconds)
+	Timestamp int64 `json:"timestamp"`
+}
 
 // Add adds the Executor object to another Executor object
 func (e *Executors) Add(other Executors) error {

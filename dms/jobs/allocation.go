@@ -583,6 +583,7 @@ func (a *Allocation) Start() error {
 	allocationBehaviors := map[string]func(actor.Envelope){
 		behaviors.AllocationStartBehavior:        a.handleAllocationStart,
 		behaviors.AllocationRestartBehavior:      a.handleAllocationRestart,
+		behaviors.AllocationStatsBehavior:        a.handleAllocationStats,
 		behaviors.SubnetAddPeerBehavior:          a.handleSubnetAddPeer,
 		behaviors.SubnetRemovePeersBehavior:      a.handleSubnetRemovePeers,
 		behaviors.SubnetAcceptPeersBehavior:      a.handleSubnetAcceptPeers,
