@@ -71,50 +71,62 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 		return
 	}
 
+	// Service provider path: forward to contract host, persist local copy, relay response.
+	if !request.SolutionEnablerDID.Equal(n.actor.Handle().DID) {
+		resp, err := n.forwardContractCreateToHost(request)
+		if err != nil {
+			handleErr(err)
+			return
+		}
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Contract host path: existing behaviour
+	resp, err := n.createContractOnHost(request)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) createContractOnHost(request contracts.CreateContractRequestBehaviour) (contracts.CreateContractResponseBehaviour, error) {
 	privKey, pubKey, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to generate contract keypair: %w", err))
-		return
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to generate contract keypair: %w", err)
 	}
 
 	contractActor, err := tokenomics.NewContractActor(n.actor.Handle(), request.PaymentValidatorDID, n.network, request.ContractParticipants, privKey, pubKey, n.contractStore, n.usageStore)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to create contract actor: %w", err))
-		return
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to create contract actor: %w", err)
 	}
 
 	contractObj := contracts.NewContract(contractActor.ContractDID.URI, request)
-	err = n.contractStore.Upsert(contractObj)
-	if err != nil {
-		handleErr(fmt.Errorf("failed to save contract: %w", err))
-		return
+	if err := n.contractStore.Upsert(contractObj); err != nil {
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to save contract: %w", err)
 	}
 
 	pkBytes, err := crypto.PublicKeyToBytes(pubKey)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to convert public key to bytes: %w", err))
-		return
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to convert public key to bytes: %w", err)
 	}
 
 	privKeyBytes, err := crypto.PrivateKeyToBytes(privKey)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to convert private key to bytes: %w", err))
-		return
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to convert private key to bytes: %w", err)
 	}
 
-	err = n.contractStore.InsertContractKey(store.ContractKey{
+	if err := n.contractStore.InsertContractKey(store.ContractKey{
 		ContractDID: contractActor.ContractDID.URI,
 		Key:         privKeyBytes,
-	})
-	if err != nil {
-		handleErr(fmt.Errorf("failed to save actor private key for contract %s: %w", contractActor.ContractDID.URI, err))
-		return
+	}); err != nil {
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to save actor private key for contract %s: %w", contractActor.ContractDID.URI, err)
 	}
 
-	err = contractActor.Start()
-	if err != nil {
-		handleErr(fmt.Errorf("failed to start actor: %w", err))
-		return
+	if err := contractActor.Start(); err != nil {
+		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to start actor: %w", err)
 	}
 	n.addContractActor(contractActor)
 
@@ -139,18 +151,53 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 					},
 				}
 			}
-			err = n.contractStore.Upsert(contractObj)
-			if err != nil {
+			if err := n.contractStore.Upsert(contractObj); err != nil {
 				log.Errorf("failed to update contract with signatures: %w", err)
 			}
 		}
 	}()
 
-	n.sendReply(msg, contracts.CreateContractResponseBehaviour{
+	return contracts.CreateContractResponseBehaviour{
 		ContractRequest: request,
 		ContractDID:     contractActor.ContractDID.URI,
 		PubKey:          hex.EncodeToString(pkBytes),
-	})
+	}, nil
+}
+
+func (n *Node) forwardContractCreateToHost(request contracts.CreateContractRequestBehaviour) (contracts.CreateContractResponseBehaviour, error) {
+	var resp contracts.CreateContractResponseBehaviour
+
+	if request.SolutionEnablerDID.Empty() {
+		return resp, errors.New("solution enabler DID is empty")
+	}
+
+	destination, err := actor.HandleFromDID(request.SolutionEnablerDID.String())
+	if err != nil {
+		return resp, fmt.Errorf("failed to resolve contract host handle: %w", err)
+	}
+
+	envelope, err := n.invokeBehaviour(destination, behaviors.ContractCreateBehavior, request, invokeMessageTimeout)
+	if err != nil {
+		return resp, fmt.Errorf("failed to forward create contract request to host: %w", err)
+	}
+
+	if envelope.Message == nil {
+		return resp, errors.New("contract host returned empty response")
+	}
+
+	if err := json.Unmarshal(envelope.Message, &resp); err != nil {
+		return resp, fmt.Errorf("failed to unmarshal contract host response: %w", err)
+	}
+	if resp.Error != "" {
+		return resp, fmt.Errorf("contract host error: %s", resp.Error)
+	}
+
+	localContract := contracts.NewContract(resp.ContractDID, resp.ContractRequest)
+	if err := n.contractStore.Upsert(localContract); err != nil {
+		return resp, fmt.Errorf("failed to save local contract copy: %w", err)
+	}
+
+	return resp, nil
 }
 
 // this behaviour is registered by service and compute provider
@@ -278,7 +325,7 @@ func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 		n.sendReply(msg, contracts.ContractApproveLocalResponseBehaviour{Error: err.Error()})
 	}
 
-	var req contracts.ContractApproveLocalRequestBehaviour
+	var req contracts.ContractApproveLocalRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
 		handleErr(fmt.Errorf("failed to unmarshal contract approve request: %s", err))
 		return
@@ -370,19 +417,129 @@ func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	defer msg.Discard()
 	handleErr := func(err error) {
-		n.sendReply(msg, contracts.ContractListIncomingResponseBehaviour{Error: err.Error()})
+		n.sendReply(msg, contracts.ContractListIncomingResponse{Error: err.Error()})
 	}
 
-	// get all contracts
+	var req contracts.ContractListIncomingRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal list incoming request: %w", err))
+		return
+	}
+
 	allContracts, err := n.contractStore.GetAllContracts()
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get all contracts: %w", err))
 		return
 	}
 
-	n.sendReply(msg, contracts.ContractListIncomingResponseBehaviour{
-		Contracts: allContracts,
-	})
+	callerDID := msg.From.DID.String()
+	rootDID := n.rootCap.DID().String()
+	filteredLocal := filterContractsByRole(allContracts, req.Role, callerDID)
+
+	if callerDID == rootDID {
+		solutionHosts := uniqueSolutionEnablerDIDs(allContracts)
+		if len(solutionHosts) == 0 {
+			log.Warnf("no solution hosts found (i.e: no contracts created yet) for caller %s", callerDID)
+			handleErr(fmt.Errorf("no solution hosts found to retrieve contracts from for caller %s", callerDID))
+			return
+		}
+		aggregated := make(map[string]*contracts.Contract, len(filteredLocal))
+
+		for _, hostDID := range solutionHosts {
+			if hostDID == "" {
+				continue
+			}
+
+			// if the solution enabler is this node, use local data
+			if hostDID == rootDID {
+				for _, c := range filterContractsByRole(allContracts, req.Role, callerDID) {
+					aggregated[c.ContractDID] = c
+				}
+				continue
+			}
+
+			handle, err := actor.HandleFromDID(hostDID)
+			if err != nil {
+				log.Warnf("failed to build handle for host %s: %v", hostDID, err)
+				continue
+			}
+
+			reply, err := n.invokeBehaviour(handle, behaviors.ContractListBehavior, req, invokeMessageTimeout)
+			if err != nil || reply.Message == nil {
+				log.Warnf("failed to invoke list incoming on host %s: %v", hostDID, err)
+				continue
+			}
+
+			var remoteResp contracts.ContractListIncomingResponse
+			if err := json.Unmarshal(reply.Message, &remoteResp); err != nil {
+				log.Warnf("failed to decode contract host response %s: %v", hostDID, err)
+				continue
+			}
+			if remoteResp.Error != "" {
+				log.Warnf("host %s returned error listing incoming contracts: %s", hostDID, remoteResp.Error)
+				continue
+			}
+
+			for _, c := range remoteResp.Contracts {
+				aggregated[c.ContractDID] = c
+			}
+		}
+
+		contractsSlice := make([]*contracts.Contract, 0, len(aggregated))
+		for _, c := range aggregated {
+			contractsSlice = append(contractsSlice, c)
+		}
+
+		n.sendReply(msg, contracts.ContractListIncomingResponse{
+			Contracts: contractsSlice,
+		})
+		return
+	}
+
+	// Contract host invocation: respond with local contracts only
+	resp := contracts.ContractListIncomingResponse{
+		Contracts: filteredLocal,
+	}
+	n.sendReply(msg, resp)
+}
+
+func filterContractsByRole(contractsList []*contracts.Contract, role contracts.ContractListIncomingRole, targetDID string) []*contracts.Contract {
+	result := make([]*contracts.Contract, 0, len(contractsList))
+	for _, c := range contractsList {
+		switch role {
+		case contracts.ContractRoleProvider:
+			if targetDID == "" || c.ContractParticipants.Provider.String() == targetDID {
+				result = append(result, c)
+			}
+		case contracts.ContractRoleRequestor:
+			if targetDID == "" || c.ContractParticipants.Requestor.String() == targetDID {
+				result = append(result, c)
+			}
+		default:
+			if targetDID == "" || c.SolutionEnablerDID.String() == targetDID || c.ContractParticipants.Provider.String() == targetDID || c.ContractParticipants.Requestor.String() == targetDID {
+				result = append(result, c)
+			}
+		}
+	}
+	return result
+}
+
+func uniqueSolutionEnablerDIDs(contractsList []*contracts.Contract) []string {
+	unique := make(map[string]struct{}, len(contractsList))
+	for _, c := range contractsList {
+		host := c.SolutionEnablerDID.String()
+		if host == "" {
+			continue
+		}
+		unique[host] = struct{}{}
+	}
+
+	hosts := make([]string, 0, len(unique))
+	for host := range unique {
+		hosts = append(hosts, host)
+	}
+
+	return hosts
 }
 
 func (n *Node) StartContracts() error {

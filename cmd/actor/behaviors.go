@@ -502,9 +502,18 @@ var registeredBehaviors = map[string]*behaviorConfig{
 						  nunet actor cmd --context user /dms/tokenomics/contract/transactions/list`,
 	},
 	// /dms/tokenomics/contract/list_incoming
-	behaviors.ContractListIncomingBehavior: {
+	behaviors.ContractListBehavior: {
+		Payload: func() any { return &contracts.ContractListIncomingRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*contracts.ContractListIncomingRequest)
+			cmd.Flags().StringVarP((*string)(&p.Role), "role", "", "", "role filter (provider|requestor)")
+		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			resp, err := dmsClient.ListIncoming(ctx, opts.MsgOpts...)
+			req, _ := opts.Payload.(*contracts.ContractListIncomingRequest)
+			if req == nil {
+				req = &contracts.ContractListIncomingRequest{}
+			}
+			resp, err := dmsClient.ListIncoming(ctx, *req, opts.MsgOpts...)
 			if err != nil {
 				return resp, err
 			}
@@ -535,7 +544,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to encode payload")
 			}
 
-			contractReq := contracts.ContractApproveLocalRequestBehaviour{
+			contractReq := contracts.ContractApproveLocalRequest{
 				ContractDID: req.ContractDID,
 			}
 

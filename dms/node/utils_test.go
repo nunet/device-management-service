@@ -44,6 +44,7 @@ import (
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
+	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -251,6 +252,8 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		"onboarding_config",
 		"resource_allocation",
 		"deployments",
+		"contracts",
+		"contracts_keys",
 	})
 	require.NoError(t, err)
 
@@ -296,6 +299,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	scheduler := backgroundtasks.NewScheduler(1, time.Second)
 
 	vNet, priv := setupTestNetwork(t, substrate)
+	require.NoError(t, vNet.Start())
 
 	subnetStatus = make(map[string]int)
 
@@ -317,6 +321,9 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		true, // enable push liveness for tests
 	)
 	nActor, nActorCap, nRootTrust, nRootDID := newActor(t, priv, vNet)
+
+	contractStore, err := store.New(db)
+	require.NoError(t, err)
 
 	node := &Node{}
 	node.onboarding = onboardingManager
@@ -345,6 +352,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		executor:      &docker.Executor{},
 		executionType: jobtypes.ExecutorDocker,
 	}
+	node.contractStore = contractStore
 
 	dmsBehaviors := node.getDMSBehaviors()
 	for behavior, handler := range dmsBehaviors {

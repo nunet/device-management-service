@@ -32,6 +32,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
 	"gitlab.com/nunet/device-management-service/lib/env"
 	"gitlab.com/nunet/device-management-service/lib/hardware"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -237,19 +238,18 @@ func (c *Client) hello(t *testing.T, context, passphrase, dest string) (string, 
 	return buf.String(), err
 }
 
-func (c *Client) createContract(t *testing.T, contractFilePath, context, passphrase, dest string) (string, error) {
+func (c *Client) createContract(t *testing.T, contractFilePath, context, passphrase string) (string, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/create", "--contract-file", contractFilePath, "--timeout", "5s", "--dest", dest}
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/create", "--contract-file", contractFilePath, "--timeout", "5s"}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
 	root.SetOutput(&buf)
 	err = root.Execute()
-	fmt.Println("createContract response: ", buf.String())
 	return buf.String(), err
 }
 
@@ -387,13 +387,38 @@ func (c *Client) listIncomingContracts(t *testing.T, context, passphrase string)
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/list_incoming", "--timeout", "5s"}
+	args := []string{"contracts", "list", "--context", context, "incoming", "--timeout", "5s"}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
 	root.SetOutput(&buf)
 	err = root.Execute()
 	return buf.String(), err
+}
+
+func (c *Client) listOutgoingContracts(t *testing.T, context, passphrase string) ([]*contracts.Contract, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"contracts", "list", "--context", context, "outgoing", "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	require.NoError(t, err)
+
+	// parse json response
+	var resp contracts.ContractListIncomingResponse
+	if err := json.Unmarshal(buf.Bytes(), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("failed to list outgoing contracts: %s", resp.Error)
+	}
+	return resp.Contracts, nil
 }
 
 func (c *Client) contractStatus(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) {

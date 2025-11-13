@@ -579,7 +579,7 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 			fn: n.handleContractApprovalLocal,
 		},
 		// used by compute provider to list incoming contracts
-		behaviors.ContractListIncomingBehavior: {
+		behaviors.ContractListBehavior: {
 			fn: n.handleListIncomingContracts,
 		},
 

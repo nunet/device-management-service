@@ -231,8 +231,8 @@ func (c *Context) StopEnsemble(id string) error {
 	return nil
 }
 
-func (c *Context) CreateContract(contractFile, destDID string) (contracts.CreateContractResponseBehaviour, error) {
-	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/create --contract-file %s --dest %s --timeout 1m", c.Name, contractFile, destDID))
+func (c *Context) CreateContract(contractFile string) (contracts.CreateContractResponseBehaviour, error) {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/create --contract-file %s --timeout 1m", c.Name, contractFile))
 	if err != nil {
 		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to call contract create behavior: %w", err)
 	}
@@ -262,16 +262,46 @@ func (c *Context) ContractStatus(contractDID, hostDID string) (*contracts.Contra
 }
 
 func (c *Context) ListContracts() ([]*contracts.Contract, error) {
-	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/list_incoming --timeout 5s", c.Name))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/list --timeout 1m", c.Name))
 	if err != nil {
-		return nil, fmt.Errorf("failed to call contract list_incoming behavior: %s", out)
+		return nil, fmt.Errorf("failed to call contract list behavior: %w", err)
 	}
-	var resp contracts.ContractListIncomingResponseBehaviour
+	var resp contracts.ContractListIncomingResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
 	if resp.Error != "" {
 		return nil, fmt.Errorf("failed to get list of contracts: %s", resp.Error)
+	}
+	return resp.Contracts, nil
+}
+
+func (c *Context) ListIncomingContracts() ([]*contracts.Contract, error) {
+	return c.listContractsByRole(string(contracts.ContractRoleProvider))
+}
+
+func (c *Context) ListOutgoingContracts() ([]*contracts.Contract, error) {
+	return c.listContractsByRole(string(contracts.ContractRoleRequestor))
+}
+
+func (c *Context) listContractsByRole(role string) ([]*contracts.Contract, error) {
+	direction := "incoming"
+	switch role {
+	case string(contracts.ContractRoleProvider):
+		direction = "incoming"
+	case string(contracts.ContractRoleRequestor):
+		direction = "outgoing"
+	}
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet contracts --context %s list %s --timeout 5s", c.Name, direction))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract list_incoming behavior: %s", out)
+	}
+	var resp contracts.ContractListIncomingResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("failed to get list of incoming/outgoing contracts: %s", resp.Error)
 	}
 	return resp.Contracts, nil
 }
