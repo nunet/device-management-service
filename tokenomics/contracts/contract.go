@@ -113,12 +113,23 @@ type PaymentValidateResponseBehaviour struct {
 	Error string `json:"error"`
 }
 
-type ContractListIncomingResponseBehaviour struct {
+type ContractListIncomingRole string
+
+const (
+	ContractRoleProvider  ContractListIncomingRole = "provider"
+	ContractRoleRequestor ContractListIncomingRole = "requestor"
+)
+
+type ContractListIncomingRequest struct {
+	Role ContractListIncomingRole `json:"role,omitempty"`
+}
+
+type ContractListIncomingResponse struct {
 	Contracts []*Contract `json:"contracts"`
 	Error     string      `json:"error,omitempty"`
 }
 
-type ContractApproveLocalRequestBehaviour struct {
+type ContractApproveLocalRequest struct {
 	ContractDID string `json:"contract_did"`
 }
 

@@ -52,6 +52,7 @@ func NewRootCMD(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd.AddCommand(newValidateCmd(dmsCli))
 	cmd.AddCommand(newDeployCmd(dmsCli))
 	cmd.AddCommand(newGetCmd(dmsCli))
+	cmd.AddCommand(newContractCmd(dmsCli))
 
 	return cmd
 }

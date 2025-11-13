@@ -283,8 +283,8 @@ type ActorVolumeBehaviorClient interface {
 type ActorContractBehaviorClient interface {
 	NewContract(ctx context.Context, req contracts.CreateContractRequestBehaviour, opts ...Option) (contracts.CreateContractResponseBehaviour, error)
 	ContractStatus(ctx context.Context, req contracts.ContractStatusRequestBehaviour, opts ...Option) (contracts.ContractStatusResponseBehaviour, error)
-	ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequestBehaviour, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error)
-	ListIncoming(ctx context.Context, opts ...Option) (contracts.ContractListIncomingResponseBehaviour, error)
+	ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequest, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error)
+	ListIncoming(ctx context.Context, req contracts.ContractListIncomingRequest, opts ...Option) (contracts.ContractListIncomingResponse, error)
 	ListTransactions(ctx context.Context, opts ...Option) (contracts.ContractListLocalTransactionsResponse, error)
 	CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error)
 	ConfirmTransaction(ctx context.Context, req contracts.ContractConfirmLocalTransactionRequest, opts ...Option) (contracts.ContractConfirmLocalTransactionResponse, error)

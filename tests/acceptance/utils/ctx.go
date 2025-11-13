@@ -31,6 +31,7 @@ type (
 	connectionAttemptKey struct{}
 	tokenMapKey          struct{}
 	orgMapCtxKey         struct{}
+	extraContractsKey    struct{}
 	didsCtxKey           struct{}
 )
 
@@ -43,8 +44,10 @@ type TestCtx struct {
 
 // TODO: Temporary wrapper for contract
 type ContractData struct {
-	HostDID string
-	DID     string
+	HostDID      string
+	DID          string
+	ProviderDID  string
+	RequestorDID string
 }
 
 func NewTestCtx(ctx context.Context) *TestCtx {
@@ -153,6 +156,22 @@ func (t *TestCtx) Contract() (ContractData, error) {
 func (t *TestCtx) WithContract(c ContractData) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, contractInfoKey{}, c),
+	}
+}
+
+func (t *TestCtx) ExtraContracts() []ContractData {
+	data, ok := t.ctx.Value(extraContractsKey{}).([]ContractData)
+	if !ok {
+		return nil
+	}
+	return data
+}
+
+func (t *TestCtx) WithExtraContract(c ContractData) *TestCtx {
+	extras := t.ExtraContracts()
+	newExtras := append(append([]ContractData{}, extras...), c)
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, extraContractsKey{}, newExtras),
 	}
 }
 

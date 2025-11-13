@@ -94,7 +94,7 @@ const (
 	TokenomicNamespace           = "/dms/tokenomics"
 	ContractCreateBehavior       = TokenomicNamespace + "/contract/create"
 	ContractApproveLocalBehavior = TokenomicNamespace + "/contract/approve_local"
-	ContractListIncomingBehavior = TokenomicNamespace + "/contract/list_incoming"
+	ContractListBehavior         = TokenomicNamespace + "/contract/list"
 	ContractProposeBehavior      = TokenomicNamespace + "/contract/propose"
 
 	// ContractUsagesCalculateBehavior can be invoked on the contract host

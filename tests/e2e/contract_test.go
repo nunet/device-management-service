@@ -9,6 +9,7 @@
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
 // DeployWithContractTest runs the tests that deploy with contracts
@@ -56,7 +58,7 @@ func DeployWithContractTest(suite *TestSuite) {
 		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, feesPerAllocation)
 		suite.Require().NoError(err)
 
-		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password, contractHost.dmsDID)
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
 		fmt.Println(cmdOut, err)
 
 		// sleep until actor starts
@@ -113,6 +115,12 @@ func DeployWithContractTest(suite *TestSuite) {
 		contractState, err := extractContractState(cmdOut)
 		suite.Require().NoError(err)
 		suite.Require().Equal("ACCEPTED", contractState)
+
+		// New assertion: requester lists outgoing contracts and sees this contract
+		outgoingList, err := requester.client.listOutgoingContracts(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		suite.Require().Equal(outgoingList[0].ContractDID, contractDID, "created contracts list should contain the newly created contract")
+		suite.Require().Len(outgoingList, 1, "created contracts list should contain only one contract")
 
 		// wait 6 seconds for payment to be validated
 		// before we deploy
@@ -227,19 +235,14 @@ func DeployWithContractTest(suite *TestSuite) {
 }
 
 func getContractID(input string) (string, error) {
-	pattern := `"contract_did"\s*:\s*"([^"]+)"`
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return "", fmt.Errorf("failed to compile regex: %w", err)
+	var response contracts.CreateContractResponseBehaviour
+	if err := json.Unmarshal([]byte(input), &response); err != nil {
+		return "", fmt.Errorf("failed to unmarshal contract create response: %w", err)
 	}
-
-	match := re.FindStringSubmatch(input)
-	if len(match) < 2 {
-		return "", fmt.Errorf("contract_did not found in the input string")
+	if response.Error != "" {
+		return "", fmt.Errorf("error from solution enabler: %s", response.Error)
 	}
-
-	return match[1], nil
+	return response.ContractDID, nil
 }
 
 func extractContractState(input string) (string, error) {

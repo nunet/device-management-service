@@ -13,11 +13,16 @@ Feature: Contract Management Simple
       | Alice   | SP   | false     | nunet |
       | Bob     | CP   | true      | nunet |
       | Charlie | CH   | false     | nunet |
+      | Eve     | CP   | true      | nunet |
 
   Scenario: Create a contract
     Given "Alice" requests a contract with "Bob" through "Charlie"
     When "Bob" accepts the contract
-    Then a contract is created between "Alice" and "Bob"
+    Then a contract is created between "Alice" and "Bob" through "Charlie"
+    And contract listings for "Alice" and "Bob" should reflect the contract
+    When "Alice" creates an unrelated contract with "Eve" through "Charlie"
+    Then "Bob" should not see unrelated contracts
+    And "Charlie" should see contracts for "Bob" and "Eve"
 
   Scenario: Make deployment with contract
     Given "Alice" requests a contract with "Bob" through "Charlie"

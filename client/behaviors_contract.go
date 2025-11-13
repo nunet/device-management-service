@@ -50,7 +50,7 @@ func (c *Client) ContractStatus(ctx context.Context, req contracts.ContractStatu
 	return response, err
 }
 
-func (c *Client) ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequestBehaviour, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error) {
+func (c *Client) ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequest, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error) {
 	var response contracts.ContractApproveLocalResponseBehaviour
 
 	resp, err := c.InvokeBehavior(
@@ -67,17 +67,17 @@ func (c *Client) ApproveLocal(ctx context.Context, req contracts.ContractApprove
 	return response, err
 }
 
-func (c *Client) ListIncoming(ctx context.Context, opts ...Option) (contracts.ContractListIncomingResponseBehaviour, error) {
-	var response contracts.ContractListIncomingResponseBehaviour
+func (c *Client) ListIncoming(ctx context.Context, req contracts.ContractListIncomingRequest, opts ...Option) (contracts.ContractListIncomingResponse, error) {
+	var response contracts.ContractListIncomingResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
-		behaviors.ContractListIncomingBehavior,
-		struct{}{},
+		behaviors.ContractListBehavior,
+		req,
 		opts...,
 	)
 	if err != nil {
-		return response, fmt.Errorf("%s: %w", behaviors.ContractListIncomingBehavior, err)
+		return response, fmt.Errorf("%s: %w", behaviors.ContractListBehavior, err)
 	}
 
 	err = c.unmarshalResponse(resp, &response)
