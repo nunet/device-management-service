@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -443,4 +444,86 @@ func TestLocation(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestLocationSatisfies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		loc         Location
+		constraints LocationConstraints
+		expected    bool
+	}{
+		{
+			name:        "no constraints returns true",
+			loc:         Location{Continent: "Europe"},
+			constraints: LocationConstraints{},
+			expected:    true,
+		},
+		{
+			name: "accept exact match",
+			loc:  Location{Continent: "Europe"},
+			constraints: LocationConstraints{
+				Accept: []Location{{Continent: "Europe"}},
+			},
+			expected: true,
+		},
+		{
+			name: "accept takes precedence over reject",
+			loc:  Location{Continent: "Europe"},
+			constraints: LocationConstraints{
+				Accept: []Location{{Continent: "Europe"}},
+				Reject: []Location{{Continent: "Europe"}},
+			},
+			expected: true,
+		},
+		{
+			name: "reject exact match blocks",
+			loc:  Location{Continent: "Europe", Country: "DE"},
+			constraints: LocationConstraints{
+				Reject: []Location{{Continent: "Europe", Country: "DE"}},
+			},
+			expected: false,
+		},
+		{
+			name: "reject non-match returns true",
+			loc:  Location{Continent: "Europe", Country: "DE"},
+			constraints: LocationConstraints{
+				Reject: []Location{{Continent: "Europe", Country: "FR"}},
+			},
+			expected: true,
+		},
+		{
+			name: "accept requires continent match even if other fields match",
+			loc:  Location{Continent: "North America", Country: "US"},
+			constraints: LocationConstraints{
+				Accept: []Location{{Country: "US"}},
+			},
+			expected: false,
+		},
+		{
+			name: "accept with ASN exact match",
+			loc:  Location{Continent: "North America", Country: "US", ASN: 123},
+			constraints: LocationConstraints{
+				Accept: []Location{{Continent: "North America", ASN: 123}},
+			},
+			expected: true,
+		},
+		{
+			name: "reject does not match if continent differs even when ISP matches",
+			loc:  Location{Continent: "Europe", Country: "DE", ISP: "Comcast"},
+			constraints: LocationConstraints{
+				Reject: []Location{{Continent: "North America", ISP: "Comcast"}},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expected, tt.loc.Satisfies(tt.constraints))
+		})
+	}
 }

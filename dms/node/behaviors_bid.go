@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
@@ -137,7 +138,6 @@ func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) erro
 	return nil
 }
 
-// TODO: ignore bid if our location is rejected or not included on accepted
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -239,6 +239,17 @@ loop:
 					"hostID", hostID)
 				continue loop
 			}
+		}
+
+		constraints := v.V1.Location
+		if !n.location().Satisfies(constraints) {
+			log.Debugw("bid_request_location_constraints_not_satisfied",
+				"labels", string(observability.LabelDeployment),
+				"nodeID", v.V1.NodeID,
+				"ourLocation", n.location(),
+				"constraints", constraints,
+			)
+			continue loop
 		}
 
 		// if the desired executable is not found stop
