@@ -813,36 +813,7 @@ func acceptPeerLocation(
 		return n.Peer == peerID
 	}
 
-	// check acceptable locations
-	// if acceptable locations are specified, then reject locations are ignored
-	// (since the user probably wants only specified locations)
-	if len(n.Location.Accept) > 0 {
-		accept := false
-		for _, acceptable := range n.Location.Accept {
-			if acceptable.Equal(loc) {
-				accept = true
-				break
-			}
-		}
-
-		return accept
-	}
-
-	// check unacceptable locations
-	if len(n.Location.Reject) > 0 {
-		reject := false
-		for _, unacceptable := range n.Location.Reject {
-			if unacceptable.Equal(loc) {
-				reject = true
-				break
-			}
-		}
-		if reject {
-			return false
-		}
-	}
-
-	return true
+	return loc.Satisfies(n.Location)
 }
 
 func (b *BidCoordinator) makeInitialBidRequest(cfg jtypes.EnsembleConfig) (jtypes.EnsembleBidRequest, error) {
