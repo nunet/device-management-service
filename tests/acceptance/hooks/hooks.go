@@ -112,7 +112,7 @@ func CleanupNodes() error {
 }
 
 // SaveLogs saves all DMS logs locally to help debugging
-func SaveLogs(ctx context.Context) error {
+func SaveLogs(ctx context.Context, scenarioName string) error {
 	fmt.Println("saving logs...")
 	tc := utils.NewTestCtx(ctx)
 	t := godog.T(ctx)
@@ -135,7 +135,7 @@ func SaveLogs(ctx context.Context) error {
 			continue
 		}
 
-		filename := fmt.Sprintf("%s_%s_logs_%d.txt", n.Name, n.Role, timestamp)
+		filename := fmt.Sprintf("%s_%s_%s_logs_%d.txt", scenarioName, n.Name, n.Role, timestamp)
 		path := filepath.Join(dest, filename)
 
 		err = os.WriteFile(path, []byte(logs), 0o644)
@@ -145,7 +145,7 @@ func SaveLogs(ctx context.Context) error {
 
 		// JSONL logs
 		src := "/root/nunet/logs/nunet-dms-logs.jsonl"
-		target := filepath.Join(dest, fmt.Sprintf("%s_%s_logs_%d.txt", n.Name, n.Role, timestamp))
+		target := filepath.Join(dest, fmt.Sprintf("%s_%s_%s_logs_%d.json", scenarioName, n.Name, n.Role, timestamp))
 		if err := utils.DownloadFile(n.Instance.Client, n.Instance.Name, src, target); err != nil {
 			t.Errorf("failed to download jsonl logs for %s: %s", n.Name, err)
 		}

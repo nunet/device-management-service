@@ -31,8 +31,9 @@ func Subnet(ctx *godog.ScenarioContext) {
 		}
 		return ctx, nil
 	})
-	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		if err := hooks.SaveLogs(ctx); err != nil {
+	ctx.After(func(ctx context.Context, scenario *godog.Scenario, _ error) (context.Context, error) {
+		scenarioName := strings.ReplaceAll(scenario.Name, " ", "_")
+		if err := hooks.SaveLogs(ctx, scenarioName); err != nil {
 			return ctx, err
 		}
 		if err := hooks.CleanupNodes(); err != nil {
@@ -233,7 +234,22 @@ func serviceTriesToCommunicateWith(ctx context.Context, cpName, otherCPName stri
 				"--connect-timeout", "900",
 				"http://" + server.dns + portStr,
 			}
-			out, err := client.instance.RunCMD(cmd)
+
+			// retry a few times since first dial may go to an undialable addresss
+			retries := 3
+			try := 0
+			var out string
+			var err error
+			for {
+				try++
+				out, err = client.instance.RunCMD(cmd)
+				if err == nil || try >= retries {
+					break
+				}
+				fmt.Printf("retrying subnet comm, attempt %d/%d\n", try, retries)
+				time.Sleep(5 * time.Second)
+			}
+
 			require.NoError(t, err)
 			assert.NotEmpty(t, out)
 

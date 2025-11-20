@@ -55,6 +55,15 @@ func (c *Context) Revoke(token string) (revokedToken string, err error) {
 		c.Name, token))
 }
 
+func (c *Context) SetConfig(key, value string) error {
+	_, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet config set %s %s", key, value))
+	return err
+}
+
+func (c *Context) GetConfig(key string) (string, error) {
+	return c.instance.RunDMSCmd(fmt.Sprintf("nunet config get %s", key))
+}
+
 func (c *Context) Run(t godog.TestingT) error {
 	frSec := os.Getenv(observability.EnvFlightrecSec)
 	if frSec != "" {
