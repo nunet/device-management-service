@@ -104,6 +104,12 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 				return err
 			}
 
+			// set dms config to test env for fast observable ip fetch
+			err = node.DMS().SetConfig("general.env", "test")
+			if err != nil {
+				return fmt.Errorf("failed to set dms env to test: %w", err)
+			}
+
 			orgCtx, ok := orgMap[node.Org]
 			if !ok {
 				return fmt.Errorf("org context for %s not found", node.Org)

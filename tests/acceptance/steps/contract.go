@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -34,8 +35,9 @@ func Contract(ctx *godog.ScenarioContext) {
 		}
 		return ctx, nil
 	})
-	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		if err := hooks.SaveLogs(ctx); err != nil {
+	ctx.After(func(ctx context.Context, scenario *godog.Scenario, _ error) (context.Context, error) {
+		scenarioName := strings.ReplaceAll(scenario.Name, " ", "_")
+		if err := hooks.SaveLogs(ctx, scenarioName); err != nil {
 			return ctx, err
 		}
 		if err := hooks.CleanupNodes(); err != nil {

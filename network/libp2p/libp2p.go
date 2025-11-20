@@ -698,9 +698,10 @@ func (l *Libp2p) GetPeerIP(p PeerID) string {
 }
 
 func (l *Libp2p) watchForObservedAddr() {
+	log.Infof("watching for observed address")
 	sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
 	if err != nil {
-		log.Debugf("could not subscribe to event: %w", err)
+		log.Errorf("could not subscribe to event: %w", err)
 		return
 	}
 	defer sub.Close()
@@ -1245,8 +1246,10 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 
 func (l *Libp2p) HostPublicIP() (net.IP, error) {
 	if l.config.Env == "dev" || l.config.Env == "test" {
+		log.Infof("host public ip: using listening IP since in dev or test environment")
 		return l.listeningIP()
 	}
+	log.Infof("waiting for observed public IP")
 	addr, err := l.waitForObservedAddr(l.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve observed addr: %w", err)
@@ -1446,13 +1449,14 @@ func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAdd
 	// QUIC connection on the same 4-tupe. This works since QUIC demultiplexes connections
 	// based on their connection ID.
 	var directAddr *net.UDPAddr
+	log.Infof("dialQUIC: connections to target %q : %+v", target.String(), l.Host.Network().ConnsToPeer(target))
 	for _, c := range l.Host.Network().ConnsToPeer(target) {
 		if a := c.RemoteMultiaddr(); isQUICAddr(a) {
 			directAddr, err = quicAddrToNetAddr(a)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
 			}
-			log.Debugf("found QUIC address: %s", a)
+			log.Infof("dialQUIC: found QUIC address: %s", directAddr.String())
 			break
 		}
 	}
@@ -1467,12 +1471,14 @@ connectLoop:
 		if now.Sub(start) > 5*time.Second {
 			break
 		}
+		log.Infof("dialQUIC: connections to target %q : %+v", target.String(), l.Host.Network().ConnsToPeer(target))
 		for _, c := range l.Host.Network().ConnsToPeer(target) {
 			if a := c.RemoteMultiaddr(); isQUICAddr(a) {
 				directAddr, err = quicAddrToNetAddr(a)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
 				}
+				log.Infof("dialQUIC: found QUIC address: %s", directAddr.String())
 				break connectLoop
 			}
 		}
@@ -1498,7 +1504,7 @@ func dialSubnetQUICLayer(l *Libp2p, tr *quic.Transport, addr *net.UDPAddr, servN
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate self signed certificate: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	log.Debugf("dialing QUIC address: %s", addr)
 	conn, err := tr.Dial(

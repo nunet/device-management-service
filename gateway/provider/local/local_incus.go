@@ -169,15 +169,15 @@ done:
   # Disable systemd-resolved and set custom DNS
   #systemctl stop systemd-resolved
   #systemctl disable systemd-resolved
-  sudo rm -f /etc/resolv.conf
-  echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
-  sudo apt-get install ca-certificates curl
-  sudo install -m 0755 -d /etc/apt/keyrings
-  sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-  sudo chmod a+r /etc/apt/keyrings/docker.asc
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  rm -f /etc/resolv.conf
+  echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | tee /etc/resolv.conf
+  apt install -y ca-certificates curl
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
   apt update
-  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   apt install -y openssh-server
   systemctl enable ssh
   systemctl start ssh
@@ -188,7 +188,7 @@ done:
   # Set a root password
   echo "root:root" | chpasswd
   DMS_PASSPHRASE=pass /home/ubuntu/dms key new dms
-  sudo setcap cap_net_admin,cap_sys_admin+ep /home/ubuntu/dms
+  setcap cap_net_admin,cap_sys_admin+ep /home/ubuntu/dms
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap new dms
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap anchor --context dms --root `+p.gatewayDID+`
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap anchor --context dms --root `+orchestratorDID+`

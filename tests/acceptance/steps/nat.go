@@ -11,7 +11,6 @@ package steps
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,24 +26,13 @@ import (
 
 // NAT registers all step definitions for NAT feature
 func NAT(ctx *godog.ScenarioContext) {
-	ctx.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-		// Cleanup any existing NAT networks and instances
-		if err := cleanupNATInfrastructure(); err != nil {
-			return ctx, err
-		}
-		return ctx, nil
-	})
-
-	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+	ctx.After(func(ctx context.Context, scenario *godog.Scenario, _ error) (context.Context, error) {
+		scenarioName := strings.ReplaceAll(scenario.Name, " ", "_")
 		// Save logs and cleanup
-		if err := hooks.SaveLogs(ctx); err != nil {
+		if err := hooks.SaveLogs(ctx, scenarioName); err != nil {
 			return ctx, err
 		}
 		if err := hooks.CleanupNodes(); err != nil {
-			return ctx, err
-		}
-
-		if err := cleanupNATInfrastructure(); err != nil {
 			return ctx, err
 		}
 
@@ -74,14 +62,6 @@ func haveNodesOnIsolatedNATNetworks(ctx context.Context, count int, table *godog
 	assert.NoError(t, err)
 	assert.Len(t, natNodes, count)
 
-	subnets := []string{
-		fmt.Sprintf("10.%d.100.1/24", rand.Intn(250)+2),
-		fmt.Sprintf("10.%d.90.1/24", rand.Intn(250)+2),
-	}
-
-	instanceIPs := make(map[string]string)
-	instanceNets := make([]string, 0, len(instanceIPs))
-
 	config, err := config.Get()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch config: %w", err)
@@ -101,12 +81,10 @@ func haveNodesOnIsolatedNATNetworks(ctx context.Context, count int, table *godog
 			client := clients[idx%len(clients)]
 			fmt.Println("spinning up instances...")
 			instName := fmt.Sprintf("%s-nat-test-%d", config.VMsPrefix, idx+1)
-			err := utils.CreateInstanceWithNetwork(
+			err := utils.CreateInstance(
 				client,
 				utils.GetInstanceType(),
 				instName,
-				nodeInfo.network,
-				subnets[idx],
 			)
 			if err != nil {
 				return err
@@ -146,6 +124,52 @@ func haveNodesOnIsolatedNATNetworks(ctx context.Context, count int, table *godog
 				return err
 			}
 
+			state, _, err := clients[0].GetInstanceState(instName)
+			if err != nil {
+				fmt.Printf("Failed to get instance state: %v\n", err)
+			}
+
+			// get ip address of the instance
+			instanceIP := ""
+			fmt.Printf("IP addresses for instance %s:\n", instName)
+			for iface, network := range state.Network {
+				fmt.Printf("  Interface %s:\n", iface)
+				if strings.HasPrefix(iface, "enp") || strings.HasPrefix(iface, "eth") {
+					// likely the main network interface
+					for _, addr := range network.Addresses {
+						if addr.Family == "inet" && addr.Scope == "global" { // ipv4 and global scope
+							instanceIP = addr.Address
+						}
+					}
+				}
+			}
+
+			// set up iptables rules to simulate symmetric NAT
+			_, err = instance.RunCMD([]string{"iptables", "-P", "INPUT", "DROP"})
+			if err != nil {
+				return fmt.Errorf("failed to set iptables rule on: %w", err)
+			}
+
+			_, err = instance.RunCMD([]string{"iptables", "-A", "INPUT", "-i", "lo", "-j", "ACCEPT"})
+			if err != nil {
+				return fmt.Errorf("failed to set iptables rule on: %w", err)
+			}
+
+			_, err = instance.RunCMD([]string{"iptables", "-A", "INPUT", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"})
+			if err != nil {
+				return fmt.Errorf("failed to set iptables rule on: %w", err)
+			}
+
+			_, err = instance.RunCMD([]string{"iptables", "-t", "nat", "-A", "POSTROUTING", "-s", instanceIP, "-j", "MASQUERADE"})
+			if err != nil {
+				return fmt.Errorf("failed to set iptables rule on: %w", err)
+			}
+
+			_, err = instance.RunCMD([]string{"iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "eth0", "-p", "tcp", "--syn", "-m", "state", "--state", "NEW", "-j", "SNAT", "--to-source", instanceIP + ":10000-20000", "--random-fully"})
+			if err != nil {
+				return fmt.Errorf("failed to set iptables rule on: %w", err)
+			}
+
 			if err := node.DMS().Run(t); err != nil {
 				return err
 			}
@@ -155,12 +179,9 @@ func haveNodesOnIsolatedNATNetworks(ctx context.Context, count int, table *godog
 			}, 20*time.Second, 500*time.Millisecond)
 
 			nodeMap[nodeInfo.name] = node
+
 			return nil
 		})
-
-		instanceIPs[nodeInfo.name] = subnets[idx]
-		instanceNets = append(instanceNets, nodeInfo.network)
-
 	}
 
 	if err := g.Wait(); err != nil {
@@ -168,13 +189,6 @@ func haveNodesOnIsolatedNATNetworks(ctx context.Context, count int, table *godog
 	}
 
 	fmt.Printf("finished setting up instances, time elapsed: %.1fs\n", time.Since(start).Seconds())
-
-	err = utils.BlockInterInstanceTraffic(clients[0], fmt.Sprintf("%s-block-inter-instance", config.ACLPrefix), instanceIPs, instanceNets)
-	if err != nil {
-		return nil, fmt.Errorf("failed to block inter-instance traffic: %w", err)
-	}
-
-	fmt.Printf("finished adding acl to block inter-instance traffic\n")
 
 	tc = tc.WithNodes(nodeMap)
 
@@ -203,7 +217,7 @@ func waitForRelayCircuits(ctx context.Context, targetNode string) (context.Conte
 		default:
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 		targetInfo, err := DMSCtx.PeerAddr()
 		assert.NoError(t, err)
 		assert.NotNil(t, targetInfo)
@@ -266,7 +280,8 @@ func nodeAttemptsToConnect(ctx context.Context, sourceNode, targetNode string) (
 	assert.NoError(t, err)
 	assert.NotNil(t, targetInfo)
 
-	targetAddr, err := utils.MultiaddrFromCLI(targetInfo)
+	// do not attempt to connect to a specific address/transport
+	targetAddr := fmt.Sprintf("/p2p/%s", targetInfo.ID)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, targetAddr, "Target multiaddr should not be empty")
 
@@ -384,61 +399,4 @@ func parseNATNodesTable(table *godog.Table) ([]natNodeInfo, error) {
 	}
 
 	return nodes, nil
-}
-
-func cleanupNATInfrastructure() error {
-	conf, err := config.Get()
-	if err != nil {
-		return fmt.Errorf("failed to get config: %w", err)
-	}
-
-	clients, err := utils.ConnectToClients(conf)
-	if err != nil {
-		return fmt.Errorf("failed to connect to clients: %w", err)
-	}
-
-	for _, client := range clients {
-		// Delete NAT test instances
-		instances, err := utils.ListInstances(client)
-		if err != nil {
-			fmt.Printf("[CLEANUP] Warning: could not list instances: %v\n", err)
-			continue
-		}
-
-		for _, inst := range instances {
-			if strings.Contains(inst.Name, conf.VMsPrefix) {
-				fmt.Printf("[CLEANUP] Deleting instance: %s\n", inst.Name)
-				err := utils.DeleteInstance(client, inst.Name)
-				if err != nil {
-					fmt.Printf("[CLEANUP] Warning: failed to delete instance %s: %v\n", inst.Name, err)
-				}
-			}
-		}
-
-		// Delete NAT test networks
-		networks, err := client.GetNetworkNames()
-		if err != nil {
-			fmt.Printf("[CLEANUP] Warning: could not list networks: %v\n", err)
-			continue
-		}
-
-		for _, netName := range networks {
-			if strings.HasPrefix(netName, "nat-net-") || strings.HasPrefix(netName, "private-net-") {
-				fmt.Printf("[CLEANUP] Deleting network: %s\n", netName)
-				err := client.DeleteNetwork(netName)
-				if err != nil {
-					fmt.Printf("[CLEANUP] Warning: failed to delete network %s: %v\n", netName, err)
-				}
-			}
-		}
-
-		// delete acls
-		err = utils.DeleteACL(client, fmt.Sprintf("%s-block-inter-instance", conf.ACLPrefix))
-		if err != nil {
-			fmt.Printf("[CLEANUP] Warning: failed to delete ACL %s: %v\n", fmt.Sprintf("%s-block-inter-instance", conf.ACLPrefix), err)
-		}
-	}
-
-	fmt.Println("[CLEANUP] NAT infrastructure cleanup complete")
-	return nil
 }
