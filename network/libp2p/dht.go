@@ -172,8 +172,12 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 				}
 
 				if len(peerInfos) == 0 {
-					depth++
-					continue
+					if depth < 20 {
+						depth++
+						continue
+					}
+
+					goto cooldown
 				}
 
 				selected = peerInfos[rand.Intn(len(peerInfos))] //nolint:gosec
