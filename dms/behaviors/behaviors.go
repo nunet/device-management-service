@@ -125,6 +125,9 @@ const (
 	ContractListLocalTransactionsBehavior   = TokenomicNamespace + "/contract/transactions/list"
 	ContractConfirmLocalTransactionBehavior = TokenomicNamespace + "/contract/transactions/confirm"
 
+	PromiseBidToBidBehavior   = "/dms/deployment/promisebid"
+	PromiseBidSigningBehavior = "/dms/deployment/promisebid/sign"
+
 	DebugFlightrecBehavior = "/dms/debug/flightrec"
 )
 

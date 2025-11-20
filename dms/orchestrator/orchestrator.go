@@ -377,6 +377,38 @@ func (o *BasicOrchestrator) newManifest(
 	return manifest
 }
 
+func (o *BasicOrchestrator) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {
+	msg, err := actor.Message(
+		o.actor.Handle(),
+		destination,
+		behavior,
+		payload,
+		actor.WithMessageExpiry(actor.MakeExpiry(timeout)),
+	)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to create contract actor message: %w", err)
+	}
+
+	replyCh, err := o.actor.Invoke(msg)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to invoke message: %w", err)
+	}
+
+	ticker := time.NewTicker(timeout)
+	defer ticker.Stop()
+
+	var reply actor.Envelope
+	select {
+	case reply = <-replyCh:
+		defer reply.Discard()
+
+		return reply, nil
+
+	case <-ticker.C:
+		return actor.Envelope{}, errors.New("failed to receive reply due to timeout")
+	}
+}
+
 // TODO (dynamic ensemble PR): documentation on how updates
 // and revert handle manifest changes
 //
@@ -417,6 +449,30 @@ deploy:
 
 			log.Errorf("failed to bid: %v", err)
 			return fmt.Errorf("failed to bid: %w", err)
+		}
+
+		for key, v := range candidateDeployment {
+			if v.V1.PromiseBid {
+				// wait for provisioning
+				pb := jtypes.PromiseBidRequest{
+					Bid: v,
+				}
+				envelope, err := o.invokeBehaviour(v.V1.Handle, behaviors.PromiseBidToBidBehavior, pb, time.Minute*5)
+				if err != nil {
+					log.Errorf("failed to convert promise bid: %v", err)
+					return fmt.Errorf("failed to convert promise bid: %w", err)
+				}
+
+				var newBid jtypes.ConvertedPromiseBidResponse
+				err = json.Unmarshal(envelope.Message, &newBid)
+				if err != nil {
+					log.Errorf("failed to unmarshal new bid: %v", err)
+					return fmt.Errorf("failed to unmarshal new bid: %w", err)
+				}
+
+				// replace the current bid with the new bid
+				candidateDeployment[key] = newBid.Bid
+			}
 		}
 
 		// 2. Commit the deployment

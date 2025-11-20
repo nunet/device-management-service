@@ -24,6 +24,7 @@ import (
 	lcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
+	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -32,6 +33,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
 	"gitlab.com/nunet/device-management-service/internal"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
@@ -67,7 +69,8 @@ const (
 	// RestoreDeadlineCommitting   = 1 * time.Minute
 	// RestoreDeadlineProvisioning = 1 * time.Minute
 	// RestoreDeadlineRunning      = 5 * time.Minute
-	bidStateGCInterval = time.Minute
+	bidStateGCInterval             = time.Minute
+	provisionedResourcesGCInterval = time.Minute
 
 	// contract event handler config
 	eventHandlerWorkers   = 2
@@ -151,6 +154,10 @@ type Node struct {
 
 	// contract event handler
 	contractEventHandler *eventhandler.EventHandler
+
+	// serverProviderRegistry registory
+	serverProviderRegistry *provider.Registry
+	gatewayStore           *gatewastore.Store
 }
 
 // createActor creates an actor.
@@ -193,6 +200,8 @@ func New(cfg config.Config, fs afero.Afero,
 	usageStore *usage.Store,
 	transactionStore *transaction.Store,
 	deploymentStore orchestrator.DeploymentStore,
+	providerRegistry *provider.Registry,
+	gatewayStore *gatewastore.Store,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -263,33 +272,35 @@ func New(cfg config.Config, fs afero.Afero,
 	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID, cfg.General.PushLivenessEnabled)
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
-		allocator:            allocator,
-		hostID:               hostID,
-		network:              net,
-		bids:                 make(map[string]*bidState),
-		answeredBids:         make(map[string][]uint64),
-		peers:                make(map[peer.ID]*peerState),
-		resourceManager:      resourceManager,
-		hardware:             hardware,
-		actor:                nodeActor,
-		rootCap:              rootCap,
-		scheduler:            scheduler,
-		onboarding:           onboarding,
-		executors:            make(map[string]executorMetadata),
-		ctx:                  ctx,
-		cancel:               cancel,
-		orchestratorRegistry: orchestrator.NewRegistry(deploymentStore),
-		geoIP:                geoIP,
-		hostLocation:         hostLocation,
-		dmsConfig:            cfg,
-		fs:                   fs,
-		volumeController:     volumeController,
-		volumeOwners:         make(map[string]string),
-		contractStore:        contractStore,
-		paymentStore:         paymentStore,
-		usageStore:           usageStore,
-		transactionStore:     transactionStore,
-		contractActors:       make([]*tokenomics.ContractActor, 0),
+		allocator:              allocator,
+		hostID:                 hostID,
+		network:                net,
+		bids:                   make(map[string]*bidState),
+		answeredBids:           make(map[string][]uint64),
+		peers:                  make(map[peer.ID]*peerState),
+		resourceManager:        resourceManager,
+		hardware:               hardware,
+		actor:                  nodeActor,
+		rootCap:                rootCap,
+		scheduler:              scheduler,
+		onboarding:             onboarding,
+		executors:              make(map[string]executorMetadata),
+		ctx:                    ctx,
+		cancel:                 cancel,
+		orchestratorRegistry:   orchestrator.NewRegistry(deploymentStore),
+		geoIP:                  geoIP,
+		hostLocation:           hostLocation,
+		dmsConfig:              cfg,
+		fs:                     fs,
+		volumeController:       volumeController,
+		volumeOwners:           make(map[string]string),
+		contractStore:          contractStore,
+		paymentStore:           paymentStore,
+		usageStore:             usageStore,
+		transactionStore:       transactionStore,
+		contractActors:         make([]*tokenomics.ContractActor, 0),
+		serverProviderRegistry: providerRegistry,
+		gatewayStore:           gatewayStore,
 	}
 
 	// set up the flight recorder
@@ -606,6 +617,16 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.ContractConfirmLocalTransactionBehavior: {
 			fn: n.handleConfirmLocalTransaction,
 		},
+
+		// gateway
+		behaviors.PromiseBidToBidBehavior: {
+			fn: n.handlePromiseBid,
+		},
+
+		// provisioned server
+		behaviors.PromiseBidSigningBehavior: {
+			fn: n.handleBidSigning,
+		},
 	}
 
 	return dmsBehaviors
@@ -652,6 +673,76 @@ func (n *Node) gcBidState() {
 
 		case <-n.ctx.Done():
 			return
+		}
+	}
+}
+
+func (n *Node) shutdownUnusedProvisionedResources() {
+	ticker := time.NewTicker(provisionedResourcesGCInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			n.deleteProvionedResource()
+
+		case <-n.ctx.Done():
+			return
+		}
+	}
+}
+
+func (n *Node) deleteProvionedResource() {
+	all, err := n.gatewayStore.All()
+	if err != nil {
+		log.Errorf("failed to get provisioned resources from store: %v", err)
+		return
+	}
+
+	for _, v := range all {
+		destination, err := actor.HandleFromPeerID(v.ProvisionedVMPeerID)
+		if err != nil {
+			log.Errorf("failed to get handle of provisioned dms")
+			continue
+		}
+		envelope, err := n.invokeBehaviour(destination, behaviors.AllocationsListBehavior, nil, invokeMessageTimeout)
+		if envelope.Message == nil || err != nil {
+			log.Errorf("failed to get allocation list from new dms: %v", err)
+			continue
+		}
+
+		var allocs AllocationsListResponse
+		err = json.Unmarshal(envelope.Message, &allocs)
+		if err != nil {
+			log.Errorf("failed to unmarshal allocation list from new dms: %v", err)
+			continue
+		}
+
+		killVM := true
+		for _, alloc := range allocs.Allocations {
+			if alloc.Status == "pending" || alloc.Status == "running" || alloc.Status == "stopped" {
+				killVM = false
+				break
+			}
+		}
+
+		if killVM {
+			serverProvider, err := n.serverProviderRegistry.Get(v.ProviderName)
+			if err != nil {
+				log.Errorf("failed to get server provider for deleting unused resource: %v", err)
+				continue
+			}
+
+			err = serverProvider.DeleteServer(context.Background(), v.Resource.ID)
+			if err != nil {
+				log.Errorf("failed to delete provisioned resource: %v", err)
+				continue
+			}
+
+			err = n.gatewayStore.Delete(v.Resource.ID)
+			if err != nil {
+				log.Errorf("failed to delete provisioned resource from local store: %v", err)
+			}
 		}
 	}
 }
@@ -745,6 +836,9 @@ func (n *Node) Start() error {
 	n.running.Store(true)
 	go n.gcBidState()
 	go n.geolocate()
+	if n.dmsConfig.General.ComputeGateway {
+		go n.shutdownUnusedProvisionedResources()
+	}
 
 	log.Infow("node_started_successfully",
 		"labels", string(observability.LabelNode))

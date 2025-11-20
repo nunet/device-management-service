@@ -469,13 +469,13 @@ func (c *Client) startVolume(t *testing.T, volName, context, passphrase, dest st
 	return buf.String(), err
 }
 
-func (c *Client) deploy(t *testing.T, context, passphrase, specPath string) string {
+func (c *Client) deploy(t *testing.T, context, passphrase, specPath, timeout string) string {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/new", "--spec-file", specPath, "--timeout", "2m"}
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/new", "--spec-file", specPath, "--timeout", timeout}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
