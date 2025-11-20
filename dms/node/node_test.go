@@ -22,6 +22,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
+	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
@@ -169,6 +171,8 @@ func TestNew(t *testing.T) {
 			&usage.Store{},
 			&transaction.Store{},
 			deploymentStore,
+			&provider.Registry{},
+			&gatewastore.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "onboarding is nil")
@@ -197,6 +201,8 @@ func TestNew(t *testing.T) {
 			&usage.Store{},
 			&transaction.Store{},
 			deploymentStore,
+			&provider.Registry{},
+			&gatewastore.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "root capability context is nil")
@@ -224,6 +230,8 @@ func TestNew(t *testing.T) {
 			&usage.Store{},
 			&transaction.Store{},
 			deploymentStore,
+			&provider.Registry{},
+			&gatewastore.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "hostID is empty")
@@ -252,6 +260,8 @@ func TestNew(t *testing.T) {
 			&usage.Store{},
 			&transaction.Store{},
 			deploymentStore,
+			&provider.Registry{},
+			&gatewastore.Store{},
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "network is nil")
@@ -280,6 +290,8 @@ func TestNew(t *testing.T) {
 			&usage.Store{},
 			&transaction.Store{},
 			deploymentStore,
+			&provider.Registry{},
+			&gatewastore.Store{},
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, node)

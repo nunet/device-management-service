@@ -34,9 +34,19 @@ type General struct {
 	StorageCADirectory       string `mapstructure:"storage_ca_directory"       json:"storage_ca_directory"`
 	StorageBricksDir         string `mapstructure:"storage_bricks_dir"         json:"storage_bricks_dir"`
 	StorageGlusterfsHostname string `mapstructure:"storage_glusterfs_hostname" json:"storage_glusterfs_hostname"`
+	ComputeGateway           bool   `mapstructure:"compute_gateway" json:"compute_gateway"`
+
+	// server provider configurations
+	Providers []ProviderConfig `mapstructure:"providers" json:"providers"`
 
 	PaymentProvider     PaymentProvider `mapstructure:"payment_provider" json:"payment_provider"`
 	PushLivenessEnabled bool
+}
+
+type ProviderConfig struct {
+	Name   string                 `mapstructure:"name" json:"name"`
+	Type   string                 `mapstructure:"type" json:"type"` // e.g "local-incus"
+	Config map[string]interface{} `mapstructure:"config" json:"config"`
 }
 
 type PaymentProvider struct {

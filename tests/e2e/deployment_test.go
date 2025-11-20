@@ -30,6 +30,7 @@ func DeploymentTests(suite *TestSuite) {
 		deployment2Result := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "ensembles", "hello.yaml"),
+			"2m",
 		)
 		suite.Contains(deployment2Result, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deployment2Result)
@@ -78,7 +79,9 @@ func DeploymentWithRedundancyTest(suite *TestSuite) {
 		deployer := suite.nodes[3]
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
-			srcFile)
+			srcFile,
+			"2m",
+		)
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deploymentResult)
 
@@ -176,6 +179,7 @@ func DeploymentFullAssertion(suite *TestSuite) {
 		suite.T(), deployer.userContext,
 		deployer.password,
 		ensemblePath,
+		"2m",
 	)
 	suite.Contains(deploymentResult, `"Status": "OK"`)
 	ensembleID := extractEnsembleID(deploymentResult)
@@ -469,6 +473,7 @@ func DeploymentUpdates(suite *TestSuite) {
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "multiple.yaml"),
+			"2m",
 		)
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -556,6 +561,7 @@ func DeploymentUpdates(suite *TestSuite) {
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "single_node.yaml"),
+			"2m",
 		)
 		suite.Require().Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -640,6 +646,7 @@ func DeploymentUpdates(suite *TestSuite) {
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "multiple.yaml"),
+			"2m",
 		)
 		suite.Require().Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -743,6 +750,7 @@ func DeploymentRestorationPostReboot(suite *TestSuite) {
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password, ensemblePath,
+			"2m",
 		)
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -836,7 +844,7 @@ func DeploymentRestorationFromCommitting(suite *TestSuite) {
 		deployer := suite.nodes[1]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
 
@@ -937,7 +945,7 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 		deployer := suite.nodes[1]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
 
@@ -1036,7 +1044,7 @@ func DeploymentRestorationFromPreparing(suite *TestSuite) {
 		deployer := suite.nodes[1]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
 
@@ -1142,7 +1150,7 @@ func DeploymentRestorationFromCommittingTaskAllocation(suite *TestSuite) {
 		deployer := suite.nodes[1]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "hello.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
 
@@ -1237,7 +1245,7 @@ func DeploymentRestorationFromProvisioningTaskAllocation(suite *TestSuite) {
 		deployer := suite.nodes[1]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "hello.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
 

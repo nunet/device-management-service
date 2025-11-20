@@ -90,7 +90,7 @@ func DeployWithContractTest(suite *TestSuite) {
 
 		deploymentResult := requester.client.deploy(
 			suite.T(), requester.userContext, requester.password,
-			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"))
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deploymentResult)
 
@@ -130,7 +130,7 @@ func DeployWithContractTest(suite *TestSuite) {
 
 		deploymentResult = requester.client.deploy(
 			suite.T(), requester.userContext, requester.password,
-			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"))
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		manifestID = extractEnsembleID(deploymentResult)
 

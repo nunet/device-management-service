@@ -36,6 +36,9 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
+	"gitlab.com/nunet/device-management-service/gateway/provider/local"
+	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
@@ -272,6 +275,24 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("failed to create transaction store: %w", err)
 	}
 
+	factories := provider.NewProviderFactoryRegistry(capCtx.DID().URI)
+	// add local incus to the factory
+	local.RegisterFactory(factories)
+	provRegistry, err := buildProviderRegistry(gcfg, factories)
+	if err != nil {
+		log.Fatalf("failed to build provider registry: %v", err)
+	}
+
+	if gcfg.General.ComputeGateway {
+		if os.Getenv("DMS_BINARY_PATH") == "" {
+			log.Fatal("DMS_BINARY_PATH env var not set: compute gateway needs absolute path to dms binary")
+		}
+	}
+	provisionedResourceStore, err := gatewastore.New(db)
+	if err != nil {
+		log.Fatalf("failed to prepate gateway store: %v", err)
+	}
+
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
@@ -282,6 +303,8 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		usageStore,
 		txStore,
 		deploymentStore,
+		provRegistry,
+		provisionedResourceStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -308,6 +331,21 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		Node:       node,
 		RestServer: rServer,
 	}, nil
+}
+
+func buildProviderRegistry(gcfg *config.Config, factories *provider.FactoryRegistry) (*provider.Registry, error) {
+	reg := provider.NewProviderRegistry()
+
+	for _, pc := range gcfg.General.Providers {
+		p, err := factories.Create(pc.Type, pc.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create provider %q: %w", pc.Type, err)
+		}
+
+		reg.Register(p)
+	}
+
+	return reg, nil
 }
 
 func (d *DMS) Run() error {
@@ -403,6 +441,7 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"gpu",
 			"contracts",
 			"contracts_keys",
+			"provisioned_resources",
 			"contracts_payments",
 			"service_provider_transactions",
 			"contracts_usage",

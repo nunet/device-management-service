@@ -67,6 +67,7 @@ type BidV1 struct {
 	Handle     actor.Handle // the handle of the actor submitting the bid
 	Contracts  map[string]types.ContractConfig
 	Signature  []byte
+	PromiseBid bool
 }
 
 const bidPrefix = "dms-bid-"

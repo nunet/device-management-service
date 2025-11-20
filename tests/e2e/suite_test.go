@@ -28,6 +28,7 @@ import (
 	"go.elastic.co/apm/v2"
 
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -300,7 +301,9 @@ func (s *TestSuite) startNode(index int) {
 		"GOLOG_LOG_LEVEL=debug",
 		"DMS_OBSERVE_LEVEL=debug",
 		"DMS_FLIGHTREC_SEC="+envFlightrec,
+		"DMS_BINARY_PATH="+binaryPath,
 	)
+
 	// nest under a test span
 	if s.rootTrace != nil {
 		traceCtx := s.rootTrace.TraceContext()
@@ -499,6 +502,19 @@ func (s *TestSuite) setupTestNetwork() {
 		if s.Name == "deployment_with_contracts_tests" && nodeIndex == 3 {
 			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9421/"
 			cfg.PaymentProvider.Mode = true
+		}
+
+		// for ondemand provisioner
+		// first node make it a gateway
+		if s.Name == "deployment_with_ondemand_provisioner_tests" && nodeIndex == 0 {
+			cfg.General.ComputeGateway = true
+			cfg.General.Providers = []config.ProviderConfig{
+				{
+					Name:   "local-incus",
+					Type:   "local-incus",
+					Config: map[string]interface{}{},
+				},
+			}
 		}
 
 		var err error

@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -22,6 +24,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
+	"gitlab.com/nunet/device-management-service/gateway/store"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -36,6 +40,8 @@ const (
 	MinDeploymentTime             = time.Minute - time.Second
 	MinUpdateDeploymentTime       = 2 * (time.Minute - time.Second) // TODO: tune this
 	allocationStatsRequestTimeout = 20 * time.Second
+	maxRetries                    = 5
+	retryDelay                    = time.Second
 )
 
 var (
@@ -735,6 +741,7 @@ func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 			}
 		}
 	}
+
 	log.Infow("deployments_pruned",
 		"labels", []string{string(observability.LabelDeployment)},
 		"mode", "before")
@@ -782,4 +789,227 @@ func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
 		"orchestrator_id", request.OrchestratorID)
 
 	n.sendReply(msg, DeploymentDeleteResponse{OK: true})
+}
+
+// handleBidSigning is for new provisioned dmses to sign bids
+func (n *Node) handleBidSigning(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var req jobtypes.SignPromiseBidRequest
+	err := json.Unmarshal(msg.Message, &req)
+	if err != nil {
+		n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	bid := jobtypes.Bid{
+		V1: &jobtypes.BidV1{
+			EnsembleID: req.Bid.EnsembleID(),
+			NodeID:     req.Bid.NodeID(),
+			Peer:       n.hostID,
+			Location:   req.Bid.Location(),
+			Handle:     n.actor.Handle(),
+		},
+	}
+
+	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
+	if err != nil {
+		log.Debugw("provider_retrieval_error",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
+		n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+			Error: err.Error(),
+		})
+
+		return
+	}
+
+	err = bid.Sign(provider)
+	if err != nil {
+		log.Debugw("provider_sign_error",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
+		n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+			Error: err.Error(),
+		})
+
+		return
+	}
+
+	n.storeBid(bid.EnsembleID(), req.Nounce, req.BidRequest)
+
+	n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+		Bid: bid,
+	})
+}
+
+func (n *Node) handlePromiseBid(msg actor.Envelope) {
+	defer msg.Discard()
+
+	log.Debug("handling promise bids")
+
+	var req jobtypes.PromiseBidRequest
+	err := json.Unmarshal(msg.Message, &req)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+
+		return
+	}
+
+	// check if we already signed this bid
+	bid, ok := n.getBid(req.Bid.EnsembleID())
+	if !ok {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("bid with ensemble id %s not found", req.Bid.EnsembleID()),
+		})
+		return
+	}
+
+	allProviders := n.serverProviderRegistry.All()
+	log.Debugf("checking %d providers for provisioning", len(allProviders))
+
+	ctx, cancel := context.WithCancel(n.ctx)
+	defer cancel()
+
+	var (
+		wg             sync.WaitGroup
+		found          int32
+		targetPlan     provider.Plan
+		targetProvider provider.Provider
+		mu             sync.Mutex
+	)
+
+	for _, pp := range allProviders {
+		wg.Add(1)
+		go func(pp provider.Provider) {
+			defer wg.Done()
+
+			if atomic.LoadInt32(&found) == 1 {
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			plans, err := pp.ListPlans(ctx)
+			if err != nil {
+				return
+			}
+
+			matchedPlan, err := pp.SelectMatchingPlan(plans, bid.request.V1.Resources)
+			if err != nil || matchedPlan == nil {
+				return
+			}
+
+			if atomic.CompareAndSwapInt32(&found, 0, 1) {
+				mu.Lock()
+				targetPlan = *matchedPlan
+				targetProvider = pp
+				mu.Unlock()
+				cancel() // stop others
+			}
+		}(pp)
+	}
+
+	wg.Wait()
+
+	if atomic.LoadInt32(&found) == 0 || targetProvider == nil {
+		log.Debug("targetProvider is nil — no matching plan found")
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("no suitable plan found for bid with ensemble: %s", req.Bid.EnsembleID()),
+		})
+		return
+	}
+
+	// TODO: for now image is empty, maybe make it part of the plan object
+	server, err := targetProvider.ProvisionServer(n.ctx, targetPlan, targetPlan.Name, "", msg.From.DID.String())
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("failed to provision server for bid with ensemble: %s", req.Bid.EnsembleID()),
+		})
+		return
+	}
+
+	log.Debugf("successfully provisioned server %s using provider %s", server.ID, targetProvider.Name())
+
+	connected := false
+
+	for i := 1; i <= maxRetries; i++ {
+		err = n.network.Connect(n.ctx, fmt.Sprintf("%s/p2p/%s", server.ListenAddr, server.PeerID))
+		if err == nil {
+			connected = true
+			break
+		}
+
+		time.Sleep(retryDelay)
+	}
+
+	if !connected {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("failed to connect to provisioned resource for bid: %s", req.Bid.EnsembleID()),
+		})
+		err := targetProvider.DeleteServer(ctx, server.ID)
+		if err != nil {
+			log.Errorf("failed to delete provisioned instance: %v", err)
+		}
+		return
+	}
+
+	err = n.addProvisionedResources(msg.From.DID.String(), targetProvider, server)
+	if err != nil {
+		log.Errorf("failed to record provisioned resource in store: %v", err)
+	}
+
+	destination, err := actor.HandleFromPeerID(server.PeerID)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+	signReq := jobtypes.SignPromiseBidRequest{
+		Bid:        req.Bid,
+		BidRequest: bid.request,
+		Nounce:     bid.nonce,
+	}
+
+	envelope, err := n.invokeBehaviour(destination, behaviors.PromiseBidSigningBehavior, signReq, invokeMessageTimeout)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	var signedBidPayload jobtypes.PromiseBidSigningResponse
+	err = json.Unmarshal(envelope.Message, &signedBidPayload)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	resp := jobtypes.ConvertedPromiseBidResponse{
+		Bid: signedBidPayload.Bid,
+	}
+
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) addProvisionedResources(orchestratorDID string, p provider.Provider, server *provider.Server) error {
+	return n.gatewayStore.Insert(&store.ProvisionedResources{
+		ProvisionedVMPeerID: server.PeerID,
+		Orchestrator:        orchestratorDID,
+		ProviderName:        p.Name(),
+		Resource:            *server,
+		CreatedAt:           time.Now(),
+	})
 }

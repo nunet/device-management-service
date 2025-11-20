@@ -168,6 +168,19 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, committingTask)
 	})
 
+	t.Run("DeployWithOnDemandProvisioner", func(t *testing.T) {
+		t.Parallel()
+
+		deploymentWithOnDemandProvisionerTests := &TestSuite{
+			numNodes:      2,
+			Name:          "deployment_with_ondemand_provisioner_tests",
+			restPortIndex: ports[18],
+			p2pPortIndex:  ports[19],
+			runner:        DeployWithOnDemandProvisioner,
+		}
+		suite.Run(t, deploymentWithOnDemandProvisionerTests)
+	})
+
 	// Disabled because too flaky since 'Provisioning' status is too quick to catch
 	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
 	// test case
