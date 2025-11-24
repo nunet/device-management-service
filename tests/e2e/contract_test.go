@@ -235,7 +235,7 @@ func DeployWithContractTest(suite *TestSuite) {
 }
 
 func getContractID(input string) (string, error) {
-	var response contracts.CreateContractResponseBehaviour
+	var response contracts.CreateContractResponse
 	if err := json.Unmarshal([]byte(input), &response); err != nil {
 		return "", fmt.Errorf("failed to unmarshal contract create response: %w", err)
 	}

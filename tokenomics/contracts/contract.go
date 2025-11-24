@@ -21,7 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type CreateContractRequestBehaviour struct {
+type CreateContractRequest struct {
 	SolutionEnablerDID    did.DID              `json:"solution_enabler_did"`
 	PaymentValidatorDID   did.DID              `json:"payment_validator_did"`
 	ResourceConfiguration types.Resources      `json:"resource_configuration"`
@@ -43,7 +43,7 @@ type ContractPaymentStatusResponse struct {
 	Error    string `json:"error"`
 }
 
-type CollectUsagesAndForwardToPaymentProvidersReponse struct {
+type CollectUsagesAndForwardToPaymentProvidersResponse struct {
 	Error       string `json:"error"`
 	TotalUsages int    `json:"total_usages"`
 }
@@ -77,39 +77,39 @@ type TransactionForServiceProviderResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractUsageRequestBehavior struct {
+type ContractUsageRequest struct {
 	UniqueID string   `json:"unique_id"`
 	Contract Contract `json:"contract"`
 	Usages   int      `json:"usages"`
 }
 
-type ContractUsageResponseBehavior struct {
+type ContractUsageResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractEventRequestBehaviour struct {
+type ContractEventRequest struct {
 	Payload []byte `json:"payload"`
 }
 
-type ContractEventResponseBehaviour struct {
+type ContractEventResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractPaymentValidationRequestBehavior struct {
+type ContractPaymentValidationRequest struct {
 	TxHash     string `json:"tx_hash"`
 	UniqueID   string `json:"unique_id"`
 	Blockchain string `json:"blockchain"`
 }
 
-type ContractPaymentValidationResponseBehavior struct {
+type ContractPaymentValidationResponse struct {
 	Error string `json:"error"`
 }
 
-type PaymentValidateRequestBehaviour struct {
+type PaymentValidateRequest struct {
 	ContractDID string `json:"contract_did"`
 }
 
-type PaymentValidateResponseBehaviour struct {
+type PaymentValidateResponse struct {
 	Error string `json:"error"`
 }
 
@@ -133,7 +133,7 @@ type ContractApproveLocalRequest struct {
 	ContractDID string `json:"contract_did"`
 }
 
-type ContractApproveLocalResponseBehaviour struct {
+type ContractApproveLocalResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
 }
@@ -144,61 +144,61 @@ type ContractVerificationResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-type ContractStatusRequestBehaviour struct {
+type ContractStatusRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractStatusResponseBehaviour struct {
+type ContractStatusResponse struct {
 	Error    string   `json:"error"`
 	Contract Contract `json:"contract"`
 }
 
-type CreateContractResponseBehaviour struct {
-	ContractRequest CreateContractRequestBehaviour `json:"contract_request"`
-	ContractDID     string                         `json:"contract_did"`
-	PubKey          string                         `json:"pub_key"`
-	Error           string                         `json:"error"`
+type CreateContractResponse struct {
+	ContractRequest CreateContractRequest `json:"contract_request"`
+	ContractDID     string                `json:"contract_did"`
+	PubKey          string                `json:"pub_key"`
+	Error           string                `json:"error"`
 }
 
-type ProposeContractResponseBehaviour struct {
+type ProposeContractResponse struct {
 	Signature Signature `json:"signature"`
 	Error     string    `json:"error"`
 }
 
-type ContractTerminationRequestBehaviour struct {
+type ContractTerminationRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractTerminationResponseBehaviour struct {
+type ContractTerminationResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractCompletionRequestBehaviour struct {
+type ContractCompletionRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractCompletionResponseBehaviour struct {
+type ContractCompletionResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractSettleRequestBehaviour struct {
+type ContractSettleRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractSettleResponseBehaviour struct {
+type ContractSettleResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractValidateRequestBehaviour struct {
+type ContractValidateRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractValidateResponseBehaviour struct {
+type ContractValidateResponse struct {
 	Valid         bool   `json:"valid"`
 	CurrentStatus string `json:"current_status"`
 	Error         string `json:"error"`
 }
 
-type ContractSignRequestBehaviour struct {
+type ContractSignRequest struct {
 	ContractDID string `json:"contract_did"`
 	Signature   []byte `json:"signature"`
 }
-type ContractSignResponseBehaviour struct {
+type ContractSignResponse struct {
 	Error    string   `json:"error"`
 	Contract Contract `json:"contract"`
 }
@@ -321,7 +321,7 @@ type Signature struct {
 	Signatures []byte  `json:"signature"` // The actual signature bytes
 }
 
-func GenerateContractID(req CreateContractRequestBehaviour) (string, error) {
+func GenerateContractID(req CreateContractRequest) (string, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return "", err
@@ -330,7 +330,7 @@ func GenerateContractID(req CreateContractRequestBehaviour) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-func NewContract(contractDID string, req CreateContractRequestBehaviour) *Contract {
+func NewContract(contractDID string, req CreateContractRequest) *Contract {
 	return &Contract{
 		ContractDID:           contractDID,
 		SolutionEnablerDID:    req.SolutionEnablerDID,

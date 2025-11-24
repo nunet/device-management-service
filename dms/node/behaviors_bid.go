@@ -122,12 +122,12 @@ func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) erro
 			return fmt.Errorf("failed to get contracts host handle: %w", err)
 		}
 
-		req := contracts.ContractValidateRequestBehaviour{ContractDID: v.DID}
+		req := contracts.ContractValidateRequest{ContractDID: v.DID}
 		reply, err := n.invokeBehaviour(destination, behaviors.ContractValidationBehavior, req, invokeMessageTimeout)
 		if err != nil {
 			return fmt.Errorf("failed to send message to contract host: %w", err)
 		}
-		var respEnvelope contracts.ContractValidateResponseBehaviour
+		var respEnvelope contracts.ContractValidateResponse
 		err = json.Unmarshal(reply.Message, &respEnvelope)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)

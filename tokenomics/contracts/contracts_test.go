@@ -71,7 +71,7 @@ func TestUnmarshalContract(t *testing.T) {
 }
 `
 
-	var req CreateContractRequestBehaviour
+	var req CreateContractRequest
 	err := json.Unmarshal([]byte(data), &req)
 	assert.NoError(t, err)
 }

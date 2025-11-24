@@ -262,9 +262,9 @@ func (c *ContractActor) getContractBehaviors() map[string]struct {
 
 func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
 	defer msg.Discard()
-	resp := contracts.ContractEventResponseBehaviour{}
+	resp := contracts.ContractEventResponse{}
 
-	var req contracts.ContractEventRequestBehaviour
+	var req contracts.ContractEventRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
 		resp.Error = err.Error()
 		c.sendReply(msg, resp)
@@ -288,7 +288,7 @@ func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
 func (c *ContractActor) handlePaymentValidate(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := contracts.PaymentValidateResponseBehaviour{}
+	resp := contracts.PaymentValidateResponse{}
 	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
 	if err != nil {
 		resp.Error = err.Error()
@@ -309,9 +309,9 @@ func (c *ContractActor) handlePaymentValidate(msg actor.Envelope) {
 
 func (c *ContractActor) handleContractSignByParticipants(msg actor.Envelope) {
 	defer msg.Discard()
-	resp := contracts.ContractSignResponseBehaviour{}
+	resp := contracts.ContractSignResponse{}
 
-	var req contracts.ContractSignRequestBehaviour
+	var req contracts.ContractSignRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
 		resp.Error = err.Error()
 		c.sendReply(msg, resp)
@@ -380,7 +380,7 @@ func (c *ContractActor) handleContractSignByParticipants(msg actor.Envelope) {
 func (c *ContractActor) handleContractState(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := contracts.ContractStatusResponseBehaviour{}
+	resp := contracts.ContractStatusResponse{}
 	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
 	if err != nil {
 		resp.Error = err.Error()
@@ -410,7 +410,7 @@ func (c *ContractActor) sendReply(msg actor.Envelope, payload interface{}) {
 func (c *ContractActor) handleContractTermination(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := contracts.ContractTerminationResponseBehaviour{}
+	resp := contracts.ContractTerminationResponse{}
 	savedContract, err := c.contractStore.GetContract(c.ContractDID.URI)
 	if err != nil {
 		resp.Error = err.Error()
@@ -449,7 +449,7 @@ func (c *ContractActor) handleContractTermination(msg actor.Envelope) {
 func (c *ContractActor) handleCompleteContract(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := contracts.ContractCompletionResponseBehaviour{}
+	resp := contracts.ContractCompletionResponse{}
 	savedContract, err := c.contractStore.GetContract(c.ContractDID.URI)
 	if err != nil {
 		resp.Error = err.Error()
@@ -482,7 +482,7 @@ func (c *ContractActor) handleCompleteContract(msg actor.Envelope) {
 func (c *ContractActor) handleSettleContract(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := contracts.ContractSettleResponseBehaviour{}
+	resp := contracts.ContractSettleResponse{}
 	savedContract, err := c.contractStore.GetContract(c.ContractDID.URI)
 	if err != nil {
 		resp.Error = err.Error()
@@ -515,7 +515,7 @@ func (c *ContractActor) handleSettleContract(msg actor.Envelope) {
 func (c *ContractActor) handleContractValidation(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := contracts.ContractValidateResponseBehaviour{}
+	resp := contracts.ContractValidateResponse{}
 	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
 	if err != nil {
 		resp.Error = err.Error()

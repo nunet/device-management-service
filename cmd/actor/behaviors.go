@@ -182,7 +182,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract settle payload")
 			}
 
-			request := contracts.ContractSettleRequestBehaviour{
+			request := contracts.ContractSettleRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -226,7 +226,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract terminate payload")
 			}
 
-			request := contracts.ContractTerminationRequestBehaviour{
+			request := contracts.ContractTerminationRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -270,7 +270,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract complete payload")
 			}
 
-			request := contracts.ContractCompletionRequestBehaviour{
+			request := contracts.ContractCompletionRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -314,7 +314,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract complete payload")
 			}
 
-			request := contracts.ContractValidateRequestBehaviour{
+			request := contracts.ContractValidateRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -358,7 +358,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to encode payload")
 			}
 
-			contractReq := contracts.ContractStatusRequestBehaviour{
+			contractReq := contracts.ContractStatusRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -584,7 +584,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to read contract file: %w", err)
 			}
 
-			var contractReq contracts.CreateContractRequestBehaviour
+			var contractReq contracts.CreateContractRequest
 			err = json.Unmarshal(data, &contractReq)
 			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal create contract request payload: %w", err)
