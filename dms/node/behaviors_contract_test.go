@@ -193,7 +193,7 @@ func TestHandleContractCreateForwardAndStoreLocally(t *testing.T) {
 		behaviors.ContractCreateBehavior,
 	)
 
-	req := contracts.CreateContractRequestBehaviour{
+	req := contracts.CreateContractRequest{
 		SolutionEnablerDID:  chNode.actor.Handle().DID,
 		PaymentValidatorDID: chNode.actor.Handle().DID,
 		ResourceConfiguration: types.Resources{
@@ -238,7 +238,7 @@ func TestHandleContractCreateForwardAndStoreLocally(t *testing.T) {
 
 	require.NoError(t, spNode.actor.Send(msg))
 
-	var resp contracts.CreateContractResponseBehaviour
+	var resp contracts.CreateContractResponse
 	select {
 	case reply := <-replyCh:
 		defer reply.Discard()

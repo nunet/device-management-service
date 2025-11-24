@@ -240,17 +240,17 @@ func (c *Context) StopEnsemble(id string) error {
 	return nil
 }
 
-func (c *Context) CreateContract(contractFile string) (contracts.CreateContractResponseBehaviour, error) {
+func (c *Context) CreateContract(contractFile string) (contracts.CreateContractResponse, error) {
 	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/create --contract-file %s --timeout 1m", c.Name, contractFile))
 	if err != nil {
-		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to call contract create behavior: %w", err)
+		return contracts.CreateContractResponse{}, fmt.Errorf("failed to call contract create behavior: %w", err)
 	}
-	var resp contracts.CreateContractResponseBehaviour
+	var resp contracts.CreateContractResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
-		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+		return contracts.CreateContractResponse{}, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
 	if resp.Error != "" {
-		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to create contract: %s", resp.Error)
+		return contracts.CreateContractResponse{}, fmt.Errorf("failed to create contract: %s", resp.Error)
 	}
 	return resp, nil
 }
@@ -260,7 +260,7 @@ func (c *Context) ContractStatus(contractDID, hostDID string) (*contracts.Contra
 	if err != nil {
 		return nil, fmt.Errorf("failed to call contract state behavior: %w", err)
 	}
-	var resp contracts.ContractStatusResponseBehaviour
+	var resp contracts.ContractStatusResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -320,7 +320,7 @@ func (c *Context) ApproveContract(contractDID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to call contract approve_local behavior: %w", err)
 	}
-	var resp contracts.ContractApproveLocalResponseBehaviour
+	var resp contracts.ContractApproveLocalResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -338,7 +338,7 @@ func (c *Context) CompleteContract(contractDID, hostDID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to call contract complete behavior: %w", err)
 	}
-	var resp contracts.ContractCompletionResponseBehaviour
+	var resp contracts.ContractCompletionResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -353,7 +353,7 @@ func (c *Context) TerminateContract(contractDID, hostDID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to call contract terminate behavior: %w", err)
 	}
-	var resp contracts.ContractTerminationResponseBehaviour
+	var resp contracts.ContractTerminationResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}

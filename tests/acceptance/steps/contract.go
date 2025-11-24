@@ -109,7 +109,7 @@ func requestsAContractWithThrough(ctx context.Context, spName, cpName, chName st
 	rawContract, err := os.ReadFile(contractPath)
 	assert.NoError(t, err)
 
-	var req contracts.CreateContractRequestBehaviour
+	var req contracts.CreateContractRequest
 	err = json.Unmarshal(rawContract, &req)
 	assert.NoError(t, err)
 
@@ -371,7 +371,7 @@ func createsUnrelatedContractWithThrough(ctx context.Context, spName, cpName, ch
 	rawContract, err := os.ReadFile(contractPath)
 	assert.NoError(t, err)
 
-	var req contracts.CreateContractRequestBehaviour
+	var req contracts.CreateContractRequest
 	err = json.Unmarshal(rawContract, &req)
 	assert.NoError(t, err)
 

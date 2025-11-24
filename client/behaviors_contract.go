@@ -16,8 +16,8 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
-func (c *Client) NewContract(ctx context.Context, req contracts.CreateContractRequestBehaviour, opts ...Option) (contracts.CreateContractResponseBehaviour, error) {
-	var response contracts.CreateContractResponseBehaviour
+func (c *Client) NewContract(ctx context.Context, req contracts.CreateContractRequest, opts ...Option) (contracts.CreateContractResponse, error) {
+	var response contracts.CreateContractResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
@@ -33,8 +33,8 @@ func (c *Client) NewContract(ctx context.Context, req contracts.CreateContractRe
 	return response, err
 }
 
-func (c *Client) ContractStatus(ctx context.Context, req contracts.ContractStatusRequestBehaviour, opts ...Option) (contracts.ContractStatusResponseBehaviour, error) {
-	var response contracts.ContractStatusResponseBehaviour
+func (c *Client) ContractStatus(ctx context.Context, req contracts.ContractStatusRequest, opts ...Option) (contracts.ContractStatusResponse, error) {
+	var response contracts.ContractStatusResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
@@ -50,8 +50,8 @@ func (c *Client) ContractStatus(ctx context.Context, req contracts.ContractStatu
 	return response, err
 }
 
-func (c *Client) ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequest, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error) {
-	var response contracts.ContractApproveLocalResponseBehaviour
+func (c *Client) ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequest, opts ...Option) (contracts.ContractApproveLocalResponse, error) {
+	var response contracts.ContractApproveLocalResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
@@ -118,8 +118,8 @@ func (c *Client) ConfirmTransaction(ctx context.Context, req contracts.ContractC
 	return response, err
 }
 
-func (c *Client) CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error) {
-	var response contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+func (c *Client) CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersResponse, error) {
+	var response contracts.CollectUsagesAndForwardToPaymentProvidersResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
@@ -152,8 +152,8 @@ func (c *Client) GetPaymentStatus(ctx context.Context, req contracts.ContractPay
 	return response, err
 }
 
-func (c *Client) TerminateContract(ctx context.Context, req contracts.ContractTerminationRequestBehaviour, opts ...Option) (contracts.ContractTerminationResponseBehaviour, error) {
-	var response contracts.ContractTerminationResponseBehaviour
+func (c *Client) TerminateContract(ctx context.Context, req contracts.ContractTerminationRequest, opts ...Option) (contracts.ContractTerminationResponse, error) {
+	var response contracts.ContractTerminationResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
@@ -169,8 +169,8 @@ func (c *Client) TerminateContract(ctx context.Context, req contracts.ContractTe
 	return response, err
 }
 
-func (c *Client) SettleContract(ctx context.Context, req contracts.ContractSettleRequestBehaviour, opts ...Option) (contracts.ContractSettleResponseBehaviour, error) {
-	var response contracts.ContractSettleResponseBehaviour
+func (c *Client) SettleContract(ctx context.Context, req contracts.ContractSettleRequest, opts ...Option) (contracts.ContractSettleResponse, error) {
+	var response contracts.ContractSettleResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
@@ -186,8 +186,8 @@ func (c *Client) SettleContract(ctx context.Context, req contracts.ContractSettl
 	return response, err
 }
 
-func (c *Client) CompleteContract(ctx context.Context, req contracts.ContractCompletionRequestBehaviour, opts ...Option) (contracts.ContractCompletionResponseBehaviour, error) {
-	var response contracts.ContractCompletionResponseBehaviour
+func (c *Client) CompleteContract(ctx context.Context, req contracts.ContractCompletionRequest, opts ...Option) (contracts.ContractCompletionResponse, error) {
+	var response contracts.ContractCompletionResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
@@ -203,8 +203,8 @@ func (c *Client) CompleteContract(ctx context.Context, req contracts.ContractCom
 	return response, err
 }
 
-func (c *Client) ValidateContract(ctx context.Context, req contracts.ContractValidateRequestBehaviour, opts ...Option) (contracts.ContractValidateResponseBehaviour, error) {
-	var response contracts.ContractValidateResponseBehaviour
+func (c *Client) ValidateContract(ctx context.Context, req contracts.ContractValidateRequest, opts ...Option) (contracts.ContractValidateResponse, error) {
+	var response contracts.ContractValidateResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,

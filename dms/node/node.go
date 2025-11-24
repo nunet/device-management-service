@@ -1088,7 +1088,7 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders() (int, error) {
 	}
 
 	for _, v := range allPayments {
-		req := contracts.ContractUsageRequestBehavior{
+		req := contracts.ContractUsageRequest{
 			UniqueID: uuid.NewString(),
 			Contract: v.Contract,
 			Usages:   v.AllocationsUsed,
@@ -1178,7 +1178,7 @@ func (n *Node) handleContractEvents(event eventhandler.Event) error {
 		return fmt.Errorf("failed to marshal event object: %w", err)
 	}
 
-	req := contracts.ContractEventRequestBehaviour{
+	req := contracts.ContractEventRequest{
 		Payload: bts,
 	}
 	reply, err := n.invokeBehaviour(destination, behaviors.ContractEventsBehavior, req, invokeMessageTimeout)
@@ -1186,7 +1186,7 @@ func (n *Node) handleContractEvents(event eventhandler.Event) error {
 		return fmt.Errorf("failed to send message to contract host: %w", err)
 	}
 
-	var respEnvelope contracts.ContractEventResponseBehaviour
+	var respEnvelope contracts.ContractEventResponse
 	err = json.Unmarshal(reply.Message, &respEnvelope)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
