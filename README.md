@@ -820,7 +820,7 @@ Current key functional areas of DMS:
 
 - Actor-based system: NuNet's network communication is powered by the [NuActor System](https://gitlab.com/nunet/device-management-service/-/blob/main/actor/README.md), a zero-trust system that utilizes fine-grained capabilities, anchored on [DIDs](https://www.w3.org/TR/did-core/), following the [UCAN model](https://github.com/ucan-wg/).
 - Node management: Supports [onboarding/offboarding](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/onboarding/README.md) of nodes and manages peer connections.
-- Compute ensembles: Defines ensembles as collections of logical nodes and allocations that represent compute workloads (as explained [here](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/jobs/README.md)). Each allocation is a compute job assigned to a node.
+- Compute ensembles: Defines ensembles as collections of logical nodes and allocations that represent compute workloads (as explained [here](https://gitlab.com/nunet/device-management-service/-/blob/main/dms/jobs/README.md) and [here](./docs/ensemble/README.md)). Each allocation is a compute job assigned to a node.
 - Orchestration: [Deploys an ensemble](https://gitlab.com/nunet/device-management-service/-/blob/main/docs/deployments/README.md) across nodes by fulfilling the specified constraints. This is done using a constraint satisfaction process where bids are requested from nodes and evaluated based on the required resources and locations.
 - Supervision: Once deployed, ensembles are continuously monitored.
 - VM/container lifecycle management: Allows creation, customization, and management of containers and virtual machines on the network.
