@@ -420,15 +420,126 @@ func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 		n.sendReply(msg, contracts.ContractListIncomingResponse{Error: err.Error()})
 	}
 
+	var req contracts.ContractListIncomingRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal list incoming request: %w", err))
+		return
+	}
+
 	allContracts, err := n.contractStore.GetAllContracts()
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get all contracts: %w", err))
 		return
 	}
 
-	n.sendReply(msg, contracts.ContractListIncomingResponse{
-		Contracts: allContracts,
-	})
+	callerDID := msg.From.DID.String()
+	rootDID := n.rootCap.DID().String()
+	filteredLocal := filterContractsByRole(allContracts, req.Role, callerDID)
+
+	if callerDID == rootDID {
+		solutionHosts := uniqueSolutionEnablerDIDs(allContracts)
+		if len(solutionHosts) == 0 {
+			log.Warnf("no solution hosts found (i.e: no contracts created yet) for caller %s", callerDID)
+			handleErr(fmt.Errorf("no solution hosts found to retrieve contracts from for caller %s", callerDID))
+			return
+		}
+		aggregated := make(map[string]*contracts.Contract, len(filteredLocal))
+
+		for _, hostDID := range solutionHosts {
+			if hostDID == "" {
+				continue
+			}
+
+			// if the solution enabler is this node, use local data
+			if hostDID == rootDID {
+				for _, c := range filterContractsByRole(allContracts, req.Role, callerDID) {
+					aggregated[c.ContractDID] = c
+				}
+				continue
+			}
+
+			handle, err := actor.HandleFromDID(hostDID)
+			if err != nil {
+				log.Warnf("failed to build handle for host %s: %v", hostDID, err)
+				continue
+			}
+
+			reply, err := n.invokeBehaviour(handle, behaviors.ContractListBehavior, req, invokeMessageTimeout)
+			if err != nil || reply.Message == nil {
+				log.Warnf("failed to invoke list incoming on host %s: %v", hostDID, err)
+				continue
+			}
+
+			var remoteResp contracts.ContractListIncomingResponse
+			if err := json.Unmarshal(reply.Message, &remoteResp); err != nil {
+				log.Warnf("failed to decode contract host response %s: %v", hostDID, err)
+				continue
+			}
+			if remoteResp.Error != "" {
+				log.Warnf("host %s returned error listing incoming contracts: %s", hostDID, remoteResp.Error)
+				continue
+			}
+
+			for _, c := range remoteResp.Contracts {
+				aggregated[c.ContractDID] = c
+			}
+		}
+
+		contractsSlice := make([]*contracts.Contract, 0, len(aggregated))
+		for _, c := range aggregated {
+			contractsSlice = append(contractsSlice, c)
+		}
+
+		n.sendReply(msg, contracts.ContractListIncomingResponse{
+			Contracts: contractsSlice,
+		})
+		return
+	}
+
+	// Contract host invocation: respond with local contracts only
+	resp := contracts.ContractListIncomingResponse{
+		Contracts: filteredLocal,
+	}
+	n.sendReply(msg, resp)
+}
+
+func filterContractsByRole(contractsList []*contracts.Contract, role contracts.ContractListIncomingRole, targetDID string) []*contracts.Contract {
+	result := make([]*contracts.Contract, 0, len(contractsList))
+	for _, c := range contractsList {
+		switch role {
+		case contracts.ContractRoleProvider:
+			if targetDID == "" || c.ContractParticipants.Provider.String() == targetDID {
+				result = append(result, c)
+			}
+		case contracts.ContractRoleRequestor:
+			if targetDID == "" || c.ContractParticipants.Requestor.String() == targetDID {
+				result = append(result, c)
+			}
+		default:
+			if targetDID == "" || c.SolutionEnablerDID.String() == targetDID || c.ContractParticipants.Provider.String() == targetDID || c.ContractParticipants.Requestor.String() == targetDID {
+				result = append(result, c)
+			}
+		}
+	}
+	return result
+}
+
+func uniqueSolutionEnablerDIDs(contractsList []*contracts.Contract) []string {
+	unique := make(map[string]struct{}, len(contractsList))
+	for _, c := range contractsList {
+		host := c.SolutionEnablerDID.String()
+		if host == "" {
+			continue
+		}
+		unique[host] = struct{}{}
+	}
+
+	hosts := make([]string, 0, len(unique))
+	for host := range unique {
+		hosts = append(hosts, host)
+	}
+
+	return hosts
 }
 
 func (n *Node) StartContracts() error {
