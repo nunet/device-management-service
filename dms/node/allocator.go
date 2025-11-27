@@ -231,6 +231,7 @@ type Allocator interface {
 		executor types.Executor,
 		contracts map[string]types.ContractConfig,
 		contractEventHandler *eventhandler.EventHandler,
+		deploymentID string,
 	) (*jobs.Allocation, error)
 	// Release releases allocated resources and ports for an allocation.
 	Release(ctx context.Context, allocationID string) error
@@ -524,6 +525,7 @@ func (a *allocator) Allocate(
 	executor types.Executor,
 	contracts map[string]types.ContractConfig,
 	contractEventHandler *eventhandler.EventHandler,
+	deploymentID string,
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
 	a.lock.Lock()
@@ -567,6 +569,7 @@ func (a *allocator) Allocate(
 		func() error { return a.Release(ctx, allocationID) },
 		contractEventHandler,
 		a.pushLivenessEnabled,
+		deploymentID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation: %w", err)

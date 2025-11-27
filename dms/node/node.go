@@ -956,8 +956,10 @@ func createEnsembleID(peerID string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func (n *Node) createOrchestrator(ctx context.Context,
+func (n *Node) createOrchestrator(
+	ctx context.Context,
 	ensemble jobtypes.EnsembleConfig,
+	contracts map[string]types.ContractConfig,
 ) (orchestrator.Orchestrator, error) {
 	if ensemble.V1 == nil {
 		return nil, fmt.Errorf("empty ensemble config")
@@ -985,7 +987,10 @@ func (n *Node) createOrchestrator(ctx context.Context,
 	orch, err := n.orchestratorRegistry.NewOrchestrator(
 		ctx, n.fs, n.dmsConfig.WorkDir,
 		ensembleID, childActor, ensemble,
-		types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(),
+		types.NewDefaultNodeIDGenerator(),
+		types.NewDefaultAllocationIDGenerator(),
+		n.contractEventHandler,
+		contracts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new orchestrator: %w", err)

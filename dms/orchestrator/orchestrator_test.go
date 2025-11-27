@@ -85,7 +85,7 @@ func TestOrchestratorDeploy(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Start deployment in a goroutine
@@ -388,7 +388,7 @@ func TestOrchestratorDeployWithRedundancy(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Start deployment in a goroutine
@@ -496,7 +496,7 @@ func TestOrchestratorID(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, ensembleID, o.ID())
@@ -541,7 +541,7 @@ func TestOrchestratorConfig(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	config := o.Config()
@@ -588,7 +588,7 @@ func TestOrchestratorStatus(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Initial status should be Preparing
@@ -661,7 +661,7 @@ func TestOrchestratorManifest(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Start deployment in a goroutine
@@ -751,7 +751,7 @@ func TestOrchestratorActorPrivateKey(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	privKey := o.ActorPrivateKey()
@@ -797,7 +797,7 @@ func TestOrchestratorDeploymentSnapshot(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	snapshot := o.DeploymentSnapshot()
@@ -843,7 +843,7 @@ func TestOrchestratorStatusChannel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	statusCh := o.StatusChannel(ctx)
@@ -937,7 +937,7 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Start deployment in a goroutine
@@ -1019,7 +1019,7 @@ func TestHandleTaskTermination(t *testing.T) {
 
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Deploy the ensemble
@@ -1159,7 +1159,7 @@ func TestWriteAllocationLogs(t *testing.T) {
 
 	ctx := context.Background()
 	fs := afero.Afero{Fs: afero.NewMemMapFs()}
-	o, err := NewOrchestrator(ctx, fs, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, fs, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Write allocation logs
@@ -1391,7 +1391,7 @@ func TestRevertNodeDeployment(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Set up test manifest
@@ -1592,7 +1592,7 @@ func TestRevert(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Set up test manifest
@@ -1712,7 +1712,7 @@ func TestRemoveNodeFromManifest(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Set up test manifest
@@ -1797,7 +1797,7 @@ func TestShutdown(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	deploy := func() {
@@ -2354,7 +2354,7 @@ func TestMonitorOnlyTaskManifest(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Test with only task manifest
@@ -2498,7 +2498,7 @@ func TestOrchestratorJoinSubnet(t *testing.T) {
 		},
 	}
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest, types.NewDefaultAllocationIDGenerator())
@@ -2610,7 +2610,7 @@ func TestEscalateFailure(t *testing.T) {
 		},
 	}
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Prepare allocation manifest
@@ -2916,7 +2916,7 @@ func TestIsOnlyTaskManifest(t *testing.T) {
 
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Initialize manifest
@@ -2992,7 +2992,7 @@ func TestSubnetAddPeer(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3060,7 +3060,7 @@ func TestAddDNSRecords(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest, types.NewDefaultAllocationIDGenerator())
@@ -3127,7 +3127,7 @@ func TestMapPorts(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	p := NewProvisioner(ctx, o.cancel, orch.actor, o.subnetManifest, types.NewDefaultAllocationIDGenerator())

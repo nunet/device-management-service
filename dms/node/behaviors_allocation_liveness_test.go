@@ -353,6 +353,7 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
 		true, // Enable push liveness
+		"",
 	)
 	require.NoError(t, err)
 	require.NotNil(t, allocation)
@@ -483,6 +484,7 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
 		true, // Enable push liveness
+		"",
 	)
 	require.NoError(t, err)
 
@@ -564,6 +566,7 @@ func TestAllocationLivenessDisabled(t *testing.T) {
 		func() error { return nil },
 		nil,
 		false, // DISABLE push liveness
+		"",
 	)
 	require.NoError(t, err)
 
@@ -637,6 +640,7 @@ func TestTaskAllocationDoesNotSendPeriodicHeartbeats(t *testing.T) {
 		func() error { return nil },
 		nil,
 		true, // Enable push liveness
+		"",
 	)
 	require.NoError(t, err)
 	require.NoError(t, allocation.Start())
@@ -736,6 +740,7 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
 		true,
+		"",
 	)
 	require.NoError(t, err)
 
@@ -864,6 +869,7 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
 		true,
+		"",
 	)
 	require.NoError(t, err)
 

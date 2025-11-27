@@ -88,18 +88,20 @@ type allocationLiveness struct {
 }
 
 type Allocation struct {
-	ID           string
-	allocType    jobtypes.AllocationType
-	Actor        actor.Actor
-	actorRunning bool
-	status       AllocationStatus
-	nodeID       string
-	sourceID     string
-	orchestrator actor.Handle
-	executor     types.Executor
-	executionID  string
-	Job          Job
-	network      network.Network
+	ID                 string
+	allocType          jobtypes.AllocationType
+	Actor              actor.Actor
+	actorRunning       bool
+	status             AllocationStatus
+	nodeID             string
+	sourceID           string
+	computeProviderDID string
+	deploymentID       string
+	orchestrator       actor.Handle
+	executor           types.Executor
+	executionID        string
+	Job                Job
+	network            network.Network
 	// TODO: create separated type for vpn info
 	state struct {
 		subnetIP    string
@@ -141,6 +143,7 @@ func NewAllocation(
 	selfRelease func() error,
 	contractEventHandler *eventhandler.EventHandler,
 	enablePushLiveness bool,
+	deploymentID string,
 ) (*Allocation, error) {
 	if network == nil {
 		return nil, fmt.Errorf("network is nil")
@@ -181,6 +184,8 @@ func NewAllocation(
 		}{},
 		createdAt:            time.Now(),
 		contractEventHandler: contractEventHandler,
+		computeProviderDID:   actor.Parent().DID.URI,
+		deploymentID:         deploymentID,
 	}
 
 	// Initialize liveness reporting state
@@ -291,6 +296,20 @@ func (a *Allocation) Run(
 	oldStatus := a.status
 	a.startedAt = time.Now()
 	a.status = AllocationRunning
+
+	for _, v := range a.Contracts {
+		evt := events.StartAllocation{
+			Type:               events.StartAllocationEvent,
+			AllocationID:       a.ID,
+			ComputeProviderDID: a.computeProviderDID,
+			DeploymentID:       a.deploymentID,
+		}
+		a.contractEventHandler.Push(eventhandler.Event{
+			ContractHostDID: v.Host,
+			ContractDID:     v.DID,
+			Payload:         evt,
+		})
+	}
 
 	// Send status change notification (must be done with lock released)
 	// Release lock temporarily to avoid blocking on message send
@@ -420,6 +439,20 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 	if err != nil {
 		log.Errorf("error releasing self: %s", err)
 	}
+
+	for _, v := range a.Contracts {
+		evt := events.CompleteAllocation{
+			Type:               events.CompleteAllocationEvent,
+			AllocationID:       a.ID,
+			ComputeProviderDID: a.computeProviderDID,
+			DeploymentID:       a.deploymentID,
+		}
+		a.contractEventHandler.Push(eventhandler.Event{
+			ContractHostDID: v.Host,
+			ContractDID:     v.DID,
+			Payload:         evt,
+		})
+	}
 }
 
 // Cancel stops the running executor
@@ -475,8 +508,10 @@ func (a *Allocation) Cleanup() error {
 func (a *Allocation) Terminate(ctx context.Context) error {
 	for _, v := range a.Contracts {
 		evt := events.StopAllocation{
-			Type:         events.StopAllocationEvent,
-			AllocationID: a.ID,
+			Type:               events.StopAllocationEvent,
+			AllocationID:       a.ID,
+			DeploymentID:       a.deploymentID,
+			ComputeProviderDID: a.computeProviderDID,
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,

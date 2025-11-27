@@ -56,7 +56,7 @@ func TestNode_createOrchestrator(t *testing.T) {
 		node.orchestratorRegistry = orchestrator.NewRegistry(deploymentStore)
 
 		ctx := context.Background()
-		orch, err := node.createOrchestrator(ctx, jobtypes.EnsembleConfig{})
+		orch, err := node.createOrchestrator(ctx, jobtypes.EnsembleConfig{}, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "empty ensemble config")
 		assert.Nil(t, orch)
@@ -99,7 +99,7 @@ func TestNode_createOrchestrator(t *testing.T) {
 			},
 		}
 
-		orch, err := node.createOrchestrator(ctx, ensembleConfig)
+		orch, err := node.createOrchestrator(ctx, ensembleConfig, nil)
 		assert.NoError(t, err)
 		require.NotNil(t, orch)
 

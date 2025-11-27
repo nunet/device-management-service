@@ -63,7 +63,7 @@ func TestOrchestratorHandlesStatusUpdate(t *testing.T) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID,
-		orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+		orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Deploy orchestrator (registers the real status update handler)
