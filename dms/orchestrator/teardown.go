@@ -18,6 +18,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 )
 
 type SubnetDestroyRequest struct {
@@ -75,6 +77,19 @@ func (o *BasicOrchestrator) Shutdown() error {
 		o.setStatus(jtypes.DeploymentStatusCompleted)
 		if o.cancel != nil {
 			o.cancel()
+		}
+
+		for _, v := range o.contracts {
+			evt := events.DeploymentStop{
+				Type:           events.DeploymentStopEvent,
+				DeploymentID:   o.manifest.ID,
+				OrchestratorID: o.id,
+			}
+			o.contractEventHandler.Push(eventhandler.Event{
+				ContractHostDID: v.Host,
+				ContractDID:     v.DID,
+				Payload:         evt,
+			})
 		}
 	}()
 
@@ -213,6 +228,7 @@ func (o *BasicOrchestrator) Shutdown() error {
 	if err1 != nil || err2 != nil {
 		return fmt.Errorf("errors occurred during shutdown: %w, %w", err1, err2)
 	}
+
 	return nil
 }
 

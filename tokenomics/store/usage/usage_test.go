@@ -132,14 +132,16 @@ func TestGetEventsByDateRange(t *testing.T) {
 func TestCountAllocationsByContract(t *testing.T) {
 	store := setupTestDB(t)
 
-	createEvent := []byte(`{"type":"CREATE_ALLOCATION_EVENT","allocation_id":"a1"}`)
-	startEvent := []byte(`{"type":"START_ALLOCATION_EVENT","allocation_id":"a1"}`)
+	startEvent1 := []byte(`{"type":"START_ALLOCATION_EVENT","allocation_id":"a1"}`)
+	startEvent2 := []byte(`{"type":"START_ALLOCATION_EVENT","allocation_id":"a2"}`)
+	completeEvent := []byte(`{"type":"COMPLETE_ALLOCATION_EVENT","allocation_id":"a1"}`)
+	startEvent3 := []byte(`{"type":"START_ALLOCATION_EVENT","allocation_id":"a3"}`)
 
 	usages := []Usage{
-		{ContractDID: "contract-123", Data: createEvent}, // should count
-		{ContractDID: "contract-123", Data: startEvent},  // should NOT count
-		{ContractDID: "contract-123", Data: createEvent}, // should count
-		{ContractDID: "contract-456", Data: createEvent}, // should count
+		{ContractDID: "contract-123", Data: startEvent1},   // should count (unique a1)
+		{ContractDID: "contract-123", Data: completeEvent}, // should NOT count (not START event)
+		{ContractDID: "contract-123", Data: startEvent2},   // should count (unique a2)
+		{ContractDID: "contract-456", Data: startEvent3},   // should count (unique a3)
 	}
 
 	for _, u := range usages {

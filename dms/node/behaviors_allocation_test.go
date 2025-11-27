@@ -313,6 +313,7 @@ func TestCreateAllocation(t *testing.T) {
 			},
 			orchHandle,
 			map[string]types.ContractConfig{},
+			"",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported executor type: null")
@@ -328,6 +329,7 @@ func TestCreateAllocation(t *testing.T) {
 			},
 			orchHandle,
 			map[string]types.ContractConfig{},
+			"",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported executor type: firecracker")
@@ -356,6 +358,7 @@ func TestCreateAllocation(t *testing.T) {
 			},
 			orchHandle,
 			map[string]types.ContractConfig{},
+			"",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "allocation not committed")
@@ -396,6 +399,7 @@ func TestCreateAllocation(t *testing.T) {
 			},
 			orchHandle,
 			map[string]types.ContractConfig{},
+			"deployment-id",
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc)
@@ -819,6 +823,7 @@ func TestHandleAllocationShutdown(t *testing.T) {
 			},
 			supervisorHandle,
 			map[string]types.ContractConfig{},
+			"deployment-id",
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc)
@@ -935,6 +940,7 @@ func TestHandleAllocationsList(t *testing.T) {
 			allocationID1, jobtypes.AllocationType("task"),
 			job, supervisorHandle,
 			map[string]types.ContractConfig{},
+			"deployment-id",
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc1)
@@ -943,6 +949,7 @@ func TestHandleAllocationsList(t *testing.T) {
 			allocationID2, jobtypes.AllocationType("task"),
 			job, supervisorHandle,
 			map[string]types.ContractConfig{},
+			"deployment-id",
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc2)

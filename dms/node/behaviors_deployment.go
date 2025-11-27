@@ -165,7 +165,12 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 		return
 	}
 
-	orch, err := n.createOrchestrator(n.ctx, request.Ensemble)
+	if request.Ensemble.V1 == nil {
+		handleErr(errors.New("empty ensemble config"))
+		return
+	}
+
+	orch, err := n.createOrchestrator(n.ctx, request.Ensemble, request.Ensemble.Contracts())
 	if err != nil {
 		log.Warnw("orchestrator_creation_failure",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -196,7 +201,6 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 
 		return
 	}
-
 	// Orchestrator status is automatically saved to store via status watcher
 }
 

@@ -266,7 +266,7 @@ func TestSupervision(t *testing.T) {
 	workDir := "/tmp"
 	ensembleID := "test-ensemble"
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Start deployment
@@ -356,7 +356,7 @@ func TestSupervisorUpdate(t *testing.T) {
 		},
 	}
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	// Initial manifest with one allocation
@@ -555,7 +555,7 @@ func TestSupervisorPerformHealthCheck(t *testing.T) {
 		},
 	}
 
-	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o, err := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err)
 
 	allocation := jtypes.AllocationManifest{

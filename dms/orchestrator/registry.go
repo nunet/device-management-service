@@ -20,6 +20,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -30,6 +31,8 @@ type Registry interface {
 		ctx context.Context, fs afero.Afero, workDir string,
 		id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
 		nodeIDGenerator types.NodeIDGenerator, allocationIDGenerator types.AllocationIDGenerator,
+		contractEventHandler *eventhandler.EventHandler,
+		contracts map[string]types.ContractConfig,
 	) (Orchestrator, error)
 	// RestoreDeployment restores deployments where the status is either provisioning, committing or running
 	RestoreDeployment(
@@ -83,6 +86,8 @@ func (f *basicRegistry) NewOrchestrator(
 	ctx context.Context, fs afero.Afero, workDir string,
 	id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
 	nodeIDGenerator types.NodeIDGenerator, allocationIDGenerator types.AllocationIDGenerator,
+	contractEventHandler *eventhandler.EventHandler,
+	contracts map[string]types.ContractConfig,
 ) (Orchestrator, error) {
 	// check if orchestrator already exists in store
 	if _, err := f.store.Get(id); err == nil {
@@ -90,7 +95,7 @@ func (f *basicRegistry) NewOrchestrator(
 	}
 
 	// NewOrchestrator creates a new orchestrator with a new context
-	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg, nodeIDGenerator, allocationIDGenerator)
+	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg, nodeIDGenerator, allocationIDGenerator, contractEventHandler, contracts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
 	}

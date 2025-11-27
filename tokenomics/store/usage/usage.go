@@ -27,12 +27,21 @@ const (
 )
 
 type Usage struct {
-	ContractDID string `json:"contract_did"`
-	Data        []byte `json:"data"`
+	ContractDID string           `json:"contract_did"`
+	EventType   events.EventType `json:"event_type,omitempty"` // For indexing - extracted from JSON if not provided
+	Data        []byte           `json:"data"`                 // Raw JSON bytes
 }
 
 type Store struct {
 	db *clover.DB
+}
+
+// EventFilters defines filters for querying events
+type EventFilters struct {
+	ContractDID string
+	EventTypes  []events.EventType
+	StartTime   time.Time
+	EndTime     time.Time
 }
 
 func New(db *clover.DB) (*Store, error) {
@@ -54,6 +63,22 @@ func (s *Store) AddUsageEvent(u Usage) error {
 	doc.Set("contract_did", u.ContractDID)
 	doc.Set("created_at", time.Now().UnixNano())
 	doc.Set("usage_data", u.Data)
+
+	// Extract event_type from JSON for indexing (if not already provided)
+	eventType := u.EventType
+	if eventType == "" && len(u.Data) > 0 {
+		var base struct {
+			Type events.EventType `json:"type"`
+		}
+		if err := json.Unmarshal(u.Data, &base); err == nil {
+			eventType = base.Type
+		}
+	}
+
+	// Store event_type as indexed field for efficient querying
+	if eventType != "" {
+		doc.Set("event_type", string(eventType))
+	}
 
 	_, err := s.db.InsertOne(contractsUsageCollection, doc)
 	if err != nil {
@@ -80,6 +105,9 @@ func (s *Store) GetEventsByContract(contractDID string) ([]*Usage, error) {
 		if data, ok := doc.Get("usage_data").([]byte); ok {
 			u.Data = data
 		}
+		if eventTypeStr, ok := doc.Get("event_type").(string); ok {
+			u.EventType = events.EventType(eventTypeStr)
+		}
 		usages = append(usages, &u)
 	}
 
@@ -101,6 +129,9 @@ func (s *Store) GetAllEvents() ([]*Usage, error) {
 		data := doc.Get("usage_data")
 		currentUsage.Data = data.([]byte)
 		currentUsage.ContractDID = doc.Get("contract_did").(string)
+		if eventTypeStr, ok := doc.Get("event_type").(string); ok {
+			currentUsage.EventType = events.EventType(eventTypeStr)
+		}
 		allUsages = append(allUsages, &currentUsage)
 	}
 
@@ -127,38 +158,160 @@ func (s *Store) GetEventsByDateRange(start, end time.Time) ([]*Usage, error) {
 		if data, ok := doc.Get("usage_data").([]byte); ok {
 			u.Data = data
 		}
+		if eventTypeStr, ok := doc.Get("event_type").(string); ok {
+			u.EventType = events.EventType(eventTypeStr)
+		}
 		usages = append(usages, &u)
 	}
 
 	return usages, nil
 }
 
-// CountAllocationsByContract retrieves all events and returns a map
-// of contractDID -> allocation count (based on CreateAllocationEvent).
-// CountAllocationsByContract retrieves events within a given time range
-// and returns a map of contractDID -> allocation count (based on CreateAllocationEvent).
-func (s *Store) CountAllocationsByContract(start, end time.Time) (map[string]int, error) {
-	usages, err := s.GetEventsByDateRange(start, end)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get events by date range: %w", err)
+// QueryEvents - Generic query with filters (event_type-based filtering)
+func (s *Store) QueryEvents(filters EventFilters) ([]*Usage, error) {
+	q := query.NewQuery(contractsUsageCollection)
+
+	if filters.ContractDID != "" {
+		q = q.Where(query.Field("contract_did").Eq(filters.ContractDID))
 	}
 
+	if len(filters.EventTypes) > 0 {
+		typeStrs := make([]interface{}, len(filters.EventTypes))
+		for i, et := range filters.EventTypes {
+			typeStrs[i] = string(et)
+		}
+		q = q.Where(query.Field("event_type").In(typeStrs...))
+	}
+
+	if !filters.StartTime.IsZero() {
+		q = q.Where(query.Field("created_at").GtEq(filters.StartTime.UnixNano()))
+	}
+	if !filters.EndTime.IsZero() {
+		q = q.Where(query.Field("created_at").LtEq(filters.EndTime.UnixNano()))
+	}
+
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events: %w", err)
+	}
+
+	usages := make([]*Usage, 0, len(docs))
+	for _, doc := range docs {
+		var u Usage
+		if cdid, ok := doc.Get("contract_did").(string); ok {
+			u.ContractDID = cdid
+		}
+		if data, ok := doc.Get("usage_data").([]byte); ok {
+			u.Data = data
+		}
+		if eventTypeStr, ok := doc.Get("event_type").(string); ok {
+			u.EventType = events.EventType(eventTypeStr)
+		}
+		usages = append(usages, &u)
+	}
+
+	return usages, nil
+}
+
+// CountAllocationsByContract retrieves all events within a given time range
+// and returns a map of contractDID -> allocation count (based on START_ALLOCATION_EVENT).
+// This is the backward-compatible version that returns counts for all contracts.
+func (s *Store) CountAllocationsByContract(start, end time.Time) (map[string]int, error) {
+	// First filter by event_type at DB level, then unmarshal to count unique allocation_ids
+	events, err := s.QueryEvents(EventFilters{
+		EventTypes: []events.EventType{events.StartAllocationEvent},
+		StartTime:  start,
+		EndTime:    end,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events: %w", err)
+	}
+
+	// Group by contract and count unique allocations
+	contractAllocations := make(map[string]map[string]bool)
+	for _, evt := range events {
+		var evtData struct {
+			AllocationID string `json:"allocation_id"`
+		}
+		if err := json.Unmarshal(evt.Data, &evtData); err != nil {
+			continue
+		}
+		if evtData.AllocationID != "" {
+			if contractAllocations[evt.ContractDID] == nil {
+				contractAllocations[evt.ContractDID] = make(map[string]bool)
+			}
+			contractAllocations[evt.ContractDID][evtData.AllocationID] = true
+		}
+	}
+
+	// Convert to map[string]int
 	contractCounts := make(map[string]int)
-
-	for _, usage := range usages {
-		var base struct {
-			Type events.EventType `json:"type"`
-		}
-		if err := json.Unmarshal(usage.Data, &base); err != nil {
-			continue // skip invalid payloads
-		}
-
-		if base.Type == events.CreateAllocationEvent {
-			contractCounts[usage.ContractDID]++
-		}
+	for contractDID, allocationSet := range contractAllocations {
+		contractCounts[contractDID] = len(allocationSet)
 	}
 
 	return contractCounts, nil
+}
+
+// CountAllocationsByContractDID retrieves events within a given time range
+// for a specific contract DID and returns the count of unique allocations based on START_ALLOCATION_EVENT.
+func (s *Store) CountAllocationsByContractDID(contractDID string, start, end time.Time) (int, error) {
+	// First filter by event_type at DB level, then unmarshal to count unique allocation_ids
+	events, err := s.QueryEvents(EventFilters{
+		ContractDID: contractDID,
+		EventTypes:  []events.EventType{events.StartAllocationEvent},
+		StartTime:   start,
+		EndTime:     end,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to query events: %w", err)
+	}
+
+	// Unmarshal JSON to get allocation_id for unique counting
+	allocationSet := make(map[string]bool)
+	for _, evt := range events {
+		var evtData struct {
+			AllocationID string `json:"allocation_id"`
+		}
+		if err := json.Unmarshal(evt.Data, &evtData); err != nil {
+			continue
+		}
+		if evtData.AllocationID != "" {
+			allocationSet[evtData.AllocationID] = true
+		}
+	}
+
+	return len(allocationSet), nil
+}
+
+// CountDeploymentsByContract retrieves events within a given time range
+// and returns the count of unique deployments based on DEPLOYMENT_START_EVENT.
+func (s *Store) CountDeploymentsByContract(contractDID string, start, end time.Time) (int, error) {
+	events, err := s.QueryEvents(EventFilters{
+		ContractDID: contractDID,
+		EventTypes:  []events.EventType{events.DeploymentStartEvent},
+		StartTime:   start,
+		EndTime:     end,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to query events: %w", err)
+	}
+
+	// Unmarshal JSON to get deployment_id for unique counting
+	deploymentSet := make(map[string]bool)
+	for _, evt := range events {
+		var evtData struct {
+			DeploymentID string `json:"deployment_id"`
+		}
+		if err := json.Unmarshal(evt.Data, &evtData); err != nil {
+			continue
+		}
+		if evtData.DeploymentID != "" {
+			deploymentSet[evtData.DeploymentID] = true
+		}
+	}
+
+	return len(deploymentSet), nil
 }
 
 // SaveLastProcessedAt stores the last processed timestamp (Unix seconds).

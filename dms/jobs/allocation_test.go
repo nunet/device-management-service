@@ -90,6 +90,7 @@ func TestNewAllocation(t *testing.T) {
 				func() error { return nil },
 				eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 				true, // enable push liveness
+				"",
 			)
 
 			if tt.wantErr {
@@ -547,5 +548,6 @@ func createTestAllocation(t *testing.T, vol ...types.VolumeConfig) (*Allocation,
 		func() error { return nil },
 		eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 		false, // disable push liveness for behavior tests (to avoid extra messages)
+		"",
 	)
 }

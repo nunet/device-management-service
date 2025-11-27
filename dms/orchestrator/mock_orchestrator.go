@@ -19,6 +19,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -206,6 +207,7 @@ func (m *MockOrchestratorRegistry) NewOrchestrator(
 	ctx context.Context, fs afero.Afero, workDir string,
 	id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
 	_ types.NodeIDGenerator, _ types.AllocationIDGenerator,
+	_ *eventhandler.EventHandler, _ map[string]types.ContractConfig,
 ) (Orchestrator, error) {
 	m.lock.RLock()
 	if _, ok := m.orchestrators[id]; ok {

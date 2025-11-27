@@ -175,6 +175,7 @@ func (n *Node) createAllocation(
 	allocType jobtypes.AllocationType,
 	job jobs.Job, supervisor actor.Handle,
 	contracts map[string]types.ContractConfig,
+	deploymentID string,
 ) (*jobs.Allocation, error) {
 	if contracts == nil {
 		contracts = make(map[string]types.ContractConfig)
@@ -196,6 +197,7 @@ func (n *Node) createAllocation(
 		job, executor,
 		contracts,
 		n.contractEventHandler,
+		deploymentID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("allocate: %w", err)
@@ -246,6 +248,7 @@ func (n *Node) createAllocations(
 			},
 			supervisor,
 			allocationConfig.Contracts,
+			ensembleID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create allocation %s: %w", allocationID, err)

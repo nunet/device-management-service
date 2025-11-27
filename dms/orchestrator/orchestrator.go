@@ -24,6 +24,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -103,6 +105,9 @@ type BasicOrchestrator struct {
 	// Status subscribers
 	statusSubscribers     map[chan jtypes.DeploymentStatus]struct{}
 	statusSubscribersLock sync.RWMutex
+
+	contractEventHandler *eventhandler.EventHandler
+	contracts            map[string]types.ContractConfig
 }
 
 var _ Orchestrator = (*BasicOrchestrator)(nil)
@@ -116,6 +121,8 @@ func NewOrchestrator(
 	cfg jtypes.EnsembleConfig,
 	nodeIDGenerator types.NodeIDGenerator,
 	allocationIDGenerator types.AllocationIDGenerator,
+	contractEventHandler *eventhandler.EventHandler,
+	contracts map[string]types.ContractConfig,
 ) (*BasicOrchestrator, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
@@ -151,6 +158,8 @@ func NewOrchestrator(
 		nodeIDGenerator:       nodeIDGenerator,
 		allocationIDGenerator: allocationIDGenerator,
 		statusSubscribers:     make(map[chan jtypes.DeploymentStatus]struct{}),
+		contractEventHandler:  contractEventHandler,
+		contracts:             contracts,
 	}
 
 	orchestratorBehaviors := map[string]func(actor.Envelope){
@@ -260,6 +269,19 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", o.id)
 	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
+
+	for _, v := range o.contracts {
+		evt := events.DeploymentStart{
+			Type:           events.DeploymentStartEvent,
+			DeploymentID:   o.manifest.ID,
+			OrchestratorID: o.id,
+		}
+		o.contractEventHandler.Push(eventhandler.Event{
+			ContractHostDID: v.Host,
+			ContractDID:     v.DID,
+			Payload:         evt,
+		})
+	}
 	return nil
 }
 

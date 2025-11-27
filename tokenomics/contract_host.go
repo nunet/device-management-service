@@ -22,6 +22,7 @@ import (
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	contractstore "gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 )
@@ -271,9 +272,19 @@ func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
 		return
 	}
 
-	// save the payload in db
+	// Extract event type for efficient indexing (optional - AddUsageEvent will extract if not provided)
+	var eventType events.EventType
+	var eventMap map[string]interface{}
+	if err := json.Unmarshal(req.Payload, &eventMap); err == nil {
+		if typeStr, ok := eventMap["type"].(string); ok {
+			eventType = events.EventType(typeStr)
+		}
+	}
+
+	// Store with event_type (will be extracted from JSON if not provided)
 	err := c.usageStore.AddUsageEvent(usage.Usage{
 		ContractDID: c.ContractDID.URI,
+		EventType:   eventType, // Optional - extracted from JSON if empty
 		Data:        req.Payload,
 	})
 	if err != nil {
