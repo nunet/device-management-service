@@ -58,16 +58,18 @@ type Bid struct {
 }
 
 // BidV1 is v1 of the bid structure
+// XXX: note that the json tags are camel case to be compatible with bid structure version before introducing
+// the tags. Otherwise signature verification would fail.
 type BidV1 struct {
-	EnsembleID string       // unique identifier for the ensemble
-	NodeID     string       // unique identifier for a node; matches the id of the BidRequest to which this bid pertains
-	Peer       string       // the peer ID of the node
-	PubAddress string       // observed public address of the node
-	Location   Location     // the location of the node
-	Handle     actor.Handle // the handle of the actor submitting the bid
-	Contracts  map[string]types.ContractConfig
-	Signature  []byte
-	PromiseBid bool
+	EnsembleID string                          `json:"EnsembleID"`           // unique identifier for the ensemble
+	NodeID     string                          `json:"NodeID"`               // unique identifier for a node; matches the id of the BidRequest to which this bid pertains
+	Peer       string                          `json:"Peer"`                 // the peer ID of the node
+	Location   Location                        `json:"Location"`             // the location of the node
+	Handle     actor.Handle                    `json:"Handle"`               // the handle of the actor submitting the bid
+	PubAddress string                          `json:"PubAddress,omitempty"` // observed public address of the node
+	Contracts  map[string]types.ContractConfig `json:"Contracts,omitempty"`
+	Signature  []byte                          `json:"Signature"`
+	PromiseBid bool                            `json:"PromiseBid,omitempty"`
 }
 
 const bidPrefix = "dms-bid-"
