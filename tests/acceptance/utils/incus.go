@@ -382,49 +382,97 @@ func GetNode(clients []incus.InstanceServer, name string) (*Instance, error) {
 	return nil, fmt.Errorf("failed to find instance %s on any provided Incus server", name)
 }
 
-// CreateIsolatedNATNetwork creates a completely isolated network with NAT enabled
-// This simulates a separate NAT router that nodes behind it must traverse
-func CreateIsolatedNATNetwork(c incus.InstanceServer, networkName, subnet string) error {
-	// Check if network already exists and delete if so
-	_, _, err := c.GetNetwork(networkName)
-	if err == nil {
-		fmt.Printf("[NETWORK] Network %s already exists, deleting...\n", networkName)
-		err = c.DeleteNetwork(networkName)
+func getOrCreateNetworkForward(c incus.InstanceServer, networkName, listenAddress string) (*api.NetworkForward, error) {
+	forward, _, err := c.GetNetworkForward(networkName, listenAddress)
+
+	if forward != nil && err == nil {
+		// Forward already exists
+		return forward, nil
+	}
+
+	forwardPost := api.NetworkForwardsPost{
+		ListenAddress: listenAddress,
+	}
+
+	err = c.CreateNetworkForward(networkName, forwardPost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create network forward on %s: %w", networkName, err)
+	}
+
+	forward, _, err = c.GetNetworkForward(networkName, listenAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network forward on %s after creation: %w", networkName, err)
+	}
+
+	return forward, nil
+}
+
+func NetworkForwardPort(
+	c incus.InstanceServer, networkName, listenAddress, listenPort, targetAddress, targetPort, protocol string,
+) error {
+	// Update the forward to add target address and port
+	forward, err := getOrCreateNetworkForward(c, networkName, listenAddress)
+	if err != nil {
+		return fmt.Errorf("failed to get network forward on %s: %w", networkName, err)
+	}
+
+	if forward.Ports == nil {
+		forward.Ports = []api.NetworkForwardPort{}
+	}
+
+	forward.Ports = append(forward.Ports,
+		api.NetworkForwardPort{
+			ListenPort:    listenPort,
+			TargetAddress: targetAddress,
+			TargetPort:    targetPort,
+			Protocol:      protocol,
+			Description:   "NuNet AccTest: Forward libp2p nat listening port to instance addr",
+		},
+	)
+
+	netForwardPut := api.NetworkForwardPut{
+		Ports: forward.Ports,
+	}
+
+	return c.UpdateNetworkForward(networkName, listenAddress, netForwardPut, "")
+}
+
+func CleanNetworkForward(c incus.InstanceServer) error {
+	nets, err := c.GetNetworks()
+	if err != nil {
+		return fmt.Errorf("failed to get networks: %w", err)
+	}
+	for _, net := range nets {
+		forwards, err := c.GetNetworkForwards(net.Name)
 		if err != nil {
-			return fmt.Errorf("failed to delete existing network %s: %w", networkName, err)
+			// network can not have a forward
+			continue
+		}
+		var keepFwds []api.NetworkForwardPort
+		for _, fwd := range forwards {
+			for _, port := range fwd.Ports {
+				if !strings.Contains(port.Description, "NuNet AccTest") {
+					keepFwds = append(keepFwds, port)
+				}
+			}
+			if len(keepFwds) > 0 {
+				// Update forward to keep only non-AccTest ports
+				netForwardPut := api.NetworkForwardPut{
+					Ports: keepFwds,
+				}
+				err := c.UpdateNetworkForward(net.Name, fwd.ListenAddress, netForwardPut, "")
+				if err != nil {
+					return fmt.Errorf("failed to update network forward on %s: %w", net.Name, err)
+				}
+			} else {
+				// Delete the forward entirely
+				err := c.DeleteNetworkForward(net.Name, fwd.ListenAddress)
+				if err != nil {
+					return fmt.Errorf("failed to delete network forward on %s: %w", net.Name, err)
+				}
+			}
 		}
 	}
-
-	// Create new isolated network WITHOUT NAT (we'll handle NAT in the namespace)
-	// Each network gets its own subnet to ensure complete isolation
-	networkPost := api.NetworksPost{
-		Name: networkName,
-		NetworkPut: api.NetworkPut{
-			Config: map[string]string{
-				"ipv4.address": subnet,    // Auto-assign a unique subnet
-				"ipv4.nat":     "true",    // Enable NAT
-				"ipv4.dhcp":    "true",    // Enable DHCP
-				"ipv6.address": "none",    // Disable IPv6 for simplicity
-				"dns.mode":     "dynamic", // DNS for name resolution
-			},
-		},
-	}
-
-	fmt.Printf("[NETWORK] Creating isolated network: %s\n", networkName)
-	err = c.CreateNetwork(networkPost)
-	if err != nil {
-		return fmt.Errorf("failed to create network %s: %w", networkName, err)
-	}
-
-	// Verify network was created
-	network, _, err := c.GetNetwork(networkName)
-	if err != nil {
-		return fmt.Errorf("failed to verify network %s: %w", networkName, err)
-	}
-
-	subnet = network.Config["ipv4.address"]
-	fmt.Printf("[NETWORK] Network %s created with subnet: %s\n", networkName, subnet)
-
 	return nil
 }
 

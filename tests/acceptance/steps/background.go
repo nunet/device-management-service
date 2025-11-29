@@ -134,6 +134,45 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 					return err
 				}
 			}
+
+			// get libp2p listening addr on host and forward ports
+			// wait until at least 5 listening addresses are available
+			try := 0
+			retries := 5
+			var addrs []string
+			for {
+				peerInfo, err := node.DMS().PeerAddr()
+				if err != nil {
+					return fmt.Errorf("failed to get peer addr: %w", err)
+				}
+
+				addrs = strings.Split(peerInfo.Address, ", ")
+
+				if len(addrs) >= 5 {
+					break
+				}
+				try++
+				if try >= retries {
+					return fmt.Errorf("libp2p listening addresses not available after %d retries", retries)
+				}
+				time.Sleep(5 * time.Second)
+			}
+
+			instanceIP, instancePort, hostIP, hostPort, err := utils.ExtractNetFromAddr(instance, addrs)
+			if err != nil {
+				return fmt.Errorf("failed to extract network from addr: %w", err)
+			}
+
+			netInfo, err := instance.GetNetInfo()
+			if err != nil {
+				return fmt.Errorf("failed to get network info: %w", err)
+			}
+
+			err = utils.NetworkForwardPort(instance.Client, netInfo.HostIface, hostIP, hostPort, instanceIP, instancePort, "udp")
+			if err != nil {
+				return fmt.Errorf("failed to forward port: %w", err)
+			}
+
 			return nil
 		})
 	}

@@ -81,20 +81,6 @@ func hasServicesDeployedOn(ctx context.Context, spName, cpName, otherCPName stri
 	require.NoError(t, err)
 	assert.NotNil(t, otherCPInfo)
 
-	// wait for a relay
-	require.Eventually(t, func() bool {
-		cpAddr, _ := cpDmsCtx.PeerAddr()
-		if strings.Contains(cpAddr.Address, "p2p-circuit") {
-			// wait for other cp to also have a relay
-			otherCPAddr, _ := otherCPDmsCtx.PeerAddr()
-			if strings.Contains(otherCPAddr.Address, "p2p-circuit") {
-				return true
-			}
-		}
-		return false
-	}, 2*time.Minute, 20*time.Second, nil)
-	time.Sleep(20 * time.Second)
-
 	cpAddr, err := utils.MultiaddrFromCLI(cpInfo)
 	require.NoError(t, err)
 	assert.NotEmpty(t, cpAddr)
