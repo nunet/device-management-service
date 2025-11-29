@@ -124,25 +124,11 @@ func haveNodesOnIsolatedNATNetworks(ctx context.Context, count int, table *godog
 				return err
 			}
 
-			state, _, err := clients[0].GetInstanceState(instName)
+			netInfo, err := instance.GetNetInfo()
 			if err != nil {
-				fmt.Printf("Failed to get instance state: %v\n", err)
+				return fmt.Errorf("failed to get instance network info: %w", err)
 			}
-
-			// get ip address of the instance
-			instanceIP := ""
-			fmt.Printf("IP addresses for instance %s:\n", instName)
-			for iface, network := range state.Network {
-				fmt.Printf("  Interface %s:\n", iface)
-				if strings.HasPrefix(iface, "enp") || strings.HasPrefix(iface, "eth") {
-					// likely the main network interface
-					for _, addr := range network.Addresses {
-						if addr.Family == "inet" && addr.Scope == "global" { // ipv4 and global scope
-							instanceIP = addr.Address
-						}
-					}
-				}
-			}
+			instanceIP := netInfo.IPAddress
 
 			// set up iptables rules to simulate symmetric NAT
 			_, err = instance.RunCMD([]string{"iptables", "-P", "INPUT", "DROP"})

@@ -10,6 +10,7 @@ package utils
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,8 +29,9 @@ type Instance struct {
 }
 
 type NetInfo struct {
-	NetworkName string
-	IPAddress   string
+	InternalIface string
+	HostIface     string
+	IPAddress     string
 }
 
 // RunCMD runs a command inside the instance.
@@ -130,11 +132,28 @@ func (i *Instance) GetNetInfo() (NetInfo, error) {
 
 	for netName, netInfo := range instState.Network {
 		for _, addr := range netInfo.Addresses {
-			if addr.Family == "inet" && addr.Scope == "global" && (strings.HasPrefix(netName, "eth") || strings.HasPrefix(netName, "enp")) {
-				netI.NetworkName = netName
+			if addr.Family == "inet" &&
+				addr.Scope == "global" &&
+				(strings.HasPrefix(netName, "eth") ||
+					strings.HasPrefix(netName, "enp")) {
+				netI.InternalIface = netName
 				netI.IPAddress = addr.Address
-				return netI, nil
+				break
 			}
+		}
+	}
+
+	nets, err := i.Client.GetNetworks()
+	if err != nil {
+		return NetInfo{}, fmt.Errorf("failed to get networks: %w", err)
+	}
+
+	// get incus bridge interface
+	for _, net := range nets {
+		if strings.Contains(net.Name, "incus") &&
+			slices.Contains(net.UsedBy, fmt.Sprintf("/1.0/instances/%s", i.Name)) {
+			netI.HostIface = net.Name
+			break
 		}
 	}
 

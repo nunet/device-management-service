@@ -10,7 +10,9 @@ package utils
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/multiformats/go-multiaddr"
@@ -211,4 +213,41 @@ func UploadScripts(i *Instance, ensemble string) (err error) {
 		}
 	}
 	return nil
+}
+
+// extract instance and host IP and ports from string list of multiaddrs
+func ExtractNetFromAddr(instance *Instance, addrs []string) (instanceIP, instancePort, hostIP, hostPort string, err error) {
+	netInfo, err := instance.GetNetInfo()
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("failed to get local IP: %w", err)
+	}
+
+	instanceIP = netInfo.IPAddress
+
+	for _, addr := range addrs {
+		// strip quic-v1 or quic if present at the end for ToNetAddr
+		addr = strings.TrimRight(addr, "/quic")
+		addr = strings.TrimRight(addr, "/quic-v1")
+
+		mAddr := multiaddr.StringCast(addr)
+		if !manet.IsIPLoopback(mAddr) && strings.Contains(addr, "udp") {
+			natA, err := manet.ToNetAddr(mAddr)
+			if err != nil {
+				return "", "", "", "", fmt.Errorf("failed to convert multiaddr to net addr: %w", err)
+			}
+			udpAddr, ok := natA.(*net.UDPAddr)
+			if !ok {
+				return "", "", "", "", fmt.Errorf("failed to assert net.Addr to UDPAddr")
+			}
+
+			if udpAddr.IP.Equal(net.ParseIP(instanceIP)) {
+				instancePort = strconv.Itoa(udpAddr.Port)
+				continue
+			}
+
+			hostIP = udpAddr.IP.String()
+			hostPort = strconv.Itoa(udpAddr.Port)
+		}
+	}
+	return instanceIP, instancePort, hostIP, hostPort, nil
 }

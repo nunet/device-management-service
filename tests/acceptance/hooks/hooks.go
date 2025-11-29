@@ -107,6 +107,13 @@ func CleanupNodes() error {
 			}
 		}
 	}
+
+	fmt.Println("cleaning up network forwards...")
+	err = utils.CleanNetworkForward(clients[0])
+	if err != nil {
+		return fmt.Errorf("failed to clean network forwards: %w", err)
+	}
+
 	fmt.Printf("finished cleaning up. time elapsed: %.1fs\n", time.Since(start).Seconds())
 	return nil
 }
