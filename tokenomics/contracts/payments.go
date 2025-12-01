@@ -14,6 +14,13 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+type PaymentModel string
+
+const (
+	PayPerAllocation PaymentModel = "pay_per_allocation"
+	PayPerDeployment PaymentModel = "pay_per_deployment"
+)
+
 const (
 	FiatMethod       PaymentType = "fiat"
 	BlockchainMethod PaymentType = "blockchain"
@@ -23,8 +30,17 @@ type PaymentType string
 
 // Payment represents a payment transaction
 type PaymentDetails struct {
-	PaymentType       PaymentType                `json:"payment_type"`
-	Timestamp         time.Time                  `json:"timestamp"`
-	FeesPerAllocation string                     `json:"fees_per_allocation"`
-	Addresses         []types.PaymentAddressInfo `json:"addresses"`
+	PaymentType PaymentType `json:"payment_type"`
+	Timestamp   time.Time   `json:"timestamp"`
+
+	// payment model
+	PaymentModel PaymentModel `json:"payment_model"`
+
+	// pay per deployment payment model
+	FeePerDeployment string `json:"fee_per_deployment,omitempty"`
+
+	// pay per allocation payment model
+	FeesPerAllocation string `json:"fees_per_allocation"`
+
+	Addresses []types.PaymentAddressInfo `json:"addresses"`
 }

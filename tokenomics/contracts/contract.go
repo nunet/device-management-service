@@ -43,9 +43,21 @@ type ContractPaymentStatusResponse struct {
 	Error    string `json:"error"`
 }
 
-type CollectUsagesAndForwardToPaymentProvidersResponse struct {
-	Error       string `json:"error"`
-	TotalUsages int    `json:"total_usages"`
+type CollectUsagesAndForwardToPaymentProvidersRequest struct {
+	ContractDID string `json:"contract_did,omitempty"` // If empty, processes all contracts
+}
+
+type ContractUsageResult struct {
+	ContractDID  string       `json:"contract_did"`
+	PaymentModel PaymentModel `json:"payment_model"`
+	Usages       int          `json:"usages"`
+	Error        string       `json:"error,omitempty"`
+}
+
+type CollectUsagesAndForwardToPaymentProvidersReponse struct {
+	Error       string                `json:"error"`
+	TotalUsages int                   `json:"total_usages"`
+	Results     []ContractUsageResult `json:"results,omitempty"` // Per-contract results
 }
 
 type ContractListLocalTransactionsRequest struct{}

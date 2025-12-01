@@ -504,6 +504,12 @@ func (s *TestSuite) setupTestNetwork() {
 			cfg.PaymentProvider.Mode = true
 		}
 
+		// for contracts pay per deployment test set the 4th node as a payment validator
+		if s.Name == "deployment_with_contracts_pay_per_deployment_tests" && nodeIndex == 3 {
+			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9422/"
+			cfg.PaymentProvider.Mode = true
+		}
+
 		// for ondemand provisioner
 		// first node make it a gateway
 		if s.Name == "deployment_with_ondemand_provisioner_tests" && nodeIndex == 0 {

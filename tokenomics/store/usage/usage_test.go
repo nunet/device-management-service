@@ -172,7 +172,8 @@ func TestCountAllocationsByContract(t *testing.T) {
 func TestSaveAndGetLastProcessedAt(t *testing.T) {
 	store := setupTestDB(t)
 
-	ts, err := store.GetLastProcessedAt()
+	// Test global timestamp
+	ts, err := store.GetLastProcessedAt("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -181,11 +182,11 @@ func TestSaveAndGetLastProcessedAt(t *testing.T) {
 	}
 
 	now := time.Now().Truncate(time.Second) // truncate for equality
-	if err := store.SaveLastProcessedAt(now); err != nil {
+	if err := store.SaveLastProcessedAt("", now); err != nil {
 		t.Fatalf("failed to save last processed at: %v", err)
 	}
 
-	ts, err = store.GetLastProcessedAt()
+	ts, err = store.GetLastProcessedAt("")
 	if err != nil {
 		t.Fatalf("failed to get last processed at: %v", err)
 	}
@@ -194,15 +195,39 @@ func TestSaveAndGetLastProcessedAt(t *testing.T) {
 	}
 
 	newer := now.Add(15 * time.Minute).Truncate(time.Second)
-	if err := store.SaveLastProcessedAt(newer); err != nil {
+	if err := store.SaveLastProcessedAt("", newer); err != nil {
 		t.Fatalf("failed to update last processed at: %v", err)
 	}
 
-	ts, err = store.GetLastProcessedAt()
+	ts, err = store.GetLastProcessedAt("")
 	if err != nil {
 		t.Fatalf("failed to get updated last processed at: %v", err)
 	}
 	if !ts.Equal(newer) {
 		t.Errorf("expected updated timestamp %v, got %v", newer, ts)
+	}
+
+	// Test contract-specific timestamp
+	contractDID := "did:key:test123"
+	contractTime := now.Add(30 * time.Minute).Truncate(time.Second)
+	if err := store.SaveLastProcessedAt(contractDID, contractTime); err != nil {
+		t.Fatalf("failed to save contract-specific last processed at: %v", err)
+	}
+
+	ts, err = store.GetLastProcessedAt(contractDID)
+	if err != nil {
+		t.Fatalf("failed to get contract-specific last processed at: %v", err)
+	}
+	if !ts.Equal(contractTime) {
+		t.Errorf("expected contract timestamp %v, got %v", contractTime, ts)
+	}
+
+	// Verify global timestamp is unchanged
+	ts, err = store.GetLastProcessedAt("")
+	if err != nil {
+		t.Fatalf("failed to get global last processed at: %v", err)
+	}
+	if !ts.Equal(newer) {
+		t.Errorf("expected global timestamp to remain %v, got %v", newer, ts)
 	}
 }

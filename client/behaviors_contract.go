@@ -118,13 +118,13 @@ func (c *Client) ConfirmTransaction(ctx context.Context, req contracts.ContractC
 	return response, err
 }
 
-func (c *Client) CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersResponse, error) {
-	var response contracts.CollectUsagesAndForwardToPaymentProvidersResponse
+func (c *Client) CollectUsagesAndForwardToPaymentProviders(ctx context.Context, req contracts.CollectUsagesAndForwardToPaymentProvidersRequest, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error) {
+	var response contracts.CollectUsagesAndForwardToPaymentProvidersReponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
 		behaviors.ContractUsagesCalculateBehavior,
-		struct{}{},
+		req,
 		opts...,
 	)
 	if err != nil {

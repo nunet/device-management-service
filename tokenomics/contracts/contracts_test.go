@@ -47,13 +47,18 @@ func TestUnmarshalContract(t *testing.T) {
         }
     ],
     "payment_details": {
-        "requester_addr": "0xe66b31678d6c16e9ebf358268a790b763c133750",
-        "provider_addr": "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
-        "currency": "NTX",
+        "addresses": [
+            {
+                "requester_addr": "0xe66b31678d6c16e9ebf358268a790b763c133750",
+                "provider_addr": "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
+                "currency": "NTX",
+                "blockchain": "ETHEREUM"
+            }
+        ],
+        "payment_model": "pay_per_allocation",
         "fees_per_allocation": "10",
         "timestamp": "0001-01-01T00:00:00Z",
-        "payment_type": "blockchain",
-        "blockchain": "ETHEREUM"
+        "payment_type": "blockchain"
     },
     "contract_terms": "Standard contract terms",
     "contract_participants": {
