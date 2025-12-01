@@ -46,13 +46,28 @@ const (
 func (n *Node) handleContractUsagesCalculate(msg actor.Envelope) {
 	defer msg.Discard()
 
-	resp := contracts.CollectUsagesAndForwardToPaymentProvidersResponse{}
-	totalUsages, err := n.collectUsagesAndForwardToPaymentProviders()
-	if err != nil {
-		resp.Error = err.Error()
+	resp := contracts.CollectUsagesAndForwardToPaymentProvidersReponse{}
+
+	// Parse request, default to empty request (process all contracts) if no message
+	var req contracts.CollectUsagesAndForwardToPaymentProvidersRequest
+	if len(msg.Message) > 0 {
+		if err := json.Unmarshal(msg.Message, &req); err != nil {
+			resp.Error = fmt.Errorf("failed to unmarshal request: %w", err).Error()
+			n.sendReply(msg, resp)
+			return
+		}
 	}
 
-	resp.TotalUsages = totalUsages
+	resp = n.collectUsagesAndForwardToPaymentProviders(req)
+	errAggregated := ""
+	for _, result := range resp.Results {
+		if result.Error != "" {
+			errAggregated += result.Error + "\n"
+		}
+	}
+	if errAggregated != "" {
+		resp.Error = errAggregated
+	}
 
 	n.sendReply(msg, resp)
 }
@@ -106,6 +121,11 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 	contractObj := contracts.NewContract(contractActor.ContractDID.URI, request)
 	if err := n.contractStore.Upsert(contractObj); err != nil {
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to save contract: %w", err)
+	}
+
+	// Initialize usage metadata for this contract
+	if err := n.usageStore.InitializeContractMetadata(contractActor.ContractDID.URI); err != nil {
+		return contracts.CreateContractResponse{}, fmt.Errorf("failed to initialize usage metadata for contract %s: %w", contractActor.ContractDID.URI, err)
 	}
 
 	pkBytes, err := crypto.PublicKeyToBytes(pubKey)
@@ -867,14 +887,34 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 		return
 	}
 
-	// forward to service provider
-	finalAmount, err := calculateTotal(req.Usages, req.Contract.PaymentDetails.FeesPerAllocation)
-	if err != nil {
-		handleErr(errors.New("failed to calculate final tx amount"))
+	// Calculate payment based on payment model
+	var finalAmount string
+	var calcErr error
+
+	switch req.Contract.PaymentDetails.PaymentModel {
+	case contracts.PayPerAllocation:
+		if req.Contract.PaymentDetails.FeesPerAllocation == "" {
+			handleErr(errors.New("fees_per_allocation is required for pay_per_allocation payment model"))
+			return
+		}
+		finalAmount, calcErr = calculateTotal(req.Usages, req.Contract.PaymentDetails.FeesPerAllocation)
+	case contracts.PayPerDeployment:
+		if req.Contract.PaymentDetails.FeePerDeployment == "" {
+			handleErr(errors.New("fee_per_deployment is required for pay_per_deployment payment model"))
+			return
+		}
+		finalAmount, calcErr = calculateTotal(req.Usages, req.Contract.PaymentDetails.FeePerDeployment)
+	default:
+		handleErr(fmt.Errorf("unsupported payment model: %s", req.Contract.PaymentDetails.PaymentModel))
 		return
 	}
 
-	err = n.paymentStore.Insert(payment.Payment{
+	if calcErr != nil {
+		handleErr(fmt.Errorf("failed to calculate final tx amount: %w", calcErr))
+		return
+	}
+
+	err := n.paymentStore.Insert(payment.Payment{
 		UniqueID: req.UniqueID,
 		Contract: req.Contract,
 		Usages:   req.Usages,

@@ -19,6 +19,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/validate"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/types"
 	cutils "gitlab.com/nunet/device-management-service/utils/convert"
 	vutils "gitlab.com/nunet/device-management-service/utils/validate"
@@ -924,6 +925,19 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 
 	if !strings.HasPrefix(did, "did:") {
 		return fmt.Errorf("invalid did format")
+	}
+
+	// Validate payment_details.payment_model if present
+	if paymentDetails, ok := contract["payment_details"].(map[string]any); ok {
+		if paymentModel, ok := paymentDetails["payment_model"].(string); ok {
+			validPaymentModels := []string{
+				string(contracts.PayPerAllocation),
+				string(contracts.PayPerDeployment),
+			}
+			if !slices.Contains(validPaymentModels, paymentModel) {
+				return fmt.Errorf("invalid payment_model %q: must be one of %v", paymentModel, validPaymentModels)
+			}
+		}
 	}
 
 	return nil

@@ -146,6 +146,10 @@ type ContractPaymentStatusCmd struct {
 	UniqueID string
 }
 
+type CollectUsagesAndForwardToPaymentProvidersCmd struct {
+	ContractDID string `json:"contract_did,omitempty"`
+}
+
 type ContractTerminateCmd struct {
 	ContractDID  string
 	ContractHost string
@@ -424,8 +428,16 @@ var registeredBehaviors = map[string]*behaviorConfig{
 	},
 	// /dms/tokenomics/contract/usages/calculate
 	behaviors.ContractUsagesCalculateBehavior: {
+		Payload: func() any { return &CollectUsagesAndForwardToPaymentProvidersCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CollectUsagesAndForwardToPaymentProvidersCmd)
+			cmd.Flags().StringVar(&p.ContractDID, "contract-did", "", "Contract DID to process (optional, processes all contracts if not specified)")
+		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			resp, err := dmsClient.CollectUsagesAndForwardToPaymentProviders(ctx, opts.MsgOpts...)
+			req := contracts.CollectUsagesAndForwardToPaymentProvidersRequest{
+				ContractDID: opts.Payload.(*CollectUsagesAndForwardToPaymentProvidersCmd).ContractDID,
+			}
+			resp, err := dmsClient.CollectUsagesAndForwardToPaymentProviders(ctx, req, opts.MsgOpts...)
 			if err != nil {
 				return resp, err
 			}
@@ -440,7 +452,8 @@ var registeredBehaviors = map[string]*behaviorConfig{
 						
 						Examples:
 						
-						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate`,
+						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate
+						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate --contract-did did:key:...`,
 	},
 	// /dms/tokenomics/contract/transactions/confirm
 	behaviors.ContractConfirmLocalTransactionBehavior: {

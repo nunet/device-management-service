@@ -285,7 +285,7 @@ func (c *Client) paymentStatus(t *testing.T, context, passphrase, uniqueID, dest
 	return buf.String(), err
 }
 
-func (c *Client) terminateContract(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) {
+func (c *Client) terminateContract(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) { //nolint:unparam
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
@@ -317,7 +317,7 @@ func (c *Client) validateContract(t *testing.T, context, passphrase, contractDID
 	return buf.String(), err
 }
 
-func (c *Client) settleContract(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) {
+func (c *Client) settleContract(t *testing.T, context, passphrase, contractDID, contractHostDID string) (string, error) { //nolint:unparam
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
@@ -333,7 +333,7 @@ func (c *Client) settleContract(t *testing.T, context, passphrase, contractDID, 
 	return buf.String(), err
 }
 
-func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniqueID, txHash string) (string, error) {
+func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniqueID, txHash string) (string, error) { //nolint:unparam
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
@@ -349,13 +349,16 @@ func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniq
 	return buf.String(), err
 }
 
-func (c *Client) calculateContractUsages(t *testing.T, context, passphrase string) (string, error) {
+func (c *Client) calculateContractUsages(t *testing.T, context, passphrase string, contractDID ...string) (string, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/usages/calculate", "--timeout", "5s"}
+	if len(contractDID) > 0 && contractDID[0] != "" {
+		args = append(args, "--contract-did", contractDID[0])
+	}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer

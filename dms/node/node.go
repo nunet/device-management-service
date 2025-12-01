@@ -1057,46 +1057,117 @@ func (n *Node) addContractActor(a *tokenomics.ContractActor) {
 	n.contractActors = append(n.contractActors, a)
 }
 
-func (n *Node) collectUsagesAndForwardToPaymentProviders() (int, error) {
-	total := 0
-	lastProcessedAt, _ := n.usageStore.GetLastProcessedAt()
+func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUsagesAndForwardToPaymentProvidersRequest) contracts.CollectUsagesAndForwardToPaymentProvidersReponse {
+	resp := contracts.CollectUsagesAndForwardToPaymentProvidersReponse{
+		Results: make([]contracts.ContractUsageResult, 0),
+	}
 	now := time.Now()
 
-	usages, err := n.usageStore.CountAllocationsByContract(lastProcessedAt, now)
-	if err != nil {
-		return total, fmt.Errorf("failed to get usages: %w", err)
+	// Get contracts to process
+	var contractsToProcess []*contracts.Contract
+	var err error
+
+	if req.ContractDID != "" {
+		// Process specific contract
+		contract, err := n.contractStore.GetContract(req.ContractDID)
+		if err != nil {
+			resp.Error = fmt.Sprintf("failed to get contract %s: %v", req.ContractDID, err)
+			return resp
+		}
+		contractsToProcess = []*contracts.Contract{contract}
+	} else {
+		// Process all contracts
+		contractsToProcess, err = n.contractStore.GetAllContracts()
+		if err != nil {
+			resp.Error = fmt.Sprintf("failed to get contracts: %v", err)
+			return resp
+		}
 	}
 
 	type paymentForwardToProviderRequest struct {
-		AllocationsUsed int
-		Contract        contracts.Contract
+		Usages   int
+		Contract contracts.Contract
 	}
 
 	allPayments := make([]paymentForwardToProviderRequest, 0)
 
-	for contractDID, v := range usages {
-		c, err := n.contractStore.GetContract(contractDID)
+	// Collect usage for each contract based on its payment model
+	for _, contract := range contractsToProcess {
+		// Get contract-specific last processed timestamp
+		lastProcessedAt, _ := n.usageStore.GetLastProcessedAt(contract.ContractDID)
+		var usageCount int
+		var result contracts.ContractUsageResult
+
+		// Query usage based on payment model
+		switch contract.PaymentDetails.PaymentModel {
+		case contracts.PayPerAllocation:
+			usageCount, err = n.usageStore.CountAllocationsByContractDID(contract.ContractDID, lastProcessedAt, now)
+			if err != nil {
+				result = contracts.ContractUsageResult{
+					ContractDID:  contract.ContractDID,
+					PaymentModel: contract.PaymentDetails.PaymentModel,
+					Error:        fmt.Sprintf("failed to count allocations: %v", err),
+				}
+				resp.Results = append(resp.Results, result)
+				log.Warnf("failed to count allocations for contract %s: %v", contract.ContractDID, err)
+				continue
+			}
+		case contracts.PayPerDeployment:
+			usageCount, err = n.usageStore.CountDeploymentsByContract(contract.ContractDID, lastProcessedAt, now)
+			if err != nil {
+				result = contracts.ContractUsageResult{
+					ContractDID:  contract.ContractDID,
+					PaymentModel: contract.PaymentDetails.PaymentModel,
+					Error:        fmt.Sprintf("failed to count deployments: %v", err),
+				}
+				resp.Results = append(resp.Results, result)
+				log.Warnf("failed to count deployments for contract %s: %v", contract.ContractDID, err)
+				continue
+			}
+		default:
+			resp.Results = append(resp.Results, contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        "unsupported payment model",
+			})
+			return resp
+		}
+
+		// Save contract-specific last processed timestamp
+		err = n.usageStore.SaveLastProcessedAt(contract.ContractDID, now)
 		if err != nil {
-			log.Warnf("contract %s was not found on this host", contractDID)
+			result = contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        fmt.Sprintf("failed to save last processed timestamp: %v", err),
+			}
+			resp.Results = append(resp.Results, result)
+			log.Warnf("failed to save last processed usage for contract %s: %v", contract.ContractDID, err)
 			continue
 		}
 
-		request := paymentForwardToProviderRequest{
-			Contract:        *c,
-			AllocationsUsed: v,
+		// Add result
+		result = contracts.ContractUsageResult{
+			ContractDID:  contract.ContractDID,
+			PaymentModel: contract.PaymentDetails.PaymentModel,
+			Usages:       usageCount,
 		}
-		allPayments = append(allPayments, request)
-	}
-	err = n.usageStore.SaveLastProcessedAt(now)
-	if err != nil {
-		return 0, fmt.Errorf("failed to save last processed usage: %w", err)
+		resp.Results = append(resp.Results, result)
+
+		// Only add to payments if there are usages
+		if usageCount > 0 {
+			allPayments = append(allPayments, paymentForwardToProviderRequest{
+				Contract: *contract,
+				Usages:   usageCount,
+			})
+		}
 	}
 
 	for _, v := range allPayments {
 		req := contracts.ContractUsageRequest{
 			UniqueID: uuid.NewString(),
 			Contract: v.Contract,
-			Usages:   v.AllocationsUsed,
+			Usages:   v.Usages,
 		}
 
 		// construct destination address
@@ -1107,13 +1178,13 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders() (int, error) {
 		}
 		envelope, err := n.invokeBehaviour(destination, behaviors.ContractUsageBehavior, req, invokeMessageTimeout)
 		if envelope.Message == nil || err != nil {
-			log.Errorf("failed to update payment status of contract host: %v", err)
+			log.Errorf("failed to update payment status of contract host for contract %s: %v", v.Contract.ContractDID, err)
 			continue
 		}
-		total++
+		resp.TotalUsages++
 	}
 
-	return total, nil
+	return resp
 }
 
 func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {

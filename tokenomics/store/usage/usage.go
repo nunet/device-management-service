@@ -314,8 +314,9 @@ func (s *Store) CountDeploymentsByContract(contractDID string, start, end time.T
 	return len(deploymentSet), nil
 }
 
-// SaveLastProcessedAt stores the last processed timestamp (Unix seconds).
-func (s *Store) SaveLastProcessedAt(t time.Time) error {
+// SaveLastProcessedAt stores the last processed timestamp (Unix seconds) for a specific contract.
+// If contractDID is empty, it stores a global timestamp.
+func (s *Store) SaveLastProcessedAt(contractDID string, t time.Time) error {
 	ok, err := s.db.HasCollection(usageMetadataCollection)
 	if err != nil {
 		return fmt.Errorf("failed to check collection: %w", err)
@@ -326,7 +327,13 @@ func (s *Store) SaveLastProcessedAt(t time.Time) error {
 		}
 	}
 
-	q := query.NewQuery(usageMetadataCollection).Where(query.Field("key").Eq("last_processed_at"))
+	// Create a unique key for each contract
+	key := "last_processed_at"
+	if contractDID != "" {
+		key = fmt.Sprintf("last_processed_at:%s", contractDID)
+	}
+
+	q := query.NewQuery(usageMetadataCollection).Where(query.Field("key").Eq(key))
 	docs, err := s.db.FindAll(q)
 	if err != nil {
 		return fmt.Errorf("failed to query metadata: %w", err)
@@ -340,7 +347,10 @@ func (s *Store) SaveLastProcessedAt(t time.Time) error {
 		}
 	} else {
 		doc := document.NewDocument()
-		doc.Set("key", "last_processed_at")
+		doc.Set("key", key)
+		if contractDID != "" {
+			doc.Set("contract_did", contractDID)
+		}
 		doc.Set("last_processed_at", t.Unix())
 		if _, err := s.db.InsertOne(usageMetadataCollection, doc); err != nil {
 			return fmt.Errorf("failed to insert last processed at: %w", err)
@@ -350,9 +360,10 @@ func (s *Store) SaveLastProcessedAt(t time.Time) error {
 	return nil
 }
 
-// GetLastProcessedAt retrieves the last processed timestamp.
+// GetLastProcessedAt retrieves the last processed timestamp for a specific contract.
+// If contractDID is empty, it retrieves the global timestamp.
 // If no record exists, it returns Unix(0).
-func (s *Store) GetLastProcessedAt() (time.Time, error) {
+func (s *Store) GetLastProcessedAt(contractDID string) (time.Time, error) {
 	ok, err := s.db.HasCollection(usageMetadataCollection)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to check metadata collection: %w", err)
@@ -361,13 +372,23 @@ func (s *Store) GetLastProcessedAt() (time.Time, error) {
 		return time.Unix(0, 0), nil
 	}
 
-	q := query.NewQuery(usageMetadataCollection).Where(query.Field("key").Eq("last_processed_at"))
+	// Create a unique key for each contract
+	key := "last_processed_at"
+	if contractDID != "" {
+		key = fmt.Sprintf("last_processed_at:%s", contractDID)
+	}
+
+	q := query.NewQuery(usageMetadataCollection).Where(query.Field("key").Eq(key))
 	docs, err := s.db.FindAll(q)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to query metadata: %w", err)
 	}
 
 	if len(docs) == 0 {
+		// If contract-specific key not found and contractDID is provided, fall back to global
+		if contractDID != "" {
+			return s.GetLastProcessedAt("")
+		}
 		return time.Unix(0, 0), nil
 	}
 
@@ -377,4 +398,50 @@ func (s *Store) GetLastProcessedAt() (time.Time, error) {
 	}
 
 	return time.Unix(0, 0), nil
+}
+
+// InitializeContractMetadata initializes the usage metadata for a new contract.
+// This creates a metadata entry with the contract-specific key and sets the initial
+// last processed timestamp to Unix(0).
+func (s *Store) InitializeContractMetadata(contractDID string) error {
+	if contractDID == "" {
+		return errors.New("contractDID cannot be empty")
+	}
+
+	ok, err := s.db.HasCollection(usageMetadataCollection)
+	if err != nil {
+		return fmt.Errorf("failed to check collection: %w", err)
+	}
+	if !ok {
+		if err := s.db.CreateCollection(usageMetadataCollection); err != nil {
+			return fmt.Errorf("failed to create metadata collection: %w", err)
+		}
+	}
+
+	// Create contract-specific key
+	key := fmt.Sprintf("last_processed_at:%s", contractDID)
+
+	// Check if metadata already exists for this contract
+	q := query.NewQuery(usageMetadataCollection).Where(query.Field("key").Eq(key))
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return fmt.Errorf("failed to query metadata: %w", err)
+	}
+
+	// If metadata already exists, don't overwrite it
+	if len(docs) > 0 {
+		return nil
+	}
+
+	// Create new metadata entry for this contract
+	doc := document.NewDocument()
+	doc.Set("key", key)
+	doc.Set("contract_did", contractDID)
+	doc.Set("last_processed_at", time.Unix(0, 0).Unix())
+
+	if _, err := s.db.InsertOne(usageMetadataCollection, doc); err != nil {
+		return fmt.Errorf("failed to initialize contract metadata: %w", err)
+	}
+
+	return nil
 }

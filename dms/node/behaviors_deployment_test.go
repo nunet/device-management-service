@@ -188,7 +188,15 @@ func TestCommitDeployment(t *testing.T) {
 func TestHandleNewDeployment(t *testing.T) {
 	t.Parallel()
 
-	ensembleConfig := jobtypes.EnsembleConfig{}
+	ensembleConfig := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{},
+			Nodes:       map[string]jobtypes.NodeConfig{},
+			Supervisor:  jobtypes.SupervisorConfig{},
+			Subnet:      jobtypes.SubnetConfig{},
+			Contracts:   map[string]types.ContractConfig{},
+		},
+	}
 
 	msg, err := actor.Message(
 		actor.Handle{},
