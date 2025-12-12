@@ -558,9 +558,29 @@ func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentVali
 
 func startMockRPC(port int) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		var req struct {
+			Method string `json:"method"`
+			ID     int    `json:"id"`
+		}
+		if err := json.Unmarshal(body, &req); err == nil {
+			if req.Method == "eth_blockNumber" {
+				w.WriteHeader(http.StatusOK)
+				response := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"result":"0xe20a59"}`, req.ID)
+				_, _ = w.Write([]byte(response))
+				return
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(jsonPayload))
 	})

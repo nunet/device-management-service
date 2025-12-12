@@ -50,11 +50,10 @@ type ProviderConfig struct {
 }
 
 type PaymentProvider struct {
-	Mode                  bool   `mapstructure:"mode" json:"mode"`
-	EthereumRPCURL        string `mapstructure:"ethereum_rpc_url" json:"ethereum_rpc_url"`
-	EthereumRPCToken      string `mapstructure:"ethereum_rpc_token" json:"ethereum_rpc_token"`
-	NtxContractAddress    string `mapstructure:"ntx_contract_address" json:"ntx_contract_address"`
-	StartingBlockScanning string `mapstructure:"starting_block_scanning" json:"starting_block_scanning"`
+	Mode               bool   `mapstructure:"mode" json:"mode"`
+	EthereumRPCURL     string `mapstructure:"ethereum_rpc_url" json:"ethereum_rpc_url"`
+	EthereumRPCToken   string `mapstructure:"ethereum_rpc_token" json:"ethereum_rpc_token"`
+	NtxContractAddress string `mapstructure:"ntx_contract_address" json:"ntx_contract_address"`
 
 	BlockFrostAPIURL     string `mapstructure:"block_frost_api_url" json:"block_frost_api_url"`
 	BlockFrostAPIKey     string `mapstructure:"block_frost_api_key" json:"block_frost_api_key"`

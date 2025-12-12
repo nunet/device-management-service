@@ -11,6 +11,7 @@ package ethereum
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -46,6 +47,10 @@ type RPCResponse struct {
 type RPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+func (e *RPCError) Error() string {
+	return fmt.Sprintf("RPC error %d: %s", e.Code, e.Message)
 }
 
 // NewClient creates a new Ethereum JSON-RPC client

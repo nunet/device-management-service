@@ -637,11 +637,22 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 			n.dmsConfig.PaymentProvider.EthereumRPCURL,
 			n.dmsConfig.PaymentProvider.EthereumRPCToken,
 		)
+
+		blockNum, err := ethereumClient.GetBlockNumber(c)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get block number: %w", err))
+			return
+		}
+
+		// deduct some block numbers
+		blockNum -= 1800 // 5 hours back approx
+		blockNumHex := fmt.Sprintf("0x%x", blockNum)
+
 		txs, err := ethereumClient.GetERC20Transfers(
 			c,
 			n.dmsConfig.PaymentProvider.NtxContractAddress,
 			ethAddr.ProviderAddr,
-			n.dmsConfig.PaymentProvider.StartingBlockScanning,
+			blockNumHex,
 			"latest",
 		)
 		if err != nil {
