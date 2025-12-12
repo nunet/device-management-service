@@ -148,6 +148,16 @@ Examples:
 				return nil
 			}
 
+			if node.IsEternlContext(keyName) {
+				provider, err := did.NewEternlWalletProvider()
+				if err != nil {
+					return err
+				}
+
+				fmt.Println(provider.DID())
+				return nil
+			}
+
 			keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
 			ks, err := keystore.New(fs, keyStoreDir, false)
 			if err != nil {

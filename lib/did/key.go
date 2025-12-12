@@ -86,6 +86,10 @@ func (p *PrivateKeyProvider) PrivateKey() (crypto.PrivKey, error) {
 	return p.privk, nil
 }
 
+func (p *PrivateKeyProvider) Signer() Signer {
+	return PrivateKeySigner
+}
+
 func (p *PrivateKeyProvider) Anchor() Anchor {
 	return NewAnchor(p.did, p.privk.GetPublic())
 }
@@ -134,8 +138,8 @@ const (
 	multicodecKindEd25519PubKey   uint64 = 0xed
 	multicodecKindSecp256k1PubKey uint64 = 0xe7
 	multicodecKindEthPubKey       uint64 = 0xef01
-
-	keyPrefix = "did:key"
+	multicodecKindCardanoPubKey   uint64 = 0xef02
+	keyPrefix                            = "did:key"
 )
 
 func FormatKeyURI(pubk crypto.PubKey) string {
@@ -152,6 +156,8 @@ func FormatKeyURI(pubk crypto.PubKey) string {
 		t = multicodecKindSecp256k1PubKey
 	case crypto.Eth:
 		t = multicodecKindEthPubKey
+	case crypto.Cardano:
+		t = multicodecKindCardanoPubKey
 	default:
 		// we don't support those yet
 		log.Errorf("unsupported key type: %d", t)
@@ -198,6 +204,9 @@ func ParseKeyURI(uri string) (crypto.PubKey, error) {
 
 	case multicodecKindSecp256k1PubKey:
 		return libp2p_crypto.UnmarshalSecp256k1PublicKey(data[n:])
+
+	case multicodecKindCardanoPubKey:
+		return crypto.UnmarshalCardanoPublicKey(data[n:])
 
 	case multicodecKindEthPubKey:
 		return crypto.UnmarshalEthPublicKey(data[n:])

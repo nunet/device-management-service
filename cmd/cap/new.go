@@ -72,7 +72,7 @@ func runNewCap(ctx context.Context, dmsCLI *cli.DmsCLI, opts NewCapOptions, stre
 	}
 
 	// ledger doesnt need keystore
-	if node.IsLedgerContext(opts.Context) {
+	if node.IsLedgerContext(opts.Context) || node.IsEternlContext(opts.Context) {
 		return GenCaps(ctx, cfg, fs, opts, streams, nil)
 	}
 
@@ -130,7 +130,8 @@ func GenCaps(
 	var trustCtx did.TrustContext
 	var rootDID did.DID
 
-	if node.IsLedgerContext(opts.Context) {
+	switch {
+	case node.IsLedgerContext(opts.Context):
 		// need userDir for the resolver
 		idx, err := node.ResolveLedgerIndex(fs, cfg.General.UserDir, node.GetContextKey(opts.Context))
 		if err != nil {
@@ -145,7 +146,17 @@ func GenCaps(
 		trustCtx = did.NewTrustContextWithProvider(provider)
 		rootDID = provider.DID()
 		opts.Context = node.GetContextKey(opts.Context) // normalize context name
-	} else {
+	case node.IsEternlContext(opts.Context):
+
+		provider, err := did.NewEternlWalletProvider()
+		if err != nil {
+			return err
+		}
+
+		trustCtx = did.NewTrustContextWithProvider(provider)
+		rootDID = provider.DID()
+		opts.Context = node.GetContextKey(opts.Context)
+	default:
 		trustCtx, err = did.NewTrustContextWithPrivateKey(privKey)
 		if err != nil {
 			return fmt.Errorf("unable to create trust context: %w", err)
