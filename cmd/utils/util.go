@@ -123,7 +123,7 @@ func LoadCapabilityContext(dmsCLI *cli.DmsCLI, contextName string) (ucan.Capabil
 	fs := dmsCLI.FS()
 
 	passphrase := ""
-	if !node.IsLedgerContext(contextName) {
+	if !node.IsLedgerContext(contextName) && !node.IsEternlContext(contextName) {
 		passphrase, err = dmsCLI.Passphrase(contextName)
 		if err != nil {
 			return nil, fmt.Errorf("get dms passphrase: %w", err)

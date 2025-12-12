@@ -19,6 +19,14 @@ import (
 
 const anchorEntryTTL = time.Hour
 
+type Signer string
+
+const EternlSigner Signer = "ETERNL"
+
+const LedgerSigner Signer = "LEDGER"
+
+const PrivateKeySigner Signer = "PRIVATE_KEY"
+
 // Anchor is a DID anchor that encapsulates a public key that can be used
 // for verification of signatures.
 type Anchor interface {
@@ -30,6 +38,7 @@ type Anchor interface {
 // Provider holds the private key material necessary to sign statements for
 // a DID.
 type Provider interface {
+	Signer() Signer
 	DID() DID
 	Sign(data []byte) ([]byte, error)
 	Anchor() Anchor

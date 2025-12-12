@@ -229,6 +229,7 @@ require (
 	github.com/buildkite/terminal-to-html v3.2.0+incompatible
 	github.com/compose-spec/compose-go/v2 v2.8.1
 	github.com/cucumber/godog v0.15.0
+	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/itchyny/gojq v0.12.13
 	github.com/lithammer/dedent v1.1.0
 	github.com/lxc/incus v0.7.0
@@ -273,6 +274,7 @@ require (
 	github.com/pion/webrtc/v4 v4.1.2 // indirect
 	github.com/pkg/sftp v1.13.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	github.com/zitadel/oidc/v2 v2.12.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
