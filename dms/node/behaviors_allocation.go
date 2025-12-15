@@ -205,9 +205,9 @@ func (n *Node) createAllocation(
 
 	for _, v := range contracts {
 		evt := events.CreateAllocation{
-			Type:         events.CreateAllocationEvent,
-			Resources:    job.Resources,
-			AllocationID: allocationID,
+			EventBase:      events.EventBase{Type: events.CreateAllocationEvent},
+			Resources:      job.Resources,
+			AllocationBase: events.AllocationBase{AllocationID: allocationID, DeploymentID: deploymentID, ComputeProviderDID: n.actor.Handle().DID.URI},
 		}
 		n.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,

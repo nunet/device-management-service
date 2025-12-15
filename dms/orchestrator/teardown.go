@@ -81,7 +81,7 @@ func (o *BasicOrchestrator) Shutdown() error {
 
 		for _, v := range o.contracts {
 			evt := events.DeploymentStop{
-				Type:           events.DeploymentStopEvent,
+				EventBase:      events.EventBase{Type: events.DeploymentStopEvent},
 				DeploymentID:   o.manifest.ID,
 				OrchestratorID: o.id,
 			}

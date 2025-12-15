@@ -1085,8 +1085,10 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 	}
 
 	type paymentForwardToProviderRequest struct {
-		Usages   int
-		Contract contracts.Contract
+		Usages              int                                 // For backward compatibility
+		TimeUtilization     *contracts.TimeUtilizationUsage     // For pay_per_time_utilization
+		ResourceUtilization *contracts.ResourceUtilizationUsage // For pay_per_resource_utilization
+		Contract            contracts.Contract
 	}
 
 	allPayments := make([]paymentForwardToProviderRequest, 0)
@@ -1095,13 +1097,16 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 	for _, contract := range contractsToProcess {
 		// Get contract-specific last processed timestamp
 		lastProcessedAt, _ := n.usageStore.GetLastProcessedAt(contract.ContractDID)
+		// Use a strictly greater-than window to avoid re-counting the last
+		// processed event on subsequent collections.
+		windowStart := lastProcessedAt.Add(time.Nanosecond)
 		var usageCount int
 		var result contracts.ContractUsageResult
 
 		// Query usage based on payment model
 		switch contract.PaymentDetails.PaymentModel {
 		case contracts.PayPerAllocation:
-			usageCount, err = n.usageStore.CountAllocationsByContractDID(contract.ContractDID, lastProcessedAt, now)
+			usageCount, err = n.usageStore.CountAllocationsByContractDID(contract.ContractDID, windowStart, now)
 			if err != nil {
 				result = contracts.ContractUsageResult{
 					ContractDID:  contract.ContractDID,
@@ -1113,7 +1118,7 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 				continue
 			}
 		case contracts.PayPerDeployment:
-			usageCount, err = n.usageStore.CountDeploymentsByContract(contract.ContractDID, lastProcessedAt, now)
+			usageCount, err = n.usageStore.CountDeploymentsByContract(contract.ContractDID, windowStart, now)
 			if err != nil {
 				result = contracts.ContractUsageResult{
 					ContractDID:  contract.ContractDID,
@@ -1124,13 +1129,124 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 				log.Warnf("failed to count deployments for contract %s: %v", contract.ContractDID, err)
 				continue
 			}
+
+		case contracts.PayPerTimeUtilization:
+			deploymentUtils, err := n.usageStore.CalculateTimeUtilizationByContract(contract.ContractDID, lastProcessedAt, now)
+			if err != nil {
+				result = contracts.ContractUsageResult{
+					ContractDID:  contract.ContractDID,
+					PaymentModel: contract.PaymentDetails.PaymentModel,
+					Error:        fmt.Sprintf("failed to calculate time utilization: %v", err),
+				}
+				resp.Results = append(resp.Results, result)
+				log.Warnf("failed to calculate time utilization for contract %s: %v", contract.ContractDID, err)
+				continue
+			}
+
+			timeUtil := &contracts.TimeUtilizationUsage{
+				Deployments: deploymentUtils,
+			}
+
+			// Calculate total number of deployments (for backward compatibility)
+			totalDeployments := len(deploymentUtils)
+
+			result = contracts.ContractUsageResult{
+				ContractDID:     contract.ContractDID,
+				PaymentModel:    contract.PaymentDetails.PaymentModel,
+				Usages:          totalDeployments, // Number of deployments
+				TimeUtilization: timeUtil,
+			}
+
+			// For pay_per_time_utilization, send ALL deployments in one request
+			// The payment provider will generate one transaction per deployment
+			if totalDeployments > 0 {
+				allPayments = append(allPayments, paymentForwardToProviderRequest{
+					Contract:        *contract,
+					Usages:          totalDeployments,
+					TimeUtilization: timeUtil, // All deployments in one request
+				})
+			}
+
+			// Save contract-specific last processed timestamp before adding result
+			err = n.usageStore.SaveLastProcessedAt(contract.ContractDID, now)
+			if err != nil {
+				result = contracts.ContractUsageResult{
+					ContractDID:     contract.ContractDID,
+					PaymentModel:    contract.PaymentDetails.PaymentModel,
+					Error:           fmt.Sprintf("failed to save last processed timestamp: %v", err),
+					TimeUtilization: timeUtil,
+				}
+				resp.Results = append(resp.Results, result)
+				log.Warnf("failed to save last processed usage for contract %s: %v", contract.ContractDID, err)
+				continue
+			}
+
+			// Add result (already set above)
+			resp.Results = append(resp.Results, result)
+			continue
+
+		case contracts.PayPerResourceUtilization:
+			deploymentUtils, err := n.usageStore.CalculateResourceUtilizationByContract(contract.ContractDID, lastProcessedAt, now)
+			if err != nil {
+				result = contracts.ContractUsageResult{
+					ContractDID:  contract.ContractDID,
+					PaymentModel: contract.PaymentDetails.PaymentModel,
+					Error:        fmt.Sprintf("failed to calculate resource utilization: %v", err),
+				}
+				resp.Results = append(resp.Results, result)
+				log.Warnf("failed to calculate resource utilization for contract %s: %v", contract.ContractDID, err)
+				continue
+			}
+
+			resourceUtil := &contracts.ResourceUtilizationUsage{
+				Deployments: deploymentUtils,
+			}
+
+			// Calculate total number of deployments (for backward compatibility)
+			totalDeployments := len(deploymentUtils)
+
+			result = contracts.ContractUsageResult{
+				ContractDID:         contract.ContractDID,
+				PaymentModel:        contract.PaymentDetails.PaymentModel,
+				Usages:              totalDeployments, // Number of deployments
+				ResourceUtilization: resourceUtil,
+			}
+
+			// For pay_per_resource_utilization, send ALL deployments in one request
+			// The payment provider will generate one transaction per deployment
+			if totalDeployments > 0 {
+				allPayments = append(allPayments, paymentForwardToProviderRequest{
+					Contract:            *contract,
+					Usages:              totalDeployments,
+					ResourceUtilization: resourceUtil, // All deployments in one request
+				})
+			}
+
+			// Save contract-specific last processed timestamp before adding result
+			err = n.usageStore.SaveLastProcessedAt(contract.ContractDID, now)
+			if err != nil {
+				result = contracts.ContractUsageResult{
+					ContractDID:         contract.ContractDID,
+					PaymentModel:        contract.PaymentDetails.PaymentModel,
+					Error:               fmt.Sprintf("failed to save last processed timestamp: %v", err),
+					ResourceUtilization: resourceUtil,
+				}
+				resp.Results = append(resp.Results, result)
+				log.Warnf("failed to save last processed usage for contract %s: %v", contract.ContractDID, err)
+				continue
+			}
+
+			// Add result (already set above)
+			resp.Results = append(resp.Results, result)
+			continue
+
 		default:
 			resp.Results = append(resp.Results, contracts.ContractUsageResult{
 				ContractDID:  contract.ContractDID,
 				PaymentModel: contract.PaymentDetails.PaymentModel,
 				Error:        "unsupported payment model",
 			})
-			return resp
+			continue
 		}
 
 		// Save contract-specific last processed timestamp
@@ -1165,15 +1281,17 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 
 	for _, v := range allPayments {
 		req := contracts.ContractUsageRequest{
-			UniqueID: uuid.NewString(),
-			Contract: v.Contract,
-			Usages:   v.Usages,
+			UniqueID:            uuid.NewString(),
+			Contract:            v.Contract,
+			Usages:              v.Usages,
+			TimeUtilization:     v.TimeUtilization,     // May contain multiple deployments for pay_per_time_utilization
+			ResourceUtilization: v.ResourceUtilization, // May contain multiple deployments for pay_per_resource_utilization
 		}
 
 		// construct destination address
 		destination, err := actor.HandleFromDID(v.Contract.PaymentValidatorDID.URI)
 		if err != nil {
-			log.Errorf("failed to get handle of payment provider")
+			log.Errorf("failed to get handle of payment provider for contract %s: %v", v.Contract.ContractDID, err)
 			continue
 		}
 		envelope, err := n.invokeBehaviour(destination, behaviors.ContractUsageBehavior, req, invokeMessageTimeout)
@@ -1181,6 +1299,7 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 			log.Errorf("failed to update payment status of contract host for contract %s: %v", v.Contract.ContractDID, err)
 			continue
 		}
+		log.Infof("Successfully sent ContractUsageRequest for contract %s to payment validator", v.Contract.ContractDID)
 		resp.TotalUsages++
 	}
 

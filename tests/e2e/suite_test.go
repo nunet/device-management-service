@@ -498,10 +498,30 @@ func (s *TestSuite) setupTestNetwork() {
 		}
 		nodeIndex := i
 
+		fmt.Println("setting up for test", s.Name)
+
 		// for contracts test set the 4th node as a payment validator
-		if s.Name == "deployment_with_contracts_tests" && nodeIndex == 3 {
-			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9421/"
-			cfg.PaymentProvider.Mode = true
+		switch s.Name {
+		case "deployment_with_contracts_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9421/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_pay_per_deployment_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9422/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_pay_per_time_utilization_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9423/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_pay_per_resource_utilization_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9424/"
+				cfg.PaymentProvider.Mode = true
+			}
 		}
 
 		// for contracts pay per deployment test set the 4th node as a payment validator
@@ -521,6 +541,11 @@ func (s *TestSuite) setupTestNetwork() {
 					Config: map[string]interface{}{},
 				},
 			}
+		}
+
+		if s.Name == "deployment_with_contracts_collect_after_pay_tests" && nodeIndex == 3 {
+			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
+			cfg.PaymentProvider.Mode = true
 		}
 
 		var err error

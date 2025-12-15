@@ -18,6 +18,11 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
+const (
+	// BytesPerGB is the number of bytes in 1 GB (SI standard: 1 GB = 10^9 bytes)
+	BytesPerGB = 1e9
+)
+
 // ToPositiveFloat64 converts various numeric types to float64 and validates it's positive
 func ToPositiveFloat64(value any, fieldName string) (float64, error) {
 	var result float64
@@ -140,4 +145,69 @@ func ToSIFormatWithUnit(value any, unit string) (string, error) {
 		return "", err
 	}
 	return humanize.SI(v, unit), nil
+}
+
+// BytesToGB converts bytes to gigabytes (GB) as float64 for precision.
+// Uses SI standard: 1 GB = 10^9 bytes = 1,000,000,000 bytes
+// Supports various numeric types: uint64, int64, float64, string, etc.
+// Example: BytesToGB(5000000000) -> 5.0
+func BytesToGB(bytes any) (float64, error) {
+	var bytesValue uint64
+	switch v := bytes.(type) {
+	case uint64:
+		bytesValue = v
+	case uint32:
+		bytesValue = uint64(v)
+	case uint16:
+		bytesValue = uint64(v)
+	case uint8:
+		bytesValue = uint64(v)
+	case uint:
+		bytesValue = uint64(v)
+	case int64:
+		if v < 0 {
+			return 0, fmt.Errorf("bytes cannot be negative")
+		}
+		bytesValue = uint64(v)
+	case int32:
+		if v < 0 {
+			return 0, fmt.Errorf("bytes cannot be negative")
+		}
+		bytesValue = uint64(v)
+	case int16:
+		if v < 0 {
+			return 0, fmt.Errorf("bytes cannot be negative")
+		}
+		bytesValue = uint64(v)
+	case int8:
+		if v < 0 {
+			return 0, fmt.Errorf("bytes cannot be negative")
+		}
+		bytesValue = uint64(v)
+	case int:
+		if v < 0 {
+			return 0, fmt.Errorf("bytes cannot be negative")
+		}
+		bytesValue = uint64(v)
+	case float64:
+		if v < 0 {
+			return 0, fmt.Errorf("bytes cannot be negative")
+		}
+		bytesValue = uint64(v)
+	case float32:
+		if v < 0 {
+			return 0, fmt.Errorf("bytes cannot be negative")
+		}
+		bytesValue = uint64(v)
+	case string:
+		parsed, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid bytes value: %w", err)
+		}
+		bytesValue = parsed
+	default:
+		return 0, fmt.Errorf("unsupported type for bytes conversion: %T", bytes)
+	}
+
+	return float64(bytesValue) / BytesPerGB, nil
 }

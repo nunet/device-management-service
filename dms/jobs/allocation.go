@@ -299,10 +299,9 @@ func (a *Allocation) Run(
 
 	for _, v := range a.Contracts {
 		evt := events.StartAllocation{
-			Type:               events.StartAllocationEvent,
-			AllocationID:       a.ID,
-			ComputeProviderDID: a.computeProviderDID,
-			DeploymentID:       a.deploymentID,
+			EventBase:      events.EventBase{Type: events.StartAllocationEvent},
+			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
+			Resources:      a.Job.Resources,
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -442,10 +441,8 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 
 	for _, v := range a.Contracts {
 		evt := events.CompleteAllocation{
-			Type:               events.CompleteAllocationEvent,
-			AllocationID:       a.ID,
-			ComputeProviderDID: a.computeProviderDID,
-			DeploymentID:       a.deploymentID,
+			EventBase:      events.EventBase{Type: events.CompleteAllocationEvent},
+			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -508,10 +505,8 @@ func (a *Allocation) Cleanup() error {
 func (a *Allocation) Terminate(ctx context.Context) error {
 	for _, v := range a.Contracts {
 		evt := events.StopAllocation{
-			Type:               events.StopAllocationEvent,
-			AllocationID:       a.ID,
-			DeploymentID:       a.deploymentID,
-			ComputeProviderDID: a.computeProviderDID,
+			EventBase:      events.EventBase{Type: events.StopAllocationEvent},
+			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,

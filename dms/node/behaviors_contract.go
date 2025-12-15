@@ -31,6 +31,7 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils/convert"
 )
 
 const (
@@ -889,6 +890,7 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
+		log.Errorf("handleIncomingContractUsage error: %v", err)
 		n.sendReply(msg, contracts.ContractUsageResponse{Error: err.Error()})
 	}
 
@@ -897,6 +899,10 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 		handleErr(fmt.Errorf("failed to unmarshal incoming contract usages request: %s", err))
 		return
 	}
+
+	log.Infof("handleIncomingContractUsage: payment_model=%s, usages=%d, hasTimeUtilization=%v, hasResourceUtilization=%v, contractDID=%s",
+		req.Contract.PaymentDetails.PaymentModel, req.Usages,
+		req.TimeUtilization != nil, req.ResourceUtilization != nil, req.Contract.ContractDID)
 
 	// Calculate payment based on payment model
 	var finalAmount string
@@ -909,52 +915,355 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 			return
 		}
 		finalAmount, calcErr = calculateTotal(req.Usages, req.Contract.PaymentDetails.FeesPerAllocation)
+		if calcErr != nil {
+			handleErr(fmt.Errorf("failed to calculate final tx amount: %w", calcErr))
+			return
+		}
+
+		err := n.paymentStore.Insert(payment.Payment{
+			UniqueID: req.UniqueID,
+			Contract: req.Contract,
+			Usages:   req.Usages,
+			Paid:     false,
+			Amount:   finalAmount,
+		})
+		if err != nil {
+			handleErr(errors.New("error while upserting payment"))
+			return
+		}
+
+		txReq := contracts.TransactionForServiceProviderRequest{
+			PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
+			UniqueID:            req.UniqueID,
+			ContractDID:         req.Contract.ContractDID,
+			ToAddress:           req.Contract.PaymentDetails.Addresses,
+			Amount:              finalAmount,
+		}
+		go func() {
+			destination, err := actor.HandleFromDID(req.Contract.ContractParticipants.Requestor.URI)
+			if err != nil {
+				log.Errorf("failed to get service provider's DID: %w", err)
+				return
+			}
+			reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
+			if reply.Message == nil || err != nil {
+				log.Errorf("failed to forward transaction info to service provider: %w", err)
+			}
+		}()
+
+		resp := contracts.ContractUsageResponse{}
+		n.sendReply(msg, resp)
+		return
+
 	case contracts.PayPerDeployment:
 		if req.Contract.PaymentDetails.FeePerDeployment == "" {
 			handleErr(errors.New("fee_per_deployment is required for pay_per_deployment payment model"))
 			return
 		}
 		finalAmount, calcErr = calculateTotal(req.Usages, req.Contract.PaymentDetails.FeePerDeployment)
+		if calcErr != nil {
+			handleErr(fmt.Errorf("failed to calculate final tx amount: %w", calcErr))
+			return
+		}
+
+		err := n.paymentStore.Insert(payment.Payment{
+			UniqueID: req.UniqueID,
+			Contract: req.Contract,
+			Usages:   req.Usages,
+			Paid:     false,
+			Amount:   finalAmount,
+		})
+		if err != nil {
+			handleErr(errors.New("error while upserting payment"))
+			return
+		}
+
+		txReq := contracts.TransactionForServiceProviderRequest{
+			PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
+			UniqueID:            req.UniqueID,
+			ContractDID:         req.Contract.ContractDID,
+			ToAddress:           req.Contract.PaymentDetails.Addresses,
+			Amount:              finalAmount,
+		}
+		go func() {
+			destination, err := actor.HandleFromDID(req.Contract.ContractParticipants.Requestor.URI)
+			if err != nil {
+				log.Errorf("failed to get service provider's DID: %w", err)
+				return
+			}
+			reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
+			if reply.Message == nil || err != nil {
+				log.Errorf("failed to forward transaction info to service provider: %w", err)
+			}
+		}()
+
+		resp := contracts.ContractUsageResponse{}
+		n.sendReply(msg, resp)
+		return
+
+	case contracts.PayPerTimeUtilization:
+		// IMPORTANT: For pay_per_time_utilization, the request may contain MULTIPLE deployments.
+		// We generate ONE payment and ONE transaction PER deployment. Each deployment gets:
+		// - Its own unique ID (base unique ID + deployment ID)
+		// - Its own payment record
+		// - Its own transaction sent to the service provider
+		// This ensures one invoice per deployment as required.
+
+		if req.TimeUtilization == nil {
+			handleErr(errors.New("time_utilization is required for pay_per_time_utilization payment model"))
+			return
+		}
+		if req.Contract.PaymentDetails.FeePerTimeUnit == "" {
+			handleErr(errors.New("fee_per_time_unit is required for pay_per_time_utilization payment model"))
+			return
+		}
+		if req.Contract.PaymentDetails.TimeUnit == "" {
+			handleErr(errors.New("time_unit is required for pay_per_time_utilization payment model"))
+			return
+		}
+
+		if len(req.TimeUtilization.Deployments) == 0 {
+			handleErr(errors.New("time_utilization must contain at least one deployment"))
+			return
+		}
+
+		feePerUnit, err := strconv.ParseFloat(req.Contract.PaymentDetails.FeePerTimeUnit, 64)
+		if err != nil {
+			handleErr(fmt.Errorf("invalid fee_per_time_unit: %w", err))
+			return
+		}
+
+		log.Info("----> pay_per_time_utilization", req.TimeUtilization)
+		requestorURI := req.Contract.ContractParticipants.Requestor.URI // Capture Requestor URI to avoid closure issue
+		// Process each deployment separately - each gets its own payment and transaction
+		for _, deployment := range req.TimeUtilization.Deployments {
+			totalSeconds := deployment.TotalUtilizationSec
+
+			// Convert to the specified time unit
+			var timeInUnit float64
+			switch req.Contract.PaymentDetails.TimeUnit {
+			case "second":
+				timeInUnit = totalSeconds
+			case "minute":
+				timeInUnit = totalSeconds / 60.0
+			case "hour":
+				timeInUnit = totalSeconds / 3600.0
+			default:
+				handleErr(fmt.Errorf("unsupported time_unit: %s", req.Contract.PaymentDetails.TimeUnit))
+				return
+			}
+
+			// Calculate amount for this deployment
+			deploymentAmount := feePerUnit * timeInUnit
+			deploymentFinalAmount := fmt.Sprintf("%.8f", deploymentAmount)
+
+			// Generate unique ID for this deployment's payment/transaction
+			// Include deployment ID in unique ID for tracking purposes
+			deploymentUniqueID := fmt.Sprintf("%s-%s", req.UniqueID, deployment.DeploymentID)
+
+			// Save payment for this deployment
+			err := n.paymentStore.Insert(payment.Payment{
+				UniqueID: deploymentUniqueID,
+				Contract: req.Contract,
+				Usages:   1, // One deployment
+				Paid:     false,
+				Amount:   deploymentFinalAmount,
+			})
+			if err != nil {
+				log.Errorf("error while upserting payment for deployment %s: %v", deployment.DeploymentID, err)
+				continue // Continue with next deployment
+			}
+
+			// Create transaction for service provider for this deployment
+			txReq := contracts.TransactionForServiceProviderRequest{
+				PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
+				UniqueID:            deploymentUniqueID,
+				ContractDID:         req.Contract.ContractDID,
+				ToAddress:           req.Contract.PaymentDetails.Addresses,
+				Amount:              deploymentFinalAmount,
+			}
+
+			log.Info("forwarding transaction to service provider", txReq)
+			go func(depID string, txReq contracts.TransactionForServiceProviderRequest, requestorURI string) {
+				destination, err := actor.HandleFromDID(requestorURI)
+				if err != nil {
+					log.Errorf("failed to get service provider's DID for deployment %s: %w", depID, err)
+					return
+				}
+				reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
+				if reply.Message == nil || err != nil {
+					if err != nil {
+						log.Errorf("failed to forward transaction info to service provider for deployment %s: %w", depID, err)
+					} else {
+						log.Errorf("failed to forward transaction info to service provider for deployment %s: empty reply", depID)
+					}
+				} else {
+					log.Infof("successfully sent transaction for deployment %s to service provider", depID)
+				}
+			}(deployment.DeploymentID, txReq, requestorURI)
+		}
+
+	case contracts.PayPerResourceUtilization:
+		log.Infof("Processing PayPerResourceUtilization: ResourceUtilization=%v, Deployments=%d",
+			req.ResourceUtilization != nil,
+			func() int {
+				if req.ResourceUtilization != nil {
+					return len(req.ResourceUtilization.Deployments)
+				}
+				return 0
+			}())
+		// IMPORTANT: For pay_per_resource_utilization, the request may contain MULTIPLE deployments.
+		// We generate ONE payment and ONE transaction PER deployment. Each deployment gets:
+		// - Its own unique ID (base unique ID + deployment ID)
+		// - Its own payment record
+		// - Its own transaction sent to the service provider
+		// This ensures one invoice per deployment as required.
+
+		if req.ResourceUtilization == nil {
+			handleErr(errors.New("resource_utilization is required for pay_per_resource_utilization payment model"))
+			return
+		}
+		if len(req.ResourceUtilization.Deployments) == 0 {
+			handleErr(errors.New("resource_utilization must contain at least one deployment"))
+			return
+		}
+
+		// Validate required pricing fields
+		pd := req.Contract.PaymentDetails
+		if pd.FeePerCPUCorePerTimeUnit == "" ||
+			pd.FeePerRAMGBPerTimeUnit == "" ||
+			pd.FeePerDiskGBPerTimeUnit == "" ||
+			pd.ResourceTimeUnit == "" {
+			handleErr(errors.New("resource pricing fields are required for pay_per_resource_utilization payment model"))
+			return
+		}
+
+		// Parse pricing using convert.ToPositiveFloat64 (validates fees are positive)
+		feePerCPUCore, err := convert.ToPositiveFloat64(pd.FeePerCPUCorePerTimeUnit, "fee_per_cpu_core_per_time_unit")
+		if err != nil {
+			handleErr(fmt.Errorf("invalid fee_per_cpu_core_per_time_unit: %w", err))
+			return
+		}
+
+		feePerRAMGB, err := convert.ToPositiveFloat64(pd.FeePerRAMGBPerTimeUnit, "fee_per_ram_gb_per_time_unit")
+		if err != nil {
+			handleErr(fmt.Errorf("invalid fee_per_ram_gb_per_time_unit: %w", err))
+			return
+		}
+
+		feePerDiskGB, err := convert.ToPositiveFloat64(pd.FeePerDiskGBPerTimeUnit, "fee_per_disk_gb_per_time_unit")
+		if err != nil {
+			handleErr(fmt.Errorf("invalid fee_per_disk_gb_per_time_unit: %w", err))
+			return
+		}
+
+		var feePerGPU float64
+		// GPU fee is optional - skip if empty or if it looks like an unreplaced placeholder
+		if pd.FeePerGPUPerTimeUnit != "" {
+			feePerGPU, err = convert.ToPositiveFloat64(pd.FeePerGPUPerTimeUnit, "fee_per_gpu_per_time_unit")
+			if err != nil {
+				handleErr(fmt.Errorf("invalid fee_per_gpu_per_time_unit: %w", err))
+				return
+			}
+		}
+
+		baseUniqueID := req.UniqueID
+		requestorURI := req.Contract.ContractParticipants.Requestor.URI // Capture Requestor URI to avoid closure issue
+
+		// Process each deployment separately - each gets its own payment and transaction
+		for _, deployment := range req.ResourceUtilization.Deployments {
+			var deploymentTotalCost float64
+
+			// Process each allocation in the deployment
+			for _, allocation := range deployment.Allocations {
+				// Convert duration to time unit
+				var timeUnits float64
+				switch pd.ResourceTimeUnit {
+				case "second":
+					timeUnits = allocation.Duration.Seconds()
+				case "minute":
+					timeUnits = allocation.Duration.Minutes()
+				case "hour":
+					timeUnits = allocation.Duration.Hours()
+				default:
+					handleErr(fmt.Errorf("unsupported resource_time_unit: %s", pd.ResourceTimeUnit))
+					return
+				}
+
+				// Calculate costs per resource (RAM and Disk sizes are in bytes, convert to GB)
+				cpuCost := float64(allocation.Resources.CPU.Cores) * feePerCPUCore * timeUnits
+
+				ramCostGB, err := convert.BytesToGB(allocation.Resources.RAM.Size)
+				if err != nil {
+					log.Errorf("failed to convert RAM size to GB for allocation: %v", err)
+					continue
+				}
+				ramCost := ramCostGB * feePerRAMGB * timeUnits
+
+				diskCostGB, err := convert.BytesToGB(allocation.Resources.Disk.Size)
+				if err != nil {
+					log.Errorf("failed to convert Disk size to GB for allocation: %v", err)
+					continue
+				}
+				diskCost := diskCostGB * feePerDiskGB * timeUnits
+
+				var gpuCost float64
+				if len(allocation.Resources.GPUs) > 0 && feePerGPU > 0 {
+					gpuCost = float64(len(allocation.Resources.GPUs)) * feePerGPU * timeUnits
+				}
+
+				allocationCost := cpuCost + ramCost + diskCost + gpuCost
+				deploymentTotalCost += allocationCost
+			}
+
+			// Generate payment and transaction for this deployment
+			deploymentUniqueID := fmt.Sprintf("%s-%s", baseUniqueID, deployment.DeploymentID)
+			finalAmount := fmt.Sprintf("%.8f", deploymentTotalCost)
+
+			err := n.paymentStore.Insert(payment.Payment{
+				UniqueID: deploymentUniqueID,
+				Contract: req.Contract,
+				Usages:   1, // One deployment
+				Amount:   finalAmount,
+				Paid:     false,
+			})
+			if err != nil {
+				log.Errorf("error while upserting payment for deployment %s: %v", deployment.DeploymentID, err)
+				continue // Continue with next deployment
+			}
+
+			// Create transaction for service provider for this deployment
+			txReq := contracts.TransactionForServiceProviderRequest{
+				PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
+				UniqueID:            deploymentUniqueID,
+				ContractDID:         req.Contract.ContractDID,
+				ToAddress:           req.Contract.PaymentDetails.Addresses,
+				Amount:              finalAmount,
+			}
+
+			go func(depID string, txReq contracts.TransactionForServiceProviderRequest, requestorURI string) {
+				destination, err := actor.HandleFromDID(requestorURI)
+				if err != nil {
+					log.Errorf("failed to get service provider's DID for deployment %s: %w", depID, err)
+					return
+				}
+				reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
+				if reply.Message == nil || err != nil {
+					if err != nil {
+						log.Errorf("failed to forward transaction info to service provider for deployment %s: %w", depID, err)
+					} else {
+						log.Errorf("failed to forward transaction info to service provider for deployment %s: empty reply", depID)
+					}
+				} else {
+					log.Infof("successfully sent transaction for deployment %s to service provider", depID)
+				}
+			}(deployment.DeploymentID, txReq, requestorURI)
+		}
+
 	default:
 		handleErr(fmt.Errorf("unsupported payment model: %s", req.Contract.PaymentDetails.PaymentModel))
 		return
 	}
-
-	if calcErr != nil {
-		handleErr(fmt.Errorf("failed to calculate final tx amount: %w", calcErr))
-		return
-	}
-
-	err := n.paymentStore.Insert(payment.Payment{
-		UniqueID: req.UniqueID,
-		Contract: req.Contract,
-		Usages:   req.Usages,
-		Paid:     false,
-		Amount:   finalAmount,
-	})
-	if err != nil {
-		handleErr(errors.New("error while upserting payment"))
-		return
-	}
-
-	txReq := contracts.TransactionForServiceProviderRequest{
-		PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
-		UniqueID:            req.UniqueID,
-		ContractDID:         req.Contract.ContractDID,
-		ToAddress:           req.Contract.PaymentDetails.Addresses,
-		Amount:              finalAmount,
-	}
-	go func() {
-		destination, err := actor.HandleFromDID(req.Contract.ContractParticipants.Requestor.URI)
-		if err != nil {
-			log.Errorf("failed to get service provider's DID: %w", err)
-			return
-		}
-		reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
-		if reply.Message == nil || err != nil {
-			log.Errorf("failed to forward transaction info to service provider: %w", err)
-		}
-	}()
 
 	resp := contracts.ContractUsageResponse{}
 	n.sendReply(msg, resp)

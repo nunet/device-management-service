@@ -39,6 +39,13 @@
         ],
         "fees_per_allocation": "{{amount}}",
         "fee_per_deployment": "{{fee_per_deployment}}",
+        "fee_per_time_unit": "{{fee_per_time_unit}}",
+        "time_unit": "{{time_unit}}",
+        "fee_per_cpu_core_per_time_unit": "{{fee_per_cpu_core_per_time_unit}}",
+        "fee_per_ram_gb_per_time_unit": "{{fee_per_ram_gb_per_time_unit}}",
+        "fee_per_disk_gb_per_time_unit": "{{fee_per_disk_gb_per_time_unit}}",
+        "fee_per_gpu_per_time_unit": "{{fee_per_gpu_per_time_unit}}",
+        "resource_time_unit": "{{resource_time_unit}}",
         "timestamp": "0001-01-01T00:00:00Z",
         "payment_type": "blockchain"
     },
