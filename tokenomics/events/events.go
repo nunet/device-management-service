@@ -21,43 +21,47 @@ const (
 	DeploymentStopEvent     EventType = "DEPLOYMENT_STOP_EVENT"
 )
 
+// EventBase contains common fields for all events
+type EventBase struct {
+	Type EventType `json:"type"`
+}
+
+type AllocationBase struct {
+	AllocationID       string `json:"allocation_id"`
+	DeploymentID       string `json:"deployment_id"`
+	ComputeProviderDID string `json:"compute_provider_did"`
+}
+
 type CreateAllocation struct {
-	Type               EventType       `json:"type"`
-	AllocationID       string          `json:"allocation_id"`
-	Resources          types.Resources `json:"resources"`
-	DeploymentID       string          `json:"deployment_id"`
-	ComputeProviderDID string          `json:"compute_provider_did"`
+	EventBase // Embedded - contains Type field
+	AllocationBase
+	Resources types.Resources `json:"resources"`
 }
 
 type StartAllocation struct {
-	Type               EventType `json:"type"`
-	AllocationID       string    `json:"allocation_id"`
-	DeploymentID       string    `json:"deployment_id"`
-	ComputeProviderDID string    `json:"compute_provider_did"`
+	EventBase // Embedded - contains Type field
+	AllocationBase
+	Resources types.Resources `json:"resources"` // Resources allocated when allocation starts
 }
 
 type StopAllocation struct {
-	Type               EventType `json:"type"`
-	AllocationID       string    `json:"allocation_id"`
-	DeploymentID       string    `json:"deployment_id"`
-	ComputeProviderDID string    `json:"compute_provider_did"`
+	EventBase // Embedded - contains Type field
+	AllocationBase
 }
 
 type CompleteAllocation struct {
-	Type               EventType `json:"type"`
-	AllocationID       string    `json:"allocation_id"`
-	ComputeProviderDID string    `json:"compute_provider_did"`
-	DeploymentID       string    `json:"deployment_id"`
+	EventBase // Embedded - contains Type field
+	AllocationBase
 }
 
 type DeploymentStart struct {
-	Type           EventType `json:"type"`
-	DeploymentID   string    `json:"deployment_id"`
-	OrchestratorID string    `json:"orchestrator_id"`
+	EventBase             // Embedded - contains Type field
+	DeploymentID   string `json:"deployment_id"`
+	OrchestratorID string `json:"orchestrator_id"`
 }
 
 type DeploymentStop struct {
-	Type           EventType `json:"type"`
-	DeploymentID   string    `json:"deployment_id"`
-	OrchestratorID string    `json:"orchestrator_id"`
+	EventBase             // Embedded - contains Type field
+	DeploymentID   string `json:"deployment_id"`
+	OrchestratorID string `json:"orchestrator_id"`
 }

@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 11
+		testSuites         = 13
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -75,8 +75,6 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeploymentWithContracts", func(t *testing.T) {
-		t.Parallel()
-
 		deploymentWithContractsTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_tests",
@@ -85,6 +83,19 @@ func TestE2E(t *testing.T) {
 			runner:        DeployWithContractTest,
 		}
 		suite.Run(t, deploymentWithContractsTests)
+	})
+
+	t.Run("DeploymentWithContractsCollectAfterPay", func(t *testing.T) {
+		t.Parallel()
+
+		deploymentWithContractsCollectAfterPayTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_collect_after_pay_tests",
+			restPortIndex: ports[22],
+			p2pPortIndex:  ports[23],
+			runner:        DeployWithContractCollectAfterPayTest,
+		}
+		suite.Run(t, deploymentWithContractsCollectAfterPayTests)
 	})
 
 	t.Run("DeploymentUpdates", func(t *testing.T) {
@@ -182,8 +193,6 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeployWithContractPayPerDeployment", func(t *testing.T) {
-		t.Parallel()
-
 		deploymentWithContractPayPerDeploymentTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_pay_per_deployment_tests",
@@ -192,6 +201,28 @@ func TestE2E(t *testing.T) {
 			runner:        DeployWithContractPayPerDeploymentTest,
 		}
 		suite.Run(t, deploymentWithContractPayPerDeploymentTests)
+	})
+
+	t.Run("DeployWithContractPayPerTimeUtilization", func(t *testing.T) {
+		deploymentWithContractPayPerTimeUtilizationTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_pay_per_time_utilization_tests",
+			restPortIndex: ports[22],
+			p2pPortIndex:  ports[23],
+			runner:        DeployWithContractPayPerTimeUtilizationTest,
+		}
+		suite.Run(t, deploymentWithContractPayPerTimeUtilizationTests)
+	})
+
+	t.Run("DeployWithContractPayPerResourceUtilization", func(t *testing.T) {
+		deploymentWithContractPayPerResourceUtilizationTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_pay_per_resource_utilization_tests",
+			restPortIndex: ports[24],
+			p2pPortIndex:  ports[25],
+			runner:        DeployWithContractPayPerResourceUtilizationTest,
+		}
+		suite.Run(t, deploymentWithContractPayPerResourceUtilizationTests)
 	})
 
 	// Disabled because too flaky since 'Provisioning' status is too quick to catch

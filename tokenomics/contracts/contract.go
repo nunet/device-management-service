@@ -47,11 +47,61 @@ type CollectUsagesAndForwardToPaymentProvidersRequest struct {
 	ContractDID string `json:"contract_did,omitempty"` // If empty, processes all contracts
 }
 
+// AllocationTimeUtilization represents time utilization for a single allocation
+type AllocationTimeUtilization struct {
+	AllocationID string        `json:"allocation_id"`
+	Duration     time.Duration `json:"duration"` // Total time the allocation ran
+	StartTime    time.Time     `json:"start_time"`
+	EndTime      time.Time     `json:"end_time,omitempty"` // Empty if still running
+}
+
+// DeploymentTimeUtilization represents time utilization for a deployment
+type DeploymentTimeUtilization struct {
+	DeploymentID        string                      `json:"deployment_id"`
+	Allocations         []AllocationTimeUtilization `json:"allocations"`
+	TotalUtilizationSec float64                     `json:"total_utilization_sec"` // Total seconds across all allocations
+}
+
+// TimeUtilizationUsage represents usage data for pay_per_time_utilization model
+type TimeUtilizationUsage struct {
+	Deployments []DeploymentTimeUtilization `json:"deployments"`
+}
+
+// AllocationResourceUtilization represents resource utilization for a single allocation
+type AllocationResourceUtilization struct {
+	AllocationID string          `json:"allocation_id"`
+	Resources    types.Resources `json:"resources"` // CPU cores, RAM GB, Disk GB, GPU count
+	Duration     time.Duration   `json:"duration"`  // How long allocation ran
+	StartTime    time.Time       `json:"start_time"`
+	EndTime      time.Time       `json:"end_time,omitempty"`
+	// Calculated costs (for invoice details)
+	CPUCost   string `json:"cpu_cost,omitempty"`
+	RAMCost   string `json:"ram_cost,omitempty"`
+	DiskCost  string `json:"disk_cost,omitempty"`
+	GPUCost   string `json:"gpu_cost,omitempty"`
+	TotalCost string `json:"total_cost,omitempty"`
+}
+
+// DeploymentResourceUtilization tracks all allocations in a deployment
+type DeploymentResourceUtilization struct {
+	DeploymentID        string                          `json:"deployment_id"`
+	Allocations         []AllocationResourceUtilization `json:"allocations"`
+	TotalUtilizationSec float64                         `json:"total_utilization_sec"`
+	TotalCost           string                          `json:"total_cost,omitempty"`
+}
+
+// ResourceUtilizationUsage represents resource utilization data
+type ResourceUtilizationUsage struct {
+	Deployments []DeploymentResourceUtilization `json:"deployments"`
+}
+
 type ContractUsageResult struct {
-	ContractDID  string       `json:"contract_did"`
-	PaymentModel PaymentModel `json:"payment_model"`
-	Usages       int          `json:"usages"`
-	Error        string       `json:"error,omitempty"`
+	ContractDID         string                    `json:"contract_did"`
+	PaymentModel        PaymentModel              `json:"payment_model"`
+	Usages              int                       `json:"usages"` // For backward compatibility
+	Error               string                    `json:"error,omitempty"`
+	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
+	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
 }
 
 type CollectUsagesAndForwardToPaymentProvidersReponse struct {
@@ -90,9 +140,11 @@ type TransactionForServiceProviderResponse struct {
 }
 
 type ContractUsageRequest struct {
-	UniqueID string   `json:"unique_id"`
-	Contract Contract `json:"contract"`
-	Usages   int      `json:"usages"`
+	UniqueID            string                    `json:"unique_id"`
+	Contract            Contract                  `json:"contract"`
+	Usages              int                       `json:"usages"`                         // For backward compatibility
+	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
+	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
 }
 
 type ContractUsageResponse struct {

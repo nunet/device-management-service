@@ -933,9 +933,50 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 			validPaymentModels := []string{
 				string(contracts.PayPerAllocation),
 				string(contracts.PayPerDeployment),
+				string(contracts.PayPerTimeUtilization),
+				string(contracts.PayPerResourceUtilization),
 			}
 			if !slices.Contains(validPaymentModels, paymentModel) {
 				return fmt.Errorf("invalid payment_model %q: must be one of %v", paymentModel, validPaymentModels)
+			}
+
+			// Validate pay_per_time_utilization specific fields
+			if paymentModel == string(contracts.PayPerTimeUtilization) {
+				if feePerTimeUnit, ok := paymentDetails["fee_per_time_unit"].(string); !ok || feePerTimeUnit == "" {
+					return fmt.Errorf("fee_per_time_unit is required for pay_per_time_utilization payment model")
+				}
+				timeUnit, ok := paymentDetails["time_unit"].(string)
+				if !ok || timeUnit == "" {
+					return fmt.Errorf("time_unit is required for pay_per_time_utilization payment model")
+				}
+				validTimeUnits := []string{"second", "minute", "hour"}
+				if !slices.Contains(validTimeUnits, timeUnit) {
+					return fmt.Errorf("invalid time_unit %q: must be one of %v", timeUnit, validTimeUnits)
+				}
+			}
+
+			// Validate pay_per_resource_utilization specific fields
+			if paymentModel == string(contracts.PayPerResourceUtilization) {
+				requiredFields := map[string]string{
+					"fee_per_cpu_core_per_time_unit": "fee_per_cpu_core_per_time_unit",
+					"fee_per_ram_gb_per_time_unit":   "fee_per_ram_gb_per_time_unit",
+					"fee_per_disk_gb_per_time_unit":  "fee_per_disk_gb_per_time_unit",
+					"resource_time_unit":             "resource_time_unit",
+				}
+
+				for field, name := range requiredFields {
+					if val, ok := paymentDetails[field].(string); !ok || val == "" {
+						return fmt.Errorf("%s is required for pay_per_resource_utilization payment model", name)
+					}
+				}
+
+				validTimeUnits := []string{"second", "minute", "hour"}
+				timeUnit := paymentDetails["resource_time_unit"].(string)
+				if !slices.Contains(validTimeUnits, timeUnit) {
+					return fmt.Errorf("invalid resource_time_unit %q: must be one of %v", timeUnit, validTimeUnits)
+				}
+
+				// fee_per_gpu_per_time_unit is optional
 			}
 		}
 	}

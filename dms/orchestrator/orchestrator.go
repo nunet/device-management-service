@@ -272,7 +272,7 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 
 	for _, v := range o.contracts {
 		evt := events.DeploymentStart{
-			Type:           events.DeploymentStartEvent,
+			EventBase:      events.EventBase{Type: events.DeploymentStartEvent},
 			DeploymentID:   o.manifest.ID,
 			OrchestratorID: o.id,
 		}

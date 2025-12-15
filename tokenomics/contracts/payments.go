@@ -17,8 +17,10 @@ import (
 type PaymentModel string
 
 const (
-	PayPerAllocation PaymentModel = "pay_per_allocation"
-	PayPerDeployment PaymentModel = "pay_per_deployment"
+	PayPerAllocation          PaymentModel = "pay_per_allocation"
+	PayPerDeployment          PaymentModel = "pay_per_deployment"
+	PayPerTimeUtilization     PaymentModel = "pay_per_time_utilization"
+	PayPerResourceUtilization PaymentModel = "pay_per_resource_utilization"
 )
 
 const (
@@ -41,6 +43,17 @@ type PaymentDetails struct {
 
 	// pay per allocation payment model
 	FeesPerAllocation string `json:"fees_per_allocation"`
+
+	// pay per time utilization payment model
+	FeePerTimeUnit string `json:"fee_per_time_unit,omitempty"` // e.g., "0.01" per second
+	TimeUnit       string `json:"time_unit,omitempty"`         // "second", "minute", "hour"
+
+	// pay per resource utilization payment model
+	FeePerCPUCorePerTimeUnit string `json:"fee_per_cpu_core_per_time_unit,omitempty"` // e.g., "0.10" per core per hour
+	FeePerRAMGBPerTimeUnit   string `json:"fee_per_ram_gb_per_time_unit,omitempty"`   // e.g., "0.05" per GB per hour
+	FeePerDiskGBPerTimeUnit  string `json:"fee_per_disk_gb_per_time_unit,omitempty"`  // e.g., "0.01" per GB per hour
+	FeePerGPUPerTimeUnit     string `json:"fee_per_gpu_per_time_unit,omitempty"`      // e.g., "5.00" per GPU per hour (optional)
+	ResourceTimeUnit         string `json:"resource_time_unit,omitempty"`             // "second", "minute", "hour"
 
 	Addresses []types.PaymentAddressInfo `json:"addresses"`
 }

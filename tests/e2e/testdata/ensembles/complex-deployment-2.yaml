@@ -1,0 +1,42 @@
+version: "V1"
+
+{$contract}
+
+allocations:
+  task-allocation-2:
+    type: task
+    executor: docker
+    resources:
+      cpu:
+        cores: 1
+      ram:
+        size: 1
+      disk:
+        size: 1
+    execution:
+      type: docker
+      image: busybox
+      args: ["sh", "-c", "echo 'Task completed' && sleep 10"]
+    failure_recovery: stay_down
+  service-allocation-2:
+    type: service
+    executor: docker
+    resources:
+      cpu:
+        cores: 1
+      ram:
+        size: 1
+      disk:
+        size: 1
+    execution:
+      type: docker
+      image: nginx:alpine
+      args: []
+    failure_recovery: stay_down
+
+nodes:
+  node1:
+    allocations:
+      - task-allocation-2
+      - service-allocation-2
+
