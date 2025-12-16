@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 14
+		testSuites         = 15
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -237,6 +237,19 @@ func TestE2E(t *testing.T) {
 			runner:        DeployWithContractFixedRentalTest,
 		}
 		suite.Run(t, deploymentWithContractFixedRentalTests)
+	})
+
+	t.Run("DeployWithContractPeriodic", func(t *testing.T) {
+		t.Parallel()
+
+		deploymentWithContractPeriodicTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_periodic_tests",
+			restPortIndex: ports[28],
+			p2pPortIndex:  ports[29],
+			runner:        DeployWithContractPeriodicTest,
+		}
+		suite.Run(t, deploymentWithContractPeriodicTests)
 	})
 
 	// Disabled because too flaky since 'Provisioning' status is too quick to catch

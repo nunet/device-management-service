@@ -120,32 +120,17 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to generate contract keypair: %w", err)
 	}
 
-	// Create forwarding function that uses the solution enabler's (contract host) actor to send invoices
+	// Create forwardInvoice function to forward invoices from contract actor to payment validator
 	forwardInvoice := func(req contracts.ContractUsageRequest) error {
 		destination, err := actor.HandleFromDID(request.PaymentValidatorDID.URI)
 		if err != nil {
 			return fmt.Errorf("failed to get payment validator handle: %w", err)
 		}
-
-		// Create message envelope using solution enabler's actor handle (contract host node actor)
-		// This ensures the message is sent from the solution enabler's actor, which has the required capabilities
-		envelope, err := actor.Message(
-			n.actor.Handle(), // Source: solution enabler (contract host) actor - has granted capabilities
-			destination,      // Destination: payment validator
-			behaviors.ContractUsageBehavior,
-			req,
-			actor.WithMessageExpiry(actor.MakeExpiry(invokeMessageTimeout)),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create envelope: %w", err)
+		envelope, err := n.invokeBehaviour(destination, behaviors.ContractUsageBehavior, req, invokeMessageTimeout)
+		if envelope.Message == nil || err != nil {
+			return fmt.Errorf("failed to forward invoice to payment validator: %w", err)
 		}
-
-		// Send asynchronously (no reply expected)
-		if err := n.actor.Send(envelope); err != nil {
-			return fmt.Errorf("failed to send contract usage request: %w", err)
-		}
-
-		log.Infof("Successfully sent Fixed Rental invoice for contract %s to payment validator", req.Contract.ContractDID)
+		log.Infof("Successfully sent invoice for contract %s to payment validator (payment_model: %s)", req.Contract.ContractDID, req.Contract.PaymentDetails.PaymentModel)
 		return nil
 	}
 
@@ -632,33 +617,17 @@ func (n *Node) StartContracts() error {
 
 		pubKey := privKey.GetPublic()
 
-		// Create forwarding function that uses the solution enabler's (contract host) actor to send invoices
-		paymentValidatorDID := v.PaymentValidatorDID
+		// Create forwardInvoice function to forward invoices from contract actor to payment validator
 		forwardInvoice := func(req contracts.ContractUsageRequest) error {
-			destination, err := actor.HandleFromDID(paymentValidatorDID.URI)
+			destination, err := actor.HandleFromDID(v.PaymentValidatorDID.URI)
 			if err != nil {
 				return fmt.Errorf("failed to get payment validator handle: %w", err)
 			}
-
-			// Create message envelope using solution enabler's actor handle (contract host node actor)
-			// This ensures the message is sent from the solution enabler's actor, which has the required capabilities
-			envelope, err := actor.Message(
-				n.actor.Handle(), // Source: solution enabler (contract host) actor - has granted capabilities
-				destination,      // Destination: payment validator
-				behaviors.ContractUsageBehavior,
-				req,
-				actor.WithMessageExpiry(actor.MakeExpiry(invokeMessageTimeout)),
-			)
-			if err != nil {
-				return fmt.Errorf("failed to create envelope: %w", err)
+			envelope, err := n.invokeBehaviour(destination, behaviors.ContractUsageBehavior, req, invokeMessageTimeout)
+			if envelope.Message == nil || err != nil {
+				return fmt.Errorf("failed to forward invoice to payment validator: %w", err)
 			}
-
-			// Send asynchronously (no reply expected)
-			if err := n.actor.Send(envelope); err != nil {
-				return fmt.Errorf("failed to send contract usage request: %w", err)
-			}
-
-			log.Infof("Successfully sent Fixed Rental invoice for contract %s to payment validator", req.Contract.ContractDID)
+			log.Infof("Successfully sent invoice for contract %s to payment validator (payment_model: %s)", req.Contract.ContractDID, req.Contract.PaymentDetails.PaymentModel)
 			return nil
 		}
 
@@ -997,9 +966,9 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 		return
 	}
 
-	log.Infof("handleIncomingContractUsage: payment_model=%s, usages=%d, hasTimeUtilization=%v, hasResourceUtilization=%v, contractDID=%s",
+	log.Infof("handleIncomingContractUsage: payment_model=%s, usages=%d, hasTimeUtilization=%v, hasResourceUtilization=%v, hasPeriodicDetails=%v, contractDID=%s",
 		req.Contract.PaymentDetails.PaymentModel, req.Usages,
-		req.TimeUtilization != nil, req.ResourceUtilization != nil, req.Contract.ContractDID)
+		req.TimeUtilization != nil, req.ResourceUtilization != nil, req.PeriodicDetails != nil, req.Contract.ContractDID)
 
 	// Calculate payment based on payment model
 	var finalAmount string
@@ -1011,7 +980,7 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 			handleErr(errors.New("fees_per_allocation is required for pay_per_allocation payment model"))
 			return
 		}
-		finalAmount, calcErr = calculateTotal(req.Usages, req.Contract.PaymentDetails.FeesPerAllocation)
+		finalAmount, calcErr := calculateTotal(req.Usages, req.Contract.PaymentDetails.FeesPerAllocation)
 		if calcErr != nil {
 			handleErr(fmt.Errorf("failed to calculate final tx amount: %w", calcErr))
 			return
@@ -1138,11 +1107,11 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 			// Convert to the specified time unit
 			var timeInUnit float64
 			switch req.Contract.PaymentDetails.TimeUnit {
-			case "second":
+			case contracts.TimeUnitSecond:
 				timeInUnit = totalSeconds
-			case "minute":
+			case contracts.TimeUnitMinute:
 				timeInUnit = totalSeconds / 60.0
-			case "hour":
+			case contracts.TimeUnitHour:
 				timeInUnit = totalSeconds / 3600.0
 			default:
 				handleErr(fmt.Errorf("unsupported time_unit: %s", req.Contract.PaymentDetails.TimeUnit))
@@ -1198,6 +1167,11 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 				}
 			}(deployment.DeploymentID, txReq, requestorURI)
 		}
+
+		// Common response sending after processing all deployments
+		resp := contracts.ContractUsageResponse{}
+		n.sendReply(msg, resp)
+		return
 
 	case contracts.PayPerResourceUtilization:
 		log.Infof("Processing PayPerResourceUtilization: ResourceUtilization=%v, Deployments=%d",
@@ -1356,13 +1330,12 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 			}(deployment.DeploymentID, txReq, requestorURI)
 		}
 
+		// Common response sending after processing all deployments
+		resp := contracts.ContractUsageResponse{}
+		n.sendReply(msg, resp)
+		return
+
 	case contracts.FixedRental:
-		log.Infof("Processing FixedRental: FixedRentalDetails=%t, PeriodsInvoiced=%d", req.FixedRentalDetails != nil, func() int {
-			if req.FixedRentalDetails != nil {
-				return req.FixedRentalDetails.PeriodsInvoiced
-			}
-			return 0
-		}())
 		if req.FixedRentalDetails == nil {
 			handleErr(errors.New("fixed_rental_details is required for fixed_rental payment model"))
 			return
@@ -1376,19 +1349,19 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 			return
 		}
 
-		// Generate payment and transaction for this fixed rental period
+		// The amount is already calculated in FixedRentalDetails
 		finalAmount := fixedRentalUsage.Amount
 
+		// Create payment record
 		err := n.paymentStore.Insert(payment.Payment{
 			UniqueID: req.UniqueID,
 			Contract: req.Contract,
-			Usages:   fixedRentalUsage.PeriodsInvoiced,
+			Usages:   fixedRentalUsage.PeriodsInvoiced, // Number of periods invoiced
 			Amount:   finalAmount,
 			Paid:     false,
 		})
 		if err != nil {
-			log.Errorf("error while upserting payment for fixed rental period %s-%s: %v", fixedRentalUsage.PeriodStart, fixedRentalUsage.PeriodEnd, err)
-			handleErr(fmt.Errorf("failed to insert payment for fixed rental: %w", err))
+			handleErr(fmt.Errorf("failed to insert payment: %w", err))
 			return
 		}
 
@@ -1401,25 +1374,151 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 			Amount:              finalAmount,
 		}
 
-		requestorURI := req.Contract.ContractParticipants.Requestor.URI // Capture Requestor URI
+		// Send transaction to service provider (requestor)
+		requestorURI := req.Contract.ContractParticipants.Requestor.URI
 		go func(txReq contracts.TransactionForServiceProviderRequest, requestorURI string) {
 			destination, err := actor.HandleFromDID(requestorURI)
 			if err != nil {
-				log.Errorf("failed to get service provider's DID for fixed rental invoice: %w", err)
+				log.Errorf("failed to get service provider's DID: %w", err)
 				return
 			}
 			reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
 			if reply.Message == nil || err != nil {
-				if err != nil {
-					log.Errorf("failed to forward transaction info to service provider for fixed rental invoice: %w", err)
-				} else {
-					log.Errorf("failed to forward transaction info to service provider for fixed rental invoice: empty reply")
-				}
+				log.Errorf("failed to forward transaction info to service provider: %w", err)
 			} else {
-				log.Infof("successfully sent transaction for fixed rental invoice to service provider")
+				log.Infof("Successfully sent invoice for contract %s to payment validator (payment_model: %s)", req.Contract.ContractDID, req.Contract.PaymentDetails.PaymentModel)
 			}
 		}(txReq, requestorURI)
 
+		resp := contracts.ContractUsageResponse{}
+		n.sendReply(msg, resp)
+		return
+
+	case contracts.Periodic:
+		// IMPORTANT: For periodic payment model, the request may contain MULTIPLE deployments.
+		// We generate ONE payment and ONE transaction PER deployment. Each deployment gets:
+		// - Its own unique ID (base unique ID + deployment ID)
+		// - Its own payment record
+		// - Its own transaction sent to the service provider
+		// This ensures one invoice per deployment as required (Edge Case 5).
+
+		log.Infof("Processing Periodic: PeriodicDetails=%t, Deployments=%d",
+			req.PeriodicDetails != nil,
+			func() int {
+				if req.PeriodicDetails != nil {
+					return len(req.PeriodicDetails.Deployments)
+				}
+				return 0
+			}())
+
+		if req.PeriodicDetails == nil {
+			handleErr(errors.New("periodic_details is required for periodic payment model"))
+			return
+		}
+
+		periodicUsage := req.PeriodicDetails
+
+		// Validate required fields
+		if req.Contract.PaymentDetails.FeePerTimeUnit == "" {
+			handleErr(errors.New("fee_per_time_unit is required for periodic payment model"))
+			return
+		}
+		if req.Contract.PaymentDetails.TimeUnit == "" {
+			handleErr(errors.New("time_unit is required for periodic payment model"))
+			return
+		}
+
+		if len(periodicUsage.Deployments) == 0 {
+			// Edge Case 1: No deployments in this period - skip invoice
+			log.Infow("received periodic invoice request with no deployments (zero runtime), skipping payment processing",
+				"contract_did", req.Contract.ContractDID,
+				"period_start", periodicUsage.PeriodStart,
+				"period_end", periodicUsage.PeriodEnd)
+			resp := contracts.ContractUsageResponse{}
+			n.sendReply(msg, resp)
+			return
+		}
+
+		feePerUnit, err := strconv.ParseFloat(req.Contract.PaymentDetails.FeePerTimeUnit, 64)
+		if err != nil {
+			handleErr(fmt.Errorf("invalid fee_per_time_unit: %w", err))
+			return
+		}
+
+		requestorURI := req.Contract.ContractParticipants.Requestor.URI // Capture Requestor URI to avoid closure issue
+
+		// Edge Case 5: Process each deployment separately - each gets its own payment and transaction
+		for _, deployment := range periodicUsage.Deployments {
+			totalSeconds := deployment.TotalUtilizationSec
+
+			// Convert to the specified time unit
+			var timeInUnit float64
+			switch req.Contract.PaymentDetails.TimeUnit {
+			case contracts.TimeUnitSecond:
+				timeInUnit = totalSeconds
+			case contracts.TimeUnitMinute:
+				timeInUnit = totalSeconds / 60.0
+			case contracts.TimeUnitHour:
+				timeInUnit = totalSeconds / 3600.0
+			default:
+				handleErr(fmt.Errorf("unsupported time_unit: %s", req.Contract.PaymentDetails.TimeUnit))
+				return // This will stop processing for all deployments
+			}
+
+			// Calculate amount for this deployment
+			deploymentAmount := feePerUnit * timeInUnit
+			deploymentFinalAmount := fmt.Sprintf("%.8f", deploymentAmount)
+
+			// Generate unique ID for this deployment's payment/transaction
+			// Include deployment ID in unique ID for tracking purposes
+			deploymentUniqueID := fmt.Sprintf("%s-%s", req.UniqueID, deployment.DeploymentID)
+
+			// Save payment for this deployment
+			err := n.paymentStore.Insert(payment.Payment{
+				UniqueID: deploymentUniqueID,
+				Contract: req.Contract,
+				Usages:   1, // One deployment
+				Paid:     false,
+				Amount:   deploymentFinalAmount,
+			})
+			if err != nil {
+				log.Errorf("error while upserting payment for periodic deployment %s: %v", deployment.DeploymentID, err)
+				continue // Continue with next deployment
+			}
+
+			// Create transaction for service provider for this deployment
+			txReq := contracts.TransactionForServiceProviderRequest{
+				PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
+				UniqueID:            deploymentUniqueID,
+				ContractDID:         req.Contract.ContractDID,
+				ToAddress:           req.Contract.PaymentDetails.Addresses,
+				Amount:              deploymentFinalAmount,
+			}
+
+			log.Infof("generating periodic invoice for deployment %s: amount=%s, runtime_sec=%.2f, period_start=%s, period_end=%s",
+				deployment.DeploymentID, deploymentFinalAmount, totalSeconds,
+				periodicUsage.PeriodStart, periodicUsage.PeriodEnd)
+
+			go func(depID string, txReq contracts.TransactionForServiceProviderRequest, requestorURI string) {
+				destination, err := actor.HandleFromDID(requestorURI)
+				if err != nil {
+					log.Errorf("failed to get service provider's DID for periodic deployment %s: %w", depID, err)
+					return
+				}
+				reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
+				if reply.Message == nil || err != nil {
+					if err != nil {
+						log.Errorf("failed to forward transaction info to service provider for periodic deployment %s: %w", depID, err)
+					} else {
+						log.Errorf("failed to forward transaction info to service provider for periodic deployment %s: empty reply", depID)
+					}
+				} else {
+					log.Infof("successfully sent transaction for periodic deployment %s to service provider", depID)
+				}
+			}(deployment.DeploymentID, txReq, requestorURI)
+		}
+
+		// Common response sending after processing all deployments
 		resp := contracts.ContractUsageResponse{}
 		n.sendReply(msg, resp)
 		return
@@ -1428,51 +1527,6 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 		handleErr(fmt.Errorf("unsupported payment model: %s", req.Contract.PaymentDetails.PaymentModel))
 		return
 	}
-
-	if calcErr != nil {
-		handleErr(fmt.Errorf("failed to calculate final tx amount: %w", calcErr))
-		return
-	}
-
-	err := n.paymentStore.Insert(payment.Payment{
-		UniqueID: req.UniqueID,
-		Contract: req.Contract,
-		Usages:   req.Usages,
-		Paid:     false,
-		Amount:   finalAmount,
-	})
-	if err != nil {
-		handleErr(errors.New("error while upserting payment"))
-		return
-	}
-
-	txReq := contracts.TransactionForServiceProviderRequest{
-		PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
-		UniqueID:            req.UniqueID,
-		ContractDID:         req.Contract.ContractDID,
-		ToAddress:           req.Contract.PaymentDetails.Addresses,
-		Amount:              finalAmount,
-	}
-	go func() {
-		destination, err := actor.HandleFromDID(req.Contract.ContractParticipants.Requestor.URI)
-		if err != nil {
-			log.Errorw("failed to get service provider's DID",
-				"labels", []string{string(observability.LabelContract)},
-				"error", err,
-				"contractID", req.Contract.ContractDID)
-			return
-		}
-		reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
-		if reply.Message == nil || err != nil {
-			log.Errorw("failed to forward transaction info to service provider",
-				"labels", []string{string(observability.LabelContract)},
-				"error", err,
-				"contractID", req.Contract.ContractDID)
-		}
-	}()
-
-	resp := contracts.ContractUsageResponse{}
-	n.sendReply(msg, resp)
 }
 
 func calculateTotal(numItems int, feePerItem string) (string, error) {

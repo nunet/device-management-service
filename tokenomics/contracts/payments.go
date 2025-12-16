@@ -22,6 +22,7 @@ const (
 	PayPerTimeUtilization     PaymentModel = "pay_per_time_utilization"
 	PayPerResourceUtilization PaymentModel = "pay_per_resource_utilization"
 	FixedRental               PaymentModel = "fixed_rental"
+	Periodic                  PaymentModel = "periodic"
 )
 
 const (
@@ -35,6 +36,12 @@ const (
 	PaymentPeriodDay    string = "day"
 	PaymentPeriodWeek   string = "week"
 	PaymentPeriodMonth  string = "month"
+)
+
+const (
+	TimeUnitSecond string = "second"
+	TimeUnitMinute string = "minute"
+	TimeUnitHour   string = "hour"
 )
 
 type PaymentType string

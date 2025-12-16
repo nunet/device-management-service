@@ -40,10 +40,16 @@ const (
 // In production this is set to 15 minutes to balance timeliness and load.
 var FixedRentalBillingCheckerInterval = 15 * time.Minute
 
-// Sentinel errors for fixed rental invoice calculation
+// PeriodicBillingCheckerInterval controls how often the contract actor checks
+// whether a Periodic invoice should be generated.
+// Set to 1 minute for testing, will be changed to 15 minutes after E2E tests pass.
+var PeriodicBillingCheckerInterval = 1 * time.Minute
+
+// Sentinel errors for fixed rental and periodic invoice calculation
 var (
 	ErrFullPeriodElapsed = errors.New("full billing period has elapsed, use regular billing instead of pro-rated")
 	ErrPeriodNotElapsed  = errors.New("billing period has not elapsed yet, no invoice needed")
+	ErrNoDeployments     = errors.New("no deployments active during billing period, skipping invoice")
 )
 
 type ContractActor struct {
@@ -178,19 +184,28 @@ func (c *ContractActor) Start() error {
 		}
 	}()
 
-	// Fixed Rental billing routine (only start for Fixed Rental contracts)
+	// Fixed Rental and Periodic billing routines (only start for applicable contracts)
 	// Check payment model before starting the billing routine to avoid unnecessary
 	// goroutines for contracts with other payment models
 	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
 	if err != nil {
-		log.Errorw("failed to get contract to check payment model for fixed rental billing",
+		log.Errorw("failed to get contract to check payment model for billing routine",
 			"labels", string(observability.LabelContract),
 			"contract_did", c.ContractDID.URI,
 			"error", err)
 		// Continue - billing routine won't start, but actor still starts
-	} else if contract.PaymentDetails.PaymentModel == contracts.FixedRental {
+		return nil
+	}
+
+	switch contract.PaymentDetails.PaymentModel {
+	case contracts.FixedRental:
 		go c.startFixedRentalBilling()
 		log.Infow("started fixed rental billing routine",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI)
+	case contracts.Periodic:
+		go c.startPeriodicBilling()
+		log.Infow("started periodic billing routine",
 			"labels", string(observability.LabelContract),
 			"contract_did", c.ContractDID.URI)
 	}
@@ -722,6 +737,185 @@ func (c *ContractActor) calculateProRatedInvoiceForTermination(
 	}, nil
 }
 
+func (c *ContractActor) calculatePeriodicInvoice(
+	contract *contracts.Contract,
+	lastInvoiceAt time.Time,
+	now time.Time,
+) (*contracts.PeriodicUsage, error) {
+	pd := contract.PaymentDetails
+
+	// Parse payment period
+	periodDuration, err := parsePaymentPeriod(pd.PaymentPeriod)
+	if err != nil {
+		return nil, fmt.Errorf("invalid payment_period: %w", err)
+	}
+
+	// Calculate elapsed time
+	elapsed := now.Sub(lastInvoiceAt)
+
+	// Calculate number of periods that have elapsed
+	periodsElapsed := int(elapsed / periodDuration)
+
+	// Get payment_period_count (default to 1 if not set or 0)
+	paymentPeriodCount := pd.PaymentPeriodCount
+	if paymentPeriodCount <= 0 {
+		paymentPeriodCount = 1
+	}
+
+	// Only invoice when enough periods have elapsed (paymentPeriodCount periods)
+	billingCyclesElapsed := periodsElapsed / paymentPeriodCount
+	if billingCyclesElapsed < 1 {
+		// Not enough periods have elapsed for a billing cycle
+		return nil, ErrPeriodNotElapsed
+	}
+
+	// Calculate billing period boundaries
+	periodStart := lastInvoiceAt.Truncate(periodDuration)
+	if periodStart.Before(lastInvoiceAt) {
+		periodStart = periodStart.Add(periodDuration)
+	}
+
+	periodsToInvoice := billingCyclesElapsed * paymentPeriodCount
+	periodEnd := periodStart.Add(periodDuration * time.Duration(periodsToInvoice))
+
+	// Calculate deployment runtime for this billing period
+	deployments, err := c.usageStore.CalculateDeploymentTimeUtilizationByContract(
+		contract.ContractDID,
+		periodStart,
+		periodEnd,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate deployment time utilization: %w", err)
+	}
+
+	// Edge Case 1: No deployments during period - skip invoice
+	if len(deployments) == 0 {
+		return nil, ErrNoDeployments
+	}
+
+	// Calculate total time across all deployments
+	var totalTimeSec float64
+	for _, deployment := range deployments {
+		totalTimeSec += deployment.TotalUtilizationSec
+	}
+
+	// If totalTimeSec is zero or negative, skip invoice
+	if totalTimeSec <= 0 {
+		return nil, ErrNoDeployments
+	}
+
+	// Parse fee per time unit
+	feePerUnit, err := strconv.ParseFloat(pd.FeePerTimeUnit, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid fee_per_time_unit: %w", err)
+	}
+
+	// Convert total time to the specified time unit
+	var timeInUnit float64
+	switch pd.TimeUnit {
+	case contracts.TimeUnitSecond:
+		timeInUnit = totalTimeSec
+	case contracts.TimeUnitMinute:
+		timeInUnit = totalTimeSec / 60.0
+	case contracts.TimeUnitHour:
+		timeInUnit = totalTimeSec / 3600.0
+	default:
+		return nil, fmt.Errorf("unsupported time_unit: %s", pd.TimeUnit)
+	}
+
+	// Calculate total amount (sum across all deployments for this period)
+	// Note: Each deployment will get its own invoice, but this provides the combined total
+	totalAmount := feePerUnit * timeInUnit
+
+	return &contracts.PeriodicUsage{
+		PeriodStart:     periodStart,
+		PeriodEnd:       periodEnd,
+		LastInvoiceAt:   lastInvoiceAt,
+		Deployments:     deployments,
+		TotalTimeSec:    totalTimeSec,
+		Amount:          fmt.Sprintf("%.8f", totalAmount),
+		PeriodsInvoiced: periodsToInvoice,
+	}, nil
+}
+
+func (c *ContractActor) calculateProRatedPeriodicInvoiceForTermination(
+	contract *contracts.Contract,
+	lastInvoiceAt time.Time,
+	now time.Time,
+	periodDuration time.Duration,
+) (*contracts.PeriodicUsage, error) {
+	pd := contract.PaymentDetails
+
+	// Calculate deployment runtime from last invoice to termination
+	deployments, err := c.usageStore.CalculateDeploymentTimeUtilizationByContract(
+		contract.ContractDID,
+		lastInvoiceAt,
+		now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate deployment time utilization: %w", err)
+	}
+
+	// Edge Case 1: If no deployments, skip invoice
+	if len(deployments) == 0 {
+		return nil, nil // No invoice needed
+	}
+
+	// Calculate total time across all deployments
+	var totalTimeSec float64
+	for _, deployment := range deployments {
+		totalTimeSec += deployment.TotalUtilizationSec
+	}
+
+	if totalTimeSec <= 0 {
+		return nil, nil // No invoice needed
+	}
+
+	// Parse fee per time unit
+	feePerUnit, err := strconv.ParseFloat(pd.FeePerTimeUnit, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid fee_per_time_unit: %w", err)
+	}
+
+	// Convert total time to the specified time unit
+	var timeInUnit float64
+	switch pd.TimeUnit {
+	case contracts.TimeUnitSecond:
+		timeInUnit = totalTimeSec
+	case contracts.TimeUnitMinute:
+		timeInUnit = totalTimeSec / 60.0
+	case contracts.TimeUnitHour:
+		timeInUnit = totalTimeSec / 3600.0
+	default:
+		return nil, fmt.Errorf("unsupported time_unit: %s", pd.TimeUnit)
+	}
+
+	// Calculate pro-rated amount
+	proRatedAmount := feePerUnit * timeInUnit
+
+	// Ensure we don't generate negative or zero amounts for very small elapsed times
+	if proRatedAmount <= 0 {
+		// If elapsed time is negligible or zero, return nil (no invoice needed)
+		return nil, nil
+	}
+
+	// Calculate period boundaries
+	periodStart := lastInvoiceAt.Truncate(periodDuration)
+	if periodStart.Before(lastInvoiceAt) {
+		periodStart = periodStart.Add(periodDuration)
+	}
+
+	return &contracts.PeriodicUsage{
+		PeriodStart:     periodStart,
+		PeriodEnd:       now,
+		LastInvoiceAt:   lastInvoiceAt,
+		Deployments:     deployments,
+		TotalTimeSec:    totalTimeSec,
+		Amount:          fmt.Sprintf("%.8f", proRatedAmount),
+		PeriodsInvoiced: 1, // Single pro-rated period
+	}, nil
+}
+
 func (c *ContractActor) sendFixedRentalInvoice(
 	contract *contracts.Contract,
 	fixedRentalUsage *contracts.FixedRentalUsage,
@@ -957,5 +1151,319 @@ func (c *ContractActor) startFixedRentalBilling() {
 				return
 			}
 		}
+	}
+}
+
+func (c *ContractActor) startPeriodicBilling() {
+	// Perform initial check immediately
+	shouldStop := c.checkAndGeneratePeriodicInvoice()
+	if shouldStop {
+		log.Infow("periodic billing routine stopping - contract terminated or completed",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI)
+		return
+	}
+
+	ticker := time.NewTicker(PeriodicBillingCheckerInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			shouldStop := c.checkAndGeneratePeriodicInvoice()
+			if shouldStop {
+				log.Infow("periodic billing routine stopping - contract terminated or completed",
+					"labels", string(observability.LabelContract),
+					"contract_did", c.ContractDID.URI)
+				return
+			}
+		case <-c.ctx.Done():
+			log.Infow("periodic billing routine stopping - context cancelled",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI)
+			return
+		}
+	}
+}
+
+// checkAndGeneratePeriodicInvoice checks if an invoice is needed and generates it.
+// Returns true if the billing routine should stop (contract terminated/completed), false otherwise.
+func (c *ContractActor) checkAndGeneratePeriodicInvoice() bool {
+	// Get current contract state
+	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
+	if err != nil {
+		log.Errorw("failed to get contract for periodic billing",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"error", err)
+		return false // Continue checking (might be transient error)
+	}
+
+	// Defensive check: Only process Periodic contracts
+	if contract.PaymentDetails.PaymentModel != contracts.Periodic {
+		return true // Stop routine if payment model changed
+	}
+
+	// Check if contract is terminated - generate final invoice (pro-rated or regular)
+	if contract.CurrentState == contracts.ContractTerminated {
+		// Generate final invoice for elapsed time since last invoice
+		lastInvoiceAt, err := c.usageStore.GetLastProcessedAt(c.ContractDID.URI)
+		if err != nil {
+			log.Errorw("failed to get last processed timestamp for terminated contract final invoice",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI,
+				"error", err)
+			return true // Stop billing routine - error getting last invoice
+		}
+
+		if lastInvoiceAt.IsZero() {
+			// No previous invoice, nothing to invoice
+			return true // Stop billing routine
+		}
+
+		now := time.Now()
+		elapsed := now.Sub(lastInvoiceAt)
+		if elapsed <= 0 {
+			// No elapsed time, nothing to invoice
+			return true // Stop billing routine
+		}
+
+		periodDuration, err := parsePaymentPeriod(contract.PaymentDetails.PaymentPeriod)
+		if err != nil {
+			log.Errorw("failed to parse payment period for terminated contract final invoice",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI,
+				"error", err)
+			return true // Stop billing routine
+		}
+
+		// For terminated contracts, always generate an invoice for elapsed time
+		// Try regular billing first (if enough periods have elapsed)
+		periodicUsage, err := c.calculatePeriodicInvoice(contract, lastInvoiceAt, now)
+		if err != nil {
+			if !errors.Is(err, ErrPeriodNotElapsed) && !errors.Is(err, ErrNoDeployments) {
+				log.Warnw("failed to calculate regular invoice for terminated contract, falling back to pro-rated",
+					"labels", string(observability.LabelContract),
+					"contract_did", c.ContractDID.URI,
+					"error", err)
+			}
+			// Period not elapsed or no deployments - fall back to pro-rated invoice
+			// For terminated contracts, we always generate a pro-rated invoice for any elapsed time
+			proRatedUsage, err := c.calculateProRatedPeriodicInvoiceForTermination(contract, lastInvoiceAt, now, periodDuration)
+			if err != nil {
+				log.Errorw("failed to calculate pro-rated invoice for terminated contract",
+					"labels", string(observability.LabelContract),
+					"contract_did", c.ContractDID.URI,
+					"error", err)
+				return true // Stop billing routine
+			}
+
+			if proRatedUsage != nil && proRatedUsage.Amount != "" {
+				// Pro-rated invoice generated for partial elapsed time
+				c.sendPeriodicInvoice(contract, proRatedUsage, now)
+			}
+			// Stop billing routine after final invoice
+			return true
+		}
+
+		if periodicUsage != nil {
+			// Regular invoice generated for full period(s) that have elapsed
+			c.sendPeriodicInvoice(contract, periodicUsage, now)
+			// Stop billing routine after final regular invoice
+			return true
+		}
+
+		return true // Stop billing routine after handling termination
+	}
+
+	// Check if contract is completed or expired
+	if contract.CurrentState == contracts.ContractCompleted ||
+		time.Now().After(contract.Duration.EndDate) {
+		return true // Stop billing routine
+	}
+
+	// Get last invoice timestamp
+	lastInvoiceAt, err := c.usageStore.GetLastProcessedAt(c.ContractDID.URI)
+	if err != nil {
+		log.Errorw("failed to get last processed timestamp for periodic billing",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"error", err)
+		return false // Continue checking (might be transient error)
+	}
+
+	// Initialize lastInvoiceAt if zero (first invoice)
+	now := time.Now()
+	if lastInvoiceAt.IsZero() {
+		// For first invoice, use contract start date as baseline
+		lastInvoiceAt = contract.Duration.StartDate
+		if err := c.usageStore.SaveLastProcessedAt(c.ContractDID.URI, lastInvoiceAt); err != nil {
+			log.Errorw("failed to save initial last processed timestamp",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI,
+				"error", err)
+			return false
+		}
+	}
+
+	// Try to calculate invoice for elapsed periods
+	periodicUsage, err := c.calculatePeriodicInvoice(contract, lastInvoiceAt, now)
+	if err != nil {
+		if errors.Is(err, ErrPeriodNotElapsed) {
+			// Period hasn't elapsed yet - this is normal, continue checking
+			return false
+		}
+		if errors.Is(err, ErrNoDeployments) {
+			// Edge Case 1: No deployments during period - skip invoice with log
+			log.Infow("skipping periodic invoice - no deployments active during billing period",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI,
+				"period_start", lastInvoiceAt,
+				"period_end", now)
+			// Update lastInvoiceAt to skip this period
+			// Calculate period boundaries and move to next period start
+			periodDuration, err := parsePaymentPeriod(contract.PaymentDetails.PaymentPeriod)
+			if err == nil {
+				paymentPeriodCount := contract.PaymentDetails.PaymentPeriodCount
+				if paymentPeriodCount <= 0 {
+					paymentPeriodCount = 1
+				}
+				billingCycleDuration := periodDuration * time.Duration(paymentPeriodCount)
+				nextPeriodStart := lastInvoiceAt.Add(billingCycleDuration)
+				if err := c.usageStore.SaveLastProcessedAt(c.ContractDID.URI, nextPeriodStart); err != nil {
+					log.Errorw("failed to update last processed timestamp after skipping period",
+						"labels", string(observability.LabelContract),
+						"contract_did", c.ContractDID.URI,
+						"error", err)
+				}
+			}
+			return false // Continue checking for next period
+		}
+		// Other error occurred - log and continue (might be transient)
+		log.Errorw("failed to calculate periodic invoice",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"error", err)
+		return false
+	}
+
+	if periodicUsage != nil {
+		// Invoice calculated successfully - send it (will generate one invoice per deployment)
+		c.sendPeriodicInvoice(contract, periodicUsage, now)
+		return false // Continue billing routine
+	}
+
+	return false
+}
+
+// sendPeriodicInvoice sends periodic invoice(s) - one per deployment (Edge Case 5)
+func (c *ContractActor) sendPeriodicInvoice(
+	contract *contracts.Contract,
+	periodicUsage *contracts.PeriodicUsage,
+	now time.Time,
+) {
+	pd := contract.PaymentDetails
+
+	// Parse fee per time unit
+	feePerUnit, err := strconv.ParseFloat(pd.FeePerTimeUnit, 64)
+	if err != nil {
+		log.Errorw("failed to parse fee_per_time_unit for periodic invoice",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"error", err)
+		return
+	}
+
+	// Edge Case 5: Generate one invoice per deployment for the period
+	for _, deployment := range periodicUsage.Deployments {
+		// Calculate amount for this deployment
+		var timeInUnit float64
+		deploymentTimeSec := deployment.TotalUtilizationSec
+		switch pd.TimeUnit {
+		case contracts.TimeUnitSecond:
+			timeInUnit = deploymentTimeSec
+		case contracts.TimeUnitMinute:
+			timeInUnit = deploymentTimeSec / 60.0
+		case contracts.TimeUnitHour:
+			timeInUnit = deploymentTimeSec / 3600.0
+		default:
+			log.Errorw("unsupported time_unit for periodic invoice",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI,
+				"time_unit", pd.TimeUnit)
+			continue // Skip this deployment
+		}
+
+		deploymentAmount := feePerUnit * timeInUnit
+
+		// Edge Case 4: Use deployment stop time as period end
+		// The deployment stop time is already accounted for in the runtime calculation
+		// via CalculateDeploymentTimeUtilizationByContract, so we use periodicUsage.PeriodEnd
+		// which is set correctly based on whether deployment stopped during the period
+		periodEnd := periodicUsage.PeriodEnd
+
+		// Create unique ID for this deployment's invoice
+		uniqueID := fmt.Sprintf("%s-periodic-%s-%d", contract.ContractDID, deployment.DeploymentID, now.Unix())
+
+		// Create PeriodicUsage for this single deployment
+		deploymentPeriodicUsage := &contracts.PeriodicUsage{
+			PeriodStart:     periodicUsage.PeriodStart,
+			PeriodEnd:       periodEnd, // Use deployment stop time if applicable
+			LastInvoiceAt:   periodicUsage.LastInvoiceAt,
+			Deployments:     []contracts.DeploymentTimeUtilization{deployment}, // Single deployment
+			TotalTimeSec:    deploymentTimeSec,
+			Amount:          fmt.Sprintf("%.8f", deploymentAmount),
+			PeriodsInvoiced: periodicUsage.PeriodsInvoiced,
+		}
+
+		// Create ContractUsageRequest for this deployment
+		req := contracts.ContractUsageRequest{
+			UniqueID:        uniqueID,
+			Contract:        *contract,
+			PeriodicDetails: deploymentPeriodicUsage,
+		}
+
+		log.Infow("generating periodic invoice for deployment",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"deployment_id", deployment.DeploymentID,
+			"period_start", periodicUsage.PeriodStart,
+			"period_end", periodEnd,
+			"amount", deploymentPeriodicUsage.Amount,
+			"runtime_sec", deploymentTimeSec)
+
+		// Forward invoice using solution enabler's actor (contract host node actor)
+		// This ensures the message is sent from the solution enabler's actor handle, which has the required capabilities
+		if c.forwardInvoice == nil {
+			log.Errorw("forwardInvoice function not set for contract actor",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI)
+			continue // Continue with other deployments
+		}
+
+		// Send invoice using forwardInvoice function
+		if err := c.forwardInvoice(req); err != nil {
+			log.Errorw("failed to send periodic invoice for deployment",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI,
+				"deployment_id", deployment.DeploymentID,
+				"error", err)
+			// Continue with other deployments even if one fails
+			continue
+		}
+	}
+
+	// Update last invoice timestamp after all deployment invoices are sent
+	if err := c.usageStore.SaveLastProcessedAt(c.ContractDID.URI, now); err != nil {
+		log.Errorw("failed to update last processed timestamp after sending periodic invoices",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"error", err)
+		// Don't return - invoices were sent successfully
+	} else {
+		log.Infow("periodic invoices generated and sent successfully",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"deployments", len(periodicUsage.Deployments))
 	}
 }

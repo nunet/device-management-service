@@ -21,6 +21,8 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
 )
 
+const testOrchestratorID = "orchestrator-1"
+
 func TestAddUsageEventAndGetAllEvents(t *testing.T) {
 	store := setupTestDB(t)
 
@@ -1328,6 +1330,266 @@ func createStopAllocationEvent(allocationID, deploymentID string) []byte {
 		"allocation_id":        allocationID,
 		"deployment_id":        deploymentID,
 		"compute_provider_did": "provider-did",
+	}
+	data, _ := json.Marshal(event)
+	return data
+}
+
+// Unit tests for CalculateDeploymentTimeUtilizationByContract
+
+func TestCalculateDeploymentTimeUtilizationByContract_Basic(t *testing.T) {
+	store := setupTestDB(t)
+	contractDID := "contract-123"
+	deploymentID := "deployment-1"
+	orchestratorID := testOrchestratorID
+
+	baseTime := time.Now().Truncate(time.Second)
+
+	// Add deployment start event
+	startTime := baseTime.Add(10 * time.Second)
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deploymentID, orchestratorID), startTime)
+
+	// Add deployment stop event
+	stopTime := baseTime.Add(130 * time.Second)
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStopEvent,
+		createDeploymentStopEvent(deploymentID, orchestratorID), stopTime)
+
+	// Calculate utilization
+	queryStart := baseTime
+	queryEnd := baseTime.Add(2 * time.Hour)
+	results, err := store.CalculateDeploymentTimeUtilizationByContract(contractDID, queryStart, queryEnd)
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results, 1, "expected 1 deployment")
+
+	result := results[0]
+	assert.Equal(t, deploymentID, result.DeploymentID, "deployment ID should match")
+	assert.Equal(t, 120.0, result.TotalUtilizationSec, "expected 120 seconds of runtime")
+	assert.Len(t, result.Allocations, 0, "allocations should be empty for deployment-level tracking")
+}
+
+func TestCalculateDeploymentTimeUtilizationByContract_StartsBeforePeriod(t *testing.T) {
+	store := setupTestDB(t)
+	contractDID := "contract-123"
+	deploymentID := "deployment-1"
+	orchestratorID := testOrchestratorID
+
+	baseTime := time.Now().Truncate(time.Second)
+
+	// Deployment starts before query period
+	startTime := baseTime.Add(-10 * time.Minute)
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deploymentID, orchestratorID), startTime)
+
+	// Deployment stops during query period
+	stopTime := baseTime.Add(1 * time.Minute)
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStopEvent,
+		createDeploymentStopEvent(deploymentID, orchestratorID), stopTime)
+
+	// Query for time period starting after deployment start
+	queryStart := baseTime
+	queryEnd := baseTime.Add(2 * time.Hour)
+	results, err := store.CalculateDeploymentTimeUtilizationByContract(contractDID, queryStart, queryEnd)
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results, 1, "expected 1 deployment")
+
+	result := results[0]
+	assert.Equal(t, deploymentID, result.DeploymentID, "deployment ID should match")
+	// Should only count time from queryStart to stopTime (1 minute = 60 seconds)
+	assert.Equal(t, 60.0, result.TotalUtilizationSec, "expected 60 seconds (from query start to stop)")
+}
+
+func TestCalculateDeploymentTimeUtilizationByContract_StillRunning(t *testing.T) {
+	store := setupTestDB(t)
+	contractDID := "contract-123"
+	deploymentID := "deployment-1"
+	orchestratorID := testOrchestratorID
+
+	baseTime := time.Now().Truncate(time.Second)
+
+	// Deployment starts before query period and is still running
+	startTime := baseTime.Add(-10 * time.Minute)
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deploymentID, orchestratorID), startTime)
+
+	// No stop event - deployment is still running
+
+	// Query for time period
+	queryStart := baseTime
+	queryEnd := baseTime.Add(2 * time.Hour)
+
+	// Capture time before and after call
+	beforeCallTime := time.Now()
+	results, err := store.CalculateDeploymentTimeUtilizationByContract(contractDID, queryStart, queryEnd)
+	afterCallTime := time.Now()
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results, 1, "expected 1 deployment")
+
+	result := results[0]
+	assert.Equal(t, deploymentID, result.DeploymentID, "deployment ID should match")
+
+	// Should count from queryStart to queryEnd (2 hours = 7200 seconds)
+	expectedDuration := queryEnd.Sub(queryStart)
+	minExpected := beforeCallTime.Sub(queryStart).Seconds()
+	maxExpected := afterCallTime.Sub(queryStart).Seconds()
+	if maxExpected < expectedDuration.Seconds() {
+		maxExpected = expectedDuration.Seconds()
+	}
+
+	assert.True(t, result.TotalUtilizationSec >= minExpected && result.TotalUtilizationSec <= maxExpected,
+		"total utilization should be between min and max expected")
+}
+
+func TestCalculateDeploymentTimeUtilizationByContract_MultipleDeployments(t *testing.T) {
+	store := setupTestDB(t)
+	contractDID := "contract-123"
+	deployment1ID := "deployment-1"
+	deployment2ID := "deployment-2"
+	orchestratorID := testOrchestratorID
+
+	baseTime := time.Now().Truncate(time.Second)
+
+	// Deployment 1: starts and stops within period
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deployment1ID, orchestratorID), baseTime.Add(10*time.Second))
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStopEvent,
+		createDeploymentStopEvent(deployment1ID, orchestratorID), baseTime.Add(70*time.Second))
+
+	// Deployment 2: starts and stops within period
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deployment2ID, orchestratorID), baseTime.Add(20*time.Second))
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStopEvent,
+		createDeploymentStopEvent(deployment2ID, orchestratorID), baseTime.Add(80*time.Second))
+
+	// Calculate utilization
+	queryStart := baseTime
+	queryEnd := baseTime.Add(2 * time.Hour)
+	results, err := store.CalculateDeploymentTimeUtilizationByContract(contractDID, queryStart, queryEnd)
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results, 2, "expected 2 deployments")
+
+	// Verify both deployments are included
+	deploymentIDs := make(map[string]bool)
+	for _, result := range results {
+		deploymentIDs[result.DeploymentID] = true
+	}
+
+	assert.True(t, deploymentIDs[deployment1ID], "deployment-1 should be found")
+	assert.True(t, deploymentIDs[deployment2ID], "deployment-2 should be found")
+
+	// Find specific deployments
+	var dep1, dep2 *contracts.DeploymentTimeUtilization
+	for i := range results {
+		if results[i].DeploymentID == deployment1ID {
+			dep1 = &results[i]
+		}
+		if results[i].DeploymentID == deployment2ID {
+			dep2 = &results[i]
+		}
+	}
+
+	require.NotNil(t, dep1, "deployment-1 should be found")
+	require.NotNil(t, dep2, "deployment-2 should be found")
+
+	// Deployment 1: 60 seconds (70 - 10)
+	assert.Equal(t, 60.0, dep1.TotalUtilizationSec, "deployment-1 should have 60 seconds runtime")
+	// Deployment 2: 60 seconds (80 - 20)
+	assert.Equal(t, 60.0, dep2.TotalUtilizationSec, "deployment-2 should have 60 seconds runtime")
+}
+
+func TestCalculateDeploymentTimeUtilizationByContract_EmptyResult(t *testing.T) {
+	store := setupTestDB(t)
+	contractDID := "contract-123"
+
+	baseTime := time.Now().Truncate(time.Second)
+
+	// No deployment events added
+
+	// Calculate utilization
+	queryStart := baseTime
+	queryEnd := baseTime.Add(2 * time.Hour)
+	results, err := store.CalculateDeploymentTimeUtilizationByContract(contractDID, queryStart, queryEnd)
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results, 0, "expected 0 deployments")
+}
+
+func TestCalculateDeploymentTimeUtilizationByContract_ContractIsolation(t *testing.T) {
+	store := setupTestDB(t)
+	contract1DID := "contract-1"
+	contract2DID := "contract-2"
+	deploymentID := "deployment-1"
+	orchestratorID := testOrchestratorID
+
+	baseTime := time.Now().Truncate(time.Second)
+
+	// Add deployment to contract 1
+	addEventWithTimestamp(t, store, contract1DID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deploymentID, orchestratorID), baseTime.Add(10*time.Second))
+	addEventWithTimestamp(t, store, contract1DID, events.DeploymentStopEvent,
+		createDeploymentStopEvent(deploymentID, orchestratorID), baseTime.Add(70*time.Second))
+
+	// Add deployment to contract 2
+	addEventWithTimestamp(t, store, contract2DID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deploymentID, orchestratorID), baseTime.Add(10*time.Second))
+	addEventWithTimestamp(t, store, contract2DID, events.DeploymentStopEvent,
+		createDeploymentStopEvent(deploymentID, orchestratorID), baseTime.Add(80*time.Second))
+
+	// Query contract 1
+	queryStart := baseTime
+	queryEnd := baseTime.Add(2 * time.Hour)
+	results1, err := store.CalculateDeploymentTimeUtilizationByContract(contract1DID, queryStart, queryEnd)
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results1, 1, "expected 1 deployment for contract-1")
+
+	// Query contract 2
+	results2, err := store.CalculateDeploymentTimeUtilizationByContract(contract2DID, queryStart, queryEnd)
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results2, 1, "expected 1 deployment for contract-2")
+
+	// Verify isolation
+	assert.Equal(t, 60.0, results1[0].TotalUtilizationSec, "contract-1 deployment should have 60 seconds")
+	assert.Equal(t, 70.0, results2[0].TotalUtilizationSec, "contract-2 deployment should have 70 seconds")
+}
+
+func TestCalculateDeploymentTimeUtilizationByContract_ExcludedIfStoppedBeforePeriod(t *testing.T) {
+	store := setupTestDB(t)
+	contractDID := "contract-123"
+	deploymentID := "deployment-1"
+	orchestratorID := testOrchestratorID
+
+	baseTime := time.Now().Truncate(time.Second)
+
+	// Deployment starts and stops before query period
+	startTime := baseTime.Add(-20 * time.Minute)
+	stopTime := baseTime.Add(-10 * time.Minute)
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStartEvent,
+		createDeploymentStartEvent(deploymentID, orchestratorID), startTime)
+	addEventWithTimestamp(t, store, contractDID, events.DeploymentStopEvent,
+		createDeploymentStopEvent(deploymentID, orchestratorID), stopTime)
+
+	// Query for time period starting after deployment stopped
+	queryStart := baseTime
+	queryEnd := baseTime.Add(2 * time.Hour)
+	results, err := store.CalculateDeploymentTimeUtilizationByContract(contractDID, queryStart, queryEnd)
+	require.NoError(t, err, "CalculateDeploymentTimeUtilizationByContract failed")
+	require.Len(t, results, 0, "expected 0 deployments (stopped before query period)")
+}
+
+func createDeploymentStartEvent(deploymentID, orchestratorID string) []byte { //nolint:unparam
+	event := map[string]interface{}{
+		"type":            string(events.DeploymentStartEvent),
+		"deployment_id":   deploymentID,
+		"orchestrator_id": orchestratorID,
+	}
+	data, _ := json.Marshal(event)
+	return data
+}
+
+func createDeploymentStopEvent(deploymentID, orchestratorID string) []byte { //nolint:unparam
+	event := map[string]interface{}{
+		"type":            string(events.DeploymentStopEvent),
+		"deployment_id":   deploymentID,
+		"orchestrator_id": orchestratorID,
 	}
 	data, _ := json.Marshal(event)
 	return data
