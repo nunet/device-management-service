@@ -21,11 +21,20 @@ const (
 	PayPerDeployment          PaymentModel = "pay_per_deployment"
 	PayPerTimeUtilization     PaymentModel = "pay_per_time_utilization"
 	PayPerResourceUtilization PaymentModel = "pay_per_resource_utilization"
+	FixedRental               PaymentModel = "fixed_rental"
 )
 
 const (
 	FiatMethod       PaymentType = "fiat"
 	BlockchainMethod PaymentType = "blockchain"
+)
+
+const (
+	PaymentPeriodMinute string = "minute"
+	PaymentPeriodHour   string = "hour"
+	PaymentPeriodDay    string = "day"
+	PaymentPeriodWeek   string = "week"
+	PaymentPeriodMonth  string = "month"
 )
 
 type PaymentType string
@@ -54,6 +63,11 @@ type PaymentDetails struct {
 	FeePerDiskGBPerTimeUnit  string `json:"fee_per_disk_gb_per_time_unit,omitempty"`  // e.g., "0.01" per GB per hour
 	FeePerGPUPerTimeUnit     string `json:"fee_per_gpu_per_time_unit,omitempty"`      // e.g., "5.00" per GPU per hour (optional)
 	ResourceTimeUnit         string `json:"resource_time_unit,omitempty"`             // "second", "minute", "hour"
+
+	// fixed rental payment model
+	FixedRentalAmount  string `json:"fixed_rental_amount,omitempty"`  // e.g., "20.00"
+	PaymentPeriod      string `json:"payment_period,omitempty"`       // "minute", "hour", "day", "week", "month"
+	PaymentPeriodCount int    `json:"payment_period_count,omitempty"` // Number of periods to wait before invoicing (default: 1). Invoice amount is fixedRentalAmount, invoiced every paymentPeriodCount periods
 
 	Addresses []types.PaymentAddressInfo `json:"addresses"`
 }

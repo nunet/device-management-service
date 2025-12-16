@@ -114,7 +114,36 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to generate contract keypair: %w", err)
 	}
 
-	contractActor, err := tokenomics.NewContractActor(n.actor.Handle(), request.PaymentValidatorDID, n.network, request.ContractParticipants, privKey, pubKey, n.contractStore, n.usageStore)
+	// Create forwarding function that uses the solution enabler's (contract host) actor to send invoices
+	forwardInvoice := func(req contracts.ContractUsageRequest) error {
+		destination, err := actor.HandleFromDID(request.PaymentValidatorDID.URI)
+		if err != nil {
+			return fmt.Errorf("failed to get payment validator handle: %w", err)
+		}
+
+		// Create message envelope using solution enabler's actor handle (contract host node actor)
+		// This ensures the message is sent from the solution enabler's actor, which has the required capabilities
+		envelope, err := actor.Message(
+			n.actor.Handle(), // Source: solution enabler (contract host) actor - has granted capabilities
+			destination,      // Destination: payment validator
+			behaviors.ContractUsageBehavior,
+			req,
+			actor.WithMessageExpiry(actor.MakeExpiry(invokeMessageTimeout)),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create envelope: %w", err)
+		}
+
+		// Send asynchronously (no reply expected)
+		if err := n.actor.Send(envelope); err != nil {
+			return fmt.Errorf("failed to send contract usage request: %w", err)
+		}
+
+		log.Infof("Successfully sent Fixed Rental invoice for contract %s to payment validator", req.Contract.ContractDID)
+		return nil
+	}
+
+	contractActor, err := tokenomics.NewContractActor(n.actor.Handle(), request.PaymentValidatorDID, n.network, request.ContractParticipants, privKey, pubKey, n.contractStore, n.usageStore, forwardInvoice)
 	if err != nil {
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to create contract actor: %w", err)
 	}
@@ -583,7 +612,37 @@ func (n *Node) StartContracts() error {
 
 		pubKey := privKey.GetPublic()
 
-		contractActor, err := tokenomics.NewContractActor(n.actor.Handle(), v.PaymentValidatorDID, n.network, v.ContractParticipants, privKey, pubKey, n.contractStore, n.usageStore)
+		// Create forwarding function that uses the solution enabler's (contract host) actor to send invoices
+		paymentValidatorDID := v.PaymentValidatorDID
+		forwardInvoice := func(req contracts.ContractUsageRequest) error {
+			destination, err := actor.HandleFromDID(paymentValidatorDID.URI)
+			if err != nil {
+				return fmt.Errorf("failed to get payment validator handle: %w", err)
+			}
+
+			// Create message envelope using solution enabler's actor handle (contract host node actor)
+			// This ensures the message is sent from the solution enabler's actor, which has the required capabilities
+			envelope, err := actor.Message(
+				n.actor.Handle(), // Source: solution enabler (contract host) actor - has granted capabilities
+				destination,      // Destination: payment validator
+				behaviors.ContractUsageBehavior,
+				req,
+				actor.WithMessageExpiry(actor.MakeExpiry(invokeMessageTimeout)),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to create envelope: %w", err)
+			}
+
+			// Send asynchronously (no reply expected)
+			if err := n.actor.Send(envelope); err != nil {
+				return fmt.Errorf("failed to send contract usage request: %w", err)
+			}
+
+			log.Infof("Successfully sent Fixed Rental invoice for contract %s to payment validator", req.Contract.ContractDID)
+			return nil
+		}
+
+		contractActor, err := tokenomics.NewContractActor(n.actor.Handle(), v.PaymentValidatorDID, n.network, v.ContractParticipants, privKey, pubKey, n.contractStore, n.usageStore, forwardInvoice)
 		if err != nil {
 			continue
 		}
@@ -1033,7 +1092,6 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 			return
 		}
 
-		log.Info("----> pay_per_time_utilization", req.TimeUtilization)
 		requestorURI := req.Contract.ContractParticipants.Requestor.URI // Capture Requestor URI to avoid closure issue
 		// Process each deployment separately - each gets its own payment and transaction
 		for _, deployment := range req.TimeUtilization.Deployments {
@@ -1259,6 +1317,74 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 				}
 			}(deployment.DeploymentID, txReq, requestorURI)
 		}
+
+	case contracts.FixedRental:
+		log.Infof("Processing FixedRental: FixedRentalDetails=%t, PeriodsInvoiced=%d", req.FixedRentalDetails != nil, func() int {
+			if req.FixedRentalDetails != nil {
+				return req.FixedRentalDetails.PeriodsInvoiced
+			}
+			return 0
+		}())
+		if req.FixedRentalDetails == nil {
+			handleErr(errors.New("fixed_rental_details is required for fixed_rental payment model"))
+			return
+		}
+
+		fixedRentalUsage := req.FixedRentalDetails
+
+		// Validate required fields
+		if fixedRentalUsage.Amount == "" {
+			handleErr(errors.New("amount is required in fixed_rental_details"))
+			return
+		}
+
+		// Generate payment and transaction for this fixed rental period
+		finalAmount := fixedRentalUsage.Amount
+
+		err := n.paymentStore.Insert(payment.Payment{
+			UniqueID: req.UniqueID,
+			Contract: req.Contract,
+			Usages:   fixedRentalUsage.PeriodsInvoiced,
+			Amount:   finalAmount,
+			Paid:     false,
+		})
+		if err != nil {
+			log.Errorf("error while upserting payment for fixed rental period %s-%s: %v", fixedRentalUsage.PeriodStart, fixedRentalUsage.PeriodEnd, err)
+			handleErr(fmt.Errorf("failed to insert payment for fixed rental: %w", err))
+			return
+		}
+
+		// Create transaction for service provider
+		txReq := contracts.TransactionForServiceProviderRequest{
+			PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
+			UniqueID:            req.UniqueID,
+			ContractDID:         req.Contract.ContractDID,
+			ToAddress:           req.Contract.PaymentDetails.Addresses,
+			Amount:              finalAmount,
+		}
+
+		requestorURI := req.Contract.ContractParticipants.Requestor.URI // Capture Requestor URI
+		go func(txReq contracts.TransactionForServiceProviderRequest, requestorURI string) {
+			destination, err := actor.HandleFromDID(requestorURI)
+			if err != nil {
+				log.Errorf("failed to get service provider's DID for fixed rental invoice: %w", err)
+				return
+			}
+			reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
+			if reply.Message == nil || err != nil {
+				if err != nil {
+					log.Errorf("failed to forward transaction info to service provider for fixed rental invoice: %w", err)
+				} else {
+					log.Errorf("failed to forward transaction info to service provider for fixed rental invoice: empty reply")
+				}
+			} else {
+				log.Infof("successfully sent transaction for fixed rental invoice to service provider")
+			}
+		}(txReq, requestorURI)
+
+		resp := contracts.ContractUsageResponse{}
+		n.sendReply(msg, resp)
+		return
 
 	default:
 		handleErr(fmt.Errorf("unsupported payment model: %s", req.Contract.PaymentDetails.PaymentModel))

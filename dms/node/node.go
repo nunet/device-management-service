@@ -1088,6 +1088,7 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 		Usages              int                                 // For backward compatibility
 		TimeUtilization     *contracts.TimeUtilizationUsage     // For pay_per_time_utilization
 		ResourceUtilization *contracts.ResourceUtilizationUsage // For pay_per_resource_utilization
+		FixedRentalDetails  *contracts.FixedRentalUsage         // For fixed_rental
 		Contract            contracts.Contract
 	}
 
@@ -1238,6 +1239,18 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 
 			// Add result (already set above)
 			resp.Results = append(resp.Results, result)
+			continue
+
+		case contracts.FixedRental:
+			// Fixed Rental payment model uses automatic periodic billing and cannot be manually triggered.
+			// Return an error to prevent race conditions with the contract actor's billing routine.
+			result = contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        "fixed_rental payment model uses automatic periodic billing and cannot be manually triggered. Invoices are generated automatically by the contract actor.",
+			}
+			resp.Results = append(resp.Results, result)
+			log.Warnf("manual invoice generation attempted for fixed rental contract %s", contract.ContractDID)
 			continue
 
 		default:
