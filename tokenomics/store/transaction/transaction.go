@@ -132,3 +132,22 @@ func (s *Store) MarkAsPaid(uniqueID string, txHash string) (string, error) {
 
 	return t.PaymentValidatorDID, s.db.Update(q, update)
 }
+
+func (s *Store) GetPaymentValidatorDID(uniqueID string) (string, error) {
+	q := query.NewQuery(transactionsCollection).Where(query.Field("unique_id").Eq(uniqueID))
+	doc, err := s.db.FindFirst(q)
+	if err != nil {
+		return "", fmt.Errorf("failed to find transaction: %w", err)
+	}
+	if doc == nil {
+		return "", fmt.Errorf("transaction not found with unique_id: %s", uniqueID)
+	}
+
+	data := doc.Get("transaction_data")
+	var t Transaction
+	if err := json.Unmarshal(data.([]byte), &t); err != nil {
+		return "", fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+
+	return t.PaymentValidatorDID, nil
+}

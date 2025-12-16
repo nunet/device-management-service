@@ -830,9 +830,9 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		return
 	}
 
-	paymentProviderDID, err := n.transactionStore.MarkAsPaid(req.UniqueID, req.TxHash)
+	paymentProviderDID, err := n.transactionStore.GetPaymentValidatorDID(req.UniqueID)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to get mark transaction as paid: %s", err))
+		handleErr(fmt.Errorf("failed to get payment validator did: %s", err))
 		return
 	}
 	contractID = paymentProviderDID
@@ -857,6 +857,12 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 	_ = json.Unmarshal(reply.Message, &replyResponse)
 	if replyResponse.Error != "" {
 		handleErr(fmt.Errorf("payment validation response from payment provider: %s", replyResponse.Error))
+		return
+	}
+
+	_, err = n.transactionStore.MarkAsPaid(req.UniqueID, req.TxHash)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get mark transaction as paid: %s", err))
 		return
 	}
 

@@ -333,7 +333,7 @@ func (c *Client) settleContract(t *testing.T, context, passphrase, contractDID, 
 	return buf.String(), err
 }
 
-func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniqueID, txHash string) (string, error) { //nolint:unparam
+func (c *Client) confirmLocalTransaction(t *testing.T, context, passphrase, uniqueID, txHash string) (string, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
