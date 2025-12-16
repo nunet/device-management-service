@@ -95,6 +95,15 @@ type ResourceUtilizationUsage struct {
 	Deployments []DeploymentResourceUtilization `json:"deployments"`
 }
 
+// FixedRentalUsage represents usage data for fixed_rental payment model
+type FixedRentalUsage struct {
+	PeriodsInvoiced int       `json:"periods_invoiced"` // Number of full periods invoiced
+	PeriodStart     time.Time `json:"period_start"`     // Start of the first period in this invoice
+	PeriodEnd       time.Time `json:"period_end"`       // End of the last period in this invoice
+	Amount          string    `json:"amount"`           // Total amount for this invoice
+	LastInvoiceAt   time.Time `json:"last_invoice_at"`  // Timestamp of last invoice (before this one)
+}
+
 type ContractUsageResult struct {
 	ContractDID         string                    `json:"contract_did"`
 	PaymentModel        PaymentModel              `json:"payment_model"`
@@ -102,6 +111,7 @@ type ContractUsageResult struct {
 	Error               string                    `json:"error,omitempty"`
 	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
 	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
+	FixedRentalDetails  *FixedRentalUsage         `json:"fixed_rental_details,omitempty"` // For fixed_rental
 }
 
 type CollectUsagesAndForwardToPaymentProvidersReponse struct {
@@ -145,6 +155,7 @@ type ContractUsageRequest struct {
 	Usages              int                       `json:"usages"`                         // For backward compatibility
 	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
 	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
+	FixedRentalDetails  *FixedRentalUsage         `json:"fixed_rental_details,omitempty"` // For fixed_rental
 }
 
 type ContractUsageResponse struct {

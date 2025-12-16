@@ -13,6 +13,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ var (
 	validEscalationStrategies        = [...]string{"redeploy", "teardown"}
 	validAllocationFailureStrategies = [...]string{"stay_down", "one_for_one", "one_for_all", "rest_for_one"}
 	validNodeFailureStrategies       = [...]string{"stay_down", "restart", "redeploy"}
+	validPaymentPeriods              = [...]string{"minute", "hour", "day", "week", "month"}
 )
 
 // NewEnsembleV1Validator creates a new validator for the NuNet configuration.
@@ -935,6 +937,7 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				string(contracts.PayPerDeployment),
 				string(contracts.PayPerTimeUtilization),
 				string(contracts.PayPerResourceUtilization),
+				string(contracts.FixedRental),
 			}
 			if !slices.Contains(validPaymentModels, paymentModel) {
 				return fmt.Errorf("invalid payment_model %q: must be one of %v", paymentModel, validPaymentModels)
@@ -978,7 +981,47 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 
 				// fee_per_gpu_per_time_unit is optional
 			}
+
+			// Validate fixed_rental specific fields
+			if paymentModel == string(contracts.FixedRental) {
+				if err := validateFixedRental(paymentDetails); err != nil {
+					return err
+				}
+			}
 		}
+	}
+
+	return nil
+}
+
+func validateFixedRental(paymentDetails map[string]any) error {
+	// Validate fixed_rental_amount
+	amount, ok := paymentDetails["fixed_rental_amount"].(string)
+	if !ok || amount == "" {
+		return fmt.Errorf("fixed_rental_amount is required for fixed_rental payment model")
+	}
+
+	if _, err := strconv.ParseFloat(amount, 64); err != nil {
+		return fmt.Errorf("invalid fixed_rental_amount: %w", err)
+	}
+
+	// Validate payment_period
+	period, ok := paymentDetails["payment_period"].(string)
+	if !ok || period == "" {
+		return fmt.Errorf("payment_period is required for fixed_rental payment model")
+	}
+	if !slices.Contains(validPaymentPeriods[:], period) {
+		return fmt.Errorf("invalid payment_period: %s, must be one of %v", period, validPaymentPeriods)
+	}
+
+	// Validate payment_period_count (optional, default: 1 - invoice every period)
+	// Example: payment_period_count=2 with payment_period="minute" means invoice every 2 minutes
+	if count, ok := paymentDetails["payment_period_count"].(float64); ok { // JSON unmarshals numbers to float64
+		if count <= 0 || count != float64(int(count)) {
+			return fmt.Errorf("payment_period_count must be a positive integer")
+		}
+	} else if _, ok := paymentDetails["payment_period_count"]; ok {
+		return fmt.Errorf("payment_period_count must be an integer")
 	}
 
 	return nil

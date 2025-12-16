@@ -46,6 +46,9 @@
         "fee_per_disk_gb_per_time_unit": "{{fee_per_disk_gb_per_time_unit}}",
         "fee_per_gpu_per_time_unit": "{{fee_per_gpu_per_time_unit}}",
         "resource_time_unit": "{{resource_time_unit}}",
+        "fixed_rental_amount": "{{fixed_rental_amount}}",
+        "payment_period": "{{payment_period}}",
+        "payment_period_count": {{payment_period_count}},
         "timestamp": "0001-01-01T00:00:00Z",
         "payment_type": "blockchain"
     },

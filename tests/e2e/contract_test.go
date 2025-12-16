@@ -57,7 +57,7 @@ func DeployWithContractTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, feesPerAllocation, string(contracts.PayPerAllocation), "", "", "", "", "", "", "", "")
+		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, feesPerAllocation, string(contracts.PayPerAllocation), "", "", "", "", "", "", "", "", "", "", "")
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -293,7 +293,7 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 			providerEthAddr,
 			feesPerAllocation,
 			string(contracts.PayPerAllocation),
-			"", "", "", "", "", "", "", "")
+			"", "", "", "", "", "", "", "", "", "", "")
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -475,7 +475,7 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerDeployment), feePerDeployment, "", "", "", "", "", "", "")
+		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerDeployment), feePerDeployment, "", "", "", "", "", "", "", "", "", "")
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -705,7 +705,7 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerTimeUtilization), "", feePerTimeUnit, timeUnit, "", "", "", "", "")
+		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerTimeUtilization), "", feePerTimeUnit, timeUnit, "", "", "", "", "", "", "", "")
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -1138,7 +1138,7 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerResourceUtilization), "", "", "", feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, "", resourceTimeUnit)
+		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerResourceUtilization), "", "", "", feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, "", resourceTimeUnit, "", "", "")
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -1616,7 +1616,7 @@ func extractValidationResponse(input string) (string, error) {
 	return match[1], nil
 }
 
-func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentValidatorDID, requesterAddr, providerAddr, feesPerAllocation, paymentModel, feePerDeployment, feePerTimeUnit, timeUnit, feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit, resourceTimeUnit string) error { //nolint:unparam
+func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentValidatorDID, requesterAddr, providerAddr, feesPerAllocation, paymentModel, feePerDeployment, feePerTimeUnit, timeUnit, feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit, resourceTimeUnit, fixedRentalAmount, paymentPeriod, paymentPeriodCount string) error { //nolint:unparam
 	if filePath == "" {
 		return fmt.Errorf("filePath is empty")
 	}
@@ -1637,29 +1637,20 @@ func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentVali
 	updatedContent = strings.ReplaceAll(updatedContent, "{{providerAddr}}", providerAddr)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{amount}}", feesPerAllocation)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_model}}", paymentModel)
-	if feePerDeployment != "" {
-		updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_deployment}}", feePerDeployment)
-	}
-	if feePerTimeUnit != "" {
-		updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_time_unit}}", feePerTimeUnit)
-	}
-	if timeUnit != "" {
-		updatedContent = strings.ReplaceAll(updatedContent, "{{time_unit}}", timeUnit)
-	}
-	if feePerCPUCorePerTimeUnit != "" {
-		updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_cpu_core_per_time_unit}}", feePerCPUCorePerTimeUnit)
-	}
-	if feePerRAMGBPerTimeUnit != "" {
-		updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_ram_gb_per_time_unit}}", feePerRAMGBPerTimeUnit)
-	}
-	if feePerDiskGBPerTimeUnit != "" {
-		updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_disk_gb_per_time_unit}}", feePerDiskGBPerTimeUnit)
-	}
-	// Always replace GPU fee placeholder (it's optional, so replace with empty string if not provided)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_deployment}}", feePerDeployment)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_time_unit}}", feePerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{time_unit}}", timeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_cpu_core_per_time_unit}}", feePerCPUCorePerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_ram_gb_per_time_unit}}", feePerRAMGBPerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_disk_gb_per_time_unit}}", feePerDiskGBPerTimeUnit)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_gpu_per_time_unit}}", feePerGPUPerTimeUnit)
-	if resourceTimeUnit != "" {
-		updatedContent = strings.ReplaceAll(updatedContent, "{{resource_time_unit}}", resourceTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{resource_time_unit}}", resourceTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fixed_rental_amount}}", fixedRentalAmount)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_period}}", paymentPeriod)
+	if paymentPeriodCount == "" {
+		paymentPeriodCount = "1"
 	}
+	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_period_count}}", paymentPeriodCount)
 
 	if err := os.WriteFile(filePath, []byte(updatedContent), 0o644); err != nil {
 		return fmt.Errorf("write error: %w", err)
@@ -1756,4 +1747,325 @@ func extractTransactionDataRegex(input string) (string, string, error) {
 	status := match[2]
 
 	return uniqueID, status, nil
+}
+
+func DeployWithContractFixedRentalTest(suite *TestSuite) {
+	suite.Run("dms with contracts fixed rental", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// Setup: Offboard contract host and payment validator
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		// Prepare contract JSON with Fixed Rental configuration
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample-fixed-rental.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+
+		fixedRentalAmount := "10.00"
+		paymentPeriod := "minute" // Use minute periods for faster testing
+		paymentPeriodCount := "2" // Invoice every 2 periods (every 2 minutes)
+
+		// Start mock RPC server
+		go startMockRPC(9425)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9425/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		// Replace placeholders in contract JSON
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"", // feesPerAllocation
+			string(contracts.FixedRental),
+			"", // feePerDeployment
+			"", // feePerTimeUnit
+			"", // timeUnit
+			"", // feePerCPUCorePerTimeUnit
+			"", // feePerRAMGBPerTimeUnit
+			"", // feePerDiskGBPerTimeUnit
+			"", // feePerGPUPerTimeUnit
+			"", // resourceTimeUnit
+			fixedRentalAmount,
+			paymentPeriod,
+			paymentPeriodCount,
+		)
+		suite.Require().NoError(err)
+
+		// Create contract
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		fmt.Println(cmdOut, err)
+
+		// Wait for contract actor to start
+		time.Sleep(5 * time.Second)
+
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// Verify contract is not valid (not signed)
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Approve contract
+		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+		cmdOut, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		// TEST 1: Attempt manual invoice generation (should fail)
+		suite.T().Log("Testing manual invoice generation - should return error")
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err) // HTTP call succeeds
+
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err)
+
+		// Assert error is returned
+		suite.Require().NotEmpty(usageResponse.Results)
+		suite.Require().NotEmpty(usageResponse.Results[0].Error, "should return error for manual Fixed Rental invoice generation")
+		suite.Require().Contains(usageResponse.Results[0].Error, "automatic periodic billing", "error should mention automatic billing")
+		suite.Require().Contains(usageResponse.Results[0].Error, "cannot be manually triggered", "error should mention manual triggering is blocked")
+		suite.T().Logf("Manual invoice generation correctly blocked with error: %s", usageResponse.Results[0].Error)
+
+		// TEST 2: Wait for automatic invoice generation (15 minutes checker + 2-period billing cycle + buffer)
+		suite.T().Log("Waiting for automatic invoice generation (approx. 30 minutes + buffer)")
+
+		// Wait for billing period + buffer:
+		// - contract actor checks every FixedRentalBillingCheckerInterval (15 minutes)
+		// - invoices every paymentPeriodCount * paymentPeriod (2 * 1 minute = 2 minutes)
+		// To be safe, wait for roughly two checker intervals plus a small buffer.
+		waitTime := 30*time.Minute + 2*time.Minute
+
+		// Poll for transaction creation (billing routine generates invoice automatically)
+		var transactionCreated bool
+		var fixedRentalTransaction *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Check if any transaction exists for this contract
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID {
+					transactionCreated = true
+					fixedRentalTransaction = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated within period")
+
+		suite.Require().True(transactionCreated, "transaction should be created by automatic billing")
+		suite.Require().NotNil(fixedRentalTransaction, "should find the automatically generated transaction")
+
+		// Capture first invoice time after transaction is found
+		firstInvoiceTime := time.Now()
+
+		// Verify transaction details
+		// Parse amounts as floats for comparison (invoice uses 8 decimal places, but amounts should match numerically)
+		// The invoice amount is fixedRentalAmount (not multiplied by paymentPeriodCount)
+		// paymentPeriodCount only controls invoice frequency (every N periods)
+		expectedAmount, err := strconv.ParseFloat(fixedRentalAmount, 64)
+		suite.Require().NoError(err, "should parse expected amount")
+		actualAmount, err := strconv.ParseFloat(fixedRentalTransaction.Amount, 64)
+		suite.Require().NoError(err, "should parse actual amount")
+		suite.Require().Equal(expectedAmount, actualAmount, "transaction amount should match fixed rental amount (expected %s, got %s)", fixedRentalAmount, fixedRentalTransaction.Amount)
+		suite.Require().Equal("unpaid", fixedRentalTransaction.Status, "transaction should initially be unpaid")
+		suite.T().Logf("Automatic invoice generated: UniqueID=%s, Amount=%s, Status=%s", fixedRentalTransaction.UniqueID, fixedRentalTransaction.Amount, fixedRentalTransaction.Status)
+
+		// TEST 3: Payment Processing
+		suite.T().Log("Confirming payment for the first automatic invoice")
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+		confirmOutput, err := requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, fixedRentalTransaction.UniqueID, txHash)
+		suite.Require().NoError(err, "confirmation should not fail for transaction %s", fixedRentalTransaction.UniqueID)
+
+		// Parse and check confirmation response for errors
+		var confirmResp contracts.ContractConfirmLocalTransactionResponse
+		err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+		suite.Require().NoError(err, "should be able to parse confirmation response")
+		suite.Require().Empty(confirmResp.Error, "confirmation response should not have errors for transaction %s: %s", fixedRentalTransaction.UniqueID, confirmResp.Error)
+
+		// Wait for transaction status to be updated
+		time.Sleep(10 * time.Second)
+
+		// Verify the specific transaction status by finding it in the list
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+
+		// Find the specific transaction we just confirmed
+		var confirmedTx *transaction.Transaction
+		for _, tx := range respAfterConfirm.Transactions {
+			if tx.UniqueID == fixedRentalTransaction.UniqueID {
+				confirmedTx = tx
+				break
+			}
+		}
+		suite.Require().NotNil(confirmedTx, "should find the confirmed transaction with unique_id: %s", fixedRentalTransaction.UniqueID)
+		suite.Require().Equal("paid", confirmedTx.Status, "transaction %s should be marked as paid", fixedRentalTransaction.UniqueID)
+		suite.T().Logf("Transaction %s confirmed and marked as paid.", fixedRentalTransaction.UniqueID)
+
+		// Check all parties can retrieve payment status from payment provider
+		statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, fixedRentalTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from requester.")
+
+		statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, fixedRentalTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from provider.")
+
+		statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, fixedRentalTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from contract host.")
+
+		// Count transactions before mid-period termination
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountBeforeMidPeriodTermination := len(respAfterConfirm.Transactions)
+		suite.T().Logf("Transaction count before mid-period termination: %d", transactionCountBeforeMidPeriodTermination)
+
+		// TEST 4: Mid-period contract termination (pro-rated invoice)
+		suite.T().Log("Waiting 30 seconds (mid-period) before terminating contract to trigger pro-rated invoice")
+		time.Sleep(30 * time.Second) // Wait for half of the 2-minute period
+
+		terminationTime := time.Now()
+		suite.T().Logf("Terminating contract at %s", terminationTime.Format(time.RFC3339))
+		_, err = provider.client.terminateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		time.Sleep(3 * time.Second) // Allow termination to propagate
+
+		// Verify contract is terminated
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("TERMINATED", contractState)
+		suite.T().Log("Contract status verified as TERMINATED.")
+
+		// TEST 5: Verify pro-rated final invoice generated after termination
+		suite.T().Log("Waiting for pro-rated final invoice to be generated after contract termination")
+		// Billing routine checks every 15 minutes, so wait at least one checker interval + buffer
+		time.Sleep(15*time.Minute + 2*time.Minute) // Wait for billing routine to detect termination and generate final invoice
+
+		// Check for new transaction (pro-rated invoice for partial period)
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountAfterTermination := len(respAfterConfirm.Transactions)
+
+		// Assert a new transaction was created for the pro-rated period
+		suite.Require().Greater(
+			transactionCountAfterTermination,
+			transactionCountBeforeMidPeriodTermination,
+			"pro-rated final invoice should be generated after mid-period contract termination",
+		)
+		suite.T().Logf("Verified: Transaction count before termination: %d, after termination: %d (pro-rated invoice generated)",
+			transactionCountBeforeMidPeriodTermination, transactionCountAfterTermination)
+
+		// Find and verify the pro-rated transaction
+		var proRatedTransaction *transaction.Transaction
+		for _, tx := range respAfterConfirm.Transactions {
+			if tx.ContractDID == contractDID && tx.UniqueID != fixedRentalTransaction.UniqueID {
+				proRatedTransaction = tx
+				break
+			}
+		}
+		suite.Require().NotNil(proRatedTransaction, "should have pro-rated transaction after mid-period termination")
+
+		// Calculate expected pro-rated amount
+		// We waited 30 seconds after detecting the first invoice, then terminated.
+		// The billing routine may run slightly later (up to the checker interval), so the actual elapsed time
+		// used for billing will be slightly larger than this theoretical value.
+		// Base period is 1 minute (payment_period: "minute"), invoices are generated every paymentPeriodCount periods.
+		elapsedSinceFirstInvoice := terminationTime.Sub(firstInvoiceTime)
+		periodDuration := 1 * time.Minute // Base period is 1 minute
+		// Pro-rate based on the fixed rental amount and billing cycle
+		// The fixed rental amount covers paymentPeriodCount periods (one billing cycle), so pro-rate proportionally
+		amountPerInvoice, err := strconv.ParseFloat(fixedRentalAmount, 64)
+		suite.Require().NoError(err)
+		periodCount, err := strconv.Atoi(paymentPeriodCount)
+		suite.Require().NoError(err)
+		// Pro-rate: (elapsed / billing cycle duration) * fixedRentalAmount
+		billingCycleDuration := periodDuration * time.Duration(periodCount)
+		proRatedRatio := float64(elapsedSinceFirstInvoice) / float64(billingCycleDuration)
+		expectedProRatedAmountFloat := proRatedRatio * amountPerInvoice
+
+		// Verify pro-rated amount (allow small variance for timing)
+		actualAmount, err = strconv.ParseFloat(proRatedTransaction.Amount, 64)
+		suite.Require().NoError(err)
+		suite.Require().LessOrEqual(expectedProRatedAmountFloat, actualAmount, "pro-rated transaction amount should be approximately %f (got %f) for %v of %v billing cycle", expectedProRatedAmountFloat, actualAmount, elapsedSinceFirstInvoice, billingCycleDuration)
+		suite.Require().Greater(actualAmount, 0.0, "pro-rated amount should be greater than 0")
+		suite.Require().Less(actualAmount, amountPerInvoice, "pro-rated amount should be less than full invoice amount")
+		suite.T().Logf("Verified pro-rated invoice: expected ~%.2f, got %s (for %v of %v billing cycle, ratio: %.2f%%)",
+			expectedProRatedAmountFloat, proRatedTransaction.Amount, elapsedSinceFirstInvoice, billingCycleDuration, proRatedRatio*100)
+
+		// TEST 6: Verify no further invoices after termination
+		suite.T().Log("Waiting another checker interval + buffer after termination to verify no further invoices")
+		time.Sleep(waitTime)
+
+		// Count transactions after waiting another full period
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountAfterWaitPeriod := len(respAfterConfirm.Transactions)
+
+		// Assert no new transactions were created after the pro-rated invoice
+		suite.Require().Equal(
+			transactionCountAfterTermination,
+			transactionCountAfterWaitPeriod,
+			"no new transactions should be created after pro-rated invoice (contract is terminated)",
+		)
+		suite.T().Logf("Verified: Transaction count after termination: %d, after wait period: %d (no new invoices)",
+			transactionCountAfterTermination, transactionCountAfterWaitPeriod)
+	})
 }
