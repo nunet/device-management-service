@@ -155,6 +155,8 @@ type TransactionForServiceProviderRequest struct {
 	ContractDID         string                     `json:"contract_did"`
 	ToAddress           []types.PaymentAddressInfo `json:"to_address"`
 	Amount              string                     `json:"amount"`
+	Status              string                     `json:"status,omitempty"`  // optional status, defaults to "unpaid" if empty
+	TxHash              string                     `json:"tx_hash,omitempty"` // optional transaction hash
 }
 
 type TransactionForServiceProviderResponse struct {

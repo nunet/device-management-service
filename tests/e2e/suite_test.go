@@ -530,31 +530,23 @@ func (s *TestSuite) setupTestNetwork() {
 		case "deployment_with_contracts_periodic_tests":
 			if nodeIndex == 3 {
 				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9426"
+			}
+		case "deployment_with_ondemand_provisioner_tests":
+			if nodeIndex == 0 {
+				cfg.General.ComputeGateway = true
+				cfg.General.Providers = []config.ProviderConfig{
+					{
+						Name:   "local-incus",
+						Type:   "local-incus",
+						Config: map[string]interface{}{},
+					},
+				}
+			}
+		case "deployment_with_contracts_collect_after_pay_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
 				cfg.PaymentProvider.Mode = true
 			}
-		}
-
-		if s.Name == "deployment_with_contracts_tx_confimation_tests" && nodeIndex == 3 {
-			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9426"
-			cfg.PaymentProvider.Mode = true
-		}
-
-		// for ondemand provisioner
-		// first node make it a gateway
-		if s.Name == "deployment_with_ondemand_provisioner_tests" && nodeIndex == 0 {
-			cfg.General.ComputeGateway = true
-			cfg.General.Providers = []config.ProviderConfig{
-				{
-					Name:   "local-incus",
-					Type:   "local-incus",
-					Config: map[string]interface{}{},
-				},
-			}
-		}
-
-		if s.Name == "deployment_with_contracts_collect_after_pay_tests" && nodeIndex == 3 {
-			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
-			cfg.PaymentProvider.Mode = true
 		}
 
 		var err error

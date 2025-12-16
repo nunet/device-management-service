@@ -229,6 +229,25 @@ func DeployWithContractTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 		suite.Require().Contains(statusOutput, `"paid": true`)
 
+		// verify compute provider has this paid transaction locally
+		providerOutput, err := provider.client.listLocalTransactions(suite.T(), provider.dmsContext, provider.password)
+		suite.Require().NoError(err, "compute provider should be able to list transactions")
+
+		var providerTxList contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(providerOutput), &providerTxList)
+		suite.Require().NoError(err, "should be able to parse compute provider transaction list")
+
+		var providerTx *transaction.Transaction
+		for _, tx := range providerTxList.Transactions {
+			if tx.UniqueID == uniqueID {
+				providerTx = tx
+				break
+			}
+		}
+		suite.Require().NotNil(providerTx, "compute provider should have transaction %s", uniqueID)
+		suite.Require().Equal("paid", providerTx.Status, "compute provider transaction %s should be marked as paid", uniqueID)
+		suite.Require().Equal(txHash, providerTx.TxHash, "compute provider transaction %s should have correct tx hash", uniqueID)
+
 		// check the status of the contract actor
 		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
 		suite.Require().NoError(err)

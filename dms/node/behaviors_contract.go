@@ -866,9 +866,48 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		return
 	}
 
-	resp := contracts.ContractConfirmLocalTransactionResponse{}
+	// Forward paid transaction to compute provider
+	tx, err := n.transactionStore.GetTransactionByUniqueID(req.UniqueID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get transaction: %w", err))
+		return
+	}
 
-	n.sendReply(msg, resp)
+	contract, err := n.contractStore.GetContract(tx.ContractDID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get contract: %w", err))
+		return
+	}
+	// Send paid transaction to compute provider
+	computeProviderTxReq := contracts.TransactionForServiceProviderRequest{
+		PaymentValidatorDID: tx.PaymentValidatorDID,
+		UniqueID:            tx.UniqueID,
+		ContractDID:         tx.ContractDID,
+		ToAddress:           tx.ToAddress,
+		Amount:              tx.Amount,
+		Status:              "paid", // Mark as paid
+		TxHash:              req.TxHash,
+	}
+
+	destination, err := actor.HandleFromDID(contract.ContractParticipants.Provider.URI)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get destination handle: %w", err))
+		return
+	}
+
+	_, err = n.invokeBehaviour(
+		destination,
+		behaviors.ContractTransactionBehavior,
+		computeProviderTxReq,
+		invokeMessageTimeout,
+	)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to forward paid transaction to compute provider: %w", err))
+		return
+	}
+
+	log.Infof("successfully forwarded paid transaction %s to compute provider", req.UniqueID)
+	n.sendReply(msg, contracts.ContractConfirmLocalTransactionResponse{})
 }
 
 func (n *Node) handleListLocalTransactions(msg actor.Envelope) {
@@ -945,6 +984,8 @@ func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 		ContractDID:         req.ContractDID,
 		ToAddress:           req.ToAddress,
 		Amount:              req.Amount,
+		Status:              req.Status, // Use provided status, or "" defaults to "unpaid" in Upsert
+		TxHash:              req.TxHash, // Use provided tx hash
 	})
 	if err != nil {
 		handleErr(fmt.Errorf("failed to insert transaction into the store: %w", err))
