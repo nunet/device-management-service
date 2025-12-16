@@ -229,6 +229,7 @@ require (
 	github.com/buildkite/terminal-to-html v3.2.0+incompatible
 	github.com/compose-spec/compose-go/v2 v2.8.1
 	github.com/cucumber/godog v0.15.0
+	github.com/elastic/go-elasticsearch/v9 v9.2.0
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/itchyny/gojq v0.12.13
 	github.com/lithammer/dedent v1.1.0
@@ -251,6 +252,7 @@ require (
 	github.com/cucumber/messages/go/v21 v21.0.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
+	github.com/elastic/elastic-transport-go/v8 v8.7.0 // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/gofrs/uuid v4.3.1+incompatible // indirect
 	github.com/gorilla/schema v1.2.1 // indirect

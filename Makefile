@@ -56,7 +56,10 @@ linux_amd64:
 	@echo "Building for Linux AMD64..."
 	go mod tidy
 	GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) .
-	
+	GOOS=linux GOARCH=amd64 go build -o builds/dms_logs_linux_amd64 -ldflags="-s -w" ./maint-scripts/e2e/logs
+	GOOS=linux GOARCH=amd64 go build -o builds/dms_msgflow_linux_amd64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow
+	GOOS=linux GOARCH=amd64 go build -o builds/dms_ingest_linux_amd64 -ldflags="-s -w" ./maint-scripts/e2e/ingest
+
 linux_amd64_docker:
 	@echo "Building for Linux AMD64 using Docker..."
 	make build-dms-builder
@@ -69,7 +72,10 @@ linux_amd64_docker:
 		bash -c '\
 			git config --global --add safe.directory /app && \
 			go mod tidy && \
-			CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) .;\
+			CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o builds/dms_linux_amd64 -ldflags=$(LDFLAGS) . && \
+			CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o builds/dms_logs_linux_amd64 -ldflags="-s -w" ./maint-scripts/e2e/logs && \
+			CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o builds/dms_msgflow_linux_amd64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
+			CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=x86_64-linux-gnu-gcc GOOS=linux GOARCH=amd64 go build -o builds/dms_ingest_linux_amd64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
 		'
 
 BUILD_ARCHS := "amd64 arm64 arm32_v6l arm32_v7l"
@@ -101,10 +107,16 @@ linux_arm64:
 	go mod tidy
 	@if [ $(ARCH) = "aarch64" ]; then\
 		echo "Building ON ARM64...";\
-		GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .;\
+		GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) . && \
+		GOOS=linux GOARCH=arm64 go build -o builds/dms_logs_linux_arm64 -ldflags="-s -w" ./maint-scripts/e2e/logs && \
+		GOOS=linux GOARCH=arm64 go build -o builds/dms_msgflow_linux_arm64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
+		GOOS=linux GOARCH=arm64 go build -o builds/dms_ingest_linux_arm64 -ldflags="-s -w" ./maint-scripts/e2e/ingest;\
 	elif command -v aarch64-linux-gnu-gcc > /dev/null 2>&1; then\
 		echo "Cross Compiling for aarch64...";\
-		CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) .;\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 go build -o builds/dms_linux_arm64 -ldflags=$(LDFLAGS) . && \
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 go build -o builds/dms_logs_linux_arm64 -ldflags="-s -w" ./maint-scripts/e2e/logs && \
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 go build -o builds/dms_msgflow_linux_arm64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-aarch64-linux-gnu CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 go build -o builds/dms_ingest_linux_arm64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
 	else\
 		echo "arm64 - no compiler found";\
 	fi
@@ -113,10 +125,16 @@ linux_arm32_v6l:
 	go mod tidy
 	@if [ $(ARCH) = "armv6l" ]; then\
 		echo "Building ON armv6l...";\
-		GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_linux_arm32_v6l -ldflags=$(LDFLAGS) .;\
+		GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_linux_arm32_v6l -ldflags=$(LDFLAGS) . && \
+		GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_logs_linux_arm32_v6l -ldflags="-s -w" ./maint-scripts/e2e/logs && \
+		GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_msgflow_linux_arm32_v6l -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
+		GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_ingest_linux_arm32_v6l -ldflags="-s -w" ./maint-scripts/e2e/ingest;\
 	elif command -v arm-linux-gnueabihf-gcc > /dev/null 2>&1; then\
 		echo "Cross Compiling for armv6l...";\
-		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_linux_arm32_v6l -ldflags=$(LDFLAGS) .;\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_linux_arm32_v6l -ldflags=$(LDFLAGS) . && \
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_logs_linux_arm32_v6l -ldflags="-s -w" ./maint-scripts/e2e/logs && \
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_msgflow_linux_arm32_v6l -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 go build -o builds/dms_ingest_linux_arm32_v6l -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
 	else\
 		echo "arm-linux-gnueabihf - no compiler found";\
 	fi
@@ -125,10 +143,16 @@ linux_arm32_v7l:
 	go mod tidy
 	@if [ $(ARCH) = "armv7l" ]; then\
 		echo "Building ON armv7l...";\
-		GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_linux_arm32_v7l -ldflags=$(LDFLAGS) .;\
+		GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_linux_arm32_v7l -ldflags=$(LDFLAGS) . && \
+		GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_logs_linux_arm32_v7l -ldflags="-s -w" ./maint-scripts/e2e/logs && \
+		GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_msgflow_linux_arm32_v7l -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
+		GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_msgflow_linux_arm32_v7l -ldflags="-s -w" ./maint-scripts/e2e/ingest;\
 	elif command -v arm-linux-gnueabihf-gcc > /dev/null 2>&1; then\
 		echo "Cross Compiling for armv7l...";\
-		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_linux_arm32_v7l -ldflags=$(LDFLAGS) .;\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_linux_arm32_v7l -ldflags=$(LDFLAGS) . && \
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_logs_linux_arm32_v7l -ldflags="-s -w" ./maint-scripts/e2e/logs && \
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_msgflow_linux_arm32_v7l -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
+		CGO_ENABLED=1 CC_FOR_TARGET=gcc-arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=7 go build -o builds/dms_ingest_linux_arm32_v7l -ldflags="-s -w" ./maint-scripts/e2e/msgflow;\
 	else\
 		echo "arm-linux-gnueabihf - no compiler found";\
 	fi
@@ -137,14 +161,28 @@ darwin_arm64:
 	@echo "Building for Darwin ARM64..."
 	go mod tidy
 	GOOS=darwin GOARCH=arm64 go build -o builds/dms_darwin_arm64 -ldflags=$(LDFLAGS) .
+	GOOS=darwin GOARCH=arm64 go build -o builds/dms_logs_darwin_arm64 -ldflags="-s -w" ./maint-scripts/e2e/logs
+	GOOS=darwin GOARCH=arm64 go build -o builds/dms_msgflow_darwin_arm64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow
+	GOOS=darwin GOARCH=arm64 go build -o builds/dms_msgflow_darwin_arm64 -ldflags="-s -w" ./maint-scripts/e2e/ingest
 
 darwin_amd64:
 	@echo "Building for Darwin AMD64..."
 	go mod tidy
 	GOOS=darwin GOARCH=amd64 go build -o builds/dms_darwin_amd64 -ldflags=$(LDFLAGS) .
+	GOOS=darwin GOARCH=amd64 go build -o builds/dms_logs_darwin_amd64 -ldflags="-s -w" ./maint-scripts/e2e/logs
+	GOOS=darwin GOARCH=amd64 go build -o builds/dms_msgflow_darwin_amd64 -ldflags="-s -w" ./maint-scripts/e2e/msgflow
+	GOOS=darwin GOARCH=amd64 go build -o builds/dms_msgflow_darwin_amd64 -ldflags="-s -w" ./maint-scripts/e2e/ingest
 
 lint:
 	golangci-lint run --max-issues-per-linter=200
+
+lint-license:
+	go list -m -json -mod=mod all | go-licence-detector -rules .go-licence-detector-rules.json -overrides .go-licence-detector-overrides.json
+
+lint-all:
+	make format
+	make lint
+	make lint-license
 
 format:
 	gofumpt -w .

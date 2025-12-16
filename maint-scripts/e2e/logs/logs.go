@@ -10,81 +10,72 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/alexflint/go-arg"
+
 	shared "gitlab.com/nunet/device-management-service/maint-scripts/e2e"
+	"gitlab.com/nunet/device-management-service/maint-scripts/e2e/logs/presets"
+	"gitlab.com/nunet/device-management-service/maint-scripts/e2e/logs/types"
 )
 
-type Args struct {
-	shared.ArgsBasic
-	shared.ArgsFilters
-	shared.ArgsAdjacent
-	// TODO support showing ungrouped log lines (with node name prefix for each)
+func init() {
+	types.ArgsPresets = slices.Collect(maps.Keys(presets.Presets))
 }
 
-func (Args) Description() string {
-	return shared.Sprintf(`
-		List log lines from a test run.
-		
-		Install github.com/brocode/fblog
-		$> cargo install fblog
-		
-		Examples:
-		
-		Logs for all nodes in the latest acceptance test run
-		$> logs.sh --test-name acceptance
-		
-		Logs for all nodes in the E2E deployment_updates test run
-		$> logs.sh --test-name deployment_updates
-		
-		Logs 1 second around line 50 for the node "dms1"
-		$> logs.sh --line 50 --node-name dms1 --adjacent-duration 1s
-		
-		Log lines 50 to 60 for the node "dms1"
-		$> logs.sh --line 50:60 --node-name dms1
-		
-		Log lines 50 to 60 for the node "dms1", with flight times
-		$> logs.sh --line 50:60 --node-name dms1 --fligtrec
-		
-		Logs from 10:09:50 to 10:09:56 for the node "dms1"
-		$> logs.sh \
-			--timestamp-start 2025-09-24T10:09:50 \
-			--timestamp-end 2025-09-24T10:09:56 \
-			--node-name dms1
-		
-		Logs from 10:09:56 for the node "dms1", with 10 adjacent lines
-		$> logs.sh --timestamp 2025-09-24T10:09:56 \
-			--node-name dms1 \
-			--adjacent-lines 10
-	`)
-}
-
-var args Args
+var args types.Args
 
 func main() {
 	p := arg.MustParse(&args)
-
-	// collect log files
-	logs := shared.CollectLogFiles(args.TestName, args.NodeName)
-
-	// process log files
 	var output string
-	shown := 0
-	for _, logFile := range logs {
+
+	// intro screen
+	if args.SourceName == "" {
+		p.WriteHelp(os.Stdout)
+		os.Exit(0)
+	}
+
+	// collect and process log files
+	logs := shared.CollectLogFiles(args.ArgsBasic, args.NodeName)
+	processed := make([][]*shared.LogLine, len(logs))
+	for i, logFile := range logs {
 		// collect
-		lines, err := shared.CollectLines(logFile, args.ArgsAdjacent, args.ArgsFilters, args.Flightrec)
+		lines, did, err := shared.CollectLines(logFile, args.ArgsAdjacent, args.ArgsFilters, args.Flightrec)
 		if err != nil {
 			p.Fail(fmt.Sprintf("collecting lines for %s: %s", logFile.Name, err.Error()))
 		}
 		if len(lines) == 0 {
 			continue
 		}
+		logs[i].DID = did
+		processed[i] = shared.ParseLines(lines)
+	}
+
+	// handle presets
+	for _, preset := range args.Preset {
+		if _, ok := presets.Presets[preset]; !ok {
+			p.Fail(fmt.Sprintf("unknown preset: %s", preset))
+		}
+		logs, processed = presets.Presets[preset](args, logs, processed)
+	}
+
+	// render stdout
+	if args.Headers && args.HeadersNetwork {
+		output += shared.RenderLogHeader(logs)
+	}
+	shown := 0
+	for i, lines := range processed {
+		if len(lines) == 0 {
+			continue
+		}
+		logFile := logs[i]
 
 		// render
 		if args.Headers {
-			output += shared.RenderHeader(logFile, shown > 0)
+			output += shared.RenderSliceHeader(logFile, shown > 0)
 		}
 		if sliceOut, err := shared.RenderSlice("logs-"+logFile.Name, lines, args.ArgsBasic); err != nil {
 			p.Fail("rendering tmp file: " + err.Error())
@@ -96,7 +87,7 @@ func main() {
 
 	// save HTML
 	if wd, err := os.Getwd(); err == nil && args.OutputHTML != "" {
-		err := shared.SaveHTML(filepath.Join(wd, args.OutputHTML), output, args.Headers)
+		err := shared.SaveHTML(filepath.Join(wd, args.OutputHTML), output, true)
 		if err != nil {
 			p.Fail(err.Error())
 		}

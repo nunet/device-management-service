@@ -180,6 +180,13 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		return
 	}
 
+	log.Infow(
+		"bid_request",
+		"labels", string(observability.LabelDeployment),
+		"from", msg.From.Address,
+		"orchestratorID", request.ID,
+	)
+
 	// contracts are global at ensemble level so they apply
 	// to all nodes
 	if len(request.Request) > 0 {

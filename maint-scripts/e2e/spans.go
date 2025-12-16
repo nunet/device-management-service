@@ -20,6 +20,7 @@ type SpanFactory interface {
 }
 
 type Span struct {
+	// no spaces
 	Name      string
 	StartLine *LogLine
 	EndLine   *LogLine
@@ -120,21 +121,37 @@ func (d *SpanDeployments) ProcessLine(line *LogLine) {
 			return
 		}
 		t := Span{
-			Name:      "Successful deployment",
+			Name:      "successful_deployment",
 			StartLine: line,
 			Nodes:     []string{line.Node, line.FromNode},
 		}
 		d.matches = append(d.matches, t)
+
+		// fail open deploys
+		for i, m := range d.matches {
+			// skip closed spans
+			if m.EndLine != nil {
+				continue
+			}
+			// verify nodes
+			if m.Nodes[0] != line.Node || m.Nodes[1] != line.FromNode {
+				continue
+			}
+
+			d.matches[i].EndLine = line
+			d.matches[i].Name = "failed_deployment"
+		}
+
 		return
 	}
 
-	// match end to close
+	// match end to success
 	for i, m := range d.matches {
 		// skip closed spans
 		if m.EndLine != nil {
 			continue
 		}
-		// varify nodes
+		// verify nodes
 		if m.Nodes[0] != line.Node || m.Nodes[1] != line.FromNode {
 			continue
 		}

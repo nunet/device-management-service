@@ -44,9 +44,12 @@ for arch in $BUILD_ARCHS; do
     fi
 
     # create bin only zip release
-    zip -j $outputDir/nunet-dms_${fullVersion}_${debarch}.zip builds/dms_linux_$arch
+    zip -j $outputDir/nunet-dms_${fullVersion}_${debarch}.zip builds/dms_linux_$arch builds/dms_logs_linux_$arch builds/dms_msgflow_linux_$arch builds/dms_ingest_linux_$arch
 
     cp builds/dms_linux_$arch $archDir/usr/bin/nunet
+    cp builds/dms_logs_linux_$arch $archDir/usr/bin/nunet-logs
+    cp builds/dms_msgflow_linux_$arch $archDir/usr/bin/nunet-msgflow
+    cp builds/dms_ingest_linux_$arch $archDir/usr/bin/nunet-ingest
     ls -R $archDir/usr # to allow checking all files are where they're supposed to be
 
     # create man page

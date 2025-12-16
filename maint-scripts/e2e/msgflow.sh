@@ -3,4 +3,4 @@
 DIR=$( dirname -- "$0" )
 
 #set -x
-go run $DIR/msgflow "$@"
+go run ./$DIR/msgflow "$@"

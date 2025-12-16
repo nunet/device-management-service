@@ -278,10 +278,13 @@ type DeploymentLogsResponse struct {
 func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_logs_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentLogsResponse{Error: err.Error()})
 	}
 
@@ -289,26 +292,27 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 	var resp DeploymentLogsResponse
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		handleErr(fmt.Errorf("error unmarshalling deployment logs: %s", err))
+		handleErr(fmt.Errorf("error unmarshalling deployment logs: %w", err))
 		return
 	}
 
 	// For logs, we need an active orchestrator (in-memory registry only)
 	o, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
+		handleErr(fmt.Errorf("failed to get orchestrator: %w", err))
 		return
 	}
+	orchestratorID = o.ID()
 
 	data, err := o.GetAllocationLogs(request.AllocationName)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to get allocation logs: %s", err))
+		handleErr(fmt.Errorf("failed to get allocation logs: %w", err))
 		return
 	}
 
 	allocDir, err := o.WriteAllocationLogs(request.AllocationName, data.Stdout, data.Stderr)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to write allocation logst: %s", err))
+		handleErr(fmt.Errorf("failed to write allocation logst: %w", err))
 		return
 	}
 
@@ -330,10 +334,13 @@ type DeploymentStatusResponse struct {
 func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_status_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentStatusResponse{Error: err.Error()})
 	}
 
@@ -351,6 +358,7 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		handleErr(fmt.Errorf("failed to get deployment: %s", err))
 		return
 	}
+	orchestratorID = deployment.ID
 
 	resp.Status = deployment.Status.String()
 
@@ -408,10 +416,13 @@ type DeploymentManifestResponse struct {
 func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_manifest_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentManifestResponse{Error: err.Error()})
 	}
 
@@ -446,10 +457,13 @@ type DeploymentShutdownResponse struct {
 func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_shutdown_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentShutdownResponse{Error: err.Error()})
 	}
 
@@ -470,7 +484,7 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	if o.Status() != jobs.DeploymentStatusRunning {
 		log.Debugw("deployment_not_running_for_shutdown",
 			"labels", []string{string(observability.LabelDeployment)},
-			"deploymentID", request.ID,
+			"orchestratorID", request.ID,
 			"status", o.Status())
 		// maybe-TODO: if it's still provisioning/committing,
 		// we should stop the deployment process anyway
@@ -498,11 +512,14 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	var request orchestrator.DeploymentRevertRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Debugw("revert_deployment_unmarshal_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 
 		n.sendReply(msg, orchestrator.DeploymentRevertResponse{
 			OK:    false,
@@ -575,10 +592,13 @@ type UpdateDeploymentResponse struct {
 func (n *Node) handleDeploymentUpdate(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment update error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, UpdateDeploymentResponse{Error: err.Error()})
 	}
 
@@ -644,10 +664,13 @@ func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 		"labels", []string{string(observability.LabelDeployment)},
 		"msg", msg)
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_prune_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentPruneResponse{Error: err.Error()})
 	}
 
@@ -670,6 +693,7 @@ func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 				return
 			}
 			for _, v := range views {
+				orchestratorID = v.OrchestratorID
 				if err := n.orchestratorRegistry.DeleteDeployment(v.OrchestratorID); err != nil {
 					handleErr(fmt.Errorf("failed to delete deployment %s: %w", v.OrchestratorID, err))
 					return
@@ -764,10 +788,13 @@ type DeploymentDeleteResponse struct {
 func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_delete_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentDeleteResponse{Error: err.Error()})
 	}
 
@@ -781,6 +808,7 @@ func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
 		handleErr(errors.New("orchestrator_id is required"))
 		return
 	}
+	orchestratorID = request.OrchestratorID
 
 	// Delete the specific deployment
 	if err := n.orchestratorRegistry.DeleteDeployment(request.OrchestratorID); err != nil {

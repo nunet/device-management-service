@@ -150,6 +150,14 @@ func SaveLogs(ctx context.Context, scenarioName string) error {
 			return err
 		}
 
+		// TODO dir structure for /testdata/logs/TIMESTAMP
+		//  - /1
+		//    - /flightrec.trace
+		//    - /nunet-dms-logs.jsonl
+		//    - /role
+		//  - /2
+		//    - ...
+
 		// JSONL logs
 		src := "/root/nunet/logs/nunet-dms-logs.jsonl"
 		target := filepath.Join(dest, fmt.Sprintf("%s_%s_%s_logs_%d.json", scenarioName, n.Name, n.Role, timestamp))
