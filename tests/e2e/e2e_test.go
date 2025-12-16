@@ -238,7 +238,6 @@ func TestE2E(t *testing.T) {
 		}
 		suite.Run(t, deploymentWithContractFixedRentalTests)
 	})
-
 	t.Run("DeployWithContractPeriodic", func(t *testing.T) {
 		t.Parallel()
 
@@ -251,7 +250,6 @@ func TestE2E(t *testing.T) {
 		}
 		suite.Run(t, deploymentWithContractPeriodicTests)
 	})
-
 	// Disabled because too flaky since 'Provisioning' status is too quick to catch
 	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
 	// test case
