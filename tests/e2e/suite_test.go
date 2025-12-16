@@ -534,6 +534,11 @@ func (s *TestSuite) setupTestNetwork() {
 			}
 		}
 
+		if s.Name == "deployment_with_contracts_tx_confimation_tests" && nodeIndex == 3 {
+			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9426"
+			cfg.PaymentProvider.Mode = true
+		}
+
 		// for ondemand provisioner
 		// first node make it a gateway
 		if s.Name == "deployment_with_ondemand_provisioner_tests" && nodeIndex == 0 {

@@ -232,7 +232,7 @@ e2e:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=45m $(ARGS)
+	go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=60m $(ARGS)
 
 e2e-%:
 	@echo "Running e2e test: TestE2E/$*"

@@ -184,9 +184,25 @@ func DeployWithContractTest(suite *TestSuite) {
 		suite.Require().NotEmpty(uniqueID)
 		suite.Require().Equal("unpaid", status)
 
-		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f" //nolint:goconst
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113x5f"
 
 		// confirm the payment and check if status was changed
+		var response contracts.ContractConfirmLocalTransactionResponse
+		output, _ = requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, uniqueID, txHash)
+		err = json.Unmarshal([]byte(output), &response)
+		suite.Require().NoError(err)
+		suite.Require().NotEmpty(response.Error)
+		suite.Require().Contains(output, "not verified")
+
+		time.Sleep(2 * time.Second)
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		uniqueID, status, err = extractTransactionDataRegex(output)
+		suite.Require().NoError(err)
+		suite.Require().Equal("unpaid", status)
+		suite.Require().NotEmpty(uniqueID)
+
+		txHash = "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f" //nolint:goconst
 		_, err = requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, uniqueID, txHash)
 		suite.Require().NoError(err)
 		time.Sleep(2 * time.Second)
