@@ -787,6 +787,169 @@ func (s *Store) CountDeploymentsByContract(contractDID string, start, end time.T
 	return len(deploymentSet), nil
 }
 
+// CalculateDeploymentTimeUtilizationByContract calculates deployment runtime per deployment for a contract.
+//
+// Deployment Event Handling Logic:
+// - Tracks deployment start/stop events (not allocation events)
+// - Calculates total runtime for each deployment within a time period
+// - Handles deployments that start before the period or continue after
+//
+// Edge Cases Handled:
+//   - Edge Case 2: Deployment starts before period, stops during period:
+//     Only count time from period start to deployment stop time
+//   - Edge Case 3: Deployment spans multiple billing periods:
+//     Only count runtime within the specified period boundaries
+//   - Edge Case 4: Use deployment stop time as period end:
+//     If deployment stopped during period, use stop time as effective end
+//
+// Process:
+//  1. Query ALL DeploymentStartEvent for the contract (no time restriction)
+//  2. Query ALL DeploymentStopEvent for the contract (no time restriction)
+//  3. Match start/stop events by deployment ID
+//  4. For each deployment active during the period:
+//     - If deployment started before period start: use period start as effective start
+//     - If deployment stopped during period: use deployment stop time as effective end
+//     - If deployment is still running: use period end as effective end
+//  5. Calculate runtime for each deployment within effective start/end boundaries
+//  6. Return deployment time utilization grouped by deployment ID
+func (s *Store) CalculateDeploymentTimeUtilizationByContract(contractDID string, start, end time.Time) ([]contracts.DeploymentTimeUtilization, error) {
+	// Query ALL deployment start events for this contract (no time restriction)
+	// This is necessary to find deployments that started before 'start' but are still running or stopped after 'start'
+	startEvents, err := s.QueryEvents(EventFilters{
+		ContractDID: contractDID,
+		EventTypes:  []events.EventType{events.DeploymentStartEvent},
+		// No time restriction - we need ALL start events to catch deployments that started before 'start'
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query deployment start events: %w", err)
+	}
+
+	// Query ALL deployment stop events for this contract (no time restriction)
+	// This is necessary to properly match start and stop events, even if stop happened before 'start'
+	stopEvents, err := s.QueryEvents(EventFilters{
+		ContractDID: contractDID,
+		EventTypes:  []events.EventType{events.DeploymentStopEvent},
+		// No time restriction - we need ALL stop events to properly match with start events
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query deployment stop events: %w", err)
+	}
+
+	// Track deployment windows by deployment ID
+	type deploymentWindow struct {
+		deploymentID string
+		startTime    time.Time
+		endTime      time.Time
+		isComplete   bool // true if we have both start and stop events
+	}
+
+	// Map: deploymentID -> window
+	deploymentWindows := make(map[string]*deploymentWindow)
+
+	// First pass: Process DeploymentStartEvent to create deployment windows
+	for _, evt := range startEvents {
+		if evt.EventType != events.DeploymentStartEvent {
+			continue
+		}
+
+		eventTime := evt.Timestamp
+		if eventTime.IsZero() {
+			continue // Skip if no timestamp
+		}
+
+		var data events.DeploymentStart
+		if err := json.Unmarshal(evt.Data, &data); err != nil {
+			continue
+		}
+
+		// Create window for this deployment
+		if deploymentWindows[data.DeploymentID] == nil {
+			deploymentWindows[data.DeploymentID] = &deploymentWindow{
+				deploymentID: data.DeploymentID,
+				startTime:    eventTime,
+				isComplete:   false,
+			}
+		}
+	}
+
+	// Second pass: Process DeploymentStopEvent to set end time
+	for _, evt := range stopEvents {
+		if evt.EventType != events.DeploymentStopEvent {
+			continue
+		}
+
+		eventTime := evt.Timestamp
+		if eventTime.IsZero() {
+			continue // Skip if no timestamp
+		}
+
+		var data events.DeploymentStop
+		if err := json.Unmarshal(evt.Data, &data); err != nil {
+			continue
+		}
+
+		window := deploymentWindows[data.DeploymentID]
+		if window == nil {
+			continue // No start event for this deployment, skip
+		}
+
+		window.endTime = eventTime
+		window.isComplete = true
+	}
+
+	// Build deployment time utilization structures
+	result := make([]contracts.DeploymentTimeUtilization, 0)
+	for _, window := range deploymentWindows {
+		// Edge Case 2: Calculate effective start time - if deployment started before period, use period start
+		effectiveStartTime := window.startTime
+		if window.startTime.Before(start) {
+			effectiveStartTime = start
+		}
+
+		// Edge Case 4: Determine effective end time - use deployment stop time if stopped during period
+		var effectiveEndTime time.Time
+		if window.isComplete {
+			// Deployment stopped - check if it stopped after period start
+			if window.endTime.After(start) {
+				// Edge Case 4: Use deployment stop time, but cap at period end
+				if window.endTime.Before(end) || window.endTime.Equal(end) {
+					effectiveEndTime = window.endTime
+				} else {
+					// Deployment stopped after period end, use period end
+					effectiveEndTime = end
+				}
+			} else {
+				// Deployment stopped before period start, skip it (already counted in previous period)
+				continue
+			}
+		} else {
+			// Deployment is still running - use period end as effective end time
+			effectiveEndTime = end
+		}
+
+		// Skip if effective start is after or equal to effective end
+		if !effectiveStartTime.Before(effectiveEndTime) {
+			continue
+		}
+
+		// Calculate duration from effective start to effective end
+		duration := effectiveEndTime.Sub(effectiveStartTime)
+
+		// For periodic model, we track deployment-level runtime, not allocation-level
+		// We'll create a DeploymentTimeUtilization with empty allocations array
+		// and set TotalUtilizationSec to the deployment runtime
+		deploymentUtil := contracts.DeploymentTimeUtilization{
+			DeploymentID:        window.deploymentID,
+			Allocations:         []contracts.AllocationTimeUtilization{}, // Empty - tracking at deployment level
+			TotalUtilizationSec: duration.Seconds(),
+		}
+
+		result = append(result, deploymentUtil)
+	}
+
+	return result, nil
+}
+
 // SaveLastProcessedAt stores the last processed timestamp (Unix seconds) for a specific contract.
 // If contractDID is empty, it stores a global timestamp.
 func (s *Store) SaveLastProcessedAt(contractDID string, t time.Time) error {

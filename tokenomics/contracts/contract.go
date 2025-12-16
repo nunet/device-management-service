@@ -104,6 +104,17 @@ type FixedRentalUsage struct {
 	LastInvoiceAt   time.Time `json:"last_invoice_at"`  // Timestamp of last invoice (before this one)
 }
 
+// PeriodicUsage represents usage data for periodic payment model
+type PeriodicUsage struct {
+	PeriodStart     time.Time                   `json:"period_start"`     // Start of billing period
+	PeriodEnd       time.Time                   `json:"period_end"`       // End of billing period
+	LastInvoiceAt   time.Time                   `json:"last_invoice_at"`  // Timestamp of last invoice
+	Deployments     []DeploymentTimeUtilization `json:"deployments"`      // Deployment runtime data
+	TotalTimeSec    float64                     `json:"total_time_sec"`   // Total deployment time in seconds
+	Amount          string                      `json:"amount"`           // Calculated amount
+	PeriodsInvoiced int                         `json:"periods_invoiced"` // Number of periods covered
+}
+
 type ContractUsageResult struct {
 	ContractDID         string                    `json:"contract_did"`
 	PaymentModel        PaymentModel              `json:"payment_model"`
@@ -112,6 +123,7 @@ type ContractUsageResult struct {
 	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
 	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
 	FixedRentalDetails  *FixedRentalUsage         `json:"fixed_rental_details,omitempty"` // For fixed_rental
+	PeriodicDetails     *PeriodicUsage            `json:"periodic_details,omitempty"`     // For periodic
 }
 
 type CollectUsagesAndForwardToPaymentProvidersReponse struct {
@@ -156,6 +168,7 @@ type ContractUsageRequest struct {
 	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
 	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
 	FixedRentalDetails  *FixedRentalUsage         `json:"fixed_rental_details,omitempty"` // For fixed_rental
+	PeriodicDetails     *PeriodicUsage            `json:"periodic_details,omitempty"`     // For periodic
 }
 
 type ContractUsageResponse struct {

@@ -527,6 +527,11 @@ func (s *TestSuite) setupTestNetwork() {
 				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425"
 				cfg.PaymentProvider.Mode = true
 			}
+		case "deployment_with_contracts_periodic_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9426"
+				cfg.PaymentProvider.Mode = true
+			}
 		}
 
 		// for ondemand provisioner

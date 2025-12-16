@@ -938,6 +938,7 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				string(contracts.PayPerTimeUtilization),
 				string(contracts.PayPerResourceUtilization),
 				string(contracts.FixedRental),
+				string(contracts.Periodic),
 			}
 			if !slices.Contains(validPaymentModels, paymentModel) {
 				return fmt.Errorf("invalid payment_model %q: must be one of %v", paymentModel, validPaymentModels)
@@ -988,7 +989,55 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 					return err
 				}
 			}
+
+			// Validate periodic specific fields
+			if paymentModel == string(contracts.Periodic) {
+				if err := validatePeriodic(paymentDetails); err != nil {
+					return err
+				}
+			}
 		}
+	}
+
+	return nil
+}
+
+func validatePeriodic(paymentDetails map[string]any) error {
+	// Validate fee_per_time_unit
+	feePerTimeUnit, ok := paymentDetails["fee_per_time_unit"].(string)
+	if !ok || feePerTimeUnit == "" {
+		return fmt.Errorf("fee_per_time_unit is required for periodic payment model")
+	}
+	if _, err := strconv.ParseFloat(feePerTimeUnit, 64); err != nil {
+		return fmt.Errorf("invalid fee_per_time_unit: %w", err)
+	}
+
+	// Validate time_unit
+	timeUnit, ok := paymentDetails["time_unit"].(string)
+	if !ok || timeUnit == "" {
+		return fmt.Errorf("time_unit is required for periodic payment model")
+	}
+	validTimeUnits := []string{"second", "minute", "hour"}
+	if !slices.Contains(validTimeUnits, timeUnit) {
+		return fmt.Errorf("invalid time_unit: %s, must be one of %v", timeUnit, validTimeUnits)
+	}
+
+	// Validate payment_period
+	period, ok := paymentDetails["payment_period"].(string)
+	if !ok || period == "" {
+		return fmt.Errorf("payment_period is required for periodic payment model")
+	}
+	if !slices.Contains(validPaymentPeriods[:], period) {
+		return fmt.Errorf("invalid payment_period: %s, must be one of %v", period, validPaymentPeriods)
+	}
+
+	// Validate payment_period_count (optional)
+	if count, ok := paymentDetails["payment_period_count"].(float64); ok { // JSON unmarshals numbers to float64
+		if count <= 0 || count != float64(int(count)) {
+			return fmt.Errorf("payment_period_count must be a positive integer")
+		}
+	} else if _, ok := paymentDetails["payment_period_count"]; ok {
+		return fmt.Errorf("payment_period_count must be an integer")
 	}
 
 	return nil
