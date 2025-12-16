@@ -40,7 +40,7 @@ func BasicTests(suite *TestSuite) {
 		expectedDisk := uint64(10 * types.GB)
 		require.Equal(expectedDisk, onboardedResp.Resources.Disk.Size, "disk size mismatch")
 
-		require.EqualValues(expectedRAMGB(suite.T()), onboardedResp.Resources.RAM.SizeInGB(), "RAM size mismatch")
+		require.EqualValues(expectedRAMGB(suite.T()), int(onboardedResp.Resources.RAM.SizeInGB()), "RAM size mismatch")
 
 		// Test 2 - every node in the network must be able to broadcast and receive DID from all other nodes
 		// every node in the network must be able to broadcast and receive DID from all other nodes

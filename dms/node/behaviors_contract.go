@@ -23,6 +23,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics"
 	cardanoClient "gitlab.com/nunet/device-management-service/tokenomics/client/cardano"
 	ethereumClient "gitlab.com/nunet/device-management-service/tokenomics/client/ethereum"
@@ -77,7 +78,11 @@ func (n *Node) handleContractUsagesCalculate(msg actor.Envelope) {
 func (n *Node) handleNewContract(msg actor.Envelope) {
 	defer msg.Discard()
 
+	solutionEnablerDID := ""
 	handleErr := func(err error) {
+		log.Errorw("handle_contract_propose",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err, "solutionEnablerDID", solutionEnablerDID)
 		n.sendReply(msg, contracts.CreateContractResponse{Error: err.Error()})
 	}
 
@@ -86,6 +91,7 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 		handleErr(fmt.Errorf("unmarshal create contract request: %s", err))
 		return
 	}
+	solutionEnablerDID = request.SolutionEnablerDID.String()
 
 	// Service provider path: forward to contract host, persist local copy, relay response.
 	if !request.SolutionEnablerDID.Equal(n.actor.Handle().DID) {
@@ -226,7 +232,11 @@ func (n *Node) forwardContractCreateToHost(request contracts.CreateContractReque
 func (n *Node) handleContractPropose(msg actor.Envelope) {
 	defer msg.Discard()
 
+	contractID := ""
 	handleErr := func(err error) {
+		log.Errorw("handle_contract_propose",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err, "contractID", contractID)
 		n.sendReply(msg, contracts.ProposeContractResponse{Error: err.Error()})
 	}
 
@@ -235,6 +245,7 @@ func (n *Node) handleContractPropose(msg actor.Envelope) {
 		handleErr(fmt.Errorf("failed to unmarshal contract: %s", err))
 		return
 	}
+	contractID = incomingContract.ContractDID
 
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
@@ -342,7 +353,11 @@ func (n *Node) proposeContract(contractDID string) ([]contracts.Signature, error
 func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 	defer msg.Discard()
 
+	contractID := ""
 	handleErr := func(err error) {
+		log.Errorw("handle_contract_approval_local",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err, "contractID", contractID)
 		n.sendReply(msg, contracts.ContractApproveLocalResponse{Error: err.Error()})
 	}
 
@@ -364,6 +379,7 @@ func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 		handleErr(fmt.Errorf("failed to update contract: %w", err))
 		return
 	}
+	contractID = savedContract.ContractDID
 
 	// sign the contract and send it to the contract host
 	contractDID, err := did.FromString(savedContract.ContractDID)
@@ -437,7 +453,11 @@ func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 // compute provider can list incoming contracts for approval
 func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	defer msg.Discard()
+	contractID := ""
 	handleErr := func(err error) {
+		log.Errorw("handle_list_incoming_contracts",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err, "contractID", contractID)
 		n.sendReply(msg, contracts.ContractListIncomingResponse{Error: err.Error()})
 	}
 
@@ -600,7 +620,11 @@ func (n *Node) StartContracts() error {
 func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.Envelope) {
 	defer msg.Discard()
 
+	contractID := ""
 	handleErr := func(err error) {
+		log.Errorw("handle_contract_payment_validation_request_from_contract_host",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err, "contractID", contractID)
 		n.sendReply(msg, contracts.ContractPaymentValidationResponse{Error: err.Error()})
 	}
 
@@ -617,6 +641,7 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 	}
 	verified := false
 	errorMsg := ""
+	contractID = payment.Contract.ContractDID
 
 	switch req.Blockchain {
 	case ethereumBlockchain:
@@ -763,7 +788,11 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 	defer msg.Discard()
 
+	contractID := ""
 	handleErr := func(err error) {
+		log.Errorw("handle_confirm_local_transaction",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err, "contractID", contractID)
 		n.sendReply(msg, contracts.ContractConfirmLocalTransactionResponse{Error: err.Error()})
 	}
 
@@ -778,6 +807,7 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		handleErr(fmt.Errorf("failed to get mark transaction as paid: %s", err))
 		return
 	}
+	contractID = paymentProviderDID
 
 	paymentValidationReq := contracts.ContractPaymentValidationRequest{
 		TxHash:     req.TxHash,
@@ -811,6 +841,9 @@ func (n *Node) handleListLocalTransactions(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
+		log.Errorw("handle_list_local_transactions",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err)
 		n.sendReply(msg, contracts.ContractListLocalTransactionsResponse{Error: err.Error()})
 	}
 
@@ -857,7 +890,11 @@ func (n *Node) handlePaymentStatus(msg actor.Envelope) {
 func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 	defer msg.Discard()
 
+	contractID := ""
 	handleErr := func(err error) {
+		log.Errorw("handle_incoming_transaction",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err, "contractID", contractID)
 		n.sendReply(msg, contracts.TransactionForServiceProviderResponse{Error: err.Error()})
 	}
 
@@ -866,6 +903,7 @@ func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 		handleErr(fmt.Errorf("failed to unmarshal incoming transaction request: %s", err))
 		return
 	}
+	contractID = req.ContractDID
 
 	err := n.transactionStore.Upsert(transaction.Transaction{
 		UniqueID:            req.UniqueID,
@@ -1264,6 +1302,48 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 		handleErr(fmt.Errorf("unsupported payment model: %s", req.Contract.PaymentDetails.PaymentModel))
 		return
 	}
+
+	if calcErr != nil {
+		handleErr(fmt.Errorf("failed to calculate final tx amount: %w", calcErr))
+		return
+	}
+
+	err := n.paymentStore.Insert(payment.Payment{
+		UniqueID: req.UniqueID,
+		Contract: req.Contract,
+		Usages:   req.Usages,
+		Paid:     false,
+		Amount:   finalAmount,
+	})
+	if err != nil {
+		handleErr(errors.New("error while upserting payment"))
+		return
+	}
+
+	txReq := contracts.TransactionForServiceProviderRequest{
+		PaymentValidatorDID: req.Contract.PaymentValidatorDID.URI,
+		UniqueID:            req.UniqueID,
+		ContractDID:         req.Contract.ContractDID,
+		ToAddress:           req.Contract.PaymentDetails.Addresses,
+		Amount:              finalAmount,
+	}
+	go func() {
+		destination, err := actor.HandleFromDID(req.Contract.ContractParticipants.Requestor.URI)
+		if err != nil {
+			log.Errorw("failed to get service provider's DID",
+				"labels", []string{string(observability.LabelContract)},
+				"error", err,
+				"contractID", req.Contract.ContractDID)
+			return
+		}
+		reply, err := n.invokeBehaviour(destination, behaviors.ContractTransactionBehavior, txReq, invokeMessageTimeout)
+		if reply.Message == nil || err != nil {
+			log.Errorw("failed to forward transaction info to service provider",
+				"labels", []string{string(observability.LabelContract)},
+				"error", err,
+				"contractID", req.Contract.ContractDID)
+		}
+	}()
 
 	resp := contracts.ContractUsageResponse{}
 	n.sendReply(msg, resp)

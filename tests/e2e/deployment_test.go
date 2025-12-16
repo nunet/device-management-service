@@ -144,7 +144,7 @@ func DeploymentWithRedundancyTest(suite *TestSuite) {
 	})
 }
 
-// DeploymentFullAssertion deploys multiple_nginx.yaml using 4 nodes:
+// DeploymentAssertSubnet deploys multiple_nginx.yaml using 4 nodes:
 // 1 deployer and 3 providers (bob, alice, carl).
 //
 // - All allocations are services (TODO: test with a task?)
@@ -155,7 +155,7 @@ func DeploymentWithRedundancyTest(suite *TestSuite) {
 // - Subnet conns between peers
 // - Resources allocation (before and after deployment)
 // - Manifest changes
-func DeploymentFullAssertion(suite *TestSuite) {
+func DeploymentAssertSubnet(suite *TestSuite) {
 	suite.Require().Len(suite.nodes, 4)
 	deployer := suite.nodes[0]
 	bobProvider := suite.nodes[1]

@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	t2h "github.com/buildkite/terminal-to-html"
 	"github.com/itchyny/gojq"
 	"github.com/lithammer/dedent"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"golang.org/x/exp/trace"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -65,19 +67,20 @@ var DateFormats = []string{
 }
 
 type LogLine struct {
-	Timestamp  time.Time     `json:"timestamp"`
-	FlightTime string        `json:"flight_time"`
-	Msg        string        `json:"msg"`
-	Node       string        `json:"node"`
-	Line       int           `json:"line"`
-	MsgFrom    *actor.Handle `json:"msg_from"`
-	FromNode   string        `json:"from_node"`
-	Behavior   string        `json:"behavior"`
-	Error      string        `json:"error"`
-	DID        string        `json:"did"`
-	Labels     []string      `json:"labels"`
-	Label      string        `json:"label"`
-	Level      string        `json:"level"`
+	Timestamp  time.Time `json:"timestamp"`
+	FlightTime string    `json:"flight_time"`
+	Msg        string    `json:"msg"`
+	// Node is set by [lineCollector].
+	Node     string        `json:"node"`
+	Line     int           `json:"line"`
+	MsgFrom  *actor.Handle `json:"msg_from"`
+	FromNode string        `json:"from_node"`
+	Behavior string        `json:"behavior"`
+	Error    string        `json:"error"`
+	DID      string        `json:"did"`
+	Labels   []string      `json:"labels"`
+	Label    string        `json:"label"`
+	Level    string        `json:"level"`
 
 	RawJSON string `json:"-"`
 }
@@ -86,32 +89,40 @@ type LogFile struct {
 	Path   string
 	Name   string
 	Number int
+	DID    string
 	// full path the flight recorder trace file.
 	Flightrec string
+	// Node's role "cp" or "sp". TODO >1 role?
+	Role string
 }
 
 type ArgsBasic struct {
-	TestName       string   `help:"'acceptance' or an E2E test name" arg:"positional,required"`
-	NodeName       []string `help:"Show logs of specific nodes, eg dms0 (repeated)" arg:"--node-name,separate"`
-	Flightrec      bool     `help:"Read a flight recorder file for relative timestamps" arg:"--flightrec"`
-	ExtraField     []string `help:"Show a specific field from the log line, eg 'msg_from.did'" arg:"-f,--extra-field,separate"`
-	SkipField      []string `help:"Skip a specific field from the log line, eg 'msg_from.did'" arg:"-s,--skip-field,separate"`
-	NoFields       bool     `help:"Don't show any fields" arg:"-n,--no-fields"`
-	NoCommonFields bool     `help:"Don't show common fields (node, line, did)" arg:"-c,--no-common-fields"`
+	SourceName string   `help:"'acceptance' or 'config' or an E2E test name (required)" arg:"positional"`
+	NodeName   []string `help:"Show logs of specific nodes, eg dms0 (repeatable)" arg:"--node-name,separate"`
+	Config     string   `help:"Fixed path to the config for SOURCENAME config"`
+	Dir        []string `help:"Additional source of *.jsonl files (repeatable)" arg:"--dir,separate"`
+	Flightrec  bool     `help:"Read flight recorder files for relative timestamps" arg:"--flightrec"`
+
+	ExtraField     []string `help:"Show a specific field from the log line, eg 'msg_from.did' (repeatable)" arg:"-f,--extra-field,separate"`
+	SkipField      []string `help:"Skip a specific field from the log line, eg 'msg_from.did' (repeatable)" arg:"-s,--skip-field,separate"`
+	NoFields       bool     `help:"Don't show any fields, except extra fields" arg:"-n,--no-fields"`
+	NoCommonFields bool     `help:"Don't show common fields (node, line)" arg:"-c,--no-common-fields"`
 	AllFields      bool     `help:"Show all fields" arg:"-a,--all-fields"`
-	Max            int      `help:"Maximum lines to show" default:"1000"`
-	Headers        bool     `help:"Show headers" default:"true"`
-	OutputHTML     string   `help:"Render HTML to a file in CWD" arg:"-o,--output-html"`
+
+	Max            int    `help:"Maximum lines to show per node" default:"1000"`
+	Headers        bool   `help:"Show node headers" default:"true"`
+	HeadersNetwork bool   `help:"Show the network header" default:"true" arg:"--headers-network"`
+	OutputHTML     string `help:"Render HTML to a file" arg:"-o,--output-html"`
 }
 
 type ArgsFilters struct {
+	LastRun        bool   `help:"Show only the last run of each node (from docker_client_init_started)" arg:"--last-run" default:"true"`
 	Line           string `help:"Reference line number, use '12:15' for a range" arg:"-l,--line"`
 	Timestamp      string `help:"Reference timestamp"`
 	TimestampStart string `help:"Earliest timestamp" arg:"--timestamp-start"`
 	TimestampEnd   string `help:"Latest timestamp" arg:"--timestamp-end"`
-	Query          string `help:"Custom jq select() query to run on each line, eg '.error'"`
+	Query          string `help:"Custom jq select() query to run on each line, eg '.error'" arg:"-q,--query"`
 	LvlInfo        bool   `help:"Show lines up to log level INFO" arg:"--lvl-info"`
-	// TODO LatestRun to show only the later run of a long log (per node)
 }
 
 type ArgsAdjacent struct {
@@ -119,11 +130,201 @@ type ArgsAdjacent struct {
 	AdjacentDuration time.Duration `help:"Amount of surrounding time to output, eg 3s" arg:"--adjacent-duration"`
 }
 
+type ArgsPresets struct {
+	Preset     []string `help:"Run a named preset, eg errors (repeatable)" arg:"-p,--preset,separate"`
+	PresetHelp bool     `help:"Show help message for a preset (requires --preset)" default:"false" arg:"--preset-help"`
+	PresetArgs string   `help:"Arguments to pass to presets" arg:"--preset-args"`
+}
+
 // ///// ///// /////
 
 // ///// FUNCTIONS
 
 // ///// ///// /////
+
+// SourceConfig returns a JSONL filename pointed at by a config file.
+func SourceConfig(path string) []LogFile {
+	// DMS-style config resolve (internal/config/load.go)
+	paths := []string{path}
+	if path == "" {
+		paths = []string{"./dms_config.json"}
+		if hd, err := os.UserHomeDir(); err == nil {
+			paths = append(paths, hd+"/.nunet/dms_config.json", hd+"/nunet/dms_config.json")
+		}
+		if runtime.GOOS != "windows" {
+			paths = append(paths, "/etc/nunet/dms_config.json")
+		}
+	}
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		js, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var cfg config.Config
+		if err := json.Unmarshal(js, &cfg); err != nil {
+			continue
+		}
+
+		// check flightrec.trace
+		flightrec := filepath.Join(path, "flightrec.trace")
+		if _, err := os.Stat(flightrec); err != nil {
+			flightrec = ""
+		}
+
+		return []LogFile{{
+			Path:      cfg.Observability.LogFile,
+			Name:      "config",
+			Number:    0,
+			Flightrec: flightrec,
+		}}
+	}
+
+	return nil
+}
+
+// SourceAcceptanceLatest returns a list of JSONL filenames from the latest acceptance test run.
+func SourceAcceptanceLatest(path string, nodeNames []string) []LogFile {
+	ret := make([]LogFile, 0, len(nodeNames))
+	var latest time.Time
+	var latestStr string
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return ret
+	}
+	// format1: alice_sp_logs_1762251399.txt
+	// format1: alice_cp_logs_1762251399.txt
+	re := regexp.MustCompile(`(.+)_(cp|sp)_logs_(\d+)\.txt`)
+
+	// find the latest timestamp
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// format2: flightrec-1762251399.alice.trace
+		matches := re.FindStringSubmatch(entry.Name())
+		if len(matches) != 4 {
+			continue
+		}
+		timestamp, err := strconv.Atoi(matches[3])
+		if err != nil {
+			continue
+		}
+		t := time.Unix(int64(timestamp), 0)
+		if t.Before(latest) {
+			continue
+		}
+
+		latest = t
+		latestStr = matches[3]
+	}
+
+	// collect results
+	nodeNum := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
+			continue
+		}
+
+		// format1: flightrec_1-1759482433.alice.trace
+		// format2: dms_logs_node_3-1759482433.jsonl
+		matches := re.FindStringSubmatch(entry.Name())
+		if len(matches) != 4 || matches[3] != latestStr {
+			continue
+		}
+		name := matches[1]
+		role := matches[2]
+		ts := matches[3]
+
+		// filter
+		if len(nodeNames) > 0 && !slices.Contains(nodeNames, name) {
+			continue
+		}
+
+		// check flightrec-1762251399.alice.trace
+		flightrec := filepath.Join(path, "flightrec-"+ts+"."+name+".trace")
+		if _, err := os.Stat(flightrec); err != nil {
+			flightrec = ""
+		}
+		ret = append(ret, LogFile{
+			Path:      filepath.Join(path, entry.Name()),
+			Name:      name,
+			Number:    nodeNum,
+			Role:      role,
+			Flightrec: flightrec,
+		})
+		nodeNum++
+	}
+
+	return ret
+}
+
+// SourceE2E collects log paths for the given E2E test.
+func SourceE2E(logRoot string, nodeNames []string) []LogFile {
+	logs := make([]LogFile, 0, len(nodeNames))
+	nodeDirs, err := e2eListNodeDirs(logRoot)
+	if err != nil {
+		return logs
+	}
+
+	for i, nodeDir := range nodeDirs {
+		if len(nodeNames) > 0 && !slices.Contains(nodeNames, nodeDir) {
+			continue
+		}
+
+		// check flightrec.trace
+		flightrec := filepath.Join(logRoot, nodeDir, "work_dir", "logs", "flightrec.trace")
+		if _, err := os.Stat(flightrec); err != nil {
+			flightrec = ""
+		}
+		logs = append(logs, LogFile{
+			Path:      filepath.Join(logRoot, nodeDir, "logs.jsonl"),
+			Name:      nodeDir,
+			Number:    i,
+			Flightrec: flightrec,
+		})
+	}
+	return logs
+}
+
+func SourceDir(dir string, nodeNames []string, nextNum int) []LogFile {
+	// list JSONL files
+	files, err := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	if err != nil {
+		// TODO log err
+		return nil
+	}
+	ret := make([]LogFile, len(files))
+	for i, path := range files {
+		// node name
+		file := filepath.Base(path)
+		node := file[0 : len(file)-len(".jsonl")]
+		if len(nodeNames) > 0 && !slices.Contains(nodeNames, node) {
+			continue
+		}
+
+		// check NODE.flightrec.trace
+		flightrec := filepath.Join(dir, node+".flightrec.trace")
+		if _, err := os.Stat(flightrec); err != nil {
+			flightrec = ""
+		}
+
+		// add new log source
+		ret[i] = LogFile{
+			Path:      path,
+			Name:      node,
+			Number:    nextNum,
+			Flightrec: flightrec,
+		}
+		nextNum++
+	}
+
+	return ret
+}
 
 // ParseTimestamp parses a timestamp string using know formats.
 func ParseTimestamp(timestamp string) (time.Time, error) {
@@ -139,18 +340,20 @@ func ParseTimestamp(timestamp string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unable to parse timestamp '%s'", timestamp)
 }
 
-// SaveSlice saves a named JSONL file to /tmp.
-func SaveSlice(name string, data []string) (string, error) {
-	tmpDir := os.TempDir() + "/dms-logs"
-	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
-		return "", err
-	}
-	tmpPath := tmpDir + "/" + name + ".jsonl"
-	buf := bytes.NewBufferString(strings.Join(data, "\n"))
-	return tmpPath, os.WriteFile(tmpPath, buf.Bytes(), 0o644)
+// SortByTimestamp sorts a list of JSONL log entries by the [Filters] field.
+func SortByTimestamp(logs []*LogLine) {
+	slices.SortFunc(logs, func(a, b *LogLine) int {
+		if a.Timestamp.Before(b.Timestamp) {
+			return -1
+		}
+		if a.Timestamp.After(b.Timestamp) {
+			return 1
+		}
+		return 0
+	})
 }
 
-// RenderLog renders a JSONL file to the terminal.
+// RenderLog renders a JSONL file to the terminal, and returns the output.
 func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 	common := []string{"node", "line", "did"}
 
@@ -168,7 +371,6 @@ func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 
 		// DMS produced fields
 
-		"did",
 		"error",
 		"behavior",
 		"msg_from.did",
@@ -179,6 +381,8 @@ func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 		"status",
 		"allocation",
 		"allocationID",
+		"deploymentID",
+		"contractID",
 		"request",
 		"path",
 		"name",
@@ -199,7 +403,6 @@ func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 		"subnet",
 		"ip",
 	}
-	fields = append(fields, cfg.ExtraField...)
 	fields = slices.DeleteFunc(fields, func(f string) bool {
 		return slices.Contains(cfg.SkipField, f)
 	})
@@ -210,6 +413,7 @@ func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 			return slices.Contains(common, f)
 		})
 	}
+	fields = append(fields, cfg.ExtraField...)
 
 	// run fblog, add header and footer
 	cmd := `fblog -a "` + strings.Join(fields, `" -a "`) + `" ` + path
@@ -230,115 +434,8 @@ func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 	return output, nil
 }
 
-// SortByTimestamp sorts a list of JSONL log entries by the [Filters] field.
-func SortByTimestamp(logs []*LogLine) {
-	slices.SortFunc(logs, func(a, b *LogLine) int {
-		if a.Timestamp.Before(b.Timestamp) {
-			return -1
-		}
-		if a.Timestamp.After(b.Timestamp) {
-			return 1
-		}
-		return 0
-	})
-}
-
-// SourceAcceptanceLatest returns a list of JSONL filenames from the latest acceptance test run.
-func SourceAcceptanceLatest(path string, nodeNames []string) []LogFile {
-	ret := make([]LogFile, 0, len(nodeNames))
-	var latest time.Time
-	var id string
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return ret
-	}
-
-	// find the latest run
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		// format1: flightrec_1-1759482433.alice.trace
-		// format2: dms_logs_node_3-1759482433.jsonl
-		re := regexp.MustCompile(`[^-]+_(\d+)-(\d+)`)
-		matches := re.FindStringSubmatch(entry.Name())
-		if len(matches) != 3 {
-			continue
-		}
-		timestamp, err := strconv.Atoi(matches[2])
-		if err != nil {
-			continue
-		}
-		t := time.Unix(int64(timestamp), 0)
-		if t.Before(latest) {
-			continue
-		}
-
-		latest = t
-		id = matches[2]
-	}
-
-	// collect results
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-			continue
-		}
-
-		// format1: flightrec_1-1759482433.alice.trace
-		// format2: dms_logs_node_3-1759482433.jsonl
-		re := regexp.MustCompile(`[^-]+_(\d+)-(\d+)`)
-		matches := re.FindStringSubmatch(entry.Name())
-		if len(matches) != 3 || matches[2] != id {
-			continue
-		}
-		num, err := strconv.Atoi(matches[1])
-		if err != nil {
-			continue
-		}
-
-		// result
-		name := "dms" + matches[1]
-		if len(nodeNames) > 0 && !slices.Contains(nodeNames, name) {
-			continue
-		}
-		ret = append(ret, LogFile{
-			Path: filepath.Join(path, entry.Name()),
-			// TODO support name suffixes alice, charlie, etc.
-			Name:   name,
-			Number: num,
-			// TODO get the name from the log file
-			Flightrec: "flightrec_1-1759482433.alice.trace",
-		})
-	}
-
-	return ret
-}
-
-// SourceE2E collects log paths for the given E2E test.
-func SourceE2E(logRoot string, nodeNames []string) []LogFile {
-	logs := make([]LogFile, 0, len(nodeNames))
-	nodeDirs, err := e2eListNodeDirs(logRoot)
-	if err != nil {
-		return logs
-	}
-
-	for i, nodeDir := range nodeDirs {
-		if len(nodeNames) > 0 && !slices.Contains(nodeNames, nodeDir) {
-			continue
-		}
-		logs = append(logs, LogFile{
-			Path:      filepath.Join(logRoot, nodeDir, "logs.jsonl"),
-			Name:      nodeDir,
-			Number:    i,
-			Flightrec: filepath.Join(logRoot, nodeDir, "work_dir", "logs", "flightrec.trace"),
-		})
-	}
-	return logs
-}
-
-// RenderSlice saves a JSONL file and renders it to the terminal.
-func RenderSlice(name string, data []string, cfg ArgsBasic) (string, error) {
+// RenderSlice saves a JSONL file, renders it to the terminal, and returns the output.
+func RenderSlice(name string, data []*LogLine, cfg ArgsBasic) (string, error) {
 	show := data
 	if cfg.Max > 0 && len(data) > cfg.Max {
 		show = data[:cfg.Max]
@@ -352,9 +449,13 @@ func RenderSlice(name string, data []string, cfg ArgsBasic) (string, error) {
 	}
 }
 
-func RenderHeader(logFile LogFile, prefix bool) string {
+func RenderSliceHeader(logFile LogFile, prefix bool) string {
 	mark := strings.Repeat("##### ", 3)
-	ret := fmt.Sprintf("%s\n%s: %s\n%s\n", mark, logFile.Name, logFile.Path, mark)
+	ret := fmt.Sprintf("%s\n%s: %s\n%s\n", mark, logFile.Name, logFile.Path, logFile.DID)
+	if logFile.Role != "" {
+		ret += "role: " + logFile.Role + "\n"
+	}
+	ret += mark + "\n"
 	if prefix {
 		ret = "\n" + ret
 	}
@@ -363,23 +464,40 @@ func RenderHeader(logFile LogFile, prefix bool) string {
 	return ret
 }
 
-func LogRoot(testName string) string {
-	if testName == "acceptance" {
-		return "tests/acceptance/testdata/logs"
+func RenderLogHeader(logFiles []LogFile) string {
+	mark := strings.Repeat("##### ", 3)
+	ret := fmt.Sprintf("%s\nNetwork:\n", mark)
+	for _, lf := range logFiles {
+		ret += fmt.Sprintf("%-2d \"%s\"\n   %s", lf.Number, lf.Name, lf.DID)
+		if lf.Role != "" {
+			ret += fmt.Sprintf("\n   role: %s", lf.Role)
+		}
+		ret += "\n"
 	}
-	return "tests/e2e/testdata/" + testName
+	ret += fmt.Sprintf("%s\n\n", mark)
+	fmt.Print(ret)
+
+	return ret
 }
 
 // CollectLogFiles collects logs based on the E2E test name, or "acceptance" for the latest acceptance test.
-func CollectLogFiles(testName string, nodeNames []string) []LogFile {
+func CollectLogFiles(args ArgsBasic, nodeNames []string) []LogFile {
 	var ret []LogFile
 	var logRoot string
-	if testName == "acceptance" {
+	switch args.SourceName {
+	case "config":
+		ret = SourceConfig(args.Config)
+	case "acceptance":
 		logRoot = "tests/acceptance/testdata/logs"
 		ret = SourceAcceptanceLatest(logRoot, nodeNames)
-	} else {
-		logRoot = "tests/e2e/testdata/" + testName
+	default:
+		logRoot = "tests/e2e/testdata/" + args.SourceName
 		ret = SourceE2E(logRoot, nodeNames)
+	}
+
+	// collect dirs
+	for _, dir := range args.Dir {
+		ret = append(ret, SourceDir(dir, nodeNames, len(ret))...)
 	}
 
 	return ret
@@ -388,10 +506,12 @@ func CollectLogFiles(testName string, nodeNames []string) []LogFile {
 // CollectLines reads a log file, applies filters and adjacent limits, optionally reads a flight recording, and returns
 // matched lines with extra metadata (eg node's name).
 // Implementation is backed by an unexported helper type with methods handling each section.
-func CollectLines(logFile LogFile, adjacent ArgsAdjacent, filters ArgsFilters, flightrecTimes bool) ([]string, error) {
-	cl, err := newCollectLines(logFile, adjacent, filters, flightrecTimes)
+func CollectLines(
+	logFile LogFile, adjacent ArgsAdjacent, filters ArgsFilters, flightrecTimes bool,
+) (lines []string, did string, err error) {
+	cl, err := newLineCollector(logFile, adjacent, filters, flightrecTimes)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	return cl.run()
 }
@@ -436,6 +556,22 @@ func FlightrecDuration(path string) (time.Duration, error) {
 	return endTime.Sub(startTime).Abs(), nil
 }
 
+// SaveSlice saves a named JSONL file to /tmp.
+func SaveSlice(name string, lines []*LogLine) (string, error) {
+	tmpDir := os.TempDir() + "/dms-logs"
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		return "", err
+	}
+	tmpPath := tmpDir + "/" + name + ".jsonl"
+	data := ""
+	for _, l := range lines {
+		data += l.RawJSON + "\n"
+	}
+	buf := bytes.NewBufferString(data)
+
+	return tmpPath, os.WriteFile(tmpPath, buf.Bytes(), 0o644)
+}
+
 func SaveHTML(path, output string, showCmd bool) error {
 	if showCmd {
 		name := filepath.Base(os.Args[0])
@@ -446,6 +582,11 @@ func SaveHTML(path, output string, showCmd bool) error {
 	html = strings.Replace(html, "STYLESHEET", CSS, 1)
 	html = strings.Replace(html, "CONTENT", string(t2h.Render([]byte(output))), 1)
 
+	// mkdir -p and save
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 	err := os.WriteFile(path, []byte(html), 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to write HTML file: %w", err)
@@ -455,7 +596,7 @@ func SaveHTML(path, output string, showCmd bool) error {
 }
 
 // ParseLines parses JSONL and returns a map of DIDs to nodes.
-func ParseLines(lines []string) ([]*LogLine, map[string]string) {
+func ParseLines(lines []string) []*LogLine {
 	// parse JSON
 	parsed := make([]*LogLine, len(lines))
 	for i, line := range lines {
@@ -468,13 +609,37 @@ func ParseLines(lines []string) ([]*LogLine, map[string]string) {
 		parsed[i] = l
 	}
 
-	// build a map of DIDs
-	DIDs := make(map[string]string)
-	for _, l := range parsed {
-		DIDs[l.DID] = l.Node
+	return parsed
+}
+
+// JSONQuery applies a JSON query to the log lines.
+// See https://jqlang.org/manual
+func JSONQuery(lines []*LogLine, q string) ([]*LogLine, error) {
+	if q == "" {
+		return nil, fmt.Errorf("query param required")
+	}
+	parsedQuery, err := gojq.Parse("select( " + q + ")")
+	if err != nil {
+		return nil, err
+	}
+	code, err := gojq.Compile(parsedQuery)
+	if err != nil {
+		return nil, err
+	}
+	resQuery := make([]*LogLine, 0, len(lines))
+	for _, line := range lines {
+		var input any
+		if err := json.Unmarshal([]byte(line.RawJSON), &input); err != nil {
+			return nil, fmt.Errorf("parsing log line: %w", err)
+		}
+		_, ok := code.Run(input).Next()
+		if !ok {
+			continue
+		}
+		resQuery = append(resQuery, line)
 	}
 
-	return parsed, DIDs
+	return resQuery, nil
 }
 
 // unexported
@@ -500,9 +665,9 @@ func e2eListNodeDirs(logRoot string) ([]string, error) {
 
 // ///// ///// /////
 
-// collectLines is a log collection pipeline, which collects lines from a log file, based on filters and adjacent
+// lineCollector is a log collection pipeline, which collects lines from a log file, based on filters and adjacent
 // limits. It also reads a flight recording if requested.
-type collectLines struct {
+type lineCollector struct {
 	logFile   LogFile
 	adjacent  ArgsAdjacent
 	filters   ArgsFilters
@@ -524,20 +689,21 @@ type collectLines struct {
 
 	// results state
 	results        []string
+	did            string
 	firstMatchLine int
 	firstMatchTime time.Time
 	lastMatchTime  time.Time
 }
 
-// newCollectLines creates a new collectLines instance.
-func newCollectLines(
+// newLineCollector creates a new lineCollector instance, suitable for a single run.
+func newLineCollector(
 	logFile LogFile, adjacent ArgsAdjacent, filters ArgsFilters, flightrecTimes bool,
-) (*collectLines, error) {
+) (*lineCollector, error) {
 	f, err := os.Open(logFile.Path)
 	if err != nil {
 		return nil, fmt.Errorf("reading log: %w", err)
 	}
-	cl := &collectLines{
+	cl := &lineCollector{
 		logFile:        logFile,
 		adjacent:       adjacent,
 		filters:        filters,
@@ -553,43 +719,43 @@ func newCollectLines(
 	return cl, nil
 }
 
-func (c *collectLines) close() {
+func (c *lineCollector) close() {
 	c.finished = true
 	if c.file != nil {
 		_ = c.file.Close()
 	}
 }
 
-func (c *collectLines) run() ([]string, error) {
+func (c *lineCollector) run() (lines []string, did string, err error) {
 	if c.finished {
-		return nil, fmt.Errorf("collectLines already finished, create a new instance")
+		return nil, "", fmt.Errorf("lineCollector already finished, create a new instance")
 	}
 
 	defer c.close()
 	if err := c.readFlightrec(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.init(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.scanMatches(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.addAdjacent(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.applyQuery(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.addFlightrecTimes(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return c.results, nil
+	return c.results, c.did, nil
 }
 
-func (c *collectLines) readFlightrec() error {
-	if !c.flightrec {
+func (c *lineCollector) readFlightrec() error {
+	if !c.flightrec || c.logFile.Flightrec == "" {
 		return nil
 	}
 	dur, err := FlightrecDuration(c.logFile.Flightrec)
@@ -601,7 +767,7 @@ func (c *collectLines) readFlightrec() error {
 }
 
 // init validates input data and prepares filter values.
-func (c *collectLines) init() error {
+func (c *lineCollector) init() error {
 	// validate
 	var err error
 	if c.filters.Line != "" && c.filters.Timestamp != "" {
@@ -660,7 +826,7 @@ func (c *collectLines) init() error {
 	return nil
 }
 
-func (c *collectLines) scanMatches() error {
+func (c *lineCollector) scanMatches() error {
 	scanner := c.scanner
 	lineNum := 1
 	for scanner.Scan() {
@@ -686,6 +852,8 @@ func (c *collectLines) scanMatches() error {
 
 		if entry.Msg == "flightrec_captured" {
 			c.frLogTime = entry.Timestamp
+		} else if entry.Msg == "docker_client_init_started" && c.filters.LastRun {
+			c.results = nil
 		}
 
 		if c.lineStart >= 0 {
@@ -697,9 +865,10 @@ func (c *collectLines) scanMatches() error {
 
 		// skip level DEBUG
 		if c.filters.LvlInfo {
-			filtered = true
 			allow := []string{"INFO", "ERROR", "WARN"}
-			match = slices.Contains(allow, entry.Level)
+			if !slices.Contains(allow, entry.Level) {
+				continue
+			}
 		}
 
 		if filtered && !match {
@@ -721,6 +890,9 @@ func (c *collectLines) scanMatches() error {
 
 		c.results = append(c.results, fmt.Sprintf(`{"node": "%s", "line": %d, %s`,
 			c.logFile.Name, lineNum, label)+string(line)[1:])
+		if c.did == "" {
+			c.did = entry.DID
+		}
 		lineNum++
 	}
 	if err := scanner.Err(); err != nil {
@@ -730,7 +902,7 @@ func (c *collectLines) scanMatches() error {
 	return nil
 }
 
-func (c *collectLines) addAdjacent() error {
+func (c *lineCollector) addAdjacent() error {
 	if c.adjacent.AdjacentLines <= 0 && c.adjacent.AdjacentDuration <= 0 {
 		return nil
 	}
@@ -786,7 +958,7 @@ func (c *collectLines) addAdjacent() error {
 	return nil
 }
 
-func (c *collectLines) applyQuery() error {
+func (c *lineCollector) applyQuery() error {
 	if c.filters.Query == "" {
 		return nil
 	}
@@ -815,7 +987,7 @@ func (c *collectLines) applyQuery() error {
 	return nil
 }
 
-func (c *collectLines) addFlightrecTimes() error {
+func (c *lineCollector) addFlightrecTimes() error {
 	//nolint:staticcheck
 	if !(c.flightrec && c.frDuration > 0 && !c.frLogTime.IsZero()) {
 		return nil

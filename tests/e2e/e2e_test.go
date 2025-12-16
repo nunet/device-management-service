@@ -109,13 +109,14 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentUpdates)
 	})
 
-	t.Run("DeploymentFullAssertion", func(t *testing.T) {
+	t.Run("DeploymentAssertSubnet", func(t *testing.T) {
 		deploymentFullAssertion := &TestSuite{
-			numNodes:      4,
+			numNodes: 4,
+			// TODO unify names
 			Name:          "deployment_assert_subnet",
 			restPortIndex: ports[10],
 			p2pPortIndex:  ports[11],
-			runner:        DeploymentFullAssertion,
+			runner:        DeploymentAssertSubnet,
 		}
 		suite.Run(t, deploymentFullAssertion)
 	})

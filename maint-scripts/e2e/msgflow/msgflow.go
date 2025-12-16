@@ -21,95 +21,87 @@ import (
 	"github.com/alexflint/go-arg"
 
 	shared "gitlab.com/nunet/device-management-service/maint-scripts/e2e"
+	"gitlab.com/nunet/device-management-service/maint-scripts/e2e/msgflow/presets"
+	"gitlab.com/nunet/device-management-service/maint-scripts/e2e/msgflow/types"
 )
 
-type Args struct {
-	shared.ArgsBasic
-	shared.ArgsFilters
-	shared.ArgsAdjacent
-
-	IncludeExternal bool   `help:"Include msgs from unknown nodes" default:"false" arg:"--include-external"`
-	Diagram         string `help:"Generate a sequence diagram (D2 and SVG) to a file in CWD" default:"msgflow"`
-	DiagramImage    bool   `help:"Generate a PNG image (slow)" default:"false" arg:"--diagram-image"`
-	SelfMsgs        bool   `help:"Include msgs to itself" default:"true" arg:"--self-msgs"`
-	ReplyToMsgs     bool   `help:"Include '/dms/actor/replyto' msgs" default:"true" arg:"--replyto-msgs"`
-	HelloMsgs       bool   `help:"Include '/public/hello' msgs" default:"true" arg:"--hello-msgs"`
-	BehaviorPrefix  string `help:"Limit to behaviors starting with a prefix" arg:"--behavior-prefix"`
-	Span            string `help:"Render a single kind of spans to visually mark events" default:"deployments"`
+func init() {
+	types.Presets = slices.Concat(
+		slices.Collect(maps.Keys(presets.Presets)),
+		slices.Collect(maps.Keys(presets.PresetsArgs)),
+	)
 }
 
-func (Args) Description() string {
-	return shared.Sprintf(`
-		List all messages from a test run as a single log, and plot a sequence diagram.
-		
-		Install github.com/brocode/fblog
-		$> cargo install fblog
-		
-		Install d2 for diagrams, or use https://play.d2lang.com
-		$> curl -fsSL https://d2lang.com/install.sh | sh -s --
-		
-		Examples:
-		
-		Grouped diagram for the latest acceptance test run
-		$> logs.sh --test-name acceptance --diagram-group
-		
-		Log for all nodes in the E2E deployment_updates test run
-		$> logs.sh --test-name deployment_updates
-		
-		Log 1 second around line 50 for the node "dms1"
-		$> logs.sh --line 50 --node-name dms1 --adjacent-duration 1s
-		
-		Msgs within lines 50 to 60 for the node "dms1"
-		$> logs.sh --line 50:60 --node-name dms1
-		
-		Msgs within lines 50 to 60 for the node "dms1", with flight times
-		$> logs.sh --line 50:60 --node-name dms1 --fligtrec
-	
-		Msgs from 10:09:50 to 10:09:56 for the node "dms1"
-		$> logs.sh \
-			--timestamp-start 2025-09-24T10:09:50 \
-			--timestamp-end 2025-09-24T10:09:56 \
-			--node-name dms1
-		
-		Msgs from 10:09:56 plus 10 adjacent lines, for the node "dms1"
-		$> logs.sh --timestamp 2025-09-24T10:09:56 \
-			--node-name dms1 \
-			--adjacent-lines 10
-	`)
-}
-
-var args Args
+var args types.Args
 
 func main() {
 	p := arg.MustParse(&args)
 
+	// intro screen
+	if args.SourceName == "" {
+		p.WriteHelp(os.Stdout)
+		os.Exit(0)
+	}
+
+	// validate presets
+	for _, preset := range args.Preset {
+		if _, ok := presets.Presets[preset]; !ok {
+			continue
+		}
+		if _, ok := presets.PresetsArgs[preset]; !ok {
+			continue
+		}
+		p.Fail(fmt.Sprintf("unknown preset: %s", preset))
+	}
+
+	// handle args presets
+	for _, preset := range args.Preset {
+		if _, ok := presets.PresetsArgs[preset]; ok {
+			args = presets.PresetsArgs[preset](args)
+		}
+	}
+
 	// collect log files
-	logs := shared.CollectLogFiles(args.TestName, args.NodeName)
-	var results []string
+	logs := shared.CollectLogFiles(args.ArgsBasic, args.NodeName)
+	var results []*shared.LogLine
 
 	// disable level filters
 	args.LvlInfo = false
 
 	// process log files
-	for _, logFile := range logs {
+	DIDs := make(map[string]string)
+	for i, logFile := range logs {
 		// collect
-		lines, err := shared.CollectLines(logFile, args.ArgsAdjacent, args.ArgsFilters, args.Flightrec)
+		lines, did, err := shared.CollectLines(logFile, args.ArgsAdjacent, args.ArgsFilters, args.Flightrec)
 		if err != nil {
-			p.Fail(fmt.Sprintf("collecting lines for %s: %s", logFile.Name, err.Error()))
+			fmt.Printf("warn: collecting lines for %s: %v\n", logFile.Name, err)
+			continue
 		}
-		results = append(results, lines...)
+		logs[i].DID = did
+		DIDs[did] = logFile.Name
+		results = append(results, shared.ParseLines(lines)...)
 	}
 
 	if len(results) == 0 {
 		p.Fail("no results")
 	}
 
+	// handle presets
+	for _, preset := range args.Preset {
+		if _, ok := presets.Presets[preset]; ok {
+			logs, results = presets.Presets[preset](args, logs, results)
+		}
+	}
+
 	// filter all msg-passing entries
 	filtered := make([]*shared.LogLine, 0, len(results))
-	parsed, DIDs := shared.ParseLines(results)
-	for _, l := range parsed {
+	for _, l := range results {
 
 		// filters
+		if l.Error != "" {
+			filtered = append(filtered, l)
+			continue
+		}
 		if l.MsgFrom == nil {
 			continue
 		}
@@ -136,20 +128,19 @@ func main() {
 		// filter ok
 		filtered = append(filtered, l)
 	}
-	filteredStr := make([]string, len(filtered))
-	for i, l := range filtered {
-		filteredStr[i] = l.RawJSON
-	}
 
 	// sort, save, and render
 	shared.SortByTimestamp(filtered)
-	// TODO render DID map
-	if output, err := shared.RenderSlice("msgflow", filteredStr, args.ArgsBasic); err != nil {
+	output1 := ""
+	if args.Headers && args.HeadersNetwork {
+		output1 = shared.RenderLogHeader(logs)
+	}
+	if output2, err := shared.RenderSlice("msgflow", filtered, args.ArgsBasic); err != nil {
 		p.Fail(err.Error())
 
 		// save HTML
 	} else if wd, err := os.Getwd(); err == nil && args.OutputHTML != "" {
-		err := shared.SaveHTML(filepath.Join(wd, args.OutputHTML), output, args.Headers)
+		err := shared.SaveHTML(filepath.Join(wd, args.OutputHTML), output1+output2, true)
 		if err != nil {
 			p.Fail(err.Error())
 		}
@@ -175,14 +166,7 @@ type GroupInfo struct {
 }
 
 // GenDiagram generates a sequence diagram from the given logs.
-//
-// TODO color errors in red
-// TODO add regions
-//
-//	region: {
-//	  ...
-//	}
-func GenDiagram(args Args, lines []*shared.LogLine, name string, groupMsgs bool, dids map[string]string) error {
+func GenDiagram(args types.Args, lines []*shared.LogLine, name string, groupMsgs bool, dids map[string]string) error {
 	// init
 	path, err := os.Getwd()
 	if err != nil {
@@ -201,9 +185,9 @@ func GenDiagram(args Args, lines []*shared.LogLine, name string, groupMsgs bool,
 	slices.Sort(didsSorted)
 	ret = append(ret, didsSorted...)
 
-	// parse spans
+	// parse spans TODO move to main
 	proc := shared.SpansProc
-	if !groupMsgs && args.Span != "" {
+	if !groupMsgs && args.DiagramSpan != "" {
 		// TODO build the processor
 		for _, l := range lines {
 			proc.ProcessLine(l)
@@ -213,6 +197,19 @@ func GenDiagram(args Args, lines []*shared.LogLine, name string, groupMsgs bool,
 	// process lines
 	spanOpen := false
 	for _, l := range lines {
+		// errors
+		if l.Error != "" {
+			// TODO class, break long lines
+			ret = append(ret, shared.Sprintf(`
+				%s -> %s: ERROR: %s  {
+					style.stroke: red
+					style.stroke-dash: 5
+					style.stroke-width: 5
+				}`, l.Node, l.Node, brakeLine(l.Error, 50)))
+			continue
+		}
+
+		// messages
 		fromDID := l.MsgFrom.DID.String()
 		from := "external"
 		if v, ok := dids[fromDID]; ok {
@@ -243,13 +240,13 @@ func GenDiagram(args Args, lines []*shared.LogLine, name string, groupMsgs bool,
 		} else if spans := proc.MatchesForLine(l); spans != nil {
 			// first span only TODO nesting spans
 			s := spans[0]
-			n := strings.ReplaceAll(s.Name, " ", "_")
-			spanLeft = "." + n
-			spanRight = "." + n
+			spanLeft = "." + s.Name
+			spanRight = "." + s.Name
 
 			// render note
 			if !spanOpen {
-				ret = append(ret, from+`."`+s.Name+`"`)
+				label := strings.ReplaceAll(s.Name, "_", " ")
+				ret = append(ret, fmt.Sprintf(`%s."%s"`, l.Node, label))
 				spanOpen = true
 			}
 			if s.EndLine == l {
@@ -257,13 +254,12 @@ func GenDiagram(args Args, lines []*shared.LogLine, name string, groupMsgs bool,
 			}
 		}
 
-		// TODO break long lines of l.Behavior
 		msgTime := l.Timestamp.Format(time.RFC3339)
 		if l.FlightTime != "" {
 			msgTime = "flight " + l.FlightTime
 		}
 		ret = append(ret, fmt.Sprintf("%s%s -> %s%s: %s\\nline %s:%d\\n%s",
-			from, spanLeft, l.Node, spanRight, l.Behavior, l.Node, l.Line, msgTime))
+			from, spanLeft, l.Node, spanRight, brakeLine(l.Behavior, 50), l.Node, l.Line, msgTime))
 
 		// grouping state
 		lastMsg = from + "|" + l.Node
@@ -317,8 +313,16 @@ func groupResults(lastMsg string, ret []string, group GroupInfo) []string {
 	from := msg[0]
 	to := msg[1]
 	ret = ret[0 : len(ret)-group.Count-1]
-	ret = append(ret, fmt.Sprintf("%s -> %s: group of %d\\nlines %s:%d to %s:%d\\n%s\\n%s",
+	ret = append(ret, fmt.Sprintf("%s -> %s: GROUP OF %d\\nlines %s:%d to %s:%d\\n%s\\n%s",
 		from, to, group.Count+1, to, group.LineStart, to, group.LineEnd, group.TimeStart, group.TimeEnd))
 
 	return ret
+}
+
+// brakeLine breaks a line at a given limit.
+func brakeLine(line string, limit int) string {
+	if len(line) <= limit {
+		return line
+	}
+	return line[:limit] + "\\n" + brakeLine(line[limit:], limit)
 }

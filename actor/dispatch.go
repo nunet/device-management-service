@@ -225,9 +225,8 @@ func (k *Dispatch) dispatch() {
 				k.mx.Unlock()
 				log.Warnw("message does not have the required capability",
 					"from", msg.From,
-					"capabilities", CapabilitiesJoin(b.opt.Capability),
-					"msg", string(msg.Capability),
-					"error", err.Error(),
+					"capabilities", b.opt.Capability,
+					"error", err,
 					"labels", string(observability.LabelNode),
 				)
 				// TODO? msg without an answer

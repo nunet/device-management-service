@@ -327,12 +327,16 @@ func (b *BidCoordinator) requestBids(
 
 			var bid jtypes.Bid
 			if err := json.Unmarshal(msg.Message, &bid); err != nil {
-				log.Debugw("failed to unmarshal bid",
+				log.Errorw("failed to unmarshal bid",
 					"labels", []string{string(observability.LabelDeployment)},
 					"from", msg.From,
 					"error", err)
 				return
 			}
+
+			log.Infow("deployment_bid",
+				"labels", []string{string(observability.LabelDeployment)},
+				"from", msg.From)
 
 			timer := time.NewTimer(time.Until(bidExpiryTime))
 			defer timer.Stop()
