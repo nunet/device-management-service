@@ -148,7 +148,7 @@ func initLogger(observabilityConfig config.Observability) error {
 	if observabilityConfig.ElasticsearchEnabled && !isESDisabled() {
 		esCore, err = createElasticsearchCore(observabilityConfig, atomicLevel)
 		if err != nil {
-			log.Warn("Unable to create Elasticsearch logger (will disable ES logging).", zap.Error(err))
+			log.Errorw("elasticsearch_failed", "error", err)
 			disableES()
 			esCore = nil
 		}

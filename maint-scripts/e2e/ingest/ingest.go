@@ -22,6 +22,7 @@ var ErrNotFound = fmt.Errorf("logs not found")
 const dmsStartMsg = "docker_client_init_started"
 
 // keep in sync with /observability/labels.go
+// TODO add CI indexes
 var indexes = []string{
 	"nunet-dms", "accounting-index", "metric-index", "allocation-index", "deployment-index",
 	"node-index",
@@ -54,13 +55,17 @@ func (Args) Description() string {
 		$> %s did --download 1 \
 			did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
 		
+		Download logs 5m around 2025-09-24T06:30:25.517Z of did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
+		$> %s did --timestamp 2025-09-24T06:30:25.517Z \
+			did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
+		
 		Show all errors from the last 2h
 		$> %s errors --duration 2h
 		
-		Show all errors from the last 24h, with stack traces, and HTML output.
+		Show all errors from the last 24h, with stack traces, and save HTML output.
 		$> %s errors --stack-traces --output-html errors.html
 		
-	`, n, n, n, n)
+	`, n, n, n, n, n)
 }
 
 type DIDCmd struct {
@@ -168,8 +173,10 @@ func DownloadRun(ctx context.Context, es *elasticsearch.Client, args Args) error
 	}
 	oldestTime := runs[0]
 	newestTime := time.Now().Format(time.RFC3339)
-	if args.DID.Download > 1 {
-		newestTime = runs[args.DID.Download-1]
+	runIdx := args.DID.Download - 1
+	if runIdx > 0 && len(runs) > runIdx {
+		oldestTime = runs[runIdx]
+		newestTime = runs[runIdx-1]
 	}
 
 	// find all logs after docker_client_init_started
@@ -196,7 +203,7 @@ func DownloadRun(ctx context.Context, es *elasticsearch.Client, args Args) error
 			},
 		},
 	}
-	filename := did + "-" + args.DID.Timestamp
+	filename := did + "-" + oldestTime
 	if args.DID.Output != "" {
 		filename = args.DID.Output
 	}
