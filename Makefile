@@ -1,3 +1,4 @@
+
 PROTO_DIR := proto/v1/common
 GO_OUT_DIR := proto/generated/v1/common
 

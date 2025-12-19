@@ -45,6 +45,7 @@ import (
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts/processors"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
@@ -157,7 +158,10 @@ type Node struct {
 
 	// serverProviderRegistry registory
 	serverProviderRegistry *provider.Registry
-	gatewayStore           *gatewastore.Store
+
+	// payment processor
+	paymentProcessor PaymentProcessor
+	gatewayStore     *gatewastore.Store
 }
 
 // createActor creates an actor.
@@ -303,11 +307,47 @@ func New(cfg config.Config, fs afero.Afero,
 		gatewayStore:           gatewayStore,
 	}
 
+	// Create payment processor with invokeBehaviour function
+	invokeBehaviourFunc := func(destination actor.Handle, behavior string, req interface{}, timeout time.Duration) (actor.Envelope, error) {
+		msg, err := actor.Message(
+			nodeActor.Handle(),
+			destination,
+			behavior,
+			req,
+			actor.WithMessageExpiry(actor.MakeExpiry(timeout)),
+		)
+		if err != nil {
+			return actor.Envelope{}, fmt.Errorf("failed to create message: %w", err)
+		}
+
+		replyCh, err := nodeActor.Invoke(msg)
+		if err != nil {
+			return actor.Envelope{}, fmt.Errorf("failed to invoke message: %w", err)
+		}
+
+		ticker := time.NewTicker(timeout)
+		defer ticker.Stop()
+
+		select {
+		case reply := <-replyCh:
+			defer reply.Discard()
+			return reply, nil
+		case <-ticker.C:
+			return actor.Envelope{}, errors.New("failed to receive reply due to timeout")
+		}
+	}
+
+	n.paymentProcessor = NewPaymentProcessor(paymentStore, net, nodeActor.Handle(), invokeBehaviourFunc)
+
 	// set up the flight recorder
 	observability.FlightrecInit()
 
 	// setup contract event handler
 	n.contractEventHandler = eventhandler.New(ctx, eventHandlerWorkers, eventHandlerQueueSize, eventHandlerBaseDelay, eventHandlerMaxDelay, n.handleContractEvents)
+
+	// Initialize payment model processors
+	// This must be called before using GetPaymentModelProcessor
+	processors.InitPaymentModelProcessors(usageStore)
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
 		cancel()
@@ -1098,209 +1138,78 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 	for _, contract := range contractsToProcess {
 		// Get contract-specific last processed timestamp
 		lastProcessedAt, _ := n.usageStore.GetLastProcessedAt(contract.ContractDID)
-		// Use a strictly greater-than window to avoid re-counting the last
-		// processed event on subsequent collections.
-		windowStart := lastProcessedAt.Add(time.Nanosecond)
-		var usageCount int
-		var result contracts.ContractUsageResult
 
-		// Query usage based on payment model
-		switch contract.PaymentDetails.PaymentModel {
-		case contracts.PayPerAllocation:
-			usageCount, err = n.usageStore.CountAllocationsByContractDID(contract.ContractDID, windowStart, now)
-			if err != nil {
-				result = contracts.ContractUsageResult{
-					ContractDID:  contract.ContractDID,
-					PaymentModel: contract.PaymentDetails.PaymentModel,
-					Error:        fmt.Sprintf("failed to count allocations: %v", err),
-				}
-				resp.Results = append(resp.Results, result)
-				log.Warnf("failed to count allocations for contract %s: %v", contract.ContractDID, err)
-				continue
-			}
-		case contracts.PayPerDeployment:
-			usageCount, err = n.usageStore.CountDeploymentsByContract(contract.ContractDID, windowStart, now)
-			if err != nil {
-				result = contracts.ContractUsageResult{
-					ContractDID:  contract.ContractDID,
-					PaymentModel: contract.PaymentDetails.PaymentModel,
-					Error:        fmt.Sprintf("failed to count deployments: %v", err),
-				}
-				resp.Results = append(resp.Results, result)
-				log.Warnf("failed to count deployments for contract %s: %v", contract.ContractDID, err)
-				continue
-			}
-
-		case contracts.PayPerTimeUtilization:
-			deploymentUtils, err := n.usageStore.CalculateTimeUtilizationByContract(contract.ContractDID, lastProcessedAt, now)
-			if err != nil {
-				result = contracts.ContractUsageResult{
-					ContractDID:  contract.ContractDID,
-					PaymentModel: contract.PaymentDetails.PaymentModel,
-					Error:        fmt.Sprintf("failed to calculate time utilization: %v", err),
-				}
-				resp.Results = append(resp.Results, result)
-				log.Warnf("failed to calculate time utilization for contract %s: %v", contract.ContractDID, err)
-				continue
-			}
-
-			timeUtil := &contracts.TimeUtilizationUsage{
-				Deployments: deploymentUtils,
-			}
-
-			// Calculate total number of deployments (for backward compatibility)
-			totalDeployments := len(deploymentUtils)
-
-			result = contracts.ContractUsageResult{
-				ContractDID:     contract.ContractDID,
-				PaymentModel:    contract.PaymentDetails.PaymentModel,
-				Usages:          totalDeployments, // Number of deployments
-				TimeUtilization: timeUtil,
-			}
-
-			// For pay_per_time_utilization, send ALL deployments in one request
-			// The payment provider will generate one transaction per deployment
-			if totalDeployments > 0 {
-				allPayments = append(allPayments, paymentForwardToProviderRequest{
-					Contract:        *contract,
-					Usages:          totalDeployments,
-					TimeUtilization: timeUtil, // All deployments in one request
-				})
-			}
-
-			// Save contract-specific last processed timestamp before adding result
-			err = n.usageStore.SaveLastProcessedAt(contract.ContractDID, now)
-			if err != nil {
-				result = contracts.ContractUsageResult{
-					ContractDID:     contract.ContractDID,
-					PaymentModel:    contract.PaymentDetails.PaymentModel,
-					Error:           fmt.Sprintf("failed to save last processed timestamp: %v", err),
-					TimeUtilization: timeUtil,
-				}
-				resp.Results = append(resp.Results, result)
-				log.Warnf("failed to save last processed usage for contract %s: %v", contract.ContractDID, err)
-				continue
-			}
-
-			// Add result (already set above)
-			resp.Results = append(resp.Results, result)
-			continue
-
-		case contracts.PayPerResourceUtilization:
-			deploymentUtils, err := n.usageStore.CalculateResourceUtilizationByContract(contract.ContractDID, lastProcessedAt, now)
-			if err != nil {
-				result = contracts.ContractUsageResult{
-					ContractDID:  contract.ContractDID,
-					PaymentModel: contract.PaymentDetails.PaymentModel,
-					Error:        fmt.Sprintf("failed to calculate resource utilization: %v", err),
-				}
-				resp.Results = append(resp.Results, result)
-				log.Warnf("failed to calculate resource utilization for contract %s: %v", contract.ContractDID, err)
-				continue
-			}
-
-			resourceUtil := &contracts.ResourceUtilizationUsage{
-				Deployments: deploymentUtils,
-			}
-
-			// Calculate total number of deployments (for backward compatibility)
-			totalDeployments := len(deploymentUtils)
-
-			result = contracts.ContractUsageResult{
-				ContractDID:         contract.ContractDID,
-				PaymentModel:        contract.PaymentDetails.PaymentModel,
-				Usages:              totalDeployments, // Number of deployments
-				ResourceUtilization: resourceUtil,
-			}
-
-			// For pay_per_resource_utilization, send ALL deployments in one request
-			// The payment provider will generate one transaction per deployment
-			if totalDeployments > 0 {
-				allPayments = append(allPayments, paymentForwardToProviderRequest{
-					Contract:            *contract,
-					Usages:              totalDeployments,
-					ResourceUtilization: resourceUtil, // All deployments in one request
-				})
-			}
-
-			// Save contract-specific last processed timestamp before adding result
-			err = n.usageStore.SaveLastProcessedAt(contract.ContractDID, now)
-			if err != nil {
-				result = contracts.ContractUsageResult{
-					ContractDID:         contract.ContractDID,
-					PaymentModel:        contract.PaymentDetails.PaymentModel,
-					Error:               fmt.Sprintf("failed to save last processed timestamp: %v", err),
-					ResourceUtilization: resourceUtil,
-				}
-				resp.Results = append(resp.Results, result)
-				log.Warnf("failed to save last processed usage for contract %s: %v", contract.ContractDID, err)
-				continue
-			}
-
-			// Add result (already set above)
-			resp.Results = append(resp.Results, result)
-			continue
-
-		case contracts.FixedRental:
-			// Fixed Rental payment model uses automatic periodic billing and cannot be manually triggered.
-			// Return an error to prevent race conditions with the contract actor's billing routine.
-			result = contracts.ContractUsageResult{
+		// Get processor for this payment model
+		processor, err := contracts.GetPaymentModelProcessor(contract.PaymentDetails.PaymentModel)
+		if err != nil {
+			result := contracts.ContractUsageResult{
 				ContractDID:  contract.ContractDID,
 				PaymentModel: contract.PaymentDetails.PaymentModel,
-				Error:        "fixed_rental payment model uses automatic periodic billing and cannot be manually triggered. Invoices are generated automatically by the contract actor.",
+				Error:        fmt.Sprintf("unsupported payment model: %v", err),
 			}
 			resp.Results = append(resp.Results, result)
-			log.Warnf("manual invoice generation attempted for fixed rental contract %s", contract.ContractDID)
+			log.Warnf("unsupported payment model for contract %s: %v", contract.ContractDID, err)
 			continue
+		}
 
-		case contracts.Periodic:
-			// Periodic payment model uses automatic periodic billing and cannot be manually triggered.
-			// Return an error to prevent race conditions with the contract actor's billing routine.
-			result = contracts.ContractUsageResult{
+		// Check if this model supports manual billing
+		if !processor.SupportsManualBilling() {
+			result := contracts.ContractUsageResult{
 				ContractDID:  contract.ContractDID,
 				PaymentModel: contract.PaymentDetails.PaymentModel,
-				Error:        "periodic payment model uses automatic periodic billing and cannot be manually triggered. Invoices are generated automatically by the contract actor.",
+				Error:        fmt.Sprintf("%s payment model uses automatic periodic billing and cannot be manually triggered. Invoices are generated automatically by the contract actor.", contract.PaymentDetails.PaymentModel),
 			}
 			resp.Results = append(resp.Results, result)
-			log.Warnf("manual invoice generation attempted for periodic contract %s", contract.ContractDID)
+			log.Warnf("manual invoice generation attempted for %s contract %s", contract.PaymentDetails.PaymentModel, contract.ContractDID)
 			continue
+		}
 
-		default:
-			resp.Results = append(resp.Results, contracts.ContractUsageResult{
+		// Collect usage using processor
+		usageData, err := processor.CollectUsage(contract.ContractDID, lastProcessedAt, now)
+		if err != nil {
+			result := contracts.ContractUsageResult{
 				ContractDID:  contract.ContractDID,
 				PaymentModel: contract.PaymentDetails.PaymentModel,
-				Error:        "unsupported payment model",
-			})
+				Error:        fmt.Sprintf("failed to collect usage: %v", err),
+			}
+			resp.Results = append(resp.Results, result)
+			log.Warnf("failed to collect usage for contract %s: %v", contract.ContractDID, err)
+			continue
+		}
+
+		// Convert usage data to result format
+		result := n.convertUsageDataToResult(usageData)
+		if result.Error != "" {
+			resp.Results = append(resp.Results, result)
+			log.Warnf("failed to convert usage data for contract %s: %s", contract.ContractDID, result.Error)
 			continue
 		}
 
 		// Save contract-specific last processed timestamp
 		err = n.usageStore.SaveLastProcessedAt(contract.ContractDID, now)
 		if err != nil {
-			result = contracts.ContractUsageResult{
-				ContractDID:  contract.ContractDID,
-				PaymentModel: contract.PaymentDetails.PaymentModel,
-				Error:        fmt.Sprintf("failed to save last processed timestamp: %v", err),
-			}
+			result.Error = fmt.Sprintf("failed to save last processed timestamp: %v", err)
 			resp.Results = append(resp.Results, result)
 			log.Warnf("failed to save last processed usage for contract %s: %v", contract.ContractDID, err)
 			continue
 		}
 
 		// Add result
-		result = contracts.ContractUsageResult{
-			ContractDID:  contract.ContractDID,
-			PaymentModel: contract.PaymentDetails.PaymentModel,
-			Usages:       usageCount,
-		}
 		resp.Results = append(resp.Results, result)
 
-		// Only add to payments if there are usages
-		if usageCount > 0 {
-			allPayments = append(allPayments, paymentForwardToProviderRequest{
+		// Add to payments if there are usages
+		if result.Usages > 0 || result.TimeUtilization != nil || result.ResourceUtilization != nil {
+			paymentReq := paymentForwardToProviderRequest{
 				Contract: *contract,
-				Usages:   usageCount,
-			})
+				Usages:   result.Usages,
+			}
+			if result.TimeUtilization != nil {
+				paymentReq.TimeUtilization = result.TimeUtilization
+			}
+			if result.ResourceUtilization != nil {
+				paymentReq.ResourceUtilization = result.ResourceUtilization
+			}
+			allPayments = append(allPayments, paymentReq)
 		}
 	}
 
@@ -1329,6 +1238,55 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 	}
 
 	return resp
+}
+
+// convertUsageDataToResult converts UsageData from processor to ContractUsageResult
+func (n *Node) convertUsageDataToResult(usageData *contracts.UsageData) contracts.ContractUsageResult {
+	result := contracts.ContractUsageResult{
+		ContractDID:  usageData.ContractDID,
+		PaymentModel: usageData.PaymentModel,
+	}
+
+	switch usageData.PaymentModel {
+	case contracts.PayPerAllocation:
+		usageCount, ok := usageData.Data.(int)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_allocation"
+			return result
+		}
+		result.Usages = usageCount
+
+	case contracts.PayPerDeployment:
+		usageCount, ok := usageData.Data.(int)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_deployment"
+			return result
+		}
+		result.Usages = usageCount
+
+	case contracts.PayPerTimeUtilization:
+		timeUtil, ok := usageData.Data.(*contracts.TimeUtilizationUsage)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_time_utilization"
+			return result
+		}
+		result.TimeUtilization = timeUtil
+		result.Usages = len(timeUtil.Deployments) // For backward compatibility
+
+	case contracts.PayPerResourceUtilization:
+		resourceUtil, ok := usageData.Data.(*contracts.ResourceUtilizationUsage)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_resource_utilization"
+			return result
+		}
+		result.ResourceUtilization = resourceUtil
+		result.Usages = len(resourceUtil.Deployments) // For backward compatibility
+
+	default:
+		result.Error = fmt.Sprintf("unsupported payment model: %s", usageData.PaymentModel)
+	}
+
+	return result
 }
 
 func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {
