@@ -513,12 +513,18 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerDeployment), feePerDeployment, "", "", "", "", "", "", "", "", "", "")
 		suite.Require().NoError(err)
 
+		fmt.Println("destinationFile", destinationFile)
+		bytes, err := os.ReadFile(destinationFile)
+		fmt.Println("bytes", string(bytes), err)
+		suite.Require().NoError(err)
+
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
-		fmt.Println(cmdOut, err)
+		fmt.Println("cmdOut", cmdOut, err)
 
 		// sleep until actor starts
 		time.Sleep(5 * time.Second)
 
+		fmt.Println("cmdOut", cmdOut)
 		contractDID, err := getContractID(cmdOut)
 		suite.Require().NoError(err)
 
@@ -1182,6 +1188,7 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 		// sleep until actor starts
 		time.Sleep(5 * time.Second)
 
+		fmt.Println("cmdOut", cmdOut)
 		contractDID, err := getContractID(cmdOut)
 		suite.Require().NoError(err)
 
@@ -2216,8 +2223,8 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		// so the billing routine should skip the period with a log message
 		suite.T().Log("Waiting for billing routine check (no deployments - should skip with log)")
 
-		// Wait for billing checker interval (1 minute) + buffer
-		waitTime := 1*time.Minute + 30*time.Second
+		// Wait for billing checker interval (15 minute) + buffer
+		waitTime := 15*time.Minute + 2*time.Minute
 		time.Sleep(waitTime)
 
 		// Check that no transactions were created (Edge Case 1: no deployments = skip invoice)
@@ -2282,10 +2289,10 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		time.Sleep(30 * time.Second)
 
 		// Wait for billing period + buffer:
-		// - contract actor checks every PeriodicBillingCheckerInterval (1 minute for testing)
-		// - invoices every paymentPeriodCount * paymentPeriod (2 * 1 minute = 2 minutes)
+		// - contract actor checks every PeriodicBillingCheckerInterval (15 minute)
+		// - invoices every paymentPeriodCount * paymentPeriod (2 * 15 minute = 30 minutes)
 		// To be safe, wait for roughly two checker intervals plus a small buffer.
-		waitTimeForInvoice := 2*time.Minute + 30*time.Second
+		waitTimeForInvoice := 30*time.Minute + 2*time.Minute
 
 		// Poll for transaction creation (billing routine generates invoice automatically)
 		var transactionCreated bool
@@ -2404,8 +2411,8 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		suite.T().Logf("Transaction count before mid-period deployment shutdown: %d", transactionCountBeforeShutdown)
 
 		// TEST 5: Mid-Period Deployment Shutdown (pro-rated invoice)
-		suite.T().Log("Waiting 30 seconds (mid-period) before shutting down deployment to trigger pro-rated invoice")
-		time.Sleep(30 * time.Second) // Wait for half of the 2-minute period
+		suite.T().Log("Waiting 2 minutes(mid-period) before shutting down deployment to trigger pro-rated invoice")
+		time.Sleep(2 * time.Minute)
 
 		deploymentShutdownTime := time.Now()
 		suite.T().Logf("Shutting down deployment at %s", deploymentShutdownTime.Format(time.RFC3339))
@@ -2427,8 +2434,8 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 
 		// TEST 6: Verify pro-rated final invoice generated after deployment shutdown
 		suite.T().Log("Waiting for pro-rated final invoice to be generated after deployment shutdown")
-		// Billing routine checks every 1 minute (for testing), so wait at least one checker interval + buffer
-		time.Sleep(1*time.Minute + 30*time.Second)
+		// Billing routine checks every 15 minutes, so wait at least one checker interval + buffer
+		time.Sleep(15*time.Minute + 2*time.Minute)
 
 		// Check for new transaction (pro-rated invoice for partial period)
 		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)

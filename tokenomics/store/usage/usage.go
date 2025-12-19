@@ -17,9 +17,7 @@ import (
 	"github.com/ostafen/clover/v2"
 	"github.com/ostafen/clover/v2/document"
 	"github.com/ostafen/clover/v2/query"
-	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
-	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -247,449 +245,123 @@ func (s *Store) QueryEvents(filters EventFilters) ([]*Usage, error) {
 	return usages, nil
 }
 
-// CalculateTimeUtilizationByContract calculates time utilization per deployment for a contract.
-//
-// Allocation Event Handling Logic:
-// - StartAllocationEvent is pushed for BOTH task and service allocations (this is the start event for both)
-// - CreateAllocationEvent is also pushed for both types, but we don't use it for time tracking
-// - Allocation type is determined by the end event:
-//   - CompleteAllocationEvent → task allocation (one-shot task that completes)
-//   - StopAllocationEvent → service allocation (long-running service that can be stopped)
-//
-// Process:
-//  1. Query ALL StartAllocationEvents for the contract (no time restriction) to catch
-//     allocations that started before 'start' but are still running or ended after 'start'
-//  2. Query ALL end events (Complete/Stop) for the contract (no time restriction) to properly
-//     match start and end events, even if end happened before 'start'
-//  3. First pass: Process StartAllocationEvent to create allocation windows
-//  4. Second pass: Process CompleteAllocationEvent/StopAllocationEvent to determine type and set end time
-//  5. Filter allocations to only include those that were active during the period:
-//     - Allocations that started after 'start' are included (they're within the period)
-//     - Allocations that started before 'start' but ended after 'start' (or are still running) are included
-//     - Allocations that ended before 'start' are excluded (already counted in previous period)
-//  6. For allocations that started before 'start', only count time from 'start' onwards
-func (s *Store) CalculateTimeUtilizationByContract(contractDID string, start, _ time.Time) ([]contracts.DeploymentTimeUtilization, error) {
-	// Query ALL StartAllocationEvents for this contract (no time restriction)
-	// This is necessary to find allocations that started before 'start' but are still running
+// QueryAllocationEvents queries allocation start/end events with smart time bounds.
+// This helper eliminates duplication across calculation methods.
+// It looks back 1 year to catch allocations that started before query period but are still running.
+func (s *Store) QueryAllocationEvents(
+	contractDID string,
+	queryStart, queryEnd time.Time,
+) ([]*Usage, []*Usage, error) {
+	// Look back 1 year to catch allocations that started before query period
+	queryStartBound := queryStart.AddDate(-1, 0, 0)
+
 	startEvents, err := s.QueryEvents(EventFilters{
 		ContractDID: contractDID,
 		EventTypes:  []events.EventType{events.StartAllocationEvent},
-		// No time restriction - we need ALL start events to catch allocations that started before 'start'
+		StartTime:   queryStartBound,
+		EndTime:     queryEnd,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to query start events: %w", err)
+		return nil, nil, fmt.Errorf("failed to query start events: %w", err)
 	}
 
-	// Query ALL end events for this contract (no time restriction)
-	// This is necessary to properly match start and end events, even if end happened before 'start'
-	endEventTypes := []events.EventType{
-		events.CompleteAllocationEvent, // End event for task allocations
-		events.StopAllocationEvent,     // End event for service allocations
-	}
 	endEvents, err := s.QueryEvents(EventFilters{
 		ContractDID: contractDID,
-		EventTypes:  endEventTypes,
-		// No time restriction - we need ALL end events to properly match with start events
+		EventTypes:  []events.EventType{events.CompleteAllocationEvent, events.StopAllocationEvent},
+		StartTime:   queryStartBound,
+		EndTime:     queryEnd,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to query end events: %w", err)
+		return nil, nil, fmt.Errorf("failed to query end events: %w", err)
 	}
 
-	// Combine all events for processing
-	startEvents = append(startEvents, endEvents...)
-
-	// Track allocation windows by allocation ID
-	type allocationWindow struct {
-		allocationID   string
-		deploymentID   string
-		startTime      time.Time
-		endTime        time.Time
-		isComplete     bool   // true if we have both start and end events
-		allocationType string // "task" or "service" - determined by end event
-	}
-
-	// Map: allocationID -> window
-	allocationWindows := make(map[string]*allocationWindow)
-
-	// Map: deploymentID -> []allocationID
-	deploymentAllocations := make(map[string]map[string]bool) // Use map to avoid duplicates
-
-	// First pass: Process StartAllocationEvent to create allocation windows
-	// StartAllocationEvent is used for BOTH task and service allocations
-	for _, evt := range startEvents {
-		if evt.EventType != events.StartAllocationEvent {
-			continue
-		}
-
-		eventTime := evt.Timestamp
-		if eventTime.IsZero() {
-			continue // Skip if no timestamp
-		}
-
-		var data events.StartAllocation
-		if err := json.Unmarshal(evt.Data, &data); err != nil {
-			continue
-		}
-
-		// Create window for this allocation (type will be determined by end event)
-		if allocationWindows[data.AllocationID] == nil {
-			allocationWindows[data.AllocationID] = &allocationWindow{
-				allocationID:   data.AllocationID,
-				deploymentID:   data.DeploymentID,
-				startTime:      eventTime,
-				allocationType: "", // Will be determined by end event
-			}
-			if deploymentAllocations[data.DeploymentID] == nil {
-				deploymentAllocations[data.DeploymentID] = make(map[string]bool)
-			}
-			deploymentAllocations[data.DeploymentID][data.AllocationID] = true
-		}
-	}
-
-	// Second pass: Process end events to determine allocation type and set end time
-	for _, evt := range startEvents {
-		eventTime := evt.Timestamp
-		if eventTime.IsZero() {
-			continue // Skip if no timestamp
-		}
-
-		// CompleteAllocationEvent indicates a task allocation
-		var data events.AllocationBase
-		if err := json.Unmarshal(evt.Data, &data); err != nil {
-			continue
-		}
-		window := allocationWindows[data.AllocationID]
-		if window == nil {
-			continue // No start event for this allocation, skip
-		}
-		window.allocationType = "service"
-		window.endTime = eventTime
-		window.isComplete = false
-
-		if evt.EventType == events.CompleteAllocationEvent { //nolint:staticcheck
-			window.allocationType = "task"
-			window.isComplete = true
-		} else if evt.EventType == events.StopAllocationEvent {
-			window.isComplete = true
-		}
-	}
-
-	// Build deployment time utilization structures
-	result := make([]contracts.DeploymentTimeUtilization, 0)
-	for deploymentID, allocationIDMap := range deploymentAllocations {
-		deploymentUtil := contracts.DeploymentTimeUtilization{
-			DeploymentID: deploymentID,
-			Allocations:  make([]contracts.AllocationTimeUtilization, 0),
-		}
-
-		for allocID := range allocationIDMap {
-			window := allocationWindows[allocID]
-			if window == nil {
-				continue
-			}
-
-			// Determine if this allocation is relevant for this time period
-			// An allocation is relevant if:
-			// 1. It started after 'start' (within the period), OR
-			// 2. It started before 'start' but ended after 'start' (or is still running)
-
-			// Calculate effective start time: if allocation started before 'start', use 'start' as effective start
-			effectiveStartTime := window.startTime
-			if window.startTime.Before(start) {
-				// Allocation started before the period - only count time from 'start' onwards
-				effectiveStartTime = start
-			}
-
-			// Determine end time for duration calculation
-			var effectiveEndTime time.Time
-			if window.isComplete {
-				// Allocation ended - check if it ended after 'start'
-				if window.endTime.After(start) {
-					effectiveEndTime = window.endTime
-				} else {
-					// Allocation ended before 'start', skip it (already counted in previous period)
-					continue
-				}
-			} else {
-				// Allocation is still running - use current time as effective end time
-				effectiveEndTime = time.Now()
-			}
-
-			// Skip if effective start is after or equal to effective end
-			if !effectiveStartTime.Before(effectiveEndTime) {
-				continue
-			}
-
-			// Calculate duration from effective start to effective end
-			duration := effectiveEndTime.Sub(effectiveStartTime)
-
-			allocUtil := contracts.AllocationTimeUtilization{
-				AllocationID: window.allocationID,
-				Duration:     duration,
-				StartTime:    window.startTime, // Always use actual start time for tracking
-			}
-
-			if window.isComplete {
-				allocUtil.EndTime = window.endTime
-			}
-
-			deploymentUtil.Allocations = append(deploymentUtil.Allocations, allocUtil)
-			deploymentUtil.TotalUtilizationSec += duration.Seconds()
-		}
-
-		if len(deploymentUtil.Allocations) > 0 {
-			result = append(result, deploymentUtil)
-		}
-	}
-
-	return result, nil
+	return startEvents, endEvents, nil
 }
 
-// CalculateResourceUtilizationByContract calculates resource utilization per deployment for a contract.
-// Allocation Event Handling Logic:
-// - StartAllocationEvent is pushed for BOTH task and service allocations (this is the start event for both)
-// - Resources are embedded in StartAllocationEvent (primary source)
-// - CreateAllocationEvent also contains resources (fallback if StartAllocationEvent missing resources)
-// - Allocation type is determined by the end event:
-//   - CompleteAllocationEvent → task allocation (one-shot task that completes)
-//   - StopAllocationEvent → service allocation (long-running service that can be stopped)
-//
-// Process:
-//  1. Query ALL StartAllocationEvents for the contract (no time restriction) to catch
-//     allocations that started before 'start' but are still running or ended after 'start'
-//  2. Query ALL end events (Complete/Stop) for the contract (no time restriction) to properly
-//     match start and end events, even if end happened before 'start'
-//  3. Query ALL CreateAllocationEvents for resource fallback lookup
-//  4. First pass: Process StartAllocationEvent to create allocation windows (with resources)
-//  5. Second pass: Process CompleteAllocationEvent/StopAllocationEvent to determine type and set end time
-//  6. Filter allocations to only include those that were active during the period:
-//     - Allocations that started after 'start' are included (they're within the period)
-//     - Allocations that started before 'start' but ended after 'start' (or are still running) are included
-//     - Allocations that ended before 'start' are excluded (already counted in previous period)
-//  7. For allocations that started before 'start', only count time from 'start' onwards
-func (s *Store) CalculateResourceUtilizationByContract(contractDID string, start, end time.Time) ([]contracts.DeploymentResourceUtilization, error) {
-	// Query ALL StartAllocationEvents for this contract (no time restriction)
-	// This is necessary to find allocations that started before 'start' but are still running
+// QueryDeploymentEvents queries deployment start/stop events with smart time bounds.
+// This helper eliminates duplication for deployment-based calculations.
+// It looks back 1 year to catch deployments that started before query period but are still running.
+func (s *Store) QueryDeploymentEvents(
+	contractDID string,
+	queryStart, queryEnd time.Time,
+) ([]*Usage, []*Usage, error) {
+	queryStartBound := queryStart.AddDate(-1, 0, 0)
+
 	startEvents, err := s.QueryEvents(EventFilters{
 		ContractDID: contractDID,
-		EventTypes:  []events.EventType{events.StartAllocationEvent},
-		// No time restriction - we need ALL start events to catch allocations that started before 'start'
+		EventTypes:  []events.EventType{events.DeploymentStartEvent},
+		StartTime:   queryStartBound,
+		EndTime:     queryEnd,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to query start events: %w", err)
+		return nil, nil, fmt.Errorf("failed to query deployment start events: %w", err)
 	}
 
-	// Query ALL end events for this contract (no time restriction)
-	// This is necessary to properly match start and end events, even if end happened before 'start'
-	endEventTypes := []events.EventType{
-		events.CompleteAllocationEvent, // End event for task allocations
-		events.StopAllocationEvent,     // End event for service allocations
-	}
-	endEvents, err := s.QueryEvents(EventFilters{
+	stopEvents, err := s.QueryEvents(EventFilters{
 		ContractDID: contractDID,
-		EventTypes:  endEventTypes,
-		// No time restriction - we need ALL end events to properly match with start events
+		EventTypes:  []events.EventType{events.DeploymentStopEvent},
+		StartTime:   queryStartBound,
+		EndTime:     queryEnd,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to query end events: %w", err)
+		return nil, nil, fmt.Errorf("failed to query deployment stop events: %w", err)
 	}
 
-	// Query ALL CreateAllocationEvents for resource fallback lookup
-	createEvents, err := s.QueryEvents(EventFilters{
+	return startEvents, stopEvents, nil
+}
+
+// QueryCreateAllocationEvents queries create allocation events (for resource fallback).
+// This is used when StartAllocationEvent doesn't contain resources.
+// No time restriction - need all for resource fallback lookup.
+func (s *Store) QueryCreateAllocationEvents(
+	contractDID string,
+) ([]*Usage, error) {
+	return s.QueryEvents(EventFilters{
 		ContractDID: contractDID,
 		EventTypes:  []events.EventType{events.CreateAllocationEvent},
-		// No time restriction - we need ALL create events for resource fallback lookup
+		// No time restriction - need all for resource fallback
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query create events: %w", err)
+}
+
+// CalculateEffectiveTime calculates effective start/end time for a window within query period.
+// This is a simple utility function, not an abstraction.
+// It handles the common pattern of:
+// - If window started before query period, use query start as effective start
+// - If window ended, use window end time (if after query start)
+// - If window still running, use query end as effective end
+// Returns effectiveStart, effectiveEnd, and valid flag (false if window should be excluded).
+func CalculateEffectiveTime(
+	windowStart, windowEnd time.Time,
+	isComplete bool,
+	queryStart, queryEnd time.Time,
+) (effectiveStart, effectiveEnd time.Time, valid bool) {
+	// If window started before query period, use query start
+	if windowStart.Before(queryStart) {
+		effectiveStart = queryStart
+	} else {
+		effectiveStart = windowStart
 	}
 
-	// Build resource map from CreateAllocationEvents (fallback if StartAllocationEvent missing resources)
-	allocationResources := make(map[string]types.Resources)
-	for _, evt := range createEvents {
-		var data events.CreateAllocation
-		if err := json.Unmarshal(evt.Data, &data); err != nil {
-			continue
+	// Determine effective end time
+	if isComplete {
+		// Window ended - check if it ended after query start
+		if windowEnd.After(queryStart) {
+			effectiveEnd = windowEnd
+		} else {
+			// Window ended before query period, exclude it
+			return time.Time{}, time.Time{}, false
 		}
-		allocationResources[data.AllocationID] = data.Resources
+	} else {
+		// Window still running - use query end
+		effectiveEnd = queryEnd
 	}
 
-	// Combine all events for processing
-	startEvents = append(startEvents, endEvents...)
-
-	// Track allocation windows by allocation ID
-	type allocationWindow struct {
-		allocationID   string
-		deploymentID   string
-		startTime      time.Time
-		endTime        time.Time
-		isComplete     bool   // true if we have both start and end events
-		allocationType string // "task" or "service" - determined by end event
-		resources      types.Resources
+	// Validate
+	if !effectiveStart.Before(effectiveEnd) {
+		return time.Time{}, time.Time{}, false
 	}
 
-	// Map: allocationID -> window
-	allocationWindows := make(map[string]*allocationWindow)
-
-	// Map: deploymentID -> []allocationID
-	deploymentAllocations := make(map[string]map[string]bool) // Use map to avoid duplicates
-
-	// First pass: Process StartAllocationEvent to create allocation windows
-	// StartAllocationEvent is used for BOTH task and service allocations
-	for _, evt := range startEvents {
-		if evt.EventType != events.StartAllocationEvent {
-			continue
-		}
-
-		eventTime := evt.Timestamp
-		if eventTime.IsZero() {
-			continue // Skip if no timestamp
-		}
-
-		var data events.StartAllocation
-		if err := json.Unmarshal(evt.Data, &data); err != nil {
-			continue
-		}
-
-		// Get resources from StartAllocationEvent (primary source)
-		resources := data.Resources
-
-		// Fallback: If resources not in StartAllocationEvent, use CreateAllocationEvent
-		if resources.CPU.Cores == 0 && resources.RAM.Size == 0 {
-			if createRes, ok := allocationResources[data.AllocationID]; ok {
-				resources = createRes
-			}
-		}
-
-		// Create window for this allocation (type will be determined by end event)
-		if allocationWindows[data.AllocationID] == nil {
-			allocationWindows[data.AllocationID] = &allocationWindow{
-				allocationID:   data.AllocationID,
-				deploymentID:   data.DeploymentID,
-				startTime:      eventTime,
-				allocationType: "", // Will be determined by end event
-				resources:      resources,
-			}
-			if deploymentAllocations[data.DeploymentID] == nil {
-				deploymentAllocations[data.DeploymentID] = make(map[string]bool)
-			}
-			deploymentAllocations[data.DeploymentID][data.AllocationID] = true
-		}
-	}
-
-	// Second pass: Process end events to determine allocation type and set end time
-	for _, evt := range startEvents {
-		eventTime := evt.Timestamp
-		if eventTime.IsZero() {
-			continue // Skip if no timestamp
-		}
-
-		switch evt.EventType {
-		case events.CompleteAllocationEvent:
-			// CompleteAllocationEvent indicates a task allocation
-			var data events.CompleteAllocation
-			if err := json.Unmarshal(evt.Data, &data); err != nil {
-				continue
-			}
-			window := allocationWindows[data.AllocationID]
-			if window == nil {
-				continue // No start event for this allocation, skip
-			}
-			window.allocationType = "task"
-			window.endTime = eventTime
-			window.isComplete = true
-
-		case events.StopAllocationEvent:
-			// StopAllocationEvent indicates a service allocation
-			var data events.StopAllocation
-			if err := json.Unmarshal(evt.Data, &data); err != nil {
-				continue
-			}
-			window := allocationWindows[data.AllocationID]
-			if window == nil {
-				continue // No start event for this allocation, skip
-			}
-			window.allocationType = "service"
-			window.endTime = eventTime
-			window.isComplete = true
-		}
-	}
-
-	// Build deployment resource utilization structures
-	result := make([]contracts.DeploymentResourceUtilization, 0)
-	for deploymentID, allocationIDMap := range deploymentAllocations {
-		deploymentUtil := contracts.DeploymentResourceUtilization{
-			DeploymentID: deploymentID,
-			Allocations:  make([]contracts.AllocationResourceUtilization, 0),
-		}
-
-		for allocID := range allocationIDMap {
-			window := allocationWindows[allocID]
-			if window == nil {
-				continue
-			}
-
-			// Determine if this allocation is relevant for this time period
-			// An allocation is relevant if:
-			// 1. It started after 'start' (within the period), OR
-			// 2. It started before 'start' but ended after 'start' (or is still running)
-
-			// Exclude allocations that started after 'end' (query period end)
-			if window.startTime.After(end) {
-				continue
-			}
-
-			// Calculate effective start time: if allocation started before 'start', use 'start' as effective start
-			effectiveStartTime := window.startTime
-			if window.startTime.Before(start) {
-				// Allocation started before the period - only count time from 'start' onwards
-				effectiveStartTime = start
-			}
-
-			// Determine end time for duration calculation
-			var effectiveEndTime time.Time
-			if window.isComplete {
-				// Allocation ended - check if it ended after 'start'
-				if window.endTime.After(start) {
-					effectiveEndTime = window.endTime
-				} else {
-					// Allocation ended before 'start', skip it (already counted in previous period)
-					continue
-				}
-			} else {
-				// Allocation is still running - use current time as effective end time
-				effectiveEndTime = time.Now()
-			}
-
-			// Skip if effective start is after or equal to effective end
-			if !effectiveStartTime.Before(effectiveEndTime) {
-				continue
-			}
-
-			// Calculate duration from effective start to effective end
-			duration := effectiveEndTime.Sub(effectiveStartTime)
-
-			allocUtil := contracts.AllocationResourceUtilization{
-				AllocationID: window.allocationID,
-				Resources:    window.resources,
-				Duration:     duration,
-				StartTime:    window.startTime, // Always use actual start time for tracking
-			}
-
-			if window.isComplete {
-				allocUtil.EndTime = window.endTime
-			}
-
-			deploymentUtil.Allocations = append(deploymentUtil.Allocations, allocUtil)
-			deploymentUtil.TotalUtilizationSec += duration.Seconds()
-		}
-
-		if len(deploymentUtil.Allocations) > 0 {
-			result = append(result, deploymentUtil)
-		}
-	}
-
-	return result, nil
+	return effectiveStart, effectiveEnd, true
 }
 
 // CountAllocationsByContract retrieves all events within a given time range
@@ -785,169 +457,6 @@ func (s *Store) CountDeploymentsByContract(contractDID string, start, end time.T
 	}
 
 	return len(deploymentSet), nil
-}
-
-// CalculateDeploymentTimeUtilizationByContract calculates deployment runtime per deployment for a contract.
-//
-// Deployment Event Handling Logic:
-// - Tracks deployment start/stop events (not allocation events)
-// - Calculates total runtime for each deployment within a time period
-// - Handles deployments that start before the period or continue after
-//
-// Edge Cases Handled:
-//   - Edge Case 2: Deployment starts before period, stops during period:
-//     Only count time from period start to deployment stop time
-//   - Edge Case 3: Deployment spans multiple billing periods:
-//     Only count runtime within the specified period boundaries
-//   - Edge Case 4: Use deployment stop time as period end:
-//     If deployment stopped during period, use stop time as effective end
-//
-// Process:
-//  1. Query ALL DeploymentStartEvent for the contract (no time restriction)
-//  2. Query ALL DeploymentStopEvent for the contract (no time restriction)
-//  3. Match start/stop events by deployment ID
-//  4. For each deployment active during the period:
-//     - If deployment started before period start: use period start as effective start
-//     - If deployment stopped during period: use deployment stop time as effective end
-//     - If deployment is still running: use period end as effective end
-//  5. Calculate runtime for each deployment within effective start/end boundaries
-//  6. Return deployment time utilization grouped by deployment ID
-func (s *Store) CalculateDeploymentTimeUtilizationByContract(contractDID string, start, end time.Time) ([]contracts.DeploymentTimeUtilization, error) {
-	// Query ALL deployment start events for this contract (no time restriction)
-	// This is necessary to find deployments that started before 'start' but are still running or stopped after 'start'
-	startEvents, err := s.QueryEvents(EventFilters{
-		ContractDID: contractDID,
-		EventTypes:  []events.EventType{events.DeploymentStartEvent},
-		// No time restriction - we need ALL start events to catch deployments that started before 'start'
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query deployment start events: %w", err)
-	}
-
-	// Query ALL deployment stop events for this contract (no time restriction)
-	// This is necessary to properly match start and stop events, even if stop happened before 'start'
-	stopEvents, err := s.QueryEvents(EventFilters{
-		ContractDID: contractDID,
-		EventTypes:  []events.EventType{events.DeploymentStopEvent},
-		// No time restriction - we need ALL stop events to properly match with start events
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query deployment stop events: %w", err)
-	}
-
-	// Track deployment windows by deployment ID
-	type deploymentWindow struct {
-		deploymentID string
-		startTime    time.Time
-		endTime      time.Time
-		isComplete   bool // true if we have both start and stop events
-	}
-
-	// Map: deploymentID -> window
-	deploymentWindows := make(map[string]*deploymentWindow)
-
-	// First pass: Process DeploymentStartEvent to create deployment windows
-	for _, evt := range startEvents {
-		if evt.EventType != events.DeploymentStartEvent {
-			continue
-		}
-
-		eventTime := evt.Timestamp
-		if eventTime.IsZero() {
-			continue // Skip if no timestamp
-		}
-
-		var data events.DeploymentStart
-		if err := json.Unmarshal(evt.Data, &data); err != nil {
-			continue
-		}
-
-		// Create window for this deployment
-		if deploymentWindows[data.DeploymentID] == nil {
-			deploymentWindows[data.DeploymentID] = &deploymentWindow{
-				deploymentID: data.DeploymentID,
-				startTime:    eventTime,
-				isComplete:   false,
-			}
-		}
-	}
-
-	// Second pass: Process DeploymentStopEvent to set end time
-	for _, evt := range stopEvents {
-		if evt.EventType != events.DeploymentStopEvent {
-			continue
-		}
-
-		eventTime := evt.Timestamp
-		if eventTime.IsZero() {
-			continue // Skip if no timestamp
-		}
-
-		var data events.DeploymentStop
-		if err := json.Unmarshal(evt.Data, &data); err != nil {
-			continue
-		}
-
-		window := deploymentWindows[data.DeploymentID]
-		if window == nil {
-			continue // No start event for this deployment, skip
-		}
-
-		window.endTime = eventTime
-		window.isComplete = true
-	}
-
-	// Build deployment time utilization structures
-	result := make([]contracts.DeploymentTimeUtilization, 0)
-	for _, window := range deploymentWindows {
-		// Edge Case 2: Calculate effective start time - if deployment started before period, use period start
-		effectiveStartTime := window.startTime
-		if window.startTime.Before(start) {
-			effectiveStartTime = start
-		}
-
-		// Edge Case 4: Determine effective end time - use deployment stop time if stopped during period
-		var effectiveEndTime time.Time
-		if window.isComplete {
-			// Deployment stopped - check if it stopped after period start
-			if window.endTime.After(start) {
-				// Edge Case 4: Use deployment stop time, but cap at period end
-				if window.endTime.Before(end) || window.endTime.Equal(end) {
-					effectiveEndTime = window.endTime
-				} else {
-					// Deployment stopped after period end, use period end
-					effectiveEndTime = end
-				}
-			} else {
-				// Deployment stopped before period start, skip it (already counted in previous period)
-				continue
-			}
-		} else {
-			// Deployment is still running - use period end as effective end time
-			effectiveEndTime = end
-		}
-
-		// Skip if effective start is after or equal to effective end
-		if !effectiveStartTime.Before(effectiveEndTime) {
-			continue
-		}
-
-		// Calculate duration from effective start to effective end
-		duration := effectiveEndTime.Sub(effectiveStartTime)
-
-		// For periodic model, we track deployment-level runtime, not allocation-level
-		// We'll create a DeploymentTimeUtilization with empty allocations array
-		// and set TotalUtilizationSec to the deployment runtime
-		deploymentUtil := contracts.DeploymentTimeUtilization{
-			DeploymentID:        window.deploymentID,
-			Allocations:         []contracts.AllocationTimeUtilization{}, // Empty - tracking at deployment level
-			TotalUtilizationSec: duration.Seconds(),
-		}
-
-		result = append(result, deploymentUtil)
-	}
-
-	return result, nil
 }
 
 // SaveLastProcessedAt stores the last processed timestamp (Unix seconds) for a specific contract.

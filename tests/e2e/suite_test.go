@@ -549,6 +549,11 @@ func (s *TestSuite) setupTestNetwork() {
 			}
 		}
 
+		if s.Name == "deployment_with_contracts_collect_after_pay_tests" && nodeIndex == 3 {
+			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
+			cfg.PaymentProvider.Mode = true
+		}
+
 		var err error
 		s.nodes[nodeIndex], err = newMockNode(s.T(), cfg, password, nodeRoot, nodeIndex)
 		s.Require().NoError(err)
