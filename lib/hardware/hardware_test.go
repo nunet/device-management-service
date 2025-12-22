@@ -11,6 +11,7 @@ package hardware
 import (
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,6 +52,9 @@ func TestGetUsage(t *testing.T) {
 	t.Parallel()
 	hwManager := NewHardwareManager()
 	assert.NotNil(t, hwManager, "Hardware manager should not be nil")
+
+	// wait a few seconds to get data on CPU usage
+	time.Sleep(3 * time.Second)
 
 	usage, err := hwManager.GetUsage()
 	require.NoError(t, err, "GetUsage should not return an error")
