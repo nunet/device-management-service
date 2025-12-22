@@ -187,6 +187,20 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		"orchestratorID", request.ID,
 	)
 
+	if n.dmsConfig.Job.RequireContractsForDeployment {
+		// contracts are global at ensemble level so they apply to all nodes
+		if len(request.Request) > 0 {
+			if len(request.Request[0].V1.Contracts) == 0 {
+				log.Debugw(
+					"bid_request_missing_contracts_for_deployment",
+					"labels", string(observability.LabelDeployment),
+					"ensemble_id", request.ID,
+				)
+				return
+			}
+		}
+	}
+
 	// contracts are global at ensemble level so they apply
 	// to all nodes
 	if len(request.Request) > 0 {

@@ -80,7 +80,8 @@ type P2P struct {
 }
 
 type Job struct {
-	AllowPrivilegedDocker bool `mapstructure:"allow_privileged_docker" json:"allow_privileged_docker"`
+	AllowPrivilegedDocker         bool `mapstructure:"allow_privileged_docker" json:"allow_privileged_docker"`
+	RequireContractsForDeployment bool `mapstructure:"require_contracts_for_deployment" json:"require_contracts_for_deployment"`
 }
 
 // Observability
