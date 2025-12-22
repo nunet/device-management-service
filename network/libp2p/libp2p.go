@@ -231,8 +231,6 @@ func (l *Libp2p) Init(cfg *config.Config) error {
 		return fmt.Errorf("failed to derive a valid DID from public key")
 	}
 
-	log.Infof("Derived DID: %s", didInstance.URI)
-
 	// Initialize the observability package with the host and DID
 	if err := observability.Initialize(l.Host, didInstance, cfg); err != nil {
 		return fmt.Errorf("failed to initialize observability: %w", err)
@@ -256,14 +254,12 @@ func (l *Libp2p) Start() error {
 		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success", "labels", string(observability.LabelNode))
 
 	err = l.bootstrapDHT(l.ctx)
 	if err != nil {
 		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success", "labels", string(observability.LabelNode))
 
 	// Start random walk
 	l.startRandomWalk(l.ctx)
@@ -279,16 +275,16 @@ func (l *Libp2p) Start() error {
 		// advertise randevouz discovery
 		err = l.advertiseForRendezvousDiscovery(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_advertise_rendezvous_failure", "labels", string(observability.LabelNode), "error", err)
+			log.Warnw("libp2p_advertise_rendezvous_failure", "labels", string(observability.LabelNode), "error", err)
 		} else {
-			log.Infow("libp2p_advertise_rendezvous_success", "labels", string(observability.LabelNode))
+			log.Debugw("libp2p_advertise_rendezvous_success", "labels", string(observability.LabelNode))
 		}
 
 		err = l.discoverDialPeers(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_peer_discover_failure", "labels", string(observability.LabelNode), "error", err)
+			log.Warnw("libp2p_peer_discover_failure", "labels", string(observability.LabelNode), "error", err)
 		} else {
-			log.Infow("libp2p_peer_discover_success", "labels", string(observability.LabelNode), "foundPeers", len(l.discoveredPeers))
+			log.Debugw("libp2p_peer_discover_success", "labels", string(observability.LabelNode), "foundPeers", len(l.discoveredPeers))
 		}
 	}()
 
@@ -742,20 +738,18 @@ func (l *Libp2p) watchForObservedAddr() {
 		count := addrCount[ip.String()]
 		addrMux.Unlock()
 
-		log.Debugf("got public ip: %s (seen %d times)", ip.String(), count)
+		log.Infof("got public ip: %s (seen %d times)", ip.String(), count)
 
 		if count >= 3 {
 			l.mx.Lock()
 			l.observedAddr = event.ObservedAddr
 			l.mx.Unlock()
-			log.Debugf("confirmed public address after seeing it %d times: %s", count, addrStr)
 
 			// send the observed address on the channel
 			select {
 			case l.observedAddrCh <- event.ObservedAddr:
-				log.Debugf("sent observed address signal: %s", addrStr)
 			default:
-				log.Debugf("channel full, couldn't send observed address signal: %s", addrStr)
+				log.Warnf("channel full, couldn't send observed address signal: %s", addrStr)
 			}
 			return
 		}
@@ -1246,14 +1240,15 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 
 func (l *Libp2p) HostPublicIP() (net.IP, error) {
 	if l.config.Env == "dev" || l.config.Env == "test" {
-		log.Infof("host public ip: using listening IP since in dev or test environment")
+		log.Infow("host public ip: using listening IP since in dev or test environment")
 		return l.listeningIP()
 	}
-	log.Infof("waiting for observed public IP")
+	log.Infow("checking observed public IP...")
 	addr, err := l.waitForObservedAddr(l.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve observed addr: %w", err)
 	}
+	log.Infow("obtained observed public IP", "addr", addr.String())
 	return manet.ToIP(addr)
 }
 

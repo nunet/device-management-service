@@ -42,7 +42,7 @@ func NewGenericRepository[T repositories.ModelType](
 	endSpan := observability.StartSpan("clover_db_repo_init")
 	defer endSpan()
 	collection := strcase.ToSnake(reflect.TypeOf(*new(T)).Name())
-	logger.Infow("clover_db_repo_init_success", "collection", collection)
+	logger.Debugw("clover_db_repo_init_success", "collection", collection)
 	return &GenericRepositoryClover[T]{db: db, collection: collection}
 }
 

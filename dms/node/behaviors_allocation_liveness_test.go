@@ -259,6 +259,8 @@ func (m *mockExecutor) Stats(_ context.Context, _ string) (*types.ExecutorStats,
 	return nil, nil
 }
 
+// XXX these tests below aren't testing anything. - revise
+
 // TestServiceAllocationSendsLivenessHeartbeats tests that service allocations
 // send periodic liveness heartbeats to the orchestrator
 func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
@@ -285,14 +287,14 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 
 	// Track received heartbeats
 	var heartbeatsMu sync.Mutex
-	receivedHeartbeats := []behaviors.AllocationLivenessNotification{}
+	receivedHeartbeats := []jobtypes.AllocationLivenessNotification{}
 
 	// Add liveness behavior to orchestrator
 	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
-			var notification behaviors.AllocationLivenessNotification
+			var notification jobtypes.AllocationLivenessNotification
 			err := json.Unmarshal(msg.Message, &notification)
 			if err != nil {
 				t.Logf("Failed to unmarshal liveness: %v", err)
@@ -352,7 +354,6 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 		mockExec, // Use mock executor
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
-		true, // Enable push liveness
 		"",
 	)
 	require.NoError(t, err)
@@ -377,7 +378,7 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 	// Verify: Check heartbeats
 	heartbeatsMu.Lock()
 	heartbeatCount := len(receivedHeartbeats)
-	heartbeats := make([]behaviors.AllocationLivenessNotification, len(receivedHeartbeats))
+	heartbeats := make([]jobtypes.AllocationLivenessNotification, len(receivedHeartbeats))
 	copy(heartbeats, receivedHeartbeats)
 	heartbeatsMu.Unlock()
 
@@ -391,7 +392,7 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 		assert.Equal(t, "running", firstHeartbeat.Status)
 		assert.Greater(t, firstHeartbeat.SequenceNumber, int64(0))
 		assert.True(t, firstHeartbeat.Health.Healthy)
-		assert.Equal(t, behaviors.HealthCheckTypeNone, firstHeartbeat.Health.CheckType, "No healthcheck configured")
+		assert.Equal(t, jobtypes.HealthCheckTypeNone, firstHeartbeat.Health.CheckType, "No healthcheck configured")
 		assert.Equal(t, "0.1", firstHeartbeat.Version)
 
 		// If we received multiple heartbeats, verify sequence increment
@@ -424,13 +425,13 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 		node.actor.Handle().DID, behaviors.NotifyAllocationStatusBehavior)
 
 	// Track status updates
-	statusUpdates := make(chan behaviors.AllocationStatusUpdate, 10)
+	statusUpdates := make(chan jobtypes.AllocationStatusUpdate, 10)
 
 	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationStatusBehavior,
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
-			var update behaviors.AllocationStatusUpdate
+			var update jobtypes.AllocationStatusUpdate
 			err := json.Unmarshal(msg.Message, &update)
 			if err != nil {
 				return
@@ -483,7 +484,6 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 		mockExec, // Use mock executor
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
-		true, // Enable push liveness
 		"",
 	)
 	require.NoError(t, err)
@@ -513,6 +513,7 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 }
 
 // TestAllocationLivenessDisabled tests that liveness reporting can be disabled
+// XXX test still passing even with the code changes that removed the flag and always being enabled
 func TestAllocationLivenessDisabled(t *testing.T) {
 	t.Parallel()
 
@@ -565,7 +566,6 @@ func TestAllocationLivenessDisabled(t *testing.T) {
 		mockExec, // Use mock executor
 		func() error { return nil },
 		nil,
-		false, // DISABLE push liveness
 		"",
 	)
 	require.NoError(t, err)
@@ -639,7 +639,6 @@ func TestTaskAllocationDoesNotSendPeriodicHeartbeats(t *testing.T) {
 		mockExec, // Use mock executor
 		func() error { return nil },
 		nil,
-		true, // Enable push liveness
 		"",
 	)
 	require.NoError(t, err)
@@ -680,13 +679,13 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 
 	// Track heartbeats and their health status
 	var heartbeatsMu sync.Mutex
-	healthStatuses := []behaviors.HealthStatus{}
+	healthStatuses := []jobtypes.HealthStatus{}
 
 	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
-			var notification behaviors.AllocationLivenessNotification
+			var notification jobtypes.AllocationLivenessNotification
 			if err := json.Unmarshal(msg.Message, &notification); err != nil {
 				return
 			}
@@ -739,7 +738,6 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 		mockExec,
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
-		true,
 		"",
 	)
 	require.NoError(t, err)
@@ -785,7 +783,7 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 		heartbeatsMu.Unlock()
 
 		assert.True(t, firstHealth.Healthy, "Healthcheck passed, so should be healthy")
-		assert.Equal(t, behaviors.HealthCheckTypeSelf, firstHealth.CheckType, "Should use self healthcheck")
+		assert.Equal(t, jobtypes.HealthCheckTypeSelf, firstHealth.CheckType, "Should use self healthcheck")
 		assert.Contains(t, firstHealth.Message, "passed")
 	}
 }
@@ -812,13 +810,13 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 
 	// Track health statuses
 	var heartbeatsMu sync.Mutex
-	healthStatuses := []behaviors.HealthStatus{}
+	healthStatuses := []jobtypes.HealthStatus{}
 
 	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
-			var notification behaviors.AllocationLivenessNotification
+			var notification jobtypes.AllocationLivenessNotification
 			if err := json.Unmarshal(msg.Message, &notification); err != nil {
 				return
 			}
@@ -868,7 +866,6 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 		mockExec,
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil,
-		true,
 		"",
 	)
 	require.NoError(t, err)
@@ -903,7 +900,7 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 		heartbeatsMu.Unlock()
 
 		assert.False(t, firstHealth.Healthy, "Healthcheck failed, so should be unhealthy")
-		assert.Equal(t, behaviors.HealthCheckTypeSelf, firstHealth.CheckType)
+		assert.Equal(t, jobtypes.HealthCheckTypeSelf, firstHealth.CheckType)
 		assert.Contains(t, firstHealth.Message, "failed")
 	}
 }

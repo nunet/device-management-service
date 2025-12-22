@@ -158,7 +158,7 @@ func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, candidates map[
 			return false
 		}
 
-		log.Debugf("added bid to bitMap from peer %s for %s", peerID, nodeID)
+		log.Infof("added bid to bidMap from peer %s for %s", peerID, nodeID)
 		bidMap[nodeID] = append(bidMap[nodeID], bid)
 		peerExclusion[peerID] = struct{}{}
 		return true
@@ -447,16 +447,20 @@ func (b *BidCoordinator) collectBids(
 				"peerID", bid.Peer(),
 				"nodeID", bid.NodeID())
 			if err := bid.Validate(); err != nil {
-				log.Debugw("invalid bid",
+				log.Warnw("invalid bid",
+					"ensembleID", bid.EnsembleID(),
+					"peerID", bid.Peer(),
+					"nodeID", bid.NodeID(),
 					"labels", []string{string(observability.LabelDeployment)},
 					"error", err)
 				continue
 			}
 			if bid.EnsembleID() != b.eid {
-				log.Debugw("bid for unexpected ensemble id",
+				log.Warnw("bid for unexpected ensemble id",
 					"labels", []string{string(observability.LabelDeployment)},
 					"expectedID", b.eid,
-					"gotID", bid.EnsembleID())
+					"gotID", bid.EnsembleID(),
+					"peerID", bid.Peer())
 				continue
 			}
 			if addBid(bid) {
@@ -917,10 +921,6 @@ func (b *BidCoordinator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfi
 	}
 
 	nodes := config.Nodes()
-	log.Infow("generating bid request",
-		"labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", b.eid,
-		"nodes", nodes)
 
 	for nodeID, nodeConfig := range nodes {
 		bidRequest := jtypes.BidRequest{

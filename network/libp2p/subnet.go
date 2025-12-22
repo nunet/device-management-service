@@ -648,7 +648,7 @@ func (l *Libp2p) handleIPProxyConn(
 }
 
 func (l *Libp2p) stopIPProxy() {
-	log.Infof("stopping ip proxy")
+	log.Infow("stopping ip proxy")
 
 	l.ipproxyCtxCancel()
 	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -871,19 +871,18 @@ func (s *subnet) readPackets(ctx context.Context, iface sys.NetInterface) {
 				}
 
 				if plen == 0 {
-					// TODO Warnw
-					log.Debugf("(error): received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
+					log.Warnw("(error): received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
 					continue
 				}
 
 				if plen > MaxPacketSize {
-					log.Warnf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
+					log.Debugf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
 					plen = MaxPacketSize
 				}
 
 				srcPort, destPort, srcIP, destIP, err := s.parseIPPacket(packet)
 				if err != nil {
-					log.Warnf("(error): failed to parse IP packet: %s", err)
+					log.Debugf("(error): failed to parse IP packet: %s", err)
 					continue
 				}
 

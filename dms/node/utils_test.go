@@ -98,7 +98,7 @@ func newLibp2pNetwork(t *testing.T, mockFs afero.Fs, bootstrap []multiaddr.Multi
 
 	// config
 	dcfg := config.DefaultConfig
-	dcfg.Observability.ElasticsearchEnabled = false
+	dcfg.Observability.Elastic.Enabled = false
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
 	require.NoError(t, err)
@@ -223,7 +223,6 @@ func newMockAllocator(t *testing.T, substrate *network.Substrate) (*allocator, n
 		mockFs,
 		workDir,
 		hostID,
-		true, // enable push liveness for tests
 	)
 
 	return alloc, p2pNet, priv
@@ -241,7 +240,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 
 	// config
 	dcfg := config.DefaultConfig
-	dcfg.Observability.ElasticsearchEnabled = false
+	dcfg.Observability.Elastic.Enabled = false
 
 	// mock database
 	db, err := cloverDB.NewMemDB([]string{
@@ -318,7 +317,6 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		mockFs,
 		dcfg.WorkDir,
 		vNet.GetHostID().String(),
-		true, // enable push liveness for tests
 	)
 	nActor, nActorCap, nRootTrust, nRootDID := newActor(t, priv, vNet)
 
@@ -415,7 +413,7 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 
 	// config
 	dcfg := config.DefaultConfig
-	dcfg.Observability.ElasticsearchEnabled = false
+	dcfg.Observability.Elastic.Enabled = false
 
 	// mock database
 	db, err := cloverDB.NewMemDB([]string{
@@ -493,7 +491,6 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 		mockFs,
 		dcfg.WorkDir,
 		vNet.GetHostID().String(),
-		true, // enable push liveness for tests
 	)
 	nActor, nActorCap, nRootTrust, nRootDID := newActor(t, priv, vNet)
 

@@ -265,9 +265,6 @@ type allocator struct {
 	cancel context.CancelFunc
 
 	volumeTracker *storage.VolumeTracker
-
-	// Push-based liveness configuration
-	pushLivenessEnabled bool
 }
 
 var _ Allocator = (*allocator)(nil)
@@ -282,24 +279,22 @@ func newAllocator(
 	fs afero.Afero,
 	workDir,
 	hostID string,
-	pushLivenessEnabled bool,
 ) *allocator {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &allocator{
-		ports:               portAllocator,
-		resources:           resourceManager,
-		hardware:            hardwareManager,
-		network:             network,
-		allocations:         make(map[string]*jobs.Allocation),
-		monitoredEnsembles:  make(map[string]struct{}),
-		fs:                  fs,
-		workDir:             workDir,
-		hostID:              hostID,
-		commits:             make(map[string]int64),
-		ctx:                 ctx,
-		cancel:              cancel,
-		volumeTracker:       vt,
-		pushLivenessEnabled: pushLivenessEnabled,
+		ports:              portAllocator,
+		resources:          resourceManager,
+		hardware:           hardwareManager,
+		network:            network,
+		allocations:        make(map[string]*jobs.Allocation),
+		monitoredEnsembles: make(map[string]struct{}),
+		fs:                 fs,
+		workDir:            workDir,
+		hostID:             hostID,
+		commits:            make(map[string]int64),
+		ctx:                ctx,
+		cancel:             cancel,
+		volumeTracker:      vt,
 	}
 }
 
@@ -355,7 +350,7 @@ func (a *allocator) monitorEnsembleAllocations() {
 				running := make(map[string]struct{})
 				for id, alloc := range a.allocations {
 					ensembleID := types.EnsembleIDFromAllocationID(id)
-					status := alloc.Status(a.ctx).Status
+					status := alloc.Status().Status
 					if slices.Contains(doneStatuses, status) {
 						doneAllocs[ensembleID] = append(doneAllocs[ensembleID], id)
 						continue
@@ -568,7 +563,6 @@ func (a *allocator) Allocate(
 		executor,
 		func() error { return a.Release(ctx, allocationID) },
 		contractEventHandler,
-		a.pushLivenessEnabled,
 		deploymentID,
 	)
 	if err != nil {

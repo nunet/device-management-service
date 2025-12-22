@@ -185,6 +185,10 @@ func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.Deploy
 	return make(chan jtypes.DeploymentStatus)
 }
 
+func (m *MockOrchestrator) AllocationInfo() map[string]jtypes.AllocationInfo {
+	return make(map[string]jtypes.AllocationInfo)
+}
+
 func (m *MockOrchestrator) Done() <-chan struct{} {
 	return nil
 }
@@ -228,7 +232,7 @@ func (m *MockOrchestratorRegistry) NewOrchestrator(
 }
 
 func (m *MockOrchestratorRegistry) RestoreDeployment(
-	_ context.Context,
+	_ context.Context, _ afero.Afero,
 	_ actor.Actor, _ string, _ jtypes.EnsembleConfig,
 	_ jtypes.EnsembleManifest, _ jtypes.DeploymentStatus,
 	_ jtypes.DeploymentSnapshot,

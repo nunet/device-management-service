@@ -273,7 +273,7 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, fmt.Errorf("create node actor: %w", err)
 	}
 
-	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID, cfg.General.PushLivenessEnabled)
+	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID)
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
 		allocator:              allocator,
@@ -397,7 +397,7 @@ func (n *Node) restoreDeployments() error {
 	for _, d := range allDeployments {
 		// Only restore deployments in restorable states
 		if !isRestorableStatus(d.Status) {
-			log.Debugf("deployment %s has non-restorable status %d; skipping", d.OrchestratorID, d.Status)
+			log.Infof("deployment %s has non-restorable status %s skipping", d.OrchestratorID, d.Status.String())
 			continue
 		}
 
@@ -441,6 +441,7 @@ func (n *Node) restoreDeployments() error {
 			orchestratorRegistry.
 			RestoreDeployment(
 				n.ctx,
+				n.fs,
 				childActor,
 				d.OrchestratorID,
 				d.Cfg,

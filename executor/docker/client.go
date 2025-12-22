@@ -168,14 +168,11 @@ func (c *Client) CreateContainer(
 
 // InspectContainer returns detailed information about a Docker container.
 func (c *Client) InspectContainer(ctx context.Context, id string) (dockertypes.ContainerJSON, error) {
-	log.Infow("docker_inspect_container_started", "containerID", id)
 	return c.client.ContainerInspect(ctx, id)
 }
 
 // FollowLogs tails the logs of a specified container, returning separate readers for stdout and stderr.
 func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.Reader, err error) {
-	log.Infow("docker_follow_logs_started", "containerID", id)
-
 	cont, err := c.InspectContainer(ctx, id)
 	if err != nil {
 		log.Errorw("docker_follow_logs_failure", "error", err)
@@ -220,7 +217,7 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 
 // StartContainer starts a specified Docker container.
 func (c *Client) StartContainer(ctx context.Context, containerID string) error {
-	log.Infow("docker_start_container_started",
+	log.Infow("docker_start_container",
 		"labels", string(observability.LabelDeployment),
 		"containerID", containerID)
 	return c.client.ContainerStart(ctx, containerID, container.StartOptions{})
@@ -231,7 +228,7 @@ func (c *Client) WaitContainer(
 	ctx context.Context,
 	containerID string,
 ) (<-chan container.WaitResponse, <-chan error) {
-	log.Infow("docker_wait_container_started", "containerID", containerID)
+	log.Infow("docker_wait_container", "containerID", containerID)
 	return c.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 }
 
@@ -259,9 +256,6 @@ func (c *Client) StopContainer(
 
 // RemoveContainer removes a Docker container, optionally forcing removal and removing associated volumes.
 func (c *Client) RemoveContainer(ctx context.Context, containerID string) error {
-	log.Infow("docker_remove_container_started",
-		"labels", string(observability.LabelDeployment),
-		"containerID", containerID)
 	return c.client.ContainerRemove(
 		ctx,
 		containerID,
@@ -271,9 +265,6 @@ func (c *Client) RemoveContainer(ctx context.Context, containerID string) error 
 
 // removeContainers removes all containers matching the specified filters.
 func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) error {
-	log.Infow("docker_remove_containers_started",
-		"labels", string(observability.LabelDeployment))
-
 	containers, err := c.client.ContainerList(
 		ctx,
 		container.ListOptions{All: true, Filters: filterz},
@@ -317,9 +308,6 @@ func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) err
 
 // removeNetworks removes all networks matching the specified filters.
 func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error {
-	log.Infow("docker_remove_networks_started",
-		"labels", string(observability.LabelDeployment))
-
 	networks, err := c.client.NetworkList(ctx, network.ListOptions{Filters: filterz})
 	if err != nil {
 		log.Errorw("docker_remove_networks_failure",
@@ -361,10 +349,6 @@ func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error
 
 // RemoveObjectsWithLabel removes all Docker containers and networks with a specific label.
 func (c *Client) RemoveObjectsWithLabel(ctx context.Context, label string, value string) error {
-	log.Infow("docker_remove_objects_with_label_started",
-		"labels", string(observability.LabelDeployment),
-		"label", label, "value", value)
-
 	filterz := filters.NewArgs(
 		filters.Arg("label", fmt.Sprintf("%s=%s", label, value)),
 	)
@@ -394,8 +378,6 @@ func (c *Client) GetOutputStream(
 	since string,
 	follow bool,
 ) (io.ReadCloser, error) {
-	log.Infow("docker_get_output_stream_started", "containerID", containerID)
-
 	logOptions := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
@@ -415,8 +397,6 @@ func (c *Client) GetOutputStream(
 
 // FindContainer searches for a container by label and value, returning its ID if found.
 func (c *Client) FindContainer(ctx context.Context, label string, value string) (string, error) {
-	log.Infow("docker_find_container_started", "label", label, "value", value)
-
 	containers, err := c.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		log.Errorw("docker_find_container_failure", "error", err)
@@ -430,8 +410,8 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 		}
 	}
 
-	err = fmt.Errorf("unable to find container for %s=%s", label, value)
-	log.Warnw("docker_find_container_failure", "error", err)
+	err = fmt.Errorf("container (%s=%s) not found", label, value)
+	log.Warnw("docker_container_not_found", "error", err)
 	return "", err
 }
 
@@ -617,12 +597,15 @@ func (c *Client) ContainerStats(ctx context.Context, containerID string) (types.
 
 	// Calculate CPU usage percentage
 	var cpuPercent float64
-	if dockerStats.CPUStats.SystemUsage > 0 && dockerStats.PreCPUStats.SystemUsage > 0 {
-		cpuDelta := float64(dockerStats.CPUStats.CPUUsage.TotalUsage - dockerStats.PreCPUStats.CPUUsage.TotalUsage)
-		systemDelta := float64(dockerStats.CPUStats.SystemUsage - dockerStats.PreCPUStats.SystemUsage)
-		if systemDelta > 0 {
-			cpuPercent = (cpuDelta / systemDelta) * float64(len(dockerStats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
-		}
+	cpuDelta := float64(dockerStats.CPUStats.CPUUsage.TotalUsage) - float64(dockerStats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(dockerStats.CPUStats.SystemUsage) - float64(dockerStats.PreCPUStats.SystemUsage)
+	onlineCPUs := float64(dockerStats.CPUStats.OnlineCPUs)
+
+	if onlineCPUs == 0.0 {
+		onlineCPUs = float64(len(dockerStats.CPUStats.CPUUsage.PercpuUsage))
+	}
+	if systemDelta > 0.0 && cpuDelta > 0.0 {
+		cpuPercent = (cpuDelta / systemDelta) * onlineCPUs * 100.0
 	}
 
 	// Calculate memory usage percentage

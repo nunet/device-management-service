@@ -191,6 +191,7 @@ func TestRegistry(t *testing.T) {
 		// Test restoring deployment
 		o, err := registry.RestoreDeployment(
 			ctx,
+			afero.Afero{Fs: fs},
 			orch.actor,
 			ensembleID,
 			cfg,
@@ -208,6 +209,7 @@ func TestRegistry(t *testing.T) {
 		// Test restoring deployment with existing ID
 		_, err = registry.RestoreDeployment(
 			ctx,
+			afero.Afero{Fs: fs},
 			orch.actor,
 			ensembleID,
 			cfg,

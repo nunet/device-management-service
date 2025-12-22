@@ -69,9 +69,9 @@ func TestHandleLoggerConfig(t *testing.T) {
 
 		// confirm config
 		observabilityConfig := observability.ObservabilityCfg
-		assert.Equal(t, flushInterval, observabilityConfig.FlushInterval)
-		assert.Equal(t, elasticURL, observabilityConfig.ElasticsearchURL)
-		assert.Equal(t, logLevel, observabilityConfig.LogLevel)
-		assert.Equal(t, apiKey, observabilityConfig.ElasticsearchAPIKey)
+		assert.Equal(t, flushInterval, observabilityConfig.Elastic.FlushInterval)
+		assert.Equal(t, elasticURL, observabilityConfig.Elastic.URL)
+		assert.Equal(t, logLevel, observabilityConfig.Logging.Level)
+		assert.Equal(t, apiKey, observabilityConfig.Elastic.APIKey)
 	})
 }

@@ -153,7 +153,7 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugw(
+	log.Infow(
 		"got a bid request from actor",
 		"labels", string(observability.LabelDeployment),
 		"from", msg.From.Address,
@@ -215,9 +215,12 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 				return
 			}
 
-			log.Debugf("contract_verification_success: %v", request.Request[0].V1.Contracts)
+			log.Infow("contract_verification_success",
+				"contracts", request.Request[0].V1.Contracts,
+				"labels", string(observability.LabelDeployment),
+			)
 		} else {
-			log.Debugf(
+			log.Debugw(
 				"contracts_empty",
 				"labels", string(observability.LabelDeployment),
 			)

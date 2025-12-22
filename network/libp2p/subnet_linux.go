@@ -56,11 +56,6 @@ func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destP
 		}
 	}
 
-	err = sys.AddMasqueradeRule()
-	if err != nil {
-		return err
-	}
-
 	// Store mapping (with lock)
 	s.portMappingMx.Lock()
 	s.portMapping[sourcePort] = &struct {

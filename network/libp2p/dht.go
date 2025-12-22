@@ -91,7 +91,7 @@ func (l *Libp2p) bootstrapDHT(ctx context.Context) error {
 // startRandomWalk starts a background process that crawls the dht by resolving random keys.
 func (l *Libp2p) startRandomWalk(ctx context.Context) {
 	go func() {
-		log.Debug("starting bootstrap process")
+		log.Debug("starting random walk for dht peer discovery")
 		// A simple mechanism to improve our botostrap and peer discovery:
 		// 1. initiate a background, never ending, random walk which tries to resolve
 		// random keys in the dht and by extension discovers other peers.
@@ -104,7 +104,7 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 		sender := newDHTMessageSender(l.Host, dhtProto)
 		messenger, err := dht_pb.NewProtocolMessenger(sender)
 		if err != nil {
-			log.Errorf("bootstrap: creating protocol messenger: %s", err)
+			log.Errorf("random walk: creating protocol messenger: %s", err)
 			return
 		}
 
@@ -113,20 +113,20 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Debugf("bootstrap: context done, stopping bootstrap")
+				log.Debugf("random walk: context done, stopping random walk")
 				return
 			default:
 				randomPeerID, err := l.DHT.RoutingTable().GenRandPeerID(0)
 				if err != nil {
-					log.Debugf("bootstrap: failed to generate random peer ID: %s", err)
+					log.Debugf("random walk: failed to generate random peer ID: %s", err)
 					continue
 				}
 				key = randomPeerID.String()
 
-				log.Debugf("bootstrap: crawling from %s", key)
+				log.Debugf("random walk: crawling from %s", key)
 				peers, err := l.DHT.GetClosestPeers(ctx, key)
 				if err != nil {
-					log.Debugf("bootstrap: failed to get closest peers with key=%s - error: %s", randomPeerID.String(), err)
+					log.Debugf("random walk: failed to get closest peers with key=%s - error: %s", randomPeerID.String(), err)
 					time.Sleep(delayOnError)
 					delayOnError = time.Duration(float64(delayOnError) * 1.25)
 					if delayOnError > 5*time.Minute {
@@ -142,14 +142,14 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 
 				peerID := peers[rand.Intn(len(peers))] //nolint:gosec
 				if peerID == l.Host.ID() {
-					log.Debugf("bootstrap: skipping self")
+					log.Debugf("random walk: skipping self")
 					continue
 				}
-				log.Debugf("bootstrap: starting random walk from %s", peerID)
+				log.Debugf("random walk: starting random walk from %s", peerID)
 
 				peerAddrInfo, err := l.resolvePeerAddress(ctx, peerID)
 				if err != nil {
-					log.Debugf("bootstrap: failed to resolve address for peer %s - %v", peerID, err)
+					log.Debugf("random walk: failed to resolve address for peer %s - %v", peerID, err)
 					continue
 				}
 
@@ -157,16 +157,16 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 				selected := &peerAddrInfo
 
 			crawl:
-				log.Debugf("bootstrap: crawling %s", selected.ID)
+				log.Debugf("random walk: crawling %s", selected.ID)
 				if err := l.Host.Connect(ctx, *selected); err != nil {
-					log.Debugf("bootstrap: failed to connect to peer %s: %s", peerID, err)
+					log.Debugf("random walk: failed to connect to peer %s: %s", peerID, err)
 					depth++
 					continue
 				}
 
 				peerInfos, err = messenger.GetClosestPeers(ctx, selected.ID, randomPeerID)
 				if err != nil {
-					log.Debugf("bootstrap: failed to get closest peers from %s: %s", selected.ID, err)
+					log.Debugf("random walk: failed to get closest peers from %s: %s", selected.ID, err)
 					depth++
 					continue
 				}
@@ -182,7 +182,7 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 
 				selected = peerInfos[rand.Intn(len(peerInfos))] //nolint:gosec
 				if selected.ID == l.Host.ID() {
-					log.Debugf("bootstrap: skipping self")
+					log.Debugf("random walk: skipping self")
 					depth++
 					continue
 				}
@@ -190,7 +190,7 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 				if depth < 20 {
 					randomPeerID, err = l.DHT.RoutingTable().GenRandPeerID(0)
 					if err != nil {
-						log.Debugf("bootstrap: failed to generate random peer ID: %s", err)
+						log.Debugf("random walk: failed to generate random peer ID: %s", err)
 						goto cooldown
 					}
 
@@ -204,7 +204,7 @@ func (l *Libp2p) startRandomWalk(ctx context.Context) {
 				minDelay := interval / 2
 				maxDelay := (3 * interval) / 2
 				delay := minDelay + time.Duration(rand.Int63n(int64(maxDelay-minDelay))) //nolint:gosec
-				log.Debugf("bootstrap: cooling down for %s", delay)
+				log.Debugf("random walk: cooling down for %s", delay)
 				select {
 				case <-time.After(delay):
 				case <-ctx.Done():

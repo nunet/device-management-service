@@ -44,19 +44,19 @@ var _ types.GPUManager = &gpuManager{}
 func NewGPUManager() types.GPUManager {
 	nvidiaConnector, err := newNVIDIAGPUConnector()
 	if err != nil {
-		log.Warnw("create NVIDIA GPU connector",
+		log.Debugw("could not create NVIDIA GPU connector",
 			"labels", string(observability.LabelNode),
 			"error", err)
 	}
 	amdConnector, err := newAMDGPUConnector()
 	if err != nil {
-		log.Warnw("create AMD GPU connector",
+		log.Debugw("could not create AMD GPU connector",
 			"labels", string(observability.LabelNode),
 			"error", err)
 	}
 	_, err = newIntelGPUConnector()
 	if err != nil {
-		log.Warnw("create Intel GPU connector",
+		log.Debugw("could not create Intel GPU connector",
 			"labels", string(observability.LabelNode),
 			"error", err)
 	}

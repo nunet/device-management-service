@@ -34,9 +34,9 @@ func (l *Libp2p) discoverDialPeers(ctx context.Context) error {
 
 	if len(foundPeers) > 0 {
 		l.discoveredPeers = foundPeers
-		log.Infow("libp2p_peer_discover_success", "foundPeers", len(foundPeers))
+		log.Debugw("libp2p_peer_discover_success", "foundPeers", len(foundPeers))
 	} else {
-		log.Debug("No peers found during discovery")
+		log.Warnw("No peers found during discovery")
 	}
 
 	// filter out peers with no listening addresses and self host
@@ -70,7 +70,7 @@ func (l *Libp2p) findPeersFromRendezvousDiscovery(ctx context.Context) ([]peer.A
 		return nil, fmt.Errorf("failed to discover peers: %w", err)
 	}
 
-	log.Infow("libp2p_find_peers_success", "peersCount", len(peers))
+	log.Debugw("libp2p_peers_from_rendezvous", "peersCount", len(peers))
 	return peers, nil
 }
 

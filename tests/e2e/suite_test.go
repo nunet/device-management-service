@@ -720,7 +720,7 @@ func (s *TestSuite) SetupSuite() {
 
 	// Initialize the APM tracer
 	cfg := createConfig("/tmp/fake", 0, []string{}, []string{})
-	if !cfg.Observability.ElasticsearchEnabled {
+	if !cfg.Observability.Elastic.Enabled {
 		return
 	}
 	s.T().Logf("initializing APM tracer")

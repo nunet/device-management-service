@@ -326,9 +326,10 @@ type DeploymentStatusRequest struct {
 }
 
 type DeploymentStatusResponse struct {
-	Status          string                          `json:"status"`
-	Error           string                          `json:"error"`
-	AllocationUsage map[string]*types.ExecutorStats `json:"allocation_usage,omitempty"`
+	Status          string                             `json:"status"`
+	Error           string                             `json:"error"`
+	AllocationInfo  map[string]jobtypes.AllocationInfo `json:"allocation_info,omitempty"`
+	AllocationUsage map[string]*types.ExecutorStats    `json:"allocation_usage,omitempty"`
 }
 
 func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
@@ -362,43 +363,46 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 
 	resp.Status = deployment.Status.String()
 
-	if request.IncludeUsage {
+	if deployment.Status == jobtypes.DeploymentStatusRunning {
 		orch, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
 		if err != nil {
 			handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
 			return
 		}
+		resp.AllocationInfo = orch.AllocationInfo()
 
-		manifest := orch.Manifest()
-		usage := make(map[string]*types.ExecutorStats, len(manifest.Allocations))
+		if request.IncludeUsage {
+			manifest := orch.Manifest()
+			usage := make(map[string]*types.ExecutorStats, len(manifest.Allocations))
 
-		for allocID, allocManifest := range manifest.Allocations {
-			reply, err := n.invokeBehaviour(
-				allocManifest.Handle,
-				behaviors.AllocationStatsBehavior,
-				behaviors.AllocationStatsRequest{},
-				allocationStatsRequestTimeout,
-			)
-			if err != nil {
-				handleErr(fmt.Errorf("failed to invoke allocation stats for %s: %w", allocID, err))
-				return
+			for allocID, allocManifest := range manifest.Allocations {
+				reply, err := n.invokeBehaviour(
+					allocManifest.Handle,
+					behaviors.AllocationStatsBehavior,
+					behaviors.AllocationStatsRequest{},
+					allocationStatsRequestTimeout,
+				)
+				if err != nil {
+					handleErr(fmt.Errorf("failed to invoke allocation stats for %s: %w", allocID, err))
+					return
+				}
+
+				var statsResp behaviors.AllocationStatsResponse
+				if err := json.Unmarshal(reply.Message, &statsResp); err != nil {
+					handleErr(fmt.Errorf("failed to decode allocation stats response for %s: %w", allocID, err))
+					return
+				}
+
+				if !statsResp.OK {
+					handleErr(fmt.Errorf("allocation %s stats error: %s", allocID, statsResp.Error))
+					return
+				}
+
+				usage[allocID] = statsResp.Stats
 			}
 
-			var statsResp behaviors.AllocationStatsResponse
-			if err := json.Unmarshal(reply.Message, &statsResp); err != nil {
-				handleErr(fmt.Errorf("failed to decode allocation stats response for %s: %w", allocID, err))
-				return
-			}
-
-			if !statsResp.OK {
-				handleErr(fmt.Errorf("allocation %s stats error: %s", allocID, statsResp.Error))
-				return
-			}
-
-			usage[allocID] = statsResp.Stats
+			resp.AllocationUsage = usage
 		}
-
-		resp.AllocationUsage = usage
 	}
 
 	n.sendReply(msg, resp)
@@ -438,6 +442,18 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 	deployment, err := n.orchestratorRegistry.GetDeployment(request.ID)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get deployment: %s", err))
+		return
+	}
+
+	// if deployment is running, get the latest manifest directly from orchestrator
+	if deployment.Status == jobtypes.DeploymentStatusRunning {
+		orch, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
+			return
+		}
+		resp.Manifest = orch.Manifest()
+		n.sendReply(msg, resp)
 		return
 	}
 
