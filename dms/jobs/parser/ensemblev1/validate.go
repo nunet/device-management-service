@@ -10,7 +10,6 @@ package ensemblev1
 
 import (
 	"fmt"
-	"math"
 	"reflect"
 	"slices"
 	"strconv"
@@ -344,7 +343,7 @@ func ValidateResources(_ *map[string]any, data any, _ tree.Path) error {
 	if err != nil {
 		return err
 	}
-	cpu["cores"] = int(math.Ceil(coresFloat))
+	cpu["cores"] = coresFloat
 
 	// Optional CPU fields
 	if arch, ok := cpu["architecture"].(string); ok && arch == "" {
