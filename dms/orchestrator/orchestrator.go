@@ -23,6 +23,8 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
@@ -77,6 +79,7 @@ type Orchestrator interface {
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
+	AllocationInfo() map[string]jtypes.AllocationInfo
 	Done() <-chan struct{}
 }
 
@@ -94,6 +97,7 @@ type BasicOrchestrator struct {
 	manifest       jtypes.EnsembleManifest
 	subnetManifest jtypes.SubnetManifest
 	status         jtypes.DeploymentStatus
+	allocs         map[string]jtypes.AllocationInfo
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
 	supervisor         *Supervisor
@@ -154,6 +158,7 @@ func NewOrchestrator(
 		fs:                    fs,
 		workDir:               workDir,
 		subnetManifest:        subnet,
+		allocs:                make(map[string]jtypes.AllocationInfo),
 		supervisor:            NewSupervisor(childCtx, oActor, id),
 		nodeIDGenerator:       nodeIDGenerator,
 		allocationIDGenerator: allocationIDGenerator,
@@ -162,17 +167,9 @@ func NewOrchestrator(
 		contracts:             contracts,
 	}
 
-	orchestratorBehaviors := map[string]func(actor.Envelope){
-		behaviors.NotifyTaskTerminationBehavior:    o.handleTaskTermination,
-		behaviors.NotifyAllocationLivenessBehavior: o.handleAllocationLiveness,
-		behaviors.NotifyAllocationStatusBehavior:   o.handleAllocationStatusUpdate,
-	}
-
-	for b, handler := range orchestratorBehaviors {
-		err := o.actor.AddBehavior(b, handler)
-		if err != nil {
-			return nil, fmt.Errorf("add behavior %s to orchestrator actor: %w", b, err)
-		}
+	err = o.RegisterBehaviors()
+	if err != nil {
+		return nil, fmt.Errorf("failed to register behaviors: %w", err)
 	}
 
 	return o, nil
@@ -255,7 +252,7 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 	}()
 	o.setStatus(jtypes.DeploymentStatusPreparing)
 
-	log.Debugw("initializing manifest",
+	log.Infow("initializing manifest",
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", o.id)
 
@@ -263,6 +260,13 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 
 	if err := o.deploy(o.cfg, o.manifest, expiry); err != nil {
 		return fmt.Errorf("deploying ensemble: %w", err)
+	}
+
+	for _, a := range o.Manifest().Allocations {
+		err := o.grantOrchestratorCaps(a.Handle.DID)
+		if err != nil {
+			return fmt.Errorf("failed to grant orchestrator capabilities to allocations: %w", err)
+		}
 	}
 
 	log.Infow("deployment successful, starting supervisor",
@@ -549,6 +553,20 @@ deploy:
 		log.Infof("deployment successful")
 		o.setStatus(jtypes.DeploymentStatusRunning)
 
+		for idx, a := range o.Manifest().Allocations {
+			o.allocs[a.ID] = jtypes.AllocationInfo{
+				AllocationID:   a.ID,
+				HeartbeatSeq:   0,
+				Status:         a.Status,
+				HasHealthCheck: len(a.Healthcheck.Exec) != 0 && a.Healthcheck.Type != "",
+				ResourceLimit:  o.Config().V1.Allocations[a.ID].Resources,
+				DNSName:        a.DNSName,
+				IP:             o.SubnetManifest().IndexRoutingTable[idx],
+				ResourceUsage:  jtypes.AllocationResourceUsage{},
+				Timestamp:      time.Now().Unix(),
+			}
+		}
+
 		return nil
 	}
 
@@ -744,6 +762,82 @@ func isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
 		}
 	}
 	return true
+}
+
+func (o *BasicOrchestrator) AllocationInfo() map[string]jtypes.AllocationInfo {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	allocsCopy := make(map[string]jtypes.AllocationInfo, len(o.allocs))
+	for k, v := range o.allocs {
+		allocsCopy[k] = v
+	}
+	return allocsCopy
+}
+
+func (o *BasicOrchestrator) RegisterBehaviors() error {
+	orchestratorBehaviors := map[string]func(actor.Envelope){
+		behaviors.NotifyTaskTerminationBehavior:    o.handleTaskTermination,
+		behaviors.NotifyAllocationLivenessBehavior: o.handleAllocationLiveness,
+		behaviors.NotifyAllocationStatusBehavior:   o.handleAllocationStatusUpdate,
+	}
+
+	for b, handler := range orchestratorBehaviors {
+		err := o.actor.AddBehavior(b, handler)
+		if err != nil {
+			return fmt.Errorf("add behavior %s to orchestrator actor: %w", b, err)
+		}
+	}
+	return nil
+}
+
+func (o *BasicOrchestrator) grantOrchestratorCaps(alloc did.DID) error {
+	log.Infow("granting alloc capabilities",
+		"orchestratorID", o.id,
+		"allocationDID", alloc.String(),
+	)
+	oDID, err := did.FromID(o.actor.Handle().ID)
+	if err != nil {
+		return fmt.Errorf("failed to parse orchestrator DID: %w", err)
+	}
+
+	err = o.actor.Security().Grant(
+		alloc,
+		oDID,
+		[]ucan.Capability{behaviors.OrchestratorNamespace},
+		grantOrchestratorCapsFrequency,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"granting orchestrator caps to alloc %s: %w",
+			alloc.String(), err)
+	}
+
+	// TODO: create helper func to periodically grant caps as
+	// it's being used here and on createAllocations()
+	go func() {
+		ticker := time.NewTicker(grantOrchestratorCapsFrequency)
+		defer ticker.Stop()
+
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			err := o.actor.Security().Grant(
+				alloc,
+				o.actor.Handle().DID,
+				[]ucan.Capability{},
+				grantOrchestratorCapsFrequency,
+			)
+			if err != nil {
+				log.Errorf(
+					"periodic grant orchestrator caps to alloc %s: %w",
+					alloc.String(), err)
+			}
+			return
+		}
+	}()
+	return nil
 }
 
 func (o *BasicOrchestrator) Done() <-chan struct{} {

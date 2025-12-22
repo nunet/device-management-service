@@ -278,7 +278,7 @@ func (n *Node) createAllocations(
 			ticker := time.NewTicker(grantAllocationCapsFreq)
 			defer ticker.Stop()
 
-			for allocation.Status(context.TODO()).Status != jobs.AllocationStopped {
+			for allocation.Status().Status != jobs.AllocationStopped {
 				select {
 				case <-n.ctx.Done():
 					return

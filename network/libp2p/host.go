@@ -108,9 +108,9 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	limits.SystemBaseLimit.Streams = 16384
 	scaled := limits.Scale(mem, fds)
 
-	log.Infow("libp2p_limits",
+	log.Debugw("libp2p_limits",
 		"labels", string(observability.LabelNode),
-		"limits", scaled,
+		"limits", limits,
 	)
 
 	mgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(scaled))
@@ -131,7 +131,7 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 					log.Errorf("failed to parse QUIC port from address %s: %v", addr, err)
 					return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse QUIC port from address %s: %v", addr, err)
 				}
-				log.Infof("QUIC port found in address %s: %d", addr, quicPort)
+				log.Debugf("QUIC port found in address %s: %d", addr, quicPort)
 				hasQUICPort = true
 				break
 			}

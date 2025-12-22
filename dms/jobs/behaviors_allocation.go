@@ -16,6 +16,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -99,6 +100,14 @@ func (a *Allocation) handleAllocationStats(msg actor.Envelope) {
 			a.sendReply(msg, resp)
 			return
 		}
+	}
+
+	// zero resource usage if allocation not running
+	if a.Status().Status != jobtypes.AllocationRunning {
+		resp.Stats = &types.ExecutorStats{}
+		resp.OK = true
+		a.sendReply(msg, resp)
+		return
 	}
 
 	if a.executor == nil {

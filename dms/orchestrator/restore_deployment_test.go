@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -43,6 +44,8 @@ func TestRestoreDeployment(t *testing.T) {
 	AllocationShutdownTimeout = 1 * time.Second
 
 	substrate := network.NewSubstrate()
+
+	fs := afero.NewMemMapFs()
 
 	t.Run("Restore from Committing State", func(t *testing.T) {
 		registry := NewRegistry(NewMockDeploymentStore())
@@ -169,6 +172,7 @@ func TestRestoreDeployment(t *testing.T) {
 
 		o, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -570,6 +574,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// Test restoring deployment from provisioning state with two providers
 		o, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1194,6 +1199,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// due to the subnet not existing after revert on both orchestrator and provider
 		restoredOrch, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			ensembleID,
 			cfg,
@@ -1359,6 +1365,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// Test restoring deployment from provisioning state
 		o, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1500,6 +1507,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// Test restoring deployment from running state
 		o, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1564,6 +1572,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// Test restoring deployment with subnet join
 		o, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1619,6 +1628,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// Test restoring deployment with multiple allocations
 		o, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			restoreEnsembleID,
 			cfg,
@@ -1673,6 +1683,7 @@ func TestRestoreDeployment(t *testing.T) {
 		// Test restoring deployment with invalid state (should still work but not restore)
 		o, err := registry.RestoreDeployment(
 			context.Background(),
+			afero.Afero{Fs: fs},
 			orch.actor,
 			restoreEnsembleID,
 			cfg,

@@ -243,7 +243,7 @@ func (n *Node) sayHello(p peer.ID) {
 			n.peers[p] = st
 		}
 		n.lock.Unlock()
-		log.Infow("got hello response from", "labels", string(observability.LabelNode), "hostID", handle.Address.HostID)
+		log.Debugw("got hello response from", "labels", string(observability.LabelNode), "hostID", handle.Address.HostID)
 
 	case <-time.After(time.Until(msg.Expiry())):
 		n.lock.Lock()

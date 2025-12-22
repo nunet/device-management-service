@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/go-viper/mapstructure/v2"
@@ -49,7 +50,6 @@ var DefaultConfig = Config{
 			NtxContractAddress: "0xB37216b70a745129966E553cF8Ee2C51e1cB359A", // TSTNTX
 			EthereumRPCToken:   "",
 		},
-		PushLivenessEnabled: true,
 	},
 	Rest: Rest{
 		Addr: "127.0.0.1",
@@ -75,32 +75,23 @@ var DefaultConfig = Config{
 	},
 	Observability: Observability{
 		// TODO bind in observability
-		// Logging: Logging{
-		// 	Level: "INFO",
-		// 	File:  fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),
-		// 	Rotation: Rotation{
-		// 		MaxSizeMB:  100,
-		// 		MaxBackups: 3,
-		// 		MaxAgeDays: 28,
-		// 	},
-		// },
-		// Elastic: Elastic{
-		// 	URL:                "https://telemetry.nunet.io",
-		// 	Index:              "nunet-dms",
-		// 	FlushInterval:      5,
-		// 	Enabled:            false,
-		// 	APIKey:             "",
-		// 	InsecureSkipVerify: true,
-		// },
-		// TODO remove once /observability migrates to nested structs
-		ElasticsearchURL:     "https://telemetry.nunet.io",
-		ElasticsearchIndex:   "nunet-dms",
-		FlushInterval:        5,
-		ElasticsearchEnabled: false,
-		ElasticsearchAPIKey:  "",
-		InsecureSkipVerify:   true,
-		LogLevel:             "INFO",
-		LogFile:              fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),
+		Logging: Logging{
+			Level: "INFO",
+			File:  fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),
+			Rotation: Rotation{
+				MaxSizeMB:  100,
+				MaxBackups: 3,
+				MaxAgeDays: 28,
+			},
+		},
+		Elastic: Elastic{
+			URL:                "https://telemetry.nunet.io",
+			Index:              "nunet-dms",
+			FlushInterval:      5,
+			Enabled:            false,
+			APIKey:             "",
+			InsecureSkipVerify: false,
+		},
 	},
 	APM: APM{
 		ServerURL:   "https://apm.telemetry.nunet.io",
@@ -210,8 +201,16 @@ func (l *Loader) ConfigFile() string {
 // Reload forces a fresh read; useful for SIGHUP hot-reload.
 func (l *Loader) Reload() error {
 	l.cfgMu.Lock()
-	defer l.cfgMu.Unlock()
-	return l.readAndUnmarshal()
+	migrated, err := l.readAndUnmarshal()
+	l.cfgMu.Unlock()
+
+	if migrated && err == nil {
+		if err = l.Write(true); err != nil {
+			return fmt.Errorf("persist migrated config: %w", err)
+		}
+	}
+
+	return err
 }
 
 func (l *Loader) SetConfig(c Config) {
@@ -275,13 +274,13 @@ func (l *Loader) Set(key string, value interface{}) error {
 	*l.cfg = probe
 	l.cfgMu.Unlock()
 
-	return l.Write()
+	return l.Write(false)
 }
 
 // Write persists the current in-memory config to disk atomically.
 // • Creates the file (and parent directories) on first run.
 // • Uses a temp-file + rename so it can’t be truncated on crash.
-func (l *Loader) Write() error {
+func (l *Loader) Write(backupExisting bool) error {
 	l.cfgMu.RLock()
 	defer l.cfgMu.RUnlock()
 
@@ -290,6 +289,13 @@ func (l *Loader) Write() error {
 		// First run – default to "./dms_config.json" (same as search path 1)
 		cfgPath = fmt.Sprintf("./%s.%s", defaultCfgName, defaultCfgExt)
 		l.v.SetConfigFile(cfgPath)
+	}
+
+	if backupExisting {
+		backupPath := fmt.Sprintf("%s.bk.%d", cfgPath, time.Now().Unix())
+		if err := l.fs.Rename(cfgPath, backupPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("couldn't make backup of config file ahead of write. aborting write. Error: %w", err)
+		}
 	}
 
 	// Ensure directory hierarchy exists.
@@ -363,29 +369,29 @@ func (l *Loader) BindFlags(fs *pflag.FlagSet) {
 	}
 }
 
-func (l *Loader) readAndUnmarshal() error {
+func (l *Loader) readAndUnmarshal() (migrated bool, err error) {
 	// honour --config flag if supplied
 	if l.cfgFile != nil && *l.cfgFile != "" {
 		l.v.SetConfigFile(*l.cfgFile)
 	}
 
 	if err := tryReadConfig(l.v, l.fs); err != nil {
-		return fmt.Errorf("read config: %w", err)
+		return false, fmt.Errorf("read config: %w", err)
 	}
 
 	if err := l.v.UnmarshalExact(
 		l.cfg,
 		func(c *mapstructure.DecoderConfig) { c.ZeroFields = true },
 	); err != nil {
-		return fmt.Errorf("unmarshal config: %w", err)
+		return false, fmt.Errorf("unmarshal config: %w", err)
 	}
 
-	migrateLegacyObservability(l.cfg)
+	migrated = migrateLegacyObservability(l)
 
 	if err := validate.Struct(l.cfg); err != nil {
-		return fmt.Errorf("validate config: %w", err)
+		return false, fmt.Errorf("validate config: %w", err)
 	}
-	return nil
+	return migrated, nil
 }
 
 // GetValue fetches a value by dotted key. second return is false if unset.
@@ -402,24 +408,79 @@ func (l *Loader) GetValue(key string) (interface{}, bool) {
 // nested fields have not been set  This lets old and new config files
 // work side-by-side and means we can remove the flat keys in a later
 // release without breaking users
-func migrateLegacyObservability(cfg *Config) {
-	o := &cfg.Observability
+func migrateLegacyObservability(l *Loader) (migrated bool) {
+	oCfg := &l.cfg.Observability
 
-	if o.Logging.Level == "" && o.LogLevel != "" {
-		o.Logging.Level = o.LogLevel
+	// return if no legacy keys are set
+	if oCfg.LogLevel == "" &&
+		oCfg.LogFile == "" &&
+		oCfg.MaxSize == 0 &&
+		oCfg.MaxBackups == 0 &&
+		oCfg.MaxAge == 0 &&
+		oCfg.ElasticsearchURL == "" &&
+		oCfg.ElasticsearchIndex == "" &&
+		oCfg.FlushInterval == 0 &&
+		!oCfg.ElasticsearchEnabled &&
+		oCfg.ElasticsearchAPIKey == "" &&
+		!oCfg.InsecureSkipVerify {
+		return false
 	}
-	if o.Logging.File == "" && o.LogFile != "" {
-		o.Logging.File = o.LogFile
+
+	oMap, ok := l.v.Get("observability").(map[string]any)
+	if !ok {
+		return false
 	}
-	if o.Logging.Rotation.MaxSizeMB == 0 && o.MaxSize != 0 {
-		o.Logging.Rotation.MaxSizeMB = o.MaxSize
+
+	if oCfg.Logging.Level == "" && oCfg.LogLevel != "" {
+		l.v.Set("observability.logging.level", oCfg.LogLevel)
 	}
-	if o.Logging.Rotation.MaxBackups == 0 && o.MaxBackups != 0 {
-		o.Logging.Rotation.MaxBackups = o.MaxBackups
+	if oCfg.Logging.File == "" && oCfg.LogFile != "" {
+		l.v.Set("observability.logging.file", oCfg.LogFile)
 	}
-	if o.Logging.Rotation.MaxAgeDays == 0 && o.MaxAge != 0 {
-		o.Logging.Rotation.MaxAgeDays = o.MaxAge
+	if oCfg.Logging.Rotation.MaxSizeMB == 0 && oCfg.MaxSize != 0 {
+		l.v.Set("observability.logging.rotation.max_size_mb", oCfg.MaxSize)
 	}
+	if oCfg.Logging.Rotation.MaxBackups == 0 && oCfg.MaxBackups != 0 {
+		l.v.Set("observability.logging.rotation.max_backups", oCfg.MaxBackups)
+	}
+	if oCfg.Logging.Rotation.MaxAgeDays == 0 && oCfg.MaxAge != 0 {
+		l.v.Set("observability.logging.rotation.max_age_days", oCfg.MaxAge)
+	}
+
 	// NOTE: elastic flat keys are still valid and left untouched - they'll
 	// be removed in a later major version once users have migrated
+	if oCfg.ElasticsearchURL != "" {
+		l.v.Set("observability.elastic.url", oCfg.ElasticsearchURL)
+	}
+	if oCfg.ElasticsearchIndex != "" {
+		l.v.Set("observability.elastic.index", oCfg.ElasticsearchIndex)
+	}
+	if oCfg.FlushInterval != 0 {
+		l.v.Set("observability.elastic.flush_interval", oCfg.FlushInterval)
+	}
+	if !oCfg.Elastic.Enabled && oCfg.ElasticsearchEnabled {
+		l.v.Set("observability.elastic.enabled", oCfg.ElasticsearchEnabled)
+	}
+	if oCfg.Elastic.APIKey == "" && oCfg.ElasticsearchAPIKey != "" {
+		l.v.Set("observability.elastic.api_key", oCfg.ElasticsearchAPIKey)
+	}
+	if !oCfg.Elastic.InsecureSkipVerify && oCfg.InsecureSkipVerify {
+		l.v.Set("observability.elastic.insecure_skip_verify", oCfg.InsecureSkipVerify)
+	}
+
+	// clean up old keys
+	delete(oMap, "max_size")
+	delete(oMap, "max_backups")
+	delete(oMap, "max_age")
+	delete(oMap, "log_file")
+	delete(oMap, "log_level")
+	delete(oMap, "elasticsearch_url")
+	delete(oMap, "elasticsearch_index")
+	delete(oMap, "flush_interval")
+	delete(oMap, "elasticsearch_enabled")
+	delete(oMap, "elasticsearch_api_key")
+	delete(oMap, "insecure_skip_verify")
+
+	err := l.v.MergeConfigMap(map[string]any{"observability": oMap})
+	return err == nil
 }

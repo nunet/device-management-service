@@ -39,8 +39,7 @@ type General struct {
 	// server provider configurations
 	Providers []ProviderConfig `mapstructure:"providers" json:"providers"`
 
-	PaymentProvider     PaymentProvider `mapstructure:"payment_provider" json:"payment_provider"`
-	PushLivenessEnabled bool
+	PaymentProvider PaymentProvider `mapstructure:"payment_provider" json:"payment_provider"`
 }
 
 type ProviderConfig struct {
@@ -90,23 +89,29 @@ type Observability struct {
 	Logging Logging `mapstructure:"logging" json:"logging"`
 	Elastic Elastic `mapstructure:"elastic" json:"elastic"`
 
-	// -----------------------------------------------------------------
-	// TODO DEPRECATED – will be removed once tbe migration to nested structs is complete.
-	// They are kept so that v0.6 can still read existing config files.
-	// Loader.readAndUnmarshal() transparently migrates them into
-	// the new `observability.logging` block at runtime.
-	// -----------------------------------------------------------------
-	LogLevel             string `mapstructure:"log_level"             json:"log_level"`
-	LogFile              string `mapstructure:"log_file"              json:"log_file"`
-	MaxSize              int    `mapstructure:"max_size"              json:"max_size"` // MB
-	MaxBackups           int    `mapstructure:"max_backups"           json:"max_backups"`
-	MaxAge               int    `mapstructure:"max_age"               json:"max_age"` // days
-	ElasticsearchURL     string `mapstructure:"elasticsearch_url"     json:"elasticsearch_url"`
-	ElasticsearchIndex   string `mapstructure:"elasticsearch_index"   json:"elasticsearch_index"`
-	FlushInterval        int    `mapstructure:"flush_interval"        json:"flush_interval"` // seconds
-	ElasticsearchEnabled bool   `mapstructure:"elasticsearch_enabled" json:"elasticsearch_enabled"`
-	ElasticsearchAPIKey  string `mapstructure:"elasticsearch_api_key" json:"elasticsearch_api_key"`
-	InsecureSkipVerify   bool   `mapstructure:"insecure_skip_verify"  json:"insecure_skip_verify"`
+	// Deprecated: use Logging.Level instead
+	LogLevel string `mapstructure:"log_level"             json:"-"`
+	// Deprecated: use Logging.File instead
+	LogFile string `mapstructure:"log_file"              json:"-"`
+	// Deprecated: use Logging.Rotation instead
+	MaxSize int `mapstructure:"max_size"              json:"-"` // MB
+	// Deprecated: use Logging.Rotation.MaxBackups instead
+	MaxBackups int `mapstructure:"max_backups"           json:"-"`
+	// Deprecated: use Logging.Rotation.MaxAgeDays instead
+	MaxAge int `mapstructure:"max_age"               json:"-"` // days
+
+	// Deprecated: use Elastic.URL instead
+	ElasticsearchURL string `mapstructure:"elasticsearch_url"     json:"-"`
+	// Deprecated: use Elastic.Index instead
+	ElasticsearchIndex string `mapstructure:"elasticsearch_index"   json:"-"`
+	// Deprecated: use Elastic.FlushInterval instead
+	FlushInterval int `mapstructure:"flush_interval"        json:"-"` // seconds
+	// Deprecated: use Elastic.Enabled instead
+	ElasticsearchEnabled bool `mapstructure:"elasticsearch_enabled" json:"-"`
+	// Deprecated: use Elastic.APIKey instead
+	ElasticsearchAPIKey string `mapstructure:"elasticsearch_api_key" json:"-"`
+	// Deprecated: use Elastic.InsecureSkipVerify instead
+	InsecureSkipVerify bool `mapstructure:"insecure_skip_verify"  json:"-"`
 }
 
 type Logging struct {
@@ -140,20 +145,3 @@ type APM struct {
 	// SecretToken is a legacy API key used for local ELK deployments.
 	SecretToken string `mapstructure:"secret_token"      json:"secret_token"`
 }
-
-// Convenience helpers
-
-// LogLevel returns the effective log level, favouring the new nested field but
-// falling back to the deprecated flat key so legacy configs still work.
-func (c *Config) LogLevel() string {
-	if lvl := c.Observability.Logging.Level; lvl != "" && lvl != "INFO" {
-		return lvl
-	}
-	if lvl := c.Observability.LogLevel; lvl != "" {
-		return lvl
-	}
-	return c.Observability.Logging.Level // default "INFO"
-}
-
-func (c *Config) RestAddress() string { return c.Rest.Addr }
-func (c *Config) RestPort() uint32    { return c.Rest.Port }

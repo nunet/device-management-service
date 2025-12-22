@@ -103,7 +103,7 @@ func TestAllocation_handleAllocationStart(t *testing.T) {
 
 		err = alloc.Run(context.Background(), "", "", nil)
 		require.NoError(t, err)
-		require.Equal(t, AllocationRunning, alloc.Status(context.Background()).Status)
+		require.Equal(t, AllocationRunning, alloc.Status().Status)
 
 		req := behaviors.AllocationStartRequest{
 			SubnetIP:    "192.168.1.100",

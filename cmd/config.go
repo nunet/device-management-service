@@ -165,7 +165,7 @@ func ensureConfigFile(fs afero.Fs, ldr *config.Loader) error {
 			return nil
 		}
 	}
-	return ldr.Write()
+	return ldr.Write(false)
 }
 
 func parseLiteral(s string) interface{} {

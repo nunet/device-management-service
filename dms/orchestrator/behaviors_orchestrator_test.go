@@ -103,7 +103,7 @@ func TestOrchestratorHandlesStatusUpdate(t *testing.T) {
 	require.True(t, exists, "allocation actor should exist after deployment")
 
 	// Test Case 1: Send status update notification (running -> stopping)
-	statusUpdate1 := behaviors.AllocationStatusUpdate{
+	statusUpdate1 := jtypes.AllocationStatusUpdate{
 		AllocationID: allocationFullID,
 		OldStatus:    "running",
 		NewStatus:    "stopping",
@@ -138,7 +138,7 @@ func TestOrchestratorHandlesStatusUpdate(t *testing.T) {
 		"orchestrator should still be running after status update")
 
 	// Test Case 2: Send another status update (stopping -> stopped)
-	statusUpdate2 := behaviors.AllocationStatusUpdate{
+	statusUpdate2 := jtypes.AllocationStatusUpdate{
 		AllocationID: allocationFullID,
 		OldStatus:    "stopping",
 		NewStatus:    "stopped",
@@ -170,7 +170,7 @@ func TestOrchestratorHandlesStatusUpdate(t *testing.T) {
 		"orchestrator should remain healthy after multiple status updates")
 
 	// Test Case 3: Send status update with error reason
-	statusUpdate3 := behaviors.AllocationStatusUpdate{
+	statusUpdate3 := jtypes.AllocationStatusUpdate{
 		AllocationID: allocationFullID,
 		OldStatus:    "stopped",
 		NewStatus:    "failed",

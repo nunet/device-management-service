@@ -161,12 +161,12 @@ func createConfig(userDir string, restPort uint32, p2pListenAddrs []string, boot
 	apiKey := os.Getenv(envE2EObserveAPIKey)
 	token := os.Getenv(envE2EObserveToken)
 	if apiKey != "" {
-		cfg.Observability.ElasticsearchEnabled = true
-		cfg.Observability.ElasticsearchAPIKey = apiKey
+		cfg.Observability.Elastic.Enabled = true
+		cfg.Observability.Elastic.APIKey = apiKey
 
 		// if secrettoken is set, switch to local observability
 		if token != "" {
-			cfg.Observability.ElasticsearchURL = "https://localhost:9200"
+			cfg.Observability.Elastic.URL = "https://localhost:9200"
 			cfg.APM.ServerURL = "http://localhost:8200"
 			cfg.APM.SecretToken = token
 			cfg.APM.Environment = "development"

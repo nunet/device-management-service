@@ -142,7 +142,6 @@ func NewAllocation(
 	executor types.Executor,
 	selfRelease func() error,
 	contractEventHandler *eventhandler.EventHandler,
-	enablePushLiveness bool,
 	deploymentID string,
 ) (*Allocation, error) {
 	if network == nil {
@@ -189,14 +188,14 @@ func NewAllocation(
 	}
 
 	// Initialize liveness reporting state
-	allocation.liveness.enabled = enablePushLiveness
+	allocation.liveness.enabled = true // hard coded for now
 	allocation.liveness.interval = livenessReportInterval
 
 	log.Debugw("allocation_created",
 		"labels", string(observability.LabelAllocation),
 		"allocationID", allocation.ID,
+		"allocDID", allocation.Actor.Handle().DID.String(),
 		"executionID", allocation.executionID,
-		"push_liveness_enabled", enablePushLiveness,
 	)
 
 	return allocation, nil
@@ -515,7 +514,7 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 		})
 	}
 
-	status := a.Status(ctx)
+	status := a.Status()
 	if status.Status != AllocationStopped && status.Status != AllocationCompleted {
 		err := a.Stop(ctx)
 		if err != nil {
@@ -591,9 +590,10 @@ func (a *Allocation) Stop(ctx context.Context) error {
 }
 
 // Status returns information about the allocated/usage of resources and execution status of workload.
-func (a *Allocation) Status(_ context.Context) Status {
+func (a *Allocation) Status() Status {
 	a.lock.Lock()
 	defer a.lock.Unlock()
+
 	return Status{
 		JobResources: a.Job.Resources,
 		Status:       a.status,
@@ -766,9 +766,7 @@ func (a *Allocation) startLivenessReporting(ctx context.Context) {
 
 // sendLivenessReport sends a single liveness notification
 func (a *Allocation) sendLivenessReport(ctx context.Context) error {
-	a.lock.Lock()
-	currentStatus := a.status
-	a.lock.Unlock()
+	currentStatus := a.Status()
 
 	// Increment sequence number
 	a.liveness.lock.Lock()
@@ -780,14 +778,14 @@ func (a *Allocation) sendLivenessReport(ctx context.Context) error {
 	health := a.performSelfHealthCheck(ctx)
 
 	// Optionally gather resource usage
-	var resourceUsage *behaviors.AllocationResourceUsage
+	var resourceUsage *jobtypes.AllocationResourceUsage
 	if usage, err := a.gatherResourceUsage(ctx); err == nil {
 		resourceUsage = usage
 	}
 
-	notification := behaviors.AllocationLivenessNotification{
+	notification := jobtypes.AllocationLivenessNotification{
 		AllocationID:   a.ID,
-		Status:         string(currentStatus),
+		Status:         string(currentStatus.Status),
 		Timestamp:      time.Now().Unix(),
 		SequenceNumber: seqNum,
 		Health:         health,
@@ -804,16 +802,16 @@ func (a *Allocation) sendLivenessReport(ctx context.Context) error {
 }
 
 // performSelfHealthCheck runs registered healthcheck (if any)
-func (a *Allocation) performSelfHealthCheck(ctx context.Context) behaviors.HealthStatus {
+func (a *Allocation) performSelfHealthCheck(ctx context.Context) jobtypes.HealthStatus {
 	a.lock.Lock()
 	healthcheck := a.healthcheck
 	a.lock.Unlock()
 
 	if healthcheck == nil {
-		return behaviors.HealthStatus{
+		return jobtypes.HealthStatus{
 			Healthy:       true,
 			LastCheckTime: time.Now().Unix(),
-			CheckType:     behaviors.HealthCheckTypeNone,
+			CheckType:     jobtypes.HealthCheckTypeNone,
 			Message:       "no healthcheck configured",
 		}
 	}
@@ -831,40 +829,53 @@ func (a *Allocation) performSelfHealthCheck(ctx context.Context) behaviors.Healt
 	select {
 	case err := <-errChan:
 		if err != nil {
-			return behaviors.HealthStatus{
+			return jobtypes.HealthStatus{
 				Healthy:       false,
 				LastCheckTime: time.Now().Unix(),
-				CheckType:     behaviors.HealthCheckTypeSelf,
+				CheckType:     jobtypes.HealthCheckTypeSelf,
 				Message:       fmt.Sprintf("healthcheck failed: %v", err),
 			}
 		}
-		return behaviors.HealthStatus{
+		return jobtypes.HealthStatus{
 			Healthy:       true,
 			LastCheckTime: time.Now().Unix(),
-			CheckType:     behaviors.HealthCheckTypeSelf,
+			CheckType:     jobtypes.HealthCheckTypeSelf,
 			Message:       "healthcheck passed",
 		}
 	case <-checkCtx.Done():
-		return behaviors.HealthStatus{
+		return jobtypes.HealthStatus{
 			Healthy:       false,
 			LastCheckTime: time.Now().Unix(),
-			CheckType:     behaviors.HealthCheckTypeSelf,
+			CheckType:     jobtypes.HealthCheckTypeSelf,
 			Message:       "healthcheck timeout",
 		}
 	}
 }
 
-// gatherResourceUsage collects resource metrics (optional)
-// TODO: Implement when executor supports stats collection
-// This would require adding a GetStats method to the Executor interface
-func (a *Allocation) gatherResourceUsage(_ context.Context) (*behaviors.AllocationResourceUsage, error) {
-	// Currently not implemented - no executor supports stats yet
-	// Return nil to indicate stats are unavailable
-	// Future implementation would:
-	// 1. Define ExecutorStats interface with GetStats method
-	// 2. Check if executor implements the interface
-	// 3. Call GetStats and return the metrics
-	return nil, fmt.Errorf("executor stats not implemented")
+// gatherResourceUsage collects resource metrics
+func (a *Allocation) gatherResourceUsage(ctx context.Context) (*jobtypes.AllocationResourceUsage, error) {
+	// zero usage if allocation not running
+	if a.Status().Status != jobtypes.AllocationRunning {
+		return &jobtypes.AllocationResourceUsage{}, nil
+	}
+
+	stats, err := a.executor.Stats(ctx, a.executionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve allocation stats: %w", err)
+	}
+
+	if stats == nil {
+		return nil, fmt.Errorf("allocation stats are nil")
+	}
+
+	resrcUsage := jobtypes.AllocationResourceUsage{
+		CPUUsagePercent:  stats.CPUUsage.Percent,
+		MemoryUsedBytes:  stats.Memory.Usage,
+		MemoryLimitBytes: a.Job.Resources.RAM.Size,
+		NetworkRxBytes:   stats.Network.RxBytes,
+		NetworkTxBytes:   stats.Network.TxBytes,
+	}
+	return &resrcUsage, nil
 }
 
 // sendToOrchestratorWithRetry sends with exponential backoff
@@ -916,7 +927,7 @@ func (a *Allocation) sendStatusChangeNotification(oldStatus, newStatus Allocatio
 		return
 	}
 
-	update := behaviors.AllocationStatusUpdate{
+	update := jobtypes.AllocationStatusUpdate{
 		AllocationID: a.ID,
 		OldStatus:    string(oldStatus),
 		NewStatus:    string(newStatus),

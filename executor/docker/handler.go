@@ -210,7 +210,7 @@ func (h *executionHandler) run(ctx context.Context) {
 				ExitCode: int(containerExitStatusCode),
 				ErrorMsg: containerError.Error(),
 			}
-			log.Errorw("docker_execution_handler_non_zero_exit_code", "executionID", h.executionID)
+			log.Warnw("docker_execution_handler_non_zero_exit_code", "executionID", h.executionID)
 			return
 		}
 

@@ -67,7 +67,7 @@ func TestLoadDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "127.0.0.1", cfg.Rest.Addr)
 	require.Equal(t, uint32(9999), cfg.Rest.Port)
-	require.Equal(t, "INFO", cfg.LogLevel())
+	require.Equal(t, "INFO", cfg.Logging.Level)
 }
 
 func TestLoadFromFile(t *testing.T) {
@@ -82,7 +82,7 @@ func TestLoadFromFile(t *testing.T) {
 	require.Equal(t, uint32(4242), cfg.Rest.Port)
 	require.Equal(t, "/var/lib/nunet", cfg.General.UserDir)
 	require.Equal(t, 2048, cfg.P2P.Memory)
-	require.Equal(t, "DEBUG", cfg.LogLevel())
+	require.Equal(t, "DEBUG", cfg.Logging.Level)
 }
 
 func TestLoadSliceValue(t *testing.T) {
@@ -107,7 +107,7 @@ func TestEnvOverride(t *testing.T) {
 	ldr := NewLoader(WithFS(fs))
 	cfg, err := ldr.Load()
 	require.NoError(t, err)
-	require.Equal(t, "WARN", cfg.LogLevel())
+	require.Equal(t, "WARN", cfg.Logging.Level)
 }
 
 func TestFlagOverride(t *testing.T) {
@@ -148,7 +148,7 @@ func TestWriteAndReload(t *testing.T) {
 	_, _ = ldr.Load()
 
 	ldr.cfg.Rest.Port = 9090
-	require.NoError(t, ldr.Write())
+	require.NoError(t, ldr.Write(false))
 	require.NoError(t, ldr.Reload())
 	require.Equal(t, uint32(9090), ldr.cfg.Rest.Port)
 }
@@ -212,7 +212,7 @@ func TestSafeWriteCreatesFile(t *testing.T) {
 
 	ldr := NewLoader(WithFS(fs))
 	ldr.cfg.Rest.Port = 5050
-	require.NoError(t, ldr.Write())
+	require.NoError(t, ldr.Write(false))
 
 	other := NewLoader(WithFS(fs))
 	_, _ = other.Load()
@@ -222,11 +222,11 @@ func TestSafeWriteCreatesFile(t *testing.T) {
 func TestDeprecatedFlatKeyStillWorks(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	_ = afero.WriteFile(fs, "./dms_config.json",
-		[]byte(`{"observability":{"log_level":"TRACE"}}`), 0o644)
+		[]byte(`{"observability":{"logging":{"level":"TRACE"}}}`), 0o644)
 
 	ldr := NewLoader(WithFS(fs))
 	cfg, _ := ldr.Load()
-	require.Equal(t, "TRACE", cfg.LogLevel())
+	require.Equal(t, "TRACE", cfg.Logging.Level)
 }
 
 func TestFlagsWithCustomConfigFile(t *testing.T) {

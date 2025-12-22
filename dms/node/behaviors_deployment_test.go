@@ -895,7 +895,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 		require.NoError(t, err)
 
 		node.handleDeploymentRevert(msg)
-		assert.Equal(t, jobtypes.AllocationTerminated, alloc.Status(ctx).Status)
+		assert.Equal(t, jobtypes.AllocationTerminated, alloc.Status().Status)
 	})
 }
 

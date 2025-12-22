@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -30,8 +31,11 @@ func (o *BasicOrchestrator) handleTaskTermination(msg actor.Envelope) {
 		return
 	}
 
-	log.Infow("task_terminated", "labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", o.id, "allocationID", req.AllocationID, "status", req.Status)
+	log.Infow("task_terminated",
+		"labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", o.id,
+		"allocationID", req.AllocationID,
+		"status", req.Status)
 
 	// Parse the allocation ID to get the manifest key
 	allocID, err := types.ParseAllocationID(req.AllocationID)
@@ -41,17 +45,19 @@ func (o *BasicOrchestrator) handleTaskTermination(msg actor.Envelope) {
 	}
 
 	manifestKey := allocID.ManifestKey()
-	a, ok := o.manifest.Allocations[manifestKey]
+
+	updateMan := o.Manifest()
+
+	a, ok := updateMan.Allocations[manifestKey]
 	if !ok {
 		log.Debugf("allocation %s not found on the manifest", req.AllocationID)
 		return
 	}
 
 	// update allocation status
-	o.lock.Lock()
 	a.Status = jtypes.AllocationStatus(req.Status)
-	o.manifest.Allocations[manifestKey] = a
-	o.lock.Unlock()
+	updateMan.Allocations[manifestKey] = a
+	o.updateManifest(updateMan)
 
 	if req.Error.Err != "" {
 		log.Errorf(
@@ -110,7 +116,7 @@ func (o *BasicOrchestrator) WriteAllocationLogs(
 func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var notification behaviors.AllocationLivenessNotification
+	var notification jtypes.AllocationLivenessNotification
 
 	if err := json.Unmarshal(msg.Message, &notification); err != nil {
 		log.Debugw("unmarshalling_liveness_notification_failed",
@@ -119,7 +125,15 @@ func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
 		return
 	}
 
-	// Log for observability (passive collection only)
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	if _, ok := o.allocs[notification.AllocationID]; !ok {
+		log.Debugw("liveness_notification_for_unknown_allocation",
+			"labels", []string{string(observability.LabelDeployment)},
+			"allocationID", notification.AllocationID)
+		return
+	}
+
 	log.Debugw("received_allocation_heartbeat",
 		"labels", []string{string(observability.LabelDeployment)},
 		"ensembleID", o.id,
@@ -129,16 +143,32 @@ func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
 		"healthy", notification.Health.Healthy,
 		"check_type", notification.Health.CheckType)
 
-	// Log warning if allocation self-reports unhealthy
-	// (just for observability, doesn't change supervisor behavior)
-	if !notification.Health.Healthy {
-		log.Warnw("allocation_self_reported_unhealthy",
-			"labels", []string{string(observability.LabelDeployment)},
-			"allocationID", notification.AllocationID,
-			"message", notification.Health.Message,
-			"check_type", notification.Health.CheckType,
-			"note", "supervisor pull checks remain authoritative")
+	nInfo := o.allocs[notification.AllocationID]
+	nInfo.HeartbeatSeq = notification.SequenceNumber
+	nInfo.Status = jtypes.AllocationStatus(notification.Status)
+	if notification.ResourceUsage != nil {
+		nInfo.ResourceUsage.CPUUsagePercent = notification.ResourceUsage.CPUUsagePercent
+		nInfo.ResourceUsage.MemoryUsedBytes = notification.ResourceUsage.MemoryUsedBytes
+		nInfo.ResourceUsage.MemoryLimitBytes = notification.ResourceUsage.MemoryLimitBytes
+		nInfo.ResourceUsage.NetworkRxBytes = notification.ResourceUsage.NetworkRxBytes
+		nInfo.ResourceUsage.NetworkTxBytes = notification.ResourceUsage.NetworkTxBytes
 	}
+	if o.allocs[notification.AllocationID].HasHealthCheck {
+		if notification.Health.Healthy {
+			nInfo.Health = "Healthy"
+		} else {
+			log.Warnw("allocation_self_reported_unhealthy",
+				"labels", []string{string(observability.LabelDeployment)},
+				"allocationID", notification.AllocationID,
+				"message", notification.Health.Message,
+				"check_type", notification.Health.CheckType,
+				"note", "supervisor pull checks remain authoritative")
+			nInfo.Health = "Unhealthy: " + notification.Health.Message
+		}
+	}
+
+	nInfo.Timestamp = time.Now().Unix()
+	o.allocs[notification.AllocationID] = nInfo
 
 	// Log resource usage if provided
 	if notification.ResourceUsage != nil {
@@ -155,7 +185,7 @@ func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
 func (o *BasicOrchestrator) handleAllocationStatusUpdate(msg actor.Envelope) {
 	defer msg.Discard()
 
-	var update behaviors.AllocationStatusUpdate
+	var update jtypes.AllocationStatusUpdate
 
 	if err := json.Unmarshal(msg.Message, &update); err != nil {
 		log.Debugw("unmarshalling_status_update_failed",

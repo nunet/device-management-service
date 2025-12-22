@@ -439,7 +439,7 @@ func TestAllocatorAllocate(t *testing.T) {
 		assert.NotNil(t, allocation, "allocation should not be nil on success")
 		assert.Equal(t, allocation.ID, allocationID, "allocation ID should match")
 		assert.Equal(t, allocation.Job.Resources.CPU.Cores, job.Resources.CPU.Cores, "CPU cores should match")
-		assert.Equal(t, jobs.AllocationStatus("pending"), allocation.Status(ctx).Status, "allocation status should be running")
+		assert.Equal(t, jobs.AllocationStatus("pending"), allocation.Status().Status, "allocation status should be running")
 
 		// verify allocation is stored
 		allocInst, err := alloc.GetAllocation(allocationID)
@@ -580,13 +580,13 @@ func TestAllocator_Stop(t *testing.T) {
 		alloc.lock.Unlock()
 		assert.True(t, exists, "allocation should be stored in allocator")
 
-		assert.Equal(t, jobs.AllocationStatus("pending"), allocation.Status(ctx).Status, "allocation status should be pending")
+		assert.Equal(t, jobs.AllocationStatus("pending"), allocation.Status().Status, "allocation status should be pending")
 
 		// stop the allocation
 		err = alloc.Stop(ctx)
 		assert.NoError(t, err)
 
-		assert.Equal(t, jobs.AllocationStatus("stopped"), allocation.Status(ctx).Status, "allocation status should be stopped")
+		assert.Equal(t, jobs.AllocationStatus("stopped"), allocation.Status().Status, "allocation status should be stopped")
 
 		err = alloc.Release(ctx, allocationID)
 		assert.NoError(t, err)
@@ -661,7 +661,7 @@ func TestAllocator_Stop(t *testing.T) {
 		err = alloc.Stop(ctx)
 		assert.NoError(t, err)
 
-		assert.Equal(t, jobs.AllocationStatus("stopped"), allocation.Status(ctx).Status, "allocation status should be stopped")
+		assert.Equal(t, jobs.AllocationStatus("stopped"), allocation.Status().Status, "allocation status should be stopped")
 
 		// verify commit is removed
 		_, exists = alloc.getCommit(anotherAllocationID)

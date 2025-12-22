@@ -85,7 +85,7 @@ func TLSGlusterGenerator(t *testing.T) {
 	node2Config.General.StorageCADirectory = "/home/ca_dir"
 	node2Config.General.StorageBricksDir = "/home/bricks_dir"
 	node2Config.General.StorageGlusterfsHostname = hostname
-	node2Config.Observability.LogFile = "/home/logs.txt"
+	node2Config.Observability.Logging.File = "/home/logs.txt"
 	node2Config.Profiler.Port = 6066
 
 	jsonData2, err := json.MarshalIndent(node2Config, "", "  ")
