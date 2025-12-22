@@ -1617,6 +1617,62 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 	})
 }
 
+// DeployWithContractsEnforcedProvidersTest verifies that when providers require
+// deployment contracts, a deployment without contracts gets stuck in Preparing.
+func DeployWithContractsEnforcedProvidersTest(suite *TestSuite) {
+	suite.Run("deployment without contracts is not scheduled when providers require contracts", func() {
+		requester := suite.nodes[0]
+
+		// sanity: configs for this suite should have enforcement enabled on providers
+		suite.T().Logf("requester RequireDeploymentContracts=%v", requester.config.Job.RequireContractsForDeployment)
+
+		// Use a standard ensemble without any contracts section.
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-no-contracts.yaml")
+		err := copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+
+		// Deploy the ensemble with no contracts attached.
+		deploymentResult := requester.client.deploy(
+			suite.T(),
+			requester.userContext,
+			requester.password,
+			destinationFileEnsemble,
+			"2m",
+		)
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		// Give some time for bidding/allocation to happen; since all providers
+		// require contracts and the manifest has none, we expect the deployment
+		// to remain in Preparing.
+		time.Sleep(10 * time.Second)
+
+		status, err := requester.client.deploymentStatus(
+			suite.T(),
+			requester.userContext,
+			requester.password,
+			manifestID,
+		)
+		suite.Require().NoError(err)
+		suite.Require().Equal(
+			jobtypes.DeploymentStatusPreparing.String(),
+			extractStatus(status),
+			"deployment without contracts should remain in Preparing when providers require contracts",
+		)
+
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(
+				suite.T(),
+				requester.userContext,
+				requester.password,
+				manifestID,
+			)
+			return err == nil && extractStatus(status) == jobtypes.DeploymentStatusPreparing.String()
+		}, 60*time.Second, 5*time.Second, "deployment without contracts should remain in Preparing when providers require contracts")
+	})
+}
+
 func getContractID(input string) (string, error) {
 	var response contracts.CreateContractResponse
 	if err := json.Unmarshal([]byte(input), &response); err != nil {
