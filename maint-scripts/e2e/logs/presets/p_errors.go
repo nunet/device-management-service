@@ -5,9 +5,8 @@ import (
 	"os"
 	"slices"
 
-	"gitlab.com/nunet/device-management-service/maint-scripts/e2e/logs/types"
-
 	shared "gitlab.com/nunet/device-management-service/maint-scripts/e2e"
+	"gitlab.com/nunet/device-management-service/maint-scripts/e2e/logs/types"
 )
 
 var errorsArgs ErrorsArgs
@@ -17,8 +16,9 @@ func init() {
 }
 
 type ErrorsArgs struct {
-	ErrorsIncInfo  bool `help:"Include INFO level msgs containing an 'error' prop" default:"true" arg:"--errors-inc-info"`
-	ErrorsIncDebug bool `help:"Include DEBUG level msgs containing an 'error' prop" default:"true" arg:"--errors-inc-debug"`
+	ErrorsIncInfo  bool `help:"Include INFO level msgs containing an 'error' prop" default:"false" arg:"--errors-inc-info"`
+	ErrorsIncDebug bool `help:"Include DEBUG level msgs containing an 'error' prop" default:"false" arg:"--errors-inc-debug"`
+	ErrorsIncWarn  bool `help:"Include WARN level msgs containing an 'error' prop" default:"false" arg:"--errors-inc-warn"`
 	ErrorsIncError bool `help:"Include ERROR level msgs containing an 'error' prop" default:"true" arg:"--errors-inc-error"`
 }
 
@@ -32,7 +32,9 @@ func Errors(args types.Args, files []shared.LogFile, logs [][]*shared.LogLine) (
 	var err error
 	for i, lines := range logs {
 		// filter out levels
-		if !errorsArgs.ErrorsIncInfo || !errorsArgs.ErrorsIncDebug || !errorsArgs.ErrorsIncError {
+		if !errorsArgs.ErrorsIncInfo || !errorsArgs.ErrorsIncDebug || !errorsArgs.ErrorsIncError ||
+			!errorsArgs.ErrorsIncWarn {
+
 			lines = slices.DeleteFunc(lines, func(line *shared.LogLine) bool {
 				if !errorsArgs.ErrorsIncInfo && line.Level == "INFO" {
 					return true
@@ -41,6 +43,9 @@ func Errors(args types.Args, files []shared.LogFile, logs [][]*shared.LogLine) (
 					return true
 				}
 				if !errorsArgs.ErrorsIncError && line.Level == "ERROR" {
+					return true
+				}
+				if !errorsArgs.ErrorsIncWarn && line.Level == "WARN" {
 					return true
 				}
 

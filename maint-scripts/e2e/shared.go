@@ -97,7 +97,7 @@ type LogFile struct {
 }
 
 type ArgsBasic struct {
-	SourceName string   `help:"'acceptance' or 'config' or an E2E test name (required)" arg:"positional"`
+	SourceName string   `help:"'acceptance' or 'config' or an E2E test name (required)" arg:"positional" default:"config"`
 	NodeName   []string `help:"Show logs of specific nodes, eg dms0 (repeatable)" arg:"--node-name,separate"`
 	Config     string   `help:"Fixed path to the config for SOURCENAME config"`
 	Dir        []string `help:"Additional source of *.jsonl files (repeatable)" arg:"--dir,separate"`
@@ -110,6 +110,7 @@ type ArgsBasic struct {
 	AllFields      bool     `help:"Show all fields" arg:"-a,--all-fields"`
 
 	Max            int    `help:"Maximum lines to show per node" default:"1000"`
+	Last           int    `help:"Show the last N lines (ignores --max)"`
 	Headers        bool   `help:"Show node headers" default:"true"`
 	HeadersNetwork bool   `help:"Show the network header" default:"true" arg:"--headers-network"`
 	OutputHTML     string `help:"Render HTML to a file" arg:"-o,--output-html"`
@@ -437,9 +438,14 @@ func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 // RenderSlice saves a JSONL file, renders it to the terminal, and returns the output.
 func RenderSlice(name string, data []*LogLine, cfg ArgsBasic) (string, error) {
 	show := data
-	if cfg.Max > 0 && len(data) > cfg.Max {
+	if cfg.Last > 0 {
+		start := len(data) - cfg.Last
+		start = max(0, start)
+		show = data[start:]
+	} else if cfg.Max > 0 && len(data) > cfg.Max {
 		show = data[:cfg.Max]
 	}
+
 	if path, err := SaveSlice(name, show); err != nil {
 		return "", err
 	} else if ret, err := RenderLog(path, len(data)-len(show), cfg); err != nil {
@@ -972,9 +978,12 @@ func (c *lineCollector) applyQuery() error {
 	}
 	resQuery := make([]string, 0, len(c.results))
 	for _, line := range c.results {
-		var input any
+		var input map[string]any
 		if err := json.Unmarshal([]byte(line), &input); err != nil {
 			return fmt.Errorf("parsing log line: %w", err)
+		}
+		if _, ok := input["allocationID"]; ok {
+			print()
 		}
 		_, ok := code.Run(input).Next()
 		if !ok {
