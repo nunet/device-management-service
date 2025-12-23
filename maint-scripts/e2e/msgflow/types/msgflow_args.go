@@ -45,49 +45,42 @@ func (Args) Description() string {
 		
 		Examples:
 		
+		Diagram for the local DMS and logs from ./import, max 100 msgs per node
+		$> %s --dir import --max 100
+		
+		Like above, but noise filtered out and with latest msgs
+		$> %s -p filtered --dir import --last 100
+		
+		Msgs from 1 second around line 50 for the node "dms1"
+		$> %s \
+			--line 50 \
+			--node-name dms1 \
+			--adjacent-duration 1s
+		
+		Msgs within lines 50 to 60 for the node "dms1"
+		$> %s --line 50:60 --node-name dms1
+		
+		Msgs within lines 50 to 60 for the node "dms1", with flight times
+		$> %s --line 50:60 --node-name dms1 --fligtrec
+	
+		Msgs from 10:09:50 to 10:09:56 for the node "dms1"
+		$> %s \
+			--timestamp-start 2025-09-24T10:09:50 \
+			--timestamp-end 2025-09-24T10:09:56 \
+			--node-name dms1
+		
+		Msgs from 10:09:56 plus 10 adjacent lines, for the node "dms1"
+		$> %s \
+			--timestamp 2025-09-24T10:09:56 \
+			--node-name dms1 \
+			--adjacent-lines 10
+		
 		Grouped diagram for the latest acceptance test run
 		$> %s acceptance \
 			--diagram-group
 		
 		Diagram for all nodes in the E2E deployment_updates test run
 		$> %s deployment_updates
-		
-		Diagram for the local DMS and logs from ./tmp, max 3 lines per node
-		$> %s config \
-			--dir tmp \
-			--max 3
-		
-		Filtered version of above
-		$> %s config \
-			--dir tmp \
-			--max 3 \
-			--self-msgs=false \
-			--replyto-msgs=false \
-			--hello-msgs=false
-		
-		Msgs from 1 second around line 50 for the node "dms1"
-		$> %s deployment_updates \
-			--line 50 \
-			--node-name dms1 \
-			--adjacent-duration 1s
-		
-		Msgs within lines 50 to 60 for the node "dms1"
-		$> %s deployment_updates --line 50:60 --node-name dms1
-		
-		Msgs within lines 50 to 60 for the node "dms1", with flight times
-		$> %s deployment_updates --line 50:60 --node-name dms1 --fligtrec
-	
-		Msgs from 10:09:50 to 10:09:56 for the node "dms1"
-		$> %s deployment_updates \
-			--timestamp-start 2025-09-24T10:09:50 \
-			--timestamp-end 2025-09-24T10:09:56 \
-			--node-name dms1
-		
-		Msgs from 10:09:56 plus 10 adjacent lines, for the node "dms1"
-		$> %s deployment_updates \
-			--timestamp 2025-09-24T10:09:56 \
-			--node-name dms1 \
-			--adjacent-lines 10
 	
 		Presets: %s	
 	`, n, n, n, n, n, n, n, n, n, Presets)

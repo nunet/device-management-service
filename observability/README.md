@@ -357,3 +357,11 @@ ssl:
 9. Results available after stopping the DMS and waiting for a bit:
    - Traces: [Observability -> APM -> nunet-dms -> Traces -> DMS](https://localhost:5601/app/apm/services/nunet-dms/overview?comparisonEnabled=true&environment=ENVIRONMENT_ALL&kuery=&latencyAggregationType=avg&offset=1d&rangeFrom=now-15m&rangeTo=now&serviceGroup=)
    - Logs: [Analytics -> Discover -> dms-logs](https://localhost:5601/app/management/data/index_management/data_streams/logs-nunet-dms) and [Management -> Stack Management -> Index Management](https://localhost:5601/app/discover#)
+
+### Flight Recorder
+
+Flight recorder records the last N seconds of the DMS execution and saves it to `LOGDIR/flightrec.trace`.
+
+**Activation:** Start DMS with `DMS_FLIGHTREC_SEC=60` for one minute of flight recording (started automatically).
+
+**Capturing:** By calling the dedicated behavior `/dms/debug/flightrec`. Only a single capture per process run can take place.

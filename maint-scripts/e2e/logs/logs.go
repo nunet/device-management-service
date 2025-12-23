@@ -38,6 +38,24 @@ func main() {
 		os.Exit(0)
 	}
 
+	// validate presets
+	for _, preset := range args.Preset {
+		if _, ok := presets.Presets[preset]; !ok {
+			continue
+		}
+		if _, ok := presets.PresetsArgs[preset]; !ok {
+			continue
+		}
+		p.Fail(fmt.Sprintf("unknown preset: %s", preset))
+	}
+
+	// handle args presets
+	for _, preset := range args.Preset {
+		if _, ok := presets.PresetsArgs[preset]; ok {
+			args = presets.PresetsArgs[preset](args)
+		}
+	}
+
 	// collect and process log files
 	logs := shared.CollectLogFiles(args.ArgsBasic, args.NodeName)
 	processed := make([][]*shared.LogLine, len(logs))
@@ -56,10 +74,9 @@ func main() {
 
 	// handle presets
 	for _, preset := range args.Preset {
-		if _, ok := presets.Presets[preset]; !ok {
-			p.Fail(fmt.Sprintf("unknown preset: %s", preset))
+		if _, ok := presets.Presets[preset]; ok {
+			logs, processed = presets.Presets[preset](args, logs, processed)
 		}
-		logs, processed = presets.Presets[preset](args, logs, processed)
 	}
 
 	// render stdout
