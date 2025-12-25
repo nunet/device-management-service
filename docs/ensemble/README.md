@@ -114,7 +114,19 @@ execution:
     image: nginxdemos/hello:plain-text
     working_directory: /
 ```
-Describes the exectutor we're looking to run this job on is "docker". The DMS will eventually support more executors but for now, only docker is available. When more executors are supported, the `execution` section will likely require different fileds and values than what is layed out for "docker" in the example. For example `image` field won't be necessary for a `host` executor type that runs commands on the host's system but `working_directory` will likely remain.
+
+Describes the executor we're looking to run this job on, which is "docker." For the docker executor/runner, specifying `image` is mandatory. Other parameters, such as `entrypoint`, `cmd`, and `working_directory`, may be set by the image itself. Additionally, if the image to be deployed is located in a private registry, it is possible to use the `registry_auth` field. Through this field, a username and password can be specified to authenticate with the registry and allow the compute provider to pull the image.
+```yml
+execution:
+  type: docker
+  image: registry.private.example/image/path
+  working_directory: /
+  registry_auth:
+    username: theuser
+    password: thepassword
+```
+Note that credentials placed in the ensemble will be visible to the compute provider and, therefore, should not be used if the compute provider is not trusted. Consider making a specific image public for this purpose instead of including a username and password for a registry in an ensemble spec. This approach is particularly useful in scenarios where the compute providers are known and trusted, such as within a private cluster of an organization.
+
 
 ```yml
 healthcheck:
