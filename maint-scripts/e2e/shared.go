@@ -177,7 +177,7 @@ func SourceConfig(path string) []LogFile {
 		}
 
 		return []LogFile{{
-			Path:      cfg.Observability.LogFile,
+			Path:      cfg.Logging.File,
 			Name:      "config",
 			Number:    0,
 			Flightrec: flightrec,

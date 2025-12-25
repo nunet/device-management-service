@@ -42,6 +42,7 @@ type ClientInterface interface {
 		config *container.Config,
 		hostConfig *container.HostConfig,
 		networkingConfig *network.NetworkingConfig,
+		imagePullOpts image.PullOptions,
 		platform *v1.Platform,
 		name string,
 		pullImage bool,
@@ -64,7 +65,7 @@ type ClientInterface interface {
 	RemoveObjectsWithLabel(ctx context.Context, label string, value string) error
 	FindContainer(ctx context.Context, label string, value string) (string, error)
 	GetImage(ctx context.Context, imageName string) (image.Summary, error)
-	PullImage(ctx context.Context, imageName string) (string, error)
+	PullImage(ctx context.Context, imageName string, imagePullOpts image.PullOptions) (string, error)
 	GetOutputStream(
 		ctx context.Context,
 		containerID string,
@@ -126,6 +127,7 @@ func (c *Client) CreateContainer(
 	config *container.Config,
 	hostConfig *container.HostConfig,
 	networkingConfig *network.NetworkingConfig,
+	imagePullOpts image.PullOptions,
 	platform *v1.Platform,
 	name string,
 	pullImage bool,
@@ -136,7 +138,7 @@ func (c *Client) CreateContainer(
 		"name", name)
 
 	if pullImage {
-		_, err := c.PullImage(ctx, config.Image)
+		_, err := c.PullImage(ctx, config.Image, imagePullOpts)
 		if err != nil {
 			log.Errorw("docker_create_container_failure",
 				"labels", string(observability.LabelDeployment),
@@ -456,12 +458,12 @@ func (c *Client) GetImage(ctx context.Context, imageName string) (image.Summary,
 }
 
 // PullImage pulls a Docker image from a registry.
-func (c *Client) PullImage(ctx context.Context, imageName string) (string, error) {
+func (c *Client) PullImage(ctx context.Context, imageName string, imagePullOpts image.PullOptions) (string, error) {
 	log.Infow("docker_pull_image_started",
 		"labels", string(observability.LabelDeployment),
 		"image", imageName)
 
-	out, err := c.client.ImagePull(ctx, imageName, image.PullOptions{})
+	out, err := c.client.ImagePull(ctx, imageName, imagePullOpts)
 	if err != nil {
 		log.Errorw("docker_pull_image_failure",
 			"labels", string(observability.LabelDeployment),

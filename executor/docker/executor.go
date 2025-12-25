@@ -12,6 +12,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
@@ -628,6 +630,13 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to configure host config: %w", err)
 	}
 
+	imagePullOpts := image.PullOptions{}
+	if dockerArgs.RegistryAuth.Username != "" && dockerArgs.RegistryAuth.Password != "" {
+		registryAuth := `{"username":"` + dockerArgs.RegistryAuth.Username +
+			`","password":"` + dockerArgs.RegistryAuth.Password + `"}`
+		imagePullOpts.RegistryAuth = base64.StdEncoding.EncodeToString([]byte(registryAuth))
+	}
+
 	hasImage := e.client.HasImage(ctx, dockerArgs.Image)
 
 	executionContainer, err := e.client.CreateContainer(
@@ -635,6 +644,7 @@ func (e *Executor) newDockerExecutionContainer(
 		&containerConfig,
 		&hostConfig,
 		nil,
+		imagePullOpts,
 		nil,
 		params.JobID,
 		!hasImage, // only pull if we don't have the image

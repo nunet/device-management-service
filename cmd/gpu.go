@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/executor/docker"
@@ -193,6 +194,7 @@ func newGPUTestCommand() *cobra.Command {
 				containerConfig,
 				hostConfig,
 				nil,
+				image.PullOptions{},
 				nil,
 				"nunet-gpu-test",
 				true,

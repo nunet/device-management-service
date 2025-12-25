@@ -24,6 +24,11 @@ const (
 	EngineKeyWorkingDirectory = "working_directory"
 )
 
+type RegistryAuth struct {
+	Username string `json:"username,omitempty" yaml:"username,omitempty"`
+	Password string `json:"password,omitempty" yaml:"password,omitempty"`
+}
+
 // EngineSpec contains necessary parameters to execute a docker job.
 type EngineSpec struct {
 	// Image this should be pullable by docker
@@ -40,6 +45,8 @@ type EngineSpec struct {
 	Privileged bool `json:"privileged,omitempty" yaml:"privileged,omitempty"`
 	// User to run the container as
 	User string `json:"user,omitempty" yaml:"user,omitempty"`
+	// RegistryAuth to authenticate with registries when pulling private images
+	RegistryAuth RegistryAuth `json:"registry_auth,omitempty" yaml:"registry_auth,omitempty"`
 }
 
 // Validate checks if the engine spec is valid
