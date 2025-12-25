@@ -159,6 +159,7 @@ func (c *Committer) commit(
 					"nodeID", n,
 					"error", err)
 				ok = false
+				mx.Unlock()
 				return
 			}
 			log.Infow("committing deployment",
