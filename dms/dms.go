@@ -13,6 +13,7 @@ package dms
 
 import (
 	"context"
+	"crypto/ed25519"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -417,6 +418,43 @@ func GenerateAndStorePrivKey(ks keystore.KeyStore, passphrase string, keyID stri
 	_, err = ks.Save(
 		keyID,
 		rawPriv,
+		passphrase,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to save private key into the keystore: %w", err)
+	}
+
+	return privK, nil
+}
+
+// ImportAndStorePrivKey validates the provided private key and stores it into the user's keystore.
+func ImportAndStorePrivKey(ks keystore.KeyStore, rawPriv []byte, passphrase string, keyID string) (crypto.PrivKey, error) {
+	privK, err := crypto.UnmarshalPrivateKey(rawPriv)
+	if err != nil {
+		// try to interpret as raw Ed25519 key
+		if len(rawPriv) == 32 {
+			// assume it's a seed
+			stdPriv := ed25519.NewKeyFromSeed(rawPriv)
+			privK, err = crypto.UnmarshalEd25519PrivateKey(stdPriv)
+		} else if len(rawPriv) == 64 {
+			// assume it's a full private key
+			privK, err = crypto.UnmarshalEd25519PrivateKey(rawPriv)
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("invalid private key format: %w", err)
+		}
+	}
+
+	// ensure we store the key in Protobuf format, regardless of input
+	marshaledPriv, err := crypto.MarshalPrivateKey(privK)
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal private key: %w", err)
+	}
+
+	_, err = ks.Save(
+		keyID,
+		marshaledPriv,
 		passphrase,
 	)
 	if err != nil {

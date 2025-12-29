@@ -9,6 +9,7 @@
 package cmd
 
 import (
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -36,6 +37,7 @@ This command provides subcommands for creating new keys and retrieving Decentral
 	}
 
 	cmd.AddCommand(newKeyNewCmd(dmsCli))
+	cmd.AddCommand(newKeyImportCmd(dmsCli))
 	cmd.AddCommand(newKeyDIDCmd(dmsCli))
 	cmd.AddCommand(newKeyLedgerAliasCmd(dmsCli))
 
@@ -95,6 +97,72 @@ Example:
 			priv, err := dms.GenerateAndStorePrivKey(ks, passphrase, keyID)
 			if err != nil {
 				return fmt.Errorf("failed to generate and store new private key: %w", err)
+			}
+
+			did := did.FromPublicKey(priv.GetPublic())
+			fmt.Fprintln(cmd.OutOrStdout(), did)
+			return nil
+		},
+	}
+}
+
+func newKeyImportCmd(
+	dmsCli *cli.DmsCLI,
+) *cobra.Command {
+	return &cobra.Command{
+		Use:   "import <name> <private-key-hex>",
+		Short: "Import a private key",
+		Long: `Import an existing private key into the user's local keystore.
+
+This command takes a hex-encoded private key (in libp2p protobuf format or raw Ed25519 seed) and stores it securely with the given name.
+If a key with the specified name already exists, the user will be prompted to confirm before overwriting it.
+
+Example:
+  nunet key import myweb3key 08011240...`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			keyID := args[0]
+			hexKey := args[1]
+
+			rawPriv, err := hex.DecodeString(hexKey)
+			if err != nil {
+				return fmt.Errorf("invalid hex string: %w", err)
+			}
+
+			cfg, err := dmsCli.Config()
+			if err != nil {
+				return fmt.Errorf("get dms config: %w", err)
+			}
+			fs := dmsCli.FS()
+
+			keyStoreDir := filepath.Join(cfg.General.UserDir, node.KeystoreDir)
+			ks, err := keystore.New(fs, keyStoreDir, false)
+			if err != nil {
+				return fmt.Errorf("failed to create keystore: %w", err)
+			}
+
+			if ks.Exists(keyID) {
+				confirmed, err := dmsUtils.PromptYesNo(
+					cmd.InOrStdin(),
+					cmd.OutOrStdout(),
+					fmt.Sprintf("A key with name '%s' already exists. Do you want to overwrite it?", keyID),
+				)
+				if err != nil {
+					return fmt.Errorf("failed to get user confirmation: %w", err)
+				}
+				if !confirmed {
+					return dmsUtils.ErrOperationCancelled
+				}
+			}
+
+			passphrase, err := dmsCli.NewPassphrase(keyID)
+			if err != nil {
+				return fmt.Errorf("get dms passphrase: %w", err)
+			}
+
+			priv, err := dms.ImportAndStorePrivKey(ks, rawPriv, passphrase, keyID)
+			if err != nil {
+				return fmt.Errorf("failed to import and store private key: %w", err)
 			}
 
 			did := did.FromPublicKey(priv.GetPublic())
