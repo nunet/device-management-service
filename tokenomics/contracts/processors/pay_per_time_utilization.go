@@ -120,17 +120,37 @@ func (p *PayPerTimeUtilizationProcessor) SupportsManualBilling() bool {
 
 // SupportsAutomaticBilling implements PaymentModelProcessor.SupportsAutomaticBilling
 func (p *PayPerTimeUtilizationProcessor) SupportsAutomaticBilling() bool {
-	return false
+	return true
 }
 
 // CheckAndGenerateInvoice implements PaymentModelProcessor.CheckAndGenerateInvoice
-// This payment model does not support automatic billing, so this should never be called.
 func (p *PayPerTimeUtilizationProcessor) CheckAndGenerateInvoice(
-	_ *contracts.Contract,
-	_ time.Time,
-	_ time.Time,
+	contract *contracts.Contract,
+	lastInvoiceAt time.Time,
+	now time.Time,
 ) (*contracts.UsageData, error) {
-	return nil, fmt.Errorf("pay_per_time_utilization does not support automatic billing")
+	pd := contract.PaymentDetails
+
+	// Parse payment period
+	periodDuration, err := convert.ParsePaymentPeriod(pd.PaymentPeriod)
+	if err != nil {
+		return nil, fmt.Errorf("invalid payment_period: %w", err)
+	}
+
+	// Calculate elapsed periods
+	billingCyclesElapsed, _, _ := convert.CalculateElapsedPeriods(
+		lastInvoiceAt,
+		now,
+		periodDuration,
+		pd.PaymentPeriodCount,
+	)
+
+	if billingCyclesElapsed < 1 {
+		return nil, ErrPeriodNotElapsed
+	}
+
+	// Period has elapsed, collect usage
+	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now)
 }
 
 // buildAllocationWindows is processor-specific logic

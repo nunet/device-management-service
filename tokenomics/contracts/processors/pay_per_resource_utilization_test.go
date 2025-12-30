@@ -201,7 +201,7 @@ func TestPayPerResourceUtilizationProcessor_SupportsBilling(t *testing.T) {
 	processor := NewPayPerResourceUtilizationProcessor(store)
 
 	require.True(t, processor.SupportsManualBilling())
-	require.False(t, processor.SupportsAutomaticBilling())
+	require.True(t, processor.SupportsAutomaticBilling())
 }
 
 func addStartAllocationEventWithResources(t *testing.T, store *usage.Store, contractDID, allocationID, deploymentID string, resources types.Resources, timestamp time.Time) {

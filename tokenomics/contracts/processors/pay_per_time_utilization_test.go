@@ -148,7 +148,7 @@ func TestPayPerTimeUtilizationProcessor_SupportsBilling(t *testing.T) {
 	processor := NewPayPerTimeUtilizationProcessor(store)
 
 	require.True(t, processor.SupportsManualBilling())
-	require.False(t, processor.SupportsAutomaticBilling())
+	require.True(t, processor.SupportsAutomaticBilling())
 }
 
 func addCompleteAllocationEvent(t *testing.T, store *usage.Store, contractDID, allocationID, deploymentID string, timestamp time.Time) {

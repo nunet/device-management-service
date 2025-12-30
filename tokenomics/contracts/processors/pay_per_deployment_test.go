@@ -167,7 +167,7 @@ func TestPayPerDeploymentProcessor_SupportsBilling(t *testing.T) {
 	processor := NewPayPerDeploymentProcessor(store)
 
 	require.True(t, processor.SupportsManualBilling())
-	require.False(t, processor.SupportsAutomaticBilling())
+	require.True(t, processor.SupportsAutomaticBilling())
 }
 
 func addDeploymentStartEvent(t *testing.T, store *usage.Store, contractDID, deploymentID, orchestratorID string, timestamp time.Time) {
