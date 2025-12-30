@@ -420,7 +420,22 @@ func GenerateContractID(req CreateContractRequest) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
+// SetPeriodicityDefaults sets default values for PaymentPeriod and PaymentPeriodCount if not provided.
+// Default: PaymentPeriod = "hour", PaymentPeriodCount = 1
+// This ensures all contracts have periodicity configured for automatic billing.
+func SetPeriodicityDefaults(pd *PaymentDetails) {
+	if pd.PaymentPeriod == "" {
+		pd.PaymentPeriod = PaymentPeriodHour
+	}
+	if pd.PaymentPeriodCount <= 0 {
+		pd.PaymentPeriodCount = 1
+	}
+}
+
 func NewContract(contractDID string, req CreateContractRequest) *Contract {
+	// Set periodicity defaults if not provided
+	SetPeriodicityDefaults(&req.PaymentDetails)
+
 	return &Contract{
 		ContractDID:           contractDID,
 		SolutionEnablerDID:    req.SolutionEnablerDID,

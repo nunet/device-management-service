@@ -150,7 +150,8 @@ type Node struct {
 	contractStore    *store.Store
 	paymentStore     *payment.Store
 	usageStore       *usage.Store
-	contractActors   []*tokenomics.ContractActor
+	contractActors   map[string]*tokenomics.ContractActor // DID URI -> Actor (optimized lookup)
+	billingScheduler *tokenomics.ContractBillingScheduler
 	transactionStore *transaction.Store
 
 	// contract event handler
@@ -302,7 +303,7 @@ func New(cfg config.Config, fs afero.Afero,
 		paymentStore:           paymentStore,
 		usageStore:             usageStore,
 		transactionStore:       transactionStore,
-		contractActors:         make([]*tokenomics.ContractActor, 0),
+		contractActors:         make(map[string]*tokenomics.ContractActor),
 		serverProviderRegistry: providerRegistry,
 		gatewayStore:           gatewayStore,
 	}
@@ -360,6 +361,28 @@ func New(cfg config.Config, fs afero.Afero,
 			return nil, fmt.Errorf("adding %s behavior: %w", behavior, err)
 		}
 	}
+
+	// Create billing scheduler with billing function
+	// Note: billingFunc closure references n, so it must be created after n
+	billingFunc := func(contractDID did.DID) error {
+		return n.executeBillingForContract(contractDID)
+	}
+
+	billingScheduler, err := tokenomics.NewContractBillingScheduler(
+		contractStore,
+		usageStore,
+		billingFunc,
+	)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create billing scheduler: %w", err)
+	}
+
+	// Set billing scheduler on node
+	n.billingScheduler = billingScheduler
+
+	// NOTE: Do NOT start billing scheduler here
+	// It will be started in Node.Start() method
 
 	return n, nil
 }
@@ -874,6 +897,13 @@ func (n *Node) Start() error {
 		}
 	}()
 
+	// Start billing scheduler
+	if n.billingScheduler != nil {
+		n.billingScheduler.Start()
+		log.Infow("billing scheduler started",
+			"labels", string(observability.LabelNode))
+	}
+
 	n.running.Store(true)
 	go n.gcBidState()
 	go n.geolocate()
@@ -890,6 +920,13 @@ func (n *Node) Start() error {
 func (n *Node) Stop() error {
 	log.Infow("node_stop_initiated",
 		"labels", string(observability.LabelNode))
+
+	// Stop billing scheduler first (before stopping other components)
+	if n.billingScheduler != nil {
+		n.billingScheduler.Stop()
+		log.Infow("billing scheduler stopped",
+			"labels", string(observability.LabelNode))
+	}
 
 	if err := n.allocator.Stop(context.Background()); err != nil {
 		log.Errorf("stopping node allocator: %s", err)
@@ -1095,7 +1132,61 @@ func (n *Node) addContractActor(a *tokenomics.ContractActor) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
-	n.contractActors = append(n.contractActors, a)
+	n.contractActors[a.ContractDID.URI] = a
+}
+
+// executeBillingForContract executes billing for a contract
+// This is called by the scheduler
+func (n *Node) executeBillingForContract(contractDID did.DID) error {
+	// Get contract to verify it exists
+	contract, err := n.contractStore.GetContract(contractDID.URI)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	// Find the contract actor using map lookup (O(1))
+	contractActor, exists := n.contractActors[contractDID.URI]
+	if !exists {
+		return fmt.Errorf("contract actor not found for %s", contractDID.URI)
+	}
+
+	// Check if contract should stop billing
+	if contract.CurrentState == contracts.ContractTerminated ||
+		contract.CurrentState == contracts.ContractCompleted {
+		// For FixedRental and Periodic payment models, generate pro-rated final invoice before unregistering
+		if contract.PaymentDetails.PaymentModel == contracts.FixedRental ||
+			contract.PaymentDetails.PaymentModel == contracts.Periodic {
+			// Execute billing to generate pro-rated final invoice for terminated contract
+			// This will call handleTerminatedContractInvoice() which generates the pro-rated invoice
+			err = contractActor.CheckAndGenerateInvoice()
+			if err != nil {
+				// Log error but still unregister - the invoice generation may have failed
+				// but we don't want to keep retrying for a terminated contract
+				log.Warnw("failed to generate final invoice for terminated contract",
+					"labels", string(observability.LabelContract),
+					"contract_did", contractDID.URI,
+					"payment_model", contract.PaymentDetails.PaymentModel,
+					"error", err)
+			}
+		}
+		// Unregister from scheduler after attempting to generate final invoice
+		n.billingScheduler.UnregisterContract(contractDID)
+		return fmt.Errorf("contract %s is %s, stopping billing", contractDID.URI, contract.CurrentState)
+	}
+
+	// Execute billing
+	err = contractActor.CheckAndGenerateInvoice()
+	if err != nil {
+		return fmt.Errorf("billing execution failed: %w", err)
+	}
+
+	// Update billing schedule after successful invoice
+	// This updates the trigger's lastInvoiceAt to use actual invoice time
+	if err = n.billingScheduler.UpdateContract(contractDID); err != nil {
+		return fmt.Errorf("failed to update billing schedule: %w", err)
+	}
+
+	return nil
 }
 
 func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUsagesAndForwardToPaymentProvidersRequest) contracts.CollectUsagesAndForwardToPaymentProvidersReponse {

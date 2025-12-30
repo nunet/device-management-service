@@ -166,6 +166,21 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 	if err := contractActor.Start(); err != nil {
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to start actor: %w", err)
 	}
+
+	// Register with billing scheduler
+	// NOTE: This is safe even if the contract is later loaded by StartContracts()
+	// because RegisterContract() is idempotent and checks for existing registration
+	if n.billingScheduler != nil {
+		err = contractActor.RegisterBilling(n.billingScheduler)
+		if err != nil {
+			log.Warnw("failed to register contract for billing",
+				"contract_did", contractActor.ContractDID.URI,
+				"error", err)
+			// Don't fail contract creation if billing registration fails
+		}
+	}
+
+	// Store actor reference in map for O(1) lookup
 	n.addContractActor(contractActor)
 
 	go func() {
@@ -636,6 +651,21 @@ func (n *Node) StartContracts() error {
 		if err != nil {
 			continue
 		}
+
+		// Register with billing scheduler
+		// NOTE: This is idempotent - if a contract was already registered
+		// (e.g., created while node was running), this will be a no-op
+		if n.billingScheduler != nil {
+			err = contractActor.RegisterBilling(n.billingScheduler)
+			if err != nil {
+				log.Warnw("failed to register contract for billing",
+					"contract_did", contractActor.ContractDID.URI,
+					"error", err)
+			}
+		}
+
+		// Store actor reference in map for O(1) lookup
+		n.addContractActor(contractActor)
 	}
 
 	return nil

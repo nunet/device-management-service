@@ -194,16 +194,37 @@ func (p *PayPerResourceUtilizationProcessor) SupportsManualBilling() bool {
 
 // SupportsAutomaticBilling implements PaymentModelProcessor.SupportsAutomaticBilling
 func (p *PayPerResourceUtilizationProcessor) SupportsAutomaticBilling() bool {
-	return false
+	return true
 }
 
 // CheckAndGenerateInvoice implements PaymentModelProcessor.CheckAndGenerateInvoice
 func (p *PayPerResourceUtilizationProcessor) CheckAndGenerateInvoice(
-	_ *contracts.Contract,
-	_ time.Time,
-	_ time.Time,
+	contract *contracts.Contract,
+	lastInvoiceAt time.Time,
+	now time.Time,
 ) (*contracts.UsageData, error) {
-	return nil, fmt.Errorf("pay_per_resource_utilization does not support automatic billing")
+	pd := contract.PaymentDetails
+
+	// Parse payment period
+	periodDuration, err := convert.ParsePaymentPeriod(pd.PaymentPeriod)
+	if err != nil {
+		return nil, fmt.Errorf("invalid payment_period: %w", err)
+	}
+
+	// Calculate elapsed periods
+	billingCyclesElapsed, _, _ := convert.CalculateElapsedPeriods(
+		lastInvoiceAt,
+		now,
+		periodDuration,
+		pd.PaymentPeriodCount,
+	)
+
+	if billingCyclesElapsed < 1 {
+		return nil, ErrPeriodNotElapsed
+	}
+
+	// Period has elapsed, collect usage
+	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now)
 }
 
 // buildAllocationWindowsWithResources builds windows with resources from events

@@ -185,28 +185,9 @@ func (c *ContractActor) Start() error {
 		}
 	}()
 
-	// Fixed Rental and Periodic billing routines (only start for applicable contracts)
-	// Check payment model before starting the billing routine to avoid unnecessary
-	// goroutines for contracts with other payment models
-	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
-	if err != nil {
-		log.Errorw("failed to get contract to check payment model for billing routine",
-			"labels", string(observability.LabelContract),
-			"contract_did", c.ContractDID.URI,
-			"error", err)
-		// Continue - billing routine won't start, but actor still starts
-		return nil
-	}
-
-	// Start unified automatic billing routine if supported
-	processor, err := contracts.GetPaymentModelProcessor(contract.PaymentDetails.PaymentModel)
-	if err == nil && processor.SupportsAutomaticBilling() {
-		go c.startAutomaticBilling()
-		log.Infow("started automatic billing routine",
-			"labels", string(observability.LabelContract),
-			"contract_did", c.ContractDID.URI,
-			"payment_model", contract.PaymentDetails.PaymentModel)
-	}
+	// REMOVED: Old per-actor goroutine billing routine
+	// The billing is now handled by the centralized scheduler
+	// Registration happens via RegisterBilling() method called by Node
 
 	log.Infow("contract actor started",
 		"labels", string(observability.LabelContract),
@@ -596,25 +577,6 @@ func (c *ContractActor) handleContractValidation(msg actor.Envelope) {
 	c.sendReply(msg, resp)
 }
 
-// parsePaymentPeriod converts a payment period string to a time.Duration
-func parsePaymentPeriod(period string) (time.Duration, error) {
-	switch period {
-	case contracts.PaymentPeriodMinute:
-		return time.Minute, nil
-	case contracts.PaymentPeriodHour:
-		return time.Hour, nil
-	case contracts.PaymentPeriodDay:
-		return 24 * time.Hour, nil
-	case contracts.PaymentPeriodWeek:
-		return 7 * 24 * time.Hour, nil
-	case contracts.PaymentPeriodMonth:
-		// Approximate: 30 days (could be enhanced to handle exact calendar months)
-		return 30 * 24 * time.Hour, nil
-	default:
-		return 0, fmt.Errorf("invalid payment_period: %s", period)
-	}
-}
-
 func (c *ContractActor) sendFixedRentalInvoice(
 	contract *contracts.Contract,
 	fixedRentalUsage *contracts.FixedRentalUsage,
@@ -659,56 +621,6 @@ func (c *ContractActor) sendFixedRentalInvoice(
 			"contract_did", c.ContractDID.URI,
 			"periods_invoiced", fixedRentalUsage.PeriodsInvoiced,
 			"amount", fixedRentalUsage.Amount)
-	}
-}
-
-// startAutomaticBilling is the unified billing routine for all automatic billing models
-func (c *ContractActor) startAutomaticBilling() {
-	// Check immediately on start to catch any invoices that should have been generated
-	shouldStop := c.checkAndGenerateInvoice()
-	if shouldStop {
-		log.Infow("automatic billing routine stopping after initial check - contract terminated or completed",
-			"labels", string(observability.LabelContract),
-			"contract_did", c.ContractDID.URI)
-		return
-	}
-
-	// Use appropriate ticker interval based on payment model
-	contract, err := c.contractStore.GetContract(c.ContractDID.URI)
-	var tickerInterval time.Duration
-	if err == nil {
-		switch contract.PaymentDetails.PaymentModel {
-		case contracts.FixedRental:
-			tickerInterval = FixedRentalBillingCheckerInterval
-		case contracts.Periodic:
-			tickerInterval = PeriodicBillingCheckerInterval
-		default:
-			tickerInterval = 15 * time.Minute // Default
-		}
-	} else {
-		tickerInterval = 15 * time.Minute // Default on error
-	}
-
-	ticker := time.NewTicker(tickerInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.ctx.Done():
-			log.Infow("automatic billing routine stopped",
-				"labels", string(observability.LabelContract),
-				"contract_did", c.ContractDID.URI)
-			return
-		case <-ticker.C:
-			// Check if we should stop (contract terminated or completed)
-			shouldStop := c.checkAndGenerateInvoice()
-			if shouldStop {
-				log.Infow("automatic billing routine stopping - contract terminated or completed",
-					"labels", string(observability.LabelContract),
-					"contract_did", c.ContractDID.URI)
-				return
-			}
-		}
 	}
 }
 
@@ -764,14 +676,23 @@ func (c *ContractActor) checkAndGenerateInvoice() bool {
 	now := time.Now()
 
 	// Initialize lastInvoiceAt if zero (first invoice)
+	// For contracts that start mid-period, first invoice should cover partial period
+	// by using contract start date as baseline.
+	// For automatic-only models (FixedRental, Periodic), we save the initialization
+	// to prevent infinite re-initialization loop. For models that support manual billing,
+	// we don't save to avoid interfering with manual collection which should start from zero.
 	unixEpoch := time.Unix(0, 0)
 	if lastInvoiceAt.IsZero() || lastInvoiceAt.Equal(unixEpoch) {
-		// For first invoice, use appropriate baseline
-		if contract.PaymentDetails.PaymentModel == contracts.Periodic {
-			lastInvoiceAt = contract.Duration.StartDate
-		} else {
-			lastInvoiceAt = now
-		}
+		// For first invoice calculation, use contract start date to ensure partial period coverage
+		// This ensures no usage is lost if contract starts mid-period
+		lastInvoiceAt = contract.Duration.StartDate
+		// Save initialization timestamp for all automatic billing models
+		// This prevents infinite re-initialization loop.
+		// Manual collection can still work correctly - it will use this saved timestamp
+		// when querying, which is correct because it represents the last time automatic
+		// billing processed usage. Manual collection queries from lastProcessedAt to now,
+		// so if it's the first manual collection, it will still capture all usage from
+		// contract start date to now.
 		if err := c.usageStore.SaveLastProcessedAt(c.ContractDID.URI, lastInvoiceAt); err != nil {
 			log.Errorw("failed to save initial timestamp for automatic billing",
 				"labels", string(observability.LabelContract),
@@ -830,6 +751,29 @@ func (c *ContractActor) checkAndGenerateInvoice() bool {
 	return false
 }
 
+// CheckAndGenerateInvoice is the public method for checking and generating invoices
+// This is called by the centralized billing scheduler
+// Returns an error if the contract is terminated or completed, signaling the scheduler to unregister
+func (c *ContractActor) CheckAndGenerateInvoice() error {
+	shouldStop := c.checkAndGenerateInvoice()
+	if shouldStop {
+		// Contract terminated/completed - scheduler will detect this and unregister
+		return fmt.Errorf("contract terminated or completed")
+	}
+	return nil
+}
+
+// RegisterBilling registers this contract actor with the billing scheduler
+// This method is called by the Node after creating the actor
+func (c *ContractActor) RegisterBilling(scheduler *ContractBillingScheduler) error {
+	return scheduler.RegisterContract(c.ContractDID)
+}
+
+// UnregisterBilling unregisters this contract from billing
+func (c *ContractActor) UnregisterBilling(scheduler *ContractBillingScheduler) {
+	scheduler.UnregisterContract(c.ContractDID)
+}
+
 // handleTerminatedContractInvoice handles final invoice generation for terminated contracts
 func (c *ContractActor) handleTerminatedContractInvoice(contract *contracts.Contract, processor contracts.PaymentModelProcessor) bool {
 	lastInvoiceAt, err := c.usageStore.GetLastProcessedAt(c.ContractDID.URI)
@@ -846,15 +790,32 @@ func (c *ContractActor) handleTerminatedContractInvoice(contract *contracts.Cont
 		return true // Stop billing routine
 	}
 
-	now := time.Now()
-	elapsed := now.Sub(lastInvoiceAt)
+	// Get termination timestamp from contract transitions
+	// This ensures we pro-rate based on actual termination time, not when billing runs
+	var terminationTime time.Time
+	if contract.Transitions != nil {
+		for i := len(contract.Transitions) - 1; i >= 0; i-- {
+			if contract.Transitions[i].ToState == contracts.ContractTerminated {
+				terminationTime = contract.Transitions[i].Timestamp
+				break
+			}
+		}
+	}
+
+	// Use termination time if available, otherwise use current time as fallback
+	endTime := terminationTime
+	if terminationTime.IsZero() {
+		endTime = time.Now()
+	}
+
+	elapsed := endTime.Sub(lastInvoiceAt)
 	if elapsed <= 0 {
 		// No elapsed time, nothing to invoice
 		return true // Stop billing routine
 	}
 
 	// Try to generate regular invoice first
-	usageData, err := processor.CheckAndGenerateInvoice(contract, lastInvoiceAt, now)
+	usageData, err := processor.CheckAndGenerateInvoice(contract, lastInvoiceAt, endTime)
 	if err != nil {
 		// If period not elapsed, try pro-rated invoice for periodic and fixed rental contracts
 		if errors.Is(err, processors.ErrPeriodNotElapsed) {
@@ -866,13 +827,13 @@ func (c *ContractActor) handleTerminatedContractInvoice(contract *contracts.Cont
 			case contracts.Periodic:
 				// Pro-rate based on actual deployment time within the partial period
 				if periodicProcessor, ok := processor.(*processors.PeriodicProcessor); ok {
-					proRatedUsageData, proRateErr = periodicProcessor.GenerateProRatedInvoice(contract, lastInvoiceAt, now)
+					proRatedUsageData, proRateErr = periodicProcessor.GenerateProRatedInvoice(contract, lastInvoiceAt, endTime)
 					paymentModel = "periodic"
 				}
 			case contracts.FixedRental:
 				// Pro-rate based on elapsed time ratio to billing cycle
 				if fixedRentalProcessor, ok := processor.(*processors.FixedRentalProcessor); ok {
-					proRatedUsageData, proRateErr = fixedRentalProcessor.GenerateProRatedInvoice(contract, lastInvoiceAt, now)
+					proRatedUsageData, proRateErr = fixedRentalProcessor.GenerateProRatedInvoice(contract, lastInvoiceAt, endTime)
 					paymentModel = "fixed_rental"
 				}
 			}
@@ -900,8 +861,10 @@ func (c *ContractActor) handleTerminatedContractInvoice(contract *contracts.Cont
 					"labels", string(observability.LabelContract),
 					"contract_did", c.ContractDID.URI,
 					"payment_model", paymentModel,
-					"amount", amount)
-				c.sendInvoice(contract, proRatedUsageData, now)
+					"amount", amount,
+					"termination_time", terminationTime,
+					"elapsed_since_last_invoice", elapsed)
+				c.sendInvoice(contract, proRatedUsageData, endTime)
 				return true // Stop billing routine after final invoice
 			}
 		}
@@ -915,7 +878,7 @@ func (c *ContractActor) handleTerminatedContractInvoice(contract *contracts.Cont
 
 	if usageData != nil {
 		// Final invoice generated - send it
-		c.sendInvoice(contract, usageData, now)
+		c.sendInvoice(contract, usageData, endTime)
 	}
 
 	return true // Stop billing routine after final invoice
@@ -928,11 +891,107 @@ func (c *ContractActor) sendInvoice(contract *contracts.Contract, usageData *con
 		c.sendFixedRentalInvoiceFromUsageData(contract, usageData, now)
 	case contracts.Periodic:
 		c.sendPeriodicInvoiceFromUsageData(contract, usageData, now)
+	case contracts.PayPerAllocation, contracts.PayPerDeployment, contracts.PayPerTimeUtilization, contracts.PayPerResourceUtilization:
+		// For these models, convert UsageData to ContractUsageRequest and forward via forwardInvoice
+		c.sendGenericInvoiceFromUsageData(contract, usageData, now)
 	default:
 		log.Errorw("unsupported payment model for automatic billing",
 			"labels", string(observability.LabelContract),
 			"contract_did", c.ContractDID.URI,
 			"payment_model", contract.PaymentDetails.PaymentModel)
+	}
+}
+
+// sendGenericInvoiceFromUsageData sends invoice for PayPerAllocation, PayPerDeployment, PayPerTimeUtilization, PayPerResourceUtilization
+// by converting UsageData to ContractUsageRequest and forwarding via forwardInvoice
+func (c *ContractActor) sendGenericInvoiceFromUsageData(contract *contracts.Contract, usageData *contracts.UsageData, now time.Time) {
+	req := contracts.ContractUsageRequest{
+		UniqueID: uuid.NewString(),
+		Contract: *contract,
+	}
+
+	// Convert UsageData to ContractUsageRequest format
+	switch usageData.PaymentModel {
+	case contracts.PayPerAllocation:
+		usageCount, ok := usageData.Data.(int)
+		if !ok {
+			log.Errorw("invalid usage data type for pay_per_allocation",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI)
+			return
+		}
+		req.Usages = usageCount
+
+	case contracts.PayPerDeployment:
+		usageCount, ok := usageData.Data.(int)
+		if !ok {
+			log.Errorw("invalid usage data type for pay_per_deployment",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI)
+			return
+		}
+		req.Usages = usageCount
+
+	case contracts.PayPerTimeUtilization:
+		timeUtil, ok := usageData.Data.(*contracts.TimeUtilizationUsage)
+		if !ok {
+			log.Errorw("invalid usage data type for pay_per_time_utilization",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI)
+			return
+		}
+		req.TimeUtilization = timeUtil
+		req.Usages = len(timeUtil.Deployments) // For backward compatibility
+
+	case contracts.PayPerResourceUtilization:
+		resourceUtil, ok := usageData.Data.(*contracts.ResourceUtilizationUsage)
+		if !ok {
+			log.Errorw("invalid usage data type for pay_per_resource_utilization",
+				"labels", string(observability.LabelContract),
+				"contract_did", c.ContractDID.URI)
+			return
+		}
+		req.ResourceUtilization = resourceUtil
+		req.Usages = len(resourceUtil.Deployments) // For backward compatibility
+
+	default:
+		log.Errorw("unsupported payment model for generic invoice",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"payment_model", usageData.PaymentModel)
+		return
+	}
+
+	// Forward invoice using solution enabler's actor (contract host node actor)
+	if c.forwardInvoice == nil {
+		log.Errorw("forwardInvoice function not set for contract actor",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI)
+		return
+	}
+
+	if err := c.forwardInvoice(req); err != nil {
+		log.Errorw("failed to forward invoice to payment validator",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"payment_model", usageData.PaymentModel,
+			"error", err)
+		return
+	}
+
+	// Update last processed timestamp after successful send
+	err := c.usageStore.SaveLastProcessedAt(c.ContractDID.URI, now)
+	if err != nil {
+		log.Errorw("failed to save last processed timestamp after invoice",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"error", err)
+	} else {
+		log.Infow("invoice generated and sent successfully",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI,
+			"payment_model", usageData.PaymentModel,
+			"usages", req.Usages)
 	}
 }
 

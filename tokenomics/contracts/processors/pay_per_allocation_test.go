@@ -168,7 +168,7 @@ func TestPayPerAllocationProcessor_SupportsBilling(t *testing.T) {
 	processor := NewPayPerAllocationProcessor(store)
 
 	require.True(t, processor.SupportsManualBilling())
-	require.False(t, processor.SupportsAutomaticBilling())
+	require.True(t, processor.SupportsAutomaticBilling())
 }
 
 func TestPayPerAllocationProcessor_CheckAndGenerateInvoice(t *testing.T) {
@@ -178,14 +178,25 @@ func TestPayPerAllocationProcessor_CheckAndGenerateInvoice(t *testing.T) {
 	contract := &contracts.Contract{
 		ContractDID: "test-contract-1",
 		PaymentDetails: contracts.PaymentDetails{
-			PaymentModel: contracts.PayPerAllocation,
+			PaymentModel:       contracts.PayPerAllocation,
+			PaymentPeriod:      contracts.PaymentPeriodHour,
+			PaymentPeriodCount: 1,
 		},
 	}
 
-	usageData, err := processor.CheckAndGenerateInvoice(contract, time.Now(), time.Now())
+	// Test: period not elapsed should return ErrPeriodNotElapsed
+	now := time.Now()
+	usageData, err := processor.CheckAndGenerateInvoice(contract, now, now)
 	require.Error(t, err)
 	require.Nil(t, usageData)
-	require.Contains(t, err.Error(), "does not support automatic billing")
+	require.ErrorIs(t, err, ErrPeriodNotElapsed)
+
+	// Test: period elapsed should collect usage
+	lastInvoiceAt := now.Add(-2 * time.Hour) // 2 hours ago
+	usageData, err = processor.CheckAndGenerateInvoice(contract, lastInvoiceAt, now)
+	require.NoError(t, err)
+	require.NotNil(t, usageData)
+	require.Equal(t, contracts.PayPerAllocation, usageData.PaymentModel)
 }
 
 // Helper functions for tests

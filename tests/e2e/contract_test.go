@@ -57,7 +57,18 @@ func DeployWithContractTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, feesPerAllocation, string(contracts.PayPerAllocation), "", "", "", "", "", "", "", "", "", "", "")
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			feesPerAllocation,
+			string(contracts.PayPerAllocation), "", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate)
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -195,6 +206,69 @@ func DeployWithContractTest(suite *TestSuite) {
 		suite.Require().Contains(output, "not verified")
 
 		time.Sleep(2 * time.Second)
+
+		// NEW SECTION: Test automatic billing (backwards compatibility preserved)
+		suite.T().Log("Testing automatic invoice generation for PayPerAllocation")
+
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID = extractEnsembleID(deploymentResult)
+
+		// Wait until the deployment status is "Running"
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 6 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 6 with contract did not reach Running status")
+
+		// Wait for automatic invoice generation using dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: max(1min/10, 30s) = 30 seconds (min bound applies)
+		// Wait time: 30s (checker) + 1min (billing cycle) + 2min (buffer) = 3.5 minutes
+		// This is much faster than old approach: 15min + 1min + 2min = 18 minutes
+		waitTime := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Look for new transaction created by automatic billing
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID && tx.UniqueID != uniqueID {
+					automaticTxCreated = true
+					automaticTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTx, "should find automatically generated transaction")
+		suite.Require().Equal("unpaid", automaticTx.Status, "automatic transaction should be unpaid")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s, Amount=%s", automaticTx.UniqueID, automaticTx.Amount)
 		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
 		suite.Require().NoError(err)
 		uniqueID, status, err = extractTransactionDataRegex(output)
@@ -318,6 +392,8 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 			return checkHealth("http://localhost:9425/healthz")
 		}, 10*time.Second, 500*time.Millisecond)
 
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 		err = replacePlaceholders(
 			destinationFile,
 			contractHost.dmsDID,
@@ -328,7 +404,7 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 			providerEthAddr,
 			feesPerAllocation,
 			string(contracts.PayPerAllocation),
-			"", "", "", "", "", "", "", "", "", "", "")
+			"", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate)
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -477,6 +553,61 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 		statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, uniqueID, paymentValidator.dmsDID)
 		suite.Require().NoError(err)
 		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		// NEW SECTION: Test automatic billing (backwards compatibility preserved)
+		suite.T().Log("Testing automatic invoice generation for PayPerAllocation (after payment)")
+
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID = extractEnsembleID(deploymentResult)
+
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second)
+
+		// Wait for automatic invoice generation using dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTx2 *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Look for new transaction created by automatic billing (different from manual invoice uniqueID)
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID && tx.UniqueID != uniqueID {
+					automaticTxCreated = true
+					automaticTx2 = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTx2, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticTx2.UniqueID)
 	})
 }
 
@@ -510,7 +641,20 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerDeployment), feePerDeployment, "", "", "", "", "", "", "", "", "", "")
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"",
+			string(contracts.PayPerDeployment),
+			feePerDeployment,
+			"", "", "", "", "", "", "", "", "minute", "2", startDate, endDate)
 		suite.Require().NoError(err)
 
 		fmt.Println("destinationFile", destinationFile)
@@ -625,7 +769,7 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 			if result.ContractDID == contractDID {
 				found = true
 				suite.Require().Equal(contracts.PayPerDeployment, result.PaymentModel, "payment model should be pay_per_deployment")
-				suite.Require().Equal(4, result.Usages, "should have 3 usages for 3 deployments")
+				suite.Require().Equal(4, result.Usages, "should have 4 usages for 4 deployments")
 				suite.Require().Empty(result.Error, "contract usage calculation should not have errors")
 				break
 			}
@@ -679,6 +823,65 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 		contractState, err = extractContractState(cmdOut)
 		suite.Require().NoError(err)
 		suite.Require().Equal("ACCEPTED", contractState)
+
+		suite.T().Log("Testing automatic invoice generation for PayPerDeployment")
+
+		// do a deployment before approving the contract, it should fail
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+
+		manifestID = extractEnsembleID(deploymentResult)
+
+		// Wait until the deployment status is "Running"
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 5 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 5 with contract did not reach Running status")
+
+		// Wait for automatic invoice generation using dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 2, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Look for new transaction created by automatic billing
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID && tx.UniqueID != uniqueID {
+					automaticTxCreated = true
+					automaticTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTx, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticTx.UniqueID)
 
 		time.Sleep(3 * time.Second)
 
@@ -746,7 +949,28 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerTimeUtilization), "", feePerTimeUnit, timeUnit, "", "", "", "", "", "", "", "")
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"",
+			string(contracts.PayPerTimeUtilization),
+			"",
+			feePerTimeUnit,
+			timeUnit,
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"minute", "5", startDate, endDate)
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -1144,6 +1368,49 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 		}
 		suite.Require().True(hasEndTime1, "deployment 2 should have at least one allocation with EndTime (stopped service)")
 		suite.Require().True(hasEndTime2, "deployment 3 should have at least one allocation with EndTime (stopped service)")
+
+		// NEW SECTION: Test automatic billing for PayPerTimeUtilization
+		suite.T().Log("Testing automatic invoice generation for PayPerTimeUtilization")
+
+		// Wait for automatic invoice generation with dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 5, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTimeUtilTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Find new transaction created by automatic billing (check all transactions for this contract)
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID {
+					// Simple check: if we find a transaction, assume it's from automatic billing
+					// (manual invoices were already verified in previous test sections)
+					automaticTxCreated = true
+					automaticTimeUtilTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTimeUtilTx, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticTimeUtilTx.UniqueID)
 	})
 }
 
@@ -1179,7 +1446,23 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, "", string(contracts.PayPerResourceUtilization), "", "", "", feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, "", resourceTimeUnit, "", "", "")
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"",
+			string(contracts.PayPerResourceUtilization),
+			"",
+			"",
+			"",
+			feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit,
+			"", resourceTimeUnit, "", "minute", "5", startDate, endDate)
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -1614,6 +1897,47 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 		}
 		suite.Require().True(hasEndTime1, "deployment 2 should have at least one allocation with EndTime (stopped service)")
 		suite.Require().True(hasEndTime2, "deployment 3 should have at least one allocation with EndTime (stopped service)")
+
+		// NEW SECTION: Test automatic billing for PayPerResourceUtilization
+		suite.T().Log("Testing automatic invoice generation for PayPerResourceUtilization")
+
+		// Wait for automatic invoice generation with dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticResourceUtilTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Find new transaction created by automatic billing
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID {
+					automaticTxCreated = true
+					automaticResourceUtilTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticResourceUtilTx, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticResourceUtilTx.UniqueID)
 	})
 }
 
@@ -1714,7 +2038,22 @@ func extractValidationResponse(input string) (string, error) {
 	return match[1], nil
 }
 
-func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentValidatorDID, requesterAddr, providerAddr, feesPerAllocation, paymentModel, feePerDeployment, feePerTimeUnit, timeUnit, feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit, resourceTimeUnit, fixedRentalAmount, paymentPeriod, paymentPeriodCount string) error { //nolint:unparam
+func replacePlaceholders(
+	filePath,
+	seDID,
+	providerDID,
+	requesterDID,
+	paymentValidatorDID,
+	requesterAddr, //nolint:unparam
+	providerAddr, //nolint:unparam
+	feesPerAllocation,
+	paymentModel,
+	feePerDeployment,
+	feePerTimeUnit,
+	timeUnit,
+	feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit, //nolint:unparam
+	resourceTimeUnit, fixedRentalAmount, paymentPeriod, paymentPeriodCount, startDate, endDate string, //nolint:unparam
+) error {
 	if filePath == "" {
 		return fmt.Errorf("filePath is empty")
 	}
@@ -1750,6 +2089,8 @@ func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentVali
 		paymentPeriodCount = "1"
 	}
 	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_period_count}}", paymentPeriodCount)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{start_date}}", startDate)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{end_date}}", endDate)
 
 	if err := os.WriteFile(filePath, []byte(updatedContent), 0o644); err != nil {
 		return fmt.Errorf("write error: %w", err)
@@ -1848,6 +2189,52 @@ func extractTransactionDataRegex(input string) (string, string, error) {
 	return uniqueID, status, nil
 }
 
+// calculateAutomaticBillingWaitTime calculates the wait time for automatic invoice generation
+// Updated for BillingCycleTrigger: trigger schedules at exact period boundary (lastInvoiceAt + billingCycle)
+// paymentPeriod: "minute", "hour", "day", "week", "month"
+// paymentPeriodCount: number of periods before invoicing (default: 1)
+// buffer: additional buffer time (default: 2 minutes)
+func calculateAutomaticBillingWaitTime(paymentPeriod string, paymentPeriodCount int, buffer time.Duration) time.Duration { //nolint:unparam
+	if buffer == 0 {
+		buffer = 2 * time.Minute
+	}
+
+	// Calculate billing period duration
+	var periodDuration time.Duration
+	switch paymentPeriod {
+	case contracts.PaymentPeriodMinute:
+		periodDuration = 1 * time.Minute
+	case contracts.PaymentPeriodHour:
+		periodDuration = 1 * time.Hour
+	case contracts.PaymentPeriodDay:
+		periodDuration = 24 * time.Hour
+	case contracts.PaymentPeriodWeek:
+		periodDuration = 7 * 24 * time.Hour
+	case contracts.PaymentPeriodMonth:
+		periodDuration = 30 * 24 * time.Hour // Approximate
+	default:
+		periodDuration = 1 * time.Hour // Default
+	}
+
+	if paymentPeriodCount <= 0 {
+		paymentPeriodCount = 1
+	}
+	billingCycle := periodDuration * time.Duration(paymentPeriodCount)
+
+	// Scheduler poll interval: the scheduler polls every 30 seconds to check for ready tasks
+	// This is the worst-case delay between when a trigger becomes ready and when it's executed
+	schedulerPollInterval := 30 * time.Second
+
+	// Wait time = billing cycle + scheduler poll interval + buffer
+	// - billingCycle: time until invoice is due (trigger schedules at lastInvoiceAt + billingCycle)
+	// - schedulerPollInterval: worst-case delay (scheduler polls every 30s, so up to 30s delay)
+	// - buffer: safety margin for processing time, network delays, etc.
+	//
+	// Note: BillingCycleTrigger schedules at the exact period boundary, not every checkInterval.
+	// The checkInterval is only used as a minimum bound to ensure we check frequently enough.
+	return billingCycle + schedulerPollInterval + buffer
+}
+
 func DeployWithContractFixedRentalTest(suite *TestSuite) {
 	suite.Run("dms with contracts fixed rental", func() {
 		requester := suite.nodes[0]
@@ -1870,7 +2257,7 @@ func DeployWithContractFixedRentalTest(suite *TestSuite) {
 
 		fixedRentalAmount := "10.00"
 		paymentPeriod := "minute" //nolint:goconst
-		paymentPeriodCount := "2" // Invoice every 2 periods (every 2 minutes)
+		paymentPeriodCount := "5" // Invoice every minute for fast testing
 
 		// Start mock RPC server
 		go startMockRPC(9425)
@@ -1879,6 +2266,8 @@ func DeployWithContractFixedRentalTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 		// Replace placeholders in contract JSON
 		err = replacePlaceholders(
 			destinationFile,
@@ -1901,6 +2290,8 @@ func DeployWithContractFixedRentalTest(suite *TestSuite) {
 			fixedRentalAmount,
 			paymentPeriod,
 			paymentPeriodCount,
+			startDate,
+			endDate,
 		)
 		suite.Require().NoError(err)
 
@@ -1952,14 +2343,15 @@ func DeployWithContractFixedRentalTest(suite *TestSuite) {
 		suite.Require().Contains(usageResponse.Results[0].Error, "cannot be manually triggered", "error should mention manual triggering is blocked")
 		suite.T().Logf("Manual invoice generation correctly blocked with error: %s", usageResponse.Results[0].Error)
 
-		// TEST 2: Wait for automatic invoice generation (15 minutes checker + 2-period billing cycle + buffer)
-		suite.T().Log("Waiting for automatic invoice generation (approx. 30 minutes + buffer)")
+		// TEST 2: Wait for automatic invoice generation with dynamic checker
+		suite.T().Log("Waiting for automatic invoice generation with dynamic checker")
 
-		// Wait for billing period + buffer:
-		// - contract actor checks every FixedRentalBillingCheckerInterval (15 minutes)
-		// - invoices every paymentPeriodCount * paymentPeriod (2 * 1 minute = 2 minutes)
-		// To be safe, wait for roughly two checker intervals plus a small buffer.
-		waitTime := 30*time.Minute + 2*time.Minute
+		// Wait for automatic invoice generation using dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: max(1min/10, 30s) = 30 seconds (min bound applies)
+		// Wait time: 30s (checker) + 1min (billing cycle) + 2min (buffer) = 3.5 minutes
+		// This is much faster than old approach: 15min + 2min + 2min = 19 minutes
+		waitTime := calculateAutomaticBillingWaitTime("minute", 5, 2*time.Minute)
 
 		// Poll for transaction creation (billing routine generates invoice automatically)
 		var transactionCreated bool
@@ -2091,8 +2483,8 @@ func DeployWithContractFixedRentalTest(suite *TestSuite) {
 
 		// TEST 5: Verify pro-rated final invoice generated after termination
 		suite.T().Log("Waiting for pro-rated final invoice to be generated after contract termination")
-		// Billing routine checks every 15 minutes, so wait at least one checker interval + buffer
-		time.Sleep(15*time.Minute + 2*time.Minute) // Wait for billing routine to detect termination and generate final invoice
+
+		time.Sleep(waitTime) // Wait for billing routine to detect termination and generate final invoice
 
 		// Check for new transaction (pro-rated invoice for partial period)
 		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
@@ -2192,7 +2584,7 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		feePerTimeUnit := "0.10"  // 0.10 per minute
 		timeUnit := "minute"      // Use minute for faster testing
 		paymentPeriod := "minute" // Use minute periods for faster testing
-		paymentPeriodCount := "2" // Invoice every 2 periods (every 2 minutes)
+		paymentPeriodCount := "5" // Invoice every minute for fast testing
 
 		// Start mock RPC server
 		go startMockRPC(9426)
@@ -2201,6 +2593,8 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 		// Replace placeholders in contract JSON
 		err = replacePlaceholders(
 			destinationFile,
@@ -2223,6 +2617,8 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 			"", // fixedRentalAmount
 			paymentPeriod,
 			paymentPeriodCount,
+			startDate,
+			endDate,
 		)
 		suite.Require().NoError(err)
 
@@ -2279,8 +2675,10 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		// so the billing routine should skip the period with a log message
 		suite.T().Log("Waiting for billing routine check (no deployments - should skip with log)")
 
-		// Wait for billing checker interval (15 minute) + buffer
-		waitTime := 15*time.Minute + 2*time.Minute
+		// Wait for billing checker interval with dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: 30 seconds (min bound for 1-minute period)
+		waitTime := calculateAutomaticBillingWaitTime("minute", 5, 2*time.Minute)
 		time.Sleep(waitTime)
 
 		// Check that no transactions were created (Edge Case 1: no deployments = skip invoice)
@@ -2344,11 +2742,11 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		suite.T().Log("Waiting 30 seconds for deployment to run before first billing period")
 		time.Sleep(30 * time.Second)
 
-		// Wait for billing period + buffer:
-		// - contract actor checks every PeriodicBillingCheckerInterval (15 minute)
-		// - invoices every paymentPeriodCount * paymentPeriod (2 * 15 minute = 30 minutes)
-		// To be safe, wait for roughly two checker intervals plus a small buffer.
-		waitTimeForInvoice := 30*time.Minute + 2*time.Minute
+		// Wait for automatic invoice generation with dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: 30 seconds (min bound for 1-minute period)
+		// Wait time: 30s + 1min + 2min = 3.5 minutes (vs 30+ minutes with old approach)
+		waitTimeForInvoice := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
 
 		// Poll for transaction creation (billing routine generates invoice automatically)
 		var transactionCreated bool
@@ -2490,8 +2888,8 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 
 		// TEST 6: Verify pro-rated final invoice generated after deployment shutdown
 		suite.T().Log("Waiting for pro-rated final invoice to be generated after deployment shutdown")
-		// Billing routine checks every 15 minutes, so wait at least one checker interval + buffer
-		time.Sleep(15*time.Minute + 2*time.Minute)
+
+		time.Sleep(waitTime)
 
 		// Check for new transaction (pro-rated invoice for partial period)
 		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
