@@ -18,3 +18,7 @@
     "name": "github.com/multiformats/go-multicodec",
     "licenceType": "Apache-2.0 OR MIT"
 }
+{
+    "name": "github.com/buildkite/terminal-to-html",
+    "licenceType": "MIT"
+}

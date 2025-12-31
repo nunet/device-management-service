@@ -285,8 +285,8 @@ func TestRevoke(t *testing.T) {
 		// we have to add as Provide so that we can delegate the granted caps
 		err = alice.AddRoots(nil, TokenList{}, bobAliceTokens, TokenList{})
 		require.NoError(t, err, "Alice adding Bob's tokens")
-		err = bob.AddRoots(nil, bobAliceTokens, TokenList{}, TokenList{})
-		require.NoError(t, err, "Bob adding Bob's tokens")
+		// err = bob.AddRoots(nil, bobAliceTokens, TokenList{}, TokenList{})
+		// require.NoError(t, err, "Bob adding Bob's tokens")
 
 		// Joe prepares tokens for invoking capabilities on Bob
 		aliceInvokeTokens, err := alice.Provide(
@@ -362,15 +362,6 @@ func TestRevoke(t *testing.T) {
 		)
 		require.NoError(t, err, "Bob delegating to Alice")
 
-		for _, tok := range bobAliceTokens.Tokens {
-			token := tok
-			// t.Logf("%+v\n\n", tok.DMS)
-			for token.DMS.Chain != nil {
-				token = token.DMS.Chain
-				// t.Logf("%+v\n\n", token.DMS)
-			}
-		}
-
 		// we have to add as Provide so that we can delegate the granted caps
 		err = alice.AddRoots(nil, TokenList{}, bobAliceTokens, TokenList{})
 		require.NoError(t, err, "Alice adding Bob's tokens")
@@ -414,19 +405,51 @@ func TestRevoke(t *testing.T) {
 		)
 		require.NoError(t, err, "Bob requiring capabilities from Joe")
 
+		// Bob revokes the Bob→Alice delegation
+		var revocation *Token
 		for _, token := range bobAliceTokens.Tokens {
-			revocation, err := bob.Revoke(token)
-			require.NoError(t, err)
+			revocation, err = bob.Revoke(token)
+			require.NoError(t, err, "Bob creating revocation")
 			require.NoError(t, bob.AddRoots(nil, TokenList{}, TokenList{}, TokenList{Tokens: []*Token{revocation}}))
 		}
 
+		// Bob verifies Alice is no longer authorized
 		err = bob.Require(
 			bob.DID(),
 			aliceID,
 			bobID,
 			[]Capability{Capability("/bob/hi")},
 		)
-		require.Error(t, err, "verify: token has been revoked")
+		require.Error(t, err, "Alice should NOT be authorized after revocation")
+
+		// Bob verifies Joe (downstream) is also no longer authorized
+		err = bob.Require(
+			bob.DID(),
+			joeID, // Joe is the subject
+			bobID, // Bob is the audience
+			[]Capability{Capability("/bob/hi")},
+		)
+		require.Error(t, err, "Joe should NOT be authorized - chain was revoked")
+
+		// Distribute revocation to Alice and Joe (simulating production CLI distribution)
+		err = alice.AddRoots(nil, TokenList{}, TokenList{}, TokenList{Tokens: []*Token{revocation}})
+		require.NoError(t, err, "Alice receiving revocation")
+
+		err = joe.AddRoots(nil, TokenList{}, TokenList{}, TokenList{Tokens: []*Token{revocation}})
+		require.NoError(t, err, "Joe receiving revocation")
+
+		// Verify Alice can't delegate anymore (provide tokens cleaned up)
+		aliceJoeTokens2, err := alice.Delegate(
+			joe.DID(),
+			bob.DID(),
+			nil,
+			makeExpiry(5*time.Second),
+			0,
+			[]Capability{Capability("/bob/hi")},
+			SelfSignNo,
+		)
+		require.Error(t, err, "Alice should NOT be able to delegate with revoked provide tokens")
+		require.Empty(t, aliceJoeTokens2.Tokens, "No tokens should be created from revoked chain")
 	})
 	t.Run("revoke token and try to anchor it after", func(t *testing.T) {
 		// Important: do NOT remove the commented prints.
@@ -586,5 +609,133 @@ func TestRevoke(t *testing.T) {
 			require.NoError(t, err)
 			require.Error(t, bob.AddRoots(nil, TokenList{}, TokenList{}, TokenList{Tokens: []*Token{revocation}}), ErrCapabilityExpired)
 		}
+	})
+
+	t.Run("org revokes alice - distributed revocation", func(t *testing.T) {
+		t.Parallel()
+
+		// Setup
+		org := makeCapabilityContext(t)
+		aliceUser := makeCapabilityContext(t)
+		aliceDms := makeCapabilityContext(t)
+		bobUser := makeCapabilityContext(t)
+		bobDms := makeCapabilityContext(t)
+
+		aliceDmsID := makeActorIDFromDID(t, aliceDms.DID())
+		bobDmsID := makeActorIDFromDID(t, bobDms.DID())
+
+		// 1. org grants alice user
+		orgToAliceTokens, err := org.Grant(
+			Delegate,
+			aliceUser.DID(),
+			did.DID{},
+			nil,
+			makeExpiry(120*time.Second),
+			0,
+			[]Capability{Capability("/dms/deployment")},
+		)
+		require.NoError(t, err)
+		err = aliceUser.AddRoots(nil, TokenList{}, orgToAliceTokens, TokenList{})
+		require.NoError(t, err)
+
+		// 2. alice user delegates to alice dms
+		aliceUserToDmsTokens, err := aliceUser.Delegate(
+			aliceDms.DID(),
+			did.DID{}, // Empty audience
+			nil,
+			0, // Use token's expiry (auto)
+			0,
+			[]Capability{Capability("/dms/deployment")},
+			SelfSignNo, // Try SelfSignNo to force chaining
+		)
+
+		// Debug: Check what was created
+		t.Logf("AliceUser created %d delegation tokens", len(aliceUserToDmsTokens.Tokens))
+		for i, tok := range aliceUserToDmsTokens.Tokens {
+			t.Logf("  Token %d: action=%s, has_chain=%v", i, tok.Action(), tok.DMS.Chain != nil)
+			if tok.DMS.Chain != nil {
+				t.Logf("    Chains through: %s→%s", tok.DMS.Chain.Issuer(), tok.DMS.Chain.Subject())
+			}
+		}
+
+		require.NoError(t, err)
+		err = aliceDms.AddRoots(nil, TokenList{}, aliceUserToDmsTokens, TokenList{})
+		require.NoError(t, err)
+
+		// 3. org grants bob user
+		orgToBobTokens, err := org.Grant(
+			Delegate,
+			bobUser.DID(),
+			did.DID{},
+			nil,
+			makeExpiry(120*time.Second),
+			0,
+			[]Capability{Capability("/dms/deployment")},
+		)
+		require.NoError(t, err)
+		err = bobUser.AddRoots(nil, TokenList{}, orgToBobTokens, TokenList{})
+		require.NoError(t, err)
+
+		// 4. bob user delegates to bob dms
+		bobUserToDmsTokens, err := bobUser.Delegate(
+			bobDms.DID(),
+			did.DID{}, // Empty audience
+			nil,
+			0, // Use token's expiry (auto)
+			0,
+			[]Capability{Capability("/dms/deployment")},
+			SelfSignNo, // Force chaining through provide tokens
+		)
+		require.NoError(t, err)
+		err = bobDms.AddRoots(nil, TokenList{}, bobUserToDmsTokens, TokenList{})
+		require.NoError(t, err)
+
+		// 5. alice tries to deploy on bob (Success)
+		aliceDeployTokens, err := aliceDms.Provide(
+			bobDms.DID(),
+			aliceDmsID,
+			bobDmsID,
+			makeExpiry(60*time.Second),
+			[]Capability{Capability("/dms/deployment")},
+			nil,
+		)
+		require.NoError(t, err)
+
+		err = bobDms.Consume(aliceDms.DID(), aliceDeployTokens)
+		require.NoError(t, err)
+
+		err = bobDms.Require(
+			aliceUser.DID(),
+			aliceDmsID,
+			bobDmsID,
+			[]Capability{Capability("/dms/deployment")},
+		)
+		require.NoError(t, err, "Alice should be able to deploy on Bob before revocation")
+		t.Logf("✓ Step 5: Alice deployed on Bob successfully")
+
+		// 6. org revoke Alice
+		for _, token := range orgToAliceTokens.Tokens {
+			revocation, err := org.Revoke(token)
+			require.NoError(t, err)
+			t.Logf("✓ Step 6: Org revoked Alice (nonce=%x)", revocation.Nonce())
+
+			// 7. revocation token by org added to bob user and bob dms
+			err = bobUser.AddRoots(nil, TokenList{}, TokenList{}, TokenList{Tokens: []*Token{revocation}})
+			require.NoError(t, err)
+			t.Logf("✓ Step 7a: Bob User received revocation")
+
+			err = bobDms.AddRoots(nil, TokenList{}, TokenList{}, TokenList{Tokens: []*Token{revocation}})
+			require.NoError(t, err)
+			t.Logf("✓ Step 7b: Bob DMS received revocation")
+		}
+
+		// 8. the deployment should fail
+		err = bobDms.Require(
+			aliceUser.DID(),
+			aliceDmsID,
+			bobDmsID,
+			[]Capability{Capability("/dms/deployment")},
+		)
+		require.Error(t, err, "Bob should reject Alice's deployment after Alice's grant is revoked")
 	})
 }

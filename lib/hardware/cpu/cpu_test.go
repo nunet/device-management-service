@@ -11,6 +11,7 @@ package cpu_test
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -53,13 +54,33 @@ func TestUsedCoresLimit(t *testing.T) {
 func TestConcurrency(t *testing.T) {
 	t.Parallel()
 	wg := sync.WaitGroup{}
-	for i := 0; i < 50; i++ {
+
+	cpuMon := cpu.NewCPUMonitor()
+	defer cpuMon.Stop()
+
+	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			_, _ = cpu.GetCPU()
 			_, _ = cpu.GetUsage()
+			_, _ = cpuMon.GetAvgCPUUsage()
 		}()
 	}
 	wg.Wait()
+}
+
+// TestGetAvgCpuUsage tests the GetAvgCpuUsage method of CPUMonitor
+func TestGetAvgCpuUsage(t *testing.T) {
+	t.Parallel()
+
+	cpuMon := cpu.NewCPUMonitor()
+	defer cpuMon.Stop()
+
+	// allow some time for the monitor to collect data
+	time.Sleep(2 * time.Second)
+
+	avgUsage, err := cpuMon.GetAvgCPUUsage()
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, avgUsage.Cores, float32(0))
 }

@@ -13,6 +13,7 @@ package dms
 
 import (
 	"context"
+	"crypto/ed25519"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -27,8 +28,6 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	clover "github.com/ostafen/clover/v2"
 	"github.com/spf13/afero"
-	"gitlab.com/nunet/device-management-service/observability"
-	"gitlab.com/nunet/device-management-service/utils/sys"
 	"go.elastic.co/apm/module/apmgin/v2"
 
 	"gitlab.com/nunet/device-management-service/api"
@@ -38,6 +37,9 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/dms/resources"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
+	"gitlab.com/nunet/device-management-service/gateway/provider/local"
+	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
 	backgroundtasks "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto/keystore"
@@ -46,6 +48,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/hardware"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/network/libp2p"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
@@ -53,6 +56,7 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
+	"gitlab.com/nunet/device-management-service/utils/sys"
 )
 
 //go:embed node/data/GeoLite2-Country.mmdb
@@ -272,6 +276,24 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("failed to create transaction store: %w", err)
 	}
 
+	factories := provider.NewProviderFactoryRegistry(capCtx.DID().URI)
+	// add local incus to the factory
+	local.RegisterFactory(factories)
+	provRegistry, err := buildProviderRegistry(gcfg, factories)
+	if err != nil {
+		log.Fatalf("failed to build provider registry: %v", err)
+	}
+
+	if gcfg.General.ComputeGateway {
+		if os.Getenv("DMS_BINARY_PATH") == "" {
+			log.Fatal("DMS_BINARY_PATH env var not set: compute gateway needs absolute path to dms binary")
+		}
+	}
+	provisionedResourceStore, err := gatewastore.New(db)
+	if err != nil {
+		log.Fatalf("failed to prepate gateway store: %v", err)
+	}
+
 	hostID := p2pNet.Host.ID().String()
 	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
 		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
@@ -282,6 +304,8 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		usageStore,
 		txStore,
 		deploymentStore,
+		provRegistry,
+		provisionedResourceStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -310,6 +334,21 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	}, nil
 }
 
+func buildProviderRegistry(gcfg *config.Config, factories *provider.FactoryRegistry) (*provider.Registry, error) {
+	reg := provider.NewProviderRegistry()
+
+	for _, pc := range gcfg.General.Providers {
+		p, err := factories.Create(pc.Type, pc.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create provider %q: %w", pc.Type, err)
+		}
+
+		reg.Register(p)
+	}
+
+	return reg, nil
+}
+
 func (d *DMS) Run() error {
 	if err := d.P2P.Start(); err != nil {
 		return fmt.Errorf("unable to start libp2p: %v", err)
@@ -324,6 +363,14 @@ func (d *DMS) Run() error {
 		err := d.RestServer.Run()
 		if err != nil {
 			log.Fatal(err)
+		}
+	}()
+
+	// Listen for SIGUSR1 to reload capability contexts
+	go func() {
+		err := d.Node.ListenForCapabilityContextsUpdates()
+		if err != nil {
+			log.Errorf("failed to listen for capability contexts updates: %v", err)
 		}
 	}()
 
@@ -380,6 +427,43 @@ func GenerateAndStorePrivKey(ks keystore.KeyStore, passphrase string, keyID stri
 	return privK, nil
 }
 
+// ImportAndStorePrivKey validates the provided private key and stores it into the user's keystore.
+func ImportAndStorePrivKey(ks keystore.KeyStore, rawPriv []byte, passphrase string, keyID string) (crypto.PrivKey, error) {
+	privK, err := crypto.UnmarshalPrivateKey(rawPriv)
+	if err != nil {
+		// try to interpret as raw Ed25519 key
+		if len(rawPriv) == 32 {
+			// assume it's a seed
+			stdPriv := ed25519.NewKeyFromSeed(rawPriv)
+			privK, err = crypto.UnmarshalEd25519PrivateKey(stdPriv)
+		} else if len(rawPriv) == 64 {
+			// assume it's a full private key
+			privK, err = crypto.UnmarshalEd25519PrivateKey(rawPriv)
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("invalid private key format: %w", err)
+		}
+	}
+
+	// ensure we store the key in Protobuf format, regardless of input
+	marshaledPriv, err := crypto.MarshalPrivateKey(privK)
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal private key: %w", err)
+	}
+
+	_, err = ks.Save(
+		keyID,
+		marshaledPriv,
+		passphrase,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to save private key into the keystore: %w", err)
+	}
+
+	return privK, nil
+}
+
 // NewDMSDB creates a clover database with all known dms collections
 func NewDMSDB(path string) (*clover.DB, error) {
 	return clover_db.NewDB(
@@ -395,6 +479,7 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"gpu",
 			"contracts",
 			"contracts_keys",
+			"provisioned_resources",
 			"contracts_payments",
 			"service_provider_transactions",
 			"contracts_usage",

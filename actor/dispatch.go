@@ -129,7 +129,7 @@ func (k *Dispatch) AddBehavior(behavior string, continuation Behavior, opt ...Be
 		}
 	}
 
-	log.Infof("registered behaviour: %s", behavior)
+	log.Debugw("registered_behaviour", "labels", []string{string(observability.LabelNode)}, "behavior", behavior)
 
 	k.mx.Lock()
 	defer k.mx.Unlock()
@@ -163,6 +163,14 @@ func (k *Dispatch) Receive(msg Envelope) error {
 
 func (k *Dispatch) Context() context.Context {
 	return k.ctx
+}
+
+// UpdateSecurityContext updates the security context used by the dispatch.
+// This should be called when the underlying capability context changes.
+func (k *Dispatch) UpdateSecurityContext(newSecurity SecurityContext) {
+	k.mx.Lock()
+	defer k.mx.Unlock()
+	k.sctx = newSecurity
 }
 
 func (k *Dispatch) recv() {
@@ -209,16 +217,16 @@ func (k *Dispatch) dispatch() {
 			if msg.IsBroadcast() {
 				if err := k.sctx.RequireBroadcast(msg, b.opt.Topic, b.opt.Capability); err != nil {
 					k.mx.Unlock()
-					log.Warnf("broadcast message from %s does not have the required capability %s %s: %s", msg.From, b.opt.Capability, string(msg.Capability), err)
+					// TODO Warnw
+					log.Debugf("broadcast message from %s does not have the required capability %s %s: %s", msg.From, b.opt.Capability, string(msg.Capability), err)
 					continue
 				}
 			} else if err := k.sctx.Require(msg, b.opt.Capability); err != nil {
 				k.mx.Unlock()
-				log.Warnw("message does not have the required capability",
+				log.Debugw("message does not have the required capability",
 					"from", msg.From,
-					"capabilities", CapabilitiesJoin(b.opt.Capability),
-					"msg", string(msg.Capability),
-					"error", err.Error(),
+					"capabilities", b.opt.Capability,
+					"error", err,
 					"labels", string(observability.LabelNode),
 				)
 				// TODO? msg without an answer
@@ -241,7 +249,11 @@ func (k *Dispatch) dispatch() {
 				k.sctx.Discard(msg)
 			}
 
-			log.Debugf("dispatching message from %s to %s", msg.From, msg.Behavior)
+			log.Debugw("dispatching_message", "labels", string(observability.LabelNode),
+				"msg_from", msg.From,
+				"behavior", msg.Behavior,
+				"broadcast", msg.IsBroadcast(),
+			)
 			go func() {
 				defer k.options.Limiter.Release(msg)
 				endSpan := observability.StartSpan("Dispatch: "+msg.Behavior, "FromDID", msg.From.DID)

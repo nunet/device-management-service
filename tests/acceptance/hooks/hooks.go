@@ -16,15 +16,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cucumber/godog"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/config"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
 	dutils "gitlab.com/nunet/device-management-service/utils"
-	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
 )
 
-// SetupNodes connects to Incus, spin up number of specified machines and
+// SetupInstances connects to Incus, spin up number of specified machines and
 // uploads DMS binary to all of them.
-func SetupNodes(count int) ([]*utils.Node, error) {
+func SetupInstances(count int) ([]*utils.Instance, error) {
 	config, err := config.Get()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch config: %w", err)
@@ -36,8 +38,8 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 	}
 
 	start := time.Now()
-	fmt.Println("creating nodes...")
-	nodes, err := utils.CreateNodes(clients, count, config.VMsPrefix)
+	fmt.Println("spinning up instances...")
+	nodes, err := utils.CreateInstances(clients, count, config.VMsPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -45,27 +47,28 @@ func SetupNodes(count int) ([]*utils.Node, error) {
 	here := dutils.CurrentFileDirectory()
 	remoteDMSPath := "/usr/local/bin/nunet"
 	localPath := filepath.Join(here, "..", "builds", "dms_linux_amd64")
-	for idx, n := range nodes {
-		err := n.WaitForInstanceReady()
-		if err != nil {
-			return nil, fmt.Errorf("instance not ready: %w", err)
-		}
-		err = n.UploadFile(localPath, remoteDMSPath, 0o755)
-		if err != nil {
-			return nil, fmt.Errorf("failed to upload file to node %d: %w", idx, err)
-		}
 
-		_, err = n.RunCMD([]string{"chmod", "+x", "/usr/local/bin/nunet"})
-		if err != nil {
-			return nil, fmt.Errorf("failed to make dms executable at node %d: %w", idx, err)
-		}
-		err = n.ConfigureVMNetworkingForQUIC()
-		if err != nil {
-			return nil, fmt.Errorf("failed to configure VM networking for QUIC: %w", err)
-		}
+	g := new(errgroup.Group)
+	for _, node := range nodes {
+		g.Go(func() error {
+			if err := node.WaitForInstanceReady(); err != nil {
+				return fmt.Errorf("instance %s not ready: %w", node.Name, err)
+			}
+			if err := node.UploadFile(localPath, remoteDMSPath, 0o755); err != nil {
+				return fmt.Errorf("failed to upload file to node %s: %w", node.Name, err)
+			}
+
+			if _, err := node.RunCMD([]string{"chmod", "+x", "/usr/local/bin/nunet"}); err != nil {
+				return fmt.Errorf("failed to make dms executable at node %s: %w", node.Name, err)
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
-	fmt.Printf("finished setting up nodes, time elapsed: %.1fs\n", time.Since(start).Seconds())
+	fmt.Printf("finished setting up instances, time elapsed: %.1fs\n", time.Since(start).Seconds())
 
 	return nodes, nil
 }
@@ -104,41 +107,82 @@ func CleanupNodes() error {
 			}
 		}
 	}
+
+	fmt.Println("cleaning up network forwards...")
+	err = utils.CleanNetworkForward(clients[0])
+	if err != nil {
+		return fmt.Errorf("failed to clean network forwards: %w", err)
+	}
+
 	fmt.Printf("finished cleaning up. time elapsed: %.1fs\n", time.Since(start).Seconds())
 	return nil
 }
 
 // SaveLogs saves all DMS logs locally to help debugging
-func SaveLogs(ctx context.Context) error {
+func SaveLogs(ctx context.Context, scenarioName string) error {
 	fmt.Println("saving logs...")
 	tc := utils.NewTestCtx(ctx)
+	t := godog.T(ctx)
 
 	timestamp := time.Now().Unix()
 	nodes, _ := tc.Nodes()
-	if len(nodes) == 0 {
-		nm, _ := tc.NodeMap()
-		nodes = maps.Values(nm)
-	}
 
-	for i, n := range nodes {
-		logs, err := n.RunCMD([]string{"cat", "dms-logs.txt"})
-		if err != nil {
-			continue
-		}
-
+	for _, n := range nodes {
+		// init destination
 		dest := filepath.Join(dutils.CurrentFileDirectory(), "..", "tests", "acceptance", "testdata", "logs")
-		err = os.MkdirAll(dest, 0o755)
+		err := os.MkdirAll(dest, 0o755)
 		if err != nil {
 			return err
 		}
 
-		filename := fmt.Sprintf("dms_logs_node_%d-%d.txt", i, timestamp)
+		// terminal output
+		logs, err := n.Instance.RunCMD([]string{"cat", "dms-logs.txt"})
+		if err != nil {
+			t.Errorf("no stdout for %s", n.Name)
+			continue
+		}
+
+		filename := fmt.Sprintf("%s_%s_%s_logs_%d.txt", scenarioName, n.Name, n.Role, timestamp)
 		path := filepath.Join(dest, filename)
 
 		err = os.WriteFile(path, []byte(logs), 0o644)
 		if err != nil {
 			return err
 		}
+
+		// TODO dir structure for /testdata/logs/TIMESTAMP
+		//  - /1
+		//    - /flightrec.trace
+		//    - /nunet-dms-logs.jsonl
+		//    - /role
+		//  - /2
+		//    - ...
+
+		// JSONL logs
+		src := "/root/nunet/logs/nunet-dms-logs.jsonl"
+		target := filepath.Join(dest, fmt.Sprintf("%s_%s_%s_logs_%d.json", scenarioName, n.Name, n.Role, timestamp))
+		if err := utils.DownloadFile(n.Instance.Client, n.Instance.Name, src, target); err != nil {
+			t.Errorf("failed to download jsonl logs for %s: %s", n.Name, err)
+		}
+
+		// flight recorder
+		src = "/root/nunet/logs/flightrec.trace"
+		if os.Getenv(observability.EnvFlightrecSec) != "" {
+
+			// create dump and download
+			if _, err = n.Instance.RunDMSCmd(fmt.Sprintf("nunet -c %s-dms actor cmd /dms/debug/flightrec", n.Name)); err == nil {
+				t.Logf("created flight recorder dump for %s", n.Name)
+				break
+			}
+
+			target = filepath.Join(dest, fmt.Sprintf("flightrec-%d.%s.trace", timestamp, n.Name))
+
+			// download
+			if err := utils.DownloadFile(n.Instance.Client, n.Instance.Name, src, target); err != nil {
+				t.Errorf("failed to download flight recorder dump %s: %s", n.Name, err)
+			}
+		}
+
 	}
 	return nil
 }

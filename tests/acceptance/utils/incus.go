@@ -11,6 +11,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -172,111 +173,6 @@ func CreateInstance(c incus.InstanceServer, instanceType, name string) error {
 	return startOp.Wait()
 }
 
-func findVMNetworkMainInterface(c incus.InstanceServer, name string) (string, error) {
-	// Find main network interface (exclude 'lo')
-	ifaceCmd := []string{"sh", "-c", "ip route | grep default | awk '{print $5}'"}
-	ifaceOut, err := RunCommandInInstance(c, name, ifaceCmd)
-	if err != nil {
-		return "", fmt.Errorf("failed to detect network interface: %v", err)
-	}
-	iface := strings.TrimSpace(ifaceOut)
-	return iface, nil
-}
-
-// ConfigureVMNetworkingForQUIC applies network optimizations for QUIC connections in VMs
-// This addresses the root causes of QUIC connection failures in VM environments:
-// - Increases UDP timeouts for QUIC's connectionless nature
-// - Optimizes network buffers for QUIC's multiplexed streams
-// - Disables network interface optimizations that interfere with QUIC
-// - Configures firewall rules for QUIC traffic
-func ConfigureVMNetworkingForQUIC(c incus.InstanceServer, name string) error {
-	iface, err := findVMNetworkMainInterface(c, name)
-	if err != nil {
-		return err
-	}
-
-	// Network optimizations for QUIC in VM environments
-	networkConfig := []string{
-		// Enable IP forwarding for better packet routing
-		"echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf",
-		"echo 'net.ipv4.conf.all.accept_redirects = 0' >> /etc/sysctl.conf",
-
-		// Optimize network buffer sizes for QUIC
-		"echo 'net.core.rmem_max = 134217728' >> /etc/sysctl.conf",
-		"echo 'net.core.wmem_max = 134217728' >> /etc/sysctl.conf",
-		"echo 'net.core.rmem_default = 262144' >> /etc/sysctl.conf",
-		"echo 'net.core.wmem_default = 262144' >> /etc/sysctl.conf",
-
-		// Optimize for QUIC's UDP-based transport
-		"echo 'net.ipv4.udp_mem = 102400 873800 16777216' >> /etc/sysctl.conf",
-		"echo 'net.ipv4.udp_rmem_min = 8192' >> /etc/sysctl.conf",
-		"echo 'net.ipv4.udp_wmem_min = 8192' >> /etc/sysctl.conf",
-
-		// Apply sysctl settings immediately
-		"sysctl -p",
-
-		// Configure iptables rules for QUIC traffic (port 9000 and common QUIC ports)
-		"iptables -A INPUT -p udp --dport 9000 -j ACCEPT",
-		"iptables -A INPUT -p udp --dport 4800 -j ACCEPT", // Common QUIC port from logs
-		"iptables -A INPUT -p udp --dport 3091 -j ACCEPT", // Another QUIC port from logs
-		"iptables -A FORWARD -p udp --dport 9000 -j ACCEPT",
-		"iptables -A FORWARD -p udp --dport 4800 -j ACCEPT",
-		"iptables -A FORWARD -p udp --dport 3091 -j ACCEPT",
-
-		// Disable network interface optimizations that can interfere with QUIC
-		fmt.Sprintf("ethtool -K %s gro off || true", iface), // Disable generic receive offload
-		fmt.Sprintf("ethtool -K %s tso off || true", iface), // Disable TCP segmentation offload
-		fmt.Sprintf("ethtool -K %s gso off || true", iface), // Disable generic segmentation offload
-		fmt.Sprintf("ethtool -K %s ufo off || true", iface), // Disable UDP fragmentation offload
-
-		// Set network interface to use optimal settings for QUIC
-		fmt.Sprintf("ethtool -G %s rx 1024 tx 1024 || true", iface), // Increase ring buffer sizes
-	}
-
-	for _, cmd := range networkConfig {
-		// Add a small delay between commands to avoid overwhelming the VM agent
-		time.Sleep(100 * time.Millisecond)
-
-		_, err := RunCommandInInstance(c, name, []string{"sh", "-c", cmd})
-		if err != nil {
-			// Log warning but don't fail - some commands might not work in all VM environments
-			fmt.Printf("Warning: failed to apply network config '%s' to VM %s: %v\n", cmd, name, err)
-			return err
-		}
-	}
-
-	return nil
-}
-
-// VerifyVMNetworkingForQUIC verifies that the QUIC networking optimizations were applied correctly
-func VerifyVMNetworkingForQUIC(c incus.InstanceServer, name string) error {
-	iface, err := findVMNetworkMainInterface(c, name)
-	if err != nil {
-		return err
-	}
-
-	verificationCommands := []string{
-		"sysctl net.ipv4.ip_forward",
-		"sysctl net.netfilter.nf_conntrack_udp_timeout",
-		"sysctl net.core.rmem_max",
-		"iptables -L INPUT | grep 9000",
-		fmt.Sprintf("ethtool -k %s | grep -E '(gro|tso|gso|ufo)'", iface),
-	}
-
-	for _, cmd := range verificationCommands {
-		// Add a small delay between verification commands
-		time.Sleep(50 * time.Millisecond)
-
-		_, err := RunCommandInInstance(c, name, []string{"sh", "-c", cmd})
-		if err != nil {
-			fmt.Printf("Warning: failed to verify config '%s' in VM %s: %v\n", cmd, name, err)
-			return err
-		}
-	}
-
-	return nil
-}
-
 func RunCommandInInstance(c incus.InstanceServer, name string, command []string) (string, error) {
 	execReq := api.InstanceExecPost{
 		Command:     command,
@@ -313,6 +209,7 @@ func RunBackgroundCommandInInstance(c incus.InstanceServer, name string, command
 		Command:     command,
 		WaitForWS:   true,
 		Interactive: false,
+		// TODO Environment
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -352,6 +249,24 @@ func UploadFileToInstance(c incus.InstanceServer, name, localPath, remotePath st
 
 	if err := c.CreateInstanceFile(name, remotePath, args); err != nil {
 		return fmt.Errorf("failed to upload file to instance: %w", err)
+	}
+
+	return nil
+}
+
+func DownloadFile(c incus.InstanceServer, instance, instancePath, hostPath string) error {
+	r, _, err := c.GetInstanceFile(instance, instancePath)
+	if err != nil {
+		return fmt.Errorf("failed to get file: %w", err)
+	}
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	if err := os.WriteFile(hostPath, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 
 	return nil
@@ -413,9 +328,9 @@ func ConnectToClients(config *config.Config) ([]incus.InstanceServer, error) {
 	return clients, nil
 }
 
-// CreateNodes creates `howMany` instances on a given Incus server (unix or remote URL).
-func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string) ([]*Node, error) {
-	nodes := make([]*Node, 0, howMany)
+// CreateInstances creates `howMany` instances on a given Incus server (unix or remote URL).
+func CreateInstances(clients []incus.InstanceServer, howMany int, namePrefix string) ([]*Instance, error) {
+	nodes := make([]*Instance, 0, howMany)
 	g := new(errgroup.Group)
 
 	for i := range howMany {
@@ -429,7 +344,7 @@ func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string)
 				return fmt.Errorf("failed to create instance %s: %w", name, err)
 			}
 
-			nodes = append(nodes, &Node{
+			nodes = append(nodes, &Instance{
 				Name:     name,
 				Client:   client,
 				Contexts: make(map[string]*Context),
@@ -452,11 +367,11 @@ func CreateNodes(clients []incus.InstanceServer, howMany int, namePrefix string)
 }
 
 // GetNode gets an instance already created on a given Incus server (unix or remote URL).
-func GetNode(clients []incus.InstanceServer, name string) (*Node, error) {
+func GetNode(clients []incus.InstanceServer, name string) (*Instance, error) {
 	for _, client := range clients {
 		_, _, err := client.GetInstance(name)
 		if err == nil {
-			node := &Node{
+			node := &Instance{
 				Name:     name,
 				Client:   client,
 				Contexts: make(map[string]*Context),
@@ -465,4 +380,104 @@ func GetNode(clients []incus.InstanceServer, name string) (*Node, error) {
 		}
 	}
 	return nil, fmt.Errorf("failed to find instance %s on any provided Incus server", name)
+}
+
+func getOrCreateNetworkForward(c incus.InstanceServer, networkName, listenAddress string) (*api.NetworkForward, error) {
+	forward, _, err := c.GetNetworkForward(networkName, listenAddress)
+
+	if forward != nil && err == nil {
+		// Forward already exists
+		return forward, nil
+	}
+
+	forwardPost := api.NetworkForwardsPost{
+		ListenAddress: listenAddress,
+	}
+
+	err = c.CreateNetworkForward(networkName, forwardPost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create network forward on %s: %w", networkName, err)
+	}
+
+	forward, _, err = c.GetNetworkForward(networkName, listenAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network forward on %s after creation: %w", networkName, err)
+	}
+
+	return forward, nil
+}
+
+func NetworkForwardPort(
+	c incus.InstanceServer, networkName, listenAddress, listenPort, targetAddress, targetPort, protocol string,
+) error {
+	// Update the forward to add target address and port
+	forward, err := getOrCreateNetworkForward(c, networkName, listenAddress)
+	if err != nil {
+		return fmt.Errorf("failed to get network forward on %s: %w", networkName, err)
+	}
+
+	if forward.Ports == nil {
+		forward.Ports = []api.NetworkForwardPort{}
+	}
+
+	forward.Ports = append(forward.Ports,
+		api.NetworkForwardPort{
+			ListenPort:    listenPort,
+			TargetAddress: targetAddress,
+			TargetPort:    targetPort,
+			Protocol:      protocol,
+			Description:   "NuNet AccTest: Forward libp2p nat listening port to instance addr",
+		},
+	)
+
+	netForwardPut := api.NetworkForwardPut{
+		Ports: forward.Ports,
+	}
+
+	return c.UpdateNetworkForward(networkName, listenAddress, netForwardPut, "")
+}
+
+func CleanNetworkForward(c incus.InstanceServer) error {
+	nets, err := c.GetNetworks()
+	if err != nil {
+		return fmt.Errorf("failed to get networks: %w", err)
+	}
+	for _, net := range nets {
+		forwards, err := c.GetNetworkForwards(net.Name)
+		if err != nil {
+			// network can not have a forward
+			continue
+		}
+		var keepFwds []api.NetworkForwardPort
+		for _, fwd := range forwards {
+			for _, port := range fwd.Ports {
+				if !strings.Contains(port.Description, "NuNet AccTest") {
+					keepFwds = append(keepFwds, port)
+				}
+			}
+			if len(keepFwds) > 0 {
+				// Update forward to keep only non-AccTest ports
+				netForwardPut := api.NetworkForwardPut{
+					Ports: keepFwds,
+				}
+				err := c.UpdateNetworkForward(net.Name, fwd.ListenAddress, netForwardPut, "")
+				if err != nil {
+					return fmt.Errorf("failed to update network forward on %s: %w", net.Name, err)
+				}
+			} else {
+				// Delete the forward entirely
+				err := c.DeleteNetworkForward(net.Name, fwd.ListenAddress)
+				if err != nil {
+					return fmt.Errorf("failed to delete network forward on %s: %w", net.Name, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// GetInstanceType returns the instance type from environment
+// Exported version for use in other packages
+func GetInstanceType() string {
+	return getInstanceType()
 }

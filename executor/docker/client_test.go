@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/google/uuid"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -74,9 +75,9 @@ func TestClientTestSuite(t *testing.T) {
 }
 
 // createTestContainer is a helper method to create a container for testing.
-func (s *ClientTestSuite) createTestContainer(image string, cmd []string) string {
+func (s *ClientTestSuite) createTestContainer(imageName string, cmd []string) string {
 	config := &container.Config{
-		Image: image,
+		Image: imageName,
 		Cmd:   cmd,
 	}
 	hostConfig := &container.HostConfig{}
@@ -84,7 +85,7 @@ func (s *ClientTestSuite) createTestContainer(image string, cmd []string) string
 	platform := &v1.Platform{}
 	pullImage := true
 
-	_, err := s.client.GetImage(context.Background(), image)
+	_, err := s.client.GetImage(context.Background(), imageName)
 	if err == nil {
 		pullImage = false
 	}
@@ -94,6 +95,7 @@ func (s *ClientTestSuite) createTestContainer(image string, cmd []string) string
 		config,
 		hostConfig,
 		networkingConfig,
+		image.PullOptions{},
 		platform,
 		fmt.Sprintf("nunet_test_container-%s", uuid.New()),
 		pullImage,
@@ -206,7 +208,7 @@ func (s *ClientTestSuite) TestFollowLogs() {
 func (s *ClientTestSuite) TestPullImage() {
 	testImage := "alpine:latest"
 
-	digest, err := s.client.PullImage(context.Background(), testImage)
+	digest, err := s.client.PullImage(context.Background(), testImage, image.PullOptions{})
 	s.NoError(err)
 	s.NotEmpty(digest)
 
@@ -280,6 +282,7 @@ func (s *ClientTestSuite) TestFindContainer() {
 		config,
 		&container.HostConfig{},
 		&network.NetworkingConfig{},
+		image.PullOptions{},
 		&v1.Platform{},
 		fmt.Sprintf("nunet_test_container-%s", uuid.New()),
 		false,
@@ -318,6 +321,7 @@ func (s *ClientTestSuite) TestRemoveObjectsWithLabel() {
 			config,
 			&container.HostConfig{},
 			&network.NetworkingConfig{},
+			image.PullOptions{},
 			&v1.Platform{},
 			fmt.Sprintf("nunet_test_container-%s-%d", uuid.New(), i),
 			false,

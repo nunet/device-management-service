@@ -361,3 +361,23 @@ func (l *Location) Equal(other Location) bool {
 
 	return true
 }
+
+func (l Location) Satisfies(constraints LocationConstraints) bool {
+	// Accept list takes precedence
+	if len(constraints.Accept) > 0 {
+		for _, a := range constraints.Accept {
+			if a.Equal(l) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Otherwise enforce Reject list
+	for _, r := range constraints.Reject {
+		if r.Equal(l) {
+			return false
+		}
+	}
+	return true
+}

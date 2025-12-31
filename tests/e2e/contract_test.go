@@ -9,16 +9,20 @@
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 )
 
 // DeployWithContractTest runs the tests that deploy with contracts
@@ -40,8 +44,8 @@ func DeployWithContractTest(suite *TestSuite) {
 
 		// random addresses
 		// we will setup a mock http server to response with the following addresses
-		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
-		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750" //nolint:goconst
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"  //nolint:goconst
 		// contractAmount := "1034.007244"
 
 		feesPerAllocation := "10"
@@ -53,10 +57,21 @@ func DeployWithContractTest(suite *TestSuite) {
 			return checkHealth(url)
 		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
 
-		err = replacePlaceholders(destinationFile, contractHost.dmsDID, provider.dmsDID, requester.dmsDID, paymentValidator.dmsDID, requesterEthAddr, providerEthAddr, feesPerAllocation)
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			feesPerAllocation,
+			string(contracts.PayPerAllocation), "", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate)
 		suite.Require().NoError(err)
 
-		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password, contractHost.dmsDID)
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
 		fmt.Println(cmdOut, err)
 
 		// sleep until actor starts
@@ -88,7 +103,7 @@ func DeployWithContractTest(suite *TestSuite) {
 
 		deploymentResult := requester.client.deploy(
 			suite.T(), requester.userContext, requester.password,
-			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"))
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deploymentResult)
 
@@ -114,6 +129,12 @@ func DeployWithContractTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 		suite.Require().Equal("ACCEPTED", contractState)
 
+		// New assertion: requester lists outgoing contracts and sees this contract
+		outgoingList, err := requester.client.listOutgoingContracts(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		suite.Require().Equal(outgoingList[0].ContractDID, contractDID, "created contracts list should contain the newly created contract")
+		suite.Require().Len(outgoingList, 1, "created contracts list should contain only one contract")
+
 		// wait 6 seconds for payment to be validated
 		// before we deploy
 		time.Sleep(time.Second * 6)
@@ -122,7 +143,7 @@ func DeployWithContractTest(suite *TestSuite) {
 
 		deploymentResult = requester.client.deploy(
 			suite.T(), requester.userContext, requester.password,
-			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"))
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		manifestID = extractEnsembleID(deploymentResult)
 
@@ -140,10 +161,622 @@ func DeployWithContractTest(suite *TestSuite) {
 		time.Sleep(10 * time.Second)
 
 		// contract host generates usages and sends them to payment provider
-		_, err = contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password)
+		// Optionally specify contract DID to process only this contract
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
 		suite.Require().NoError(err)
 
+		// Verify the response structure
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err, "failed to unmarshal usage calculation response")
+		suite.Require().Empty(usageResponse.Error, "usage calculation should not have errors")
+		suite.Require().NotEmpty(usageResponse.Results, "usage calculation should return results")
+
+		// Verify the result contains the expected contract
+		found := false
+		for _, result := range usageResponse.Results {
+			if result.ContractDID == contractDID {
+				found = true
+				suite.Require().Equal(contracts.PayPerAllocation, result.PaymentModel, "payment model should be pay_per_allocation")
+				suite.Require().Empty(result.Error, "contract usage calculation should not have errors")
+				break
+			}
+		}
+		suite.Require().True(found, "expected contract should be in results")
+
 		time.Sleep(10 * time.Second)
+
+		// check if transactions arrived on service provider to be paid
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		uniqueID, status, err := extractTransactionDataRegex(output)
+		suite.Require().NoError(err)
+		suite.Require().NotEmpty(uniqueID)
+		suite.Require().Equal("unpaid", status)
+
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113x5f"
+
+		// confirm the payment and check if status was changed
+		var response contracts.ContractConfirmLocalTransactionResponse
+		output, _ = requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, uniqueID, txHash)
+		err = json.Unmarshal([]byte(output), &response)
+		suite.Require().NoError(err)
+		suite.Require().NotEmpty(response.Error)
+		suite.Require().Contains(output, "not verified")
+
+		time.Sleep(2 * time.Second)
+
+		// NEW SECTION: Test automatic billing (backwards compatibility preserved)
+		suite.T().Log("Testing automatic invoice generation for PayPerAllocation")
+
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID = extractEnsembleID(deploymentResult)
+
+		// Wait until the deployment status is "Running"
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 6 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 6 with contract did not reach Running status")
+
+		// Wait for automatic invoice generation using dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: max(1min/10, 30s) = 30 seconds (min bound applies)
+		// Wait time: 30s (checker) + 1min (billing cycle) + 2min (buffer) = 3.5 minutes
+		// This is much faster than old approach: 15min + 1min + 2min = 18 minutes
+		waitTime := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Look for new transaction created by automatic billing
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID && tx.UniqueID != uniqueID {
+					automaticTxCreated = true
+					automaticTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTx, "should find automatically generated transaction")
+		suite.Require().Equal("unpaid", automaticTx.Status, "automatic transaction should be unpaid")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s, Amount=%s", automaticTx.UniqueID, automaticTx.Amount)
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		uniqueID, status, err = extractTransactionDataRegex(output)
+		suite.Require().NoError(err)
+		suite.Require().Equal("unpaid", status)
+		suite.Require().NotEmpty(uniqueID)
+
+		txHash = "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f" //nolint:goconst
+		_, err = requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, uniqueID, txHash)
+		suite.Require().NoError(err)
+		time.Sleep(2 * time.Second)
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		uniqueID, status, err = extractTransactionDataRegex(output)
+		suite.Require().NoError(err)
+		suite.Require().Equal("paid", status)
+		suite.Require().NotEmpty(uniqueID)
+
+		// check all parties can retrieve payment status from payment provider
+		// requester
+		statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, uniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		// provider
+		statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, uniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		// contract host
+		statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, uniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		// verify compute provider has this paid transaction locally
+		providerOutput, err := provider.client.listLocalTransactions(suite.T(), provider.dmsContext, provider.password)
+		suite.Require().NoError(err, "compute provider should be able to list transactions")
+
+		var providerTxList contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(providerOutput), &providerTxList)
+		suite.Require().NoError(err, "should be able to parse compute provider transaction list")
+
+		var providerTx *transaction.Transaction
+		for _, tx := range providerTxList.Transactions {
+			if tx.UniqueID == uniqueID {
+				providerTx = tx
+				break
+			}
+		}
+		suite.Require().NotNil(providerTx, "compute provider should have transaction %s", uniqueID)
+		suite.Require().Equal("paid", providerTx.Status, "compute provider transaction %s should be marked as paid", uniqueID)
+		suite.Require().Equal(txHash, providerTx.TxHash, "compute provider transaction %s should have correct tx hash", uniqueID)
+
+		// check the status of the contract actor
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		time.Sleep(3 * time.Second)
+
+		_, err = provider.client.settleContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("SETTLED", contractState)
+
+		time.Sleep(3 * time.Second)
+
+		// terminate by provider
+		_, err = provider.client.terminateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		time.Sleep(3 * time.Second)
+
+		// check the status of the contract actor
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("TERMINATED", contractState)
+
+		// validate contract
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err = extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+	})
+}
+
+// DeployWithContractCollectAfterPayTest is identical to DeployWithContractTest
+// but triggers usage collection immediately after payment to surface potential
+// double-billing issues.
+func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
+	suite.Run("dms with contracts collect after pay", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample-collect-after-pay.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+		feesPerAllocation := "10"
+
+		go startMockRPC(9425)
+		suite.Require().Eventually(func() bool {
+			return checkHealth("http://localhost:9425/healthz")
+		}, 10*time.Second, 500*time.Millisecond)
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			feesPerAllocation,
+			string(contracts.PayPerAllocation),
+			"", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate)
+		suite.Require().NoError(err)
+
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		time.Sleep(5 * time.Second)
+
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-contract-collect-after-pay.yaml")
+		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"`
+		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
+		suite.Require().NoError(err)
+
+		deploymentResult := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		time.Sleep(10 * time.Second)
+		status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusPreparing.String(), extractStatus(status))
+
+		_, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		suite.Require().NoError(err)
+		_, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		suite.Require().NoError(err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		outgoingList, err := requester.client.listOutgoingContracts(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		suite.Require().Equal(outgoingList[0].ContractDID, contractDID)
+		suite.Require().Len(outgoingList, 1)
+
+		time.Sleep(6 * time.Second)
+
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID = extractEnsembleID(deploymentResult)
+
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second)
+
+		time.Sleep(10 * time.Second)
+
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse.Error)
+		suite.Require().NotEmpty(usageResponse.Results)
+
+		found := false
+		for _, result := range usageResponse.Results {
+			if result.ContractDID == contractDID {
+				found = true
+				suite.Require().Equal(contracts.PayPerAllocation, result.PaymentModel)
+				suite.Require().Empty(result.Error)
+				break
+			}
+		}
+		suite.Require().True(found)
+
+		time.Sleep(10 * time.Second)
+
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		var initialTxList contracts.ContractListLocalTransactionsResponse
+		suite.Require().NoError(json.Unmarshal([]byte(output), &initialTxList))
+		initialTxCount := len(initialTxList.Transactions)
+
+		uniqueID, statusStr, err := extractTransactionDataRegex(output)
+		suite.Require().NoError(err)
+		suite.Require().NotEmpty(uniqueID)
+		suite.Require().Equal("unpaid", statusStr)
+
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+
+		_, err = requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, uniqueID, txHash)
+		suite.Require().NoError(err)
+		time.Sleep(2 * time.Second)
+
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		var postPayTxList contracts.ContractListLocalTransactionsResponse
+		suite.Require().NoError(json.Unmarshal([]byte(output), &postPayTxList))
+		uniqueID, statusStr, err = extractTransactionDataRegex(output)
+		suite.Require().NoError(err)
+		suite.Require().Equal("paid", statusStr)
+
+		// Immediately collect usages again to surface double-billing
+		calculateResp, err = contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse.Error)
+
+		// After re-collection, ensure no new unpaid transactions were added
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		var afterRecollectTxList contracts.ContractListLocalTransactionsResponse
+		suite.Require().NoError(json.Unmarshal([]byte(output), &afterRecollectTxList))
+		suite.Require().LessOrEqual(len(afterRecollectTxList.Transactions), initialTxCount, "no additional transactions should be created after recollection")
+		for _, tx := range afterRecollectTxList.Transactions {
+			suite.Require().NotEqual("unpaid", tx.Status, "no unpaid transactions should appear after re-collection")
+		}
+
+		statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, uniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, uniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, uniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+
+		// NEW SECTION: Test automatic billing (backwards compatibility preserved)
+		suite.T().Log("Testing automatic invoice generation for PayPerAllocation (after payment)")
+
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID = extractEnsembleID(deploymentResult)
+
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second)
+
+		// Wait for automatic invoice generation using dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTx2 *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Look for new transaction created by automatic billing (different from manual invoice uniqueID)
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID && tx.UniqueID != uniqueID {
+					automaticTxCreated = true
+					automaticTx2 = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTx2, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticTx2.UniqueID)
+	})
+}
+
+// DeployWithContractPayPerDeploymentTest runs tests that deploy with contracts using pay_per_deployment payment model
+func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
+	suite.Run("dms with contracts pay per deployment", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// offboard this machine to not accept any bid request
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample-pay-per-deployment.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		// random addresses
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+
+		feePerDeployment := "15"
+
+		// rpc on port
+		go startMockRPC(9422)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9422/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"",
+			string(contracts.PayPerDeployment),
+			feePerDeployment,
+			"", "", "", "", "", "", "", "", "minute", "2", startDate, endDate)
+		suite.Require().NoError(err)
+
+		fmt.Println("destinationFile", destinationFile)
+		bytes, err := os.ReadFile(destinationFile)
+		fmt.Println("bytes", string(bytes), err)
+		suite.Require().NoError(err)
+
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		fmt.Println("cmdOut", cmdOut, err)
+
+		// sleep until actor starts
+		time.Sleep(5 * time.Second)
+
+		fmt.Println("cmdOut", cmdOut)
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// contract should not be valid at this point because its not signed
+		// by all parties
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Prepare ensemble file for deployments
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-contract-pay-per-deployment.yaml")
+		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"`
+		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
+		suite.Require().NoError(err)
+
+		// do a deployment before approving the contract, it should fail
+		deploymentResult := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+
+		// deployment should not go through, lets check after 10 seconds
+		// the status should be Preparing
+		time.Sleep(10 * time.Second)
+		manifestID := extractEnsembleID(deploymentResult)
+		status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusPreparing.String(), extractStatus(status))
+
+		// check the list and see the contract that is not approved yet localy
+		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+		cmdOut, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+
+		time.Sleep(7 * time.Second)
+		// contractStatus can be changed and no more needed to contract the address here
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		// wait 6 seconds for payment to be validated before we deploy
+		time.Sleep(time.Second * 6)
+
+		// Perform 3 deployments
+		for i := 0; i < 3; i++ {
+			deploymentResult = requester.client.deploy(
+				suite.T(), requester.userContext, requester.password,
+				destinationFileEnsemble, "2m")
+			suite.Contains(deploymentResult, `"Status": "OK"`)
+			manifestID = extractEnsembleID(deploymentResult)
+
+			// Wait until the deployment status is "Running"
+			suite.Require().Eventually(func() bool {
+				status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+				if err != nil {
+					suite.T().Logf("Error getting deployment status: %v", err)
+					return false
+				}
+				suite.T().Logf("Deployment %d status: %s", i+1, extractStatus(status))
+				return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+			}, 60*time.Second, 5*time.Second, fmt.Sprintf("Deployment %d with contract did not reach Running status", i+1))
+
+			// Small delay between deployments
+			if i < 2 {
+				time.Sleep(5 * time.Second)
+			}
+		}
+
+		time.Sleep(10 * time.Second)
+
+		// contract host generates usages and sends them to payment provider
+		// Specify contract DID to process only this contract
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		// Verify the response structure
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err, "failed to unmarshal usage calculation response")
+		suite.Require().Empty(usageResponse.Error, "usage calculation should not have errors")
+		suite.Require().NotEmpty(usageResponse.Results, "usage calculation should return results")
+
+		// Verify the result contains the expected contract with 3 usages
+		found := false
+		for _, result := range usageResponse.Results {
+			if result.ContractDID == contractDID {
+				found = true
+				suite.Require().Equal(contracts.PayPerDeployment, result.PaymentModel, "payment model should be pay_per_deployment")
+				suite.Require().Equal(4, result.Usages, "should have 4 usages for 4 deployments")
+				suite.Require().Empty(result.Error, "contract usage calculation should not have errors")
+				break
+			}
+		}
+		suite.Require().True(found, "expected contract should be in results")
+
+		time.Sleep(30 * time.Second)
 
 		// check if transactions arrived on service provider to be paid
 		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
@@ -191,6 +824,65 @@ func DeployWithContractTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 		suite.Require().Equal("ACCEPTED", contractState)
 
+		suite.T().Log("Testing automatic invoice generation for PayPerDeployment")
+
+		// do a deployment before approving the contract, it should fail
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+
+		manifestID = extractEnsembleID(deploymentResult)
+
+		// Wait until the deployment status is "Running"
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 5 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 5 with contract did not reach Running status")
+
+		// Wait for automatic invoice generation using dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 2, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Look for new transaction created by automatic billing
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID && tx.UniqueID != uniqueID {
+					automaticTxCreated = true
+					automaticTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTx, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticTx.UniqueID)
+
 		time.Sleep(3 * time.Second)
 
 		_, err = provider.client.settleContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
@@ -226,20 +918,1094 @@ func DeployWithContractTest(suite *TestSuite) {
 	})
 }
 
+// DeployWithContractPayPerTimeUtilizationTest runs comprehensive tests for pay_per_time_utilization payment model
+func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
+	suite.Run("dms with contracts pay per time utilization", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// offboard this machine to not accept any bid request
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample-pay-per-time-utilization.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		// random addresses
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+
+		feePerTimeUnit := "0.01" // $0.01 per second
+		timeUnit := "second"
+
+		// rpc on port
+		go startMockRPC(9423)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9423/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"",
+			string(contracts.PayPerTimeUtilization),
+			"",
+			feePerTimeUnit,
+			timeUnit,
+			"",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"minute", "5", startDate, endDate)
+		suite.Require().NoError(err)
+
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		fmt.Println(cmdOut, err)
+
+		// sleep until actor starts
+		time.Sleep(5 * time.Second)
+
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// Contract should not be valid at this point because its not signed by all parties
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Prepare ensemble files for deployments using test data
+		// Deployment 1: Will be shut down later (service will be stopped)
+		srcFileEnsemble1 := filepath.Join(suite.testDataDir, "ensembles", "complex-deployment-1.yaml")
+		destinationFileEnsemble1 := filepath.Join(requester.config.WorkDir, "complex-deployment-1.yaml")
+		err = copyFile(srcFileEnsemble1, destinationFileEnsemble1)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"`
+		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
+		suite.Require().NoError(err)
+
+		// Deployment 2: Will continue running after first invoice
+		srcFileEnsemble2 := filepath.Join(suite.testDataDir, "ensembles", "complex-deployment-2.yaml")
+		destinationFileEnsemble2 := filepath.Join(requester.config.WorkDir, "complex-deployment-2.yaml")
+		err = copyFile(srcFileEnsemble2, destinationFileEnsemble2)
+		suite.Require().NoError(err)
+		err = replaceContractInFile(destinationFileEnsemble2, contractsContent)
+		suite.Require().NoError(err)
+
+		suite.T().Log("Deploying first deployment before approving the contract")
+		// Do a deployment before approving the contract, it should fail
+		deploymentResult1 := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble1, "5m")
+		suite.Contains(deploymentResult1, `"Status": "OK"`)
+
+		// Deployment should not go through, check after 10 seconds
+		time.Sleep(10 * time.Second)
+		manifestID1 := extractEnsembleID(deploymentResult1)
+		status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID1)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusPreparing.String(), extractStatus(status))
+
+		// Approve contract
+		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+		cmdOut, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		// Wait 6 seconds for payment to be validated before we deploy
+		time.Sleep(time.Second * 6)
+
+		// Deploy first deployment
+		suite.T().Log("Deploying second deployment (with task and service that will be stopped)")
+		deploymentResult2 := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble1, "5m")
+		suite.Contains(deploymentResult2, `"Status": "OK"`)
+		manifestID2 := extractEnsembleID(deploymentResult2)
+
+		// Wait until first deployment reaches Running status
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID2)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 2 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 2 did not reach Running status")
+
+		// Wait longer to ensure all allocations (task + service) have started and StartAllocationEvent is pushed
+		suite.T().Log("Waiting 10 seconds for all allocations to start and StartAllocationEvent to be pushed")
+		time.Sleep(10 * time.Second)
+
+		// Deploy second deployment
+		suite.T().Log("Deploying third deployment (with task and service that will continue running)")
+		deploymentResult3 := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble2, "5m")
+		suite.Contains(deploymentResult3, `"Status": "OK"`)
+		manifestID3 := extractEnsembleID(deploymentResult3)
+
+		// Wait until second deployment reaches Running status
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID3)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 2 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 2 did not reach Running status")
+
+		// Wait longer to ensure all allocations (task + service) have started and StartAllocationEvent is pushed
+		suite.T().Log("Waiting 10 seconds for deployment 2 allocations to start and StartAllocationEvent to be pushed")
+		time.Sleep(10 * time.Second)
+
+		// Wait for allocations to run for 30 seconds before first invoice
+		suite.T().Log("Waiting 30 seconds for allocations to run before first invoice generation")
+		time.Sleep(30 * time.Second)
+
+		// Generate first invoice (should capture both deployments)
+		suite.T().Log("Generating first invoice")
+		calculateResp1, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse1 contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp1), &usageResponse1)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse1.Error)
+		suite.Require().NotEmpty(usageResponse1.Results)
+		suite.Require().Equal(contracts.PayPerTimeUtilization, usageResponse1.Results[0].PaymentModel)
+		suite.Require().NotNil(usageResponse1.Results[0].TimeUtilization)
+		// Account for 3 deployments: the first deployment before approval (may succeed after approval),
+		// plus deployment 1 and deployment 2 after approval
+		suite.Require().Equal(3, usageResponse1.Results[0].Usages, "should have 3 usages for 3 deployments")
+		suite.Require().Equal(3, len(usageResponse1.Results[0].TimeUtilization.Deployments), "should have 3 deployments in time utilization")
+
+		// Store deployment utilization details from first invoice
+		extractDeploymentUtilization := func(usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse, deploymentID string) contracts.DeploymentTimeUtilization {
+			for _, deployment := range usageResponse.Results[0].TimeUtilization.Deployments {
+				if deployment.DeploymentID == deploymentID {
+					return deployment
+				}
+			}
+			return contracts.DeploymentTimeUtilization{}
+		}
+		deployment1Util1 := extractDeploymentUtilization(usageResponse1, manifestID1)
+		deployment2Util1 := extractDeploymentUtilization(usageResponse1, manifestID2)
+		deployment3Util1 := extractDeploymentUtilization(usageResponse1, manifestID3)
+
+		suite.Require().Equal(2, len(deployment1Util1.Allocations), "deployment 1 should have 2 allocations")
+		suite.Require().Equal(2, len(deployment2Util1.Allocations), "deployment 2 should have 2 allocations")
+		suite.Require().Equal(2, len(deployment3Util1.Allocations), "deployment 3 should have 2 allocations")
+
+		// Verify allocations have reasonable durations (at least 20 seconds)
+		suite.Require().GreaterOrEqual(deployment1Util1.TotalUtilizationSec, 60.0, "deployment 1 should have at least 20 seconds of utilization")
+		suite.Require().GreaterOrEqual(deployment2Util1.TotalUtilizationSec, 50.0, "deployment 2 should have at least 20 seconds of utilization")
+		suite.Require().GreaterOrEqual(deployment3Util1.TotalUtilizationSec, 40.0, "deployment 3 should have at least 20 seconds of utilization")
+
+		// Verify we have transactions for both deployments
+		time.Sleep(10 * time.Second) // Wait for transactions to be created
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		// Extract all transaction unique IDs by marshalling json
+		var transactionIDs []string
+		var resp contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output), &resp)
+		suite.Require().NoError(err)
+		for _, tx := range resp.Transactions {
+			transactionIDs = append(transactionIDs, tx.UniqueID)
+		}
+		suite.Require().GreaterOrEqual(len(transactionIDs), 3, "should have at least 3 transactions (one per deployment)")
+
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+		for _, txID := range transactionIDs {
+			confirmOutput, err := requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, txID, txHash)
+			suite.Require().NoError(err, "confirmation should not fail for transaction %s", txID)
+
+			// Parse and check confirmation response for errors
+			var confirmResp contracts.ContractConfirmLocalTransactionResponse
+			err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+			suite.Require().NoError(err, "should be able to parse confirmation response")
+			suite.Require().Empty(confirmResp.Error, "confirmation response should not have errors for transaction %s: %s", txID, confirmResp.Error)
+
+			// Wait for transaction status to be updated
+			time.Sleep(10 * time.Second)
+
+			// Verify the specific transaction status by finding it in the list
+			output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			suite.Require().NoError(err)
+
+			var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &respAfterConfirm)
+			suite.Require().NoError(err)
+
+			// Find the specific transaction we just confirmed
+			var confirmedTx *transaction.Transaction
+			for _, tx := range respAfterConfirm.Transactions {
+				if tx.UniqueID == txID {
+					confirmedTx = tx
+					break
+				}
+			}
+			suite.Require().NotNil(confirmedTx, "should find the confirmed transaction with unique_id: %s", txID)
+			suite.Require().Equal("paid", confirmedTx.Status, "transaction %s should be marked as paid", txID)
+
+			// check all parties can retrieve payment status from payment provider
+			// requester
+			statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// provider
+			statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// contract host
+			statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+		}
+
+		// Now stop the service allocation in deployment 1 (shutdown deployment 1)
+		suite.T().Log("Stopping deployment 1 (will stop service allocation)")
+		_ = requester.client.shutdownDeployment(suite.T(), requester.userContext, requester.password, manifestID1)
+
+		// Wait for deployment 1 to stop
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID1)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 1 should stop")
+
+		// Wait additional 30 seconds while deployment 2 continues running
+		suite.T().Log("Waiting 30 seconds while deployment 2 continues running")
+		time.Sleep(1 * time.Minute)
+
+		// Generate second invoice (should show deployment 1 stopped, deployment 2 continued)
+		suite.T().Log("Generating second invoice after deployment 1 stopped and deployment 2 and 3 continued")
+		calculateResp2, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse2 contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp2), &usageResponse2)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse2.Error)
+		suite.Require().NotEmpty(usageResponse2.Results)
+
+		suite.Require().NotNil(usageResponse2.Results[0].TimeUtilization)
+		suite.Require().Equal(3, len(usageResponse2.Results[0].TimeUtilization.Deployments))
+
+		deployment2Util2 := extractDeploymentUtilization(usageResponse2, manifestID2)
+		deployment3Util2 := extractDeploymentUtilization(usageResponse2, manifestID3)
+
+		suite.Require().Equal(1, len(deployment2Util2.Allocations), "deployment 2 should have at least 1 allocations (service)")
+		suite.Require().Equal(1, len(deployment3Util2.Allocations), "deployment 2 should have 1 allocations (service)")
+
+		noEndTime1 := false
+		for _, allocation := range deployment2Util2.Allocations {
+			if allocation.EndTime.IsZero() {
+				noEndTime1 = true
+			}
+		}
+		noEndTime2 := false
+		for _, allocation := range deployment3Util2.Allocations {
+			if allocation.EndTime.IsZero() {
+				noEndTime2 = true
+			}
+		}
+		suite.Require().True(noEndTime1, "deployment 2 should have at least one allocation without EndTime (running service)")
+		suite.Require().True(noEndTime2, "deployment 3 should have at least one allocation without EndTime (running service)")
+
+		// Verify we have additional transactions for the second invoice
+		time.Sleep(10 * time.Second)
+		output2, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		var transactionIDs2 []string
+		var resp2 contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output2), &resp2)
+		suite.Require().NoError(err)
+		for _, tx := range resp2.Transactions {
+			transactionIDs2 = append(transactionIDs2, tx.UniqueID)
+		}
+		// With 2 deployments remaining, we should have at least 2 transactions from first invoice + more from second invoice
+		// may be 3 due to the time the first deployment runs for before shutdown
+		suite.Require().GreaterOrEqual(len(transactionIDs2), 2, "should have at least 3 transactions from first invoice (one per deployment)")
+
+		// Verify transactions can be paid
+		for _, txID := range transactionIDs2 {
+			confirmOutput, err := requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, txID, txHash)
+			suite.Require().NoError(err, "confirmation should not fail for transaction %s", txID)
+
+			// Parse and check confirmation response for errors
+			var confirmResp contracts.ContractConfirmLocalTransactionResponse
+			err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+			suite.Require().NoError(err, "should be able to parse confirmation response")
+			suite.Require().Empty(confirmResp.Error, "confirmation response should not have errors for transaction %s: %s", txID, confirmResp.Error)
+
+			// Wait for transaction status to be updated
+			time.Sleep(10 * time.Second)
+
+			// Verify the specific transaction status by finding it in the list
+			output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			suite.Require().NoError(err)
+
+			var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &respAfterConfirm)
+			suite.Require().NoError(err)
+
+			// Find the specific transaction we just confirmed
+			var confirmedTx *transaction.Transaction
+			for _, tx := range respAfterConfirm.Transactions {
+				if tx.UniqueID == txID {
+					confirmedTx = tx
+					break
+				}
+			}
+			suite.Require().NotNil(confirmedTx, "should find the confirmed transaction with unique_id: %s", txID)
+			suite.Require().Equal("paid", confirmedTx.Status, "transaction %s should be marked as paid", txID)
+
+			// check all parties can retrieve payment status from payment provider
+			// requester
+			statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// provider
+			statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// contract host
+			statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+		}
+
+		// shutdown deployment 2 and 3
+		suite.T().Log("Stopping deployment 2 and 3 for cleanup")
+		shutdownRes2 := requester.client.shutdownDeployment(suite.T(), requester.userContext, requester.password, manifestID2)
+		suite.Require().Contains(shutdownRes2, `"Error": ""`)
+		shutdownRes3 := requester.client.shutdownDeployment(suite.T(), requester.userContext, requester.password, manifestID3)
+		suite.Require().Contains(shutdownRes3, `"Error": ""`)
+
+		// Wait for deployments to stop
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID2)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 2 should stop")
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID3)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 3 should stop")
+
+		// Generate second invoice (should show deployment 1 stopped, deployment 2 continued)
+		suite.T().Log("Generating second invoice after deployment 1 stopped and deployment 2 and 3 continued")
+		calculateResp3, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse3 contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp3), &usageResponse3)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse3.Error)
+		suite.Require().NotEmpty(usageResponse3.Results)
+		suite.Require().NotNil(usageResponse3.Results[0].TimeUtilization)
+		suite.Require().Equal(2, len(usageResponse3.Results[0].TimeUtilization.Deployments))
+
+		deployment2Util3 := extractDeploymentUtilization(usageResponse3, manifestID2)
+		deployment3Util3 := extractDeploymentUtilization(usageResponse3, manifestID3)
+
+		suite.Require().Equal(1, len(deployment2Util3.Allocations), "deployment 2 should have 1 allocations (service)")
+		suite.Require().Equal(1, len(deployment3Util3.Allocations), "deployment 3 should have 1 allocations (service)")
+
+		hasEndTime1 := false
+		for _, allocation := range deployment2Util3.Allocations {
+			if !allocation.EndTime.IsZero() {
+				hasEndTime1 = true
+			}
+		}
+		hasEndTime2 := false
+		for _, allocation := range deployment3Util3.Allocations {
+			if !allocation.EndTime.IsZero() {
+				hasEndTime2 = true
+			}
+		}
+		suite.Require().True(hasEndTime1, "deployment 2 should have at least one allocation with EndTime (stopped service)")
+		suite.Require().True(hasEndTime2, "deployment 3 should have at least one allocation with EndTime (stopped service)")
+
+		// NEW SECTION: Test automatic billing for PayPerTimeUtilization
+		suite.T().Log("Testing automatic invoice generation for PayPerTimeUtilization")
+
+		// Wait for automatic invoice generation with dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 5, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticTimeUtilTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Find new transaction created by automatic billing (check all transactions for this contract)
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID {
+					// Simple check: if we find a transaction, assume it's from automatic billing
+					// (manual invoices were already verified in previous test sections)
+					automaticTxCreated = true
+					automaticTimeUtilTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticTimeUtilTx, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticTimeUtilTx.UniqueID)
+	})
+}
+
+func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
+	suite.Run("dms with contracts pay per resource utilization", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// offboard this machine to not accept any bid request
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample-pay-per-resource-utilization.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		// random addresses
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+
+		feePerCPUCorePerTimeUnit := "0.10" // $0.10 per core per hour
+		feePerRAMGBPerTimeUnit := "0.05"   // $0.05 per GB per hour
+		feePerDiskGBPerTimeUnit := "0.01"  // $0.01 per GB per hour
+		resourceTimeUnit := "hour"
+
+		// rpc on port
+		go startMockRPC(9424)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9424/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"",
+			string(contracts.PayPerResourceUtilization),
+			"",
+			"",
+			"",
+			feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit,
+			"", resourceTimeUnit, "", "minute", "5", startDate, endDate)
+		suite.Require().NoError(err)
+
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		fmt.Println(cmdOut, err)
+
+		// sleep until actor starts
+		time.Sleep(5 * time.Second)
+
+		fmt.Println("cmdOut", cmdOut)
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// Contract should not be valid at this point because its not signed by all parties
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Prepare ensemble files for deployments using test data
+		// Deployment 1: Will be shut down later (service will be stopped)
+		srcFileEnsemble1 := filepath.Join(suite.testDataDir, "ensembles", "complex-deployment-1.yaml")
+		destinationFileEnsemble1 := filepath.Join(requester.config.WorkDir, "complex-deployment-1.yaml")
+		err = copyFile(srcFileEnsemble1, destinationFileEnsemble1)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"`
+		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
+		suite.Require().NoError(err)
+
+		// Deployment 2: Will continue running after first invoice
+		srcFileEnsemble2 := filepath.Join(suite.testDataDir, "ensembles", "complex-deployment-2.yaml")
+		destinationFileEnsemble2 := filepath.Join(requester.config.WorkDir, "complex-deployment-2.yaml")
+		err = copyFile(srcFileEnsemble2, destinationFileEnsemble2)
+		suite.Require().NoError(err)
+		err = replaceContractInFile(destinationFileEnsemble2, contractsContent)
+		suite.Require().NoError(err)
+
+		suite.T().Log("Deploying first deployment before approving the contract")
+		// Do a deployment before approving the contract, it should fail
+		deploymentResult1 := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble1, "5m")
+		suite.Contains(deploymentResult1, `"Status": "OK"`)
+
+		// Deployment should not go through, check after 10 seconds
+		time.Sleep(10 * time.Second)
+		manifestID1 := extractEnsembleID(deploymentResult1)
+		status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID1)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusPreparing.String(), extractStatus(status))
+
+		// Approve contract
+		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+		cmdOut, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		// Wait 6 seconds for payment to be validated before we deploy
+		time.Sleep(time.Second * 6)
+
+		// Deploy first deployment
+		suite.T().Log("Deploying second deployment (with task and service that will be stopped)")
+		deploymentResult2 := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble1, "5m")
+		suite.Contains(deploymentResult2, `"Status": "OK"`)
+		manifestID2 := extractEnsembleID(deploymentResult2)
+
+		// Wait until first deployment reaches Running status
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID2)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 1 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 1 did not reach Running status")
+
+		// Wait longer to ensure all allocations (task + service) have started and StartAllocationEvent is pushed
+		suite.T().Log("Waiting 10 seconds for all allocations to start and StartAllocationEvent to be pushed")
+		time.Sleep(10 * time.Second)
+
+		// Deploy second deployment
+		suite.T().Log("Deploying third deployment (with task and service that will continue running)")
+		deploymentResult3 := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble2, "5m")
+		suite.Contains(deploymentResult3, `"Status": "OK"`)
+		manifestID3 := extractEnsembleID(deploymentResult3)
+
+		// Wait until second deployment reaches Running status
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID3)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment 2 status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 2 did not reach Running status")
+
+		// Wait longer to ensure all allocations (task + service) have started and StartAllocationEvent is pushed
+		suite.T().Log("Waiting 10 seconds for deployment 2 allocations to start and StartAllocationEvent to be pushed")
+		time.Sleep(10 * time.Second)
+
+		// Wait for allocations to run for 30 seconds before first invoice
+		suite.T().Log("Waiting 30 seconds for allocations to run before first invoice generation")
+		time.Sleep(30 * time.Second)
+
+		// Generate first invoice (should capture both deployments)
+		suite.T().Log("Generating first invoice")
+		calculateResp1, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse1 contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp1), &usageResponse1)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse1.Error)
+		suite.Require().NotEmpty(usageResponse1.Results)
+		suite.Require().Equal(contracts.PayPerResourceUtilization, usageResponse1.Results[0].PaymentModel)
+		suite.Require().NotNil(usageResponse1.Results[0].ResourceUtilization)
+		// Account for 3 deployments: the first deployment before approval (may succeed after approval),
+		// plus deployment 1 and deployment 2 after approval
+		suite.Require().Equal(3, usageResponse1.Results[0].Usages, "should have 3 usages for 3 deployments")
+		suite.Require().Equal(3, len(usageResponse1.Results[0].ResourceUtilization.Deployments), "should have 3 deployments in resource utilization")
+
+		// Store deployment resource utilization details from first invoice
+		extractDeploymentResourceUtilization := func(usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse, deploymentID string) contracts.DeploymentResourceUtilization {
+			for _, deployment := range usageResponse.Results[0].ResourceUtilization.Deployments {
+				if deployment.DeploymentID == deploymentID {
+					return deployment
+				}
+			}
+			return contracts.DeploymentResourceUtilization{}
+		}
+		deployment1Util1 := extractDeploymentResourceUtilization(usageResponse1, manifestID1)
+		deployment2Util1 := extractDeploymentResourceUtilization(usageResponse1, manifestID2)
+		deployment3Util1 := extractDeploymentResourceUtilization(usageResponse1, manifestID3)
+
+		suite.Require().Equal(2, len(deployment1Util1.Allocations), "deployment 1 should have 2 allocations")
+		suite.Require().Equal(2, len(deployment2Util1.Allocations), "deployment 2 should have 2 allocations")
+		suite.Require().Equal(2, len(deployment3Util1.Allocations), "deployment 3 should have 2 allocations")
+
+		// Verify each deployment has allocations with resources
+		for _, deployment := range usageResponse1.Results[0].ResourceUtilization.Deployments {
+			suite.Require().Greater(len(deployment.Allocations), 0, "deployment should have allocations")
+
+			// Verify each allocation has resources
+			// Note: RAM.Size and Disk.Size are in bytes
+			for _, alloc := range deployment.Allocations {
+				suite.Require().Greater(alloc.Resources.CPU.Cores, float32(0), "allocation should have CPU cores")
+				suite.Require().Greater(alloc.Resources.RAM.Size, uint64(0), "allocation should have RAM")
+				suite.Require().Greater(alloc.Resources.Disk.Size, uint64(0), "allocation should have Disk")
+				suite.Require().Greater(alloc.Duration.Seconds(), 0.0, "allocation should have duration")
+				suite.Require().False(alloc.StartTime.IsZero(), "allocation should have start time")
+			}
+
+			suite.Require().Greater(deployment.TotalUtilizationSec, 0.9, "deployment should have total utilization")
+		}
+
+		// Verify allocations have reasonable durations (at least 20 seconds)
+		suite.Require().GreaterOrEqual(deployment1Util1.TotalUtilizationSec, 60.0, "deployment 1 should have at least 60 seconds of utilization")
+		suite.Require().GreaterOrEqual(deployment2Util1.TotalUtilizationSec, 50.0, "deployment 2 should have at least 50 seconds of utilization")
+		suite.Require().GreaterOrEqual(deployment3Util1.TotalUtilizationSec, 40.0, "deployment 3 should have at least 40 seconds of utilization")
+
+		// Verify we have transactions for both deployments
+		time.Sleep(2 * 60 * time.Second) // Wait for transactions to be created
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		// Extract all transaction unique IDs by marshalling json
+		var transactionIDs []string
+		var resp contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output), &resp)
+		suite.Require().NoError(err)
+		for _, tx := range resp.Transactions {
+			transactionIDs = append(transactionIDs, tx.UniqueID)
+		}
+		suite.Require().GreaterOrEqual(len(transactionIDs), 3, "should have at least 3 transactions (one per deployment)")
+
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+		for _, txID := range transactionIDs {
+			confirmOutput, err := requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, txID, txHash)
+			suite.Require().NoError(err, "confirmation should not fail for transaction %s", txID)
+
+			// Parse and check confirmation response for errors
+			var confirmResp contracts.ContractConfirmLocalTransactionResponse
+			err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+			suite.Require().NoError(err, "should be able to parse confirmation response")
+			suite.Require().Empty(confirmResp.Error, "confirmation response should not have errors for transaction %s: %s", txID, confirmResp.Error)
+
+			// Wait for transaction status to be updated
+			time.Sleep(10 * time.Second)
+
+			// Verify the specific transaction status by finding it in the list
+			output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			suite.Require().NoError(err)
+
+			var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &respAfterConfirm)
+			suite.Require().NoError(err)
+
+			// Find the specific transaction we just confirmed
+			var confirmedTx *transaction.Transaction
+			for _, tx := range respAfterConfirm.Transactions {
+				if tx.UniqueID == txID {
+					confirmedTx = tx
+					break
+				}
+			}
+			suite.Require().NotNil(confirmedTx, "should find the confirmed transaction with unique_id: %s", txID)
+			suite.Require().Equal("paid", confirmedTx.Status, "transaction %s should be marked as paid", txID)
+
+			// Verify transaction amounts reflect resource-based pricing
+			// Amount should be calculated as: (CPU × CPU_price × time) + (RAM × RAM_price × time) + (Disk × Disk_price × time)
+			suite.Require().NotEmpty(confirmedTx.Amount, "transaction should have amount")
+
+			// Parse amount and verify it's positive
+			amount, err := strconv.ParseFloat(confirmedTx.Amount, 64)
+			suite.Require().NoError(err)
+			suite.Require().Greater(amount, 0.0, "amount should be greater than 0")
+
+			// check all parties can retrieve payment status from payment provider
+			// requester
+			statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// provider
+			statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// contract host
+			statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+		}
+
+		// Now stop the service allocation in deployment 1 (shutdown deployment 1)
+		suite.T().Log("Stopping deployment 1 (will stop service allocation)")
+		_ = requester.client.shutdownDeployment(suite.T(), requester.userContext, requester.password, manifestID1)
+
+		// Wait for deployment 1 to stop
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID1)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 1 should stop")
+
+		// Wait additional 30 seconds while deployment 2 continues running
+		suite.T().Log("Waiting 60 seconds while deployment 2 continues running")
+		time.Sleep(1 * time.Minute)
+
+		// Generate second invoice (should show deployment 1 stopped, deployment 2 continued)
+		suite.T().Log("Generating second invoice after deployment 1 stopped and deployment 2 and 3 continued")
+		calculateResp2, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse2 contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp2), &usageResponse2)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse2.Error)
+		suite.Require().NotEmpty(usageResponse2.Results)
+
+		suite.Require().NotNil(usageResponse2.Results[0].ResourceUtilization)
+		suite.Require().Equal(3, len(usageResponse2.Results[0].ResourceUtilization.Deployments))
+
+		// Find second deployment (the one that continued running)
+		var secondDeploymentUtil contracts.DeploymentResourceUtilization
+		var thirdDeploymentUtil contracts.DeploymentResourceUtilization
+		for _, deployment := range usageResponse2.Results[0].ResourceUtilization.Deployments {
+			if deployment.DeploymentID == manifestID2 {
+				secondDeploymentUtil = deployment
+			}
+			if deployment.DeploymentID == manifestID3 {
+				thirdDeploymentUtil = deployment
+			}
+		}
+
+		suite.Require().NotEmpty(secondDeploymentUtil.DeploymentID, "should find second deployment")
+		suite.Require().NotEmpty(thirdDeploymentUtil.DeploymentID, "should find third deployment")
+		suite.Require().Greater(len(secondDeploymentUtil.Allocations), 0, "second deployment should have allocations")
+		suite.Require().Greater(len(thirdDeploymentUtil.Allocations), 0, "third deployment should have allocations")
+		suite.Require().Greater(secondDeploymentUtil.TotalUtilizationSec, 0.0, "second deployment should have utilization")
+		suite.Require().Greater(thirdDeploymentUtil.TotalUtilizationSec, 0.0, "third deployment should have utilization")
+
+		// Verify resources are still present
+		// Note: RAM.Size and Disk.Size are in bytes
+		for _, alloc := range secondDeploymentUtil.Allocations {
+			suite.Require().Greater(alloc.Resources.CPU.Cores, float32(0), "allocation should have CPU cores")
+			suite.Require().Greater(alloc.Resources.RAM.Size, uint64(0), "allocation should have RAM")
+			suite.Require().Greater(alloc.Resources.Disk.Size, uint64(0), "allocation should have Disk")
+		}
+		for _, alloc := range thirdDeploymentUtil.Allocations {
+			suite.Require().Greater(alloc.Resources.CPU.Cores, float32(0), "allocation should have CPU cores")
+			suite.Require().Greater(alloc.Resources.RAM.Size, uint64(0), "allocation should have RAM")
+			suite.Require().Greater(alloc.Resources.Disk.Size, uint64(0), "allocation should have Disk")
+		}
+
+		// Verify we have additional transactions for the second invoice
+		time.Sleep(10 * time.Second)
+		output2, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		var transactionIDs2 []string
+		var resp2 contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output2), &resp2)
+		suite.Require().NoError(err)
+		for _, tx := range resp2.Transactions {
+			transactionIDs2 = append(transactionIDs2, tx.UniqueID)
+		}
+		// With 3 deployments, we should have at least 3 transactions from first invoice + more from second invoice
+		suite.Require().GreaterOrEqual(len(transactionIDs2), 3, "should have at least 3 transactions from first invoice (one per deployment)")
+
+		// Clean up: Stop deployment 2 and 3
+		suite.T().Log("Stopping deployment 2 and 3 for cleanup")
+		shutdownRes2 := requester.client.shutdownDeployment(suite.T(), requester.userContext, requester.password, manifestID2)
+		suite.Require().Contains(shutdownRes2, `"Error": ""`)
+		shutdownRes3 := requester.client.shutdownDeployment(suite.T(), requester.userContext, requester.password, manifestID3)
+		suite.Require().Contains(shutdownRes3, `"Error": ""`)
+
+		// Wait for deployments to stop
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID2)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 2 should stop")
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID3)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "Deployment 3 should stop")
+
+		// Verify transactions can be paid
+		for _, txID := range transactionIDs2 {
+			confirmOutput, err := requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, txID, txHash)
+			suite.Require().NoError(err, "confirmation should not fail for transaction %s", txID)
+
+			// Parse and check confirmation response for errors
+			var confirmResp contracts.ContractConfirmLocalTransactionResponse
+			err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+			suite.Require().NoError(err, "should be able to parse confirmation response")
+			suite.Require().Empty(confirmResp.Error, "confirmation response should not have errors for transaction %s: %s", txID, confirmResp.Error)
+
+			// Wait for transaction status to be updated
+			time.Sleep(10 * time.Second)
+
+			// Verify the specific transaction status by finding it in the list
+			output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			suite.Require().NoError(err)
+
+			var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &respAfterConfirm)
+			suite.Require().NoError(err)
+
+			// Find the specific transaction we just confirmed
+			var confirmedTx *transaction.Transaction
+			for _, tx := range respAfterConfirm.Transactions {
+				if tx.UniqueID == txID {
+					confirmedTx = tx
+					break
+				}
+			}
+			suite.Require().NotNil(confirmedTx, "should find the confirmed transaction with unique_id: %s", txID)
+			suite.Require().Equal("paid", confirmedTx.Status, "transaction %s should be marked as paid", txID)
+
+			// check all parties can retrieve payment status from payment provider
+			// requester
+			statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// provider
+			statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+
+			// contract host
+			statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, txID, paymentValidator.dmsDID)
+			suite.Require().NoError(err)
+			suite.Require().Contains(statusOutput, `"paid": true`)
+		}
+
+		// Generate second invoice (should show deployment 1 stopped, deployment 2 continued)
+		suite.T().Log("Generating second invoice after deployment 1 stopped and deployment 2 and 3 continued")
+		calculateResp3, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse3 contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp3), &usageResponse3)
+		suite.Require().NoError(err)
+		suite.Require().Empty(usageResponse3.Error)
+		suite.Require().NotEmpty(usageResponse3.Results)
+		suite.Require().NotNil(usageResponse3.Results[0].ResourceUtilization)
+		suite.Require().Equal(2, len(usageResponse3.Results[0].ResourceUtilization.Deployments))
+
+		deployment2Util3 := extractDeploymentResourceUtilization(usageResponse3, manifestID2)
+		deployment3Util3 := extractDeploymentResourceUtilization(usageResponse3, manifestID3)
+
+		suite.Require().Equal(1, len(deployment2Util3.Allocations), "deployment 2 should have 1 allocations (service)")
+		suite.Require().Equal(1, len(deployment3Util3.Allocations), "deployment 3 should have 1 allocations (service)")
+
+		hasEndTime1 := false
+		for _, allocation := range deployment2Util3.Allocations {
+			if !allocation.EndTime.IsZero() {
+				hasEndTime1 = true
+			}
+		}
+		hasEndTime2 := false
+		for _, allocation := range deployment3Util3.Allocations {
+			if !allocation.EndTime.IsZero() {
+				hasEndTime2 = true
+			}
+		}
+		suite.Require().True(hasEndTime1, "deployment 2 should have at least one allocation with EndTime (stopped service)")
+		suite.Require().True(hasEndTime2, "deployment 3 should have at least one allocation with EndTime (stopped service)")
+
+		// NEW SECTION: Test automatic billing for PayPerResourceUtilization
+		suite.T().Log("Testing automatic invoice generation for PayPerResourceUtilization")
+
+		// Wait for automatic invoice generation with dynamic checker
+		waitTime := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
+
+		var automaticTxCreated bool
+		var automaticResourceUtilTx *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Find new transaction created by automatic billing
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID {
+					automaticTxCreated = true
+					automaticResourceUtilTx = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated")
+
+		suite.Require().True(automaticTxCreated, "automatic billing should create transaction")
+		suite.Require().NotNil(automaticResourceUtilTx, "should find automatically generated transaction")
+		suite.T().Logf("Verified automatic invoice generation: UniqueID=%s", automaticResourceUtilTx.UniqueID)
+	})
+}
+
+// DeployWithContractsEnforcedProvidersTest verifies that when providers require
+// deployment contracts, a deployment without contracts gets stuck in Preparing.
+func DeployWithContractsEnforcedProvidersTest(suite *TestSuite) {
+	suite.Run("deployment without contracts is not scheduled when providers require contracts", func() {
+		requester := suite.nodes[0]
+
+		// sanity: configs for this suite should have enforcement enabled on providers
+		suite.T().Logf("requester RequireDeploymentContracts=%v", requester.config.Job.RequireContractsForDeployment)
+
+		// Use a standard ensemble without any contracts section.
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-no-contracts.yaml")
+		err := copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+
+		// Deploy the ensemble with no contracts attached.
+		deploymentResult := requester.client.deploy(
+			suite.T(),
+			requester.userContext,
+			requester.password,
+			destinationFileEnsemble,
+			"2m",
+		)
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		// Give some time for bidding/allocation to happen; since all providers
+		// require contracts and the manifest has none, we expect the deployment
+		// to remain in Preparing.
+		time.Sleep(10 * time.Second)
+
+		status, err := requester.client.deploymentStatus(
+			suite.T(),
+			requester.userContext,
+			requester.password,
+			manifestID,
+		)
+		suite.Require().NoError(err)
+		suite.Require().Equal(
+			jobtypes.DeploymentStatusPreparing.String(),
+			extractStatus(status),
+			"deployment without contracts should remain in Preparing when providers require contracts",
+		)
+
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(
+				suite.T(),
+				requester.userContext,
+				requester.password,
+				manifestID,
+			)
+			return err == nil && extractStatus(status) == jobtypes.DeploymentStatusPreparing.String()
+		}, 60*time.Second, 5*time.Second, "deployment without contracts should remain in Preparing when providers require contracts")
+	})
+}
+
 func getContractID(input string) (string, error) {
-	pattern := `"contract_did"\s*:\s*"([^"]+)"`
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return "", fmt.Errorf("failed to compile regex: %w", err)
+	var response contracts.CreateContractResponse
+	if err := json.Unmarshal([]byte(input), &response); err != nil {
+		return "", fmt.Errorf("failed to unmarshal contract create response: %w", err)
 	}
-
-	match := re.FindStringSubmatch(input)
-	if len(match) < 2 {
-		return "", fmt.Errorf("contract_did not found in the input string")
+	if response.Error != "" {
+		return "", fmt.Errorf("error from solution enabler: %s", response.Error)
 	}
-
-	return match[1], nil
+	return response.ContractDID, nil
 }
 
 func extractContractState(input string) (string, error) {
@@ -272,7 +2038,22 @@ func extractValidationResponse(input string) (string, error) {
 	return match[1], nil
 }
 
-func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentValidatorDID, requesterAddr, providerAddr, feesPerAllocation string) error {
+func replacePlaceholders(
+	filePath,
+	seDID,
+	providerDID,
+	requesterDID,
+	paymentValidatorDID,
+	requesterAddr, //nolint:unparam
+	providerAddr, //nolint:unparam
+	feesPerAllocation,
+	paymentModel,
+	feePerDeployment,
+	feePerTimeUnit,
+	timeUnit,
+	feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit, //nolint:unparam
+	resourceTimeUnit, fixedRentalAmount, paymentPeriod, paymentPeriodCount, startDate, endDate string, //nolint:unparam
+) error {
 	if filePath == "" {
 		return fmt.Errorf("filePath is empty")
 	}
@@ -292,6 +2073,24 @@ func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentVali
 	updatedContent = strings.ReplaceAll(updatedContent, "{{requesterAddr}}", requesterAddr)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{providerAddr}}", providerAddr)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{amount}}", feesPerAllocation)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_model}}", paymentModel)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_deployment}}", feePerDeployment)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_time_unit}}", feePerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{time_unit}}", timeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_cpu_core_per_time_unit}}", feePerCPUCorePerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_ram_gb_per_time_unit}}", feePerRAMGBPerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_disk_gb_per_time_unit}}", feePerDiskGBPerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_gpu_per_time_unit}}", feePerGPUPerTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{resource_time_unit}}", resourceTimeUnit)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fixed_rental_amount}}", fixedRentalAmount)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_period}}", paymentPeriod)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_deployment}}", feePerDeployment)
+	if paymentPeriodCount == "" {
+		paymentPeriodCount = "1"
+	}
+	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_period_count}}", paymentPeriodCount)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{start_date}}", startDate)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{end_date}}", endDate)
 
 	if err := os.WriteFile(filePath, []byte(updatedContent), 0o644); err != nil {
 		return fmt.Errorf("write error: %w", err)
@@ -302,9 +2101,29 @@ func replacePlaceholders(filePath, seDID, providerDID, requesterDID, paymentVali
 
 func startMockRPC(port int) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		var req struct {
+			Method string `json:"method"`
+			ID     int    `json:"id"`
+		}
+		if err := json.Unmarshal(body, &req); err == nil {
+			if req.Method == "eth_blockNumber" {
+				w.WriteHeader(http.StatusOK)
+				response := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"result":"0xe20a59"}`, req.ID)
+				_, _ = w.Write([]byte(response))
+				return
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(jsonPayload))
 	})
@@ -368,4 +2187,786 @@ func extractTransactionDataRegex(input string) (string, string, error) {
 	status := match[2]
 
 	return uniqueID, status, nil
+}
+
+// calculateAutomaticBillingWaitTime calculates the wait time for automatic invoice generation
+// Updated for BillingCycleTrigger: trigger schedules at exact period boundary (lastInvoiceAt + billingCycle)
+// paymentPeriod: "minute", "hour", "day", "week", "month"
+// paymentPeriodCount: number of periods before invoicing (default: 1)
+// buffer: additional buffer time (default: 2 minutes)
+func calculateAutomaticBillingWaitTime(paymentPeriod string, paymentPeriodCount int, buffer time.Duration) time.Duration { //nolint:unparam
+	if buffer == 0 {
+		buffer = 2 * time.Minute
+	}
+
+	// Calculate billing period duration
+	var periodDuration time.Duration
+	switch paymentPeriod {
+	case contracts.PaymentPeriodMinute:
+		periodDuration = 1 * time.Minute
+	case contracts.PaymentPeriodHour:
+		periodDuration = 1 * time.Hour
+	case contracts.PaymentPeriodDay:
+		periodDuration = 24 * time.Hour
+	case contracts.PaymentPeriodWeek:
+		periodDuration = 7 * 24 * time.Hour
+	case contracts.PaymentPeriodMonth:
+		periodDuration = 30 * 24 * time.Hour // Approximate
+	default:
+		periodDuration = 1 * time.Hour // Default
+	}
+
+	if paymentPeriodCount <= 0 {
+		paymentPeriodCount = 1
+	}
+	billingCycle := periodDuration * time.Duration(paymentPeriodCount)
+
+	// Scheduler poll interval: the scheduler polls every 30 seconds to check for ready tasks
+	// This is the worst-case delay between when a trigger becomes ready and when it's executed
+	schedulerPollInterval := 30 * time.Second
+
+	// Wait time = billing cycle + scheduler poll interval + buffer
+	// - billingCycle: time until invoice is due (trigger schedules at lastInvoiceAt + billingCycle)
+	// - schedulerPollInterval: worst-case delay (scheduler polls every 30s, so up to 30s delay)
+	// - buffer: safety margin for processing time, network delays, etc.
+	//
+	// Note: BillingCycleTrigger schedules at the exact period boundary, not every checkInterval.
+	// The checkInterval is only used as a minimum bound to ensure we check frequently enough.
+	return billingCycle + schedulerPollInterval + buffer
+}
+
+func DeployWithContractFixedRentalTest(suite *TestSuite) {
+	suite.Run("dms with contracts fixed rental", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// Setup: Offboard contract host and payment validator
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		// Prepare contract JSON with Fixed Rental configuration
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample-fixed-rental.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+
+		fixedRentalAmount := "10.00"
+		paymentPeriod := "minute" //nolint:goconst
+		paymentPeriodCount := "5" // Invoice every minute for fast testing
+
+		// Start mock RPC server
+		go startMockRPC(9425)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9425/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		// Replace placeholders in contract JSON
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"", // feesPerAllocation
+			string(contracts.FixedRental),
+			"", // feePerDeployment
+			"", // feePerTimeUnit
+			"", // timeUnit
+			"", // feePerCPUCorePerTimeUnit
+			"", // feePerRAMGBPerTimeUnit
+			"", // feePerDiskGBPerTimeUnit
+			"", // feePerGPUPerTimeUnit
+			"", // resourceTimeUnit
+			fixedRentalAmount,
+			paymentPeriod,
+			paymentPeriodCount,
+			startDate,
+			endDate,
+		)
+		suite.Require().NoError(err)
+
+		// Create contract
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		fmt.Println(cmdOut, err)
+
+		// Wait for contract actor to start
+		time.Sleep(5 * time.Second)
+
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// Verify contract is not valid (not signed)
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Approve contract
+		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+		cmdOut, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		// TEST 1: Attempt manual invoice generation (should fail)
+		suite.T().Log("Testing manual invoice generation - should return error")
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err) // HTTP call succeeds
+
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err)
+
+		// Assert error is returned
+		suite.Require().NotEmpty(usageResponse.Results)
+		suite.Require().NotEmpty(usageResponse.Results[0].Error, "should return error for manual Fixed Rental invoice generation")
+		suite.Require().Contains(usageResponse.Results[0].Error, "automatic periodic billing", "error should mention automatic billing")
+		suite.Require().Contains(usageResponse.Results[0].Error, "cannot be manually triggered", "error should mention manual triggering is blocked")
+		suite.T().Logf("Manual invoice generation correctly blocked with error: %s", usageResponse.Results[0].Error)
+
+		// TEST 2: Wait for automatic invoice generation with dynamic checker
+		suite.T().Log("Waiting for automatic invoice generation with dynamic checker")
+
+		// Wait for automatic invoice generation using dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: max(1min/10, 30s) = 30 seconds (min bound applies)
+		// Wait time: 30s (checker) + 1min (billing cycle) + 2min (buffer) = 3.5 minutes
+		// This is much faster than old approach: 15min + 2min + 2min = 19 minutes
+		waitTime := calculateAutomaticBillingWaitTime("minute", 5, 2*time.Minute)
+
+		// Poll for transaction creation (billing routine generates invoice automatically)
+		var transactionCreated bool
+		var fixedRentalTransaction *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Check if any transaction exists for this contract
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID {
+					transactionCreated = true
+					fixedRentalTransaction = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTime {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTime+30*time.Second, 5*time.Second, "automatic invoice should be generated within period")
+
+		suite.Require().True(transactionCreated, "transaction should be created by automatic billing")
+		suite.Require().NotNil(fixedRentalTransaction, "should find the automatically generated transaction")
+
+		// Capture first invoice time after transaction is found
+		firstInvoiceTime := time.Now()
+
+		// Verify transaction details
+		// Parse amounts as floats for comparison (invoice uses 8 decimal places, but amounts should match numerically)
+		// The invoice amount is fixedRentalAmount (not multiplied by paymentPeriodCount)
+		// paymentPeriodCount only controls invoice frequency (every N periods)
+		expectedAmount, err := strconv.ParseFloat(fixedRentalAmount, 64)
+		suite.Require().NoError(err, "should parse expected amount")
+		actualAmount, err := strconv.ParseFloat(fixedRentalTransaction.Amount, 64)
+		suite.Require().NoError(err, "should parse actual amount")
+		suite.Require().Equal(expectedAmount, actualAmount, "transaction amount should match fixed rental amount (expected %s, got %s)", fixedRentalAmount, fixedRentalTransaction.Amount)
+		suite.Require().Equal("unpaid", fixedRentalTransaction.Status, "transaction should initially be unpaid")
+		suite.T().Logf("Automatic invoice generated: UniqueID=%s, Amount=%s, Status=%s", fixedRentalTransaction.UniqueID, fixedRentalTransaction.Amount, fixedRentalTransaction.Status)
+
+		// TEST 3: Payment Processing
+		suite.T().Log("Confirming payment for the first automatic invoice")
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+		confirmOutput, err := requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, fixedRentalTransaction.UniqueID, txHash)
+		suite.Require().NoError(err, "confirmation should not fail for transaction %s", fixedRentalTransaction.UniqueID)
+
+		// Parse and check confirmation response for errors
+		var confirmResp contracts.ContractConfirmLocalTransactionResponse
+		err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+		suite.Require().NoError(err, "should be able to parse confirmation response")
+		suite.Require().Empty(confirmResp.Error, "confirmation response should not have errors for transaction %s: %s", fixedRentalTransaction.UniqueID, confirmResp.Error)
+
+		// Wait for transaction status to be updated
+		time.Sleep(10 * time.Second)
+
+		// Verify the specific transaction status by finding it in the list
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+
+		// Find the specific transaction we just confirmed
+		var confirmedTx *transaction.Transaction
+		for _, tx := range respAfterConfirm.Transactions {
+			if tx.UniqueID == fixedRentalTransaction.UniqueID {
+				confirmedTx = tx
+				break
+			}
+		}
+		suite.Require().NotNil(confirmedTx, "should find the confirmed transaction with unique_id: %s", fixedRentalTransaction.UniqueID)
+		suite.Require().Equal("paid", confirmedTx.Status, "transaction %s should be marked as paid", fixedRentalTransaction.UniqueID)
+		suite.T().Logf("Transaction %s confirmed and marked as paid.", fixedRentalTransaction.UniqueID)
+
+		// Check all parties can retrieve payment status from payment provider
+		statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, fixedRentalTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from requester.")
+
+		statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, fixedRentalTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from provider.")
+
+		statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, fixedRentalTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from contract host.")
+
+		// Count transactions before mid-period termination
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountBeforeMidPeriodTermination := len(respAfterConfirm.Transactions)
+		suite.T().Logf("Transaction count before mid-period termination: %d", transactionCountBeforeMidPeriodTermination)
+
+		// TEST 4: Mid-period contract termination (pro-rated invoice)
+		suite.T().Log("Waiting 30 seconds (mid-period) before terminating contract to trigger pro-rated invoice")
+		time.Sleep(30 * time.Second) // Wait for half of the 2-minute period
+
+		terminationTime := time.Now()
+		suite.T().Logf("Terminating contract at %s", terminationTime.Format(time.RFC3339))
+		_, err = provider.client.terminateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		time.Sleep(3 * time.Second) // Allow termination to propagate
+
+		// Verify contract is terminated
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("TERMINATED", contractState)
+		suite.T().Log("Contract status verified as TERMINATED.")
+
+		// TEST 5: Verify pro-rated final invoice generated after termination
+		suite.T().Log("Waiting for pro-rated final invoice to be generated after contract termination")
+
+		time.Sleep(waitTime) // Wait for billing routine to detect termination and generate final invoice
+
+		// Check for new transaction (pro-rated invoice for partial period)
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountAfterTermination := len(respAfterConfirm.Transactions)
+
+		// Assert a new transaction was created for the pro-rated period
+		suite.Require().Greater(
+			transactionCountAfterTermination,
+			transactionCountBeforeMidPeriodTermination,
+			"pro-rated final invoice should be generated after mid-period contract termination",
+		)
+		suite.T().Logf("Verified: Transaction count before termination: %d, after termination: %d (pro-rated invoice generated)",
+			transactionCountBeforeMidPeriodTermination, transactionCountAfterTermination)
+
+		// Find and verify the pro-rated transaction
+		var proRatedTransaction *transaction.Transaction
+		for _, tx := range respAfterConfirm.Transactions {
+			if tx.ContractDID == contractDID && tx.UniqueID != fixedRentalTransaction.UniqueID {
+				proRatedTransaction = tx
+				break
+			}
+		}
+		suite.Require().NotNil(proRatedTransaction, "should have pro-rated transaction after mid-period termination")
+
+		// Calculate expected pro-rated amount
+		// We waited 30 seconds after detecting the first invoice, then terminated.
+		// The billing routine may run slightly later (up to the checker interval), so the actual elapsed time
+		// used for billing will be slightly larger than this theoretical value.
+		// Base period is 1 minute (payment_period: "minute"), invoices are generated every paymentPeriodCount periods.
+		elapsedSinceFirstInvoice := terminationTime.Sub(firstInvoiceTime)
+		periodDuration := 1 * time.Minute // Base period is 1 minute
+		// Pro-rate based on the fixed rental amount and billing cycle
+		// The fixed rental amount covers paymentPeriodCount periods (one billing cycle), so pro-rate proportionally
+		amountPerInvoice, err := strconv.ParseFloat(fixedRentalAmount, 64)
+		suite.Require().NoError(err)
+		periodCount, err := strconv.Atoi(paymentPeriodCount)
+		suite.Require().NoError(err)
+		// Pro-rate: (elapsed / billing cycle duration) * fixedRentalAmount
+		billingCycleDuration := periodDuration * time.Duration(periodCount)
+		proRatedRatio := float64(elapsedSinceFirstInvoice) / float64(billingCycleDuration)
+		expectedProRatedAmountFloat := proRatedRatio * amountPerInvoice
+
+		// Verify pro-rated amount (allow small variance for timing)
+		actualAmount, err = strconv.ParseFloat(proRatedTransaction.Amount, 64)
+		suite.Require().NoError(err)
+		suite.Require().LessOrEqual(expectedProRatedAmountFloat, actualAmount, "pro-rated transaction amount should be approximately %f (got %f) for %v of %v billing cycle", expectedProRatedAmountFloat, actualAmount, elapsedSinceFirstInvoice, billingCycleDuration)
+		suite.Require().Greater(actualAmount, 0.0, "pro-rated amount should be greater than 0")
+		suite.Require().Less(actualAmount, amountPerInvoice, "pro-rated amount should be less than full invoice amount")
+		suite.T().Logf("Verified pro-rated invoice: expected ~%.2f, got %s (for %v of %v billing cycle, ratio: %.2f%%)",
+			expectedProRatedAmountFloat, proRatedTransaction.Amount, elapsedSinceFirstInvoice, billingCycleDuration, proRatedRatio*100)
+
+		// TEST 6: Verify no further invoices after termination
+		suite.T().Log("Waiting another checker interval + buffer after termination to verify no further invoices")
+		time.Sleep(waitTime)
+
+		// Count transactions after waiting another full period
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountAfterWaitPeriod := len(respAfterConfirm.Transactions)
+
+		// Assert no new transactions were created after the pro-rated invoice
+		suite.Require().Equal(
+			transactionCountAfterTermination,
+			transactionCountAfterWaitPeriod,
+			"no new transactions should be created after pro-rated invoice (contract is terminated)",
+		)
+		suite.T().Logf("Verified: Transaction count after termination: %d, after wait period: %d (no new invoices)",
+			transactionCountAfterTermination, transactionCountAfterWaitPeriod)
+	})
+}
+
+func DeployWithContractPeriodicTest(suite *TestSuite) {
+	suite.Run("dms with contracts periodic", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// Setup: Offboard contract host and payment validator
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		// Prepare contract JSON with Periodic configuration
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample-periodic.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+
+		feePerTimeUnit := "0.10"  // 0.10 per minute
+		timeUnit := "minute"      // Use minute for faster testing
+		paymentPeriod := "minute" // Use minute periods for faster testing
+		paymentPeriodCount := "5" // Invoice every minute for fast testing
+
+		// Start mock RPC server
+		go startMockRPC(9426)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9426/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		// Replace placeholders in contract JSON
+		err = replacePlaceholders(
+			destinationFile,
+			contractHost.dmsDID,
+			provider.dmsDID,
+			requester.dmsDID,
+			paymentValidator.dmsDID,
+			requesterEthAddr,
+			providerEthAddr,
+			"", // feesPerAllocation
+			string(contracts.Periodic),
+			"", // feePerDeployment
+			feePerTimeUnit,
+			timeUnit,
+			"", // feePerCPUCorePerTimeUnit
+			"", // feePerRAMGBPerTimeUnit
+			"", // feePerDiskGBPerTimeUnit
+			"", // feePerGPUPerTimeUnit
+			"", // resourceTimeUnit
+			"", // fixedRentalAmount
+			paymentPeriod,
+			paymentPeriodCount,
+			startDate,
+			endDate,
+		)
+		suite.Require().NoError(err)
+
+		// Create contract
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		fmt.Println(cmdOut, err)
+
+		// Wait for contract actor to start
+		time.Sleep(5 * time.Second)
+
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// Verify contract is not valid (not signed)
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Approve contract
+		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+		cmdOut, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		// TEST 1: Attempt manual invoice generation (should fail)
+		suite.T().Log("Testing manual invoice generation - should return error")
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err) // HTTP call succeeds
+
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err)
+
+		// Assert error is returned
+		suite.Require().NotEmpty(usageResponse.Results)
+		suite.Require().NotEmpty(usageResponse.Results[0].Error, "should return error for manual Periodic invoice generation")
+		suite.Require().Contains(usageResponse.Results[0].Error, "automatic periodic billing", "error should mention automatic billing")
+		suite.Require().Contains(usageResponse.Results[0].Error, "cannot be manually triggered", "error should mention manual triggering is blocked")
+		suite.T().Logf("Manual invoice generation correctly blocked with error: %s", usageResponse.Results[0].Error)
+
+		// TEST 2: Wait for automatic invoice generation (with no deployments, should skip with log)
+		// Note: Since we haven't deployed anything yet, Edge Case 1 applies - no deployments,
+		// so the billing routine should skip the period with a log message
+		suite.T().Log("Waiting for billing routine check (no deployments - should skip with log)")
+
+		// Wait for billing checker interval with dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: 30 seconds (min bound for 1-minute period)
+		waitTime := calculateAutomaticBillingWaitTime("minute", 5, 2*time.Minute)
+		time.Sleep(waitTime)
+
+		// Check that no transactions were created (Edge Case 1: no deployments = skip invoice)
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		var resp contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output), &resp)
+		suite.Require().NoError(err)
+
+		// Count transactions for this contract (should be 0 since no deployments)
+		var contractTransactionCount int
+		for _, tx := range resp.Transactions {
+			if tx.ContractDID == contractDID {
+				contractTransactionCount++
+			}
+		}
+		suite.Require().Equal(0, contractTransactionCount, "no transactions should be created when no deployments exist (Edge Case 1)")
+		suite.T().Log("Verified: No invoices generated when no deployments exist (Edge Case 1)")
+
+		// TEST 2.5: Wait for payment validation before deploying
+		time.Sleep(6 * time.Second)
+
+		// TEST 3: Deploy a deployment and wait for automatic invoice generation
+		suite.T().Log("Deploying a deployment and waiting for automatic invoice generation")
+
+		// Prepare deployment file
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "complex-deployment-1.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "complex-deployment-periodic.yaml")
+		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"`
+		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
+		suite.Require().NoError(err)
+
+		// Deploy the deployment
+		deploymentResult := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			destinationFileEnsemble, "5m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		// Capture deployment start time
+		deploymentStartTime := time.Now()
+
+		// Wait until deployment reaches Running status
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Logf("Deployment status: %s", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+
+		// Wait additional time for deployment to run (at least 30 seconds to have measurable runtime)
+		suite.T().Log("Waiting 30 seconds for deployment to run before first billing period")
+		time.Sleep(30 * time.Second)
+
+		// Wait for automatic invoice generation with dynamic checker
+		// Using paymentPeriod="minute", paymentPeriodCount=1 for fast testing
+		// Dynamic checker: 30 seconds (min bound for 1-minute period)
+		// Wait time: 30s + 1min + 2min = 3.5 minutes (vs 30+ minutes with old approach)
+		waitTimeForInvoice := calculateAutomaticBillingWaitTime("minute", 1, 2*time.Minute)
+
+		// Poll for transaction creation (billing routine generates invoice automatically)
+		var transactionCreated bool
+		var periodicTransaction *transaction.Transaction
+		startWaitTime := time.Now()
+		suite.Require().Eventually(func() bool {
+			output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+			if err != nil {
+				return false
+			}
+
+			var resp contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(output), &resp)
+			if err != nil {
+				return false
+			}
+
+			// Check if any transaction exists for this contract
+			for _, tx := range resp.Transactions {
+				if tx.ContractDID == contractDID {
+					transactionCreated = true
+					periodicTransaction = tx
+					return true
+				}
+			}
+
+			elapsed := time.Since(startWaitTime)
+			if elapsed > waitTimeForInvoice {
+				suite.T().Logf("Waiting for automatic invoice... elapsed: %v", elapsed)
+			}
+			return false
+		}, waitTimeForInvoice+30*time.Second, 5*time.Second, "automatic invoice should be generated within period")
+
+		suite.Require().True(transactionCreated, "transaction should be created by automatic billing")
+		suite.Require().NotNil(periodicTransaction, "should find the automatically generated transaction")
+
+		// Capture first invoice time after transaction is found
+		firstInvoiceTime := time.Now()
+
+		// Calculate expected amount based on deployment runtime
+		// Runtime is from deployment start to first invoice time
+		deploymentRuntime := firstInvoiceTime.Sub(deploymentStartTime)
+		deploymentRuntimeMinutes := deploymentRuntime.Minutes()
+		feePerUnitFloat, err := strconv.ParseFloat(feePerTimeUnit, 64)
+		suite.Require().NoError(err)
+		expectedAmount := deploymentRuntimeMinutes * feePerUnitFloat
+
+		// Verify transaction details
+		actualAmount, err := strconv.ParseFloat(periodicTransaction.Amount, 64)
+		suite.Require().NoError(err, "should parse actual amount")
+		// Allow variance for timing (invoice may be generated slightly before/after we capture the time)
+		suite.Require().InDelta(expectedAmount, actualAmount, 2.0,
+			"transaction amount should match deployment runtime (expected ~%.2f, got %.2f, runtime: %.2f minutes)",
+			expectedAmount, actualAmount, deploymentRuntimeMinutes)
+		suite.Require().Equal("unpaid", periodicTransaction.Status, "transaction should initially be unpaid")
+		suite.T().Logf("Automatic invoice generated: UniqueID=%s, Amount=%s, Status=%s, DeploymentRuntime=%.2f minutes",
+			periodicTransaction.UniqueID, periodicTransaction.Amount, periodicTransaction.Status, deploymentRuntimeMinutes)
+
+		// TEST 4: Payment Processing
+		suite.T().Log("Confirming payment for the first automatic invoice")
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+		confirmOutput, err := requester.client.confirmLocalTransaction(suite.T(), requester.dmsContext, requester.password, periodicTransaction.UniqueID, txHash)
+		suite.Require().NoError(err, "confirmation should not fail for transaction %s", periodicTransaction.UniqueID)
+
+		// Parse and check confirmation response for errors
+		var confirmResp contracts.ContractConfirmLocalTransactionResponse
+		err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+		suite.Require().NoError(err, "should be able to parse confirmation response")
+		suite.Require().Empty(confirmResp.Error, "confirmation response should not have errors for transaction %s: %s", periodicTransaction.UniqueID, confirmResp.Error)
+
+		// Wait for transaction status to be updated
+		time.Sleep(10 * time.Second)
+
+		// Verify the specific transaction status by finding it in the list
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+
+		// Find the specific transaction we just confirmed
+		var confirmedTx *transaction.Transaction
+		for _, tx := range respAfterConfirm.Transactions {
+			if tx.UniqueID == periodicTransaction.UniqueID {
+				confirmedTx = tx
+				break
+			}
+		}
+		suite.Require().NotNil(confirmedTx, "should find the confirmed transaction with unique_id: %s", periodicTransaction.UniqueID)
+		suite.Require().Equal("paid", confirmedTx.Status, "transaction %s should be marked as paid", periodicTransaction.UniqueID)
+		suite.T().Logf("Transaction %s confirmed and marked as paid.", periodicTransaction.UniqueID)
+
+		// Check all parties can retrieve payment status from payment provider
+		statusOutput, err := requester.client.paymentStatus(suite.T(), requester.dmsContext, requester.password, periodicTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from requester.")
+
+		statusOutput, err = provider.client.paymentStatus(suite.T(), provider.dmsContext, provider.password, periodicTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from provider.")
+
+		statusOutput, err = contractHost.client.paymentStatus(suite.T(), contractHost.dmsContext, contractHost.password, periodicTransaction.UniqueID, paymentValidator.dmsDID)
+		suite.Require().NoError(err)
+		suite.Require().Contains(statusOutput, `"paid": true`)
+		suite.T().Log("Payment status verified from contract host.")
+
+		// Count transactions before mid-period deployment shutdown
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountBeforeShutdown := len(respAfterConfirm.Transactions)
+		suite.T().Logf("Transaction count before mid-period deployment shutdown: %d", transactionCountBeforeShutdown)
+
+		// TEST 5: Mid-Period Deployment Shutdown (pro-rated invoice)
+		suite.T().Log("Waiting 2 minutes(mid-period) before shutting down deployment to trigger pro-rated invoice")
+		time.Sleep(2 * time.Minute)
+
+		deploymentShutdownTime := time.Now()
+		suite.T().Logf("Shutting down deployment at %s", deploymentShutdownTime.Format(time.RFC3339))
+
+		// Shutdown deployment
+		shutdownRes := requester.client.shutdownDeployment(suite.T(), requester.userContext, requester.password, manifestID)
+		suite.Require().Contains(shutdownRes, `"Error": ""`)
+
+		// Wait for deployment to stop
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 60*time.Second, 5*time.Second, "Deployment should stop")
+
+		time.Sleep(3 * time.Second) // Allow shutdown to propagate
+
+		// TEST 6: Verify pro-rated final invoice generated after deployment shutdown
+		suite.T().Log("Waiting for pro-rated final invoice to be generated after deployment shutdown")
+
+		time.Sleep(waitTime)
+
+		// Check for new transaction (pro-rated invoice for partial period)
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountAfterShutdown := len(respAfterConfirm.Transactions)
+
+		// Assert a new transaction was created for the pro-rated period
+		suite.Require().Greater(
+			transactionCountAfterShutdown,
+			transactionCountBeforeShutdown,
+			"pro-rated final invoice should be generated after mid-period deployment shutdown",
+		)
+		suite.T().Logf("Verified: Transaction count before shutdown: %d, after shutdown: %d (pro-rated invoice generated)",
+			transactionCountBeforeShutdown, transactionCountAfterShutdown)
+
+		// Find and verify the pro-rated transaction
+		var proRatedTransaction *transaction.Transaction
+		for _, tx := range respAfterConfirm.Transactions {
+			if tx.ContractDID == contractDID && tx.UniqueID != periodicTransaction.UniqueID {
+				proRatedTransaction = tx
+				break
+			}
+		}
+		suite.Require().NotNil(proRatedTransaction, "should have pro-rated transaction after mid-period deployment shutdown")
+
+		// Calculate expected pro-rated amount based on runtime from last invoice to shutdown
+		elapsedSinceFirstInvoice := deploymentShutdownTime.Sub(firstInvoiceTime)
+		deploymentRuntimeForProRate := elapsedSinceFirstInvoice
+		deploymentRuntimeMinutesForProRate := deploymentRuntimeForProRate.Minutes()
+		expectedProRatedAmountFloat := deploymentRuntimeMinutesForProRate * feePerUnitFloat
+
+		// Verify pro-rated amount
+		actualProRatedAmount, err := strconv.ParseFloat(proRatedTransaction.Amount, 64)
+		suite.Require().NoError(err)
+		// Allow variance for timing
+		suite.Require().InDelta(expectedProRatedAmountFloat, actualProRatedAmount, 1.0,
+			"pro-rated transaction amount should match deployment runtime since last invoice (expected ~%.2f, got %.2f, runtime: %.2f minutes)",
+			expectedProRatedAmountFloat, actualProRatedAmount, deploymentRuntimeMinutesForProRate)
+		suite.Require().Greater(actualProRatedAmount, 0.0, "pro-rated amount should be greater than 0")
+		suite.T().Logf("Verified pro-rated invoice: expected ~%.2f, got %s (for %.2f minutes deployment runtime)",
+			expectedProRatedAmountFloat, proRatedTransaction.Amount, deploymentRuntimeMinutesForProRate)
+
+		// TEST 7: Contract Termination
+		suite.T().Log("Terminating contract to verify no further invoices")
+		_, err = provider.client.terminateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		time.Sleep(3 * time.Second)
+
+		// Verify contract is terminated
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("TERMINATED", contractState)
+		suite.T().Log("Contract status verified as TERMINATED.")
+
+		// Wait to ensure no further invoices are generated
+		suite.T().Log("Waiting another billing period after termination to verify no further invoices")
+		time.Sleep(waitTimeForInvoice)
+
+		// Count transactions after waiting
+		output, err = requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+		err = json.Unmarshal([]byte(output), &respAfterConfirm)
+		suite.Require().NoError(err)
+		transactionCountAfterTermination := len(respAfterConfirm.Transactions)
+
+		// Assert no new transactions were created after termination
+		suite.Require().Equal(
+			transactionCountAfterShutdown,
+			transactionCountAfterTermination,
+			"no new transactions should be created after contract termination",
+		)
+		suite.T().Logf("Verified: Transaction count after shutdown: %d, after termination: %d (no new invoices)",
+			transactionCountAfterShutdown, transactionCountAfterTermination)
+	})
 }

@@ -75,7 +75,7 @@ Or manually create a dms_config.json file and refer to the README for available 
 
 			go func() {
 				sig := <-internal.ShutdownChan
-				log.Infof("Shutting down after receiving %v...\n", sig)
+				log.Infow("Shutting down after a receiving signal", "sig", sig)
 
 				dmsInstance.Stop()
 				os.Exit(0)

@@ -89,6 +89,7 @@ func TestNewAllocation(t *testing.T) {
 				tt.executor,
 				func() error { return nil },
 				eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
+				"",
 			)
 
 			if tt.wantErr {
@@ -224,7 +225,7 @@ func TestAllocation_handleTransience(t *testing.T) {
 			require.NoError(t, err)
 
 			alloc.handleTransience(tt.result, tt.err)
-			status := alloc.Status(context.Background())
+			status := alloc.Status()
 			require.Equal(t, tt.wantStatus, status.Status)
 		})
 	}
@@ -533,7 +534,7 @@ func createTestAllocation(t *testing.T, vol ...types.VolumeConfig) (*Allocation,
 
 	fs := afero.Afero{Fs: afero.NewMemMapFs()}
 
-	return NewAllocation(
+	alloc, err := NewAllocation(
 		"test-allocation-id",
 		jobtypes.AllocationTypeService,
 		actor.Handle{},
@@ -545,5 +546,14 @@ func createTestAllocation(t *testing.T, vol ...types.VolumeConfig) (*Allocation,
 		mockExecutor,
 		func() error { return nil },
 		eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
+		"",
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// disable liveness reporting for tests
+	alloc.liveness.enabled = false
+
+	return alloc, err
 }

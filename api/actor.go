@@ -111,7 +111,7 @@ func (rs *Server) ActorSendMessage(c *gin.Context) {
 
 	err := sendMessage(c.Request.Context(), p2p, msg)
 	if err != nil {
-		log.Errorw("actor_send_message_failure", "error", err.Error(), "destination", msg.To.Address.HostID)
+		log.Errorw("actor_send_message_failure", "error", err, "destination", msg.To.Address.HostID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -138,7 +138,7 @@ func (rs *Server) ActorSendMessage(c *gin.Context) {
 func (rs *Server) ActorInvoke(c *gin.Context) {
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {
-		log.Errorw("actor_invoke_failure", "error", err.Error())
+		log.Errorw("actor_invoke_failure", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -156,13 +156,13 @@ func (rs *Server) ActorInvoke(c *gin.Context) {
 	err := p2p.HandleMessage(protocol, func(data []byte, _ peer.ID) {
 		var envelope actor.Envelope
 		if err := json.Unmarshal(data, &envelope); err != nil {
-			log.Errorw("actor_invoke_response_failure", "error", err.Error())
+			log.Errorw("actor_invoke_response_failure", "error", err)
 			return
 		}
 		responseCh <- envelope
 	})
 	if err != nil {
-		log.Errorw("actor_invoke_failure", "error", err.Error())
+		log.Errorw("actor_invoke_failure", "error", err, "behavior", msg.Behavior)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -172,7 +172,7 @@ func (rs *Server) ActorInvoke(c *gin.Context) {
 
 	err = sendMessage(c.Request.Context(), p2p, msg)
 	if err != nil {
-		log.Errorw("actor_invoke_failure", "error", err.Error())
+		log.Errorw("actor_invoke_failure", "error", err, "behavior", msg.Behavior)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -213,7 +213,7 @@ func (rs *Server) ActorBroadcast(c *gin.Context) {
 
 	var msg actor.Envelope
 	if err := c.ShouldBindJSON(&msg); err != nil {
-		log.Errorw("actor_broadcast_failure", "error", err.Error())
+		log.Errorw("actor_broadcast_failure", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -253,7 +253,7 @@ func (rs *Server) ActorBroadcast(c *gin.Context) {
 		mu.Unlock()
 	})
 	if err != nil {
-		log.Errorw("actor_broadcast_failure", "error", err.Error())
+		log.Errorw("actor_broadcast_failure", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

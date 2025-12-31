@@ -86,6 +86,10 @@ type Actor interface {
 	Children() map[did.DID]Handle
 
 	Limiter() RateLimiter
+
+	// UpdateSecurityContext updates the actor's security context.
+	// This is used when the underlying capability context changes (e.g., after reloading from disk).
+	UpdateSecurityContext(newSecurity SecurityContext) error
 }
 
 // ActorSecurityContext provides a context for which to perform cryptographic operations

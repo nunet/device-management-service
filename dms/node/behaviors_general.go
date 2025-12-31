@@ -10,6 +10,7 @@ package node
 
 import (
 	"encoding/json"
+	"path/filepath"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -109,4 +110,11 @@ func (n *Node) handleLoggerConfig(msg actor.Envelope) {
 
 	resp.OK = true
 	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleFlightrec(msg actor.Envelope) {
+	defer msg.Discard()
+
+	observability.FlightrecCapture(filepath.Join(n.dmsConfig.WorkDir, "logs"), "flightrec.trace")
+	n.sendReply(msg, PingResponse{})
 }

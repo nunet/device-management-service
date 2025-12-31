@@ -44,6 +44,7 @@ import (
 	"gitlab.com/nunet/device-management-service/network/libp2p"
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
+	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -97,7 +98,7 @@ func newLibp2pNetwork(t *testing.T, mockFs afero.Fs, bootstrap []multiaddr.Multi
 
 	// config
 	dcfg := config.DefaultConfig
-	dcfg.Observability.ElasticsearchEnabled = false
+	dcfg.Observability.Elastic.Enabled = false
 
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 256)
 	require.NoError(t, err)
@@ -239,7 +240,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 
 	// config
 	dcfg := config.DefaultConfig
-	dcfg.Observability.ElasticsearchEnabled = false
+	dcfg.Observability.Elastic.Enabled = false
 
 	// mock database
 	db, err := cloverDB.NewMemDB([]string{
@@ -250,6 +251,8 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		"onboarding_config",
 		"resource_allocation",
 		"deployments",
+		"contracts",
+		"contracts_keys",
 	})
 	require.NoError(t, err)
 
@@ -295,6 +298,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	scheduler := backgroundtasks.NewScheduler(1, time.Second)
 
 	vNet, priv := setupTestNetwork(t, substrate)
+	require.NoError(t, vNet.Start())
 
 	subnetStatus = make(map[string]int)
 
@@ -315,6 +319,9 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		vNet.GetHostID().String(),
 	)
 	nActor, nActorCap, nRootTrust, nRootDID := newActor(t, priv, vNet)
+
+	contractStore, err := store.New(db)
+	require.NoError(t, err)
 
 	node := &Node{}
 	node.onboarding = onboardingManager
@@ -343,6 +350,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		executor:      &docker.Executor{},
 		executionType: jobtypes.ExecutorDocker,
 	}
+	node.contractStore = contractStore
 
 	dmsBehaviors := node.getDMSBehaviors()
 	for behavior, handler := range dmsBehaviors {
@@ -405,7 +413,7 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 
 	// config
 	dcfg := config.DefaultConfig
-	dcfg.Observability.ElasticsearchEnabled = false
+	dcfg.Observability.Elastic.Enabled = false
 
 	// mock database
 	db, err := cloverDB.NewMemDB([]string{

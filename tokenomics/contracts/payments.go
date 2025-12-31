@@ -10,6 +10,19 @@ package contracts
 
 import (
 	"time"
+
+	"gitlab.com/nunet/device-management-service/types"
+)
+
+type PaymentModel string
+
+const (
+	PayPerAllocation          PaymentModel = "pay_per_allocation"
+	PayPerDeployment          PaymentModel = "pay_per_deployment"
+	PayPerTimeUtilization     PaymentModel = "pay_per_time_utilization"
+	PayPerResourceUtilization PaymentModel = "pay_per_resource_utilization"
+	FixedRental               PaymentModel = "fixed_rental"
+	Periodic                  PaymentModel = "periodic"
 )
 
 const (
@@ -17,15 +30,51 @@ const (
 	BlockchainMethod PaymentType = "blockchain"
 )
 
+const (
+	PaymentPeriodMinute string = "minute"
+	PaymentPeriodHour   string = "hour"
+	PaymentPeriodDay    string = "day"
+	PaymentPeriodWeek   string = "week"
+	PaymentPeriodMonth  string = "month"
+)
+
+const (
+	TimeUnitSecond string = "second"
+	TimeUnitMinute string = "minute"
+	TimeUnitHour   string = "hour"
+)
+
 type PaymentType string
 
 // Payment represents a payment transaction
 type PaymentDetails struct {
-	PaymentType       PaymentType `json:"payment_type"`
-	RequesterAddr     string      `json:"requester_addr"`
-	ProviderAddr      string      `json:"provider_addr"`
-	Currency          string      `json:"currency"`
-	Timestamp         time.Time   `json:"timestamp"`
-	FeesPerAllocation string      `json:"fees_per_allocation"`
-	Blockchain        string      `json:"blockchain"` // ETHEREUM, CARDANO etc..
+	PaymentType PaymentType `json:"payment_type"`
+	Timestamp   time.Time   `json:"timestamp"`
+
+	// payment model
+	PaymentModel PaymentModel `json:"payment_model"`
+
+	// pay per deployment payment model
+	FeePerDeployment string `json:"fee_per_deployment,omitempty"`
+
+	// pay per allocation payment model
+	FeesPerAllocation string `json:"fees_per_allocation"`
+
+	// pay per time utilization payment model
+	FeePerTimeUnit string `json:"fee_per_time_unit,omitempty"` // e.g., "0.01" per second
+	TimeUnit       string `json:"time_unit,omitempty"`         // "second", "minute", "hour"
+
+	// pay per resource utilization payment model
+	FeePerCPUCorePerTimeUnit string `json:"fee_per_cpu_core_per_time_unit,omitempty"` // e.g., "0.10" per core per hour
+	FeePerRAMGBPerTimeUnit   string `json:"fee_per_ram_gb_per_time_unit,omitempty"`   // e.g., "0.05" per GB per hour
+	FeePerDiskGBPerTimeUnit  string `json:"fee_per_disk_gb_per_time_unit,omitempty"`  // e.g., "0.01" per GB per hour
+	FeePerGPUPerTimeUnit     string `json:"fee_per_gpu_per_time_unit,omitempty"`      // e.g., "5.00" per GPU per hour (optional)
+	ResourceTimeUnit         string `json:"resource_time_unit,omitempty"`             // "second", "minute", "hour"
+
+	// fixed rental payment model
+	FixedRentalAmount  string `json:"fixed_rental_amount,omitempty"`  // e.g., "20.00"
+	PaymentPeriod      string `json:"payment_period,omitempty"`       // "minute", "hour", "day", "week", "month"
+	PaymentPeriodCount int    `json:"payment_period_count,omitempty"` // Number of periods to wait before invoicing (default: 1). Invoice amount is fixedRentalAmount, invoiced every paymentPeriodCount periods
+
+	Addresses []types.PaymentAddressInfo `json:"addresses"`
 }

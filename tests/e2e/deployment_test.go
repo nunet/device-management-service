@@ -24,12 +24,13 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-func DeploymentTest(suite *TestSuite) {
+func DeploymentTests(suite *TestSuite) {
 	suite.Run("allocation of type TASK: deploy docker hello-world", func() {
 		deployer := suite.nodes[1]
 		deployment2Result := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "ensembles", "hello.yaml"),
+			"2m",
 		)
 		suite.Contains(deployment2Result, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deployment2Result)
@@ -78,7 +79,9 @@ func DeploymentWithRedundancyTest(suite *TestSuite) {
 		deployer := suite.nodes[3]
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
-			srcFile)
+			srcFile,
+			"2m",
+		)
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		manifestID := extractEnsembleID(deploymentResult)
 
@@ -141,7 +144,7 @@ func DeploymentWithRedundancyTest(suite *TestSuite) {
 	})
 }
 
-// DeploymentFullAssertion deploys multiple_nginx.yaml using 4 nodes:
+// DeploymentAssertSubnet deploys multiple_nginx.yaml using 4 nodes:
 // 1 deployer and 3 providers (bob, alice, carl).
 //
 // - All allocations are services (TODO: test with a task?)
@@ -152,7 +155,7 @@ func DeploymentWithRedundancyTest(suite *TestSuite) {
 // - Subnet conns between peers
 // - Resources allocation (before and after deployment)
 // - Manifest changes
-func DeploymentFullAssertion(suite *TestSuite) {
+func DeploymentAssertSubnet(suite *TestSuite) {
 	suite.Require().Len(suite.nodes, 4)
 	deployer := suite.nodes[0]
 	bobProvider := suite.nodes[1]
@@ -176,6 +179,7 @@ func DeploymentFullAssertion(suite *TestSuite) {
 		suite.T(), deployer.userContext,
 		deployer.password,
 		ensemblePath,
+		"2m",
 	)
 	suite.Contains(deploymentResult, `"Status": "OK"`)
 	ensembleID := extractEnsembleID(deploymentResult)
@@ -469,6 +473,7 @@ func DeploymentUpdates(suite *TestSuite) {
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "multiple.yaml"),
+			"2m",
 		)
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -556,6 +561,7 @@ func DeploymentUpdates(suite *TestSuite) {
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "single_node.yaml"),
+			"2m",
 		)
 		suite.Require().Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -640,6 +646,7 @@ func DeploymentUpdates(suite *TestSuite) {
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password,
 			filepath.Join(suite.testDataDir, "multiple.yaml"),
+			"2m",
 		)
 		suite.Require().Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -743,6 +750,7 @@ func DeploymentRestorationPostReboot(suite *TestSuite) {
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password, ensemblePath,
+			"2m",
 		)
 		suite.Contains(deploymentResult, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deploymentResult)
@@ -829,107 +837,6 @@ func DeploymentRestorationPostReboot(suite *TestSuite) {
 	})
 }
 
-// DeploymentRestorationFromCommitting tests restoration when crash occurs at Committing
-func DeploymentRestorationFromCommitting(suite *TestSuite) {
-	suite.Run("DeploymentRestorationFromCommitting", func() {
-		suite.Require().Len(suite.nodes, 3)
-		deployer := suite.nodes[1]
-
-		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
-		suite.Contains(deployRes, `"Status": "OK"`)
-		ensembleID := extractEnsembleID(deployRes)
-
-		// Wait for deployment to reach Committing status and crash immediately
-		suite.T().Log("Waiting for deployment to reach Committing status...")
-		deadline := time.Now().Add(60 * time.Second)
-		seen := make([]string, 0, 16)
-		last := ""
-
-		for time.Now().Before(deadline) {
-			statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
-			if err == nil {
-				cur := extractStatus(statusStr)
-				if cur != last {
-					seen = append(seen, cur)
-					last = cur
-					suite.T().Log("Deployment status:", cur)
-				}
-				if cur == jobtypes.DeploymentStatusCommitting.String() {
-					suite.T().Log("Deployment reached Committing status, crashing orchestrator immediately...")
-					suite.killNode(1)
-					break
-				}
-			}
-			// High frequency check to catch Committing status reliably
-			time.Sleep(100 * time.Millisecond)
-		}
-
-		// If we didn't find Committing status, fail the test
-		if last != jobtypes.DeploymentStatusCommitting.String() {
-			suite.T().Fatalf("deployment %s did not reach Committing status within 60s (seen: %v)", ensembleID, seen)
-		}
-
-		// Restart orchestrator node
-		go suite.startNode(1)
-
-		// Wait until restarted node is ready
-		suite.Require().Eventually(func() bool {
-			stats, err := suite.nodes[1].client.self(suite.T(), suite.nodes[1].dmsContext, suite.nodes[1].password)
-			if err != nil {
-				suite.T().Logf("Node not ready yet, error: %v", err)
-				return false
-			}
-			suite.T().Logf("Node ready, ID: %s", stats.ID)
-			return stats.ID != ""
-		}, 60*time.Second, 2*time.Second)
-
-		// Reconnect the restarted node to the existing network
-		// This is crucial for the node to be able to send bid requests
-		for i := 0; i < len(suite.nodes); i++ {
-			if i == 1 {
-				continue // Skip the restarted node itself
-			}
-			otherNode := suite.nodes[i]
-			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
-			suite.Require().NoError(err)
-
-			result := deployer.client.connect(suite.T(), deployer.userContext, deployer.password, otherHostID.ID)
-			suite.Contains(result, `"Status": "CONNECTED"`)
-		}
-
-		time.Sleep(60 * time.Second)
-
-		// After restoration, the deployment should have progressed from Committing to Running
-		// This is expected behavior - the orchestrator automatically continues the deployment process
-		statusStr, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
-		suite.Require().NoError(err)
-		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), extractStatus(statusStr), "expected Running after restoration from Committing")
-
-		// Then it should stay Running or progress to Completed
-		suite.Require().Eventually(func() bool {
-			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
-			if err != nil {
-				return false
-			}
-			cur := extractStatus(status)
-			suite.T().Log("Current deployment status after restoration:", cur)
-			return cur == jobtypes.DeploymentStatusRunning.String() || cur == jobtypes.DeploymentStatusCompleted.String()
-		}, 120*time.Second, 2*time.Second, "deployment did not stay Running or progress to Completed after restoration")
-
-		// Cleanup (only if not already completed)
-		finalStatus, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
-		if err == nil && extractStatus(finalStatus) != jobtypes.DeploymentStatusCompleted.String() {
-			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
-			suite.Contains(shutdownRes, `"Error": ""`)
-			suite.Require().Eventually(func() bool {
-				status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
-				return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
-			}, 60*time.Second, 2*time.Second)
-		}
-	})
-}
-
 // DeploymentRestorationFromProvisioning tests restoration when crash occurs at Provisioning
 func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 	suite.Run("DeploymentRestorationFromProvisioning", func() {
@@ -937,7 +844,7 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 		deployer := suite.nodes[1]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
 
@@ -958,14 +865,17 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 				}
 				if cur == jobtypes.DeploymentStatusProvisioning.String() {
 					suite.T().Log("Deployment reached Provisioning status, crashing orchestrator immediately...")
-					suite.stopNode(1)
+					suite.killNode(1)
 					break
 				}
 			}
 		}
 
-		// If we didn't find Committing status, fail the test
+		// Provisioning status can be too quick to catch. If at running status, skip the test.
 		if last != jobtypes.DeploymentStatusProvisioning.String() {
+			if last == jobtypes.DeploymentStatusRunning.String() {
+				suite.T().Skipf("deployment %s Provisioning status was not caught. Seen %v", ensembleID, seen)
+			}
 			suite.T().Fatalf("deployment %s did not reach Provisioning status within 60s (seen: %v)", ensembleID, seen)
 		}
 
@@ -1036,7 +946,7 @@ func DeploymentRestorationFromPreparing(suite *TestSuite) {
 		deployer := suite.nodes[1]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
-		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath)
+		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
 

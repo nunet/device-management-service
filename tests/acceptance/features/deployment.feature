@@ -8,7 +8,6 @@ Feature: Deployment
       | nodes   | role | onboarded | org   |
       | Alice   | SP   | false     | nunet |
       | Bob     | CP   | true      | nunet |
-      | Charlie | CP   | true      | nunet |
 
   Scenario Outline: Retrieve output from execution
     Given "Alice" has deployed <ensemble> on "Bob"

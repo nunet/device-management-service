@@ -18,7 +18,7 @@ This document outlines the defined features and scenarios used for acceptance te
 | [Allocation Running on Subnet](#feature-allocation-running-on-subnet) ([.feature](./subnet.feature)) | As a Service Provider I want to launch services on peers And the services can communicate with each other | Service and Resource Providers | Feature or Testnet | Implemented | In progress | Main subnet test implemented; working now on the redeployment case. |
 | [Capabilities Management](#feature-capabilities-management) ([.feature](./capabilities_management.feature)) | Grant, revoke, and delegate behavior-level capabilities across users. | Resource Providers and Facilitators | Feature or Testnet | Implemented | Not started |  |
 | [Cardano](#feature-cardano) ([.feature](./cardano.feature)) | Launch Cardano nodes. | Tokenomics Enablers | Testnet | Implemented | Not started |  |
-| [Contract Management](#feature-contract-management) ([.feature](./contract_management.feature)) | Create and execute a contract. | Service and Resource Providers, Facilitators | Testnet | In progress | Not started |  |
+| [Contract Management Simple](#feature-contract-management-simple) ([.feature](./contract.feature)) | As a Service Provider I want to create contracts with Compute Providers So that I can guarantee exclusive access to specific resources and ensure secure, isolated deployments # SP -> Service Provider # CP -> Compute Provider # CH -> Contract Host | Service and Resource Providers, Facilitators | Testnet | Implemented | Implemented | Payment flow manually tested. |
 | [Deployment](#feature-deployment) ([.feature](./deployment.feature)) | As a Service Provider I want to deploy my computation on other nodes So that I don't have to use my machine | Service Providers | Feature or Testnet | Implemented | Implemented |  |
 | [Deployment Cancellation](#feature-deployment-cancellation) ([.feature](./deployment_cancellation.feature)) | Cancel deployments in various lifecycle stages and error conditions. | Service Providers | Feature or Testnet | Implemented | Not started |  |
 | [Deployment Constraints](#feature-deployment-constraints) ([.feature](./deployment_constraints.feature)) | Consider placement constraints such as location, edge proximity, or hardware specs to do a deployment. | Service and Resource Providers | Testnet - Requires infrastructure specific to each scenario. | Implemented | Not started |  |
@@ -79,15 +79,17 @@ This document outlines the defined features and scenarios used for acceptance te
 
 ---
 
-### Feature: Contract Management
+### Feature: Contract Management Simple
 
-*Create and execute a contract.*
+*As a Service Provider I want to create contracts with Compute Providers So that I can guarantee exclusive access to specific resources and ensure secure, isolated deployments # SP -> Service Provider # CP -> Compute Provider # CH -> Contract Host*
 
 **Scenarios:**
-- Create a contract with detailed resource requirements, payment terms, participant information, and custom terms
-- Digitally sign the contract by all relevant parties
-- Execute a deployment to analyze the contract's state transitions through to termination
-- Recover contract data in the event of a system failure or restart
+- 
+- Create a contract
+- Make deployment with contract
+- Make deployment without signed contract
+- Mark contract as completed
+- Terminate a contract
 
 ---
 

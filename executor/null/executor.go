@@ -10,6 +10,7 @@ package null
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -96,4 +97,9 @@ func (e *Executor) Resume(_ context.Context, _ string) error {
 // WaitForStatus does nothing and returns nil.
 func (e *Executor) WaitForStatus(_ context.Context, _ string, _ types.ExecutionStatus, _ *time.Duration) error {
 	return nil
+}
+
+// Stats returns nil stats and an error indicating stats are not available for null executor.
+func (e *Executor) Stats(_ context.Context, _ string) (*types.ExecutorStats, error) {
+	return nil, fmt.Errorf("stats not available for null executor")
 }

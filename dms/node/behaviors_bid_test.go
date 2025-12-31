@@ -255,6 +255,56 @@ func TestHandleBidRequest(t *testing.T) {
 		assert.NotEmpty(t, node.answeredBids)
 		assert.NotEmpty(t, node.bids)
 	})
+
+	t.Run("contracts required but missing - no bid placed", func(t *testing.T) {
+		t.Parallel()
+
+		node, sActor, _ := newMockNodeWithSender(t, behaviors.BidRequestBehavior)
+
+		// mark node as onboarded so it can normally bid
+		mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
+
+		// enable contract enforcement
+		node.dmsConfig.Job.RequireContractsForDeployment = true
+
+		// standard bid request from helper has no contracts
+		bidRequest := getBidRequest()
+		require.Len(t, bidRequest.Request, 1)
+		require.Nil(t, bidRequest.Request[0].V1.Contracts)
+
+		msg := getBroadcastMsg(t, sActor.Handle(), bidRequest)
+
+		node.handleBidRequest(msg)
+
+		// With enforcement enabled and no contracts, node must not store a bid or mark it answered
+		assert.Empty(t, node.answeredBids)
+		assert.Empty(t, node.bids)
+	})
+
+	t.Run("contracts required and it exist - bid placed", func(t *testing.T) {
+		t.Parallel()
+
+		node, sActor, _ := newMockNodeWithSender(t, behaviors.BidRequestBehavior)
+
+		// mark node as onboarded so it can normally bid
+		mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
+
+		// enable contract enforcement
+		node.dmsConfig.Job.RequireContractsForDeployment = false
+
+		// standard bid request from helper has no contracts
+		bidRequest := getBidRequest()
+		require.Len(t, bidRequest.Request, 1)
+		require.Nil(t, bidRequest.Request[0].V1.Contracts)
+
+		msg := getBroadcastMsg(t, sActor.Handle(), bidRequest)
+
+		node.handleBidRequest(msg)
+
+		// With enforcement enabled and no contracts, node must not store a bid or mark it answered
+		assert.Len(t, node.answeredBids, 1)
+		assert.Len(t, node.bids, 1)
+	})
 }
 
 func getBidRequest() jobtypes.EnsembleBidRequest {

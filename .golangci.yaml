@@ -16,7 +16,6 @@ linters:
     - unconvert
     - unparam
     - unused
-    - whitespace
   exclusions:
     generated: lax
     presets:
@@ -32,6 +31,12 @@ linters:
       - linters:
         - staticcheck
         text: "QF1008:"
+      # exculude `types` and `utils` packages from revive's var-naming rule
+      - path: (types|utils)
+        linters:
+          - revive
+        text: "var-naming: avoid meaningless package names"
+
 
 formatters:
   enable:

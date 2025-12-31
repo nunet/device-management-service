@@ -109,6 +109,14 @@ type AllocationStartResponse struct {
 	Error string
 }
 
+type AllocationStatsRequest struct{}
+
+type AllocationStatsResponse struct {
+	OK    bool                 `json:"ok"`
+	Error string               `json:"error,omitempty"`
+	Stats *types.ExecutorStats `json:"stats,omitempty"`
+}
+
 type RegisterHealthcheckRequest struct {
 	EnsembleID  string
 	HealthCheck types.HealthCheckManifest

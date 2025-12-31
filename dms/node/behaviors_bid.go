@@ -14,13 +14,17 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
@@ -118,12 +122,12 @@ func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) erro
 			return fmt.Errorf("failed to get contracts host handle: %w", err)
 		}
 
-		req := contracts.ContractValidateRequestBehaviour{ContractDID: v.DID}
+		req := contracts.ContractValidateRequest{ContractDID: v.DID}
 		reply, err := n.invokeBehaviour(destination, behaviors.ContractValidationBehavior, req, invokeMessageTimeout)
 		if err != nil {
 			return fmt.Errorf("failed to send message to contract host: %w", err)
 		}
-		var respEnvelope contracts.ContractValidateResponseBehaviour
+		var respEnvelope contracts.ContractValidateResponse
 		err = json.Unmarshal(reply.Message, &respEnvelope)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
@@ -137,7 +141,8 @@ func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) erro
 	return nil
 }
 
-// TODO: ignore bid if our location is rejected or not included on accepted
+// gateway logic to decide a bid or not goes here
+// we keep all the restrictions and contrains here as it is for normal bid
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -148,19 +153,21 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		return
 	}
 
-	log.Debugw(
+	log.Infow(
 		"got a bid request from actor",
 		"labels", string(observability.LabelDeployment),
 		"from", msg.From.Address,
 	)
 
-	onboarded := n.onboarding.IsOnboarded()
-	if !onboarded {
-		log.Debugw(
-			"node_not_onboarded_ignoring_bid_request",
-			"labels", string(observability.LabelDeployment),
-		)
-		return
+	// if not a gateway check onboarded
+	if !n.dmsConfig.General.ComputeGateway {
+		if onboarded := n.onboarding.IsOnboarded(); !onboarded {
+			log.Debugw(
+				"node_not_onboarded_ignoring_bid_request",
+				"labels", string(observability.LabelDeployment),
+			)
+			return
+		}
 	}
 
 	var request jobtypes.EnsembleBidRequest
@@ -171,6 +178,27 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 			"error", err,
 		)
 		return
+	}
+
+	log.Infow(
+		"bid_request",
+		"labels", string(observability.LabelDeployment),
+		"from", msg.From.Address,
+		"orchestratorID", request.ID,
+	)
+
+	if n.dmsConfig.Job.RequireContractsForDeployment {
+		// contracts are global at ensemble level so they apply to all nodes
+		if len(request.Request) > 0 {
+			if len(request.Request[0].V1.Contracts) == 0 {
+				log.Debugw(
+					"bid_request_missing_contracts_for_deployment",
+					"labels", string(observability.LabelDeployment),
+					"ensemble_id", request.ID,
+				)
+				return
+			}
+		}
 	}
 
 	// contracts are global at ensemble level so they apply
@@ -187,9 +215,12 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 				return
 			}
 
-			log.Debugf("contract_verification_success: %v", request.Request[0].V1.Contracts)
+			log.Infow("contract_verification_success",
+				"contracts", request.Request[0].V1.Contracts,
+				"labels", string(observability.LabelDeployment),
+			)
 		} else {
-			log.Debugf(
+			log.Debugw(
 				"contracts_empty",
 				"labels", string(observability.LabelDeployment),
 			)
@@ -241,41 +272,92 @@ loop:
 			}
 		}
 
-		// if the desired executable is not found stop
-		for _, e := range v.V1.Executors {
-			executor, err := n.getExecutor(e)
-			if err != nil {
-				log.Debugw("executor_unavailable",
-					"labels", string(observability.LabelDeployment),
-					"executor", e,
-					"error", err)
-				continue loop
-			}
+		constraints := v.V1.Location
+		if !n.location().Satisfies(constraints) {
+			log.Debugw("bid_request_location_constraints_not_satisfied",
+				"labels", string(observability.LabelDeployment),
+				"nodeID", v.V1.NodeID,
+				"ourLocation", n.location(),
+				"constraints", constraints,
+			)
+			continue loop
+		}
 
-			if executor.executionType == jobtypes.ExecutorDocker {
-				if v.V1.GeneralRequirements.PrivilegedDocker {
-					if !n.dmsConfig.AllowPrivilegedDocker {
-						log.Debugw("privileged_docker_not_allowed",
-							"labels", string(observability.LabelDeployment))
-						continue loop
+		// if the desired executable is not found stop
+		if !n.dmsConfig.General.ComputeGateway {
+			for _, e := range v.V1.Executors {
+				executor, err := n.getExecutor(e)
+				if err != nil {
+					log.Debugw("executor_unavailable",
+						"labels", string(observability.LabelDeployment),
+						"executor", e,
+						"error", err)
+					continue loop
+				}
+
+				if executor.executionType == jobtypes.ExecutorDocker {
+					if v.V1.GeneralRequirements.PrivilegedDocker {
+						if !n.dmsConfig.AllowPrivilegedDocker {
+							log.Debugw("privileged_docker_not_allowed",
+								"labels", string(observability.LabelDeployment))
+							continue loop
+						}
 					}
 				}
 			}
 		}
 
-		comparisonResult, err := machineResources.Compare(v.V1.Resources)
-		if err != nil {
-			log.Debugw("compare_machine_resources_error",
-				"labels", string(observability.LabelDeployment),
-				"error", err)
-			continue loop
-		}
+		if !n.dmsConfig.General.ComputeGateway {
+			comparisonResult, err := machineResources.Compare(v.V1.Resources)
+			if err != nil {
+				log.Debugw("compare_machine_resources_error",
+					"labels", string(observability.LabelDeployment),
+					"error", err)
+				continue loop
+			}
 
-		if comparisonResult != types.Better {
-			log.Debugw("resource_not_better",
-				"labels", string(observability.LabelDeployment),
-				"comparisonResult", comparisonResult)
-			continue
+			if comparisonResult != types.Better {
+				log.Debugw("resource_not_better",
+					"labels", string(observability.LabelDeployment),
+					"comparisonResult", comparisonResult)
+				continue
+			}
+
+		} else {
+			// make this concurrent
+			foundServer := int32(0)
+			allProviders := n.serverProviderRegistry.All()
+			log.Debugf("server providers %d", len(allProviders))
+
+			var wg sync.WaitGroup
+			for _, pp := range allProviders {
+				wg.Add(1)
+				go func(pp provider.Provider) {
+					defer wg.Done()
+
+					if atomic.LoadInt32(&foundServer) == 1 {
+						return
+					}
+
+					plans, err := pp.ListPlans(n.ctx)
+					if err != nil {
+						return
+					}
+
+					_, err = pp.SelectMatchingPlan(plans, v.V1.Resources)
+					if err != nil {
+						return
+					}
+					atomic.StoreInt32(&foundServer, 1)
+				}(pp)
+			}
+
+			wg.Wait()
+
+			if atomic.LoadInt32(&foundServer) == 0 {
+				log.Debug("couldn't find servers to provision")
+				return
+			}
 		}
 
 		found = true
@@ -289,15 +371,17 @@ loop:
 		return
 	}
 
-	if err := n.allocator.CheckAvailability(toAnswer.V1.PublicPorts.Static, toAnswer.V1.PublicPorts.Dynamic, toAnswer.V1.Resources); err != nil {
-		log.Debugw("no_resource_availability_for_bid",
-			"labels", string(observability.LabelDeployment),
-			"nodeID", toAnswer.V1.NodeID,
-			"staticPorts", toAnswer.V1.PublicPorts.Static,
-			"dynamicPorts", toAnswer.V1.PublicPorts.Dynamic,
-			"resources", toAnswer.V1.Resources,
-			"error", err)
-		return
+	if !n.dmsConfig.General.ComputeGateway {
+		if err := n.allocator.CheckAvailability(toAnswer.V1.PublicPorts.Static, toAnswer.V1.PublicPorts.Dynamic, toAnswer.V1.Resources); err != nil {
+			log.Debugw("no_resource_availability_for_bid",
+				"labels", string(observability.LabelDeployment),
+				"nodeID", toAnswer.V1.NodeID,
+				"staticPorts", toAnswer.V1.PublicPorts.Static,
+				"dynamicPorts", toAnswer.V1.PublicPorts.Dynamic,
+				"resources", toAnswer.V1.Resources,
+				"error", err)
+			return
+		}
 	}
 
 	log.Debugw("signing_bid_with_node_identity",
@@ -320,9 +404,15 @@ loop:
 			EnsembleID: request.ID,
 			NodeID:     toAnswer.V1.NodeID,
 			Peer:       n.hostID,
+			PubAddress: n.publicIP.String(),
 			Location:   n.location(),
 			Handle:     n.actor.Handle(),
 		},
+	}
+
+	// indicate if its a promise bid
+	if n.dmsConfig.General.ComputeGateway {
+		bid.V1.PromiseBid = true
 	}
 
 	if err := bid.Sign(provider); err != nil {

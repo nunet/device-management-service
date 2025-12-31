@@ -14,9 +14,15 @@ import (
 	"syscall"
 )
 
-var ShutdownChan chan os.Signal
+var (
+	ShutdownChan chan os.Signal
+	ReloadChan   chan os.Signal
+)
 
 func init() {
 	ShutdownChan = make(chan os.Signal, 1)
 	signal.Notify(ShutdownChan, syscall.SIGINT, syscall.SIGTERM)
+
+	ReloadChan = make(chan os.Signal, 1)
+	signal.Notify(ReloadChan, syscall.SIGUSR1)
 }

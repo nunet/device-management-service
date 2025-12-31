@@ -92,7 +92,7 @@ func extractEnsembleID(input string) string {
 }
 
 func extractStatus(input string) string {
-	re := regexp.MustCompile(`"Status":\s*"(.*?)"`)
+	re := regexp.MustCompile(`"status":\s*"(.*?)"`)
 
 	matches := re.FindStringSubmatch(input)
 
@@ -134,17 +134,23 @@ func createConfig(userDir string, restPort uint32, p2pListenAddrs []string, boot
 			FileDescriptors: 10444,
 		},
 		Observability: config.Observability{
-			LogLevel:             "debug",
-			LogFile:              filepath.Join(userDir, "logs.jsonl"),
-			MaxSize:              100,
-			MaxBackups:           3,
-			MaxAge:               28,
-			ElasticsearchURL:     "https://telemetry.nunet.io",
-			ElasticsearchIndex:   "nunet-dms",
-			FlushInterval:        3,
-			ElasticsearchEnabled: false,
-			ElasticsearchAPIKey:  os.Getenv("ES_API"),
-			InsecureSkipVerify:   true,
+			Elastic: config.Elastic{
+				Enabled:            false,
+				APIKey:             os.Getenv("ES_API"),
+				URL:                "https://telemetry.nunet.io",
+				Index:              "nunet-dms",
+				FlushInterval:      3,
+				InsecureSkipVerify: true,
+			},
+			Logging: config.Logging{
+				Level: "DEBUG",
+				File:  filepath.Join(userDir, "logs.jsonl"),
+				Rotation: config.Rotation{
+					MaxSizeMB:  100,
+					MaxBackups: 3,
+					MaxAgeDays: 28,
+				},
+			},
 		},
 		Profiler: config.Profiler{
 			Enabled: false,
@@ -161,12 +167,12 @@ func createConfig(userDir string, restPort uint32, p2pListenAddrs []string, boot
 	apiKey := os.Getenv(envE2EObserveAPIKey)
 	token := os.Getenv(envE2EObserveToken)
 	if apiKey != "" {
-		cfg.Observability.ElasticsearchEnabled = true
-		cfg.Observability.ElasticsearchAPIKey = apiKey
+		cfg.Observability.Elastic.Enabled = true
+		cfg.Observability.Elastic.APIKey = apiKey
 
 		// if secrettoken is set, switch to local observability
 		if token != "" {
-			cfg.Observability.ElasticsearchURL = "https://localhost:9200"
+			cfg.Observability.Elastic.URL = "https://localhost:9200"
 			cfg.APM.ServerURL = "http://localhost:8200"
 			cfg.APM.SecretToken = token
 			cfg.APM.Environment = "development"

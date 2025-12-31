@@ -24,9 +24,13 @@ func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destP
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
 	}
 
+	// Check if port already mapped (with lock)
+	s.portMappingMx.Lock()
 	if _, ok := s.portMapping[sourcePort]; ok {
+		s.portMappingMx.Unlock()
 		return fmt.Errorf("port %s is already mapped", sourcePort)
 	}
+	s.portMappingMx.Unlock()
 
 	// TODO: check if any rules for the port already exists
 
@@ -52,11 +56,8 @@ func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destP
 		}
 	}
 
-	err = sys.AddMasqueradeRule()
-	if err != nil {
-		return err
-	}
-
+	// Store mapping (with lock)
+	s.portMappingMx.Lock()
 	s.portMapping[sourcePort] = &struct {
 		destPort string
 		destIP   string
@@ -66,6 +67,7 @@ func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destP
 		destIP:   destIP,
 		srcIP:    sourceIP,
 	}
+	s.portMappingMx.Unlock()
 
 	return nil
 }
@@ -76,14 +78,19 @@ func (l *Libp2p) UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, des
 		return fmt.Errorf("subnet with ID %s does not exist", subnetID)
 	}
 
+	// Get and validate mapping (with lock)
+	s.portMappingMx.Lock()
 	mapping, ok := s.portMapping[sourcePort]
 	if !ok {
+		s.portMappingMx.Unlock()
 		return fmt.Errorf("port %s is not mapped", sourcePort)
 	}
 
 	if mapping.destIP != destIP || mapping.destPort != destPort || mapping.srcIP != sourceIP {
+		s.portMappingMx.Unlock()
 		return fmt.Errorf("port %s is not mapped to %s:%s", sourcePort, destIP, destPort)
 	}
+	s.portMappingMx.Unlock()
 
 	err := sys.DelDNATRule(protocol, sourcePort, destIP, destPort)
 	if err != nil {
@@ -110,7 +117,10 @@ func (l *Libp2p) UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, des
 		return err
 	}
 
+	// Delete mapping (with lock)
+	s.portMappingMx.Lock()
 	delete(s.portMapping, sourcePort)
+	s.portMappingMx.Unlock()
 
 	log.Infof("port %s unmapped successfully", sourcePort)
 

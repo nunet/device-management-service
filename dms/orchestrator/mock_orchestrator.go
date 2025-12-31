@@ -19,6 +19,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -184,6 +185,10 @@ func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.Deploy
 	return make(chan jtypes.DeploymentStatus)
 }
 
+func (m *MockOrchestrator) AllocationInfo() map[string]jtypes.AllocationInfo {
+	return make(map[string]jtypes.AllocationInfo)
+}
+
 func (m *MockOrchestrator) Done() <-chan struct{} {
 	return nil
 }
@@ -206,6 +211,7 @@ func (m *MockOrchestratorRegistry) NewOrchestrator(
 	ctx context.Context, fs afero.Afero, workDir string,
 	id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
 	_ types.NodeIDGenerator, _ types.AllocationIDGenerator,
+	_ *eventhandler.EventHandler, _ map[string]types.ContractConfig,
 ) (Orchestrator, error) {
 	m.lock.RLock()
 	if _, ok := m.orchestrators[id]; ok {
@@ -226,7 +232,7 @@ func (m *MockOrchestratorRegistry) NewOrchestrator(
 }
 
 func (m *MockOrchestratorRegistry) RestoreDeployment(
-	_ context.Context,
+	_ context.Context, _ afero.Afero,
 	_ actor.Actor, _ string, _ jtypes.EnsembleConfig,
 	_ jtypes.EnsembleManifest, _ jtypes.DeploymentStatus,
 	_ jtypes.DeploymentSnapshot,

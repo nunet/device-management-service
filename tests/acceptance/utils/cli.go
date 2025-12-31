@@ -11,50 +11,87 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/cucumber/godog"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/dms/node"
+	dmsnode "gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
+// TODO: Deprecate Context. It can be simply represented by a string inside Node
 // Context represents a named context within a node
+// TODO pass godog.TestingT
 type Context struct {
-	Name string
-	DID  string
-	node *Node
+	Name     string
+	DID      string
+	instance *Instance
 }
 
 func (c *Context) Grant(did string) (token string, err error) {
 	expire := time.Now().AddDate(1, 0, 0).Format(time.DateOnly)
-	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap grant --context %s --cap /dms/deployment --cap /public --cap /broadcast --cap /dms/tokenomics --topic /nunet --expiry %s %s",
+	return c.instance.RunDMSCmd(fmt.Sprintf("nunet cap grant --context %s --cap /dms/deployment --cap /public --cap /broadcast --cap /dms/tokenomics --topic /nunet --expiry %s %s",
 		c.Name, expire, did))
 }
 
 func (c *Context) Delegate(did string) (token string, err error) {
 	expire := time.Now().AddDate(1, 0, 0).Format(time.DateOnly)
-	return c.node.RunDMSCmd(fmt.Sprintf("nunet cap delegate --context %s --cap /dms/deployment --cap /public --cap /broadcast --cap /dms/tokenomics --topic /nunet --expiry %s %s",
+	return c.instance.RunDMSCmd(fmt.Sprintf("nunet cap delegate --context %s --cap /dms/deployment --cap /public --cap /broadcast --cap /dms/tokenomics --topic /nunet --expiry %s %s",
 		c.Name, expire, did))
 }
 
 func (c *Context) Anchor(kind, arg string) error {
-	_, err := c.node.RunDMSCmd(fmt.Sprintf("nunet cap anchor --context %s --%s '%s'",
+	_, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet cap anchor --context %s --%s '%s'",
 		c.Name, kind, arg))
 	return err
 }
 
-func (c *Context) Run() error {
-	return c.node.RunDMSCmdBackground(fmt.Sprintf("GOLOG_LOG_LEVEL=debug nunet run -c %s > dms-logs.txt 2>&1", c.Name))
+func (c *Context) Revoke(token string) (revokedToken string, err error) {
+	return c.instance.RunDMSCmd(fmt.Sprintf("nunet cap revoke --context %s '%s'",
+		c.Name, token))
 }
 
-func (c *Context) PeerAddr() (*node.PeerAddrInfoResponse, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/peers/self", c.Name))
+func (c *Context) SetConfig(key, value string) error {
+	_, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet config set %s %s", key, value))
+	return err
+}
+
+func (c *Context) GetConfig(key string) (string, error) {
+	return c.instance.RunDMSCmd(fmt.Sprintf("nunet config get %s", key))
+}
+
+func (c *Context) Run(t godog.TestingT) error {
+	frSec := os.Getenv(observability.EnvFlightrecSec)
+	if frSec != "" {
+		t.Log("starting DMS with " + frSec + "sec flight recorder")
+	}
+
+	// TODO use api.(InstanceExecPost).Environment
+	return c.instance.RunDMSCmdBackground(fmt.Sprintf(
+		// env
+		"GOLOG_LOG_LEVEL=debug "+
+			"%s=%s "+
+			// cmd
+			"nunet run -c %s > dms-logs.txt 2>&1",
+		observability.EnvFlightrecSec, frSec, c.Name))
+}
+
+// Stop stops a running DMS instance by issuing SIGTERM, which should cause it to exit cleanly.
+func (c *Context) Stop() error {
+	_, err := c.instance.RunCMD([]string{"pkill", "-SIGINT", "-f", "nunet"})
+	return err
+}
+
+func (c *Context) PeerAddr() (*dmsnode.PeerAddrInfoResponse, error) {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/peers/self", c.Name))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call self behavior: %w", err)
 	}
-	var resp node.PeerAddrInfoResponse
+	var resp dmsnode.PeerAddrInfoResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -62,11 +99,11 @@ func (c *Context) PeerAddr() (*node.PeerAddrInfoResponse, error) {
 }
 
 func (c *Context) Connect(target string) error {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/peers/connect --address %s", c.Name, target))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/peers/connect --address %s", c.Name, target))
 	if err != nil {
 		return fmt.Errorf("failed to call connect behavior: %w", err)
 	}
-	var resp node.PeerConnectResponse
+	var resp dmsnode.PeerConnectResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -77,18 +114,18 @@ func (c *Context) Connect(target string) error {
 }
 
 func (c *Context) Onboard() error {
-	ram, cores, disk, err := c.node.GetOnboardingResources()
+	ram, cores, disk, err := c.instance.OnboardingResources()
 	if err != nil {
 		return fmt.Errorf("failed to get onboarding resources: %w", err)
 	}
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/onboarding/onboard -N -R %.f -C %.f -D %.f", c.Name, ram, cores, disk))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/onboarding/onboard -N -R %.f -C %.f -D %.f", c.Name, ram, cores, disk))
 	if err != nil {
 		return fmt.Errorf("failed to call onboard behavior: %w", err)
 	}
 	// TODO: see a better way to remove this from output....
 	trimmed := strings.Replace(out, "Skipping GPU selection.", "", 1)
 
-	var resp node.OnboardResponse
+	var resp dmsnode.OnboardResponse
 	if err = json.Unmarshal([]byte(trimmed), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -99,11 +136,11 @@ func (c *Context) Onboard() error {
 }
 
 func (c *Context) Deploy(ensemble string) (string, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/new -f %s -t 2m", c.Name, ensemble))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet -c %s deploy -f %s -t 2m", c.Name, ensemble))
 	if err != nil {
 		return "", fmt.Errorf("failed to call deployment new behavior: %s", out)
 	}
-	var resp node.NewDeploymentResponse
+	var resp dmsnode.NewDeploymentResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return "", fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -114,11 +151,11 @@ func (c *Context) Deploy(ensemble string) (string, error) {
 }
 
 func (c *Context) EnsembleStatus(id string) (string, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/status --id %s", c.Name, id))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/status --id %s", c.Name, id))
 	if err != nil {
 		return "", fmt.Errorf("failed to call deployment status behavior: %s", out)
 	}
-	var resp node.DeploymentStatusResponse
+	var resp dmsnode.DeploymentStatusResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return "", fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -129,11 +166,11 @@ func (c *Context) EnsembleStatus(id string) (string, error) {
 }
 
 func (c *Context) LogsFromAllocation(ensembleID, allocName string) (string, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/logs --id %s --allocation %s", c.Name, ensembleID, allocName))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/logs --id %s --allocation %s", c.Name, ensembleID, allocName))
 	if err != nil {
 		return "", fmt.Errorf("failed to call deployment logs behavior: %s", out)
 	}
-	var resp node.DeploymentLogsResponse
+	var resp dmsnode.DeploymentLogsResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return "", fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -144,11 +181,11 @@ func (c *Context) LogsFromAllocation(ensembleID, allocName string) (string, erro
 }
 
 func (c *Context) Manifest(ensembleID string) (*jobtypes.EnsembleManifest, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/manifest --id %s", c.Name, ensembleID))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/manifest --id %s", c.Name, ensembleID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call deployment manifest behavior: %s", out)
 	}
-	var resp node.DeploymentManifestResponse
+	var resp dmsnode.DeploymentManifestResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -159,11 +196,11 @@ func (c *Context) Manifest(ensembleID string) (*jobtypes.EnsembleManifest, error
 }
 
 func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/allocations/list", c.Name))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet -c %s get allocations", c.Name))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call allocation list manifest behavior: %s", out)
 	}
-	var resp node.AllocationsListResponse
+	var resp dmsnode.AllocationsListResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -174,11 +211,11 @@ func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
 }
 
 func (c *Context) UpdateEnsemble(id, path string) error {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/update -i %s -f %s -t 15m", c.Name, id, path))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/update -i %s -f %s -t 15m", c.Name, id, path))
 	if err != nil {
 		return fmt.Errorf("failed to call deployment update behavior: %w", err)
 	}
-	var resp node.UpdateDeploymentResponse
+	var resp dmsnode.UpdateDeploymentResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -189,11 +226,11 @@ func (c *Context) UpdateEnsemble(id, path string) error {
 }
 
 func (c *Context) StopEnsemble(id string) error {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/shutdown --id %s", c.Name, id))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/shutdown --id %s", c.Name, id))
 	if err != nil {
 		return fmt.Errorf("failed to call deployment shutdown behavior: %s", out)
 	}
-	var resp node.DeploymentShutdownResponse
+	var resp dmsnode.DeploymentShutdownResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -203,27 +240,27 @@ func (c *Context) StopEnsemble(id string) error {
 	return nil
 }
 
-func (c *Context) CreateContract(contractFile, destDID string) (contracts.CreateContractResponseBehaviour, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/create --contract-file %s --dest %s --timeout 1m", c.Name, contractFile, destDID))
+func (c *Context) CreateContract(contractFile string) (contracts.CreateContractResponse, error) {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/create --contract-file %s --timeout 1m", c.Name, contractFile))
 	if err != nil {
-		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to call contract create behavior: %w", err)
+		return contracts.CreateContractResponse{}, fmt.Errorf("failed to call contract create behavior: %w", err)
 	}
-	var resp contracts.CreateContractResponseBehaviour
+	var resp contracts.CreateContractResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
-		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+		return contracts.CreateContractResponse{}, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
 	if resp.Error != "" {
-		return contracts.CreateContractResponseBehaviour{}, fmt.Errorf("failed to create contract: %s", resp.Error)
+		return contracts.CreateContractResponse{}, fmt.Errorf("failed to create contract: %s", resp.Error)
 	}
 	return resp, nil
 }
 
 func (c *Context) ContractStatus(contractDID, hostDID string) (*contracts.Contract, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/state --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/state --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call contract state behavior: %w", err)
 	}
-	var resp contracts.ContractStatusResponseBehaviour
+	var resp contracts.ContractStatusResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -234,11 +271,11 @@ func (c *Context) ContractStatus(contractDID, hostDID string) (*contracts.Contra
 }
 
 func (c *Context) ListContracts() ([]*contracts.Contract, error) {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/list_incoming --timeout 5s", c.Name))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/list --timeout 1m", c.Name))
 	if err != nil {
-		return nil, fmt.Errorf("failed to call contract list_incoming behavior: %s", out)
+		return nil, fmt.Errorf("failed to call contract list behavior: %w", err)
 	}
-	var resp contracts.ContractListIncomingResponseBehaviour
+	var resp contracts.ContractListIncomingResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -248,12 +285,42 @@ func (c *Context) ListContracts() ([]*contracts.Contract, error) {
 	return resp.Contracts, nil
 }
 
+func (c *Context) ListIncomingContracts() ([]*contracts.Contract, error) {
+	return c.listContractsByRole(string(contracts.ContractRoleProvider))
+}
+
+func (c *Context) ListOutgoingContracts() ([]*contracts.Contract, error) {
+	return c.listContractsByRole(string(contracts.ContractRoleRequestor))
+}
+
+func (c *Context) listContractsByRole(role string) ([]*contracts.Contract, error) {
+	direction := "incoming"
+	switch role {
+	case string(contracts.ContractRoleProvider):
+		direction = "incoming"
+	case string(contracts.ContractRoleRequestor):
+		direction = "outgoing"
+	}
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet contracts --context %s list %s --timeout 5s", c.Name, direction))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract list_incoming behavior: %s", out)
+	}
+	var resp contracts.ContractListIncomingResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("failed to get list of incoming/outgoing contracts: %s", resp.Error)
+	}
+	return resp.Contracts, nil
+}
+
 func (c *Context) ApproveContract(contractDID string) error {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/approve_local --contract-did %s --timeout 1m", c.Name, contractDID))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/approve_local --contract-did %s --timeout 1m", c.Name, contractDID))
 	if err != nil {
 		return fmt.Errorf("failed to call contract approve_local behavior: %w", err)
 	}
-	var resp contracts.ContractApproveLocalResponseBehaviour
+	var resp contracts.ContractApproveLocalResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -267,11 +334,11 @@ func (c *Context) ApproveContract(contractDID string) error {
 }
 
 func (c *Context) CompleteContract(contractDID, hostDID string) error {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/complete --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/complete --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
 	if err != nil {
 		return fmt.Errorf("failed to call contract complete behavior: %w", err)
 	}
-	var resp contracts.ContractCompletionResponseBehaviour
+	var resp contracts.ContractCompletionResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -282,11 +349,11 @@ func (c *Context) CompleteContract(contractDID, hostDID string) error {
 }
 
 func (c *Context) TerminateContract(contractDID, hostDID string) error {
-	out, err := c.node.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/terminate --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/tokenomics/contract/terminate --contract-did %s --contract-host-did %s --timeout 1m", c.Name, contractDID, hostDID))
 	if err != nil {
 		return fmt.Errorf("failed to call contract terminate behavior: %w", err)
 	}
-	var resp contracts.ContractTerminationResponseBehaviour
+	var resp contracts.ContractTerminationResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
@@ -296,32 +363,89 @@ func (c *Context) TerminateContract(contractDID, hostDID string) error {
 	return nil
 }
 
-// JoinOrg allows a user to join an existing organization
-func (c *Context) JoinOrg(dmsCtx *Context, orgDID, grantFromOrg string) error {
-	err := c.Anchor("provide", grantFromOrg)
+func (c *Context) DeploymentList() (map[string]string, error) {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/list", c.Name))
 	if err != nil {
-		return fmt.Errorf("could not anchor cap: %w", err)
+		return nil, fmt.Errorf("failed to call deployment list behavior: %w", err)
+	}
+	var resp dmsnode.DeploymentListResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	return resp.Deployments, nil
+}
+
+func (c *Context) PruneDeployments() error {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/prune --all", c.Name))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment prune behavior: %w", err)
 	}
 
-	grantToken, err := c.Grant(orgDID)
-	if err != nil {
-		return fmt.Errorf("failed to grant: %w", err)
+	var resp dmsnode.DeploymentPruneResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
 
-	err = dmsCtx.Anchor("require", grantToken)
-	if err != nil {
-		return err
-	}
-
-	delegateToken, err := c.Delegate(dmsCtx.DID)
-	if err != nil {
-		return fmt.Errorf("failed to delegate: %w", err)
-	}
-
-	err = dmsCtx.Anchor("provide", delegateToken)
-	if err != nil {
-		return err
+	if resp.Error != "" {
+		return fmt.Errorf("failed to prune deployments: %s", resp.Error)
 	}
 
 	return nil
+}
+
+func (c *Context) PruneDeploymentsBefore(before time.Time) error {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/prune --before '%s'", c.Name, before.Format(time.RFC3339)))
+	if err != nil {
+		return fmt.Errorf("failed to call deployment prune behavior: %w", err)
+	}
+
+	var resp dmsnode.DeploymentPruneResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+
+	if resp.Error != "" {
+		return fmt.Errorf("failed to prune deployments: %s", resp.Error)
+	}
+
+	return nil
+}
+
+func (c *Context) Hello(receiver *dmsnode.PeerAddrInfoResponse) ([]string, error) {
+	// if receiver is nil, broadcast hello
+	var responses []dmsnode.HelloResponse
+
+	if receiver == nil {
+		out, err := c.instance.RunDMSCmd(
+			fmt.Sprintf("nunet actor cmd -c %s /broadcast/hello --timeout 5s", c.Name))
+		if err != nil {
+			return nil, fmt.Errorf("failed to call /broadcast/hello behavior: %w", err)
+		}
+		if err = json.Unmarshal([]byte(out), &responses); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+		}
+	} else {
+		var resp dmsnode.HelloResponse
+		out, err := c.instance.RunDMSCmd(
+			fmt.Sprintf("nunet actor cmd -c %s /public/hello --dest %s --timeout 5s", c.Name, receiver.ID))
+		if err != nil {
+			// note: direct invocation will error when greeter has no caps
+			// but currently not possible to tell if no caps or other error
+			return nil, fmt.Errorf("failed to call /public/hello behavior: %s", out)
+		}
+		if err = json.Unmarshal([]byte(out), &resp); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+		}
+		responses = append(responses, resp)
+	}
+	if len(responses) == 0 {
+		return nil, fmt.Errorf("no hello responses received")
+	}
+
+	dids := make([]string, 0, len(responses))
+	for _, r := range responses {
+		dids = append(dids, r.DID.String())
+	}
+
+	return dids, nil
 }

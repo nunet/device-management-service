@@ -12,6 +12,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
@@ -432,6 +434,40 @@ func (e *Executor) Exec(ctx context.Context, executionID string, command []strin
 	return e.client.Exec(ctx, h.containerID, command)
 }
 
+// Stats returns the resource usage stats for a container. errors if the execution is not found or stats cannot be retrieved.
+func (e *Executor) Stats(ctx context.Context, executionID string) (*types.ExecutorStats, error) {
+	endSpan := observability.StartSpan(ctx, "docker_executor_stats")
+	defer endSpan()
+
+	log.Infow("docker_executor_stats_begin",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executionID", executionID)
+
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		log.Errorw("docker_executor_stats_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"executionID", executionID,
+			"error", "execution not found")
+		return nil, fmt.Errorf("execution (%s) not found", executionID)
+	}
+
+	stats, err := e.client.ContainerStats(ctx, handler.containerID)
+	if err != nil {
+		log.Errorw("docker_executor_stats_failure",
+			"labels", []string{string(observability.LabelDeployment)},
+			"executionID", executionID,
+			"error", err)
+		return nil, fmt.Errorf("failed to get container stats: %w", err)
+	}
+
+	log.Infow("docker_executor_stats_success",
+		"labels", []string{string(observability.LabelDeployment)},
+		"executionID", executionID)
+
+	return &stats, nil
+}
+
 // copyKeysToContainer copies the keys from the request to the
 // container, respecting each key's destination path when necessary
 func (e *Executor) copyKeysToContainer(ctx context.Context,
@@ -594,6 +630,13 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to configure host config: %w", err)
 	}
 
+	imagePullOpts := image.PullOptions{}
+	if dockerArgs.RegistryAuth.Username != "" && dockerArgs.RegistryAuth.Password != "" {
+		registryAuth := `{"username":"` + dockerArgs.RegistryAuth.Username +
+			`","password":"` + dockerArgs.RegistryAuth.Password + `"}`
+		imagePullOpts.RegistryAuth = base64.StdEncoding.EncodeToString([]byte(registryAuth))
+	}
+
 	hasImage := e.client.HasImage(ctx, dockerArgs.Image)
 
 	executionContainer, err := e.client.CreateContainer(
@@ -601,6 +644,7 @@ func (e *Executor) newDockerExecutionContainer(
 		&containerConfig,
 		&hostConfig,
 		nil,
+		imagePullOpts,
 		nil,
 		params.JobID,
 		!hasImage, // only pull if we don't have the image

@@ -188,7 +188,15 @@ func TestCommitDeployment(t *testing.T) {
 func TestHandleNewDeployment(t *testing.T) {
 	t.Parallel()
 
-	ensembleConfig := jobtypes.EnsembleConfig{}
+	ensembleConfig := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{},
+			Nodes:       map[string]jobtypes.NodeConfig{},
+			Supervisor:  jobtypes.SupervisorConfig{},
+			Subnet:      jobtypes.SubnetConfig{},
+			Contracts:   map[string]types.ContractConfig{},
+		},
+	}
 
 	msg, err := actor.Message(
 		actor.Handle{},
@@ -205,6 +213,17 @@ func TestHandleNewDeployment(t *testing.T) {
 		t.Parallel()
 
 		node, sActor, _ := newMockNodeWithSender(t, behaviors.NewDeploymentBehavior)
+
+		msg, err = actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.NewDeploymentBehavior,
+			NewDeploymentRequest{
+				Ensemble: jobtypes.EnsembleConfig{},
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
 
 		msg.From = sActor.Handle()
 		msg.To = node.actor.Handle()
@@ -308,7 +327,7 @@ func TestHandleDeploymentList(t *testing.T) {
 				Subnet:      jobtypes.SubnetConfig{},
 			},
 		}
-		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
 		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -322,7 +341,7 @@ func TestHandleDeploymentList(t *testing.T) {
 				Subnet:      jobtypes.SubnetConfig{},
 			},
 		}
-		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
+		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrchWithoutM)
 		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
@@ -373,7 +392,7 @@ func TestHandleDeploymentList(t *testing.T) {
 				Subnet:      jobtypes.SubnetConfig{},
 			},
 		}
-		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata)
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
 		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -387,7 +406,7 @@ func TestHandleDeploymentList(t *testing.T) {
 				Subnet:      jobtypes.SubnetConfig{},
 			},
 		}
-		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata)
+		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrchWithoutM)
 		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
@@ -437,13 +456,13 @@ func TestHandleDeploymentStatus(t *testing.T) {
 			Subnet:      jobtypes.SubnetConfig{},
 		},
 	}
-	mockOrchPrep, err := node.createOrchestrator(context.Background(), eCfg)
+	mockOrchPrep, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, mockOrchPrep)
 	err = mockOrchPrep.Deploy(time.Now().Add(2 * time.Minute))
 	require.NoError(t, err)
 
-	mockOrchRun, err := node.createOrchestrator(context.Background(), eCfg)
+	mockOrchRun, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, mockOrchRun)
 	err = mockOrchRun.Deploy(time.Now().Add(2 * time.Minute))
@@ -543,7 +562,7 @@ func TestHandleDeploymentManifest(t *testing.T) {
 			Subnet:      jobtypes.SubnetConfig{},
 		},
 	}
-	mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+	mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, mockOrch)
 	err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -619,7 +638,7 @@ func TestHandleDeploymentShutdown(t *testing.T) {
 			Subnet:      jobtypes.SubnetConfig{},
 		},
 	}
-	mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+	mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, mockOrch)
 	err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -681,7 +700,7 @@ func TestHandleDeploymentShutdown(t *testing.T) {
 
 	t.Run("successful shutdown", func(t *testing.T) {
 		t.Parallel()
-		mockOrchRunning, err := node.createOrchestrator(context.Background(), eCfg)
+		mockOrchRunning, err := node.createOrchestrator(context.Background(), eCfg, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrchRunning)
 		err = mockOrchRunning.Deploy(time.Now().Add(2 * time.Minute))
@@ -742,7 +761,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 
 		node, sActor, _ := newMockNodeWithSender(t, behaviors.DeploymentRevertBehavior)
 
-		mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
 		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -770,7 +789,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 
 		mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
 
-		mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
 		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -818,7 +837,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 
 		mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
 
-		mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
 		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -856,6 +875,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 			nullExecutor,
 			map[string]types.ContractConfig{},
 			eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
+			"deployment-id",
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)
@@ -875,7 +895,7 @@ func TestHandleDeploymentRevert(t *testing.T) {
 		require.NoError(t, err)
 
 		node.handleDeploymentRevert(msg)
-		assert.Equal(t, jobtypes.AllocationTerminated, alloc.Status(ctx).Status)
+		assert.Equal(t, jobtypes.AllocationTerminated, alloc.Status().Status)
 	})
 }
 
@@ -905,7 +925,7 @@ func TestHandleDeploymentUpdate(t *testing.T) {
 		},
 	}
 
-	mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+	mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, mockOrch)
 	err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -968,7 +988,7 @@ func TestHandleDeploymentUpdate(t *testing.T) {
 
 	t.Run("deployment time too short", func(t *testing.T) {
 		t.Parallel()
-		mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
 		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -1003,7 +1023,7 @@ func TestHandleDeploymentUpdate(t *testing.T) {
 
 	t.Run("successful update", func(t *testing.T) {
 		t.Parallel()
-		mockOrch, err := node.createOrchestrator(context.Background(), eCfg)
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
 		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
@@ -1069,20 +1089,20 @@ func TestHandleDeploymentPrune_Before_RFC3339(t *testing.T) {
 		},
 	}
 
-	o1, err := node.createOrchestrator(context.Background(), eCfg)
+	o1, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, o1)
 	require.NoError(t, o1.Deploy(time.Now().Add(2*time.Minute)))
 	o1.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
 
-	o2, err := node.createOrchestrator(context.Background(), eCfg)
+	o2, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, o2)
 	require.NoError(t, o2.Deploy(time.Now().Add(2*time.Minute)))
 	o2.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusFailed)
 
 	time.Sleep(3 * time.Second)
-	o3, err := node.createOrchestrator(context.Background(), eCfg)
+	o3, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, o3)
 	require.NoError(t, o3.Deploy(time.Now().Add(2*time.Minute)))
@@ -1141,14 +1161,14 @@ func TestHandleDeploymentPrune_Before_Durations(t *testing.T) {
 	}
 
 	// Create older
-	old, err := node.createOrchestrator(context.Background(), eCfg)
+	old, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NoError(t, old.Deploy(time.Now().Add(2*time.Minute)))
 	old.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
 
 	// wait > 1s to test seconds duration
 	time.Sleep(2 * time.Second)
-	newer, err := node.createOrchestrator(context.Background(), eCfg)
+	newer, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NoError(t, newer.Deploy(time.Now().Add(2*time.Minute)))
 	newer.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
@@ -1208,7 +1228,7 @@ func TestHandleDeploymentPrune_All(t *testing.T) {
 		},
 	}
 
-	prep, _ := node.createOrchestrator(context.Background(), eCfg)
+	prep, _ := node.createOrchestrator(context.Background(), eCfg, nil)
 	err := prep.Deploy(time.Now().Add(2 * time.Minute))
 	require.NoError(t, err)
 	orch, err := node.orchestratorRegistry.GetOrchestrator(prep.ID())
@@ -1222,7 +1242,7 @@ func TestHandleDeploymentPrune_All(t *testing.T) {
 	require.NoError(t, node.orchestratorRegistry.SaveOrchestrator(prep))
 	// default status preparing
 
-	run, _ := node.createOrchestrator(context.Background(), eCfg)
+	run, _ := node.createOrchestrator(context.Background(), eCfg, nil)
 	err = run.Deploy(time.Now().Add(2 * time.Minute))
 	require.NoError(t, err)
 	orch, err = node.orchestratorRegistry.GetOrchestrator(run.ID())
@@ -1235,12 +1255,12 @@ func TestHandleDeploymentPrune_All(t *testing.T) {
 	// save new status manually cause status watcher has quit since the orchestrator context has been cancelled
 	require.NoError(t, node.orchestratorRegistry.SaveOrchestrator(run))
 
-	fail, _ := node.createOrchestrator(context.Background(), eCfg)
+	fail, _ := node.createOrchestrator(context.Background(), eCfg, nil)
 	err = fail.Deploy(time.Now().Add(2 * time.Minute))
 	require.NoError(t, err)
 	fail.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusFailed)
 
-	comp, _ := node.createOrchestrator(context.Background(), eCfg)
+	comp, _ := node.createOrchestrator(context.Background(), eCfg, nil)
 	_ = comp.Deploy(time.Now().Add(2 * time.Minute))
 	comp.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
 

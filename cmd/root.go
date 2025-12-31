@@ -50,6 +50,9 @@ func NewRootCMD(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd.AddCommand(newNetworkCommand(dmsCli))
 	cmd.AddCommand(newTranslateCmd(dmsCli))
 	cmd.AddCommand(newValidateCmd(dmsCli))
+	cmd.AddCommand(newDeployCmd(dmsCli))
+	cmd.AddCommand(newGetCmd(dmsCli))
+	cmd.AddCommand(newContractCmd(dmsCli))
 
 	return cmd
 }

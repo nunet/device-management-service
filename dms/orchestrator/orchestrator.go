@@ -23,7 +23,11 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/lib/did"
+	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -75,6 +79,7 @@ type Orchestrator interface {
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
+	AllocationInfo() map[string]jtypes.AllocationInfo
 	Done() <-chan struct{}
 }
 
@@ -92,6 +97,7 @@ type BasicOrchestrator struct {
 	manifest       jtypes.EnsembleManifest
 	subnetManifest jtypes.SubnetManifest
 	status         jtypes.DeploymentStatus
+	allocs         map[string]jtypes.AllocationInfo
 
 	deploymentSnapshot jtypes.DeploymentSnapshot
 	supervisor         *Supervisor
@@ -103,6 +109,9 @@ type BasicOrchestrator struct {
 	// Status subscribers
 	statusSubscribers     map[chan jtypes.DeploymentStatus]struct{}
 	statusSubscribersLock sync.RWMutex
+
+	contractEventHandler *eventhandler.EventHandler
+	contracts            map[string]types.ContractConfig
 }
 
 var _ Orchestrator = (*BasicOrchestrator)(nil)
@@ -116,6 +125,8 @@ func NewOrchestrator(
 	cfg jtypes.EnsembleConfig,
 	nodeIDGenerator types.NodeIDGenerator,
 	allocationIDGenerator types.AllocationIDGenerator,
+	contractEventHandler *eventhandler.EventHandler,
+	contracts map[string]types.ContractConfig,
 ) (*BasicOrchestrator, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("failed to validate ensemble configuration: %w", err)
@@ -147,21 +158,18 @@ func NewOrchestrator(
 		fs:                    fs,
 		workDir:               workDir,
 		subnetManifest:        subnet,
+		allocs:                make(map[string]jtypes.AllocationInfo),
 		supervisor:            NewSupervisor(childCtx, oActor, id),
 		nodeIDGenerator:       nodeIDGenerator,
 		allocationIDGenerator: allocationIDGenerator,
 		statusSubscribers:     make(map[chan jtypes.DeploymentStatus]struct{}),
+		contractEventHandler:  contractEventHandler,
+		contracts:             contracts,
 	}
 
-	orchestratorBehaviors := map[string]func(actor.Envelope){
-		behaviors.NotifyTaskTerminationBehavior: o.handleTaskTermination,
-	}
-
-	for b, handler := range orchestratorBehaviors {
-		err := o.actor.AddBehavior(b, handler)
-		if err != nil {
-			return nil, fmt.Errorf("add allocation start behavior to allocation actor: %w", err)
-		}
+	err = o.RegisterBehaviors()
+	if err != nil {
+		return nil, fmt.Errorf("failed to register behaviors: %w", err)
 	}
 
 	return o, nil
@@ -244,7 +252,7 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 	}()
 	o.setStatus(jtypes.DeploymentStatusPreparing)
 
-	log.Debugw("initializing manifest",
+	log.Infow("initializing manifest",
 		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", o.id)
 
@@ -254,9 +262,30 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 		return fmt.Errorf("deploying ensemble: %w", err)
 	}
 
-	log.Infof("deployment successful, starting supervisor",
+	for _, a := range o.Manifest().Allocations {
+		err := o.grantOrchestratorCaps(a.Handle.DID)
+		if err != nil {
+			return fmt.Errorf("failed to grant orchestrator capabilities to allocations: %w", err)
+		}
+	}
+
+	log.Infow("deployment successful, starting supervisor",
+		"labels", []string{string(observability.LabelDeployment)},
 		"orchestratorID", o.id)
 	go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
+
+	for _, v := range o.contracts {
+		evt := events.DeploymentStart{
+			EventBase:      events.EventBase{Type: events.DeploymentStartEvent},
+			DeploymentID:   o.manifest.ID,
+			OrchestratorID: o.id,
+		}
+		o.contractEventHandler.Push(eventhandler.Event{
+			ContractHostDID: v.Host,
+			ContractDID:     v.DID,
+			Payload:         evt,
+		})
+	}
 	return nil
 }
 
@@ -269,7 +298,9 @@ func (o *BasicOrchestrator) NewManifest(
 func (o *BasicOrchestrator) newManifest(
 	cfg jtypes.EnsembleConfig,
 ) jtypes.EnsembleManifest {
-	log.Debugf("creating new manifest based on config %+v", cfg.V1)
+	log.Debugw("creating new manifest",
+		"labels", []string{string(observability.LabelDeployment)},
+		"config", cfg.V1)
 	manifest := jtypes.EnsembleManifest{
 		ID:           o.id,
 		Orchestrator: o.actor.Handle(),
@@ -293,7 +324,9 @@ func (o *BasicOrchestrator) newManifest(
 		for _, allocName := range node.Allocations {
 			_, ok := cfg.Allocation(allocName)
 			if !ok {
-				log.Errorf("allocation %s not found in ensemble config, skipping", allocName)
+				log.Errorw("allocation not found in ensemble config, skipping",
+					"labels", []string{string(observability.LabelAllocation)},
+					"allocation", allocName)
 				continue
 			}
 
@@ -370,6 +403,38 @@ func (o *BasicOrchestrator) newManifest(
 	return manifest
 }
 
+func (o *BasicOrchestrator) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {
+	msg, err := actor.Message(
+		o.actor.Handle(),
+		destination,
+		behavior,
+		payload,
+		actor.WithMessageExpiry(actor.MakeExpiry(timeout)),
+	)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to create contract actor message: %w", err)
+	}
+
+	replyCh, err := o.actor.Invoke(msg)
+	if err != nil {
+		return actor.Envelope{}, fmt.Errorf("failed to invoke message: %w", err)
+	}
+
+	ticker := time.NewTicker(timeout)
+	defer ticker.Stop()
+
+	var reply actor.Envelope
+	select {
+	case reply = <-replyCh:
+		defer reply.Discard()
+
+		return reply, nil
+
+	case <-ticker.C:
+		return actor.Envelope{}, errors.New("failed to receive reply due to timeout")
+	}
+}
+
 // TODO (dynamic ensemble PR): documentation on how updates
 // and revert handle manifest changes
 //
@@ -412,6 +477,30 @@ deploy:
 			return fmt.Errorf("failed to bid: %w", err)
 		}
 
+		for key, v := range candidateDeployment {
+			if v.V1.PromiseBid {
+				// wait for provisioning
+				pb := jtypes.PromiseBidRequest{
+					Bid: v,
+				}
+				envelope, err := o.invokeBehaviour(v.V1.Handle, behaviors.PromiseBidToBidBehavior, pb, time.Minute*5)
+				if err != nil {
+					log.Errorf("failed to convert promise bid: %v", err)
+					return fmt.Errorf("failed to convert promise bid: %w", err)
+				}
+
+				var newBid jtypes.ConvertedPromiseBidResponse
+				err = json.Unmarshal(envelope.Message, &newBid)
+				if err != nil {
+					log.Errorf("failed to unmarshal new bid: %v", err)
+					return fmt.Errorf("failed to unmarshal new bid: %w", err)
+				}
+
+				// replace the current bid with the new bid
+				candidateDeployment[key] = newBid.Bid
+			}
+		}
+
 		// 2. Commit the deployment
 		o.deploymentSnapshot.Candidates = candidateDeployment
 		o.setStatus(jtypes.DeploymentStatusCommitting)
@@ -437,11 +526,9 @@ deploy:
 
 		o.updateManifest(manifestAfterCommit)
 
-		mnfJSON, err := manifestAfterCommit.JSON()
-		if err != nil {
-			return fmt.Errorf("failed to marshal manifest: %w", err)
-		}
-		log.Debugf("manifest after commit:\n", string(mnfJSON))
+		log.Debugw("manifest after commit",
+			"labels", []string{string(observability.LabelDeployment)},
+			"manifest", manifestAfterCommit)
 
 		// 3. provision the network and start the allocations
 		o.setStatus(jtypes.DeploymentStatusProvisioning)
@@ -465,6 +552,20 @@ deploy:
 
 		log.Infof("deployment successful")
 		o.setStatus(jtypes.DeploymentStatusRunning)
+
+		for idx, a := range o.Manifest().Allocations {
+			o.allocs[a.ID] = jtypes.AllocationInfo{
+				AllocationID:   a.ID,
+				HeartbeatSeq:   0,
+				Status:         a.Status,
+				HasHealthCheck: len(a.Healthcheck.Exec) != 0 && a.Healthcheck.Type != "",
+				ResourceLimit:  o.Config().V1.Allocations[a.ID].Resources,
+				DNSName:        a.DNSName,
+				IP:             o.SubnetManifest().IndexRoutingTable[idx],
+				ResourceUsage:  jtypes.AllocationResourceUsage{},
+				Timestamp:      time.Now().Unix(),
+			}
+		}
 
 		return nil
 	}
@@ -661,6 +762,82 @@ func isOnlyTaskManifest(m jtypes.EnsembleManifest) bool {
 		}
 	}
 	return true
+}
+
+func (o *BasicOrchestrator) AllocationInfo() map[string]jtypes.AllocationInfo {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	allocsCopy := make(map[string]jtypes.AllocationInfo, len(o.allocs))
+	for k, v := range o.allocs {
+		allocsCopy[k] = v
+	}
+	return allocsCopy
+}
+
+func (o *BasicOrchestrator) RegisterBehaviors() error {
+	orchestratorBehaviors := map[string]func(actor.Envelope){
+		behaviors.NotifyTaskTerminationBehavior:    o.handleTaskTermination,
+		behaviors.NotifyAllocationLivenessBehavior: o.handleAllocationLiveness,
+		behaviors.NotifyAllocationStatusBehavior:   o.handleAllocationStatusUpdate,
+	}
+
+	for b, handler := range orchestratorBehaviors {
+		err := o.actor.AddBehavior(b, handler)
+		if err != nil {
+			return fmt.Errorf("add behavior %s to orchestrator actor: %w", b, err)
+		}
+	}
+	return nil
+}
+
+func (o *BasicOrchestrator) grantOrchestratorCaps(alloc did.DID) error {
+	log.Infow("granting alloc capabilities",
+		"orchestratorID", o.id,
+		"allocationDID", alloc.String(),
+	)
+	oDID, err := did.FromID(o.actor.Handle().ID)
+	if err != nil {
+		return fmt.Errorf("failed to parse orchestrator DID: %w", err)
+	}
+
+	err = o.actor.Security().Grant(
+		alloc,
+		oDID,
+		[]ucan.Capability{behaviors.OrchestratorNamespace},
+		grantOrchestratorCapsFrequency,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"granting orchestrator caps to alloc %s: %w",
+			alloc.String(), err)
+	}
+
+	// TODO: create helper func to periodically grant caps as
+	// it's being used here and on createAllocations()
+	go func() {
+		ticker := time.NewTicker(grantOrchestratorCapsFrequency)
+		defer ticker.Stop()
+
+		select {
+		case <-o.ctx.Done():
+			return
+		case <-ticker.C:
+			err := o.actor.Security().Grant(
+				alloc,
+				o.actor.Handle().DID,
+				[]ucan.Capability{},
+				grantOrchestratorCapsFrequency,
+			)
+			if err != nil {
+				log.Errorf(
+					"periodic grant orchestrator caps to alloc %s: %w",
+					alloc.String(), err)
+			}
+			return
+		}
+	}()
+	return nil
 }
 
 func (o *BasicOrchestrator) Done() <-chan struct{} {

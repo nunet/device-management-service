@@ -231,6 +231,7 @@ type Allocator interface {
 		executor types.Executor,
 		contracts map[string]types.ContractConfig,
 		contractEventHandler *eventhandler.EventHandler,
+		deploymentID string,
 	) (*jobs.Allocation, error)
 	// Release releases allocated resources and ports for an allocation.
 	Release(ctx context.Context, allocationID string) error
@@ -349,7 +350,7 @@ func (a *allocator) monitorEnsembleAllocations() {
 				running := make(map[string]struct{})
 				for id, alloc := range a.allocations {
 					ensembleID := types.EnsembleIDFromAllocationID(id)
-					status := alloc.Status(a.ctx).Status
+					status := alloc.Status().Status
 					if slices.Contains(doneStatuses, status) {
 						doneAllocs[ensembleID] = append(doneAllocs[ensembleID], id)
 						continue
@@ -519,6 +520,7 @@ func (a *allocator) Allocate(
 	executor types.Executor,
 	contracts map[string]types.ContractConfig,
 	contractEventHandler *eventhandler.EventHandler,
+	deploymentID string,
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
 	a.lock.Lock()
@@ -561,6 +563,7 @@ func (a *allocator) Allocate(
 		executor,
 		func() error { return a.Release(ctx, allocationID) },
 		contractEventHandler,
+		deploymentID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation: %w", err)

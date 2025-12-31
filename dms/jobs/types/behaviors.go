@@ -38,3 +38,23 @@ type AllocationDeploymentResponse struct {
 	Error       string
 	Allocations map[string]actor.Handle
 }
+
+type PromiseBidRequest struct {
+	Bid Bid
+}
+
+type ConvertedPromiseBidResponse struct {
+	Bid   Bid
+	Error string
+}
+
+type SignPromiseBidRequest struct {
+	Bid        Bid
+	BidRequest BidRequest
+	Nounce     uint64
+}
+
+type PromiseBidSigningResponse struct {
+	Bid   Bid
+	Error string
+}

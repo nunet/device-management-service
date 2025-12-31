@@ -11,6 +11,8 @@ package steps
 import (
 	"context"
 	"fmt"
+	"maps"
+	"math/rand"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,14 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/hooks"
 	"gitlab.com/nunet/device-management-service/tests/acceptance/utils"
+	"golang.org/x/sync/errgroup"
 )
-
-type tableNode struct {
-	name      string
-	role      string
-	onboarded bool
-	org       string
-}
 
 // Step designed to be called as Background.
 // It parses the data table (format/headers can be found in `parseNodesTable`)
@@ -41,93 +37,156 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 	tc := utils.NewTestCtx(ctx)
 
 	nodes, err := parseNodesTable(table)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, nodes)
 
-	// get all unique organizations, since all nodes
-	// on the table may be assigned to the same org
-	orgs := []string{}
+	// get all unique organizations
+	uniqueOrgs := make(map[string]struct{})
 	for _, node := range nodes {
-		if !slices.Contains(orgs, node.org) {
-			orgs = append(orgs, node.org)
-		}
+		uniqueOrgs[node.Org] = struct{}{}
 	}
+	orgNames := make([]string, 0, len(uniqueOrgs))
+	for orgName := range uniqueOrgs {
+		orgNames = append(orgNames, orgName)
+	}
+	slices.Sort(orgNames)
 
-	// now create instances based on the total
-	// amount of nodes and orgs
-	total := len(nodes) + len(orgs)
-	instances, err := hooks.SetupNodes(total)
-	assert.NoError(t, err)
+	// create instances for all nodes
+	total := len(nodes)
+	instances, err := hooks.SetupInstances(total)
+	require.NoError(t, err)
 	assert.NotEmpty(t, instances)
-
 	assert.Len(t, instances, total)
 
-	// here we disambiguate the concept of node/org
-	// to assign each one of them a unique instance
-	// regardless of their role
-	allNodes := []string{}
-	allNodes = append(allNodes, orgs...)
+	// assign instances to nodes
+	for i, node := range nodes {
+		node.Instance = instances[i]
+	}
+
+	nodeMap := make(map[string]*utils.Node)
 	for _, node := range nodes {
-		allNodes = append(allNodes, node.name)
-	}
-	assert.Len(t, allNodes, total)
-
-	// map nodes to unique instances
-	nodeToInstance := make(map[string]*utils.Node)
-	for i, node := range allNodes {
-		instance := instances[i]
-		nodeToInstance[node] = instance
+		nodeMap[node.Name] = node
 	}
 
-	tc = tc.WithNodeMap(nodeToInstance)
+	tc = tc.WithNodes(nodeMap)
 
 	// all setup for orgs
 	orgMap := make(map[string]*utils.Context)
-	for _, org := range orgs {
-		instance, ok := nodeToInstance[org]
-		assert.True(t, ok)
+	allInstances := slices.Collect(maps.Keys(nodeMap))
 
-		orgCtx, err := instance.CreateContext(org)
-		assert.NoError(t, err)
+	for _, orgName := range orgNames {
+		i := rand.Intn(len(allInstances))
+		instance := instances[i]
 
-		orgMap[org] = orgCtx
+		orgCtx, err := utils.CreateContext(instance, orgName)
+		require.NoError(t, err)
+
+		orgMap[orgName] = orgCtx
 	}
+
+	tc = tc.WithOrganizationMap(orgMap)
+
+	tokenMap := make(map[string]string)
+
+	g := new(errgroup.Group)
 
 	// all setup for nodes (sp/cp)
 	for _, node := range nodes {
-		instance, ok := nodeToInstance[node.name]
-		assert.True(t, ok)
+		g.Go(func() error {
+			instance := node.Instance
 
-		err := instance.PruneResolved()
-		assert.NoError(t, err)
+			if err := instance.PruneResolved(); err != nil {
+				return err
+			}
 
-		userCtx, dmsCtx, err := instance.InitialCaps(node.name)
-		assert.NoError(t, err)
-		assert.NotNil(t, userCtx)
-		assert.NotNil(t, dmsCtx)
+			err = node.InitialCaps()
+			if err != nil {
+				return err
+			}
 
-		orgCtx, ok := orgMap[node.org]
-		assert.True(t, ok)
+			// set dms config to test env for fast observable ip fetch
+			err = node.DMS().SetConfig("general.env", "test")
+			if err != nil {
+				return fmt.Errorf("failed to set dms env to test: %w", err)
+			}
 
-		err = utils.SetupPrivateNetwork(userCtx, dmsCtx, orgCtx)
-		assert.NoError(t, err)
+			orgCtx, ok := orgMap[node.Org]
+			if !ok {
+				return fmt.Errorf("org context for %s not found", node.Org)
+			}
 
-		err = dmsCtx.Run()
-		assert.NoError(t, err)
+			token, err := utils.SetupPrivateNetwork(node.User(), node.DMS(), orgCtx)
+			if err != nil {
+				return err
+			}
+			tokenMap[node.Name] = token
 
-		require.Eventually(t, func() bool {
-			return instance.IsDMSRunning(9999)
-		}, 20*time.Second, 500*time.Millisecond)
+			if err := node.DMS().Run(t); err != nil {
+				return err
+			}
 
-		if node.onboarded {
-			assert.NoError(t, dmsCtx.Onboard())
-		}
+			assert.Eventually(t, func() bool {
+				return instance.IsDMSRunning(9999)
+			}, 20*time.Second, 500*time.Millisecond)
+
+			if node.Onboarded {
+				if err := node.DMS().Onboard(); err != nil {
+					return err
+				}
+			}
+
+			// get libp2p listening addr on host and forward ports
+			// wait until at least 5 listening addresses are available
+			try := 0
+			retries := 5
+			var addrs []string
+			for {
+				peerInfo, err := node.DMS().PeerAddr()
+				if err != nil {
+					return fmt.Errorf("failed to get peer addr: %w", err)
+				}
+
+				addrs = strings.Split(peerInfo.Address, ", ")
+
+				if len(addrs) >= 5 {
+					break
+				}
+				try++
+				if try >= retries {
+					return fmt.Errorf("libp2p listening addresses not available after %d retries", retries)
+				}
+				time.Sleep(5 * time.Second)
+			}
+
+			instanceIP, instancePort, hostIP, hostPort, err := utils.ExtractNetFromAddr(instance, addrs)
+			if err != nil {
+				return fmt.Errorf("failed to extract network from addr: %w", err)
+			}
+
+			netInfo, err := instance.GetNetInfo()
+			if err != nil {
+				return fmt.Errorf("failed to get network info: %w", err)
+			}
+
+			err = utils.NetworkForwardPort(instance.Client, netInfo.HostIface, hostIP, hostPort, instanceIP, instancePort, "udp")
+			if err != nil {
+				return fmt.Errorf("failed to forward port: %w", err)
+			}
+
+			return nil
+		})
 	}
+
+	err = g.Wait()
+
+	require.NoError(t, err)
+
+	tc = tc.WithTokenMap(tokenMap)
 
 	return tc.Unwrap(), nil
 }
 
-func parseNodesTable(table *godog.Table) ([]tableNode, error) {
+func parseNodesTable(table *godog.Table) ([]*utils.Node, error) {
 	if len(table.Rows) < 2 {
 		return nil, fmt.Errorf("table must have header and at least one data row")
 	}
@@ -145,7 +204,7 @@ func parseNodesTable(table *godog.Table) ([]tableNode, error) {
 		}
 	}
 
-	var nodes []tableNode
+	nodes := make([]*utils.Node, 0, len(table.Rows)-1)
 	for i := 1; i < len(table.Rows); i++ {
 		row := table.Rows[i]
 
@@ -154,14 +213,12 @@ func parseNodesTable(table *godog.Table) ([]tableNode, error) {
 			return nil, fmt.Errorf("row %d: invalid onboarded value '%s': %v", i, row.Cells[2].Value, err)
 		}
 
-		u := tableNode{
-			name:      strings.ToLower(row.Cells[0].Value),
-			role:      strings.ToLower(row.Cells[1].Value),
-			onboarded: onboarded,
-			org:       strings.ToLower(row.Cells[3].Value),
-		}
+		name := strings.ToLower(row.Cells[0].Value)
+		role := strings.ToLower(row.Cells[1].Value)
+		org := strings.ToLower(row.Cells[3].Value)
 
-		nodes = append(nodes, u)
+		node := utils.NewNode(name, role, org, onboarded, nil)
+		nodes = append(nodes, node)
 	}
 
 	return nodes, nil

@@ -28,13 +28,19 @@
         }
     ],
     "payment_details": {
-        "requester_addr": "{{requesterAddr}}",
-        "provider_addr": "{{providerAddr}}",
-        "currency": "NTX",
+        "addresses": [
+            {
+                "requester_addr": "{{requesterAddr}}",
+                "provider_addr": "{{providerAddr}}",
+                "currency": "NTX",
+                "blockchain": "ETHEREUM"
+            }
+        ],
+        "payment_model": "{{payment_model}}",
         "fees_per_allocation": "{{amount}}",
+        "fee_per_deployment": "{{fee_per_deployment}}",
         "timestamp": "0001-01-01T00:00:00Z",
-        "payment_type": "blockchain",
-        "blockchain": "ETHEREUM"
+        "payment_type": "blockchain"
     },
     "contract_terms": "Standard contract terms",
     "contract_participants": {

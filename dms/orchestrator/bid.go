@@ -158,7 +158,7 @@ func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, candidates map[
 			return false
 		}
 
-		log.Debugf("added bid to bitMap from peer %s for %s", peerID, nodeID)
+		log.Infof("added bid to bidMap from peer %s for %s", peerID, nodeID)
 		bidMap[nodeID] = append(bidMap[nodeID], bid)
 		peerExclusion[peerID] = struct{}{}
 		return true
@@ -231,10 +231,15 @@ func (b *BidCoordinator) bid(cfgReader jtypes.EnsembleCfgReader, candidates map[
 	}
 
 	for n, bids := range bidMap {
-		log.Infof("node %s has %d bids", n, len(bids))
+		bidList := make([]string, 0, len(bids))
 		for _, bid := range bids {
-			log.Infof("    bid from %s", bid.Peer())
+			bidList = append(bidList, bid.Peer())
 		}
+		log.Infow("node has bids",
+			"labels", []string{string(observability.LabelDeployment)},
+			"name", n, "amount", len(bids),
+			// TODO remove once arrays supported in log scripts
+			"bids", struct{ Peers []string }{bidList})
 	}
 
 	// 4. Iterate through the candidates trying to find one that satisfies the
@@ -264,7 +269,7 @@ func (b *BidCoordinator) requestBids(
 	cfg jtypes.EnsembleConfig,
 	bidRequest jtypes.EnsembleBidRequest, expiry time.Time,
 ) (chan jtypes.Bid, chan struct{}, time.Time, error) {
-	log.Debugf("requesting bids: %+v", bidRequest)
+	log.Debugw("requesting_bids", "labels", []string{string(observability.LabelDeployment)}, "request", bidRequest)
 
 	bidExpiryTime := time.Now().Add(BidRequestTimeout)
 	if expiry.Before(bidExpiryTime) {
@@ -322,12 +327,16 @@ func (b *BidCoordinator) requestBids(
 
 			var bid jtypes.Bid
 			if err := json.Unmarshal(msg.Message, &bid); err != nil {
-				log.Debugw("failed to unmarshal bid",
+				log.Errorw("failed to unmarshal bid",
 					"labels", []string{string(observability.LabelDeployment)},
 					"from", msg.From,
 					"error", err)
 				return
 			}
+
+			log.Infow("deployment_bid",
+				"labels", []string{string(observability.LabelDeployment)},
+				"from", msg.From)
 
 			timer := time.NewTimer(time.Until(bidExpiryTime))
 			defer timer.Stop()
@@ -438,16 +447,20 @@ func (b *BidCoordinator) collectBids(
 				"peerID", bid.Peer(),
 				"nodeID", bid.NodeID())
 			if err := bid.Validate(); err != nil {
-				log.Debugw("invalid bid",
+				log.Warnw("invalid bid",
+					"ensembleID", bid.EnsembleID(),
+					"peerID", bid.Peer(),
+					"nodeID", bid.NodeID(),
 					"labels", []string{string(observability.LabelDeployment)},
 					"error", err)
 				continue
 			}
 			if bid.EnsembleID() != b.eid {
-				log.Debugw("bid for unexpected ensemble id",
+				log.Warnw("bid for unexpected ensemble id",
 					"labels", []string{string(observability.LabelDeployment)},
 					"expectedID", b.eid,
-					"gotID", bid.EnsembleID())
+					"gotID", bid.EnsembleID(),
+					"peerID", bid.Peer())
 				continue
 			}
 			if addBid(bid) {
@@ -808,36 +821,7 @@ func acceptPeerLocation(
 		return n.Peer == peerID
 	}
 
-	// check acceptable locations
-	// if acceptable locations are specified, then reject locations are ignored
-	// (since the user probably wants only specified locations)
-	if len(n.Location.Accept) > 0 {
-		accept := false
-		for _, acceptable := range n.Location.Accept {
-			if acceptable.Equal(loc) {
-				accept = true
-				break
-			}
-		}
-
-		return accept
-	}
-
-	// check unacceptable locations
-	if len(n.Location.Reject) > 0 {
-		reject := false
-		for _, unacceptable := range n.Location.Reject {
-			if unacceptable.Equal(loc) {
-				reject = true
-				break
-			}
-		}
-		if reject {
-			return false
-		}
-	}
-
-	return true
+	return loc.Satisfies(n.Location)
 }
 
 func (b *BidCoordinator) makeInitialBidRequest(cfg jtypes.EnsembleConfig) (jtypes.EnsembleBidRequest, error) {
@@ -937,10 +921,6 @@ func (b *BidCoordinator) ensembleConfigToBidRequest(config *jtypes.EnsembleConfi
 	}
 
 	nodes := config.Nodes()
-	log.Infow("generating bid request",
-		"labels", []string{string(observability.LabelDeployment)},
-		"orchestratorID", b.eid,
-		"nodes", nodes)
 
 	for nodeID, nodeConfig := range nodes {
 		bidRequest := jtypes.BidRequest{

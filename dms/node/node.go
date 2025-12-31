@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,6 +24,7 @@ import (
 	lcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
+	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -31,6 +33,8 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
+	"gitlab.com/nunet/device-management-service/internal"
 	bt "gitlab.com/nunet/device-management-service/internal/background_tasks"
 	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -41,6 +45,7 @@ import (
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/contracts/processors"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
@@ -65,7 +70,8 @@ const (
 	// RestoreDeadlineCommitting   = 1 * time.Minute
 	// RestoreDeadlineProvisioning = 1 * time.Minute
 	// RestoreDeadlineRunning      = 5 * time.Minute
-	bidStateGCInterval = time.Minute
+	bidStateGCInterval             = time.Minute
+	provisionedResourcesGCInterval = time.Minute
 
 	// contract event handler config
 	eventHandlerWorkers   = 2
@@ -123,6 +129,7 @@ type Node struct {
 	hostID       string
 	geoIP        types.GeoIPLocator
 	hostLocation geolocation.Geolocation
+	publicIP     net.IP
 	peers        map[peer.ID]*peerState
 	bids         map[string]*bidState
 	answeredBids map[string][]uint64
@@ -143,11 +150,19 @@ type Node struct {
 	contractStore    *store.Store
 	paymentStore     *payment.Store
 	usageStore       *usage.Store
-	contractActors   []*tokenomics.ContractActor
+	contractActors   map[string]*tokenomics.ContractActor // DID URI -> Actor (optimized lookup)
+	billingScheduler *tokenomics.ContractBillingScheduler
 	transactionStore *transaction.Store
 
 	// contract event handler
 	contractEventHandler *eventhandler.EventHandler
+
+	// serverProviderRegistry registory
+	serverProviderRegistry *provider.Registry
+
+	// payment processor
+	paymentProcessor PaymentProcessor
+	gatewayStore     *gatewastore.Store
 }
 
 // createActor creates an actor.
@@ -190,6 +205,8 @@ func New(cfg config.Config, fs afero.Afero,
 	usageStore *usage.Store,
 	transactionStore *transaction.Store,
 	deploymentStore orchestrator.DeploymentStore,
+	providerRegistry *provider.Registry,
+	gatewayStore *gatewastore.Store,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -257,39 +274,81 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, fmt.Errorf("create node actor: %w", err)
 	}
 
+	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID)
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
-		allocator:            newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID),
-		hostID:               hostID,
-		network:              net,
-		bids:                 make(map[string]*bidState),
-		answeredBids:         make(map[string][]uint64),
-		peers:                make(map[peer.ID]*peerState),
-		resourceManager:      resourceManager,
-		hardware:             hardware,
-		actor:                nodeActor,
-		rootCap:              rootCap,
-		scheduler:            scheduler,
-		onboarding:           onboarding,
-		executors:            make(map[string]executorMetadata),
-		ctx:                  ctx,
-		cancel:               cancel,
-		orchestratorRegistry: orchestrator.NewRegistry(deploymentStore),
-		geoIP:                geoIP,
-		hostLocation:         hostLocation,
-		dmsConfig:            cfg,
-		fs:                   fs,
-		volumeController:     volumeController,
-		volumeOwners:         make(map[string]string),
-		contractStore:        contractStore,
-		paymentStore:         paymentStore,
-		usageStore:           usageStore,
-		transactionStore:     transactionStore,
-		contractActors:       make([]*tokenomics.ContractActor, 0),
+		allocator:              allocator,
+		hostID:                 hostID,
+		network:                net,
+		bids:                   make(map[string]*bidState),
+		answeredBids:           make(map[string][]uint64),
+		peers:                  make(map[peer.ID]*peerState),
+		resourceManager:        resourceManager,
+		hardware:               hardware,
+		actor:                  nodeActor,
+		rootCap:                rootCap,
+		scheduler:              scheduler,
+		onboarding:             onboarding,
+		executors:              make(map[string]executorMetadata),
+		ctx:                    ctx,
+		cancel:                 cancel,
+		orchestratorRegistry:   orchestrator.NewRegistry(deploymentStore),
+		geoIP:                  geoIP,
+		hostLocation:           hostLocation,
+		dmsConfig:              cfg,
+		fs:                     fs,
+		volumeController:       volumeController,
+		volumeOwners:           make(map[string]string),
+		contractStore:          contractStore,
+		paymentStore:           paymentStore,
+		usageStore:             usageStore,
+		transactionStore:       transactionStore,
+		contractActors:         make(map[string]*tokenomics.ContractActor),
+		serverProviderRegistry: providerRegistry,
+		gatewayStore:           gatewayStore,
 	}
+
+	// Create payment processor with invokeBehaviour function
+	invokeBehaviourFunc := func(destination actor.Handle, behavior string, req interface{}, timeout time.Duration) (actor.Envelope, error) {
+		msg, err := actor.Message(
+			nodeActor.Handle(),
+			destination,
+			behavior,
+			req,
+			actor.WithMessageExpiry(actor.MakeExpiry(timeout)),
+		)
+		if err != nil {
+			return actor.Envelope{}, fmt.Errorf("failed to create message: %w", err)
+		}
+
+		replyCh, err := nodeActor.Invoke(msg)
+		if err != nil {
+			return actor.Envelope{}, fmt.Errorf("failed to invoke message: %w", err)
+		}
+
+		ticker := time.NewTicker(timeout)
+		defer ticker.Stop()
+
+		select {
+		case reply := <-replyCh:
+			defer reply.Discard()
+			return reply, nil
+		case <-ticker.C:
+			return actor.Envelope{}, errors.New("failed to receive reply due to timeout")
+		}
+	}
+
+	n.paymentProcessor = NewPaymentProcessor(paymentStore, net, nodeActor.Handle(), invokeBehaviourFunc)
+
+	// set up the flight recorder
+	observability.FlightrecInit()
 
 	// setup contract event handler
 	n.contractEventHandler = eventhandler.New(ctx, eventHandlerWorkers, eventHandlerQueueSize, eventHandlerBaseDelay, eventHandlerMaxDelay, n.handleContractEvents)
+
+	// Initialize payment model processors
+	// This must be called before using GetPaymentModelProcessor
+	processors.InitPaymentModelProcessors(usageStore)
 
 	if err := n.initSupportedExecutors(ctx); err != nil {
 		cancel()
@@ -302,6 +361,28 @@ func New(cfg config.Config, fs afero.Afero,
 			return nil, fmt.Errorf("adding %s behavior: %w", behavior, err)
 		}
 	}
+
+	// Create billing scheduler with billing function
+	// Note: billingFunc closure references n, so it must be created after n
+	billingFunc := func(contractDID did.DID) error {
+		return n.executeBillingForContract(contractDID)
+	}
+
+	billingScheduler, err := tokenomics.NewContractBillingScheduler(
+		contractStore,
+		usageStore,
+		billingFunc,
+	)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create billing scheduler: %w", err)
+	}
+
+	// Set billing scheduler on node
+	n.billingScheduler = billingScheduler
+
+	// NOTE: Do NOT start billing scheduler here
+	// It will be started in Node.Start() method
 
 	return n, nil
 }
@@ -339,7 +420,7 @@ func (n *Node) restoreDeployments() error {
 	for _, d := range allDeployments {
 		// Only restore deployments in restorable states
 		if !isRestorableStatus(d.Status) {
-			log.Debugf("deployment %s has non-restorable status %d; skipping", d.OrchestratorID, d.Status)
+			log.Infof("deployment %s has non-restorable status %s skipping", d.OrchestratorID, d.Status.String())
 			continue
 		}
 
@@ -383,6 +464,7 @@ func (n *Node) restoreDeployments() error {
 			orchestratorRegistry.
 			RestoreDeployment(
 				n.ctx,
+				n.fs,
 				childActor,
 				d.OrchestratorID,
 				d.Cfg,
@@ -447,6 +529,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		},
 		behaviors.PeerScoreBehavior: {
 			fn: n.handlePeerScore,
+		},
+		behaviors.DebugFlightrecBehavior: {
+			fn: n.handleFlightrec,
 		},
 		behaviors.OnboardBehavior: {
 			fn: n.handleOnboard,
@@ -569,7 +654,7 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 			fn: n.handleContractApprovalLocal,
 		},
 		// used by compute provider to list incoming contracts
-		behaviors.ContractListIncomingBehavior: {
+		behaviors.ContractListBehavior: {
 			fn: n.handleListIncomingContracts,
 		},
 
@@ -595,6 +680,16 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 
 		behaviors.ContractConfirmLocalTransactionBehavior: {
 			fn: n.handleConfirmLocalTransaction,
+		},
+
+		// gateway
+		behaviors.PromiseBidToBidBehavior: {
+			fn: n.handlePromiseBid,
+		},
+
+		// provisioned server
+		behaviors.PromiseBidSigningBehavior: {
+			fn: n.handleBidSigning,
 		},
 	}
 
@@ -646,6 +741,76 @@ func (n *Node) gcBidState() {
 	}
 }
 
+func (n *Node) shutdownUnusedProvisionedResources() {
+	ticker := time.NewTicker(provisionedResourcesGCInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			n.deleteProvionedResource()
+
+		case <-n.ctx.Done():
+			return
+		}
+	}
+}
+
+func (n *Node) deleteProvionedResource() {
+	all, err := n.gatewayStore.All()
+	if err != nil {
+		log.Errorf("failed to get provisioned resources from store: %v", err)
+		return
+	}
+
+	for _, v := range all {
+		destination, err := actor.HandleFromPeerID(v.ProvisionedVMPeerID)
+		if err != nil {
+			log.Errorf("failed to get handle of provisioned dms")
+			continue
+		}
+		envelope, err := n.invokeBehaviour(destination, behaviors.AllocationsListBehavior, nil, invokeMessageTimeout)
+		if envelope.Message == nil || err != nil {
+			log.Errorf("failed to get allocation list from new dms: %v", err)
+			continue
+		}
+
+		var allocs AllocationsListResponse
+		err = json.Unmarshal(envelope.Message, &allocs)
+		if err != nil {
+			log.Errorf("failed to unmarshal allocation list from new dms: %v", err)
+			continue
+		}
+
+		killVM := true
+		for _, alloc := range allocs.Allocations {
+			if alloc.Status == "pending" || alloc.Status == "running" || alloc.Status == "stopped" {
+				killVM = false
+				break
+			}
+		}
+
+		if killVM {
+			serverProvider, err := n.serverProviderRegistry.Get(v.ProviderName)
+			if err != nil {
+				log.Errorf("failed to get server provider for deleting unused resource: %v", err)
+				continue
+			}
+
+			err = serverProvider.DeleteServer(context.Background(), v.Resource.ID)
+			if err != nil {
+				log.Errorf("failed to delete provisioned resource: %v", err)
+				continue
+			}
+
+			err = n.gatewayStore.Delete(v.Resource.ID)
+			if err != nil {
+				log.Errorf("failed to delete provisioned resource from local store: %v", err)
+			}
+		}
+	}
+}
+
 func (n *Node) doGCBidState() {
 	now := time.Now()
 
@@ -675,6 +840,10 @@ func (n *Node) geolocate() {
 		log.Errorw("host public IP is nil")
 		return
 	}
+
+	n.lock.Lock()
+	n.publicIP = ip
+	n.lock.Unlock()
 
 	location, err := geolocation.Geolocate(ip, n.geoIP)
 	if err != nil {
@@ -728,9 +897,19 @@ func (n *Node) Start() error {
 		}
 	}()
 
+	// Start billing scheduler
+	if n.billingScheduler != nil {
+		n.billingScheduler.Start()
+		log.Infow("billing scheduler started",
+			"labels", string(observability.LabelNode))
+	}
+
 	n.running.Store(true)
 	go n.gcBidState()
 	go n.geolocate()
+	if n.dmsConfig.General.ComputeGateway {
+		go n.shutdownUnusedProvisionedResources()
+	}
 
 	log.Infow("node_started_successfully",
 		"labels", string(observability.LabelNode))
@@ -741,6 +920,13 @@ func (n *Node) Start() error {
 func (n *Node) Stop() error {
 	log.Infow("node_stop_initiated",
 		"labels", string(observability.LabelNode))
+
+	// Stop billing scheduler first (before stopping other components)
+	if n.billingScheduler != nil {
+		n.billingScheduler.Stop()
+		log.Infow("billing scheduler stopped",
+			"labels", string(observability.LabelNode))
+	}
 
 	if err := n.allocator.Stop(context.Background()); err != nil {
 		log.Errorf("stopping node allocator: %s", err)
@@ -768,6 +954,72 @@ func (n *Node) Stop() error {
 	return nil
 }
 
+// ListenForCapabilityContextsUpdates reloads all capability contexts from disk
+func (n *Node) ListenForCapabilityContextsUpdates() error {
+	for {
+		select {
+		case <-internal.ReloadChan:
+			log.Infow("Received SIGUSR1, reloading capability contexts...")
+
+			// Reload the capability context while holding the lock
+			capCtx, err := func() (ucan.CapabilityContext, error) {
+				n.lock.Lock()
+				defer n.lock.Unlock()
+
+				// Reload the DMS capability context
+				// Note: Capability contexts are stored in UserDir, not WorkDir
+				capCtx, err := LoadCapabilityContext(n.rootCap.Trust(), n.fs, n.rootCap.Name(), n.dmsConfig.General.UserDir)
+				if err != nil {
+					return nil, fmt.Errorf("failed to reload DMS capability context: %w", err)
+				}
+
+				n.rootCap = capCtx
+				return capCtx, nil
+			}()
+			if err != nil {
+				log.Errorw("Failed to reload capability context", "error", err)
+				continue
+			}
+
+			// Create a new security context from the updated rootCap (same logic as in New())
+			rootDID := capCtx.DID()
+			rootTrust := capCtx.Trust()
+			anchor, err := rootTrust.GetAnchor(rootDID)
+			if err != nil {
+				log.Errorw("Failed to get root DID anchor", "error", err)
+				continue
+			}
+			pubk := anchor.PublicKey()
+			provider, err := rootTrust.GetProvider(rootDID)
+			if err != nil {
+				log.Errorw("Failed to get root DID provider", "error", err)
+				continue
+			}
+			privk, err := provider.PrivateKey()
+			if err != nil {
+				log.Errorw("Failed to get root private key", "error", err)
+				continue
+			}
+
+			newSecurity, err := actor.NewBasicSecurityContext(pubk, privk, capCtx)
+			if err != nil {
+				log.Errorw("Failed to create new security context", "error", err)
+				continue
+			}
+
+			// Update the actor's security context
+			if err := n.actor.UpdateSecurityContext(newSecurity); err != nil {
+				log.Errorw("Failed to update actor security context", "error", err)
+				continue
+			}
+			log.Infow("Capability contexts reloaded successfully from disk")
+		case <-n.ctx.Done():
+			log.Infow("Node context done, stopping reload loop")
+			return nil
+		}
+	}
+}
+
 func createEnsembleID(peerID string) (string, error) {
 	var id string
 
@@ -782,8 +1034,10 @@ func createEnsembleID(peerID string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func (n *Node) createOrchestrator(ctx context.Context,
+func (n *Node) createOrchestrator(
+	ctx context.Context,
 	ensemble jobtypes.EnsembleConfig,
+	contracts map[string]types.ContractConfig,
 ) (orchestrator.Orchestrator, error) {
 	if ensemble.V1 == nil {
 		return nil, fmt.Errorf("empty ensemble config")
@@ -811,7 +1065,10 @@ func (n *Node) createOrchestrator(ctx context.Context,
 	orch, err := n.orchestratorRegistry.NewOrchestrator(
 		ctx, n.fs, n.dmsConfig.WorkDir,
 		ensembleID, childActor, ensemble,
-		types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(),
+		types.NewDefaultNodeIDGenerator(),
+		types.NewDefaultAllocationIDGenerator(),
+		n.contractEventHandler,
+		contracts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new orchestrator: %w", err)
@@ -875,66 +1132,253 @@ func (n *Node) addContractActor(a *tokenomics.ContractActor) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
-	n.contractActors = append(n.contractActors, a)
+	n.contractActors[a.ContractDID.URI] = a
 }
 
-func (n *Node) collectUsagesAndForwardToPaymentProviders() (int, error) {
-	total := 0
-	lastProcessedAt, _ := n.usageStore.GetLastProcessedAt()
+// executeBillingForContract executes billing for a contract
+// This is called by the scheduler
+func (n *Node) executeBillingForContract(contractDID did.DID) error {
+	// Get contract to verify it exists
+	contract, err := n.contractStore.GetContract(contractDID.URI)
+	if err != nil {
+		return fmt.Errorf("contract not found: %w", err)
+	}
+
+	// Find the contract actor using map lookup (O(1))
+	contractActor, exists := n.contractActors[contractDID.URI]
+	if !exists {
+		return fmt.Errorf("contract actor not found for %s", contractDID.URI)
+	}
+
+	// Check if contract should stop billing
+	if contract.CurrentState == contracts.ContractTerminated ||
+		contract.CurrentState == contracts.ContractCompleted {
+		// For FixedRental and Periodic payment models, generate pro-rated final invoice before unregistering
+		if contract.PaymentDetails.PaymentModel == contracts.FixedRental ||
+			contract.PaymentDetails.PaymentModel == contracts.Periodic {
+			// Execute billing to generate pro-rated final invoice for terminated contract
+			// This will call handleTerminatedContractInvoice() which generates the pro-rated invoice
+			err = contractActor.CheckAndGenerateInvoice()
+			if err != nil {
+				// Log error but still unregister - the invoice generation may have failed
+				// but we don't want to keep retrying for a terminated contract
+				log.Warnw("failed to generate final invoice for terminated contract",
+					"labels", string(observability.LabelContract),
+					"contract_did", contractDID.URI,
+					"payment_model", contract.PaymentDetails.PaymentModel,
+					"error", err)
+			}
+		}
+		// Unregister from scheduler after attempting to generate final invoice
+		n.billingScheduler.UnregisterContract(contractDID)
+		return fmt.Errorf("contract %s is %s, stopping billing", contractDID.URI, contract.CurrentState)
+	}
+
+	// Execute billing
+	err = contractActor.CheckAndGenerateInvoice()
+	if err != nil {
+		return fmt.Errorf("billing execution failed: %w", err)
+	}
+
+	// Update billing schedule after successful invoice
+	// This updates the trigger's lastInvoiceAt to use actual invoice time
+	if err = n.billingScheduler.UpdateContract(contractDID); err != nil {
+		return fmt.Errorf("failed to update billing schedule: %w", err)
+	}
+
+	return nil
+}
+
+func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUsagesAndForwardToPaymentProvidersRequest) contracts.CollectUsagesAndForwardToPaymentProvidersReponse {
+	resp := contracts.CollectUsagesAndForwardToPaymentProvidersReponse{
+		Results: make([]contracts.ContractUsageResult, 0),
+	}
 	now := time.Now()
 
-	usages, err := n.usageStore.CountAllocationsByContract(lastProcessedAt, now)
-	if err != nil {
-		return total, fmt.Errorf("failed to get usages: %w", err)
+	// Get contracts to process
+	var contractsToProcess []*contracts.Contract
+	var err error
+
+	if req.ContractDID != "" {
+		// Process specific contract
+		contract, err := n.contractStore.GetContract(req.ContractDID)
+		if err != nil {
+			resp.Error = fmt.Sprintf("failed to get contract %s: %v", req.ContractDID, err)
+			return resp
+		}
+		contractsToProcess = []*contracts.Contract{contract}
+	} else {
+		// Process all contracts
+		contractsToProcess, err = n.contractStore.GetAllContracts()
+		if err != nil {
+			resp.Error = fmt.Sprintf("failed to get contracts: %v", err)
+			return resp
+		}
 	}
 
 	type paymentForwardToProviderRequest struct {
-		AllocationsUsed int
-		Contract        contracts.Contract
+		Usages              int                                 // For backward compatibility
+		TimeUtilization     *contracts.TimeUtilizationUsage     // For pay_per_time_utilization
+		ResourceUtilization *contracts.ResourceUtilizationUsage // For pay_per_resource_utilization
+		FixedRentalDetails  *contracts.FixedRentalUsage         // For fixed_rental
+		Contract            contracts.Contract
 	}
 
 	allPayments := make([]paymentForwardToProviderRequest, 0)
 
-	for contractDID, v := range usages {
-		c, err := n.contractStore.GetContract(contractDID)
+	// Collect usage for each contract based on its payment model
+	for _, contract := range contractsToProcess {
+		// Get contract-specific last processed timestamp
+		lastProcessedAt, _ := n.usageStore.GetLastProcessedAt(contract.ContractDID)
+
+		// Get processor for this payment model
+		processor, err := contracts.GetPaymentModelProcessor(contract.PaymentDetails.PaymentModel)
 		if err != nil {
-			log.Warnf("contract %s was not found on this host", contractDID)
+			result := contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        fmt.Sprintf("unsupported payment model: %v", err),
+			}
+			resp.Results = append(resp.Results, result)
+			log.Warnf("unsupported payment model for contract %s: %v", contract.ContractDID, err)
 			continue
 		}
 
-		request := paymentForwardToProviderRequest{
-			Contract:        *c,
-			AllocationsUsed: v,
+		// Check if this model supports manual billing
+		if !processor.SupportsManualBilling() {
+			result := contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        fmt.Sprintf("%s payment model uses automatic periodic billing and cannot be manually triggered. Invoices are generated automatically by the contract actor.", contract.PaymentDetails.PaymentModel),
+			}
+			resp.Results = append(resp.Results, result)
+			log.Warnf("manual invoice generation attempted for %s contract %s", contract.PaymentDetails.PaymentModel, contract.ContractDID)
+			continue
 		}
-		allPayments = append(allPayments, request)
-	}
-	err = n.usageStore.SaveLastProcessedAt(now)
-	if err != nil {
-		return 0, fmt.Errorf("failed to save last processed usage: %w", err)
+
+		// Collect usage using processor
+		usageData, err := processor.CollectUsage(contract.ContractDID, lastProcessedAt, now)
+		if err != nil {
+			result := contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        fmt.Sprintf("failed to collect usage: %v", err),
+			}
+			resp.Results = append(resp.Results, result)
+			log.Warnf("failed to collect usage for contract %s: %v", contract.ContractDID, err)
+			continue
+		}
+
+		// Convert usage data to result format
+		result := n.convertUsageDataToResult(usageData)
+		if result.Error != "" {
+			resp.Results = append(resp.Results, result)
+			log.Warnf("failed to convert usage data for contract %s: %s", contract.ContractDID, result.Error)
+			continue
+		}
+
+		// Save contract-specific last processed timestamp
+		err = n.usageStore.SaveLastProcessedAt(contract.ContractDID, now)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to save last processed timestamp: %v", err)
+			resp.Results = append(resp.Results, result)
+			log.Warnf("failed to save last processed usage for contract %s: %v", contract.ContractDID, err)
+			continue
+		}
+
+		// Add result
+		resp.Results = append(resp.Results, result)
+
+		// Add to payments if there are usages
+		if result.Usages > 0 || result.TimeUtilization != nil || result.ResourceUtilization != nil {
+			paymentReq := paymentForwardToProviderRequest{
+				Contract: *contract,
+				Usages:   result.Usages,
+			}
+			if result.TimeUtilization != nil {
+				paymentReq.TimeUtilization = result.TimeUtilization
+			}
+			if result.ResourceUtilization != nil {
+				paymentReq.ResourceUtilization = result.ResourceUtilization
+			}
+			allPayments = append(allPayments, paymentReq)
+		}
 	}
 
 	for _, v := range allPayments {
-		req := contracts.ContractUsageRequestBehavior{
-			UniqueID: uuid.NewString(),
-			Contract: v.Contract,
-			Usages:   v.AllocationsUsed,
+		req := contracts.ContractUsageRequest{
+			UniqueID:            uuid.NewString(),
+			Contract:            v.Contract,
+			Usages:              v.Usages,
+			TimeUtilization:     v.TimeUtilization,     // May contain multiple deployments for pay_per_time_utilization
+			ResourceUtilization: v.ResourceUtilization, // May contain multiple deployments for pay_per_resource_utilization
 		}
 
 		// construct destination address
 		destination, err := actor.HandleFromDID(v.Contract.PaymentValidatorDID.URI)
 		if err != nil {
-			log.Errorf("failed to get handle of payment provider")
+			log.Errorf("failed to get handle of payment provider for contract %s: %v", v.Contract.ContractDID, err)
 			continue
 		}
 		envelope, err := n.invokeBehaviour(destination, behaviors.ContractUsageBehavior, req, invokeMessageTimeout)
 		if envelope.Message == nil || err != nil {
-			log.Errorf("failed to update payment status of contract host: %v", err)
+			log.Errorf("failed to update payment status of contract host for contract %s: %v", v.Contract.ContractDID, err)
 			continue
 		}
-		total++
+		log.Infof("Successfully sent ContractUsageRequest for contract %s to payment validator", v.Contract.ContractDID)
+		resp.TotalUsages++
 	}
 
-	return total, nil
+	return resp
+}
+
+// convertUsageDataToResult converts UsageData from processor to ContractUsageResult
+func (n *Node) convertUsageDataToResult(usageData *contracts.UsageData) contracts.ContractUsageResult {
+	result := contracts.ContractUsageResult{
+		ContractDID:  usageData.ContractDID,
+		PaymentModel: usageData.PaymentModel,
+	}
+
+	switch usageData.PaymentModel {
+	case contracts.PayPerAllocation:
+		usageCount, ok := usageData.Data.(int)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_allocation"
+			return result
+		}
+		result.Usages = usageCount
+
+	case contracts.PayPerDeployment:
+		usageCount, ok := usageData.Data.(int)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_deployment"
+			return result
+		}
+		result.Usages = usageCount
+
+	case contracts.PayPerTimeUtilization:
+		timeUtil, ok := usageData.Data.(*contracts.TimeUtilizationUsage)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_time_utilization"
+			return result
+		}
+		result.TimeUtilization = timeUtil
+		result.Usages = len(timeUtil.Deployments) // For backward compatibility
+
+	case contracts.PayPerResourceUtilization:
+		resourceUtil, ok := usageData.Data.(*contracts.ResourceUtilizationUsage)
+		if !ok {
+			result.Error = "invalid usage data type for pay_per_resource_utilization"
+			return result
+		}
+		result.ResourceUtilization = resourceUtil
+		result.Usages = len(resourceUtil.Deployments) // For backward compatibility
+
+	default:
+		result.Error = fmt.Sprintf("unsupported payment model: %s", usageData.PaymentModel)
+	}
+
+	return result
 }
 
 func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payload any, timeout time.Duration) (actor.Envelope, error) {
@@ -1004,7 +1448,7 @@ func (n *Node) handleContractEvents(event eventhandler.Event) error {
 		return fmt.Errorf("failed to marshal event object: %w", err)
 	}
 
-	req := contracts.ContractEventRequestBehaviour{
+	req := contracts.ContractEventRequest{
 		Payload: bts,
 	}
 	reply, err := n.invokeBehaviour(destination, behaviors.ContractEventsBehavior, req, invokeMessageTimeout)
@@ -1012,7 +1456,7 @@ func (n *Node) handleContractEvents(event eventhandler.Event) error {
 		return fmt.Errorf("failed to send message to contract host: %w", err)
 	}
 
-	var respEnvelope contracts.ContractEventResponseBehaviour
+	var respEnvelope contracts.ContractEventResponse
 	err = json.Unmarshal(reply.Message, &respEnvelope)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)

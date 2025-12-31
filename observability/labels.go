@@ -9,6 +9,7 @@
 package observability
 
 import (
+	"os"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -34,6 +35,8 @@ const (
 	// TODO unused
 	LabelUser LogLabel = "user"
 )
+
+const EnvCIRun = "DMS_CI_RUN"
 
 // LabelRoutingConfig defines optional routing rules per label.
 type LabelRoutingConfig struct {
@@ -98,7 +101,7 @@ func GetLabelRoutingConfig(labels []string) (skipES bool, esIndex string) {
 			esIndex = cfg.ESIndex
 		}
 	}
-	return
+	return skipES, esIndex
 }
 
 func newLabelInjectionCore(next zapcore.Core, enabler zapcore.LevelEnabler) zapcore.Core {
@@ -164,6 +167,11 @@ func (l *labelInjectionCore) Write(ent zapcore.Entry, fields []zapcore.Field) er
 	}
 	if overrideIndex != "" {
 		finalFields = append(finalFields, zap.String("es_index", overrideIndex))
+	}
+
+	// mark CI logs
+	if os.Getenv(EnvCIRun) != "" {
+		finalFields = append(finalFields, zap.Bool("ci", true))
 	}
 
 	finalFields = l.gatherFields(ent, fields, finalFields)
@@ -234,6 +242,8 @@ func (l *labelInjectionCore) gatherFields(
 		}
 		finalFields = append(finalFields,
 			zap.String("span.id", spanID),
+			// TODO remove _ nesting, fblog fixed arrays
+			// zap.Any("stack_trace", sTrace))
 			zap.Dict("stack_trace", zap.Strings("_", sTrace)))
 
 	case len(activeSpans) > 0:

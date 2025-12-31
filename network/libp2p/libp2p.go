@@ -231,8 +231,6 @@ func (l *Libp2p) Init(cfg *config.Config) error {
 		return fmt.Errorf("failed to derive a valid DID from public key")
 	}
 
-	log.Infof("Derived DID: %s", didInstance.URI)
-
 	// Initialize the observability package with the host and DID
 	if err := observability.Initialize(l.Host, didInstance, cfg); err != nil {
 		return fmt.Errorf("failed to initialize observability: %w", err)
@@ -256,14 +254,12 @@ func (l *Libp2p) Start() error {
 		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success", "labels", string(observability.LabelNode))
 
 	err = l.bootstrapDHT(l.ctx)
 	if err != nil {
 		log.Errorw("libp2p_bootstrap_failure", "labels", string(observability.LabelNode), "error", err)
 		return err
 	}
-	log.Infow("libp2p_bootstrap_success", "labels", string(observability.LabelNode))
 
 	// Start random walk
 	l.startRandomWalk(l.ctx)
@@ -279,16 +275,16 @@ func (l *Libp2p) Start() error {
 		// advertise randevouz discovery
 		err = l.advertiseForRendezvousDiscovery(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_advertise_rendezvous_failure", "labels", string(observability.LabelNode), "error", err)
+			log.Warnw("libp2p_advertise_rendezvous_failure", "labels", string(observability.LabelNode), "error", err)
 		} else {
-			log.Infow("libp2p_advertise_rendezvous_success", "labels", string(observability.LabelNode))
+			log.Debugw("libp2p_advertise_rendezvous_success", "labels", string(observability.LabelNode))
 		}
 
 		err = l.discoverDialPeers(l.ctx)
 		if err != nil {
-			log.Warnf("libp2p_peer_discover_failure", "labels", string(observability.LabelNode), "error", err)
+			log.Warnw("libp2p_peer_discover_failure", "labels", string(observability.LabelNode), "error", err)
 		} else {
-			log.Infow("libp2p_peer_discover_success", "labels", string(observability.LabelNode), "foundPeers", len(l.discoveredPeers))
+			log.Debugw("libp2p_peer_discover_success", "labels", string(observability.LabelNode), "foundPeers", len(l.discoveredPeers))
 		}
 	}()
 
@@ -655,23 +651,25 @@ func (l *Libp2p) Connect(ctx context.Context, peerMultiAddr string) error {
 		return fmt.Errorf("peer multiaddress is empty")
 	}
 
-	log.Infof("Creating multiaddress from peerMultiAddr: %s", peerMultiAddr)
+	log.Infow("Creating multiaddress from peerMultiAddr", "labels", string(observability.LabelNode),
+		"addr", peerMultiAddr)
 	peerAddr, err := multiaddr.NewMultiaddr(peerMultiAddr)
 	if err != nil {
-		log.Infof("Invalid multiaddress: %v", err)
+		log.Errorw("Invalid multiaddress", "labels", string(observability.LabelNode), "error", err)
 		return fmt.Errorf("invalid multiaddress: %w", err)
 	}
 
-	log.Infof("Resolving peer info from multiaddress")
+	log.Infow("Resolving peer info from multiaddress", "labels", string(observability.LabelNode))
 	addrInfo, err := peer.AddrInfoFromP2pAddr(peerAddr)
 	if err != nil {
-		log.Infof("Could not resolve peer info: %v", err)
+		log.Infow("Could not resolve peer info", "labels", string(observability.LabelNode), "error", err)
 		return fmt.Errorf("could not resolve peer info: %w", err)
 	}
 
-	log.Infof("Connecting to peer: %s", peerMultiAddr)
+	log.Infow("Connecting to peer", "labels", string(observability.LabelNode), "addr", peerMultiAddr)
 	if err := l.Host.Connect(ctx, *addrInfo); err != nil {
-		log.Infof("Failed to connect to peer %s: %v", peerMultiAddr, err)
+		log.Errorw("Failed to connect to peer", "labels", string(observability.LabelNode),
+			"addr", peerMultiAddr, "error", err)
 		return fmt.Errorf("failed to connect to peer %s: %w", peerMultiAddr, err)
 	}
 
@@ -696,9 +694,10 @@ func (l *Libp2p) GetPeerIP(p PeerID) string {
 }
 
 func (l *Libp2p) watchForObservedAddr() {
+	log.Infof("watching for observed address")
 	sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
 	if err != nil {
-		log.Debugf("could not subscribe to event: %w", err)
+		log.Errorf("could not subscribe to event: %w", err)
 		return
 	}
 	defer sub.Close()
@@ -739,20 +738,18 @@ func (l *Libp2p) watchForObservedAddr() {
 		count := addrCount[ip.String()]
 		addrMux.Unlock()
 
-		log.Debugf("got public ip: %s (seen %d times)", ip.String(), count)
+		log.Infof("got public ip: %s (seen %d times)", ip.String(), count)
 
 		if count >= 3 {
 			l.mx.Lock()
 			l.observedAddr = event.ObservedAddr
 			l.mx.Unlock()
-			log.Debugf("confirmed public address after seeing it %d times: %s", count, addrStr)
 
 			// send the observed address on the channel
 			select {
 			case l.observedAddrCh <- event.ObservedAddr:
-				log.Debugf("sent observed address signal: %s", addrStr)
 			default:
-				log.Debugf("channel full, couldn't send observed address signal: %s", addrStr)
+				log.Warnf("channel full, couldn't send observed address signal: %s", addrStr)
 			}
 			return
 		}
@@ -786,6 +783,17 @@ func (l *Libp2p) Ping(ctx context.Context, peerIDAddress string, timeout time.Du
 	remotePeer, err := peer.Decode(peerIDAddress)
 	if err != nil {
 		return types.PingResult{}, err
+	}
+
+	// ensure we are connected to the peer before pinging
+	if l.Host.Network().Connectedness(remotePeer) != network.Connected {
+		err = l.Connect(pingCtx, fmt.Sprintf("/p2p/%s", peerIDAddress))
+		if err != nil {
+			return types.PingResult{
+				Success: false,
+				Error:   err,
+			}, err
+		}
 	}
 
 	pingChan := ping.Ping(pingCtx, l.Host, remotePeer)
@@ -1232,12 +1240,15 @@ func (l *Libp2p) Unsubscribe(topic string, subID uint64) error {
 
 func (l *Libp2p) HostPublicIP() (net.IP, error) {
 	if l.config.Env == "dev" || l.config.Env == "test" {
+		log.Infow("host public ip: using listening IP since in dev or test environment")
 		return l.listeningIP()
 	}
+	log.Infow("checking observed public IP...")
 	addr, err := l.waitForObservedAddr(l.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve observed addr: %w", err)
 	}
+	log.Infow("obtained observed public IP", "addr", addr.String())
 	return manet.ToIP(addr)
 }
 
@@ -1339,27 +1350,19 @@ func (l *Libp2p) RawQUICConnectLocal(target peer.ID, serverName string) (*quic.C
 }
 
 func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAddress bool) (*quic.Conn, *netip.AddrPort, error) {
-	connected := make(chan struct{}, 1)
-	go func() {
-		sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerConnectednessChanged))
-		if err != nil {
-			log.Fatal("failed to subscribe to peer connectedness changed event: ", err)
-		}
-		defer sub.Close()
-		for ev := range sub.Out() {
-			e := ev.(event.EvtPeerConnectednessChanged)
-			if e.Peer == target {
-				msg := fmt.Sprintf("peer connectedness changed: %s\n", e.Connectedness)
-				for _, c := range l.Host.Network().ConnsToPeer(target) {
-					msg += fmt.Sprintf("\t%s <-> %s\n", c.LocalMultiaddr(), c.RemoteMultiaddr())
+	waitForConnection := func(timeout time.Duration, targetPeer peer.ID) error {
+		select {
+		case <-time.After(timeout):
+			return fmt.Errorf("timed out waiting for connection to peer %s", targetPeer)
+		default:
+			for {
+				if l.Host.Network().Connectedness(target) == network.Connected {
+					return nil
 				}
-				log.Debug(msg)
-				if e.Connectedness == network.Connected {
-					connected <- struct{}{}
-				}
+				time.Sleep(50 * time.Millisecond)
 			}
 		}
-	}()
+	}
 
 	// 1st step: check if we have cached QUIC addresses in peerstore
 	// This should be checked BEFORE trying DHT lookup
@@ -1432,23 +1435,23 @@ func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAdd
 	// As soon as the relayed peer accepts the connection via the relay,
 	// it tries to establish a direction connection back to us using the DCUtR protocol.
 	// We wait for this connection to be established.
-	select {
-	case <-connected:
-	case <-time.After(2 * time.Minute):
-		return nil, nil, fmt.Errorf("timed out waiting for direct (e.g. hole-punched) connection")
+	err = waitForConnection(2*time.Minute, target)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to establish direct connection to peer %s: %w", target, err)
 	}
 
 	// Now that we have a direct connection to the target, we can dial another
 	// QUIC connection on the same 4-tupe. This works since QUIC demultiplexes connections
 	// based on their connection ID.
 	var directAddr *net.UDPAddr
+	log.Infof("dialQUIC: connections to target %q : %+v", target.String(), l.Host.Network().ConnsToPeer(target))
 	for _, c := range l.Host.Network().ConnsToPeer(target) {
 		if a := c.RemoteMultiaddr(); isQUICAddr(a) {
 			directAddr, err = quicAddrToNetAddr(a)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
 			}
-			log.Debugf("found QUIC address: %s", a)
+			log.Infof("dialQUIC: found QUIC address: %s", directAddr.String())
 			break
 		}
 	}
@@ -1463,15 +1466,14 @@ connectLoop:
 		if now.Sub(start) > 5*time.Second {
 			break
 		}
+		log.Infof("dialQUIC: connections to target %q : %+v", target.String(), l.Host.Network().ConnsToPeer(target))
 		for _, c := range l.Host.Network().ConnsToPeer(target) {
 			if a := c.RemoteMultiaddr(); isQUICAddr(a) {
 				directAddr, err = quicAddrToNetAddr(a)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
 				}
-				if directAddr.Port == 10000 {
-					break
-				}
+				log.Infof("dialQUIC: found QUIC address: %s", directAddr.String())
 				break connectLoop
 			}
 		}
@@ -1497,7 +1499,7 @@ func dialSubnetQUICLayer(l *Libp2p, tr *quic.Transport, addr *net.UDPAddr, servN
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate self signed certificate: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	log.Debugf("dialing QUIC address: %s", addr)
 	conn, err := tr.Dial(

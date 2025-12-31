@@ -18,8 +18,6 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
-	"gitlab.com/nunet/device-management-service/lib/did"
-	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -120,8 +118,12 @@ func (c *Committer) updateManifestAllocations(
 				alloc.IsStandby = nodeManifest.RedundancyRole == jtypes.RoleStandby
 				alloc.RedundancyGroup = allocID.ConfigName()
 				manifest.Allocations[allocName] = alloc
-				log.Infof("adding allocation to manifest, allocation: %s, node: %s, handle: %s, isStandby: %v",
-					allocName, alloc.NodeID, alloc.Handle, alloc.IsStandby)
+				log.Infow("adding allocation to manifest", "labels", []string{string(observability.LabelDeployment)},
+					// TODO allocationID?
+					"allocation", allocName,
+					"nodeID", alloc.NodeID,
+					"handle", alloc.Handle,
+					"isStandby", alloc.IsStandby)
 			}
 		}
 	}
@@ -157,14 +159,17 @@ func (c *Committer) commit(
 					"nodeID", n,
 					"error", err)
 				ok = false
+				mx.Unlock()
 				return
 			}
-			log.Debugf("committing deployment for %s", n)
+			log.Infow("committing deployment",
+				"nodeID", n,
+			)
 			err = updateNodeManifest(manifest.Nodes, n, func(n *jtypes.NodeManifest) {
 				n.Handle = bid.Handle()
 			})
 			if err != nil {
-				log.Errorw("committing: update node error",
+				log.Debugw("committing: update node error",
 					"labels", []string{string(observability.LabelDeployment)},
 					"nodeID", n,
 					"error", err)
@@ -196,7 +201,7 @@ func (c *Committer) commit(
 					"error", err)
 				ok = false
 			} else {
-				log.Debugf("allocating deployment for %s", n)
+				log.Debugw("allocating deployment", "nodeID", n)
 				for a, h := range allocated {
 					allocations[a] = h
 				}
@@ -234,6 +239,7 @@ func (c *Committer) commit(
 		// update manifest node
 		if nmf, ok := manifest.Nodes[n]; ok {
 			nmf.Peer = bid.Peer()
+			nmf.PubAddress = append(nmf.PubAddress, bid.PubAddress())
 			nmf.Handle = bid.Handle()
 			nmf.Location = bid.Location()
 			nmf.RedundancyRole = role
@@ -247,6 +253,7 @@ func (c *Committer) commit(
 			nmf := jtypes.NodeManifest{
 				ID:             n,
 				Peer:           bid.Peer(),
+				PubAddress:     []string{bid.PubAddress()},
 				Handle:         bid.Handle(),
 				Location:       bid.Location(),
 				RedundancyRole: role,
@@ -505,59 +512,8 @@ func (c *Committer) allocate(cfg jtypes.EnsembleConfig, n string, h actor.Handle
 		}
 	}
 
-	for _, a := range response.Allocations {
-		if err := c.grantOrchestratorCaps(a.DID); err != nil {
-			return nil, err
-		}
-	}
-
-	log.Debugf("Allocation successful for node: %s", n)
+	log.Infow("Allocation successful", "nodeID", n)
 	return response.Allocations, nil
-}
-
-func (c *Committer) grantOrchestratorCaps(alloc did.DID) error {
-	oDID, err := did.FromID(c.actor.Handle().ID)
-	if err != nil {
-		return fmt.Errorf("failed to parse orchestrator DID: %w", err)
-	}
-
-	err = c.actor.Security().Grant(
-		alloc,
-		oDID,
-		[]ucan.Capability{behaviors.OrchestratorNamespace},
-		grantOrchestratorCapsFrequency,
-	)
-	if err != nil {
-		return fmt.Errorf(
-			"granting orchestrator caps to alloc %s: %w",
-			alloc.String(), err)
-	}
-
-	// TODO: create helper func to periodically grant caps as
-	// it's being used here and on createAllocations()
-	go func() {
-		ticker := time.NewTicker(grantOrchestratorCapsFrequency)
-		defer ticker.Stop()
-
-		select {
-		case <-c.ctx.Done():
-			return
-		case <-ticker.C:
-			err := c.actor.Security().Grant(
-				alloc,
-				c.actor.Handle().DID,
-				[]ucan.Capability{},
-				grantOrchestratorCapsFrequency,
-			)
-			if err != nil {
-				log.Errorf(
-					"periodic grant orchestrator caps to alloc %s: %w",
-					alloc.String(), err)
-			}
-			return
-		}
-	}()
-	return nil
 }
 
 func updateNodeManifest(

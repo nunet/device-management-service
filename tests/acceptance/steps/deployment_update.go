@@ -32,8 +32,9 @@ func DeploymentUpdate(ctx *godog.ScenarioContext) {
 		}
 		return ctx, nil
 	})
-	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		if err := hooks.SaveLogs(ctx); err != nil {
+	ctx.After(func(ctx context.Context, scenario *godog.Scenario, _ error) (context.Context, error) {
+		scenarioName := strings.ReplaceAll(scenario.Name, " ", "_")
+		if err := hooks.SaveLogs(ctx, scenarioName); err != nil {
 			return ctx, err
 		}
 		if err := hooks.CleanupNodes(); err != nil {
@@ -76,29 +77,29 @@ func updatesDeploymentToAddAllocation(ctx context.Context, spName string, count 
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotEmpty(t, sp)
 	assert.NotEmpty(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotEmpty(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, manifest)
 
 	tc = tc.WithManifest(manifest)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, cpInfo)
 
 	var nodeName string
@@ -111,7 +112,7 @@ func updatesDeploymentToAddAllocation(ctx context.Context, spName string, count 
 	assert.NotEmpty(t, nodeName)
 
 	ensemble, err := tc.EnsembleFile()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	for i := 1; i <= count; i++ {
@@ -119,19 +120,19 @@ func updatesDeploymentToAddAllocation(ctx context.Context, spName string, count 
 
 		// Add new allocation definition by dereferencing nginx_service
 		_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".allocations.%s = .nginx_wrapper", newAllocName), ensemble})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Add allocation to node1
 		_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.%s.allocations += [\"%s\"]", nodeName, newAllocName), ensemble})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Add port configuration for new allocation
 		_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.%s.ports += [{\"private\": 80, \"public\": %d, \"allocation\": \"%s\"}]", nodeName, 17000+i, newAllocName), ensemble})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return tc.Unwrap(), nil
 }
@@ -140,34 +141,34 @@ func deploymentShouldHaveAllocationsRunningOn(ctx context.Context, spName string
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotEmpty(t, sp)
 	assert.NotEmpty(t, spDmsCtx)
 
-	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotEmpty(t, cp)
 	assert.NotEmpty(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	require.Eventually(t, func() bool {
 		status, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return strings.EqualFold(status, "Running")
 	}, 60*time.Second, 1*time.Second)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, cpInfo)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, manifest)
 
 	var found bool
@@ -186,23 +187,23 @@ func updatesDeploymentToRemoveAllocation(ctx context.Context, spName string, cou
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotEmpty(t, sp)
 	assert.NotEmpty(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotEmpty(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, manifest)
 
 	allocs := slices.Collect(maps.Keys(manifest.Allocations))
@@ -213,16 +214,16 @@ func updatesDeploymentToRemoveAllocation(ctx context.Context, spName string, cou
 	selected := allocs[0]
 
 	alloc, err := types.ParseManifestKey(selected, ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	ensemble, err := tc.EnsembleFile()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	assert.Less(t, count, len(allocs))
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, cpInfo)
 
 	var nodeName string
@@ -236,18 +237,18 @@ func updatesDeploymentToRemoveAllocation(ctx context.Context, spName string, cou
 
 	// remove top-level allocations definition
 	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.allocations.%s)", alloc.AllocationName), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// remove allocation mapping inside node
 	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s.allocations[] | select(. == \"%s\"))", nodeName, alloc.AllocationName), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// remove port configuration
 	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s.ports[] | select(.allocation == \"%s\"))", nodeName, alloc.AllocationName), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return tc.Unwrap(), nil
 }
@@ -256,26 +257,26 @@ func updatesDeploymentToRemove(ctx context.Context, spName, cpName string) (cont
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	var matchNode string
 	for name, info := range manifest.Nodes {
@@ -285,14 +286,14 @@ func updatesDeploymentToRemove(ctx context.Context, spName, cpName string) (cont
 	}
 
 	ensemble, err := tc.EnsembleFile()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", "eval", fmt.Sprintf("del(.nodes.%s)", matchNode), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return tc.Unwrap(), nil
 }
@@ -301,42 +302,42 @@ func updatesDeploymentToRunOn(ctx context.Context, spName, cpName string) (conte
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	ensemble, err := tc.EnsembleFile()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, manifest)
 
-	nodes := slices.Sorted(maps.Keys(manifest.Nodes))
-	assert.Len(t, nodes, 1)
+	manifestNodes := slices.Sorted(maps.Keys(manifest.Nodes))
+	assert.Len(t, manifestNodes, 1)
 
-	selected := nodes[0]
+	selected := manifestNodes[0]
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.%s.peer = \"%s\"", selected, cpInfo.ID), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return tc.Unwrap(), nil
 }
@@ -345,23 +346,23 @@ func updatesDeploymentToAdd(ctx context.Context, spName, cpName string) (context
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	ensemble, err := tc.EnsembleFile()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	alloc := "new-nginx"
@@ -369,24 +370,24 @@ func updatesDeploymentToAdd(ctx context.Context, spName, cpName string) (context
 
 	// Add new allocation
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".allocations.%s = .nginx_wrapper", alloc), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Add allocation to node1
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node2.allocations = [\"%s\"]", alloc), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Add port configuration for new allocation
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node2.ports += [{\"private\": 80, \"public\": %d, \"allocation\": \"%s\"}]", port, alloc), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node2.peer = \"%s\"", cpInfo.ID), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = spDmsCtx.UpdateEnsemble(ensembleID, ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return tc.Unwrap(), nil
 }
@@ -395,32 +396,32 @@ func deploymentShouldBeOn(ctx context.Context, spName, status, cpName string) (c
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	require.Eventually(t, func() bool {
 		ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return strings.EqualFold(ensembleStatus, status)
 	}, 60*time.Second, 1*time.Second)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, manifest)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	var found bool
 	for _, node := range manifest.Nodes {
@@ -437,32 +438,32 @@ func deploymentShouldNotBeOn(ctx context.Context, spName, status, cpName string)
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
-	_, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	_, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cpDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	require.Eventually(t, func() bool {
 		ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		return strings.EqualFold(ensembleStatus, status)
 	}, 60*time.Second, 1*time.Second)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, manifest)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	var found bool
 	for _, node := range manifest.Nodes {

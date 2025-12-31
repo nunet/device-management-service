@@ -71,8 +71,9 @@ const (
 	OrchestratorNamespace = "/dms/orchestrator"
 	NodeNamespace         = "/dms/node"
 
-	AllocationStartBehavior     = "/dms/allocation/start"
-	AllocationRestartBehavior   = "/dms/allocation/restart"
+	AllocationStartBehavior     = AllocationNamespace + "/start"
+	AllocationRestartBehavior   = AllocationNamespace + "/restart"
+	AllocationStatsBehavior     = AllocationNamespace + "/stats"
 	RegisterHealthcheckBehavior = "/dms/actor/healthcheck/register"
 
 	SubnetAddPeerBehavior          = AllocationNamespace + "/subnet/add-peer"
@@ -85,10 +86,15 @@ const (
 
 	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
 
+	// Push-based liveness and status reporting
+	// Allocations invoke these on the orchestrator to report their state
+	NotifyAllocationLivenessBehavior = OrchestratorNamespace + "/allocation/liveness"
+	NotifyAllocationStatusBehavior   = OrchestratorNamespace + "/allocation/status"
+
 	TokenomicNamespace           = "/dms/tokenomics"
 	ContractCreateBehavior       = TokenomicNamespace + "/contract/create"
 	ContractApproveLocalBehavior = TokenomicNamespace + "/contract/approve_local"
-	ContractListIncomingBehavior = TokenomicNamespace + "/contract/list_incoming"
+	ContractListBehavior         = TokenomicNamespace + "/contract/list"
 	ContractProposeBehavior      = TokenomicNamespace + "/contract/propose"
 
 	// ContractUsagesCalculateBehavior can be invoked on the contract host
@@ -118,6 +124,11 @@ const (
 	ContractTransactionBehavior             = TokenomicNamespace + "/contract/transaction"
 	ContractListLocalTransactionsBehavior   = TokenomicNamespace + "/contract/transactions/list"
 	ContractConfirmLocalTransactionBehavior = TokenomicNamespace + "/contract/transactions/confirm"
+
+	PromiseBidToBidBehavior   = "/dms/deployment/promisebid"
+	PromiseBidSigningBehavior = "/dms/deployment/promisebid/sign"
+
+	DebugFlightrecBehavior = "/dms/debug/flightrec"
 )
 
 var (

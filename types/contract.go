@@ -13,3 +13,10 @@ type ContractConfig struct {
 	DID  string `json:"did"` // DID of the contract
 	Host string `json:"host"`
 }
+
+type PaymentAddressInfo struct {
+	Blockchain    string `json:"blockchain"` // ETHEREUM, CARDANO etc..
+	Currency      string `json:"currency"`
+	RequesterAddr string `json:"requester_addr"`
+	ProviderAddr  string `json:"provider_addr"`
+}

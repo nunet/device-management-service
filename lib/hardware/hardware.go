@@ -20,12 +20,15 @@ import (
 // defaultHardwareManager manages the machine's hardware resources.
 type defaultHardwareManager struct {
 	gpuManager types.GPUManager
+	cpuMonitor *cpu.Monitor
 }
 
 // NewHardwareManager creates a new instance of defaultHardwareManager.
 func NewHardwareManager() types.HardwareManager {
+	// init cpu monitoring
 	return &defaultHardwareManager{
 		gpuManager: gpu.NewGPUManager(),
+		cpuMonitor: cpu.NewCPUMonitor(),
 	}
 }
 
@@ -67,14 +70,14 @@ func (m *defaultHardwareManager) GetMachineResources() (types.MachineResources, 
 
 // GetUsage returns the usage of the machine.
 func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
-	cpuDetails, err := cpu.GetUsage()
+	avgCPUUsage, err := m.cpuMonitor.GetAvgCPUUsage()
 	if err != nil {
 		return types.Resources{}, fmt.Errorf("get CPU usage: %w", err)
 	}
 	// Log CPU usage with "accounting" and "metric" labels
 	log.Debugw("cpu_usage_computed",
 		"labels", string(observability.LabelAccounting),
-		"usage", cpuDetails)
+		"usage", avgCPUUsage)
 
 	ram, err := GetRAMUsage()
 	if err != nil {
@@ -108,7 +111,7 @@ func (m *defaultHardwareManager) GetUsage() (types.Resources, error) {
 	}
 
 	return types.Resources{
-		CPU:  cpuDetails,
+		CPU:  avgCPUUsage,
 		RAM:  ram,
 		Disk: diskDetails,
 		GPUs: gpus,
@@ -127,7 +130,8 @@ func (m *defaultHardwareManager) GetFreeResources() (types.Resources, error) {
 		return types.Resources{}, fmt.Errorf("get machine resources: %w", err)
 	}
 
-	log.Debugf("system resource usage: %+v\nsystem resource available: %+v", usage, availableResources)
+	log.Debugw("resources_available", "labels", string(observability.LabelNode), "resources", availableResources)
+	log.Debugw("resources_used", "labels", string(observability.LabelNode), "resources", usage)
 
 	if err := availableResources.Subtract(usage); err != nil {
 		return types.Resources{}, fmt.Errorf("no free resources: %w", err)
@@ -157,6 +161,9 @@ func (m *defaultHardwareManager) Shutdown() error {
 	if err := m.gpuManager.Shutdown(); err != nil {
 		return fmt.Errorf("shutdown gpu manager: %w", err)
 	}
+
+	// shutdown cpu monitor
+	m.cpuMonitor.Stop()
 
 	return nil
 }

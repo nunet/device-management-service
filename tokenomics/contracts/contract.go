@@ -21,7 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-type CreateContractRequestBehaviour struct {
+type CreateContractRequest struct {
 	SolutionEnablerDID    did.DID              `json:"solution_enabler_did"`
 	PaymentValidatorDID   did.DID              `json:"payment_validator_did"`
 	ResourceConfiguration types.Resources      `json:"resource_configuration"`
@@ -43,9 +43,93 @@ type ContractPaymentStatusResponse struct {
 	Error    string `json:"error"`
 }
 
+type CollectUsagesAndForwardToPaymentProvidersRequest struct {
+	ContractDID string `json:"contract_did,omitempty"` // If empty, processes all contracts
+}
+
+// AllocationTimeUtilization represents time utilization for a single allocation
+type AllocationTimeUtilization struct {
+	AllocationID string        `json:"allocation_id"`
+	Duration     time.Duration `json:"duration"` // Total time the allocation ran
+	StartTime    time.Time     `json:"start_time"`
+	EndTime      time.Time     `json:"end_time,omitempty"` // Empty if still running
+}
+
+// DeploymentTimeUtilization represents time utilization for a deployment
+type DeploymentTimeUtilization struct {
+	DeploymentID        string                      `json:"deployment_id"`
+	Allocations         []AllocationTimeUtilization `json:"allocations"`
+	TotalUtilizationSec float64                     `json:"total_utilization_sec"` // Total seconds across all allocations
+}
+
+// TimeUtilizationUsage represents usage data for pay_per_time_utilization model
+type TimeUtilizationUsage struct {
+	Deployments []DeploymentTimeUtilization `json:"deployments"`
+}
+
+// AllocationResourceUtilization represents resource utilization for a single allocation
+type AllocationResourceUtilization struct {
+	AllocationID string          `json:"allocation_id"`
+	Resources    types.Resources `json:"resources"` // CPU cores, RAM GB, Disk GB, GPU count
+	Duration     time.Duration   `json:"duration"`  // How long allocation ran
+	StartTime    time.Time       `json:"start_time"`
+	EndTime      time.Time       `json:"end_time,omitempty"`
+	// Calculated costs (for invoice details)
+	CPUCost   string `json:"cpu_cost,omitempty"`
+	RAMCost   string `json:"ram_cost,omitempty"`
+	DiskCost  string `json:"disk_cost,omitempty"`
+	GPUCost   string `json:"gpu_cost,omitempty"`
+	TotalCost string `json:"total_cost,omitempty"`
+}
+
+// DeploymentResourceUtilization tracks all allocations in a deployment
+type DeploymentResourceUtilization struct {
+	DeploymentID        string                          `json:"deployment_id"`
+	Allocations         []AllocationResourceUtilization `json:"allocations"`
+	TotalUtilizationSec float64                         `json:"total_utilization_sec"`
+	TotalCost           string                          `json:"total_cost,omitempty"`
+}
+
+// ResourceUtilizationUsage represents resource utilization data
+type ResourceUtilizationUsage struct {
+	Deployments []DeploymentResourceUtilization `json:"deployments"`
+}
+
+// FixedRentalUsage represents usage data for fixed_rental payment model
+type FixedRentalUsage struct {
+	PeriodsInvoiced int       `json:"periods_invoiced"` // Number of full periods invoiced
+	PeriodStart     time.Time `json:"period_start"`     // Start of the first period in this invoice
+	PeriodEnd       time.Time `json:"period_end"`       // End of the last period in this invoice
+	Amount          string    `json:"amount"`           // Total amount for this invoice
+	LastInvoiceAt   time.Time `json:"last_invoice_at"`  // Timestamp of last invoice (before this one)
+}
+
+// PeriodicUsage represents usage data for periodic payment model
+type PeriodicUsage struct {
+	PeriodStart     time.Time                   `json:"period_start"`     // Start of billing period
+	PeriodEnd       time.Time                   `json:"period_end"`       // End of billing period
+	LastInvoiceAt   time.Time                   `json:"last_invoice_at"`  // Timestamp of last invoice
+	Deployments     []DeploymentTimeUtilization `json:"deployments"`      // Deployment runtime data
+	TotalTimeSec    float64                     `json:"total_time_sec"`   // Total deployment time in seconds
+	Amount          string                      `json:"amount"`           // Calculated amount
+	PeriodsInvoiced int                         `json:"periods_invoiced"` // Number of periods covered
+}
+
+type ContractUsageResult struct {
+	ContractDID         string                    `json:"contract_did"`
+	PaymentModel        PaymentModel              `json:"payment_model"`
+	Usages              int                       `json:"usages"` // For backward compatibility
+	Error               string                    `json:"error,omitempty"`
+	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
+	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
+	FixedRentalDetails  *FixedRentalUsage         `json:"fixed_rental_details,omitempty"` // For fixed_rental
+	PeriodicDetails     *PeriodicUsage            `json:"periodic_details,omitempty"`     // For periodic
+}
+
 type CollectUsagesAndForwardToPaymentProvidersReponse struct {
-	Error       string `json:"error"`
-	TotalUsages int    `json:"total_usages"`
+	Error       string                `json:"error"`
+	TotalUsages int                   `json:"total_usages"`
+	Results     []ContractUsageResult `json:"results,omitempty"` // Per-contract results
 }
 
 type ContractListLocalTransactionsRequest struct{}
@@ -56,8 +140,9 @@ type ContractListLocalTransactionsResponse struct {
 }
 
 type ContractConfirmLocalTransactionRequest struct {
-	UniqueID string `json:"unique_id"`
-	TxHash   string `json:"tx_hash"`
+	UniqueID   string `json:"unique_id"`
+	TxHash     string `json:"tx_hash"`
+	Blockchain string `json:"blockchain"`
 }
 
 type ContractConfirmLocalTransactionResponse struct {
@@ -65,62 +150,80 @@ type ContractConfirmLocalTransactionResponse struct {
 }
 
 type TransactionForServiceProviderRequest struct {
-	UniqueID            string `json:"unique_id"`
-	PaymentValidatorDID string `json:"payment_validator_did"`
-	ContractDID         string `json:"contract_did"`
-	ToAddress           string `json:"to_address"`
-	Amount              string `json:"amount"`
+	UniqueID            string                     `json:"unique_id"`
+	PaymentValidatorDID string                     `json:"payment_validator_did"`
+	ContractDID         string                     `json:"contract_did"`
+	ToAddress           []types.PaymentAddressInfo `json:"to_address"`
+	Amount              string                     `json:"amount"`
+	Status              string                     `json:"status,omitempty"`  // optional status, defaults to "unpaid" if empty
+	TxHash              string                     `json:"tx_hash,omitempty"` // optional transaction hash
 }
 
 type TransactionForServiceProviderResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractUsageRequestBehavior struct {
-	UniqueID string   `json:"unique_id"`
-	Contract Contract `json:"contract"`
-	Usages   int      `json:"usages"`
+type ContractUsageRequest struct {
+	UniqueID            string                    `json:"unique_id"`
+	Contract            Contract                  `json:"contract"`
+	Usages              int                       `json:"usages"`                         // For backward compatibility
+	TimeUtilization     *TimeUtilizationUsage     `json:"time_utilization,omitempty"`     // For pay_per_time_utilization
+	ResourceUtilization *ResourceUtilizationUsage `json:"resource_utilization,omitempty"` // For pay_per_resource_utilization
+	FixedRentalDetails  *FixedRentalUsage         `json:"fixed_rental_details,omitempty"` // For fixed_rental
+	PeriodicDetails     *PeriodicUsage            `json:"periodic_details,omitempty"`     // For periodic
 }
 
-type ContractUsageResponseBehavior struct {
+type ContractUsageResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractEventRequestBehaviour struct {
+type ContractEventRequest struct {
 	Payload []byte `json:"payload"`
 }
 
-type ContractEventResponseBehaviour struct {
+type ContractEventResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractPaymentValidationRequestBehavior struct {
-	TxHash   string `json:"tx_hash"`
-	UniqueID string `json:"unique_id"`
+type ContractPaymentValidationRequest struct {
+	TxHash     string `json:"tx_hash"`
+	UniqueID   string `json:"unique_id"`
+	Blockchain string `json:"blockchain"`
 }
 
-type ContractPaymentValidationResponseBehavior struct {
+type ContractPaymentValidationResponse struct {
 	Error string `json:"error"`
 }
 
-type PaymentValidateRequestBehaviour struct {
+type PaymentValidateRequest struct {
 	ContractDID string `json:"contract_did"`
 }
 
-type PaymentValidateResponseBehaviour struct {
+type PaymentValidateResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractListIncomingResponseBehaviour struct {
+type ContractListIncomingRole string
+
+const (
+	ContractRoleProvider  ContractListIncomingRole = "provider"
+	ContractRoleRequestor ContractListIncomingRole = "requestor"
+)
+
+type ContractListIncomingRequest struct {
+	Role ContractListIncomingRole `json:"role,omitempty"`
+}
+
+type ContractListIncomingResponse struct {
 	Contracts []*Contract `json:"contracts"`
 	Error     string      `json:"error,omitempty"`
 }
 
-type ContractApproveLocalRequestBehaviour struct {
+type ContractApproveLocalRequest struct {
 	ContractDID string `json:"contract_did"`
 }
 
-type ContractApproveLocalResponseBehaviour struct {
+type ContractApproveLocalResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
 }
@@ -131,61 +234,61 @@ type ContractVerificationResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-type ContractStatusRequestBehaviour struct {
+type ContractStatusRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractStatusResponseBehaviour struct {
+type ContractStatusResponse struct {
 	Error    string   `json:"error"`
 	Contract Contract `json:"contract"`
 }
 
-type CreateContractResponseBehaviour struct {
-	ContractRequest CreateContractRequestBehaviour `json:"contract_request"`
-	ContractDID     string                         `json:"contract_did"`
-	PubKey          string                         `json:"pub_key"`
-	Error           string                         `json:"error"`
+type CreateContractResponse struct {
+	ContractRequest CreateContractRequest `json:"contract_request"`
+	ContractDID     string                `json:"contract_did"`
+	PubKey          string                `json:"pub_key"`
+	Error           string                `json:"error"`
 }
 
-type ProposeContractResponseBehaviour struct {
+type ProposeContractResponse struct {
 	Signature Signature `json:"signature"`
 	Error     string    `json:"error"`
 }
 
-type ContractTerminationRequestBehaviour struct {
+type ContractTerminationRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractTerminationResponseBehaviour struct {
+type ContractTerminationResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractCompletionRequestBehaviour struct {
+type ContractCompletionRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractCompletionResponseBehaviour struct {
+type ContractCompletionResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractSettleRequestBehaviour struct {
+type ContractSettleRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractSettleResponseBehaviour struct {
+type ContractSettleResponse struct {
 	Error string `json:"error"`
 }
 
-type ContractValidateRequestBehaviour struct {
+type ContractValidateRequest struct {
 	ContractDID string `json:"contract_did"`
 }
-type ContractValidateResponseBehaviour struct {
+type ContractValidateResponse struct {
 	Valid         bool   `json:"valid"`
 	CurrentStatus string `json:"current_status"`
 	Error         string `json:"error"`
 }
 
-type ContractSignRequestBehaviour struct {
+type ContractSignRequest struct {
 	ContractDID string `json:"contract_did"`
 	Signature   []byte `json:"signature"`
 }
-type ContractSignResponseBehaviour struct {
+type ContractSignResponse struct {
 	Error    string   `json:"error"`
 	Contract Contract `json:"contract"`
 }
@@ -308,7 +411,7 @@ type Signature struct {
 	Signatures []byte  `json:"signature"` // The actual signature bytes
 }
 
-func GenerateContractID(req CreateContractRequestBehaviour) (string, error) {
+func GenerateContractID(req CreateContractRequest) (string, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return "", err
@@ -317,7 +420,22 @@ func GenerateContractID(req CreateContractRequestBehaviour) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-func NewContract(contractDID string, req CreateContractRequestBehaviour) *Contract {
+// SetPeriodicityDefaults sets default values for PaymentPeriod and PaymentPeriodCount if not provided.
+// Default: PaymentPeriod = "hour", PaymentPeriodCount = 1
+// This ensures all contracts have periodicity configured for automatic billing.
+func SetPeriodicityDefaults(pd *PaymentDetails) {
+	if pd.PaymentPeriod == "" {
+		pd.PaymentPeriod = PaymentPeriodHour
+	}
+	if pd.PaymentPeriodCount <= 0 {
+		pd.PaymentPeriodCount = 1
+	}
+}
+
+func NewContract(contractDID string, req CreateContractRequest) *Contract {
+	// Set periodicity defaults if not provided
+	SetPeriodicityDefaults(&req.PaymentDetails)
+
 	return &Contract{
 		ContractDID:           contractDID,
 		SolutionEnablerDID:    req.SolutionEnablerDID,

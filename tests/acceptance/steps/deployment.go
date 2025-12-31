@@ -33,8 +33,9 @@ func Deployment(ctx *godog.ScenarioContext) {
 		}
 		return ctx, nil
 	})
-	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		if err := hooks.SaveLogs(ctx); err != nil {
+	ctx.After(func(ctx context.Context, scenario *godog.Scenario, _ error) (context.Context, error) {
+		scenarioName := strings.ReplaceAll(scenario.Name, " ", "_")
+		if err := hooks.SaveLogs(ctx, scenarioName); err != nil {
 			return ctx, err
 		}
 		if err := hooks.CleanupNodes(); err != nil {
@@ -53,70 +54,70 @@ func hasDeployedOn(ctx context.Context, spName, ensembleName, cpName string) (co
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
-	cp, cpDmsCtx := utils.NodeWithDMS(nodeMap, cpName)
+	cp, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
 	assert.NotNil(t, cp)
 	assert.NotNil(t, cpDmsCtx)
 
 	spInfo, err := spDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, spInfo)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, cpInfo)
 
 	cpAddr, err := utils.MultiaddrFromCLI(cpInfo)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, cpAddr)
 
 	err = spDmsCtx.Connect(cpAddr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	ensemblePath := fmt.Sprintf("ensembles/%s", ensembleName)
 	file := utils.FindTestdata(ensemblePath)
 
 	ensemble, err := utils.UploadFile(sp, file)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensemble)
 
 	tc = tc.WithEnsembleFile(ensemble)
 
 	// Upload scripts listed in the ensemble file if needed
 	err = utils.UploadScripts(sp, ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node1.peer = \"%s\"", cpInfo.ID), ensemble})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	ensembleID, err := spDmsCtx.Deploy(ensemble)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	tc = tc.WithEnsembleID(ensembleID)
 	return tc.Unwrap(), nil
 }
 
-func deploymentIs(ctx context.Context, spName, status string) (context.Context, error) {
+func deploymentIs(ctx context.Context, spName, status string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	_, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	_, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	var wantStatus string
@@ -132,7 +133,7 @@ func deploymentIs(ctx context.Context, spName, status string) (context.Context, 
 
 		for range wantSeen {
 			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			if strings.EqualFold(ensembleStatus, wantStatus) {
 				seen++
 			} else {
@@ -145,32 +146,32 @@ func deploymentIs(ctx context.Context, spName, status string) (context.Context, 
 		wantStatus = status
 		require.Eventually(t, func() bool {
 			ensembleStatus, err := spDmsCtx.EnsembleStatus(ensembleID)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			return strings.EqualFold(ensembleStatus, wantStatus)
-		}, 60*time.Second, 1*time.Second)
+		}, 60*time.Second, 500*time.Millisecond)
 	}
 
-	return tc.Unwrap(), nil
+	return nil
 }
 
 func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	t := godog.T(ctx)
 	tc := utils.NewTestCtx(ctx)
 
-	nodeMap, err := tc.NodeMap()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, nodeMap)
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
 
-	sp, spDmsCtx := utils.NodeWithDMS(nodeMap, spName)
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
 	assert.NotNil(t, sp)
 	assert.NotNil(t, spDmsCtx)
 
 	ensembleID, err := tc.EnsembleID()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, ensembleID)
 
 	manifest, err := spDmsCtx.Manifest(ensembleID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, manifest)
 
 	allocs := slices.Collect(maps.Keys(manifest.Allocations))
@@ -179,13 +180,13 @@ func ensembleShouldReturn(ctx context.Context, spName, expected string) error {
 	alloc := allocs[0]
 
 	path, err := spDmsCtx.LogsFromAllocation(ensembleID, alloc)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, path)
 
 	logFile := "stdout.log"
 
 	out, err := sp.RunCMD([]string{"cat", filepath.Join(path, logFile)})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, out, expected)
 	return nil
 }

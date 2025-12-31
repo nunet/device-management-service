@@ -1,0 +1,84 @@
+@startuml Deployment with Contract Sequence Diagram
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+
+title Contract Settlement and Termination
+
+actor "Requester\n(Service Provider)" as Requester
+participant "Requester DMS" as ReqDMS
+participant "Contract Host\n(Solution Enabler)" as ContractHost
+participant "Contract Actor" as ContractActor
+database "Contract Database" as ContractDB
+actor "Provider\n(Compute Provider)" as Provider
+participant "Provider DMS" as ProvDMS
+participant "Payment Validator" as PaymentValidator
+participant "Blockchain RPC" as MockRPC
+
+group Contract Status Check
+    Requester -> ReqDMS: **ContractStatusBehavior**\nCheck contract status
+    ReqDMS -> ContractHost: Request status
+    ContractHost -> ContractActor: Get state
+    ContractActor -> ContractDB: Fetch contract
+    ContractActor --> ContractHost: State: **ACCEPTED**
+    ContractHost --> ReqDMS: Contract still active
+    ReqDMS --> Requester: Status: ACCEPTED
+end
+
+group Contract Settlement
+    Provider -> ProvDMS: **ContractSettleBehavior**\nSettle contract
+    ProvDMS -> ContractHost: Request settlement (contract DID)
+    ContractHost -> ContractActor: Process settlement
+    ContractActor -> ContractActor: Verify payment completed
+    ContractActor -> ContractActor: Transition state:\nACCEPTED → SETTLED
+    ContractActor -> ContractDB: Update contract state
+    ContractHost --> ProvDMS: Settlement confirmed
+    ProvDMS --> Provider: Contract settled
+
+    Requester -> ReqDMS: **ContractStatusBehavior**\nCheck contract status
+    ReqDMS -> ContractHost: Request status
+    ContractHost -> ContractActor: Get state
+    ContractActor --> ContractHost: State: **SETTLED**
+    ContractHost --> ReqDMS: Contract settled
+    ReqDMS --> Requester: Status: **SETTLED**
+end
+
+group Contract Termination
+    Provider -> ProvDMS: **ContractTerminationBehavior**\nTerminate contract
+    ProvDMS -> ContractHost: Request termination (contract DID)
+    ContractHost -> ContractActor: Process termination
+    ContractActor -> ContractActor: Transition state:\nSETTLED → TERMINATED
+    ContractActor -> ContractDB: Update contract state
+    ContractActor -> ContractActor: Cleanup resources
+    ContractHost --> ProvDMS: Termination confirmed
+    ProvDMS --> Provider: Contract terminated
+
+    Requester -> ReqDMS: **ContractStatusBehavior**\nCheck contract status
+    ReqDMS -> ContractHost: Request status
+    ContractHost -> ContractActor: Get state
+    ContractActor --> ContractHost: State: **TERMINATED**
+    ContractHost --> ReqDMS: Contract terminated
+    ReqDMS --> Requester: Status: **TERMINATED**
+end
+
+group Final Validation
+    Provider -> ProvDMS: **ContractValidationBehavior**\nValidate contract
+    ProvDMS -> ContractHost: Request validation
+    ContractHost -> ContractActor: Check contract
+    ContractActor -> ContractActor: Contract is terminated
+    ContractActor --> ContractHost: Valid: **false**
+    ContractHost --> ProvDMS: Contract no longer valid
+    ProvDMS --> Provider: Validation: false
+
+    note over Provider, ContractHost
+        Terminated contracts are considered invalid
+        and cannot be used for new deployments
+    end note
+end
+
+deactivate ContractActor
+
+@enduml

@@ -31,11 +31,20 @@ const (
 	DMSPassphraseEnv   = "DMS_PASSPHRASE"
 )
 
-const ledger = "ledger"
+const (
+	ledger = "ledger"
+
+	eternl = "eternl"
+)
 
 // IsLedgerContext checks if the context is a ledger context.
 func IsLedgerContext(context string) bool {
 	return strings.HasPrefix(context, ledger)
+}
+
+// IsEternlContext checks if the context is a eternl context.
+func IsEternlContext(context string) bool {
+	return strings.HasPrefix(context, eternl)
 }
 
 // GetContextKey returns the key part of the context, if it has a prefix.
@@ -147,6 +156,15 @@ func GetTrustContext(
 		}
 
 		provider, err := did.NewLedgerWalletProvider(idx)
+		if err != nil {
+			return nil, err
+		}
+
+		return did.NewTrustContextWithProvider(provider), nil
+	}
+
+	if IsEternlContext(context) {
+		provider, err := did.NewEternlWalletProvider()
 		if err != nil {
 			return nil, err
 		}

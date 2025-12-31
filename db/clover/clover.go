@@ -51,7 +51,7 @@ func NewDB(path string, collections []string) (*clover.DB, error) {
 		return nil, err
 	}
 
-	logger.Infow("clover_db_init_success", "path", path, "collections", collections)
+	logger.Debugw("clover_db_init_success", "path", path, "collections", collections)
 	return db, nil
 }
 

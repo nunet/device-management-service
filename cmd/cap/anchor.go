@@ -12,11 +12,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 )
@@ -123,11 +129,74 @@ func runAnchorCmd(_ context.Context, dmsCLI *cli.DmsCLI, opts AnchorOptions, _ c
 		}
 
 	default:
-		return fmt.Errorf("one of --provide, --root, or --require or --revoke must be specified")
+		return fmt.Errorf("one of --provide, --root, --require, or --revoke must be specified")
 	}
 
 	if err := utils.SaveCapabilityContext(dmsCLI, capCtx); err != nil {
 		return err
+	}
+
+	// Send SIGUSR1 to running DMS to reload contexts
+	if err := signalDMSReload(dmsCLI); err != nil {
+		// Log the error but don't fail - DMS might not be running (expected during initial setup)
+		fmt.Fprintf(os.Stderr, "Warning: Could not signal DMS to reload (DMS may not be running): %v\n", err)
+	} else {
+		fmt.Println("Successfully signaled DMS to reload capability contexts")
+	}
+
+	return nil
+}
+
+// signalDMSReload sends SIGUSR1 to the running DMS process
+func signalDMSReload(dmsCLI *cli.DmsCLI) error {
+	// Get DMS config to find the port
+	cfg, err := dmsCLI.Config()
+	if err != nil {
+		// If we can't load config, fall back to default port
+		cfg = &config.Config{}
+		cfg.Rest.Port = 9999
+	}
+
+	port := cfg.Rest.Port
+	if port == 0 {
+		port = 9999 // default
+	}
+
+	// Find process listening on the configured port
+	var pidBytes []byte
+
+	// Try lsof first (more widely available)
+	pidBytes, err = exec.Command("sh", "-c", fmt.Sprintf("lsof -ti :%d -sTCP:LISTEN", port)).Output()
+	if err != nil {
+		// Try ss as fallback (on systems without lsof)
+		pidBytes, err = exec.Command("sh", "-c", fmt.Sprintf("ss -tlnp | grep :%d | grep -oP 'pid=\\K[0-9]+'", port)).Output()
+		if err != nil {
+			// DMS not running - this is OK during initial setup
+			return nil
+		}
+	}
+
+	pidStr := strings.TrimSpace(string(pidBytes))
+	if pidStr == "" {
+		// No process listening - DMS not running
+		return nil
+	}
+
+	// Handle multiple PIDs (take the first one)
+	pids := strings.Split(pidStr, "\n")
+	pid, err := strconv.Atoi(pids[0])
+	if err != nil {
+		return fmt.Errorf("invalid PID: %w", err)
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("failed to find process: %w", err)
+	}
+
+	// Send SIGUSR1
+	if err := process.Signal(syscall.SIGUSR1); err != nil {
+		return fmt.Errorf("failed to send SIGUSR1 signal: %w", err)
 	}
 
 	return nil

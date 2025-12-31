@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnmarshalContract(t *testing.T) {
@@ -47,13 +48,18 @@ func TestUnmarshalContract(t *testing.T) {
         }
     ],
     "payment_details": {
-        "requester_addr": "0xe66b31678d6c16e9ebf358268a790b763c133750",
-        "provider_addr": "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
-        "currency": "NTX",
+        "addresses": [
+            {
+                "requester_addr": "0xe66b31678d6c16e9ebf358268a790b763c133750",
+                "provider_addr": "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
+                "currency": "NTX",
+                "blockchain": "ETHEREUM"
+            }
+        ],
+        "payment_model": "pay_per_allocation",
         "fees_per_allocation": "10",
         "timestamp": "0001-01-01T00:00:00Z",
-        "payment_type": "blockchain",
-        "blockchain": "ETHEREUM"
+        "payment_type": "blockchain"
     },
     "contract_terms": "Standard contract terms",
     "contract_participants": {
@@ -71,7 +77,67 @@ func TestUnmarshalContract(t *testing.T) {
 }
 `
 
-	var req CreateContractRequestBehaviour
+	var req CreateContractRequest
 	err := json.Unmarshal([]byte(data), &req)
 	assert.NoError(t, err)
+}
+
+func TestSetPeriodicityDefaults(t *testing.T) {
+	tests := []struct {
+		name                string
+		inputPeriod         string
+		inputPeriodCount    int
+		expectedPeriod      string
+		expectedPeriodCount int
+	}{
+		{
+			name:                "empty period sets default to hour",
+			inputPeriod:         "",
+			inputPeriodCount:    0,
+			expectedPeriod:      PaymentPeriodHour,
+			expectedPeriodCount: 1,
+		},
+		{
+			name:                "zero period count sets default to 1",
+			inputPeriod:         PaymentPeriodDay,
+			inputPeriodCount:    0,
+			expectedPeriod:      PaymentPeriodDay,
+			expectedPeriodCount: 1,
+		},
+		{
+			name:                "negative period count sets default to 1",
+			inputPeriod:         PaymentPeriodWeek,
+			inputPeriodCount:    -1,
+			expectedPeriod:      PaymentPeriodWeek,
+			expectedPeriodCount: 1,
+		},
+		{
+			name:                "existing values are preserved",
+			inputPeriod:         PaymentPeriodMinute,
+			inputPeriodCount:    5,
+			expectedPeriod:      PaymentPeriodMinute,
+			expectedPeriodCount: 5,
+		},
+		{
+			name:                "empty period and zero count both get defaults",
+			inputPeriod:         "",
+			inputPeriodCount:    0,
+			expectedPeriod:      PaymentPeriodHour,
+			expectedPeriodCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pd := &PaymentDetails{
+				PaymentPeriod:      tt.inputPeriod,
+				PaymentPeriodCount: tt.inputPeriodCount,
+			}
+
+			SetPeriodicityDefaults(pd)
+
+			require.Equal(t, tt.expectedPeriod, pd.PaymentPeriod, "PaymentPeriod should match expected")
+			require.Equal(t, tt.expectedPeriodCount, pd.PaymentPeriodCount, "PaymentPeriodCount should match expected")
+		})
+	}
 }

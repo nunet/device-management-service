@@ -179,6 +179,9 @@ type ActorPeersBehaviorClient interface {
 
 	// PeersScore retrieves the score of peers
 	PeerScore(ctx context.Context, opts ...Option) (node.PeerScoreResponse, error)
+
+	// Flightrec dump a flight recorder snapshot
+	Flightrec(ctx context.Context, opts ...Option) (node.PingResponse, error)
 }
 
 // ActorOnboardingBehaviorClient provides methods for onboarding
@@ -278,16 +281,16 @@ type ActorVolumeBehaviorClient interface {
 
 // ActorContractBehaviorClient provides methods for contracts
 type ActorContractBehaviorClient interface {
-	NewContract(ctx context.Context, req contracts.CreateContractRequestBehaviour, opts ...Option) (contracts.CreateContractResponseBehaviour, error)
-	ContractStatus(ctx context.Context, req contracts.ContractStatusRequestBehaviour, opts ...Option) (contracts.ContractStatusResponseBehaviour, error)
-	ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequestBehaviour, opts ...Option) (contracts.ContractApproveLocalResponseBehaviour, error)
-	ListIncoming(ctx context.Context, opts ...Option) (contracts.ContractListIncomingResponseBehaviour, error)
+	NewContract(ctx context.Context, req contracts.CreateContractRequest, opts ...Option) (contracts.CreateContractResponse, error)
+	ContractStatus(ctx context.Context, req contracts.ContractStatusRequest, opts ...Option) (contracts.ContractStatusResponse, error)
+	ApproveLocal(ctx context.Context, req contracts.ContractApproveLocalRequest, opts ...Option) (contracts.ContractApproveLocalResponse, error)
+	ListIncoming(ctx context.Context, req contracts.ContractListIncomingRequest, opts ...Option) (contracts.ContractListIncomingResponse, error)
 	ListTransactions(ctx context.Context, opts ...Option) (contracts.ContractListLocalTransactionsResponse, error)
-	CollectUsagesAndForwardToPaymentProviders(ctx context.Context, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error)
+	CollectUsagesAndForwardToPaymentProviders(ctx context.Context, req contracts.CollectUsagesAndForwardToPaymentProvidersRequest, opts ...Option) (contracts.CollectUsagesAndForwardToPaymentProvidersReponse, error)
 	ConfirmTransaction(ctx context.Context, req contracts.ContractConfirmLocalTransactionRequest, opts ...Option) (contracts.ContractConfirmLocalTransactionResponse, error)
 	GetPaymentStatus(ctx context.Context, req contracts.ContractPaymentStatusRequest, opts ...Option) (contracts.ContractPaymentStatusResponse, error)
-	TerminateContract(ctx context.Context, req contracts.ContractTerminationRequestBehaviour, opts ...Option) (contracts.ContractTerminationResponseBehaviour, error)
-	CompleteContract(ctx context.Context, req contracts.ContractCompletionRequestBehaviour, opts ...Option) (contracts.ContractCompletionResponseBehaviour, error)
-	ValidateContract(ctx context.Context, req contracts.ContractValidateRequestBehaviour, opts ...Option) (contracts.ContractValidateResponseBehaviour, error)
-	SettleContract(ctx context.Context, req contracts.ContractSettleRequestBehaviour, opts ...Option) (contracts.ContractSettleResponseBehaviour, error)
+	TerminateContract(ctx context.Context, req contracts.ContractTerminationRequest, opts ...Option) (contracts.ContractTerminationResponse, error)
+	CompleteContract(ctx context.Context, req contracts.ContractCompletionRequest, opts ...Option) (contracts.ContractCompletionResponse, error)
+	ValidateContract(ctx context.Context, req contracts.ContractValidateRequest, opts ...Option) (contracts.ContractValidateResponse, error)
+	SettleContract(ctx context.Context, req contracts.ContractSettleRequest, opts ...Option) (contracts.ContractSettleResponse, error)
 }

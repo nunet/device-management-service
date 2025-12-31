@@ -19,6 +19,7 @@ const (
 	Ed25519   = crypto.Ed25519
 	Secp256k1 = crypto.Secp256k1
 	Eth       = 127
+	Cardano   = 128
 )
 
 type (

@@ -18,8 +18,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/docker/docker/api/types"
+	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -30,6 +31,7 @@ import (
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/types"
 	"go.uber.org/multierr"
 )
 
@@ -40,11 +42,12 @@ type ClientInterface interface {
 		config *container.Config,
 		hostConfig *container.HostConfig,
 		networkingConfig *network.NetworkingConfig,
+		imagePullOpts image.PullOptions,
 		platform *v1.Platform,
 		name string,
 		pullImage bool,
 	) (string, error)
-	InspectContainer(ctx context.Context, id string) (types.ContainerJSON, error)
+	InspectContainer(ctx context.Context, id string) (dockertypes.ContainerJSON, error)
 	FollowLogs(ctx context.Context, id string) (stdout, stderr io.Reader, err error)
 	StartContainer(ctx context.Context, containerID string) error
 	WaitContainer(
@@ -62,7 +65,7 @@ type ClientInterface interface {
 	RemoveObjectsWithLabel(ctx context.Context, label string, value string) error
 	FindContainer(ctx context.Context, label string, value string) (string, error)
 	GetImage(ctx context.Context, imageName string) (image.Summary, error)
-	PullImage(ctx context.Context, imageName string) (string, error)
+	PullImage(ctx context.Context, imageName string, imagePullOpts image.PullOptions) (string, error)
 	GetOutputStream(
 		ctx context.Context,
 		containerID string,
@@ -71,6 +74,7 @@ type ClientInterface interface {
 	) (io.ReadCloser, error)
 	Exec(ctx context.Context, containerID string, cmd []string) (int, string, string, error)
 	CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error
+	ContainerStats(ctx context.Context, containerID string) (types.ExecutorStats, error)
 }
 
 // Client wraps the Docker client to provide high-level operations on Docker containers and networks.
@@ -123,6 +127,7 @@ func (c *Client) CreateContainer(
 	config *container.Config,
 	hostConfig *container.HostConfig,
 	networkingConfig *network.NetworkingConfig,
+	imagePullOpts image.PullOptions,
 	platform *v1.Platform,
 	name string,
 	pullImage bool,
@@ -133,7 +138,7 @@ func (c *Client) CreateContainer(
 		"name", name)
 
 	if pullImage {
-		_, err := c.PullImage(ctx, config.Image)
+		_, err := c.PullImage(ctx, config.Image, imagePullOpts)
 		if err != nil {
 			log.Errorw("docker_create_container_failure",
 				"labels", string(observability.LabelDeployment),
@@ -164,15 +169,12 @@ func (c *Client) CreateContainer(
 }
 
 // InspectContainer returns detailed information about a Docker container.
-func (c *Client) InspectContainer(ctx context.Context, id string) (types.ContainerJSON, error) {
-	log.Infow("docker_inspect_container_started", "containerID", id)
+func (c *Client) InspectContainer(ctx context.Context, id string) (dockertypes.ContainerJSON, error) {
 	return c.client.ContainerInspect(ctx, id)
 }
 
 // FollowLogs tails the logs of a specified container, returning separate readers for stdout and stderr.
 func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.Reader, err error) {
-	log.Infow("docker_follow_logs_started", "containerID", id)
-
 	cont, err := c.InspectContainer(ctx, id)
 	if err != nil {
 		log.Errorw("docker_follow_logs_failure", "error", err)
@@ -217,7 +219,7 @@ func (c *Client) FollowLogs(ctx context.Context, id string) (stdout, stderr io.R
 
 // StartContainer starts a specified Docker container.
 func (c *Client) StartContainer(ctx context.Context, containerID string) error {
-	log.Infow("docker_start_container_started",
+	log.Infow("docker_start_container",
 		"labels", string(observability.LabelDeployment),
 		"containerID", containerID)
 	return c.client.ContainerStart(ctx, containerID, container.StartOptions{})
@@ -228,7 +230,7 @@ func (c *Client) WaitContainer(
 	ctx context.Context,
 	containerID string,
 ) (<-chan container.WaitResponse, <-chan error) {
-	log.Infow("docker_wait_container_started", "containerID", containerID)
+	log.Infow("docker_wait_container", "containerID", containerID)
 	return c.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 }
 
@@ -256,9 +258,6 @@ func (c *Client) StopContainer(
 
 // RemoveContainer removes a Docker container, optionally forcing removal and removing associated volumes.
 func (c *Client) RemoveContainer(ctx context.Context, containerID string) error {
-	log.Infow("docker_remove_container_started",
-		"labels", string(observability.LabelDeployment),
-		"containerID", containerID)
 	return c.client.ContainerRemove(
 		ctx,
 		containerID,
@@ -268,9 +267,6 @@ func (c *Client) RemoveContainer(ctx context.Context, containerID string) error 
 
 // removeContainers removes all containers matching the specified filters.
 func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) error {
-	log.Infow("docker_remove_containers_started",
-		"labels", string(observability.LabelDeployment))
-
 	containers, err := c.client.ContainerList(
 		ctx,
 		container.ListOptions{All: true, Filters: filterz},
@@ -284,12 +280,12 @@ func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) err
 
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(containers))
-	for _, container := range containers {
+	for _, cont := range containers {
 		wg.Add(1)
-		go func(container types.Container, wg *sync.WaitGroup, errCh chan error) {
+		go func(cont dockertypes.Container, wg *sync.WaitGroup, errCh chan error) {
 			defer wg.Done()
-			errCh <- c.RemoveContainer(ctx, container.ID)
-		}(container, &wg, errCh)
+			errCh <- c.RemoveContainer(ctx, cont.ID)
+		}(cont, &wg, errCh)
 	}
 	go func() {
 		wg.Wait()
@@ -314,9 +310,6 @@ func (c *Client) removeContainers(ctx context.Context, filterz filters.Args) err
 
 // removeNetworks removes all networks matching the specified filters.
 func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error {
-	log.Infow("docker_remove_networks_started",
-		"labels", string(observability.LabelDeployment))
-
 	networks, err := c.client.NetworkList(ctx, network.ListOptions{Filters: filterz})
 	if err != nil {
 		log.Errorw("docker_remove_networks_failure",
@@ -358,10 +351,6 @@ func (c *Client) removeNetworks(ctx context.Context, filterz filters.Args) error
 
 // RemoveObjectsWithLabel removes all Docker containers and networks with a specific label.
 func (c *Client) RemoveObjectsWithLabel(ctx context.Context, label string, value string) error {
-	log.Infow("docker_remove_objects_with_label_started",
-		"labels", string(observability.LabelDeployment),
-		"label", label, "value", value)
-
 	filterz := filters.NewArgs(
 		filters.Arg("label", fmt.Sprintf("%s=%s", label, value)),
 	)
@@ -391,8 +380,6 @@ func (c *Client) GetOutputStream(
 	since string,
 	follow bool,
 ) (io.ReadCloser, error) {
-	log.Infow("docker_get_output_stream_started", "containerID", containerID)
-
 	logOptions := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
@@ -412,8 +399,6 @@ func (c *Client) GetOutputStream(
 
 // FindContainer searches for a container by label and value, returning its ID if found.
 func (c *Client) FindContainer(ctx context.Context, label string, value string) (string, error) {
-	log.Infow("docker_find_container_started", "label", label, "value", value)
-
 	containers, err := c.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		log.Errorw("docker_find_container_failure", "error", err)
@@ -427,8 +412,8 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 		}
 	}
 
-	err = fmt.Errorf("unable to find container for %s=%s", label, value)
-	log.Warnw("docker_find_container_failure", "error", err)
+	err = fmt.Errorf("container (%s=%s) not found", label, value)
+	log.Warnw("docker_container_not_found", "error", err)
 	return "", err
 }
 
@@ -473,12 +458,12 @@ func (c *Client) GetImage(ctx context.Context, imageName string) (image.Summary,
 }
 
 // PullImage pulls a Docker image from a registry.
-func (c *Client) PullImage(ctx context.Context, imageName string) (string, error) {
+func (c *Client) PullImage(ctx context.Context, imageName string, imagePullOpts image.PullOptions) (string, error) {
 	log.Infow("docker_pull_image_started",
 		"labels", string(observability.LabelDeployment),
 		"image", imageName)
 
-	out, err := c.client.ImagePull(ctx, imageName, image.PullOptions{})
+	out, err := c.client.ImagePull(ctx, imageName, imagePullOpts)
 	if err != nil {
 		log.Errorw("docker_pull_image_failure",
 			"labels", string(observability.LabelDeployment),
@@ -587,4 +572,104 @@ func (c *Client) CopyToContainer(ctx context.Context, containerID, dstPath strin
 		"containerID", containerID,
 		"dstPath", dstPath)
 	return nil
+}
+
+// ContainerStats retrieves real-time resource usage stats for a container.
+func (c *Client) ContainerStats(ctx context.Context, containerID string) (types.ExecutorStats, error) {
+	log.Infow("docker_container_stats_started",
+		"containerID", containerID)
+
+	statsResponse, err := c.client.ContainerStats(ctx, containerID, false)
+	if err != nil {
+		log.Errorw("docker_container_stats_failure",
+			"containerID", containerID,
+			"error", err)
+		return types.ExecutorStats{}, errors.Wrap(err, "failed to get container stats")
+	}
+	defer statsResponse.Body.Close()
+
+	// Decode the stats JSON from the response body
+	var dockerStats container.StatsResponse
+	if err := json.NewDecoder(statsResponse.Body).Decode(&dockerStats); err != nil {
+		log.Errorw("docker_container_stats_failure",
+			"containerID", containerID,
+			"error", err)
+		return types.ExecutorStats{}, errors.Wrap(err, "failed to decode container stats")
+	}
+
+	// Calculate CPU usage percentage
+	var cpuPercent float64
+	cpuDelta := float64(dockerStats.CPUStats.CPUUsage.TotalUsage) - float64(dockerStats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(dockerStats.CPUStats.SystemUsage) - float64(dockerStats.PreCPUStats.SystemUsage)
+	onlineCPUs := float64(dockerStats.CPUStats.OnlineCPUs)
+
+	if onlineCPUs == 0.0 {
+		onlineCPUs = float64(len(dockerStats.CPUStats.CPUUsage.PercpuUsage))
+	}
+	if systemDelta > 0.0 && cpuDelta > 0.0 {
+		cpuPercent = (cpuDelta / systemDelta) * onlineCPUs * 100.0
+	}
+
+	// Calculate memory usage percentage
+	var memoryPercent float64
+	if dockerStats.MemoryStats.Limit > 0 {
+		memoryPercent = (float64(dockerStats.MemoryStats.Usage) / float64(dockerStats.MemoryStats.Limit)) * 100.0
+	}
+
+	// Aggregate network statistics from all interfaces
+	var rxBytes, rxPackets, rxErrors, rxDropped uint64
+	var txBytes, txPackets, txErrors, txDropped uint64
+	for _, network := range dockerStats.Networks {
+		rxBytes += network.RxBytes
+		rxPackets += network.RxPackets
+		rxErrors += network.RxErrors
+		rxDropped += network.RxDropped
+		txBytes += network.TxBytes
+		txPackets += network.TxPackets
+		txErrors += network.TxErrors
+		txDropped += network.TxDropped
+	}
+
+	// Aggregate block I/O statistics
+	var readBytes, writeBytes uint64
+	for _, blkio := range dockerStats.BlkioStats.IoServiceBytesRecursive {
+		switch blkio.Op {
+		case "Read":
+			readBytes += blkio.Value
+		case "Write":
+			writeBytes += blkio.Value
+		}
+	}
+
+	result := types.ExecutorStats{}
+	result.CPUUsage.TotalUsage = dockerStats.CPUStats.CPUUsage.TotalUsage
+	result.CPUUsage.UsageInKernelmode = dockerStats.CPUStats.CPUUsage.UsageInKernelmode
+	result.CPUUsage.UsageInUsermode = dockerStats.CPUStats.CPUUsage.UsageInUsermode
+	result.CPUUsage.Percent = cpuPercent
+
+	result.Memory.Usage = dockerStats.MemoryStats.Usage
+	result.Memory.MaxUsage = dockerStats.MemoryStats.MaxUsage
+	result.Memory.Limit = dockerStats.MemoryStats.Limit
+	result.Memory.Percent = memoryPercent
+
+	result.Network.RxBytes = rxBytes
+	result.Network.RxPackets = rxPackets
+	result.Network.RxErrors = rxErrors
+	result.Network.RxDropped = rxDropped
+	result.Network.TxBytes = txBytes
+	result.Network.TxPackets = txPackets
+	result.Network.TxErrors = txErrors
+	result.Network.TxDropped = txDropped
+
+	result.BlockIO.ReadBytes = readBytes
+	result.BlockIO.WriteBytes = writeBytes
+
+	result.Timestamp = time.Now().UnixMilli()
+
+	log.Infow("docker_container_stats_success",
+		"containerID", containerID,
+		"cpuPercent", cpuPercent,
+		"memoryPercent", memoryPercent)
+
+	return result, nil
 }

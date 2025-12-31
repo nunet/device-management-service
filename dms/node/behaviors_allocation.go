@@ -175,6 +175,7 @@ func (n *Node) createAllocation(
 	allocType jobtypes.AllocationType,
 	job jobs.Job, supervisor actor.Handle,
 	contracts map[string]types.ContractConfig,
+	deploymentID string,
 ) (*jobs.Allocation, error) {
 	if contracts == nil {
 		contracts = make(map[string]types.ContractConfig)
@@ -196,6 +197,7 @@ func (n *Node) createAllocation(
 		job, executor,
 		contracts,
 		n.contractEventHandler,
+		deploymentID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("allocate: %w", err)
@@ -203,9 +205,9 @@ func (n *Node) createAllocation(
 
 	for _, v := range contracts {
 		evt := events.CreateAllocation{
-			Type:         events.CreateAllocationEvent,
-			Resources:    job.Resources,
-			AllocationID: allocationID,
+			EventBase:      events.EventBase{Type: events.CreateAllocationEvent},
+			Resources:      job.Resources,
+			AllocationBase: events.AllocationBase{AllocationID: allocationID, DeploymentID: deploymentID, ComputeProviderDID: n.actor.Handle().DID.URI},
 		}
 		n.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -246,6 +248,7 @@ func (n *Node) createAllocations(
 			},
 			supervisor,
 			allocationConfig.Contracts,
+			ensembleID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create allocation %s: %w", allocationID, err)
@@ -275,7 +278,7 @@ func (n *Node) createAllocations(
 			ticker := time.NewTicker(grantAllocationCapsFreq)
 			defer ticker.Stop()
 
-			for allocation.Status(context.TODO()).Status != jobs.AllocationStopped {
+			for allocation.Status().Status != jobs.AllocationStopped {
 				select {
 				case <-n.ctx.Done():
 					return

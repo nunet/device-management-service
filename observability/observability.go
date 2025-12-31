@@ -122,13 +122,13 @@ func initLogger(observabilityConfig config.Observability) error {
 
 	// 1. Check if DMS_OBSERVE_LEVEL and GOLOG_LOG_LEVEL is set. If so, let that override any config-based level
 	if envLogLevel := os.Getenv("DMS_OBSERVE_LEVEL"); envLogLevel != "" {
-		observabilityConfig.LogLevel = envLogLevel
+		observabilityConfig.Logging.Level = envLogLevel
 	} else if envLogLevel := os.Getenv("GOLOG_LOG_LEVEL"); envLogLevel != "" {
-		observabilityConfig.LogLevel = envLogLevel
+		observabilityConfig.Logging.Level = envLogLevel
 	}
 
 	// 2. Parse the final log level string
-	logLevel, err := parseLogLevel(observabilityConfig.LogLevel)
+	logLevel, err := parseLogLevel(observabilityConfig.Logging.Level)
 	if err != nil {
 		return fmt.Errorf("invalid log level: %w", err)
 	}
@@ -145,10 +145,10 @@ func initLogger(observabilityConfig config.Observability) error {
 	fileCore := createFileCore(observabilityConfig, atomicLevel)
 
 	var esCore zapcore.Core
-	if observabilityConfig.ElasticsearchEnabled && !isESDisabled() {
+	if observabilityConfig.Elastic.Enabled && !isESDisabled() {
 		esCore, err = createElasticsearchCore(observabilityConfig, atomicLevel)
 		if err != nil {
-			log.Warn("Unable to create Elasticsearch logger (will disable ES logging).", zap.Error(err))
+			log.Errorw("elasticsearch_failed", "error", err)
 			disableES()
 			esCore = nil
 		}
@@ -222,10 +222,10 @@ func createFileCore(observabilityConfig config.Observability, levelEnabler zapco
 
 	fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
 	fileWS := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   observabilityConfig.LogFile,
-		MaxSize:    observabilityConfig.MaxSize,    // in MB
-		MaxBackups: observabilityConfig.MaxBackups, // number of backups
-		MaxAge:     observabilityConfig.MaxAge,     // in days
+		Filename:   observabilityConfig.Logging.File,
+		MaxSize:    observabilityConfig.Logging.Rotation.MaxSizeMB,  // in MB
+		MaxBackups: observabilityConfig.Logging.Rotation.MaxBackups, // number of backups
+		MaxAge:     observabilityConfig.Logging.Rotation.MaxAgeDays, // in days
 		Compress:   true,
 	})
 
@@ -235,23 +235,23 @@ func createFileCore(observabilityConfig config.Observability, levelEnabler zapco
 // createElasticsearchCore creates an Elasticsearch logging core with "preflight" fallback
 func createElasticsearchCore(observabilityConfig config.Observability, levelEnabler zapcore.LevelEnabler) (zapcore.Core, error) {
 	// Basic validations
-	if observabilityConfig.ElasticsearchURL == "" {
+	if observabilityConfig.Elastic.URL == "" {
 		return nil, fmt.Errorf("elasticsearch URL is not configured")
 	}
-	if observabilityConfig.ElasticsearchIndex == "" {
+	if observabilityConfig.Elastic.Index == "" {
 		return nil, fmt.Errorf("elasticsearch index is not configured")
 	}
-	if observabilityConfig.ElasticsearchAPIKey == "" {
+	if observabilityConfig.Elastic.APIKey == "" {
 		return nil, fmt.Errorf("elasticsearch API key is not configured")
 	}
 
 	// Attempt to build the WriteSyncer
 	esWS, err := newElasticsearchWriteSyncer(
-		observabilityConfig.ElasticsearchURL,
-		observabilityConfig.ElasticsearchIndex,
-		time.Duration(observabilityConfig.FlushInterval)*time.Second,
-		observabilityConfig.ElasticsearchAPIKey,
-		observabilityConfig.InsecureSkipVerify,
+		observabilityConfig.Elastic.URL,
+		observabilityConfig.Elastic.Index,
+		time.Duration(observabilityConfig.Elastic.FlushInterval)*time.Second,
+		observabilityConfig.Elastic.APIKey,
+		observabilityConfig.Elastic.InsecureSkipVerify,
 	)
 	if err != nil {
 		return nil, err
@@ -541,7 +541,7 @@ func (b *bufferedElasticsearchSyncer) setFlushInterval(interval time.Duration) {
 // SetElasticsearchEndpoint updates the Elasticsearch URL and reinitializes the logger.
 func SetElasticsearchEndpoint(url string) error {
 	mutex.Lock()
-	ObservabilityCfg.ElasticsearchURL = url
+	ObservabilityCfg.Elastic.URL = url
 	mutex.Unlock()
 
 	err := initLogger(ObservabilityCfg)
@@ -634,7 +634,7 @@ func SetLogLevel(level string) error {
 		return fmt.Errorf("invalid log level: %w", err)
 	}
 
-	ObservabilityCfg.LogLevel = level
+	ObservabilityCfg.Logging.Level = level
 	atomicLevel.SetLevel(logLevel)
 
 	return nil
@@ -643,7 +643,7 @@ func SetLogLevel(level string) error {
 // SetFlushInterval sets the flush interval for Elasticsearch logging dynamically
 func SetFlushInterval(seconds int) error {
 	mutex.Lock()
-	ObservabilityCfg.FlushInterval = seconds
+	ObservabilityCfg.Elastic.FlushInterval = seconds
 	localEsSyncer := esSyncerInstance
 	mutex.Unlock()
 
@@ -708,7 +708,7 @@ func SetNoOpMode(enabled bool) {
 		// If in no-op mode, set the log level to a very high threshold
 		atomicLevel.SetLevel(zapcore.Level(100))
 	} else {
-		logLevel, err := parseLogLevel(ObservabilityCfg.LogLevel)
+		logLevel, err := parseLogLevel(ObservabilityCfg.Logging.Level)
 		if err != nil {
 			logLevel = zapcore.InfoLevel
 		}
@@ -727,7 +727,7 @@ func IsNoOpMode() bool {
 // SetAPIKey updates the API key for both Elasticsearch and APM.
 func SetAPIKey(apiKey string) error {
 	mutex.Lock()
-	ObservabilityCfg.ElasticsearchAPIKey = apiKey
+	ObservabilityCfg.Elastic.APIKey = apiKey
 	ApmCfg.APIKey = apiKey
 	mutex.Unlock()
 
@@ -765,7 +765,7 @@ func SetAPMURL(url string) error {
 // EnableElasticsearchLogging enables or disables Elasticsearch logging dynamically.
 func EnableElasticsearchLogging(enabled bool) error {
 	mutex.Lock()
-	ObservabilityCfg.ElasticsearchEnabled = enabled
+	ObservabilityCfg.Elastic.Enabled = enabled
 	mutex.Unlock()
 
 	// Attempt reinit

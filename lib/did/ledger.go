@@ -127,6 +127,10 @@ func (p *LedgerWalletProvider) DID() DID {
 	return p.did
 }
 
+func (p *LedgerWalletProvider) Signer() Signer {
+	return LedgerSigner
+}
+
 func (p *LedgerWalletProvider) Sign(data []byte) ([]byte, error) {
 	tmp, err := getLedgerTmpFile()
 	if err != nil {

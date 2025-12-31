@@ -27,6 +27,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/yosida95/uritemplate/v3"
+	"gitlab.com/nunet/device-management-service/observability"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -69,7 +70,8 @@ type subnet struct {
 		conns map[string]*connectip.Conn // key: IP string
 	}
 
-	portMapping map[string]*struct {
+	portMappingMx sync.Mutex
+	portMapping   map[string]*struct {
 		destPort string
 		destIP   string
 		srcIP    string
@@ -192,7 +194,20 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 
 	s.info.rtable.Clear()
 
-	for sourcePort, mapping := range s.portMapping {
+	// Create snapshot of port mappings to avoid holding lock during cleanup
+	s.portMappingMx.Lock()
+	mappingsSnapshot := make(map[string]*struct {
+		destPort string
+		destIP   string
+		srcIP    string
+	})
+	for k, v := range s.portMapping {
+		mappingsSnapshot[k] = v
+	}
+	s.portMappingMx.Unlock()
+
+	// Now iterate over snapshot
+	for sourcePort, mapping := range mappingsSnapshot {
 		err := l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
 		if err != nil {
 			log.Errorf("failed to unmap port %s: %v", sourcePort, err)
@@ -460,6 +475,9 @@ func (l *Libp2p) startIPProxy() error {
 
 		addr := netip.MustParseAddr(srcIP)
 		route := netip.MustParsePrefix(subnet.info.cidr.String())
+
+		// XXX bad hack - recreating template with correct host so it never fails (dial ip could change if behind nat)
+		template = uritemplate.MustNew(fmt.Sprintf("http://%s/vpn", r.Host))
 		req, err := connectip.ParseRequest(r, template)
 		if err != nil {
 			log.Errorf("failed to parse request: %v", err)
@@ -630,7 +648,7 @@ func (l *Libp2p) handleIPProxyConn(
 }
 
 func (l *Libp2p) stopIPProxy() {
-	log.Infof("stopping ip proxy")
+	log.Infow("stopping ip proxy")
 
 	l.ipproxyCtxCancel()
 	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -847,38 +865,41 @@ func (s *subnet) readPackets(ctx context.Context, iface sys.NetInterface) {
 					log.Debugf("tun device closed, abandoning read loop... (err=%s, subnet=%s)", err, s.info.id)
 					return
 				} else if err != nil {
+					// TODO Errorw
 					log.Debugf("(error): failed to read packet from tun device: %s (subnet=%s)", err, s.info.id)
 					continue
 				}
 
 				if plen == 0 {
-					log.Debugf("(error): received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
+					log.Warnw("(error): received zero-length packet from tun device (subnet=%s, iface=%s)", s.info.id, iface.Name())
 					continue
 				}
 
 				if plen > MaxPacketSize {
-					log.Warnf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
+					log.Debugf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
 					plen = MaxPacketSize
 				}
 
 				srcPort, destPort, srcIP, destIP, err := s.parseIPPacket(packet)
 				if err != nil {
-					log.Warnf("(error): failed to parse IP packet: %s", err)
+					log.Debugf("(error): failed to parse IP packet: %s", err)
 					continue
 				}
 
-				log.Debugf(
-					"read packet from tun device (tun=%s, subnet=%s, destIP=%s, destPort=%s, srcIP=%s, srcPort=%s)",
-					iface.Name(),
-					s.info.id,
-					destIP,
-					destPort,
-					srcIP,
-					srcPort,
+				log.Debugw(
+					"read packet from tun device",
+					"labels", string(observability.LabelNode),
+					"tun", iface.Name(),
+					"subnet", s.info.id,
+					"destIP", destIP,
+					"destPort", destPort,
+					"srcIP", srcIP,
+					"srcPort", srcPort,
 				)
 
 				// Fix DNS filtering logic - only handle DNS queries, route everything else
 				if destPort == 53 {
+					// TODO Debugw
 					log.Debugf(
 						"handling DNS query (tun=%s, subnet=%s, destIP=%s, destPort=%s, srcIP=%s, srcPort=%s)",
 						iface.Name(),
@@ -930,7 +951,7 @@ func (s *subnet) parseIPPacket(rawPacket []byte) (srcPort int, destPort int, src
 		destPort = int(tcp.DstPort)
 	}
 
-	return
+	return srcPort, destPort, srcIP, destIP, err
 }
 
 func (s *subnet) dialIPProxy(

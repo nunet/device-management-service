@@ -28,13 +28,29 @@
         }
     ],
     "payment_details": {
-        "requester_addr": "{{requesterAddr}}",
-        "provider_addr": "{{providerAddr}}",
-        "currency": "NTX",
+        "payment_model": "{{payment_model}}",
+        "addresses": [
+            {
+                "requester_addr": "{{requesterAddr}}",
+                "provider_addr": "{{providerAddr}}",
+                "currency": "NTX",
+                "blockchain": "ETHEREUM"
+            }
+        ],
         "fees_per_allocation": "{{amount}}",
+        "fee_per_deployment": "{{fee_per_deployment}}",
+        "fee_per_time_unit": "{{fee_per_time_unit}}",
+        "time_unit": "{{time_unit}}",
+        "fee_per_cpu_core_per_time_unit": "{{fee_per_cpu_core_per_time_unit}}",
+        "fee_per_ram_gb_per_time_unit": "{{fee_per_ram_gb_per_time_unit}}",
+        "fee_per_disk_gb_per_time_unit": "{{fee_per_disk_gb_per_time_unit}}",
+        "fee_per_gpu_per_time_unit": "{{fee_per_gpu_per_time_unit}}",
+        "resource_time_unit": "{{resource_time_unit}}",
+        "fixed_rental_amount": "{{fixed_rental_amount}}",
+        "payment_period": "{{payment_period}}",
+        "payment_period_count": {{payment_period_count}},
         "timestamp": "0001-01-01T00:00:00Z",
-        "payment_type": "blockchain",
-        "blockchain": "ETHEREUM"
+        "payment_type": "blockchain"
     },
     "contract_terms": "Standard contract terms",
     "contract_participants": {
@@ -46,7 +62,7 @@
         }
     },
     "duration": {
-        "start_date": "2024-07-12T18:14:06.993552133+03:00",
-        "end_date": "2028-07-12T18:14:06.99355218+03:00"
+        "start_date": "{{start_date}}",
+        "end_date": "{{end_date}}"
     }
 }

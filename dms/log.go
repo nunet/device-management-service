@@ -56,6 +56,9 @@ func silenceConnLogs() error {
 	err = logging.SetLogLevel("autonat", "panic")
 	errs = multierr.Append(errs, err)
 
+	err = logging.SetLogLevel("autonatv2", "panic")
+	errs = multierr.Append(errs, err)
+
 	err = logging.SetLogLevel("upgrader", "panic")
 	errs = multierr.Append(errs, err)
 

@@ -20,6 +20,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -30,10 +31,12 @@ type Registry interface {
 		ctx context.Context, fs afero.Afero, workDir string,
 		id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
 		nodeIDGenerator types.NodeIDGenerator, allocationIDGenerator types.AllocationIDGenerator,
+		contractEventHandler *eventhandler.EventHandler,
+		contracts map[string]types.ContractConfig,
 	) (Orchestrator, error)
 	// RestoreDeployment restores deployments where the status is either provisioning, committing or running
 	RestoreDeployment(
-		ctx context.Context,
+		ctx context.Context, fs afero.Afero,
 		actr actor.Actor, id string, cfg jtypes.EnsembleConfig,
 		manifest jtypes.EnsembleManifest, status jtypes.DeploymentStatus,
 		restoreInfo jtypes.DeploymentSnapshot,
@@ -83,6 +86,8 @@ func (f *basicRegistry) NewOrchestrator(
 	ctx context.Context, fs afero.Afero, workDir string,
 	id string, actor actor.Actor, cfg jtypes.EnsembleConfig,
 	nodeIDGenerator types.NodeIDGenerator, allocationIDGenerator types.AllocationIDGenerator,
+	contractEventHandler *eventhandler.EventHandler,
+	contracts map[string]types.ContractConfig,
 ) (Orchestrator, error) {
 	// check if orchestrator already exists in store
 	if _, err := f.store.Get(id); err == nil {
@@ -90,7 +95,7 @@ func (f *basicRegistry) NewOrchestrator(
 	}
 
 	// NewOrchestrator creates a new orchestrator with a new context
-	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg, nodeIDGenerator, allocationIDGenerator)
+	o, err := NewOrchestrator(ctx, fs, workDir, id, actor, cfg, nodeIDGenerator, allocationIDGenerator, contractEventHandler, contracts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
 	}
@@ -126,7 +131,7 @@ func (f *basicRegistry) saveDeploymentOnStatusChange(ctx context.Context, o Orch
 					continue
 				}
 				prevStatus = status
-				log.Debugw("status changed, saving deployment...",
+				log.Infow("status changed, saving deployment...",
 					"labels", []string{string(observability.LabelDeployment)},
 					"orchestratorID", o.ID(),
 					"status", o.Status().String(),
@@ -143,6 +148,7 @@ func (f *basicRegistry) saveDeploymentOnStatusChange(ctx context.Context, o Orch
 // TODO: restore subnetManifest if necessary
 func (f *basicRegistry) restoreDeployment(
 	ctx context.Context,
+	fs afero.Afero,
 	actr actor.Actor, id string,
 	cfg jtypes.EnsembleConfig, manifest jtypes.EnsembleManifest,
 	status jtypes.DeploymentStatus, restoreInfo jtypes.DeploymentSnapshot,
@@ -154,6 +160,7 @@ func (f *basicRegistry) restoreDeployment(
 
 	o := &BasicOrchestrator{
 		id:                    id,
+		fs:                    fs,
 		actor:                 actr,
 		cfg:                   cfg,
 		status:                status,
@@ -161,10 +168,16 @@ func (f *basicRegistry) restoreDeployment(
 		supervisor:            NewSupervisor(ctx, actr, id),
 		manifest:              manifest,
 		subnetManifest:        subnetManifest,
+		allocs:                make(map[string]jtypes.AllocationInfo),
 		ctx:                   ctx,
 		cancel:                cancel,
 		statusSubscribers:     make(map[chan jtypes.DeploymentStatus]struct{}),
 		allocationIDGenerator: allocationIDGenerator,
+	}
+
+	err := o.RegisterBehaviors()
+	if err != nil {
+		return nil, fmt.Errorf("failed to register orchestrator behaviors: %w", err)
 	}
 
 	// TODO: manifest.Empty()
@@ -299,6 +312,14 @@ func (f *basicRegistry) restoreDeployment(
 	}
 
 	if o.status == jtypes.DeploymentStatusRunning {
+		// grant allocs still running
+		for _, a := range o.Manifest().Allocations {
+			err := o.grantOrchestratorCaps(a.Handle.DID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to grant orchestrator capabilities during restoration: %w", err)
+			}
+		}
+
 		// save deployment on status change, use the orchestrator's context
 		f.saveDeploymentOnStatusChange(o.ctx, o)
 
@@ -332,6 +353,20 @@ func (f *basicRegistry) restoreDeployment(
 			}
 		}
 
+		for idx, a := range o.Manifest().Allocations {
+			o.allocs[a.ID] = jtypes.AllocationInfo{
+				AllocationID:   a.ID,
+				HeartbeatSeq:   0,
+				Status:         a.Status,
+				HasHealthCheck: len(a.Healthcheck.Exec) != 0 && a.Healthcheck.Type != "",
+				ResourceLimit:  o.Config().V1.Allocations[a.ID].Resources,
+				DNSName:        a.DNSName,
+				IP:             o.SubnetManifest().IndexRoutingTable[idx],
+				ResourceUsage:  jtypes.AllocationResourceUsage{},
+				Timestamp:      time.Now().Unix(),
+			}
+		}
+
 		go o.monitorOnlyTaskManifest()
 		go o.supervisor.Supervise(jtypes.NewManifestReader(o.manifest))
 	}
@@ -342,6 +377,7 @@ func (f *basicRegistry) restoreDeployment(
 // RestoreDeployment creates an orchestrator and attempts to restore its deployment
 func (f *basicRegistry) RestoreDeployment(
 	ctx context.Context,
+	fs afero.Afero,
 	actr actor.Actor, id string, cfg jtypes.EnsembleConfig,
 	manifest jtypes.EnsembleManifest, status jtypes.DeploymentStatus, restoreInfo jtypes.DeploymentSnapshot,
 	subnetManifest jtypes.SubnetManifest,
@@ -355,7 +391,7 @@ func (f *basicRegistry) RestoreDeployment(
 	}
 	f.lock.RUnlock()
 
-	o, err := f.restoreDeployment(ctx, actr, id, cfg, manifest, status, restoreInfo, subnetManifest, allocationIDGenerator)
+	o, err := f.restoreDeployment(ctx, fs, actr, id, cfg, manifest, status, restoreInfo, subnetManifest, allocationIDGenerator)
 	if err != nil {
 		return nil, fmt.Errorf("failed to restore deployment: %w", err)
 	}

@@ -26,7 +26,7 @@ for arch in arm64; do # amd64
     make darwin_$arch
 
     # create bin only zip release
-    zip -j $outputDir/nunet-dms_${version}_${arch}.zip builds/dms_darwin_$arch
+    zip -j $outputDir/nunet-dms_${version}_${arch}.zip builds/dms_darwin_$arch builds/dms_logs_darwin_$arch builds/dms_logs_darwin_$arch builds/dms_ingest_darwin_$arch
 
     cp builds/dms_darwin_$arch $archDir/usr/bin/nunet
     ls -R $archDir/usr # to allow checking all files are where they're supposed to be

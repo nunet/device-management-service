@@ -80,6 +80,7 @@ func TestOrchestratorWithCustomGenerators(t *testing.T) {
 	o, err := NewOrchestrator(
 		ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg,
 		nodeGenerator, allocationGenerator,
+		nil, nil,
 	)
 	require.NoError(t, err)
 
@@ -174,6 +175,7 @@ func TestOrchestratorWithFailingGenerator(t *testing.T) {
 	_, err := NewOrchestrator(
 		ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg,
 		nodeGenerator, failingAllocationGenerator,
+		nil, nil,
 	)
 	assert.Error(t, err, "Should reject orchestrator with failing generator")
 	assert.Contains(t, err.Error(), "invalid allocation ID generator", "Error should mention generator validation failure")
@@ -214,13 +216,14 @@ func TestOrchestratorWithDefaultGenerators(t *testing.T) {
 	fs := afero.NewMemMapFs()
 
 	// Test that default generators work the same as the original NewOrchestrator
-	o1, err1 := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator())
+	o1, err1 := NewOrchestrator(ctx, afero.Afero{Fs: fs}, workDir, ensembleID, orch.actor, cfg, types.NewDefaultNodeIDGenerator(), types.NewDefaultAllocationIDGenerator(), nil, nil)
 	require.NoError(t, err1)
 
 	o2, err2 := NewOrchestrator(
 		ctx, afero.Afero{Fs: fs}, workDir, ensembleID+"-2", orch.actor, cfg,
 		types.NewDefaultNodeIDGenerator(),
 		types.NewDefaultAllocationIDGenerator(),
+		nil, nil,
 	)
 	require.NoError(t, err2)
 

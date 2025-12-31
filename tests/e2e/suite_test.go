@@ -28,6 +28,7 @@ import (
 	"go.elastic.co/apm/v2"
 
 	"gitlab.com/nunet/device-management-service/dms/node"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -290,6 +291,8 @@ func (s *TestSuite) startNode(index int) {
 	if tracePrefix != "" {
 		tracePrefix += "/"
 	}
+	// TODO observability.EnvFlightrecSec
+	envFlightrec := os.Getenv("DMS_FLIGHTREC_SEC")
 	cmd.Env = append(os.Environ(),
 		// define a name for Kibana
 		"ELASTIC_APM_SERVICE_NODE_NAME="+tracePrefix+"E2E-"+s.T().Name()+"-node-"+idxS,
@@ -297,7 +300,10 @@ func (s *TestSuite) startNode(index int) {
 		// log levels
 		"GOLOG_LOG_LEVEL=debug",
 		"DMS_OBSERVE_LEVEL=debug",
+		"DMS_FLIGHTREC_SEC="+envFlightrec,
+		"DMS_BINARY_PATH="+binaryPath,
 	)
+
 	// nest under a test span
 	if s.rootTrace != nil {
 		traceCtx := s.rootTrace.TraceContext()
@@ -332,6 +338,15 @@ func (s *TestSuite) startNode(index int) {
 	// Start a goroutine to wait for shutdown.
 	go func() {
 		<-node.shutdownCh
+
+		// handle flight recorder
+		if secsNum, _ := strconv.Atoi(envFlightrec); secsNum > 0 {
+			_, err = node.client.debugFlightrec(s.T(), node.dmsContext, node.password)
+			if err != nil {
+				s.T().Logf("failed to get flight recorder: %v", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 
 		// Try graceful shutdown first
 		if err := cmd.Process.Signal(os.Interrupt); err != nil {
@@ -462,7 +477,7 @@ func (s *TestSuite) setupTestNetwork() {
 	s.T().Logf("%s: setting up %d nodes", s.Name, s.numNodes)
 	for i := 0; i < s.numNodes; i++ {
 		nodeName := fmt.Sprintf("dms%d", i)
-		password := fmt.Sprintf("password%d", i)
+		password := "pass1234"
 		// lock the node in this dir
 		nodeRoot := filepath.Join(s.rootDir, nodeName)
 		cfg := createConfig(
@@ -483,9 +498,63 @@ func (s *TestSuite) setupTestNetwork() {
 		}
 		nodeIndex := i
 
+		fmt.Println("setting up for test", s.Name)
+
 		// for contracts test set the 4th node as a payment validator
-		if s.Name == "deployment_with_contracts_tests" && nodeIndex == 3 {
-			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9421/"
+		switch s.Name {
+		case "deployment_with_contracts_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9421/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_pay_per_deployment_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9422/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_pay_per_time_utilization_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9423/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_pay_per_resource_utilization_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9424/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_fixed_rental_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_periodic_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9426"
+			}
+		case "deployment_with_ondemand_provisioner_tests":
+			if nodeIndex == 0 {
+				cfg.General.ComputeGateway = true
+				cfg.General.Providers = []config.ProviderConfig{
+					{
+						Name:   "local-incus",
+						Type:   "local-incus",
+						Config: map[string]interface{}{},
+					},
+				}
+			}
+		case "deployment_with_contracts_collect_after_pay_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_enforced_providers_tests":
+			if nodeIndex == 1 || nodeIndex == 2 || nodeIndex == 3 {
+				cfg.Job.RequireContractsForDeployment = true
+			}
+		}
+
+		if s.Name == "deployment_with_contracts_collect_after_pay_tests" && nodeIndex == 3 {
+			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
 			cfg.PaymentProvider.Mode = true
 		}
 
@@ -651,7 +720,7 @@ func (s *TestSuite) SetupSuite() {
 
 	// Initialize the APM tracer
 	cfg := createConfig("/tmp/fake", 0, []string{}, []string{})
-	if !cfg.Observability.ElasticsearchEnabled {
+	if !cfg.Observability.Elastic.Enabled {
 		return
 	}
 	s.T().Logf("initializing APM tracer")

@@ -15,12 +15,17 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	"gitlab.com/nunet/device-management-service/gateway/provider"
+	"gitlab.com/nunet/device-management-service/gateway/store"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -32,8 +37,11 @@ import (
 
 // MinDeploymentTime minimum time for deployment
 const (
-	MinDeploymentTime       = time.Minute - time.Second
-	MinUpdateDeploymentTime = 2 * (time.Minute - time.Second) // TODO: tune this
+	MinDeploymentTime             = time.Minute - time.Second
+	MinUpdateDeploymentTime       = 2 * (time.Minute - time.Second) // TODO: tune this
+	allocationStatsRequestTimeout = 20 * time.Second
+	maxRetries                    = 5
+	retryDelay                    = time.Second
 )
 
 var (
@@ -129,8 +137,8 @@ func (n *Node) saveDeployment(orchestrator orchestrator.Orchestrator) error {
 		return fmt.Errorf("save deployment: %w", err)
 	}
 
-	log.Debugf("deployment %s of status %s saved", orchestrator.ID(),
-		orchestrator.Status().String())
+	log.Debugw("deployment_saved", "labels", []string{string(observability.LabelDeployment)},
+		"orchestratorID", orchestrator.ID(), "stats", orchestrator.Status().String())
 
 	return nil
 }
@@ -157,7 +165,12 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 		return
 	}
 
-	orch, err := n.createOrchestrator(n.ctx, request.Ensemble)
+	if request.Ensemble.V1 == nil {
+		handleErr(errors.New("empty ensemble config"))
+		return
+	}
+
+	orch, err := n.createOrchestrator(n.ctx, request.Ensemble, request.Ensemble.Contracts())
 	if err != nil {
 		log.Warnw("orchestrator_creation_failure",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -176,17 +189,18 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	})
 
 	if err := orch.Deploy(msg.Expiry().Add(-orchestrator.MinEnsembleDeploymentTime)); err != nil {
-		// Orchestrator status is automatically saved to store via status watcher
+		// Manually save the failed status before stopping to ensure it persists
+		if err := n.orchestratorRegistry.SaveOrchestrator(orch); err != nil {
+			log.Warnw("failed to save failed orchestrator", "error", err)
+		}
 		orch.Stop()
 		log.Errorw("ensemble_deployment_error",
 			"labels", []string{string(observability.LabelDeployment)},
 			"ensembleID", orch.ID(),
 			"error", err)
-		n.orchestratorRegistry.DeleteOrchestrator(orch.ID())
 
 		return
 	}
-
 	// Orchestrator status is automatically saved to store via status watcher
 }
 
@@ -264,10 +278,13 @@ type DeploymentLogsResponse struct {
 func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_logs_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentLogsResponse{Error: err.Error()})
 	}
 
@@ -275,26 +292,27 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 	var resp DeploymentLogsResponse
 
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
-		handleErr(fmt.Errorf("error unmarshalling deployment logs: %s", err))
+		handleErr(fmt.Errorf("error unmarshalling deployment logs: %w", err))
 		return
 	}
 
 	// For logs, we need an active orchestrator (in-memory registry only)
 	o, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
+		handleErr(fmt.Errorf("failed to get orchestrator: %w", err))
 		return
 	}
+	orchestratorID = o.ID()
 
 	data, err := o.GetAllocationLogs(request.AllocationName)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to get allocation logs: %s", err))
+		handleErr(fmt.Errorf("failed to get allocation logs: %w", err))
 		return
 	}
 
 	allocDir, err := o.WriteAllocationLogs(request.AllocationName, data.Stdout, data.Stderr)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to write allocation logst: %s", err))
+		handleErr(fmt.Errorf("failed to write allocation logst: %w", err))
 		return
 	}
 
@@ -303,21 +321,27 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 }
 
 type DeploymentStatusRequest struct {
-	ID string
+	ID           string `json:"id"`
+	IncludeUsage bool   `json:"include_usage,omitempty"`
 }
 
 type DeploymentStatusResponse struct {
-	Status string
-	Error  string
+	Status          string                             `json:"status"`
+	Error           string                             `json:"error"`
+	AllocationInfo  map[string]jobtypes.AllocationInfo `json:"allocation_info,omitempty"`
+	AllocationUsage map[string]*types.ExecutorStats    `json:"allocation_usage,omitempty"`
 }
 
 func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_status_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentStatusResponse{Error: err.Error()})
 	}
 
@@ -335,8 +359,52 @@ func (n *Node) handleDeploymentStatus(msg actor.Envelope) {
 		handleErr(fmt.Errorf("failed to get deployment: %s", err))
 		return
 	}
+	orchestratorID = deployment.ID
 
 	resp.Status = deployment.Status.String()
+
+	if deployment.Status == jobtypes.DeploymentStatusRunning {
+		orch, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
+			return
+		}
+		resp.AllocationInfo = orch.AllocationInfo()
+
+		if request.IncludeUsage {
+			manifest := orch.Manifest()
+			usage := make(map[string]*types.ExecutorStats, len(manifest.Allocations))
+
+			for allocID, allocManifest := range manifest.Allocations {
+				reply, err := n.invokeBehaviour(
+					allocManifest.Handle,
+					behaviors.AllocationStatsBehavior,
+					behaviors.AllocationStatsRequest{},
+					allocationStatsRequestTimeout,
+				)
+				if err != nil {
+					handleErr(fmt.Errorf("failed to invoke allocation stats for %s: %w", allocID, err))
+					return
+				}
+
+				var statsResp behaviors.AllocationStatsResponse
+				if err := json.Unmarshal(reply.Message, &statsResp); err != nil {
+					handleErr(fmt.Errorf("failed to decode allocation stats response for %s: %w", allocID, err))
+					return
+				}
+
+				if !statsResp.OK {
+					handleErr(fmt.Errorf("allocation %s stats error: %s", allocID, statsResp.Error))
+					return
+				}
+
+				usage[allocID] = statsResp.Stats
+			}
+
+			resp.AllocationUsage = usage
+		}
+	}
+
 	n.sendReply(msg, resp)
 }
 
@@ -352,10 +420,13 @@ type DeploymentManifestResponse struct {
 func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_manifest_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentManifestResponse{Error: err.Error()})
 	}
 
@@ -371,6 +442,18 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 	deployment, err := n.orchestratorRegistry.GetDeployment(request.ID)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get deployment: %s", err))
+		return
+	}
+
+	// if deployment is running, get the latest manifest directly from orchestrator
+	if deployment.Status == jobtypes.DeploymentStatusRunning {
+		orch, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get orchestrator: %s", err))
+			return
+		}
+		resp.Manifest = orch.Manifest()
+		n.sendReply(msg, resp)
 		return
 	}
 
@@ -390,10 +473,13 @@ type DeploymentShutdownResponse struct {
 func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_shutdown_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentShutdownResponse{Error: err.Error()})
 	}
 
@@ -414,7 +500,7 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 	if o.Status() != jobs.DeploymentStatusRunning {
 		log.Debugw("deployment_not_running_for_shutdown",
 			"labels", []string{string(observability.LabelDeployment)},
-			"deploymentID", request.ID,
+			"orchestratorID", request.ID,
 			"status", o.Status())
 		// maybe-TODO: if it's still provisioning/committing,
 		// we should stop the deployment process anyway
@@ -442,11 +528,14 @@ func (n *Node) handleDeploymentShutdown(msg actor.Envelope) {
 func (n *Node) handleDeploymentRevert(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	var request orchestrator.DeploymentRevertRequest
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		log.Debugw("revert_deployment_unmarshal_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 
 		n.sendReply(msg, orchestrator.DeploymentRevertResponse{
 			OK:    false,
@@ -519,10 +608,13 @@ type UpdateDeploymentResponse struct {
 func (n *Node) handleDeploymentUpdate(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment update error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, UpdateDeploymentResponse{Error: err.Error()})
 	}
 
@@ -588,10 +680,13 @@ func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 		"labels", []string{string(observability.LabelDeployment)},
 		"msg", msg)
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_prune_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentPruneResponse{Error: err.Error()})
 	}
 
@@ -614,6 +709,7 @@ func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 				return
 			}
 			for _, v := range views {
+				orchestratorID = v.OrchestratorID
 				if err := n.orchestratorRegistry.DeleteDeployment(v.OrchestratorID); err != nil {
 					handleErr(fmt.Errorf("failed to delete deployment %s: %w", v.OrchestratorID, err))
 					return
@@ -689,6 +785,7 @@ func (n *Node) handleDeploymentPrune(msg actor.Envelope) {
 			}
 		}
 	}
+
 	log.Infow("deployments_pruned",
 		"labels", []string{string(observability.LabelDeployment)},
 		"mode", "before")
@@ -707,10 +804,13 @@ type DeploymentDeleteResponse struct {
 func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
 	defer msg.Discard()
 
+	orchestratorID := ""
 	handleErr := func(err error) {
 		log.Errorw("deployment_delete_error",
 			"labels", []string{string(observability.LabelDeployment)},
-			"error", err)
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
 		n.sendReply(msg, DeploymentDeleteResponse{Error: err.Error()})
 	}
 
@@ -724,6 +824,7 @@ func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
 		handleErr(errors.New("orchestrator_id is required"))
 		return
 	}
+	orchestratorID = request.OrchestratorID
 
 	// Delete the specific deployment
 	if err := n.orchestratorRegistry.DeleteDeployment(request.OrchestratorID); err != nil {
@@ -736,4 +837,227 @@ func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
 		"orchestrator_id", request.OrchestratorID)
 
 	n.sendReply(msg, DeploymentDeleteResponse{OK: true})
+}
+
+// handleBidSigning is for new provisioned dmses to sign bids
+func (n *Node) handleBidSigning(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var req jobtypes.SignPromiseBidRequest
+	err := json.Unmarshal(msg.Message, &req)
+	if err != nil {
+		n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	bid := jobtypes.Bid{
+		V1: &jobtypes.BidV1{
+			EnsembleID: req.Bid.EnsembleID(),
+			NodeID:     req.Bid.NodeID(),
+			Peer:       n.hostID,
+			Location:   req.Bid.Location(),
+			Handle:     n.actor.Handle(),
+		},
+	}
+
+	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
+	if err != nil {
+		log.Debugw("provider_retrieval_error",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
+		n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+			Error: err.Error(),
+		})
+
+		return
+	}
+
+	err = bid.Sign(provider)
+	if err != nil {
+		log.Debugw("provider_sign_error",
+			"labels", string(observability.LabelDeployment),
+			"error", err)
+		n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+			Error: err.Error(),
+		})
+
+		return
+	}
+
+	n.storeBid(bid.EnsembleID(), req.Nounce, req.BidRequest)
+
+	n.sendReply(msg, jobtypes.PromiseBidSigningResponse{
+		Bid: bid,
+	})
+}
+
+func (n *Node) handlePromiseBid(msg actor.Envelope) {
+	defer msg.Discard()
+
+	log.Debug("handling promise bids")
+
+	var req jobtypes.PromiseBidRequest
+	err := json.Unmarshal(msg.Message, &req)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+
+		return
+	}
+
+	// check if we already signed this bid
+	bid, ok := n.getBid(req.Bid.EnsembleID())
+	if !ok {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("bid with ensemble id %s not found", req.Bid.EnsembleID()),
+		})
+		return
+	}
+
+	allProviders := n.serverProviderRegistry.All()
+	log.Debugf("checking %d providers for provisioning", len(allProviders))
+
+	ctx, cancel := context.WithCancel(n.ctx)
+	defer cancel()
+
+	var (
+		wg             sync.WaitGroup
+		found          int32
+		targetPlan     provider.Plan
+		targetProvider provider.Provider
+		mu             sync.Mutex
+	)
+
+	for _, pp := range allProviders {
+		wg.Add(1)
+		go func(pp provider.Provider) {
+			defer wg.Done()
+
+			if atomic.LoadInt32(&found) == 1 {
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			plans, err := pp.ListPlans(ctx)
+			if err != nil {
+				return
+			}
+
+			matchedPlan, err := pp.SelectMatchingPlan(plans, bid.request.V1.Resources)
+			if err != nil || matchedPlan == nil {
+				return
+			}
+
+			if atomic.CompareAndSwapInt32(&found, 0, 1) {
+				mu.Lock()
+				targetPlan = *matchedPlan
+				targetProvider = pp
+				mu.Unlock()
+				cancel() // stop others
+			}
+		}(pp)
+	}
+
+	wg.Wait()
+
+	if atomic.LoadInt32(&found) == 0 || targetProvider == nil {
+		log.Debug("targetProvider is nil — no matching plan found")
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("no suitable plan found for bid with ensemble: %s", req.Bid.EnsembleID()),
+		})
+		return
+	}
+
+	// TODO: for now image is empty, maybe make it part of the plan object
+	server, err := targetProvider.ProvisionServer(n.ctx, targetPlan, targetPlan.Name, "", msg.From.DID.String())
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("failed to provision server for bid with ensemble: %s", req.Bid.EnsembleID()),
+		})
+		return
+	}
+
+	log.Debugf("successfully provisioned server %s using provider %s", server.ID, targetProvider.Name())
+
+	connected := false
+
+	for i := 1; i <= maxRetries; i++ {
+		err = n.network.Connect(n.ctx, fmt.Sprintf("%s/p2p/%s", server.ListenAddr, server.PeerID))
+		if err == nil {
+			connected = true
+			break
+		}
+
+		time.Sleep(retryDelay)
+	}
+
+	if !connected {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: fmt.Sprintf("failed to connect to provisioned resource for bid: %s", req.Bid.EnsembleID()),
+		})
+		err := targetProvider.DeleteServer(ctx, server.ID)
+		if err != nil {
+			log.Errorf("failed to delete provisioned instance: %v", err)
+		}
+		return
+	}
+
+	err = n.addProvisionedResources(msg.From.DID.String(), targetProvider, server)
+	if err != nil {
+		log.Errorf("failed to record provisioned resource in store: %v", err)
+	}
+
+	destination, err := actor.HandleFromPeerID(server.PeerID)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+	signReq := jobtypes.SignPromiseBidRequest{
+		Bid:        req.Bid,
+		BidRequest: bid.request,
+		Nounce:     bid.nonce,
+	}
+
+	envelope, err := n.invokeBehaviour(destination, behaviors.PromiseBidSigningBehavior, signReq, invokeMessageTimeout)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	var signedBidPayload jobtypes.PromiseBidSigningResponse
+	err = json.Unmarshal(envelope.Message, &signedBidPayload)
+	if err != nil {
+		n.sendReply(msg, jobtypes.ConvertedPromiseBidResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	resp := jobtypes.ConvertedPromiseBidResponse{
+		Bid: signedBidPayload.Bid,
+	}
+
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) addProvisionedResources(orchestratorDID string, p provider.Provider, server *provider.Server) error {
+	return n.gatewayStore.Insert(&store.ProvisionedResources{
+		ProvisionedVMPeerID: server.PeerID,
+		Orchestrator:        orchestratorDID,
+		ProviderName:        p.Name(),
+		Resource:            *server,
+		CreatedAt:           time.Now(),
+	})
 }

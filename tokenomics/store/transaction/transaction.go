@@ -17,6 +17,7 @@ import (
 	"github.com/ostafen/clover/v2"
 	"github.com/ostafen/clover/v2/document"
 	"github.com/ostafen/clover/v2/query"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -25,13 +26,13 @@ const (
 
 // Transaction struct
 type Transaction struct {
-	UniqueID            string `json:"unique_id"`
-	PaymentValidatorDID string `json:"payment_validator_did"`
-	ContractDID         string `json:"contract_did"`
-	ToAddress           string `json:"to_address"`
-	Amount              string `json:"amount"`
-	Status              string `json:"status"`
-	TxHash              string `json:"tx_hash"`
+	UniqueID            string                     `json:"unique_id"`
+	PaymentValidatorDID string                     `json:"payment_validator_did"`
+	ContractDID         string                     `json:"contract_did"`
+	ToAddress           []types.PaymentAddressInfo `json:"to_address"`
+	Amount              string                     `json:"amount"`
+	Status              string                     `json:"status"`
+	TxHash              string                     `json:"tx_hash"`
 }
 
 type Store struct {
@@ -130,4 +131,41 @@ func (s *Store) MarkAsPaid(uniqueID string, txHash string) (string, error) {
 	}
 
 	return t.PaymentValidatorDID, s.db.Update(q, update)
+}
+
+func (s *Store) GetPaymentValidatorDID(uniqueID string) (string, error) {
+	q := query.NewQuery(transactionsCollection).Where(query.Field("unique_id").Eq(uniqueID))
+	doc, err := s.db.FindFirst(q)
+	if err != nil {
+		return "", fmt.Errorf("failed to find transaction: %w", err)
+	}
+	if doc == nil {
+		return "", fmt.Errorf("transaction not found with unique_id: %s", uniqueID)
+	}
+
+	data := doc.Get("transaction_data")
+	var t Transaction
+	if err := json.Unmarshal(data.([]byte), &t); err != nil {
+		return "", fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+	return t.PaymentValidatorDID, nil
+}
+
+// GetTransactionByUniqueID retrieves a transaction by its unique ID
+func (s *Store) GetTransactionByUniqueID(uniqueID string) (*Transaction, error) {
+	q := query.NewQuery(transactionsCollection).Where(query.Field("unique_id").Eq(uniqueID))
+	doc, err := s.db.FindFirst(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find transaction: %w", err)
+	}
+	if doc == nil {
+		return nil, fmt.Errorf("transaction not found with unique_id: %s", uniqueID)
+	}
+
+	data := doc.Get("transaction_data")
+	var t Transaction
+	if err := json.Unmarshal(data.([]byte), &t); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+	return &t, nil
 }

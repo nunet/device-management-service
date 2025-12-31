@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -102,6 +103,14 @@ func runRemoveCap(_ context.Context, dmsCLI *cli.DmsCLI, opts RemoveCapOptions, 
 
 	if err := utils.SaveCapabilityContext(dmsCLI, capCtx); err != nil {
 		return err
+	}
+
+	// Send SIGUSR1 to running DMS to reload contexts
+	if err := signalDMSReload(dmsCLI); err != nil {
+		// Log the error but don't fail - DMS might not be running (expected during initial setup)
+		fmt.Fprintf(os.Stderr, "Warning: Could not signal DMS to reload (DMS may not be running): %v\n", err)
+	} else {
+		fmt.Println("Successfully signaled DMS to reload capability contexts")
 	}
 
 	return nil

@@ -15,19 +15,27 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
+// TODO: Deprecate keys in favor of struct fields
 // These are the keys stored into the Context
 // We could use a map directly, but empty struct
 // has a better performance if it grows too large
 type (
-	nodesCtxKey        struct{}
-	nodeMapCtxKey      struct{}
-	ensembleIDCtxKey   struct{}
-	ensembleFileCtxKey struct{}
-	manifestCtxKey     struct{}
-	allocRespCtxKey    struct{}
-	contractInfoKey    struct{}
+	nodesCtxKey          struct{}
+	nodeMapCtxKey        struct{}
+	ensembleIDCtxKey     struct{}
+	ensembleFileCtxKey   struct{}
+	manifestCtxKey       struct{}
+	allocRespCtxKey      struct{}
+	contractInfoKey      struct{}
+	deploymentsCtxKey    struct{}
+	connectionAttemptKey struct{}
+	tokenMapKey          struct{}
+	orgMapCtxKey         struct{}
+	extraContractsKey    struct{}
+	didsCtxKey           struct{}
 )
 
+// TODO: Define TestCase struct
 // TestCtx is a wrapper of Context
 // It allows for some type safety and it's more elegant
 type TestCtx struct {
@@ -36,8 +44,10 @@ type TestCtx struct {
 
 // TODO: Temporary wrapper for contract
 type ContractData struct {
-	HostDID string
-	DID     string
+	HostDID      string
+	DID          string
+	ProviderDID  string
+	RequestorDID string
 }
 
 func NewTestCtx(ctx context.Context) *TestCtx {
@@ -49,29 +59,31 @@ func (t *TestCtx) Unwrap() context.Context {
 	return t.ctx
 }
 
-func (t *TestCtx) Nodes() ([]*Node, error) {
-	nodes, ok := t.ctx.Value(nodesCtxKey{}).([]*Node)
+func (t *TestCtx) Nodes() (map[string]*Node, error) {
+	nodes, ok := t.ctx.Value(nodesCtxKey{}).(map[string]*Node)
 	if !ok {
 		return nil, fmt.Errorf("no nodes available on context")
 	}
 	return nodes, nil
 }
 
-func (t *TestCtx) WithNodes(n []*Node) *TestCtx {
+func (t *TestCtx) WithNodes(n map[string]*Node) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, nodesCtxKey{}, n),
 	}
 }
 
-func (t *TestCtx) NodeMap() (map[string]*Node, error) {
-	nodeMap, ok := t.ctx.Value(nodeMapCtxKey{}).(map[string]*Node)
+// TODO: Deprecate in favor of `Nodes`
+func (t *TestCtx) NodeMap() (map[string]*Instance, error) {
+	nodeMap, ok := t.ctx.Value(nodeMapCtxKey{}).(map[string]*Instance)
 	if !ok {
 		return nil, fmt.Errorf("no node map available on context")
 	}
 	return nodeMap, nil
 }
 
-func (t *TestCtx) WithNodeMap(m map[string]*Node) *TestCtx {
+// TODO: Deprecate in favor of `WithNodes`
+func (t *TestCtx) WithNodeMap(m map[string]*Instance) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, nodeMapCtxKey{}, m),
 	}
@@ -145,4 +157,90 @@ func (t *TestCtx) WithContract(c ContractData) *TestCtx {
 	return &TestCtx{
 		ctx: context.WithValue(t.ctx, contractInfoKey{}, c),
 	}
+}
+
+func (t *TestCtx) ExtraContracts() []ContractData {
+	data, ok := t.ctx.Value(extraContractsKey{}).([]ContractData)
+	if !ok {
+		return nil
+	}
+	return data
+}
+
+func (t *TestCtx) WithExtraContract(c ContractData) *TestCtx {
+	extras := t.ExtraContracts()
+	newExtras := append(append([]ContractData{}, extras...), c)
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, extraContractsKey{}, newExtras),
+	}
+}
+
+func (t *TestCtx) Deployments() (map[string]string, error) {
+	cfg, ok := t.ctx.Value(deploymentsCtxKey{}).(map[string]string)
+	if !ok {
+		return nil, fmt.Errorf("no allocation response available on context")
+	}
+	return cfg, nil
+}
+
+func (t *TestCtx) WithDeployments(d map[string]string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, deploymentsCtxKey{}, d),
+	}
+}
+
+func (t *TestCtx) ConnectionAttempt() (map[string]interface{}, error) {
+	attempt, ok := t.ctx.Value(connectionAttemptKey{}).(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("no connection attempt available on context")
+	}
+	return attempt, nil
+}
+
+func (t *TestCtx) WithConnectionAttempt(attempt map[string]interface{}) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, connectionAttemptKey{}, attempt),
+	}
+}
+
+func (t *TestCtx) TokenMap() (map[string]string, error) {
+	tokenMap, ok := t.ctx.Value(tokenMapKey{}).(map[string]string)
+	if !ok {
+		return nil, fmt.Errorf("no token map available on context")
+	}
+	return tokenMap, nil
+}
+
+func (t *TestCtx) WithTokenMap(m map[string]string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, tokenMapKey{}, m),
+	}
+}
+
+func (t *TestCtx) OrganizationMap() (map[string]*Context, error) {
+	orgMap, ok := t.ctx.Value(orgMapCtxKey{}).(map[string]*Context)
+	if !ok {
+		return nil, fmt.Errorf("no organization map available on context")
+	}
+	return orgMap, nil
+}
+
+func (t *TestCtx) WithOrganizationMap(m map[string]*Context) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, orgMapCtxKey{}, m),
+	}
+}
+
+func (t *TestCtx) WithHelloResponse(dids []string) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, didsCtxKey{}, dids),
+	}
+}
+
+func (t *TestCtx) HelloResponse() ([]string, error) {
+	dids, ok := t.ctx.Value(didsCtxKey{}).([]string)
+	if !ok {
+		return nil, fmt.Errorf("no hello response dids available on context")
+	}
+	return dids, nil
 }

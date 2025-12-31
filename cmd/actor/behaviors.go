@@ -137,12 +137,17 @@ type ContractApproveLocalRequestCmd struct {
 }
 
 type ContractConfirmLocalTransactionCmd struct {
-	UniqueID string
-	TxHash   string
+	UniqueID   string
+	TxHash     string
+	Blockchain string
 }
 
 type ContractPaymentStatusCmd struct {
 	UniqueID string
+}
+
+type CollectUsagesAndForwardToPaymentProvidersCmd struct {
+	ContractDID string `json:"contract_did,omitempty"`
 }
 
 type ContractTerminateCmd struct {
@@ -181,7 +186,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract settle payload")
 			}
 
-			request := contracts.ContractSettleRequestBehaviour{
+			request := contracts.ContractSettleRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -225,7 +230,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract terminate payload")
 			}
 
-			request := contracts.ContractTerminationRequestBehaviour{
+			request := contracts.ContractTerminationRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -269,7 +274,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract complete payload")
 			}
 
-			request := contracts.ContractCompletionRequestBehaviour{
+			request := contracts.ContractCompletionRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -313,7 +318,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to decode contract complete payload")
 			}
 
-			request := contracts.ContractValidateRequestBehaviour{
+			request := contracts.ContractValidateRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -357,7 +362,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to encode payload")
 			}
 
-			contractReq := contracts.ContractStatusRequestBehaviour{
+			contractReq := contracts.ContractStatusRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -423,8 +428,16 @@ var registeredBehaviors = map[string]*behaviorConfig{
 	},
 	// /dms/tokenomics/contract/usages/calculate
 	behaviors.ContractUsagesCalculateBehavior: {
+		Payload: func() any { return &CollectUsagesAndForwardToPaymentProvidersCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CollectUsagesAndForwardToPaymentProvidersCmd)
+			cmd.Flags().StringVar(&p.ContractDID, "contract-did", "", "Contract DID to process (optional, processes all contracts if not specified)")
+		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			resp, err := dmsClient.CollectUsagesAndForwardToPaymentProviders(ctx, opts.MsgOpts...)
+			req := contracts.CollectUsagesAndForwardToPaymentProvidersRequest{
+				ContractDID: opts.Payload.(*CollectUsagesAndForwardToPaymentProvidersCmd).ContractDID,
+			}
+			resp, err := dmsClient.CollectUsagesAndForwardToPaymentProviders(ctx, req, opts.MsgOpts...)
 			if err != nil {
 				return resp, err
 			}
@@ -439,7 +452,8 @@ var registeredBehaviors = map[string]*behaviorConfig{
 						
 						Examples:
 						
-						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate`,
+						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate
+						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate --contract-did did:key:...`,
 	},
 	// /dms/tokenomics/contract/transactions/confirm
 	behaviors.ContractConfirmLocalTransactionBehavior: {
@@ -448,8 +462,10 @@ var registeredBehaviors = map[string]*behaviorConfig{
 			p := payload.(*ContractConfirmLocalTransactionCmd)
 			cmd.Flags().StringVarP(&p.UniqueID, "unique-id", "", "", "transaction unique id (required)")
 			cmd.Flags().StringVarP(&p.TxHash, "tx-hash", "", "", "transaction hash (required)")
+			cmd.Flags().StringVarP(&p.Blockchain, "blockchain", "", "", "which blockchain was used (required)")
 			_ = cmd.MarkFlagRequired("unique-id")
 			_ = cmd.MarkFlagRequired("tx-hash")
+			_ = cmd.MarkFlagRequired("blockchain")
 		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
 			req, ok := opts.Payload.(*ContractConfirmLocalTransactionCmd)
@@ -458,8 +474,9 @@ var registeredBehaviors = map[string]*behaviorConfig{
 			}
 
 			request := contracts.ContractConfirmLocalTransactionRequest{
-				UniqueID: req.UniqueID,
-				TxHash:   req.TxHash,
+				UniqueID:   req.UniqueID,
+				TxHash:     req.TxHash,
+				Blockchain: req.Blockchain,
 			}
 
 			resp, err := dmsClient.ConfirmTransaction(ctx, request, opts.MsgOpts...)
@@ -476,7 +493,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 							
 							Examples:
 							
-							  nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash> `,
+							  nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash> --blockchain ETHEREUM`,
 	},
 	// /dms/tokenomics/contract/transactions/list
 	behaviors.ContractListLocalTransactionsBehavior: {
@@ -498,9 +515,18 @@ var registeredBehaviors = map[string]*behaviorConfig{
 						  nunet actor cmd --context user /dms/tokenomics/contract/transactions/list`,
 	},
 	// /dms/tokenomics/contract/list_incoming
-	behaviors.ContractListIncomingBehavior: {
+	behaviors.ContractListBehavior: {
+		Payload: func() any { return &contracts.ContractListIncomingRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*contracts.ContractListIncomingRequest)
+			cmd.Flags().StringVarP((*string)(&p.Role), "role", "", "", "role filter (provider|requestor)")
+		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			resp, err := dmsClient.ListIncoming(ctx, opts.MsgOpts...)
+			req, _ := opts.Payload.(*contracts.ContractListIncomingRequest)
+			if req == nil {
+				req = &contracts.ContractListIncomingRequest{}
+			}
+			resp, err := dmsClient.ListIncoming(ctx, *req, opts.MsgOpts...)
 			if err != nil {
 				return resp, err
 			}
@@ -531,7 +557,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to encode payload")
 			}
 
-			contractReq := contracts.ContractApproveLocalRequestBehaviour{
+			contractReq := contracts.ContractApproveLocalRequest{
 				ContractDID: req.ContractDID,
 			}
 
@@ -571,7 +597,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				return nil, fmt.Errorf("failed to read contract file: %w", err)
 			}
 
-			var contractReq contracts.CreateContractRequestBehaviour
+			var contractReq contracts.CreateContractRequest
 			err = json.Unmarshal(data, &contractReq)
 			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal create contract request payload: %w", err)
@@ -890,6 +916,20 @@ This behavior retrieves a snapshot of the peer's gossipsub broadcast score.
 Examples:
   nunet actor cmd --context user /dms/node/peers/score`,
 	},
+	// /dms/debug/flightrec
+	behaviors.DebugFlightrecBehavior: {
+		Action: bInvoke,
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			return dmsClient.Flightrec(ctx, opts.MsgOpts...)
+		},
+		Short: "Dumps a flight recorder snapshot",
+		Long: `Invokes the /dms/debug/flightrec behavior on an actor
+
+This behavior dumps a flight recorder snapshot.
+
+Examples:
+  nunet actor cmd --context user /dms/debug/flightrec`,
+	},
 	// /dms/node/onboarding/onboard
 	behaviors.OnboardBehavior: {
 		Action:  bInvoke,
@@ -1036,6 +1076,7 @@ Examples:
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*node.DeploymentStatusRequest)
 			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			cmd.Flags().BoolVarP(&p.IncludeUsage, "include-usage", "u", false, "include allocation resource usage statistics")
 			_ = cmd.MarkFlagRequired("id")
 		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
@@ -1051,7 +1092,8 @@ Examples:
 This behavior retrieves the status of a specific deployment.
 
 Examples:
-  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>`,
+  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id>
+  nunet actor cmd --context user /dms/node/deployment/status --id <deployment_id> --include-usage`,
 	},
 
 	// /dms/node/deployment/logs
