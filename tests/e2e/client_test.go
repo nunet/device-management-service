@@ -118,7 +118,7 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
+	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2026-12-31", otherDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -133,7 +133,7 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2025-12-31", otherDID}
+	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2026-12-31", otherDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
