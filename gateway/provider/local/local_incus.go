@@ -74,7 +74,7 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Debugf("runCommand started: error: %v %s", err, stderr.String())
+		log.Errorf("runCommand started: error: %v %s", err, stderr.String())
 
 		return "", fmt.Errorf("command %q failed: %w; stderr: %s", name, err, stderr.String())
 	}
@@ -192,7 +192,7 @@ done:
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap new dms
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap anchor --context dms --root `+p.gatewayDID+`
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap anchor --context dms --root `+orchestratorDID+`
-  DMS_PASSPHRASE=pass /home/ubuntu/dms run --context dms > logfile.log 2>&1 &
+  GOLOG_LOG_LEVEL=info DMS_PASSPHRASE=pass /home/ubuntu/dms run --context dms > logfile.log 2>&1 &
   sleep 7
   DMS_PASSPHRASE=pass /home/ubuntu/dms actor cmd --context dms /dms/node/onboarding/onboard --no-gpu --ram 3 GB --cpu 2 --disk 2GiB
 `)

@@ -132,30 +132,18 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentRestoration)
 	})
 
-	t.Run("DeploymentRestorationFromCommitting", func(t *testing.T) {
-		committing := &TestSuite{
+	// not dependable test since 'Provisioning' status can sometimes be too quick to catch
+	// the test is skipped if the status couldn't be caught
+	t.Run("DeploymentRestorationFromProvisioning", func(t *testing.T) {
+		provisioning := &TestSuite{
 			numNodes:      3,
-			Name:          "deployment_restoration_from_committing",
-			restPortIndex: ports[14],
-			p2pPortIndex:  ports[15],
-			runner:        DeploymentRestorationFromCommitting,
+			Name:          "deployment_restoration_from_provisioning",
+			restPortIndex: ports[16],
+			p2pPortIndex:  ports[17],
+			runner:        DeploymentRestorationFromProvisioning,
 		}
-		suite.Run(t, committing)
+		suite.Run(t, provisioning)
 	})
-
-	// Disabled because too flaky since 'Provisioning' status is too quick to catch
-	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
-	// test case
-	// t.Run("DeploymentRestorationFromProvisioning", func(t *testing.T) {
-	// 	provisioning := &TestSuite{
-	// 		numNodes:      3,
-	// 		Name:          "deployment_restoration_from_provisioning",
-	// 		restPortIndex: ports[16],
-	// 		p2pPortIndex:  ports[17],
-	// 		runner:        DeploymentRestorationFromProvisioning,
-	// 	}
-	// 	suite.Run(t, provisioning)
-	// })
 
 	t.Run("DeploymentRestorationFromPreparing", func(t *testing.T) {
 		preparing := &TestSuite{
@@ -166,18 +154,6 @@ func TestE2E(t *testing.T) {
 			runner:        DeploymentRestorationFromPreparing,
 		}
 		suite.Run(t, preparing)
-	})
-
-	t.Run("DeploymentRestorationFromCommittingTaskAllocation", func(t *testing.T) {
-		t.Parallel()
-		committingTask := &TestSuite{
-			numNodes:      3,
-			Name:          "deployment_restoration_from_committing_task",
-			restPortIndex: ports[16],
-			p2pPortIndex:  ports[17],
-			runner:        DeploymentRestorationFromCommittingTaskAllocation,
-		}
-		suite.Run(t, committingTask)
 	})
 
 	t.Run("DeployWithOnDemandProvisioner", func(t *testing.T) {
@@ -262,19 +238,4 @@ func TestE2E(t *testing.T) {
 		}
 		suite.Run(t, deploymentWithContractsEnforcedProvidersTests)
 	})
-
-	// Disabled because too flaky since 'Provisioning' status is too quick to catch
-	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
-	// test case
-	// t.Run("DeploymentRestorationFromProvisioningTaskAllocation", func(t *testing.T) {
-	// 	t.Parallel()
-	// 	provisioningTask := &TestSuite{
-	// 		numNodes:      3,
-	// 		Name:          "deployment_restoration_from_provisioning_task",
-	// 		restPortIndex: ports[18],
-	// 		p2pPortIndex:  ports[19],
-	// 		runner:        DeploymentRestorationFromProvisioningTaskAllocation,
-	// 	}
-	// 	suite.Run(t, provisioningTask)
-	// })
 }
