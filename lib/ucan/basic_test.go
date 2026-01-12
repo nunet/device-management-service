@@ -460,3 +460,133 @@ func createToken(t *testing.T, issuer CapabilityContext,
 
 	return token
 }
+
+// TestMultiIdentityDelegationChain tests a delegation chain with multiple grantors:
+//
+// dms0 and dms1 grant to dms2
+// dms2 delegates to dms3
+// dms3 invokes on dms0 and dms1 (should succeed)
+//
+// This tests that dms3 can invoke capabilities on both dms0 and dms1
+// through the delegation chain via dms2.
+func TestMultiIdentityDelegationChain(t *testing.T) {
+	t.Parallel()
+
+	// Create 4 identities
+	dms0 := makeCapabilityContext(t)
+	dms1 := makeCapabilityContext(t)
+	dms2 := makeCapabilityContext(t)
+	dms3 := makeCapabilityContext(t)
+
+	// Get IDs for invocation
+	dms0ID := makeActorIDFromDID(t, dms0.DID())
+	dms1ID := makeActorIDFromDID(t, dms1.DID())
+	dms3ID := makeActorIDFromDID(t, dms3.DID())
+
+	capability := Capability("/test/invoke")
+	expiry := makeExpiry(120 * time.Second)
+
+	// Step 1: dms0 grants to dms2
+	dms0ToDms2Tokens, err := dms0.Grant(
+		Delegate,
+		dms2.DID(),
+		did.DID{}, // Empty audience allows dms2 to delegate for any audience
+		nil,
+		expiry,
+		0,
+		[]Capability{capability},
+	)
+	require.NoError(t, err, "dms0 granting to dms2")
+
+	// dms2 adds dms0's tokens as provide roots so it can delegate them
+	err = dms2.AddRoots(nil, TokenList{}, dms0ToDms2Tokens, TokenList{})
+	require.NoError(t, err, "dms2 adding dms0's tokens as provide roots")
+
+	// Step 2: dms1 grants to dms2
+	dms1ToDms2Tokens, err := dms1.Grant(
+		Delegate,
+		dms2.DID(),
+		did.DID{}, // Empty audience allows dms2 to delegate for any audience
+		nil,
+		expiry,
+		0,
+		[]Capability{capability},
+	)
+	require.NoError(t, err, "dms1 granting to dms2")
+
+	// dms2 adds dms1's tokens as provide roots so it can delegate them
+	err = dms2.AddRoots(nil, TokenList{}, dms1ToDms2Tokens, TokenList{})
+	require.NoError(t, err, "dms2 adding dms1's tokens as provide roots")
+
+	// Step 3: dms2 delegates to dms3 (single delegation with empty audience)
+	// This should create tokens chained through both dms0 and dms1
+	dms2ToDms3Tokens, err := dms2.Delegate(
+		dms3.DID(),
+		did.DID{}, // Empty audience allows dms3 to invoke on any audience
+		nil,
+		expiry,
+		0,
+		[]Capability{capability},
+		SelfSignNo, // Use the provide tokens from dms0 and dms1
+	)
+	require.NoError(t, err, "dms2 delegating to dms3")
+	// dms2 should create tokens for both dms0 and dms1 anchors
+	require.Equal(t, 2, len(dms2ToDms3Tokens.Tokens), "dms2 should create tokens chained through both dms0 and dms1")
+
+	// dms3 adds dms2's tokens as provide roots
+	err = dms3.AddRoots(nil, TokenList{}, dms2ToDms3Tokens, TokenList{})
+	require.NoError(t, err, "dms3 adding dms2's tokens as provide roots")
+
+	// Step 4: dms3 invokes on dms0
+	// When dms3 provides invocation tokens for dms0, it should use the token chained through dms0
+	dms3InvokeDms0Tokens, err := dms3.Provide(
+		dms0.DID(),
+		dms3ID,
+		dms0ID,
+		expiry,
+		[]Capability{capability},
+		nil,
+	)
+	require.NoError(t, err, "dms3 providing invoke tokens for dms0")
+
+	// dms0 consumes dms3's tokens
+	err = dms0.Consume(dms3.DID(), dms3InvokeDms0Tokens)
+	require.NoError(t, err, "dms0 consuming dms3's tokens")
+
+	// dms0 requires the capabilities from dms3
+	// This should succeed because dms3 has capabilities delegated from dms2,
+	// which were granted by dms0
+	err = dms0.Require(
+		dms0.DID(), // Anchor: dms0 (the grantor)
+		dms3ID,     // Subject: dms3 (the invoker)
+		dms0ID,     // Audience: dms0 (the target)
+		[]Capability{capability},
+	)
+	require.NoError(t, err, "dms0 requiring capabilities from dms3 - should succeed")
+
+	// Step 5: dms3 invokes on dms1
+	dms3InvokeDms1Tokens, err := dms3.Provide(
+		dms1.DID(),
+		dms3ID,
+		dms1ID,
+		expiry,
+		[]Capability{capability},
+		nil,
+	)
+	require.NoError(t, err, "dms3 providing invoke tokens for dms1")
+
+	// dms1 consumes dms3's tokens
+	err = dms1.Consume(dms3.DID(), dms3InvokeDms1Tokens)
+	require.NoError(t, err, "dms1 consuming dms3's tokens")
+
+	// dms1 requires the capabilities from dms3
+	// This should succeed because dms3 has capabilities delegated from dms2,
+	// which were granted by dms1
+	err = dms1.Require(
+		dms1.DID(), // Anchor: dms1 (the grantor)
+		dms3ID,     // Subject: dms3 (the invoker)
+		dms1ID,     // Audience: dms1 (the target)
+		[]Capability{capability},
+	)
+	require.NoError(t, err, "dms1 requiring capabilities from dms3 - should succeed")
+}
