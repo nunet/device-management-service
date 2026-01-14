@@ -33,14 +33,7 @@ func (l *Libp2p) MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destP
 	s.portMappingMx.Unlock()
 
 	// TODO: check if any rules for the port already exists
-
-	// TODO track the port so that we can unmap it when we tear down the subnet
-	err := sys.AddDNATRule(protocol, sourcePort, destIP, destPort)
-	if err != nil {
-		return err
-	}
-
-	err = sys.AddForwardRule(protocol, destIP, destPort)
+	err := sys.AddForwardRule(protocol, destIP, destPort)
 	if err != nil {
 		return err
 	}
