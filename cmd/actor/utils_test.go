@@ -50,7 +50,7 @@ allocations:
 
 	volumeYaml := `
         volume:
-            - type: glusterfs
+            - type: local
               src: /etc/client_private_key
               mount_destination: /etc/client_pem`
 	nodeYaml := `

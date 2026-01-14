@@ -10,7 +10,9 @@ package ensemblev1
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,6 +53,7 @@ func NewEnsembleV1Validator() validate.Validator {
 			"V1.allocations.*.resources":   ValidateResources,
 			"V1.allocations.*.execution":   ValidateExecution,
 			"V1.allocations.*.healthcheck": ValidateHealthCheck,
+			"V1.allocations.*.volume":      ValidateVolume,
 			"V1.contracts.*":               ValidateContract,
 		},
 	)
@@ -1072,5 +1075,77 @@ func validateFixedRental(paymentDetails map[string]any) error {
 		return fmt.Errorf("payment_period_count must be an integer")
 	}
 
+	return nil
+}
+
+// ValidateVolume validates the allocation's volume config
+func ValidateVolume(_ *map[string]any, data any, _ tree.Path) error {
+	volumes, ok := data.([]any)
+	if !ok {
+		return fmt.Errorf("invalid volume configuration: %v", data)
+	}
+
+	if len(volumes) == 0 {
+		return fmt.Errorf("volume cannot be empty if specified")
+	}
+
+	for _, vol := range volumes {
+		volume, ok := vol.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid type: %T - expecting map[string]", vol)
+		}
+
+		// Check volume type
+		volType, ok := volume["type"]
+		if !ok || volType == "" {
+			return fmt.Errorf("volume must have a type")
+		}
+
+		// types for now are local or glusterfs
+		switch volType {
+		case "glusterfs":
+			servers, ok := volume["servers"].([]string)
+			if !ok {
+				return fmt.Errorf("glusterfs type volume must define one or more servers")
+			}
+			if len(servers) == 0 {
+				return fmt.Errorf("glusterfs type volume must define at least one server")
+			}
+			for i, server := range servers {
+				serverStr := server
+				if serverStr == "" {
+					return fmt.Errorf("glusterfs volume server at index %d must be a non-empty string", i)
+				}
+			}
+		case "local":
+			volumeSrc, ok := volume["src"].(string)
+			if !ok {
+				return fmt.Errorf("local type volume must define source destination as 'src'")
+			}
+
+			if strings.Contains(volumeSrc, "/") {
+				// validate as a path
+				if !filepath.IsAbs(volumeSrc) {
+					return fmt.Errorf("local type volume source must be an absolute path")
+				}
+			} else {
+				// validate as a named volume (alphanumeric, dashes, underscores and dot only)
+				// ignoring linter because only in the case of multiple named volumes will the regex run multiple times
+				matched, err := regexp.MatchString(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`, volumeSrc) //nolint:staticcheck
+				if err != nil {
+					return fmt.Errorf("error validating local volume src: %w", err)
+				}
+				if !matched {
+					return fmt.Errorf("local volume src contains invalid characters")
+				}
+			}
+		default:
+			return fmt.Errorf("unsupported volume type: %s", volType)
+		}
+
+		if _, ok := volume["mount_destination"]; !ok {
+			return fmt.Errorf("volume must define a mount destination")
+		}
+	}
 	return nil
 }

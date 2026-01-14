@@ -826,12 +826,22 @@ func makeContainerMounts(
 	// these are paths for both input and output data
 	mounts := make([]mount.Mount, 0)
 	for _, input := range inputs {
-		mounts = append(mounts, mount.Mount{
+		mnt := mount.Mount{
 			Type:     mount.TypeBind,
 			Source:   input.Source,
 			Target:   input.Target,
 			ReadOnly: input.ReadOnly,
-		})
+		}
+
+		// if the source contains a "/" (is a path) we assume it's a bind mount
+		// otherwise we assume it's a named volume
+		if strings.Contains(input.Source, "/") {
+			mnt.Type = mount.TypeBind
+		} else {
+			mnt.Type = mount.TypeVolume
+			mnt.Source = input.Source // perhaps precede with orch peerID?
+		}
+		mounts = append(mounts, mnt)
 	}
 
 	for _, output := range outputs {
