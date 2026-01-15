@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -42,6 +43,12 @@ func DeploymentOperations(ctx *godog.ScenarioContext) {
 	ctx.Step(`^"([^"]*)" should see the (\w+)? restored$`, shouldSeeDeploymentRestored)
 	ctx.Step(`^"([^"]*)" prunes the deployment$`, prunesTheDeployment)
 	ctx.Step(`^"([^"]*)" should see deployment list empty$`, shouldSeeDeploymentListEmpty)
+	ctx.Step(`^"([^"]*)" has (\d+) tasks with status "([^"]*)" on "([^"]*)"$`, hasMultipleTasksWithStatus)
+	ctx.Step(`^"([^"]*)" lists deployments filtered by status "([^"]*)" with limit (\d+) and offset (\d+)$`, listDeploymentsWithFiltersAndPagination)
+	ctx.Step(`^"([^"]*)" should see (\d+) deployment(s)?$`, shouldSeeDeploymentCount)
+	ctx.Step(`^all deployments should have status "([^"]*)"$`, allDeploymentsShouldHaveStatus)
+	ctx.Step(`^the response should indicate (true|false) more results available$`, shouldHaveMoreResults)
+	ctx.Step(`^the response should have total (\d+)$`, shouldHaveTotalCount)
 }
 
 func hasDeployments(ctx context.Context, spName string, count int, ensemble, status, cpName string) (context.Context, error) {
@@ -50,7 +57,7 @@ func hasDeployments(ctx context.Context, spName string, count int, ensemble, sta
 
 	switch ensemble {
 	case "task":
-		ensemble = "docker_hello.yaml"
+		ensemble = dockerHelloYAML
 	case "service":
 		ensemble = "nginx.yaml"
 	default:
@@ -223,4 +230,227 @@ func shouldSeeDeploymentListEmpty(ctx context.Context, spName string) error {
 	assert.Empty(t, deployments)
 
 	return nil
+}
+
+func hasMultipleTasksWithStatus(ctx context.Context, spName string, count int, status, cpName string) (context.Context, error) {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	// Choose the appropriate YAML file based on expected status
+	// - For "Running": use nginx.yaml (long-running service)
+	// - For "Completed": use docker_hello.yaml (task that completes quickly)
+	var ensembleFile string
+	var needsPortModification bool
+	switch strings.ToLower(status) {
+	case "running":
+		ensembleFile = "nginx.yaml"
+		needsPortModification = true // nginx.yaml uses static port 50001
+	case "completed":
+		ensembleFile = dockerHelloYAML
+		needsPortModification = false // docker_hello.yaml doesn't use ports
+	default:
+		// Default to docker_hello.yaml for other statuses
+		ensembleFile = dockerHelloYAML
+		needsPortModification = false
+	}
+
+	// Get nodes and DMS context
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
+
+	cp, cpDmsCtx := utils.NodeWithDMS(nodes, cpName)
+	assert.NotNil(t, cp)
+	assert.NotNil(t, cpDmsCtx)
+
+	// Get CP peer info once
+	cpInfo, err := cpDmsCtx.PeerAddr()
+	require.NoError(t, err)
+	assert.NotNil(t, cpInfo)
+
+	cpAddr, err := utils.MultiaddrFromCLI(cpInfo)
+	require.NoError(t, err)
+	assert.NotEmpty(t, cpAddr)
+
+	err = spDmsCtx.Connect(cpAddr)
+	require.NoError(t, err)
+
+	// Find the ensemble file
+	ensemblePath := fmt.Sprintf("ensembles/%s", ensembleFile)
+	file := utils.FindTestdata(ensemblePath)
+
+	ensembleIDs := make([]string, 0, count)
+	basePort := 50001 // Starting port for nginx deployments
+
+	for i := 0; i < count; i++ {
+		// Upload ensemble file (creates a new copy each time)
+		ensemble, err := utils.UploadFile(sp, file)
+		require.NoError(t, err)
+		assert.NotEmpty(t, ensemble)
+
+		// Upload scripts if needed
+		err = utils.UploadScripts(sp, ensemble)
+		require.NoError(t, err)
+
+		// Set peer
+		_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node1.peer = \"%s\"", cpInfo.ID), ensemble})
+		require.NoError(t, err)
+
+		// Modify port if needed (for nginx.yaml)
+		if needsPortModification {
+			port := basePort + i
+			_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".nodes.node1.ports[0].public = %d", port), ensemble})
+			require.NoError(t, err)
+		}
+
+		// Deploy
+		ensembleID, err := spDmsCtx.Deploy(ensemble)
+		require.NoError(t, err)
+		assert.NotEmpty(t, ensembleID)
+		ensembleIDs = append(ensembleIDs, ensembleID)
+	}
+
+	// Now wait for deployments to reach expected status in parallel
+	// (nodes and spDmsCtx are already set above)
+
+	wg := sync.WaitGroup{}
+	// Launch goroutines to wait for each deployment in parallel
+	for _, id := range ensembleIDs {
+		wg.Add(1)
+		go func(deploymentID string) {
+			defer wg.Done()
+			require.Eventually(t, func() bool {
+				ensembleStatus, err := spDmsCtx.EnsembleStatus(deploymentID)
+				// Don't use require.NoError here - just return false on error
+				// require.Eventually will keep retrying until timeout
+				if err != nil {
+					return false
+				}
+				return strings.EqualFold(ensembleStatus, status)
+			}, 3*60*time.Second, 1*time.Second,
+				"deployment %s did not reach %s status", deploymentID, status)
+		}(id)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	return tc.Unwrap(), nil
+}
+
+func listDeploymentsWithFiltersAndPagination(ctx context.Context, spName, statusStr string, limit, offset int) (context.Context, error) {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	// Parse status string to DeploymentStatus
+	var status jobtypes.DeploymentStatus
+	statusFound := false
+	statusStr = strings.TrimSpace(statusStr)
+	for i := jobtypes.DeploymentStatusPreparing; i <= jobtypes.DeploymentStatusCompleted; i++ {
+		if strings.EqualFold(i.String(), statusStr) {
+			status = i
+			statusFound = true
+			break
+		}
+	}
+	require.True(t, statusFound, "unknown status: %s", statusStr)
+
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+
+	sp, spDmsCtx := utils.NodeWithDMS(nodes, spName)
+	assert.NotNil(t, sp)
+	assert.NotNil(t, spDmsCtx)
+
+	// Use new DeploymentListWithQuery method
+	response, err := spDmsCtx.DeploymentListWithQuery(utils.DeploymentListQuery{
+		Limit:  limit,
+		Offset: offset,
+		Status: []jobtypes.DeploymentStatus{status},
+	})
+	assert.NoError(t, err)
+
+	// Store response in context for later assertions
+	tc = tc.WithDeploymentListResponse(response)
+
+	return tc.Unwrap(), nil
+}
+
+func shouldSeeDeploymentCount(ctx context.Context, _ string, expectedCount int) error {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	response, err := tc.DeploymentListResponse()
+	require.NoError(t, err)
+	assert.NotNil(t, response)
+
+	assert.Equal(t, expectedCount, len(response.Deployments),
+		"expected %d deployments, got %d", expectedCount, len(response.Deployments))
+
+	return nil
+}
+
+func allDeploymentsShouldHaveStatus(ctx context.Context, expectedStatusStr string) error {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	response, err := tc.DeploymentListResponse()
+	require.NoError(t, err)
+	assert.NotNil(t, response)
+
+	expectedStatus, err := parseStatus(expectedStatusStr)
+	require.NoError(t, err)
+
+	for _, deployment := range response.Deployments {
+		actualStatus, err := parseStatus(deployment.Status)
+		require.NoError(t, err)
+		assert.Equal(t, expectedStatus, actualStatus,
+			"deployment %s has status %s, expected %s",
+			deployment.OrchestratorID, deployment.Status, expectedStatusStr)
+	}
+
+	return nil
+}
+
+func shouldHaveMoreResults(ctx context.Context, hasMoreStr string) error {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	response, err := tc.DeploymentListResponse()
+	require.NoError(t, err)
+	assert.NotNil(t, response)
+
+	expectedHasMore := hasMoreStr == "true"
+	assert.Equal(t, expectedHasMore, response.HasMore,
+		"expected has_more=%v, got %v", expectedHasMore, response.HasMore)
+
+	return nil
+}
+
+func shouldHaveTotalCount(ctx context.Context, expectedTotal int) error {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	response, err := tc.DeploymentListResponse()
+	require.NoError(t, err)
+	assert.NotNil(t, response)
+
+	assert.Equal(t, expectedTotal, response.Total,
+		"expected total=%d, got %d", expectedTotal, response.Total)
+
+	return nil
+}
+
+// Helper function to parse status string to DeploymentStatus
+func parseStatus(statusStr string) (jobtypes.DeploymentStatus, error) {
+	statusStr = strings.TrimSpace(statusStr)
+	for i := jobtypes.DeploymentStatusPreparing; i <= jobtypes.DeploymentStatusCompleted; i++ {
+		if strings.EqualFold(i.String(), statusStr) {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("unknown status: %s", statusStr)
 }

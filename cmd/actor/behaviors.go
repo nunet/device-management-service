@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -27,6 +28,7 @@ import (
 	"gitlab.com/nunet/device-management-service/cmd/cli"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -98,76 +100,6 @@ func (b *behaviorConfig) Run(ctx context.Context, dmsCli *cli.DmsCLI, opts actor
 		return fmt.Errorf("could not run behavior: %w", err)
 	}
 	return displayResponse(streams.Out, res)
-}
-
-type NewDeploymentRequestCmd struct {
-	Config string
-}
-
-type UpdateDeploymentRequestCmd struct {
-	NewDeploymentRequestCmd
-	EnsembleID string
-}
-
-type CapAnchorRequestCmd struct {
-	Root    bool
-	Require bool
-	Provide bool
-	Revoke  bool
-	Data    string
-}
-
-type CreateVolumeRequestCmd struct {
-	ClientPEMFile string
-	VolumeName    string
-	CAOutputDir   string
-}
-
-type CreateContractRequestCmd struct {
-	ContractFile string
-}
-
-type ContractStatusRequestCmd struct {
-	ContractDID  string
-	ContractHost string
-}
-
-type ContractApproveLocalRequestCmd struct {
-	ContractDID string
-}
-
-type ContractConfirmLocalTransactionCmd struct {
-	UniqueID   string
-	TxHash     string
-	Blockchain string
-}
-
-type ContractPaymentStatusCmd struct {
-	UniqueID string
-}
-
-type CollectUsagesAndForwardToPaymentProvidersCmd struct {
-	ContractDID string `json:"contract_did,omitempty"`
-}
-
-type ContractTerminateCmd struct {
-	ContractDID  string
-	ContractHost string
-}
-
-type ContractCompleteCmd struct {
-	ContractDID  string
-	ContractHost string
-}
-
-type ContractValidateCmd struct {
-	ContractDID  string
-	ContractHost string
-}
-
-type ContractSettleCmd struct {
-	ContractDID  string
-	ContractHost string
 }
 
 var registeredBehaviors = map[string]*behaviorConfig{
@@ -1017,26 +949,113 @@ Examples:
 	// /dms/node/deployment/list
 	behaviors.DeploymentListBehavior: {
 		Action:  bInvoke,
-		Payload: func() any { return &node.DeploymentListRequest{} },
+		Payload: func() any { return &DeploymentListCmd{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
-			p := payload.(*node.DeploymentListRequest)
+			p := payload.(*DeploymentListCmd)
 
+			// Existing metadata filter
 			cmd.Flags().StringToStringVarP(&p.Metadata, "filter", "f", nil, "metadata filter to filter deployments (optional)")
+
+			// Pagination
+			cmd.Flags().IntVar(&p.Limit, "limit", 0, "Maximum number of results to return (0 = no limit)")
+			cmd.Flags().IntVar(&p.Offset, "offset", 0, "Number of results to skip")
+
+			// Status filter
+			cmd.Flags().StringSliceVar(&p.Status, "status", nil, "Filter by deployment status (can specify multiple, e.g., --status Running --status Failed)")
+
+			// Date filters
+			cmd.Flags().StringVar(&p.CreatedAfter, "created-after", "", "Filter deployments created after this date (RFC3339 or relative: 1h, 1d, etc.)")
+			cmd.Flags().StringVar(&p.CreatedBefore, "created-before", "", "Filter deployments created before this date (RFC3339 or relative)")
+			cmd.Flags().StringVar(&p.UpdatedAfter, "updated-after", "", "Filter deployments updated after this date (RFC3339 or relative)")
+			cmd.Flags().StringVar(&p.UpdatedBefore, "updated-before", "", "Filter deployments updated before this date (RFC3339 or relative)")
+
+			// Sorting
+			cmd.Flags().StringVar(&p.SortBy, "sort", "-created_at", "Sort field and direction (e.g., 'created_at', '-created_at', 'status')")
 		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*node.DeploymentListRequest)
+			payload, ok := opts.Payload.(*DeploymentListCmd)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
+			}
+
+			req := &node.DeploymentListRequest{
+				Metadata: payload.Metadata,
+				Limit:    payload.Limit,
+				Offset:   payload.Offset,
+				SortBy:   payload.SortBy,
+			}
+
+			// set status
+			if len(payload.Status) > 0 {
+				req.Status = make([]jobtypes.DeploymentStatus, 0, len(payload.Status))
+				for _, statusStr := range payload.Status {
+					statusStr = strings.TrimSpace(statusStr)
+					for i := jobtypes.DeploymentStatusPreparing; i <= jobtypes.DeploymentStatusCompleted; i++ {
+						if strings.EqualFold(i.String(), statusStr) {
+							req.Status = append(req.Status, i)
+							break
+						}
+					}
+				}
+			}
+
+			// Parse date strings from CLI if provided
+			if payload.CreatedAfter != "" {
+				parsed, err := parseDateString(payload.CreatedAfter)
+				if err != nil {
+					return nil, fmt.Errorf("invalid created-after date: %w", err)
+				}
+				req.CreatedAfter = &parsed
+			}
+			if payload.CreatedBefore != "" {
+				parsed, err := parseDateString(payload.CreatedBefore)
+				if err != nil {
+					return nil, fmt.Errorf("invalid created-before date: %w", err)
+				}
+				req.CreatedBefore = &parsed
+			}
+			if payload.UpdatedAfter != "" {
+				parsed, err := parseDateString(payload.UpdatedAfter)
+				if err != nil {
+					return nil, fmt.Errorf("invalid updated-after date: %w", err)
+				}
+				req.UpdatedAfter = &parsed
+			}
+			if payload.UpdatedBefore != "" {
+				parsed, err := parseDateString(payload.UpdatedBefore)
+				if err != nil {
+					return nil, fmt.Errorf("invalid updated-before date: %w", err)
+				}
+				req.UpdatedBefore = &parsed
 			}
 			return dmsClient.DeploymentList(ctx, *req, opts.MsgOpts...)
 		},
 		Short: "List deployments",
 		Long: `Invokes the /dms/node/deployment/list behavior on an actor
 
-This behavior retrieves a list of all deployments on the node.
+This behavior retrieves a list of deployments on the node with support for pagination, filtering, and sorting.
 
 Examples:
-  nunet actor cmd --context user /dms/node/deployment/list --filter "<metadata_key>=<metadata_value>"`,
+  # List first 10 deployments
+  nunet actor cmd --context user /dms/node/deployment/list --limit 10
+
+  # List with pagination
+  nunet actor cmd --context user /dms/node/deployment/list --limit 10 --offset 0
+
+  # Filter by status
+  nunet actor cmd --context user /dms/node/deployment/list --status Running --status Failed
+
+  # Filter by creation date (relative)
+  nunet actor cmd --context user /dms/node/deployment/list --created-after "7d"
+
+  # Filter by creation date (absolute)
+  nunet actor cmd --context user /dms/node/deployment/list --created-after "2024-01-01T00:00:00Z"
+
+  # Combine filters with pagination
+  nunet actor cmd --context user /dms/node/deployment/list --status Running --created-after "1d" --limit 50 --sort "-created_at"
+
+  # With metadata filter
+  nunet actor cmd --context user /dms/node/deployment/list --filter "environment=production" --status Running --limit 10`,
 	},
 
 	// /dms/node/deployment/prune

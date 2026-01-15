@@ -27,6 +27,8 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
+const dockerHelloYAML = "docker_hello.yaml"
+
 // Contract registers all step definitions for contract feature
 func Contract(ctx *godog.ScenarioContext) {
 	ctx.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
@@ -520,7 +522,7 @@ func deploysATaskOnWithTheirContract(ctx context.Context, spName, cpName string)
 	contract, err := tc.Contract()
 	assert.NoError(t, err)
 
-	ensembleName := "docker_hello.yaml"
+	ensembleName := dockerHelloYAML
 	ensemblePath := utils.FindTestdata(fmt.Sprintf("/ensembles/%s", ensembleName))
 	remotePath := filepath.Join("/tmp", ensembleName)
 

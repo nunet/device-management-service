@@ -390,12 +390,12 @@ func getDeploymentIDs(ctx context.Context, dmsClient client.DmsClient) ([]string
 		return nil, fmt.Errorf("error getting deployment list from client: %w", err)
 	}
 
-	ids := make([]string, len(resp.Deployments))
+	ids := make([]string, 0)
 
-	for r, status := range resp.Deployments {
+	for _, deployment := range resp.Deployments {
 		// only running deployments
-		if status == jobtypes.DeploymentStatusRunning.String() {
-			ids = append(ids, r)
+		if deployment.Status == jobtypes.DeploymentStatusRunning.String() {
+			ids = append(ids, deployment.OrchestratorID)
 		}
 	}
 
