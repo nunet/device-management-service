@@ -279,6 +279,10 @@ func (m *MockOrchestratorRegistry) GetDeploymentsByStatus(_ jtypes.DeploymentSta
 	return nil, nil
 }
 
+func (m *MockOrchestratorRegistry) QueryDeployments(_ DeploymentQuery) ([]*jtypes.OrchestratorView, int, error) {
+	return nil, 0, nil
+}
+
 func (m *MockOrchestratorRegistry) DeleteDeployment(_ string) error {
 	return nil
 }

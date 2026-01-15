@@ -153,7 +153,7 @@ func (c *Context) Deploy(ensemble string) (string, error) {
 func (c *Context) EnsembleStatus(id string) (string, error) {
 	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/status --id %s", c.Name, id))
 	if err != nil {
-		return "", fmt.Errorf("failed to call deployment status behavior: %s", out)
+		return "", fmt.Errorf("failed to call deployment status behavior: out=%s, err=%v", out, err)
 	}
 	var resp dmsnode.DeploymentStatusResponse
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
@@ -372,7 +372,97 @@ func (c *Context) DeploymentList() (map[string]string, error) {
 	if err = json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
 	}
-	return resp.Deployments, nil
+	// Convert new format ([]DeploymentInfo) to old format (map[string]string) for backward compatibility
+	result := make(map[string]string)
+	for _, d := range resp.Deployments {
+		result[d.OrchestratorID] = d.Status
+	}
+	return result, nil
+}
+
+// DeploymentListQuery represents query parameters for deployment list
+type DeploymentListQuery struct {
+	Limit    int
+	Offset   int
+	Status   []jobtypes.DeploymentStatus
+	SortBy   string
+	Metadata map[string]string
+}
+
+// DeploymentListResponse represents the enhanced response structure
+type DeploymentListResponse struct {
+	Deployments []DeploymentInfo
+	Total       int
+	HasMore     bool
+	NextOffset  int
+}
+
+// DeploymentInfo represents a single deployment in the list
+type DeploymentInfo struct {
+	OrchestratorID string
+	Status         string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	CompletedAt    *time.Time
+	Metadata       map[string]string
+}
+
+func (c *Context) DeploymentListWithQuery(query DeploymentListQuery) (*DeploymentListResponse, error) {
+	// Build CLI command with flags
+	cmd := fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/list", c.Name)
+
+	if query.Limit > 0 {
+		cmd += fmt.Sprintf(" --limit %d", query.Limit)
+	}
+	if query.Offset > 0 {
+		cmd += fmt.Sprintf(" --offset %d", query.Offset)
+	}
+	if len(query.Status) > 0 {
+		statusStrs := make([]string, len(query.Status))
+		for i, s := range query.Status {
+			statusStrs[i] = s.String()
+		}
+		cmd += fmt.Sprintf(" --status %s", strings.Join(statusStrs, ","))
+	}
+	if query.SortBy != "" {
+		cmd += fmt.Sprintf(" --sort %s", query.SortBy)
+	}
+	if len(query.Metadata) > 0 {
+		for k, v := range query.Metadata {
+			cmd += fmt.Sprintf(" --filter %s=%s", k, v)
+		}
+	}
+
+	out, err := c.instance.RunDMSCmd(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call deployment list behavior: %w", err)
+	}
+
+	var resp dmsnode.DeploymentListResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+
+	// Convert to test utility format
+	result := &DeploymentListResponse{
+		Total:       resp.Total,
+		HasMore:     resp.HasMore,
+		NextOffset:  resp.NextOffset,
+		Deployments: make([]DeploymentInfo, len(resp.Deployments)),
+	}
+
+	for i, d := range resp.Deployments {
+		result.Deployments[i] = DeploymentInfo{
+			OrchestratorID: d.OrchestratorID,
+			Status:         d.Status,
+			CreatedAt:      d.CreatedAt,
+			UpdatedAt:      d.UpdatedAt,
+			CompletedAt:    d.CompletedAt,
+			Metadata:       d.Metadata,
+		}
+	}
+
+	return result, nil
 }
 
 func (c *Context) PruneDeployments() error {

@@ -57,6 +57,8 @@ type Registry interface {
 	GetAllDeployments() ([]*jtypes.OrchestratorView, error)
 	// GetDeploymentsByStatus retrieves deployments filtered by status
 	GetDeploymentsByStatus(status jtypes.DeploymentStatus) ([]*jtypes.OrchestratorView, error)
+	// QueryDeployments retrieves deployments with advanced filtering
+	QueryDeployments(query DeploymentQuery) ([]*jtypes.OrchestratorView, int, error)
 	// DeleteDeployment removes a specific deployment by orchestrator ID
 	DeleteDeployment(orchestratorID string) error
 	// GetDeployment retrieves a deployment from store by ID
@@ -479,6 +481,11 @@ func (f *basicRegistry) GetAllDeployments() ([]*jtypes.OrchestratorView, error) 
 // GetDeploymentsByStatus retrieves deployments filtered by status
 func (f *basicRegistry) GetDeploymentsByStatus(status jtypes.DeploymentStatus) ([]*jtypes.OrchestratorView, error) {
 	return f.store.GetAll(&status)
+}
+
+// QueryDeployments retrieves deployments with advanced filtering
+func (f *basicRegistry) QueryDeployments(query DeploymentQuery) ([]*jtypes.OrchestratorView, int, error) {
+	return f.store.Query(query)
 }
 
 // DeleteDeployment removes a specific deployment by orchestrator ID

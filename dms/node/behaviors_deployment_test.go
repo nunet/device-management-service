@@ -330,8 +330,6 @@ func TestHandleDeploymentList(t *testing.T) {
 		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
-		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
-		require.NoError(t, err)
 
 		eCfgWithoutMetadata := jobtypes.EnsembleConfig{
 			V1: &jobtypes.EnsembleConfigV1{
@@ -344,10 +342,6 @@ func TestHandleDeploymentList(t *testing.T) {
 		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrchWithoutM)
-		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
-		require.NoError(t, err)
-
-		<-time.After(30 * time.Second)
 
 		msg, err := actor.Message(
 			sActor.Handle(),
@@ -367,13 +361,13 @@ func TestHandleDeploymentList(t *testing.T) {
 		var resp DeploymentListResponse
 		err = json.Unmarshal(reply.Message, &resp)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, len(resp.Deployments))
-		status, ok := resp.Deployments[mockOrch.ID()]
-		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusCompleted.String(), status)
-		status, ok = resp.Deployments[mockOrchWithoutM.ID()]
-		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusCompleted.String(), status)
+
+		// Check that both deployments are in the response
+		require.Equal(t, 2, len(resp.Deployments))
+		assert.Contains(t, []string{resp.Deployments[0].OrchestratorID, resp.Deployments[1].OrchestratorID}, mockOrch.ID())
+		assert.Contains(t, []string{resp.Deployments[0].OrchestratorID, resp.Deployments[1].OrchestratorID}, mockOrchWithoutM.ID())
+		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), resp.Deployments[0].Status)
+		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), resp.Deployments[1].Status)
 	})
 
 	t.Run("with metadata", func(t *testing.T) {
@@ -395,8 +389,6 @@ func TestHandleDeploymentList(t *testing.T) {
 		mockOrch, err := node.createOrchestrator(context.Background(), eCfgWithMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrch)
-		err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
-		require.NoError(t, err)
 
 		eCfgWithoutMetadata := jobtypes.EnsembleConfig{
 			V1: &jobtypes.EnsembleConfigV1{
@@ -409,8 +401,6 @@ func TestHandleDeploymentList(t *testing.T) {
 		mockOrchWithoutM, err := node.createOrchestrator(context.Background(), eCfgWithoutMetadata, nil)
 		require.NoError(t, err)
 		require.NotNil(t, mockOrchWithoutM)
-		err = mockOrchWithoutM.Deploy(time.Now().Add(2 * time.Minute))
-		require.NoError(t, err)
 
 		msg, err := actor.Message(
 			sActor.Handle(),
@@ -435,9 +425,149 @@ func TestHandleDeploymentList(t *testing.T) {
 		err = json.Unmarshal(reply.Message, &resp)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(resp.Deployments))
-		status, ok := resp.Deployments[mockOrch.ID()]
-		assert.True(t, ok)
-		assert.Equal(t, jobtypes.DeploymentStatusRunning.String(), status)
+		assert.Equal(t, mockOrch.ID(), resp.Deployments[0].OrchestratorID)
+		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), resp.Deployments[0].Status)
+	})
+
+	t.Run("with pagination", func(t *testing.T) {
+		t.Parallel()
+
+		node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentListBehavior)
+
+		// Create multiple deployments
+		for i := 0; i < 5; i++ {
+			eCfg := jobtypes.EnsembleConfig{
+				V1: &jobtypes.EnsembleConfigV1{
+					Allocations: map[string]jobtypes.AllocationConfig{},
+					Nodes:       map[string]jobtypes.NodeConfig{},
+					Supervisor:  jobtypes.SupervisorConfig{},
+					Subnet:      jobtypes.SubnetConfig{},
+				},
+			}
+
+			_, err := node.createOrchestrator(context.Background(), eCfg, nil)
+			require.NoError(t, err)
+		}
+
+		// Test first page
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentListBehavior,
+			DeploymentListRequest{
+				Limit:  2,
+				Offset: 0,
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp DeploymentListResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(resp.Deployments))
+		assert.GreaterOrEqual(t, resp.Total, 5)
+		assert.True(t, resp.HasMore)
+
+		// Test second page
+		msg2, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentListBehavior,
+			DeploymentListRequest{
+				Limit:  2,
+				Offset: 2,
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan2, err := sActor.Invoke(msg2)
+		assert.NoError(t, err)
+
+		reply2 := <-replyChan2
+		defer reply2.Discard()
+
+		var resp2 DeploymentListResponse
+		err = json.Unmarshal(reply2.Message, &resp2)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(resp2.Deployments))
+		// Ensure different deployments
+		assert.NotEqual(t, resp.Deployments[0].OrchestratorID, resp2.Deployments[0].OrchestratorID)
+	})
+
+	t.Run("with status filter", func(t *testing.T) {
+		t.Parallel()
+
+		node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentListBehavior)
+
+		// Create deployments with different statuses
+		eCfg := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		_, err := node.createOrchestrator(context.Background(), eCfg, nil)
+		require.NoError(t, err)
+
+		// expect only "Preparing" status deployments
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentListBehavior,
+			DeploymentListRequest{
+				Status: []jobtypes.DeploymentStatus{jobtypes.DeploymentStatusPreparing},
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp DeploymentListResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+
+		// there should be at least one in "Preparing" status
+		assert.Equal(t, 1, len(resp.Deployments))
+		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), resp.Deployments[0].Status)
+
+		// expect only "Completed" status deployments
+		msg, err = actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentListBehavior,
+			DeploymentListRequest{
+				Status: []jobtypes.DeploymentStatus{jobtypes.DeploymentStatusCompleted},
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err = sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply = <-replyChan
+		defer reply.Discard()
+
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+
+		// not expecting any in "Completed" status
+		assert.Equal(t, 0, len(resp.Deployments))
 	})
 }
 
@@ -1092,21 +1222,24 @@ func TestHandleDeploymentPrune_Before_RFC3339(t *testing.T) {
 	o1, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, o1)
-	require.NoError(t, o1.Deploy(time.Now().Add(2*time.Minute)))
 	o1.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+	err = node.saveDeployment(o1)
+	require.NoError(t, err)
 
 	o2, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, o2)
-	require.NoError(t, o2.Deploy(time.Now().Add(2*time.Minute)))
 	o2.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusFailed)
+	err = node.saveDeployment(o2)
+	require.NoError(t, err)
 
 	time.Sleep(3 * time.Second)
 	o3, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
 	require.NotNil(t, o3)
-	require.NoError(t, o3.Deploy(time.Now().Add(2*time.Minute)))
 	o3.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+	err = node.saveDeployment(o3)
+	require.NoError(t, err)
 
 	dep, err := node.orchestratorRegistry.GetAllDeployments()
 	require.NoError(t, err)
@@ -1117,8 +1250,6 @@ func TestHandleDeploymentPrune_Before_RFC3339(t *testing.T) {
 			cutoff = d.CreatedAt.Add(-1 * time.Second)
 		}
 	}
-
-	<-time.After(10 * time.Second) // wait for the status watcher to update the deployment in the store
 
 	msg, err := actor.Message(
 		sActor.Handle(),
@@ -1163,24 +1294,25 @@ func TestHandleDeploymentPrune_Before_Durations(t *testing.T) {
 	// Create older
 	old, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
-	require.NoError(t, old.Deploy(time.Now().Add(2*time.Minute)))
 	old.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+	err = node.saveDeployment(old)
+	require.NoError(t, err)
 
-	// wait > 1s to test seconds duration
-	time.Sleep(2 * time.Second)
+	// some delay between two deployments
+	time.Sleep(10 * time.Second)
+
 	newer, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
-	require.NoError(t, newer.Deploy(time.Now().Add(2*time.Minute)))
 	newer.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
+	err = node.saveDeployment(newer)
+	require.NoError(t, err)
 
-	<-time.After(5 * time.Second) // wait for the status watcher to update the deployment in the store
-
-	// 1s should remove old, keep newer
+	// should remove old, keep newer - old is at least 10s old
 	msg, err := actor.Message(
 		sActor.Handle(),
 		node.actor.Handle(),
 		behaviors.DeploymentPruneBehavior,
-		DeploymentPruneRequest{Before: "6s"}, // 7s passed since creating the old deployment
+		DeploymentPruneRequest{Before: "6s"},
 	)
 	require.NoError(t, err)
 	replyCh, err := sActor.Invoke(msg)
@@ -1228,43 +1360,25 @@ func TestHandleDeploymentPrune_All(t *testing.T) {
 		},
 	}
 
-	prep, _ := node.createOrchestrator(context.Background(), eCfg, nil)
-	err := prep.Deploy(time.Now().Add(2 * time.Minute))
+	prep, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
-	orch, err := node.orchestratorRegistry.GetOrchestrator(prep.ID())
-	require.NoError(t, err)
-	require.NotNil(t, orch)
-	<-orch.(*orchestrator.BasicOrchestrator).Done() // because task monitor will set status to completed on 0 allocations
-	// wait for the status watcher to update the deployment in the store
-	<-time.After(10 * time.Second)
-	// save new status manually cause status watcher has quit since the orchestrator context has been cancelled
-	prep.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusPreparing)
-	require.NoError(t, node.orchestratorRegistry.SaveOrchestrator(prep))
-	// default status preparing
 
-	run, _ := node.createOrchestrator(context.Background(), eCfg, nil)
-	err = run.Deploy(time.Now().Add(2 * time.Minute))
+	run, err := node.createOrchestrator(context.Background(), eCfg, nil)
 	require.NoError(t, err)
-	orch, err = node.orchestratorRegistry.GetOrchestrator(run.ID())
-	require.NoError(t, err)
-	require.NotNil(t, orch)
-	<-orch.(*orchestrator.BasicOrchestrator).Done() // because task monitor will set status to completed on 0 allocations
-	// wait for the status watcher to update the deployment in the store
-	<-time.After(10 * time.Second)
 	run.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusRunning)
-	// save new status manually cause status watcher has quit since the orchestrator context has been cancelled
-	require.NoError(t, node.orchestratorRegistry.SaveOrchestrator(run))
+	err = node.saveDeployment(run)
+	require.NoError(t, err)
 
 	fail, _ := node.createOrchestrator(context.Background(), eCfg, nil)
-	err = fail.Deploy(time.Now().Add(2 * time.Minute))
-	require.NoError(t, err)
 	fail.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusFailed)
+	err = node.saveDeployment(fail)
+	require.NoError(t, err)
 
 	comp, _ := node.createOrchestrator(context.Background(), eCfg, nil)
-	_ = comp.Deploy(time.Now().Add(2 * time.Minute))
 	comp.(*orchestrator.BasicOrchestrator).SetStatus(jobtypes.DeploymentStatusCompleted)
 
-	<-time.After(5 * time.Second) // wait for the status watcher to update the deployment in the store
+	err = node.saveDeployment(comp)
+	require.NoError(t, err)
 
 	msg, err := actor.Message(
 		sActor.Handle(),

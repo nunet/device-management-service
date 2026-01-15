@@ -1,0 +1,83 @@
+package actor
+
+type NewDeploymentRequestCmd struct {
+	Config string
+}
+
+type UpdateDeploymentRequestCmd struct {
+	NewDeploymentRequestCmd
+	EnsembleID string
+}
+
+type CapAnchorRequestCmd struct {
+	Root    bool
+	Require bool
+	Provide bool
+	Revoke  bool
+	Data    string
+}
+
+type CreateVolumeRequestCmd struct {
+	ClientPEMFile string
+	VolumeName    string
+	CAOutputDir   string
+}
+
+type CreateContractRequestCmd struct {
+	ContractFile string
+}
+
+type ContractStatusRequestCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type ContractApproveLocalRequestCmd struct {
+	ContractDID string
+}
+
+type ContractConfirmLocalTransactionCmd struct {
+	UniqueID   string
+	TxHash     string
+	Blockchain string
+}
+
+type ContractPaymentStatusCmd struct {
+	UniqueID string
+}
+
+type CollectUsagesAndForwardToPaymentProvidersCmd struct {
+	ContractDID string `json:"contract_did,omitempty"`
+}
+
+type ContractTerminateCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type ContractCompleteCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type ContractValidateCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type ContractSettleCmd struct {
+	ContractDID  string
+	ContractHost string
+}
+
+type DeploymentListCmd struct {
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	Limit         int               `json:"limit,omitempty"`
+	Offset        int               `json:"offset,omitempty"`
+	Status        []string          `json:"status,omitempty"`
+	CreatedAfter  string            `json:"created_after,omitempty"`
+	CreatedBefore string            `json:"created_before,omitempty"`
+	UpdatedAfter  string            `json:"updated_after,omitempty"`
+	UpdatedBefore string            `json:"updated_before,omitempty"`
+	SortBy        string            `json:"sort_by,omitempty"`
+}

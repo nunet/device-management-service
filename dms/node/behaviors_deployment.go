@@ -204,12 +204,44 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	// Orchestrator status is automatically saved to store via status watcher
 }
 
-type DeploymentListResponse struct {
-	Deployments map[string]string
+type DeploymentListRequest struct {
+	// Existing metadata filter (backward compatible)
+	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Pagination
+	Limit  int `json:"limit,omitempty"`  // Max number of results (default: no limit, for backward compat)
+	Offset int `json:"offset,omitempty"` // Number of results to skip (default: 0)
+
+	// Status filter (for JSON API - parsed from strings in CLI)
+	Status []jobtypes.DeploymentStatus `json:"status,omitempty"` // Filter by one or more statuses
+
+	// Date filters (for JSON API)
+	CreatedAfter  *time.Time `json:"created_after,omitempty"`  // Filter by CreatedAt >= value
+	CreatedBefore *time.Time `json:"created_before,omitempty"` // Filter by CreatedAt <= value
+	UpdatedAfter  *time.Time `json:"updated_after,omitempty"`  // Filter by UpdatedAt >= value
+	UpdatedBefore *time.Time `json:"updated_before,omitempty"` // Filter by UpdatedAt <= value
+
+	// Sorting
+	SortBy string `json:"sort_by,omitempty"` // Field to sort by (e.g., "created_at", "-created_at" for desc)
 }
 
-type DeploymentListRequest struct {
-	Metadata map[string]string
+type DeploymentListResponse struct {
+	// Enhanced deployment information
+	Deployments []DeploymentInfo `json:"deployments"`
+
+	// Pagination metadata
+	Total      int  `json:"total"`                 // Total number of deployments matching filters
+	HasMore    bool `json:"has_more"`              // Whether there are more results available
+	NextOffset int  `json:"next_offset,omitempty"` // Offset for next page (if has_more is true)
+}
+
+type DeploymentInfo struct {
+	OrchestratorID string            `json:"orchestrator_id"`
+	Status         string            `json:"status"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+	CompletedAt    *time.Time        `json:"completed_at,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
 func (n *Node) handleDeploymentList(msg actor.Envelope) {
@@ -219,7 +251,7 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 		log.Errorw("deployment_list_error",
 			"labels", []string{string(observability.LabelDeployment)},
 			"error", err)
-		n.sendReply(msg, DeploymentListResponse{Deployments: make(map[string]string)})
+		n.sendReply(msg, DeploymentListResponse{Deployments: []DeploymentInfo{}})
 	}
 
 	var request DeploymentListRequest
@@ -230,19 +262,61 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 		return
 	}
 
-	resp.Deployments = make(map[string]string)
+	// Build query from request
+	query := orchestrator.DeploymentQuery{
+		Limit:  request.Limit,
+		Offset: request.Offset,
+		SortBy: request.SortBy,
+	}
 
-	// Get all deployments from store (primary source of truth)
-	allDeployments, err := n.orchestratorRegistry.GetAllDeployments()
+	// Status filter
+	if len(request.Status) > 0 {
+		query.StatusFilter = request.Status
+	}
+
+	// Date filters
+	if request.CreatedAfter != nil {
+		query.CreatedAfter = request.CreatedAfter
+	}
+	if request.CreatedBefore != nil {
+		query.CreatedBefore = request.CreatedBefore
+	}
+	if request.UpdatedAfter != nil {
+		query.UpdatedAfter = request.UpdatedAfter
+	}
+	if request.UpdatedBefore != nil {
+		query.UpdatedBefore = request.UpdatedBefore
+	}
+
+	// Query deployments from store
+	deployments, total, err := n.orchestratorRegistry.QueryDeployments(query)
 	if err != nil {
-		handleErr(fmt.Errorf("failed to get deployments from store: %w", err))
+		handleErr(fmt.Errorf("failed to query deployments: %w", err))
 		return
 	}
 
-	for _, deployment := range allDeployments {
+	// Apply metadata filtering (in-memory, as metadata is in deployment_data)
+	filteredDeployments := make([]DeploymentInfo, 0)
+	for _, deployment := range deployments {
 		if shouldIncludeDeployment(deployment, request.Metadata) {
-			resp.Deployments[deployment.OrchestratorID] = deployment.Status.String()
+			info := DeploymentInfo{
+				OrchestratorID: deployment.OrchestratorID,
+				Status:         deployment.Status.String(),
+				CreatedAt:      deployment.CreatedAt,
+				UpdatedAt:      deployment.UpdatedAt,
+				CompletedAt:    deployment.CompletedAt,
+				Metadata:       deployment.Manifest.Metadata,
+			}
+			filteredDeployments = append(filteredDeployments, info)
 		}
+	}
+
+	// Calculate pagination metadata
+	resp.Deployments = filteredDeployments
+	resp.Total = total
+	resp.HasMore = request.Limit > 0 && (request.Offset+len(filteredDeployments) < total)
+	if resp.HasMore {
+		resp.NextOffset = request.Offset + len(filteredDeployments)
 	}
 
 	n.sendReply(msg, resp)

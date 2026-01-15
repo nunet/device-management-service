@@ -10,6 +10,8 @@ package orchestrator
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -110,4 +112,104 @@ func (m *mockDeploymentStore) Clear() error {
 
 	m.deployments = make(map[string]*jtypes.OrchestratorView)
 	return nil
+}
+
+func (m *mockDeploymentStore) Query(q DeploymentQuery) ([]*jtypes.OrchestratorView, int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Collect all deployments
+	allDeployments := make([]*jtypes.OrchestratorView, 0, len(m.deployments))
+	for _, deployment := range m.deployments {
+		allDeployments = append(allDeployments, deployment)
+	}
+
+	// Apply filters
+	filtered := make([]*jtypes.OrchestratorView, 0)
+	for _, deployment := range allDeployments {
+		// Status filter
+		if len(q.StatusFilter) > 0 {
+			found := false
+			for _, status := range q.StatusFilter {
+				if deployment.Status == status {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// Date filters
+		if q.CreatedAfter != nil && deployment.CreatedAt.Before(*q.CreatedAfter) {
+			continue
+		}
+		if q.CreatedBefore != nil && deployment.CreatedAt.After(*q.CreatedBefore) {
+			continue
+		}
+		if q.UpdatedAfter != nil && deployment.UpdatedAt.Before(*q.UpdatedAfter) {
+			continue
+		}
+		if q.UpdatedBefore != nil && deployment.UpdatedAt.After(*q.UpdatedBefore) {
+			continue
+		}
+
+		filtered = append(filtered, deployment)
+	}
+
+	// Count total before sorting/pagination
+	total := len(filtered)
+
+	// Apply sorting
+	if q.SortBy != "" {
+		sortField := q.SortBy
+		descending := strings.HasPrefix(sortField, "-")
+		if descending {
+			sortField = sortField[1:]
+		}
+
+		sort.Slice(filtered, func(i, j int) bool {
+			var less bool
+			switch mapSortField(sortField) {
+			case "created_at":
+				less = filtered[i].CreatedAt.Before(filtered[j].CreatedAt)
+			case "updated_at":
+				less = filtered[i].UpdatedAt.Before(filtered[j].UpdatedAt)
+			case "status":
+				less = int(filtered[i].Status) < int(filtered[j].Status)
+			default:
+				less = false
+			}
+			if descending {
+				return !less
+			}
+			return less
+		})
+	} else {
+		// Default sort: newest first
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].CreatedAt.After(filtered[j].CreatedAt)
+		})
+	}
+
+	// Apply pagination
+	start := q.Offset
+	if start < 0 {
+		start = 0
+	}
+	if start > len(filtered) {
+		return []*jtypes.OrchestratorView{}, total, nil
+	}
+
+	end := len(filtered)
+	if q.Limit > 0 && start+q.Limit < end {
+		end = start + q.Limit
+	}
+
+	if start >= len(filtered) {
+		return []*jtypes.OrchestratorView{}, total, nil
+	}
+
+	return filtered[start:end], total, nil
 }
