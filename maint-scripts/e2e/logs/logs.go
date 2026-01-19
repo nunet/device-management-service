@@ -40,10 +40,10 @@ func main() {
 
 	// validate presets
 	for _, preset := range args.Preset {
-		if _, ok := presets.Presets[preset]; !ok {
+		if _, ok := presets.Presets[preset]; ok {
 			continue
 		}
-		if _, ok := presets.PresetsArgs[preset]; !ok {
+		if _, ok := presets.PresetsArgs[preset]; ok {
 			continue
 		}
 		p.Fail(fmt.Sprintf("unknown preset: %s", preset))
@@ -63,7 +63,8 @@ func main() {
 		// collect
 		lines, did, err := shared.CollectLines(logFile, args.ArgsAdjacent, args.ArgsFilters, args.Flightrec)
 		if err != nil {
-			p.Fail(fmt.Sprintf("collecting lines for %s: %s", logFile.Name, err.Error()))
+			fmt.Printf("warn: collecting lines for '%s': %v\n", logFile.NodeName, err)
+			continue
 		}
 		if len(lines) == 0 {
 			continue
@@ -94,7 +95,7 @@ func main() {
 		if args.Headers {
 			output += shared.RenderSliceHeader(logFile, shown > 0)
 		}
-		if sliceOut, err := shared.RenderSlice("logs-"+logFile.Name, lines, args.ArgsBasic); err != nil {
+		if sliceOut, err := shared.RenderSlice("logs-"+logFile.NodeName, lines, args.ArgsBasic); err != nil {
 			p.Fail("rendering tmp file: " + err.Error())
 		} else {
 			output += sliceOut

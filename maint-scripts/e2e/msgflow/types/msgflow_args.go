@@ -46,42 +46,42 @@ func (Args) Description() string {
 		Examples:
 		
 		Diagram for the local DMS and logs from ./import, max 100 msgs per node
-		$> %s --dir import --max 100
+		$> %[1]s --dir import --max 100
 		
 		Like above, but noise filtered out and with latest msgs
-		$> %s -p filtered --dir import --last 100
+		$> %[1]s -p filtered --dir import --last 100
 		
 		Msgs from 1 second around line 50 for the node "dms1"
-		$> %s \
+		$> %[1]s \
 			--line 50 \
 			--node-name dms1 \
 			--adjacent-duration 1s
 		
 		Msgs within lines 50 to 60 for the node "dms1"
-		$> %s --line 50:60 --node-name dms1
+		$> %[1]s --line 50:60 --node-name dms1
 		
 		Msgs within lines 50 to 60 for the node "dms1", with flight times
-		$> %s --line 50:60 --node-name dms1 --fligtrec
+		$> %[1]s --line 50:60 --node-name dms1 --fligtrec
 	
 		Msgs from 10:09:50 to 10:09:56 for the node "dms1"
-		$> %s \
+		$> %[1]s \
 			--timestamp-start 2025-09-24T10:09:50 \
 			--timestamp-end 2025-09-24T10:09:56 \
 			--node-name dms1
 		
 		Msgs from 10:09:56 plus 10 adjacent lines, for the node "dms1"
-		$> %s \
+		$> %[1]s \
 			--timestamp 2025-09-24T10:09:56 \
 			--node-name dms1 \
 			--adjacent-lines 10
 		
 		Grouped diagram for the latest acceptance test run
-		$> %s acceptance \
+		$> %[1]s acceptance \
 			--diagram-group
 		
 		Diagram for all nodes in the E2E deployment_updates test run
-		$> %s deployment_updates
+		$> %[1]s deployment_updates
 	
-		Presets: %s	
-	`, n, n, n, n, n, n, n, n, n, Presets)
+		Presets: %[2]s	
+	`, n, Presets)
 }

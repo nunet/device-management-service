@@ -806,6 +806,16 @@ func (s *TestSuite) TearDownSuite() {
 		}, 10*time.Second, 100*time.Millisecond, fmt.Sprintf("process %d not terminated", pid))
 	}
 
+	// assert testdata
+	for _, node := range s.nodes {
+
+		// assert log files created
+		logPath := node.config.Logging.File
+		if _, err := os.Stat(logPath); os.IsNotExist(err) {
+			s.T().Errorf("log file does not exist: %s", logPath)
+		}
+	}
+
 	// clean up
 	if os.Getenv(envE2ECacheKeep) != "1" && os.Getenv(envE2ECacheKeys) != "1" {
 		s.T().Logf("cleaning up directories")
