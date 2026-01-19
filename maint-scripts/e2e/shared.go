@@ -70,7 +70,7 @@ type LogLine struct {
 	Timestamp  time.Time `json:"timestamp"`
 	FlightTime string    `json:"flight_time"`
 	Msg        string    `json:"msg"`
-	// Node is set by [lineCollector].
+	// Node is set by [lineCollector] via a JSON string.
 	Node     string        `json:"node"`
 	Line     int           `json:"line"`
 	MsgFrom  *actor.Handle `json:"msg_from"`
@@ -86,10 +86,10 @@ type LogLine struct {
 }
 
 type LogFile struct {
-	Path   string
-	Name   string
-	Number int
-	DID    string
+	Path     string
+	NodeName string
+	Number   int
+	DID      string
 	// full path the flight recorder trace file.
 	Flightrec string
 	// Node's role "cp" or "sp". TODO >1 role?
@@ -178,7 +178,7 @@ func SourceConfig(path string) []LogFile {
 
 		return []LogFile{{
 			Path:      cfg.Logging.File,
-			Name:      "config",
+			NodeName:  "config",
 			Number:    0,
 			Flightrec: flightrec,
 		}}
@@ -253,7 +253,7 @@ func SourceAcceptanceLatest(path string, nodeNames []string) []LogFile {
 		}
 		ret = append(ret, LogFile{
 			Path:      filepath.Join(path, entry.Name()),
-			Name:      name,
+			NodeName:  name,
 			Number:    nodeNum,
 			Role:      role,
 			Flightrec: flightrec,
@@ -284,7 +284,7 @@ func SourceE2E(logRoot string, nodeNames []string) []LogFile {
 		}
 		logs = append(logs, LogFile{
 			Path:      filepath.Join(logRoot, nodeDir, "logs.jsonl"),
-			Name:      nodeDir,
+			NodeName:  nodeDir,
 			Number:    i,
 			Flightrec: flightrec,
 		})
@@ -299,11 +299,15 @@ func SourceDir(dir string, nodeNames []string, nextNum int) []LogFile {
 		// TODO log err
 		return nil
 	}
-	ret := make([]LogFile, len(files))
+	ret := []LogFile{}
 	for i, path := range files {
 		// node name
 		file := filepath.Base(path)
 		node := file[0 : len(file)-len(".jsonl")]
+		// shortcut names with special chars (eg DIDs)
+		if strings.Contains(node, ":") {
+			node = string('A' + rune(i))
+		}
 		if len(nodeNames) > 0 && !slices.Contains(nodeNames, node) {
 			continue
 		}
@@ -315,12 +319,12 @@ func SourceDir(dir string, nodeNames []string, nextNum int) []LogFile {
 		}
 
 		// add new log source
-		ret[i] = LogFile{
+		ret = append(ret, LogFile{
 			Path:      path,
-			Name:      node,
+			NodeName:  node,
 			Number:    nextNum,
 			Flightrec: flightrec,
-		}
+		})
 		nextNum++
 	}
 
@@ -438,12 +442,15 @@ func RenderLog(path string, remaining int, cfg ArgsBasic) (string, error) {
 // RenderSlice saves a JSONL file, renders it to the terminal, and returns the output.
 func RenderSlice(name string, data []*LogLine, cfg ArgsBasic) (string, error) {
 	show := data
-	if cfg.Last > 0 {
+	switch {
+	case cfg.Last > 0:
 		start := len(data) - cfg.Last
 		start = max(0, start)
 		show = data[start:]
-	} else if cfg.Max > 0 && len(data) > cfg.Max {
+	case cfg.Max > 0 && len(data) > cfg.Max:
 		show = data[:cfg.Max]
+	case cfg.Max == -1:
+		return "", nil
 	}
 
 	if path, err := SaveSlice(name, show); err != nil {
@@ -457,7 +464,7 @@ func RenderSlice(name string, data []*LogLine, cfg ArgsBasic) (string, error) {
 
 func RenderSliceHeader(logFile LogFile, prefix bool) string {
 	mark := strings.Repeat("##### ", 3)
-	ret := fmt.Sprintf("%s\n%s: %s\n%s\n", mark, logFile.Name, logFile.Path, logFile.DID)
+	ret := fmt.Sprintf("%s\n%s: %s\n%s\n", mark, logFile.NodeName, logFile.Path, logFile.DID)
 	if logFile.Role != "" {
 		ret += "role: " + logFile.Role + "\n"
 	}
@@ -474,7 +481,7 @@ func RenderLogHeader(logFiles []LogFile) string {
 	mark := strings.Repeat("##### ", 3)
 	ret := fmt.Sprintf("%s\nNetwork:\n", mark)
 	for _, lf := range logFiles {
-		ret += fmt.Sprintf("%-2d \"%s\"\n   %s", lf.Number, lf.Name, lf.DID)
+		ret += fmt.Sprintf("%-2d \"%s\"\n   %s", lf.Number, lf.NodeName, lf.DID)
 		if lf.Role != "" {
 			ret += fmt.Sprintf("\n   role: %s", lf.Role)
 		}
@@ -621,6 +628,9 @@ func ParseLines(lines []string) []*LogLine {
 // JSONQuery applies a JSON query to the log lines.
 // See https://jqlang.org/manual
 func JSONQuery(lines []*LogLine, q string) ([]*LogLine, error) {
+	// TODO accept args
+	//  on --show-jq-queries print the FULL query
+
 	if q == "" {
 		return nil, fmt.Errorf("query param required")
 	}
@@ -895,7 +905,7 @@ func (c *lineCollector) scanMatches() error {
 		}
 
 		c.results = append(c.results, fmt.Sprintf(`{"node": "%s", "line": %d, %s`,
-			c.logFile.Name, lineNum, label)+string(line)[1:])
+			c.logFile.NodeName, lineNum, label)+string(line)[1:])
 		if c.did == "" {
 			c.did = entry.DID
 		}
@@ -951,7 +961,7 @@ func (c *lineCollector) addAdjacent() error {
 			lineNum++
 			continue
 		}
-		resultLine := fmt.Sprintf(`{"node": "%s", "line": %d, `, c.logFile.Name, lineNum) + string(line)[1:]
+		resultLine := fmt.Sprintf(`{"node": "%s", "line": %d, `, c.logFile.NodeName, lineNum) + string(line)[1:]
 		if lineNum < c.firstMatchLine {
 			before = append(before, resultLine)
 		} else {
