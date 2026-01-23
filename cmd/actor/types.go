@@ -10,11 +10,7 @@ type UpdateDeploymentRequestCmd struct {
 }
 
 type CapAnchorRequestCmd struct {
-	Root    bool
-	Require bool
-	Provide bool
-	Revoke  bool
-	Data    string
+	Token string
 }
 
 type CreateVolumeRequestCmd struct {

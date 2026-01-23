@@ -53,11 +53,12 @@ func (n *Node) handleCapList(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-type CapAnchorRequest struct {
-	Root    []did.DID
-	Require ucan.TokenList
-	Provide ucan.TokenList
-	Revoke  ucan.TokenList
+type CapRootAnchorRequest struct {
+	DID []did.DID
+}
+
+type CapTokenAnchorRequest struct {
+	Token ucan.TokenList
 }
 
 type CapAnchorResponse struct {
@@ -65,31 +66,99 @@ type CapAnchorResponse struct {
 	Error string
 }
 
-func (n *Node) handleCapAnchor(msg actor.Envelope) {
+func (n *Node) handleProvideCapAnchor(msg actor.Envelope) {
 	defer msg.Discard()
 
 	handleErr := func(err error) {
-		log.Errorf("Error handling capability anchor: %s", err)
+		log.Errorf("Error handling provide capability anchor: %s", err)
 		n.sendReply(msg, CapAnchorResponse{Error: err.Error()})
 	}
 
-	var request CapAnchorRequest
+	var request CapTokenAnchorRequest
 	resp := CapAnchorResponse{}
 	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		handleErr(err)
 		return
 	}
 
-	if err := n.rootCap.AddRoots(nil, request.Require, request.Provide, request.Revoke); err != nil {
+	if err := n.rootCap.AddRoots(nil, ucan.TokenList{}, request.Token, ucan.TokenList{}); err != nil {
 		handleErr(err)
 		return
 	}
 
-	if err := SaveCapabilityContext(n.rootCap, n.fs, n.dmsConfig.WorkDir); err != nil {
+	if err := SaveCapabilityContext(n.rootCap, n.fs, n.dmsConfig.UserDir); err != nil {
 		handleErr(err)
 		return
 	}
 
 	resp.OK = true
 	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleRequireCapAnchor(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling require capability anchor: %s", err)
+		n.sendReply(msg, CapAnchorResponse{Error: err.Error()})
+	}
+
+	var request CapTokenAnchorRequest
+	resp := CapAnchorResponse{}
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(err)
+		return
+	}
+
+	if err := n.rootCap.AddRoots(nil, request.Token, ucan.TokenList{}, ucan.TokenList{}); err != nil {
+		handleErr(err)
+		return
+	}
+
+	if err := SaveCapabilityContext(n.rootCap, n.fs, n.dmsConfig.UserDir); err != nil {
+		handleErr(err)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleRevokeCapAnchor(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorf("Error handling revoke capability anchor: %s", err)
+		n.sendReply(msg, CapAnchorResponse{Error: err.Error()})
+	}
+
+	var request CapTokenAnchorRequest
+	resp := CapAnchorResponse{}
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(err)
+		return
+	}
+
+	if err := n.rootCap.AddRoots(nil, ucan.TokenList{}, ucan.TokenList{}, request.Token); err != nil {
+		handleErr(err)
+		return
+	}
+
+	if err := SaveCapabilityContext(n.rootCap, n.fs, n.dmsConfig.UserDir); err != nil {
+		handleErr(err)
+		return
+	}
+
+	resp.OK = true
+	n.sendReply(msg, resp)
+}
+
+type CapBroadcastRequest struct {
+	Context string // Capability context name to broadcast revocations from
+}
+
+type CapBroadcastResponse struct {
+	OK          bool
+	Error       string
+	TokensCount int // Number of revocation tokens broadcast
 }

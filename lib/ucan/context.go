@@ -97,7 +97,7 @@ type CapabilityContext interface {
 	ListRoots() ([]did.DID, TokenList, TokenList, TokenList)
 
 	// RemoveRoots removes the specified trust anchors
-	RemoveRoots(trust []did.DID, require, provide TokenList)
+	RemoveRoots(trust []did.DID, require, provide TokenList, revoke TokenList)
 
 	// Delegate creates the appropriate delegation tokens anchored in our roots
 	Delegate(subject, audience did.DID, topics []string, expire, depth uint64, provide []Capability, selfSign SelfSignMode) (TokenList, error)
@@ -286,7 +286,7 @@ func (ctx *BasicCapabilityContext) ListRoots() ([]did.DID, TokenList, TokenList,
 	return roots, TokenList{Tokens: require}, TokenList{Tokens: provide}, TokenList{Tokens: revoke}
 }
 
-func (ctx *BasicCapabilityContext) RemoveRoots(trust []did.DID, require, provide TokenList) {
+func (ctx *BasicCapabilityContext) RemoveRoots(trust []did.DID, require, provide, revoke TokenList) {
 	ctx.mx.Lock()
 	defer ctx.mx.Unlock()
 
@@ -319,6 +319,13 @@ func (ctx *BasicCapabilityContext) RemoveRoots(trust []did.DID, require, provide
 			} else {
 				delete(ctx.provide, t.Issuer())
 			}
+		}
+	}
+
+	for _, t := range revoke.Tokens {
+		_, ok := ctx.revoke.revoked[t.RevocationKey()]
+		if ok {
+			delete(ctx.revoke.revoked, t.RevocationKey())
 		}
 	}
 }
@@ -367,11 +374,12 @@ func (ctx *BasicCapabilityContext) Revoke(token *Token) (*Token, error) {
 	}
 
 	revocationToken := &DMSToken{
-		Action:  Revoke,
-		Issuer:  token.Issuer(),
-		Subject: token.Subject(),
-		Nonce:   token.Nonce(),
-		Expire:  token.Expiry(),
+		Action:     Revoke,
+		Issuer:     token.Issuer(),
+		Subject:    token.Subject(),
+		Nonce:      token.Nonce(),
+		Expire:     token.Expiry(),
+		Capability: token.Capability(),
 	}
 
 	data, err := revocationToken.SignatureData()

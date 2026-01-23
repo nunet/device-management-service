@@ -55,6 +55,15 @@ func (c *Context) Revoke(token string) (revokedToken string, err error) {
 		c.Name, token))
 }
 
+// BroadcastRevoke broadcasts revocation tokens from the context to all peers
+func (c *Context) BroadcastRevoke() error {
+	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet actor cmd /dms/cap/broadcast --context %s", c.Name))
+	if err != nil {
+		return fmt.Errorf("failed to broadcast revocations: %w (output: %s)", err, out)
+	}
+	return nil
+}
+
 func (c *Context) SetConfig(key, value string) error {
 	_, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet config set %s %s", key, value))
 	return err

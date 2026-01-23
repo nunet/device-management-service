@@ -95,12 +95,12 @@ func TestHandleAnchorCap(t *testing.T) {
 	t.Run("wrong payload type", func(t *testing.T) {
 		t.Parallel()
 
-		node, sActor, _ := newMockNodeWithSender(t, behaviors.CapAnchorBehavior)
+		node, sActor, _ := newMockNodeWithSender(t, behaviors.RequireCapAnchorBehavior)
 
 		msg, err := actor.Message(
 			sActor.Handle(),
 			node.actor.Handle(),
-			behaviors.CapAnchorBehavior,
+			behaviors.RequireCapAnchorBehavior,
 			"wrong message",
 			actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 		)
@@ -118,13 +118,13 @@ func TestHandleAnchorCap(t *testing.T) {
 		require.Contains(t, resp.Error, "cannot unmarshal")
 	})
 
-	t.Run("successful request", func(t *testing.T) {
+	t.Run("successful require request", func(t *testing.T) {
 		t.Parallel()
 
 		testAnchorCap := "/test/anchor/cap"
 		testAnchorTopic := "/test/anchor/topic"
 
-		node, sActor, _ := newMockNodeWithSender(t, behaviors.CapAnchorBehavior)
+		node, sActor, _ := newMockNodeWithSender(t, behaviors.RequireCapAnchorBehavior)
 
 		// make sure there's only one root from the beginning
 		roots, _, _, _ := node.rootCap.ListRoots()
@@ -150,21 +150,18 @@ func TestHandleAnchorCap(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		msg, err := actor.Message(
+		requireMsg, err := actor.Message(
 			sActor.Handle(),
 			node.actor.Handle(),
-			behaviors.CapAnchorBehavior,
-			CapAnchorRequest{
-				Root:    []did.DID{tRootDID}, // will not be anchored
-				Require: ucan.TokenList{},
-				Provide: token,
-				Revoke:  ucan.TokenList{},
+			behaviors.RequireCapAnchorBehavior,
+			CapTokenAnchorRequest{
+				Token: token,
 			},
 			actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
 		)
 		require.NoError(t, err)
 
-		replyChan, err := sActor.Invoke(msg)
+		replyChan, err := sActor.Invoke(requireMsg)
 		require.NoError(t, err)
 		reply := <-replyChan
 		require.NotNil(t, reply)
@@ -175,16 +172,16 @@ func TestHandleAnchorCap(t *testing.T) {
 		require.True(t, resp.OK)
 		require.Empty(t, resp.Error)
 
-		roots, _, provide, _ := node.rootCap.ListRoots()
+		roots, require, _, _ := node.rootCap.ListRoots()
 
 		// make sure there's still only one root (do not accept root anchoring)
 		assert.Len(t, roots, 1)
 
 		// one from the beginning (reciprocal with sender actor) and one we just added
-		assert.Len(t, provide.Tokens, 2)
+		assert.Len(t, require.Tokens, 2)
 
 		var iToken *ucan.Token
-		for _, t := range provide.Tokens {
+		for _, t := range require.Tokens {
 			if t.Issuer().Equal(tActorDID) {
 				iToken = t
 				break
