@@ -88,7 +88,7 @@ func (c *Client) Discovery(ctx context.Context, msgOpts ...Option) (node.Discove
 		msgOpts...,
 	)
 	if err != nil {
-		return response, fmt.Errorf("%s: %w", behaviors.BroadcastStatusDiscoveryBehavior, err)
+		return response, fmt.Errorf("%s: %w", behaviors.StatusDiscoveryBehavior, err)
 	}
 
 	err = c.unmarshalResponse(resp, &response)

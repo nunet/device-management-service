@@ -1424,85 +1424,160 @@ This behavior retrieves a list of capabilities available on the node.
 Examples:
   nunet actor cmd --context user /dms/cap/list`,
 	},
-	behaviors.CapAnchorBehavior: {
+	behaviors.ProvideCapAnchorBehavior: {
 		Action:  bInvoke,
 		Payload: func() any { return &CapAnchorRequestCmd{} },
 		SetFlags: func(cmd *cobra.Command, payload any) {
 			p := payload.(*CapAnchorRequestCmd)
-			cmd.Flags().BoolVarP(&p.Root, "root", "", false, "add root anchor")
-			cmd.Flags().BoolVarP(&p.Require, "require", "", false, "add require anchor")
-			cmd.Flags().BoolVarP(&p.Provide, "provide", "", false, "add provide anchor")
-			cmd.Flags().BoolVarP(&p.Revoke, "revoke", "", false, "add revoke anchor")
-			cmd.MarkFlagsOneRequired("root", "require", "provide", "revoke")
-			cmd.MarkFlagsMutuallyExclusive("root", "require", "provide", "revoke")
+			cmd.Flags().StringVar(&p.Token, "token", "", "add revoke anchor")
+			cmd.MarkFlagsOneRequired("token")
 		},
-		Args: cobra.ExactArgs(1),
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			req, ok := opts.Payload.(*CapAnchorRequestCmd)
+			payload, ok := opts.Payload.(*CapAnchorRequestCmd)
 			if !ok {
 				return nil, fmt.Errorf("failed to decode payload")
 			}
 
-			if len(opts.Args) == 1 {
-				req.Data = opts.Args[0]
+			var token ucan.Token
+			if err := json.Unmarshal([]byte(payload.Token), &token); err != nil {
+				return nil, err
 			}
 
-			request := &node.CapAnchorRequest{
-				Require: ucan.TokenList{
-					Tokens: []*ucan.Token{},
+			req := &node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
+					Tokens: []*ucan.Token{
+						&token,
+					},
 				},
-				Provide: ucan.TokenList{
-					Tokens: []*ucan.Token{},
-				},
-				Revoke: ucan.TokenList{
-					Tokens: []*ucan.Token{},
-				},
-				Root: []did.DID{},
-			}
-			switch {
-			case req.Root:
-				root, err := did.FromString(req.Data)
-				if err != nil {
-					return nil, err
-				}
-				request.Root = append(request.Root, root)
-
-			case req.Require:
-				var token ucan.Token
-				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
-					return nil, err
-				}
-				request.Require.Tokens = append(request.Require.Tokens, &token)
-
-			case req.Provide:
-				var token ucan.Token
-				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
-					return nil, err
-				}
-				request.Provide.Tokens = append(request.Provide.Tokens, &token)
-
-			case req.Revoke:
-				var token ucan.Token
-				if err := json.Unmarshal([]byte(req.Data), &token); err != nil {
-					return nil, err
-				}
-
-				request.Revoke.Tokens = append(request.Revoke.Tokens, &token)
 			}
 
-			return dmsClient.CapAnchor(ctx, *request, opts.MsgOpts...)
+			return dmsClient.ProvideCapAnchor(ctx, *req, opts.MsgOpts...)
 		},
-		Short: "Add capability anchors",
-		Long: `Invokes the /dms/cap/anchor behavior on an actor
+		Short: "Anchors a capability token on the provide anchor of a node",
+		Long: `Invokes the /dms/cap/provide/anchor behavior on an actor and requests to anchor on provide anchor.
 
-This behavior anchors capabilities on the node.
+This behavior invokes a node to anchor a token on the provide anchor.
 
 Examples:
 
-  nunet actor cmd --context user /dms/cap/anchor --root did
-  nunet actor cmd --context user /dms/cap/anchor --require token
-  nunet actor cmd --context user /dms/cap/anchor --provide token
-  nunet actor cmd --context user /dms/cap/anchor --revoke token`,
+  nunet actor cmd --context user /dms/cap/provide/anchor --dest <peerID|did> --token <token>`,
+	},
+
+	behaviors.RequireCapAnchorBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &CapAnchorRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CapAnchorRequestCmd)
+			cmd.Flags().StringVar(&p.Token, "token", "", "add revoke anchor")
+			cmd.MarkFlagsOneRequired("token")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			payload, ok := opts.Payload.(*CapAnchorRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+
+			var token ucan.Token
+			if err := json.Unmarshal([]byte(payload.Token), &token); err != nil {
+				return nil, err
+			}
+
+			req := &node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
+					Tokens: []*ucan.Token{
+						&token,
+					},
+				},
+			}
+
+			return dmsClient.RequireCapAnchor(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Anchors a capability token on the require anchor of a node",
+		Long: `Invokes the /dms/cap/require/anchor behavior on an actor and anchors a token on the require anchor.
+
+This behavior invokes a node to anchor a token on the require anchor.
+
+Examples:
+
+  nunet actor cmd --context user /dms/cap/require/anchor --dest <peerID|did> --token <token>`,
+	},
+
+	behaviors.RevokeCapAnchorBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &CapAnchorRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CapAnchorRequestCmd)
+			cmd.Flags().StringVar(&p.Token, "token", "", "add revoke anchor")
+			cmd.MarkFlagsOneRequired("token")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			payload, ok := opts.Payload.(*CapAnchorRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+
+			var token ucan.Token
+			if err := json.Unmarshal([]byte(payload.Token), &token); err != nil {
+				return nil, err
+			}
+
+			req := &node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
+					Tokens: []*ucan.Token{
+						&token,
+					},
+				},
+			}
+
+			return dmsClient.RevokeCapAnchor(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Anchors revocation tokens on a node",
+		Long: `Invokes the /dms/cap/revoke/anchor behavior on an actor and anchors a revocation token.
+
+This behavior invokes a node to anchor a revocation token.
+
+Examples:
+
+  nunet actor cmd --context user /dms/cap/revoke/anchor --dest <peerID|did> --token <revocation_token>`,
+	},
+
+	behaviors.BroadcastRevokeCapBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &CapAnchorRequestCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*CapAnchorRequestCmd)
+			cmd.Flags().StringVar(&p.Token, "token", "", "add revoke token")
+			cmd.MarkFlagsOneRequired("token")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			payload, ok := opts.Payload.(*CapAnchorRequestCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+
+			var token ucan.Token
+			if err := json.Unmarshal([]byte(payload.Token), &token); err != nil {
+				return nil, err
+			}
+
+			req := &node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
+					Tokens: []*ucan.Token{
+						&token,
+					},
+				},
+			}
+
+			return dmsClient.BroadcastCapRevoke(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Broadcast revocation capability anchors",
+		Long: `Invokes the /dms/cap/revoke/broadcast behavior on an actor
+
+This behavior broadcasts a revocation token.
+
+Examples:
+
+  nunet actor cmd --context user /dms/cap/revoke/broadcast --token <revocation_token>`,
 	},
 
 	behaviors.DeploymentDeleteBehavior: {

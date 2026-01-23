@@ -17,7 +17,6 @@ import (
 	"gitlab.com/nunet/device-management-service/client"
 	"gitlab.com/nunet/device-management-service/cmd/utils"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
-	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 
 	"gitlab.com/nunet/device-management-service/dms/node"
@@ -25,16 +24,31 @@ import (
 
 type mockCapBehaviorClient struct {
 	client.DmsClient
-	capListFn   func(ctx context.Context, req node.CapListRequest, opts ...client.Option) (node.CapListResponse, error)
-	capAnchorFn func(ctx context.Context, req node.CapAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error)
+	capListFn            func(ctx context.Context, req node.CapListRequest, opts ...client.Option) (node.CapListResponse, error)
+	capProvideAnchorFn   func(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error)
+	capRequireAnchorFn   func(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error)
+	capRevokeAnchorFn    func(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error)
+	capRevokeBroadcastFn func(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) ([]node.CapAnchorResponse, error)
 }
 
 func (m *mockCapBehaviorClient) CapList(ctx context.Context, req node.CapListRequest, opts ...client.Option) (node.CapListResponse, error) {
 	return m.capListFn(ctx, req, opts...)
 }
 
-func (m *mockCapBehaviorClient) CapAnchor(ctx context.Context, req node.CapAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
-	return m.capAnchorFn(ctx, req, opts...)
+func (m *mockCapBehaviorClient) ProvideCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
+	return m.capProvideAnchorFn(ctx, req, opts...)
+}
+
+func (m *mockCapBehaviorClient) RequireCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
+	return m.capRequireAnchorFn(ctx, req, opts...)
+}
+
+func (m *mockCapBehaviorClient) RevokeCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
+	return m.capRevokeAnchorFn(ctx, req, opts...)
+}
+
+func (m *mockCapBehaviorClient) BroadcastCapRevoke(ctx context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) ([]node.CapAnchorResponse, error) {
+	return m.capRevokeBroadcastFn(ctx, req, opts...)
 }
 
 func TestCapListBehavior(t *testing.T) {
@@ -82,133 +96,108 @@ func TestCapAnchorBehavior(t *testing.T) {
 	tests := []struct {
 		name        string
 		args        []string
+		anchor      string
 		opts        client.MessageOptions
-		expectedReq node.CapAnchorRequest
+		expectedReq node.CapTokenAnchorRequest
 		wantErr     bool
 	}{
 		{
 			name:    "no args",
 			args:    []string{},
+			anchor:  "provide",
 			opts:    client.NewMessageOptions(),
 			wantErr: true,
 		},
 		{
-			name: "multiple anchors",
+			name: "multiple tokens - no error but expect only first one",
 			args: []string{
-				"--root",
-				"--require",
-				"--provide",
-				"--revoke",
+				"--token",
+				`{"dms":{"act":"testone"}}`,
+				`{"dms":{"act":"testtwo"}}`,
+				`{"dms":{"act":"testthree"}}`,
 			},
-			opts:    client.NewMessageOptions(),
-			wantErr: true,
-		},
-		{
-			name: "no data",
-			args: []string{
-				"--root",
-			},
-			opts:    client.NewMessageOptions(),
-			wantErr: true,
-		},
-		{
-			name: "valid root",
-			args: []string{
-				"--root",
-				"did:example:123",
-			},
-			opts: client.NewMessageOptions(),
-			expectedReq: node.CapAnchorRequest{
-				Root: []did.DID{{
-					URI: "did:example:123",
-				}},
-				Require: ucan.TokenList{Tokens: []*ucan.Token{}},
-				Provide: ucan.TokenList{Tokens: []*ucan.Token{}},
-				Revoke:  ucan.TokenList{Tokens: []*ucan.Token{}},
+			anchor: "require",
+			opts:   client.NewMessageOptions(),
+			expectedReq: node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
+					Tokens: []*ucan.Token{
+						{
+							DMS: &ucan.DMSToken{
+								Action: "testone",
+							},
+						},
+					},
+				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "invalid root",
+			name: "no data",
 			args: []string{
-				"--root",
-				"invalid",
+				"--token",
 			},
+			anchor:  "revoke",
 			opts:    client.NewMessageOptions(),
 			wantErr: true,
 		},
 		{
 			name: "valid require",
 			args: []string{
-				"--require",
-				`{"dms":{"act":"require"}}`,
+				"--token",
+				`{"dms":{"act":"delegate"}}`,
 			},
-			opts: client.NewMessageOptions(),
-			expectedReq: node.CapAnchorRequest{
-				Root: []did.DID{},
-				Require: ucan.TokenList{
+			anchor: "require",
+			opts:   client.NewMessageOptions(),
+			expectedReq: node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
 					Tokens: []*ucan.Token{{
 						DMS: &ucan.DMSToken{
-							Action: "require",
+							Action: "delegate",
 						},
 					}},
 				},
-				Provide: ucan.TokenList{Tokens: []*ucan.Token{}},
-				Revoke:  ucan.TokenList{Tokens: []*ucan.Token{}},
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid require",
-			args: []string{
-				"--require",
-				"invalid",
-			},
-			opts:    client.NewMessageOptions(),
-			wantErr: true,
-		},
-		{
-			name: "valid provide",
-			args: []string{
-				"--provide",
-				`{"dms":{"act":"provide"}}`,
-			},
-			opts: client.NewMessageOptions(),
-			expectedReq: node.CapAnchorRequest{
-				Root:    []did.DID{},
-				Require: ucan.TokenList{Tokens: []*ucan.Token{}},
-				Provide: ucan.TokenList{
-					Tokens: []*ucan.Token{{
-						DMS: &ucan.DMSToken{
-							Action: "provide",
-						},
-					}},
-				},
-				Revoke: ucan.TokenList{Tokens: []*ucan.Token{}},
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid provide",
 			args: []string{
-				"--provide",
+				"--token",
 				"invalid",
 			},
+			anchor:  "provide",
 			opts:    client.NewMessageOptions(),
 			wantErr: true,
 		},
 		{
+			name: "valid require",
+			args: []string{
+				"--token",
+				`{"dms":{"act":"delegate"}}`,
+			},
+			anchor: "require",
+			opts:   client.NewMessageOptions(),
+			expectedReq: node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
+					Tokens: []*ucan.Token{{
+						DMS: &ucan.DMSToken{
+							Action: "delegate",
+						},
+					}},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "valid revoke",
 			args: []string{
-				"--revoke",
+				"--token",
 				`{"dms":{"act":"revoke"}}`,
 			},
-			opts: client.NewMessageOptions(),
-			expectedReq: node.CapAnchorRequest{
-				Root:    []did.DID{},
-				Require: ucan.TokenList{Tokens: []*ucan.Token{}},
-				Provide: ucan.TokenList{Tokens: []*ucan.Token{}},
-				Revoke: ucan.TokenList{
+			anchor: "revoke",
+			opts:   client.NewMessageOptions(),
+			expectedReq: node.CapTokenAnchorRequest{
+				Token: ucan.TokenList{
 					Tokens: []*ucan.Token{{
 						DMS: &ucan.DMSToken{
 							Action: "revoke",
@@ -218,31 +207,49 @@ func TestCapAnchorBehavior(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		{
-			name: "invalid revoke",
-			args: []string{
-				"--revoke",
-				"invalid",
-			},
-			opts:    client.NewMessageOptions(),
-			wantErr: true,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			dmsCli := setupTest(t, &mockCapBehaviorClient{
-				capAnchorFn: func(_ context.Context, req node.CapAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
-					checkMessageOptions(t, tt.opts, opts...)
-					assert.Equal(t, tt.expectedReq, req)
-					return node.CapAnchorResponse{}, nil
-				},
-			})
+			var err error
+			switch tt.anchor {
+			case "require":
+				dmsCli := setupTest(t, &mockCapBehaviorClient{
+					capRequireAnchorFn: func(_ context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
+						checkMessageOptions(t, tt.opts, opts...)
+						assert.Equal(t, tt.expectedReq, req)
+						return node.CapAnchorResponse{}, nil
+					},
+				})
 
-			actorCmd := newActorCmdGroup(dmsCli)
-			_, _, err := utils.ExecuteCommand(actorCmd, append([]string{behaviors.CapAnchorBehavior}, tt.args...)...)
+				actorCmd := newActorCmdGroup(dmsCli)
+				_, _, err = utils.ExecuteCommand(actorCmd, append([]string{behaviors.RequireCapAnchorBehavior}, tt.args...)...)
+			case "provide":
+				dmsCli := setupTest(t, &mockCapBehaviorClient{
+					capProvideAnchorFn: func(_ context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
+						checkMessageOptions(t, tt.opts, opts...)
+						assert.Equal(t, tt.expectedReq, req)
+						return node.CapAnchorResponse{}, nil
+					},
+				})
+
+				actorCmd := newActorCmdGroup(dmsCli)
+				_, _, err = utils.ExecuteCommand(actorCmd, append([]string{behaviors.ProvideCapAnchorBehavior}, tt.args...)...)
+			case "revoke":
+				dmsCli := setupTest(t, &mockCapBehaviorClient{
+					capRevokeAnchorFn: func(_ context.Context, req node.CapTokenAnchorRequest, opts ...client.Option) (node.CapAnchorResponse, error) {
+						checkMessageOptions(t, tt.opts, opts...)
+						assert.Equal(t, tt.expectedReq, req)
+						return node.CapAnchorResponse{}, nil
+					},
+				})
+
+				actorCmd := newActorCmdGroup(dmsCli)
+				_, _, err = utils.ExecuteCommand(actorCmd, append([]string{behaviors.RevokeCapAnchorBehavior}, tt.args...)...)
+			}
+
 			if tt.wantErr {
 				require.Error(t, err)
 				return

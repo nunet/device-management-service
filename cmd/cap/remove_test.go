@@ -42,6 +42,10 @@ func TestRemoveCmd_InvalidArgs(t *testing.T) {
 			name: "invalid require token format",
 			args: []string{"--context", userCtx, "--require", "not-valid-json"},
 		},
+		{
+			name: "invalid revoke token format",
+			args: []string{"--context", userCtx, "--revoke", "not-valid-json"},
+		},
 	}
 
 	dmsCli := newTestCli()

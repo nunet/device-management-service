@@ -76,7 +76,7 @@ func TestPayPerAllocationProcessor_CollectUsage(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPayPerAllocationProcessor(store)
 
-	contractDID := "test-contract-1"
+	const contractDID = "test-contract-1"
 	lastProcessedAt := time.Now().Add(-2 * time.Hour)
 
 	// Add some allocation events
@@ -97,11 +97,12 @@ func TestPayPerAllocationProcessor_CollectUsage(t *testing.T) {
 }
 
 func TestPayPerAllocationProcessor_CalculatePayment(t *testing.T) {
+	const contractDID = "test-contract-1"
 	store := setupTestUsageStore(t)
 	processor := NewPayPerAllocationProcessor(store)
 
 	contract := &contracts.Contract{
-		ContractDID: "test-contract-1",
+		ContractDID: contractDID,
 		PaymentDetails: contracts.PaymentDetails{
 			PaymentModel:      contracts.PayPerAllocation,
 			FeesPerAllocation: "10.5",
@@ -117,7 +118,7 @@ func TestPayPerAllocationProcessor_CalculatePayment(t *testing.T) {
 		{
 			name: "valid usage data",
 			usageData: &contracts.UsageData{
-				ContractDID:  "test-contract-1",
+				ContractDID:  contractDID,
 				PaymentModel: contracts.PayPerAllocation,
 				Data:         5, // 5 allocations
 			},
@@ -127,7 +128,7 @@ func TestPayPerAllocationProcessor_CalculatePayment(t *testing.T) {
 		{
 			name: "zero allocations",
 			usageData: &contracts.UsageData{
-				ContractDID:  "test-contract-1",
+				ContractDID:  contractDID,
 				PaymentModel: contracts.PayPerAllocation,
 				Data:         0,
 			},
@@ -137,7 +138,7 @@ func TestPayPerAllocationProcessor_CalculatePayment(t *testing.T) {
 		{
 			name: "invalid usage data type",
 			usageData: &contracts.UsageData{
-				ContractDID:  "test-contract-1",
+				ContractDID:  contractDID,
 				PaymentModel: contracts.PayPerAllocation,
 				Data:         "invalid",
 			},

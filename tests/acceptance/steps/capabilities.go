@@ -42,10 +42,10 @@ func Capabilities(ctx *godog.ScenarioContext) {
 
 	ctx.Step(`^the following nodes$`, theFollowingNodes)
 	ctx.Step(`^"([^"]*)" says hello to "([^"]*)"$`, saysHelloto)
-	ctx.Step(`^"([^"]*)" deployment is (\w+)$`, deploymentIs)
 	ctx.Step(`^"([^"]*)" should respond with his <DID>$`, respondsToHelloWithDID)
 	ctx.Step(`^"([^"]*)" should not respond with his <DID>$`, noResponseToHelloWithDID)
 	ctx.Step(`^"([^"]*)" revokes permission from "([^"]*)" via "([^"]*)"$`, revokesATokenFromVia)
+	ctx.Step(`^"([^"]*)" revokes a token for "([^"]*)" and "([^"]*)" broadcasts it$`, revokesATokenAndBroadcastsIt)
 }
 
 func saysHelloto(ctx context.Context, greeterName, receiverName string) (context.Context, error) {
@@ -172,4 +172,59 @@ func noResponseToHelloWithDID(ctx context.Context, expectedResponder string) err
 	}
 
 	return fmt.Errorf("DID found in hello response")
+}
+
+func revokesATokenAndBroadcastsIt(ctx context.Context, orgName, spName string) (context.Context, error) {
+	t := godog.T(ctx)
+	tc := utils.NewTestCtx(ctx)
+
+	nodes, err := tc.Nodes()
+	require.NoError(t, err)
+	assert.NotEmpty(t, nodes)
+
+	tokenMap, err := tc.TokenMap()
+	require.NoError(t, err)
+	assert.NotEmpty(t, tokenMap)
+
+	orgMap, err := tc.OrganizationMap()
+	require.NoError(t, err)
+	assert.NotEmpty(t, orgMap)
+
+	// Get the organization context (Nunet)
+	orgCtx := utils.GetOrganization(orgMap, orgName)
+	assert.NotEmpty(t, orgCtx)
+
+	// Get the token that was granted to Alice
+	token, found := tokenMap[strings.ToLower(spName)]
+	assert.True(t, found, "token for %s not found", spName)
+
+	// Get Alice and Bob DMS contexts
+	spDmsCtx, spCtx := utils.NodeWithDMS(nodes, spName)
+	assert.NotEmpty(t, spDmsCtx)
+	assert.NotEmpty(t, spCtx)
+
+	// Nunet org revokes the token for Alice
+	revokeToken, err := orgCtx.Revoke(token)
+	require.NoError(t, err)
+	assert.NotEmpty(t, revokeToken)
+
+	// Anchor the revocation token on Nunet's context
+	err = orgCtx.Anchor("revoke", revokeToken)
+	require.NoError(t, err)
+
+	// Anchor the revocation token on Alice's context so she can broadcast it
+	err = spCtx.Anchor("revoke", revokeToken)
+	require.NoError(t, err)
+
+	// Wait a moment for the anchor to complete
+	time.Sleep(5 * time.Second)
+
+	// Alice broadcasts the revocation to all nodes in the network
+	err = spCtx.BroadcastRevoke()
+	require.NoError(t, err)
+
+	// Wait for the broadcast to propagate to Bob
+	time.Sleep(15 * time.Second)
+
+	return tc.Unwrap(), nil
 }

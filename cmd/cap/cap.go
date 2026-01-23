@@ -47,6 +47,7 @@ func NewCapCmd(dmsCli *cli.DmsCLI) *cobra.Command {
 	cmd.AddCommand(newDelegateCmd(dmsCli))
 	cmd.AddCommand(newListCmd(dmsCli))
 	cmd.AddCommand(newRemoveCmd(dmsCli))
+	cmd.AddCommand(newBroadcastCmd(dmsCli))
 	cmd.AddCommand(newHelpCmd())
 
 	return cmd

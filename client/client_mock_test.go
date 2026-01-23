@@ -141,3 +141,11 @@ func makeMockBehaviorClient(t *testing.T, expectedPath string, handler func(t *t
 	)
 	return client, sctx, err
 }
+
+func toAnySlice[T any](s []T) []any {
+	out := make([]any, len(s))
+	for i, v := range s {
+		out[i] = v
+	}
+	return out
+}

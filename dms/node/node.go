@@ -611,8 +611,20 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.CapListBehavior: {
 			fn: n.handleCapList,
 		},
-		behaviors.CapAnchorBehavior: {
-			fn: n.handleCapAnchor,
+		behaviors.ProvideCapAnchorBehavior: {
+			fn: n.handleProvideCapAnchor,
+		},
+		behaviors.RequireCapAnchorBehavior: {
+			fn: n.handleRequireCapAnchor,
+		},
+		behaviors.RevokeCapAnchorBehavior: {
+			fn: n.handleRevokeCapAnchor,
+		},
+		behaviors.BroadcastRevokeCapBehavior: {
+			fn: n.handleRevokeCapAnchor,
+			opts: []actor.BehaviorOption{
+				actor.WithBehaviorTopic(behaviors.BroadcastRevocationTopic),
+			},
 		},
 		behaviors.AllocationDeploymentBehavior: {
 			fn: n.handleAllocationDeployment,
@@ -884,6 +896,7 @@ func (n *Node) Start() error {
 		behaviors.BroadcastHelloTopic,
 		behaviors.BidRequestTopic,
 		behaviors.BroadcastStatusDiscoveryTopic,
+		behaviors.BroadcastRevocationTopic,
 	); err != nil {
 		_ = n.actor.Stop()
 		return err

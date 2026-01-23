@@ -75,7 +75,7 @@ func TestPayPerDeploymentProcessor_CollectUsage(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPayPerDeploymentProcessor(store)
 
-	contractDID := "test-contract-1" //nolint:goconst
+	const contractDID = "test-contract-1"
 	lastProcessedAt := time.Now().Add(-2 * time.Hour)
 
 	// Add some deployment events

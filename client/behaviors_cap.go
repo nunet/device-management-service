@@ -33,19 +33,80 @@ func (c *Client) CapList(ctx context.Context, req node.CapListRequest, opts ...O
 	return response, err
 }
 
-func (c *Client) CapAnchor(ctx context.Context, req node.CapAnchorRequest, opts ...Option) (node.CapAnchorResponse, error) {
+func (c *Client) ProvideCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...Option) (node.CapAnchorResponse, error) {
 	var response node.CapAnchorResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
-		behaviors.CapAnchorBehavior,
+		behaviors.ProvideCapAnchorBehavior,
 		req,
 		opts...,
 	)
 	if err != nil {
-		return response, fmt.Errorf("%s: %w", behaviors.CapAnchorBehavior, err)
+		return response, fmt.Errorf("%s: %w", behaviors.ProvideCapAnchorBehavior, err)
 	}
 
 	err = c.unmarshalResponse(resp, &response)
 	return response, err
+}
+
+func (c *Client) RequireCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...Option) (node.CapAnchorResponse, error) {
+	var response node.CapAnchorResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.RequireCapAnchorBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.RequireCapAnchorBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) RevokeCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...Option) (node.CapAnchorResponse, error) {
+	var response node.CapAnchorResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.RevokeCapAnchorBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.RevokeCapAnchorBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+// BroadcastCapRevoke broadcasts a capability revocation message
+func (c *Client) BroadcastCapRevoke(ctx context.Context, req node.CapTokenAnchorRequest, msgOpts ...Option) ([]node.CapAnchorResponse, error) {
+	resp, err := c.BroadcastMessage(
+		ctx,
+		behaviors.BroadcastRevokeCapBehavior,
+		behaviors.BroadcastRevocationTopic,
+		req,
+		msgOpts...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", behaviors.BroadcastRevokeCapBehavior, err)
+	}
+
+	response := make([]node.CapAnchorResponse, 0, len(resp))
+
+	for _, r := range resp {
+		var msg node.CapAnchorResponse
+		if err = c.unmarshalResponse(r, &msg); err != nil {
+			return nil, err
+		}
+
+		response = append(response, msg)
+	}
+
+	return response, nil
 }

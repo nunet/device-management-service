@@ -285,15 +285,6 @@ func (t *DMSToken) verify(trust did.TrustContext, now, depth uint64, revoke *Rev
 			return fmt.Errorf("verify: signature data: %w", err)
 		}
 
-		// if t.Type == EternlSigned {
-		// 	sigStruct := []interface{}{
-		// 		"Signature1",
-		// 		protected,
-		// 		[]byte{}, // external AAD empty
-		// 		payload,
-		// 	}
-		// }
-
 		if err := anchor.Verify(data, t.Signature); err != nil {
 			return fmt.Errorf("verify: signature: %w", err)
 		}
@@ -323,7 +314,7 @@ func (t *DMSToken) verify(trust did.TrustContext, now, depth uint64, revoke *Rev
 		}
 
 		if !t.Issuer.Equal(t.Chain.Subject()) {
-			return fmt.Errorf("verify: issuer/chain subject misnmatch: %w", ErrNotAuthorized)
+			return fmt.Errorf("verify: issuer/chain subject mismatch: %w", ErrNotAuthorized)
 		}
 
 		needCapability := slices.Clone(t.Capability)
