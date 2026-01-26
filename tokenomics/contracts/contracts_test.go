@@ -57,7 +57,7 @@ func TestUnmarshalContract(t *testing.T) {
             }
         ],
         "payment_model": "pay_per_allocation",
-        "fees_per_allocation": "10",
+        "fee_per_allocation": "10",
         "timestamp": "0001-01-01T00:00:00Z",
         "payment_type": "blockchain"
     },

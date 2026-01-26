@@ -56,7 +56,7 @@ template='{
                 "blockchain": "ETHEREUM"
             }
         ],
-        "fees_per_allocation": "{{amount}}",
+        "fee_per_allocation": "{{amount}}",
         "timestamp": "0001-01-01T00:00:00Z",
         "payment_type": "blockchain"
     },

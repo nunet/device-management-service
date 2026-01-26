@@ -65,7 +65,7 @@ func (p *PayPerAllocationProcessor) CalculatePayment(
 	}
 
 	pd := contract.PaymentDetails
-	feePerAllocation, err := convert.StringToFloat64(pd.FeesPerAllocation, "fees_per_allocation")
+	feePerAllocation, err := convert.StringToFloat64(pd.FeePerAllocation, "fees_per_allocation")
 	if err != nil {
 		return nil, err
 	}
@@ -89,10 +89,10 @@ func (p *PayPerAllocationProcessor) CalculatePayment(
 
 // Validate implements PaymentModelProcessor.Validate
 func (p *PayPerAllocationProcessor) Validate(paymentDetails contracts.PaymentDetails) error {
-	if paymentDetails.FeesPerAllocation == "" {
+	if paymentDetails.FeePerAllocation == "" {
 		return fmt.Errorf("fees_per_allocation is required")
 	}
-	if _, err := convert.StringToFloat64(paymentDetails.FeesPerAllocation, "fees_per_allocation"); err != nil {
+	if _, err := convert.StringToFloat64(paymentDetails.FeePerAllocation, "fees_per_allocation"); err != nil {
 		return err
 	}
 	return nil
