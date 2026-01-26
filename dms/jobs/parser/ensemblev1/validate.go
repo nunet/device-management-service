@@ -934,6 +934,11 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 	// Validate payment_details.payment_model if present
 	if paymentDetails, ok := contract["payment_details"].(map[string]any); ok {
 		if paymentModel, ok := paymentDetails["payment_model"].(string); ok {
+
+			if paymentModel == "" {
+				return fmt.Errorf("payment_details.payment_model cannot be empty")
+			}
+
 			validPaymentModels := []string{
 				string(contracts.PayPerAllocation),
 				string(contracts.PayPerDeployment),
@@ -946,8 +951,10 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				return fmt.Errorf("invalid payment_model %q: must be one of %v", paymentModel, validPaymentModels)
 			}
 
+			// Validate required fields based on payment model
+			switch paymentModel {
 			// Validate pay_per_time_utilization specific fields
-			if paymentModel == string(contracts.PayPerTimeUtilization) {
+			case string(contracts.PayPerTimeUtilization):
 				if feePerTimeUnit, ok := paymentDetails["fee_per_time_unit"].(string); !ok || feePerTimeUnit == "" {
 					return fmt.Errorf("fee_per_time_unit is required for pay_per_time_utilization payment model")
 				}
@@ -959,10 +966,9 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				if !slices.Contains(validTimeUnits, timeUnit) {
 					return fmt.Errorf("invalid time_unit %q: must be one of %v", timeUnit, validTimeUnits)
 				}
-			}
 
 			// Validate pay_per_resource_utilization specific fields
-			if paymentModel == string(contracts.PayPerResourceUtilization) {
+			case string(contracts.PayPerResourceUtilization):
 				requiredFields := map[string]string{
 					"fee_per_cpu_core_per_time_unit": "fee_per_cpu_core_per_time_unit",
 					"fee_per_ram_gb_per_time_unit":   "fee_per_ram_gb_per_time_unit",
@@ -983,24 +989,56 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				}
 
 				// fee_per_gpu_per_time_unit is optional
-			}
 
 			// Validate fixed_rental specific fields
-			if paymentModel == string(contracts.FixedRental) {
+			case string(contracts.FixedRental):
 				if err := validateFixedRental(paymentDetails); err != nil {
 					return err
 				}
-			}
-
 			// Validate periodic specific fields
-			if paymentModel == string(contracts.Periodic) {
+			case string(contracts.Periodic):
 				if err := validatePeriodic(paymentDetails); err != nil {
 					return err
 				}
+
+			case string(contracts.PayPerAllocation):
+				if err := validatePayPerAllocation(paymentDetails); err != nil {
+					return err
+				}
+
+			case string(contracts.PayPerDeployment):
+				if err := validatePayPerDeployment(paymentDetails); err != nil {
+					return err
+				}
+
+			default:
+				return fmt.Errorf("unsupported payment_model: %s", paymentModel)
 			}
+		} else {
+			return fmt.Errorf("payment_details.payment_model cannot be empty")
 		}
+	} else {
+		return fmt.Errorf("payment_details is required and must be an object")
 	}
 
+	return nil
+}
+
+// validatePayPerAllocation validates required fields for pay_per_allocation payment model
+func validatePayPerAllocation(paymentDetails map[string]any) error {
+	feesPerAllocation, ok := paymentDetails["fee_per_allocation"].(string)
+	if !ok || feesPerAllocation == "" {
+		return fmt.Errorf("fee_per_allocation is required for pay_per_allocation payment model and cannot be empty")
+	}
+	return nil
+}
+
+// validatePayPerDeployment validates required fields for pay_per_deployment payment model
+func validatePayPerDeployment(paymentDetails map[string]any) error {
+	feePerDeployment, ok := paymentDetails["fee_per_deployment"].(string)
+	if !ok || feePerDeployment == "" {
+		return fmt.Errorf("fee_per_deployment is required for pay_per_deployment payment model and cannot be empty")
+	}
 	return nil
 }
 

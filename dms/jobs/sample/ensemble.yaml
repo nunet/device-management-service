@@ -147,6 +147,12 @@ contracts:
   contract1:
     did: "did:contract1"
     host: "did:host"
+    payment_details:
+      payment_model: "pay_per_allocation"
+      fee_per_allocation: "15"
   contract2:
     did: "did:contract2"
     host: "did:host2"
+    payment_details:
+      payment_model: "pay_per_deployment"
+      fee_per_deployment: "50"

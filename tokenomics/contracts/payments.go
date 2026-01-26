@@ -58,7 +58,7 @@ type PaymentDetails struct {
 	FeePerDeployment string `json:"fee_per_deployment,omitempty"`
 
 	// pay per allocation payment model
-	FeesPerAllocation string `json:"fees_per_allocation"`
+	FeePerAllocation string `json:"fee_per_allocation"`
 
 	// pay per time utilization payment model
 	FeePerTimeUnit string `json:"fee_per_time_unit,omitempty"` // e.g., "0.01" per second

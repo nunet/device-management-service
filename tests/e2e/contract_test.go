@@ -97,7 +97,10 @@ func DeployWithContractTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"`
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.PayPerAllocation) + `"
+        fee_per_allocation: "` + feesPerAllocation + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 
@@ -688,7 +691,10 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"`
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.PayPerDeployment) + `"
+        fee_per_deployment: "` + feePerDeployment + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 

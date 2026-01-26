@@ -33,8 +33,8 @@ func TestPayPerAllocationProcessor_Validate(t *testing.T) {
 		{
 			name: "valid payment details",
 			paymentDetails: contracts.PaymentDetails{
-				PaymentModel:      contracts.PayPerAllocation,
-				FeesPerAllocation: "10.5",
+				PaymentModel:     contracts.PayPerAllocation,
+				FeePerAllocation: "10.5",
 			},
 			wantErr: false,
 		},
@@ -49,8 +49,8 @@ func TestPayPerAllocationProcessor_Validate(t *testing.T) {
 		{
 			name: "invalid fees_per_allocation",
 			paymentDetails: contracts.PaymentDetails{
-				PaymentModel:      contracts.PayPerAllocation,
-				FeesPerAllocation: "invalid",
+				PaymentModel:     contracts.PayPerAllocation,
+				FeePerAllocation: "invalid",
 			},
 			wantErr: true,
 			errMsg:  "invalid fees_per_allocation",
@@ -104,8 +104,8 @@ func TestPayPerAllocationProcessor_CalculatePayment(t *testing.T) {
 	contract := &contracts.Contract{
 		ContractDID: contractDID,
 		PaymentDetails: contracts.PaymentDetails{
-			PaymentModel:      contracts.PayPerAllocation,
-			FeesPerAllocation: "10.5",
+			PaymentModel:     contracts.PayPerAllocation,
+			FeePerAllocation: "10.5",
 		},
 	}
 

@@ -535,6 +535,12 @@ func deploysATaskOnWithTheirContract(ctx context.Context, spName, cpName string)
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".contracts.contract1.host = \"%s\"", contract.HostDID), remotePath})
 	assert.NoError(t, err)
 
+	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".contracts.contract1.payment_details.payment_model = \"%s\"", string(contracts.PayPerAllocation)), remotePath})
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".contracts.contract1.payment_details.fee_per_allocation = \"%s\"", "10"), remotePath})
+	assert.NoError(t, err)
+
 	cpInfo, err := cpDmsCtx.PeerAddr()
 	assert.NoError(t, err)
 

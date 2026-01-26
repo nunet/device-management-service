@@ -324,9 +324,24 @@ func TestValidateContract(t *testing.T) {
 		errorMsg string
 	}{
 		{
-			name: "valid contract",
+			name: "valid contract pay per allocation",
 			contract: map[string]any{
 				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model":      "pay_per_allocation",
+					"fee_per_allocation": "10",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid contract pay per deployment",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model":      "pay_per_deployment",
+					"fee_per_deployment": "10",
+				},
 			},
 			wantErr: false,
 		},
@@ -357,6 +372,43 @@ func TestValidateContract(t *testing.T) {
 			},
 			wantErr:  true,
 			errorMsg: "invalid did format",
+		},
+		{
+			name: "missing payment detail",
+			contract: map[string]any{
+				"did": "did:example:1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing payment model",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"fee_per_allocation": "10",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing fee per allocation for pay per allocation",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model": "pay_per_allocation",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing fee per deployment for pay per deployment",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model": "pay_per_deployment",
+				},
+			},
+			wantErr: true,
 		},
 	}
 
