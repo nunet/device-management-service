@@ -146,21 +146,34 @@ func validateCapacity(onboardedResources, machineResources types.Resources) erro
 
 	if err := validateRange(
 		onboardedResources.RAM.Size,
-		machineResources.RAM.Size/10,
-		machineResources.RAM.Size*9/10,
+		machineResources.RAM.Size/10,   // minimum 10% of total RAM
+		machineResources.RAM.Size*9/10, // maximum 90% of total RAM
 	); err != nil {
 		if errors.Is(err, ErrOutOfRange) {
-			return fmt.Errorf("expected RAM to be between %d GB and %d GB, got %d GB",
-				machineResources.RAM.SizeInGB()/10,
-				machineResources.RAM.SizeInGB()*9/10,
-				onboardedResources.RAM.SizeInGB(),
+			return fmt.Errorf("expected RAM to be between %d GiB and %d GiB, got %d GiB",
+				machineResources.RAM.SizeInGiB()/10,
+				machineResources.RAM.SizeInGiB()*9/10,
+				onboardedResources.RAM.SizeInGiB(),
 			)
 		}
 
 		return fmt.Errorf("validating resource range for RAM: %w", err)
 	}
 
-	// TODO: validate disk size
+	if err := validateRange(
+		onboardedResources.Disk.Size,
+		10*1024*1024*1024,               // minimum 10 GiB
+		machineResources.Disk.Size*9/10, // maximum 90% of total disk
+	); err != nil {
+		if errors.Is(err, ErrOutOfRange) {
+			return fmt.Errorf("expected Disk to be between 10 GiB and %d GiB, got %d GiB",
+				machineResources.Disk.SizeInGiB()*9/10,
+				onboardedResources.Disk.SizeInGiB(),
+			)
+		}
+
+		return fmt.Errorf("validating resource range for disk: %w", err)
+	}
 
 	for _, gpu := range onboardedResources.GPUs {
 		selectedGPU, err := machineResources.GPUs.GetWithIndex(gpu.Index)
@@ -199,7 +212,9 @@ func validateUsage(onboardedResources, systemFreeResources types.Resources) erro
 		return fmt.Errorf("not enough free RAM available on the system: %d GB", systemFreeResources.RAM.SizeInGB())
 	}
 
-	// TODO: validate disk usage
+	if onboardedResources.Disk.Size > systemFreeResources.Disk.Size {
+		return fmt.Errorf("not enough free Disk available on the system: %d GB", systemFreeResources.Disk.SizeInGB())
+	}
 
 	for _, gpu := range onboardedResources.GPUs {
 		selectedGPU, err := systemFreeResources.GPUs.GetWithIndex(gpu.Index)
