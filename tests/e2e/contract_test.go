@@ -431,7 +431,10 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"`
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.PayPerAllocation) + `"
+        fee_per_allocation: "` + feesPerAllocation + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 
@@ -1004,7 +1007,9 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"`
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.PayPerAllocation) + `"`
 		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
 		suite.Require().NoError(err)
 
@@ -1497,7 +1502,9 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"`
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.PayPerResourceUtilization) + `"`
 		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
 		suite.Require().NoError(err)
 
@@ -2719,7 +2726,13 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"`
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.Periodic) + `"
+        fee_per_time_unit: "` + feePerTimeUnit + `"
+        time_unit: "` + timeUnit + `"
+        payment_period: "` + paymentPeriod + `"
+        payment_period_count: ` + paymentPeriodCount
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 

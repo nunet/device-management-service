@@ -743,11 +743,12 @@ func DeploymentUpdates(suite *TestSuite) {
 func DeploymentRestorationPostReboot(suite *TestSuite) {
 	suite.Run("DeploymentRestorationPostReboot", func() {
 		// We need at least 2 nodes: 1 deployer and 1 provider
-		suite.Require().Len(suite.nodes, 3)
-		deployer := suite.nodes[0]
+		suite.Require().Len(suite.nodes, 2)
+		deployerIDX := 1
+		deployer := suite.nodes[deployerIDX]
 
 		// 1. Deploy a simple ensemble (using service-based ensemble to avoid task monitoring issues)
-		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "single-nginx.yaml")
 		deploymentResult := deployer.client.deploy(
 			suite.T(), deployer.userContext, deployer.password, ensemblePath,
 			"2m",
@@ -777,10 +778,10 @@ func DeploymentRestorationPostReboot(suite *TestSuite) {
 		suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), deploymentsBefore[ensembleID], "Deployment should be Running before restart")
 
 		// 4. Shutdown the deployer node (simulate restart)
-		suite.stopNode(0) // Stop the deployer node (index 0)
+		suite.stopNode(deployerIDX) // Stop the deployer node (index deployerIDX)
 
 		// 5. Restart the deployer node
-		go suite.startNode(0)
+		go suite.startNode(deployerIDX)
 
 		// Wait for the node to be ready again
 		var networkStats types.NetworkStats
@@ -840,10 +841,11 @@ func DeploymentRestorationPostReboot(suite *TestSuite) {
 // DeploymentRestorationFromProvisioning tests restoration when crash occurs at Provisioning
 func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 	suite.Run("DeploymentRestorationFromProvisioning", func() {
-		suite.Require().Len(suite.nodes, 3)
-		deployer := suite.nodes[1]
+		suite.Require().Len(suite.nodes, 2)
+		deployerIDX := 1
+		deployer := suite.nodes[deployerIDX]
 
-		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "nginx.yaml")
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "single-nginx.yaml")
 		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
@@ -880,11 +882,11 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 		}
 
 		// Restart orchestrator node
-		go suite.startNode(1)
+		go suite.startNode(deployerIDX)
 
 		// Wait until restarted node is ready
 		suite.Require().Eventually(func() bool {
-			stats, err := suite.nodes[1].client.self(suite.T(), suite.nodes[1].dmsContext, suite.nodes[1].password)
+			stats, err := deployer.client.self(suite.T(), deployer.dmsContext, deployer.password)
 			if err != nil {
 				suite.T().Logf("Node not ready yet, error: %v", err)
 				return false
@@ -896,7 +898,7 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 		// Reconnect the restarted node to the existing network
 		// This is crucial for the node to be able to send bid requests
 		for i := 0; i < len(suite.nodes); i++ {
-			if i == 1 {
+			if i == deployerIDX {
 				continue // Skip the restarted node itself
 			}
 			otherNode := suite.nodes[i]

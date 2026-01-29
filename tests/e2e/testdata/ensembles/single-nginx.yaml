@@ -1,0 +1,43 @@
+# Note: keep allocations's resources equal as the assertions
+# are taking that into account
+version: "V1"
+
+allocations:
+    nginx1:
+        type: service
+        executor: docker
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 1 # in GB
+            disk:
+                size: 1 # in GB
+        execution:
+            type: docker
+            image: nginxdemos/hello:plain-text
+            working_directory: /
+        dnsname: mydocker
+        keys: []
+        provision: []
+        healthcheck:
+            type: command
+            exec: ["nginx", "-t"]
+            response:
+                type: string
+                value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
+        dns_name: nginxdemo-alloc2
+
+nodes:
+    node1:
+        allocations:
+            - nginx1
+        ports:
+            - private: 80
+              public: 7224
+              allocation: nginx1
+
+
+subnet:
+    join: true

@@ -220,7 +220,7 @@ unit-docker:
 		bash -c 'git config --global --add safe.directory /app && bash /app/maint-scripts/unit-tests.sh'
 
 unit:
-	git lfs install && git lfs fetch && git lfs pull
+# 	git lfs install && git lfs fetch && git lfs pull
 	make testdata
 	export GOFLAGS=-buildvcs=false
 	bash $(PWD)/maint-scripts/unit-tests.sh

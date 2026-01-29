@@ -224,7 +224,7 @@ func TestValidateCapacity(t *testing.T) {
 			onboarded: types.Resources{
 				RAM:  types.RAM{Size: types.ConvertGiBToBytes(32)},
 				CPU:  types.CPU{Cores: 2},
-				Disk: types.Disk{Size: types.ConvertGiBToBytes(5)},
+				Disk: types.Disk{Size: types.ConvertMibToBytes(50)},
 			},
 			machine: types.Resources{
 				RAM:  types.RAM{Size: types.ConvertGiBToBytes(64)},

@@ -1090,8 +1090,6 @@ func validatePeriodic(paymentDetails map[string]any) error {
 		if count <= 0 || count != float64(int(count)) {
 			return fmt.Errorf("payment_period_count must be a positive integer")
 		}
-	} else if _, ok := paymentDetails["payment_period_count"]; ok {
-		return fmt.Errorf("payment_period_count must be an integer")
 	}
 
 	return nil
@@ -1123,8 +1121,6 @@ func validateFixedRental(paymentDetails map[string]any) error {
 		if count <= 0 || count != float64(int(count)) {
 			return fmt.Errorf("payment_period_count must be a positive integer")
 		}
-	} else if _, ok := paymentDetails["payment_period_count"]; ok {
-		return fmt.Errorf("payment_period_count must be an integer")
 	}
 
 	return nil
