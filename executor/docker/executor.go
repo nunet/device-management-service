@@ -810,6 +810,18 @@ func configureHostConfig(params *types.ExecutionRequest, dockerArgs EngineSpec, 
 		"attempts:1",
 	}
 
+	// set restart policy
+	if dockerArgs.RestartPolicy != "" {
+		hostConfig.RestartPolicy = container.RestartPolicy{
+			Name: container.RestartPolicyMode(dockerArgs.RestartPolicy),
+		}
+
+		// if set to 'on-failure', hardcode maximum retry count to 3
+		if dockerArgs.RestartPolicy == "on-failure" {
+			hostConfig.RestartPolicy.MaximumRetryCount = 3
+		}
+	}
+
 	return hostConfig, nil
 }
 

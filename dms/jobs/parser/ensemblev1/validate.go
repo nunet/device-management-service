@@ -655,6 +655,20 @@ func validateDockerExecution(execution map[string]any) error {
 		return fmt.Errorf("docker working directory cannot be empty if specified")
 	}
 
+	if restartPolicy, ok := execution["restart_policy"].(string); ok {
+		if restartPolicy == "" {
+			return fmt.Errorf("docker restart_policy cannot be empty if specified")
+		}
+
+		// validate restart policy is one of the allowed values
+		switch restartPolicy {
+		case "no", "on-failure", "always", "unless-stopped":
+			// valid policies
+		default:
+			return fmt.Errorf("invalid docker restart_policy: %s", restartPolicy)
+		}
+	}
+
 	return nil
 }
 
