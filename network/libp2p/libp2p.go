@@ -119,8 +119,9 @@ type Libp2p struct {
 	discovery       libp2pdiscovery.Discovery
 
 	// channel to signal when a public IP address has been confirmed
-	observedAddrCh chan multiaddr.Multiaddr
-	observedAddr   multiaddr.Multiaddr
+	observeAddrMx    sync.RWMutex
+	observedAddrCond sync.Cond
+	observedAddr     multiaddr.Multiaddr
 
 	// services
 	pingService *ping.PingService
@@ -185,7 +186,7 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		}
 	}
 
-	return &Libp2p{
+	l := &Libp2p{
 		config:            config,
 		discoveredPeers:   make([]peer.AddrInfo, 0),
 		pubsubTopics:      make(map[string]*pubsub.Topic),
@@ -194,9 +195,12 @@ func New(config *types.Libp2pConfig, fs afero.Fs) (*Libp2p, error) {
 		sendSemaphore:     make(chan struct{}, sendSemaphoreLimit),
 		fs:                fs,
 		subnets:           make(map[string]*subnet),
-		observedAddrCh:    make(chan multiaddr.Multiaddr, 1), // buffer of 1 to avoid blocking
-		NetIfaceFactory:   netIfaceFactory,                   // from config or nil
-	}, nil
+		NetIfaceFactory:   netIfaceFactory, // from config or nil
+	}
+
+	l.observedAddrCond = *sync.NewCond(&l.observeAddrMx)
+
+	return l, nil
 }
 
 // Init initializes a libp2p host with its dependencies.
@@ -695,6 +699,10 @@ func (l *Libp2p) GetPeerIP(p PeerID) string {
 
 func (l *Libp2p) watchForObservedAddr() {
 	log.Infof("watching for observed address")
+
+	l.observeAddrMx.Lock()
+	defer l.observeAddrMx.Unlock()
+
 	sub, err := l.Host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
 	if err != nil {
 		log.Errorf("could not subscribe to event: %w", err)
@@ -741,16 +749,9 @@ func (l *Libp2p) watchForObservedAddr() {
 		log.Infof("got public ip: %s (seen %d times)", ip.String(), count)
 
 		if count >= 3 {
-			l.mx.Lock()
 			l.observedAddr = event.ObservedAddr
-			l.mx.Unlock()
-
 			// send the observed address on the channel
-			select {
-			case l.observedAddrCh <- event.ObservedAddr:
-			default:
-				log.Warnf("channel full, couldn't send observed address signal: %s", addrStr)
-			}
+			l.observedAddrCond.Broadcast()
 			return
 		}
 	}
@@ -1293,17 +1294,21 @@ func (l *Libp2p) listeningIP() (net.IP, error) {
 // Returns the observed multiaddress or an error if the context expires
 func (l *Libp2p) waitForObservedAddr(ctx context.Context) (multiaddr.Multiaddr, error) {
 	// if we already have an observed address, return it immediately
-	l.mx.Lock()
+	l.observeAddrMx.RLock()
 	if l.observedAddr != nil {
 		addr := l.observedAddr
-		l.mx.Unlock()
+		l.observeAddrMx.RUnlock()
 		return addr, nil
 	}
-	l.mx.Unlock()
+	l.observeAddrMx.RUnlock()
 
 	// otherwise wait for the signal
 	select {
-	case addr := <-l.observedAddrCh:
+	default:
+		l.observedAddrCond.Wait()
+		l.observeAddrMx.RLock()
+		defer l.observeAddrMx.RUnlock()
+		addr := l.observedAddr
 		return addr, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()

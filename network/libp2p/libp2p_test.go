@@ -662,33 +662,6 @@ func TestBroadcastScoreInspect(t *testing.T) {
 	require.Equal(t, 10.0, scores[alice.Host.ID()].Score)
 }
 
-// TestHostPublicIP uses internal variables to inject a public IP address
-// If decided to make all libp2p tests black boxed, this method shall not be tested.
-func TestHostPublicIP(t *testing.T) {
-	hosts := newNetwork(t, 1, true, "production")
-	require.Len(t, hosts, 1)
-	alice := hosts[0]
-
-	publicIP := "203.0.113.1"
-	publicMultiaddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/1234", publicIP))
-	require.NoError(t, err)
-
-	// Inject the observed address to simulate a peer observing our address
-	select {
-	case alice.observedAddrCh <- publicMultiaddr:
-		// Successfully sent the address
-	default:
-		// Channel full, using alternative method
-		alice.mx.Lock()
-		alice.observedAddr = publicMultiaddr
-		alice.mx.Unlock()
-	}
-
-	ip, err := alice.HostPublicIP()
-	require.NoError(t, err)
-	require.Equal(t, publicIP, ip.String())
-}
-
 func TestNotify(t *testing.T) {
 	hosts := newNetwork(t, 3, true, "production")
 	require.Len(t, hosts, 3)

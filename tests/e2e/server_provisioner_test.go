@@ -22,7 +22,7 @@ import (
 // DeployWithOnDemandProvisioner
 func DeployWithOnDemandProvisioner(suite *TestSuite) {
 	suite.Run("dms with provisioner", func() {
-		defer deleteVMS()
+		defer saveLogAndDeleteVM()
 		gateway := suite.nodes[0]
 		orchestrator := suite.nodes[1]
 
@@ -50,12 +50,14 @@ func DeployWithOnDemandProvisioner(suite *TestSuite) {
 	})
 }
 
-func deleteVMS() {
+func saveLogAndDeleteVM() {
+	_, _ = runCommand(context.Background(), "incus", "file", "pull", "VM1/root/logfile.log", "/tmp/logfile.log")
+
 	// incus stop <vm-name>
 	_, _ = runCommand(context.Background(), "incus", "stop", "VM1", "--force")
 
 	// incus delete <vm-name>
-	_, _ = runCommand(context.Background(), "incus", "delete", "VM1")
+	_, _ = runCommand(context.Background(), "incus", "delete", "VM1", "--force")
 }
 
 //nolint:unparam

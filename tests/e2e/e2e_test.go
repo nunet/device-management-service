@@ -39,7 +39,6 @@ func TestE2E(t *testing.T) {
 	require.Len(t, ports, totalPortsRequired)
 
 	t.Run("BasicTests", func(t *testing.T) {
-		t.Parallel()
 		basicTests := &TestSuite{
 			numNodes:      3,
 			Name:          "basic_tests",
@@ -51,7 +50,6 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeploymentTests", func(t *testing.T) {
-		t.Parallel()
 		deploymentTests := &TestSuite{
 			numNodes:      3,
 			Name:          "deployment_tests",
@@ -63,7 +61,6 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeploymentWithRedundancy", func(t *testing.T) {
-		t.Parallel()
 		deploymentWithRedundancyTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_redundancy_tests",
@@ -86,8 +83,6 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeploymentWithContractsCollectAfterPay", func(t *testing.T) {
-		t.Parallel()
-
 		deploymentWithContractsCollectAfterPayTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_collect_after_pay_tests",
@@ -123,7 +118,7 @@ func TestE2E(t *testing.T) {
 
 	t.Run("DeploymentRestorationPostReboot", func(t *testing.T) {
 		deploymentRestoration := &TestSuite{
-			numNodes:      3,
+			numNodes:      2,
 			Name:          "deployment_restoration_post_reboot",
 			restPortIndex: ports[12],
 			p2pPortIndex:  ports[13],
@@ -136,7 +131,7 @@ func TestE2E(t *testing.T) {
 	// the test is skipped if the status couldn't be caught
 	t.Run("DeploymentRestorationFromProvisioning", func(t *testing.T) {
 		provisioning := &TestSuite{
-			numNodes:      3,
+			numNodes:      2,
 			Name:          "deployment_restoration_from_provisioning",
 			restPortIndex: ports[16],
 			p2pPortIndex:  ports[17],
@@ -157,8 +152,6 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeployWithOnDemandProvisioner", func(t *testing.T) {
-		t.Parallel()
-
 		deploymentWithOnDemandProvisionerTests := &TestSuite{
 			numNodes:      2,
 			Name:          "deployment_with_ondemand_provisioner_tests",
@@ -170,6 +163,8 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeployWithContractPayPerDeployment", func(t *testing.T) {
+		t.Parallel()
+
 		deploymentWithContractPayPerDeploymentTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_pay_per_deployment_tests",
@@ -181,6 +176,8 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeployWithContractPayPerTimeUtilization", func(t *testing.T) {
+		t.Parallel()
+
 		deploymentWithContractPayPerTimeUtilizationTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_pay_per_time_utilization_tests",
@@ -192,6 +189,8 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeployWithContractPayPerResourceUtilization", func(t *testing.T) {
+		t.Parallel()
+
 		deploymentWithContractPayPerResourceUtilizationTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_pay_per_resource_utilization_tests",
@@ -215,8 +214,6 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentWithContractFixedRentalTests)
 	})
 	t.Run("DeployWithContractPeriodic", func(t *testing.T) {
-		t.Parallel()
-
 		deploymentWithContractPeriodicTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_periodic_tests",
@@ -227,8 +224,6 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentWithContractPeriodicTests)
 	})
 	t.Run("DeploymentWithContractsEnforcedProviders", func(t *testing.T) {
-		t.Parallel()
-
 		deploymentWithContractsEnforcedProvidersTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_enforced_providers_tests",

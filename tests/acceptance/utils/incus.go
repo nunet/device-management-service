@@ -32,6 +32,15 @@ const (
 	VMType                = "vm"
 )
 
+type NetFwdParams struct {
+	HostIface    string
+	HostIP       string
+	HostPort     string
+	InstanceIP   string
+	InstancePort string
+	Protocol     string
+}
+
 func getInstanceType() string {
 	typ := os.Getenv("INSTANCE_TYPE")
 	if typ != ContainerType {
@@ -384,7 +393,6 @@ func GetNode(clients []incus.InstanceServer, name string) (*Instance, error) {
 
 func getOrCreateNetworkForward(c incus.InstanceServer, networkName, listenAddress string) (*api.NetworkForward, error) {
 	forward, _, err := c.GetNetworkForward(networkName, listenAddress)
-
 	if forward != nil && err == nil {
 		// Forward already exists
 		return forward, nil
@@ -407,13 +415,11 @@ func getOrCreateNetworkForward(c incus.InstanceServer, networkName, listenAddres
 	return forward, nil
 }
 
-func NetworkForwardPort(
-	c incus.InstanceServer, networkName, listenAddress, listenPort, targetAddress, targetPort, protocol string,
-) error {
+func NetworkForwardPort(c incus.InstanceServer, params NetFwdParams) error {
 	// Update the forward to add target address and port
-	forward, err := getOrCreateNetworkForward(c, networkName, listenAddress)
+	forward, err := getOrCreateNetworkForward(c, params.HostIface, params.HostIP)
 	if err != nil {
-		return fmt.Errorf("failed to get network forward on %s: %w", networkName, err)
+		return fmt.Errorf("failed to get network forward on %s: %w", params.HostIface, err)
 	}
 
 	if forward.Ports == nil {
@@ -422,10 +428,10 @@ func NetworkForwardPort(
 
 	forward.Ports = append(forward.Ports,
 		api.NetworkForwardPort{
-			ListenPort:    listenPort,
-			TargetAddress: targetAddress,
-			TargetPort:    targetPort,
-			Protocol:      protocol,
+			ListenPort:    params.HostPort,
+			TargetAddress: params.InstanceIP,
+			TargetPort:    params.InstancePort,
+			Protocol:      params.Protocol,
 			Description:   "NuNet AccTest: Forward libp2p nat listening port to instance addr",
 		},
 	)
@@ -434,7 +440,7 @@ func NetworkForwardPort(
 		Ports: forward.Ports,
 	}
 
-	return c.UpdateNetworkForward(networkName, listenAddress, netForwardPut, "")
+	return c.UpdateNetworkForward(params.HostIface, params.HostIP, netForwardPut, "")
 }
 
 func CleanNetworkForward(c incus.InstanceServer) error {

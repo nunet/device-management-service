@@ -162,11 +162,11 @@ func validateCapacity(onboardedResources, machineResources types.Resources) erro
 
 	if err := validateRange(
 		onboardedResources.Disk.Size,
-		10*1024*1024*1024,               // minimum 10 GiB
+		1024*1024*1024,                  // minimum 1 GiB
 		machineResources.Disk.Size*9/10, // maximum 90% of total disk
 	); err != nil {
 		if errors.Is(err, ErrOutOfRange) {
-			return fmt.Errorf("expected Disk to be between 10 GiB and %d GiB, got %d GiB",
+			return fmt.Errorf("expected Disk to be between 1 GiB and %d GiB, got %d GiB",
 				machineResources.Disk.SizeInGiB()*9/10,
 				onboardedResources.Disk.SizeInGiB(),
 			)
