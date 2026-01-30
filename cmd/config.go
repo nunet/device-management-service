@@ -94,7 +94,9 @@ Creates the configuration file if it does not yet exist.
 
 Examples:
   nunet config set rest.port 4444
-  nunet config set general.work_dir ~/.config/dms`,
+  nunet config set general.work_dir ~/.config/dms
+  nunet config set observability.elastic.enabled true
+  nunet config set p2p.listen_address '["/ip4/0.0.0.0/tcp/9889", "/ip4/0.0.0.0/udp/9889/quic-v1"]'`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key := strings.ToLower(args[0])
@@ -169,6 +171,12 @@ func ensureConfigFile(fs afero.Fs, ldr *config.Loader) error {
 }
 
 func parseLiteral(s string) interface{} {
+	// try string slice first
+	var ss []string
+	if err := json.Unmarshal([]byte(s), &ss); err == nil {
+		return ss
+	}
+
 	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return int(i)
 	}
