@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,11 +31,17 @@ var indexes = []string{
 	"node-index",
 }
 
+const (
+	EnvESAPIKey = "DMS_ES_API_KEY"
+	EnvESURL    = "DMS_ES_URL"
+)
+
 var args Args
 
 type Args struct {
-	DID    *DIDCmd    `arg:"subcommand:did" help:"Import a single DMS run via a DID"`
-	Errors *ErrorsCmd `arg:"subcommand:errors" help:"List recent DIDs with errors"`
+	DID        *DIDCmd        `arg:"subcommand:did" help:"Import a single DMS run via a DID"`
+	Errors     *ErrorsCmd     `arg:"subcommand:errors" help:"List recent DIDs with errors"`
+	Deployment *DeploymentCmd `arg:"subcommand:deployment" help:"Import all logs related to a deployment"`
 }
 
 func (Args) Description() string {
@@ -41,38 +50,41 @@ func (Args) Description() string {
 		n = "./maint-scripts/e2e/ingest.sh"
 	}
 	return shared.Sprintf(`
-		Import logs from ElasticSearch per DID, or list recent errors from logs.
+		Import logs from ElasticSearch per DID, deployment ID, or list recent errors from remote logs.
 	
-		Requires DMS_ES_API_KEY to be set, eg:
-		$> export DMS_ES_API_KEY=supersecretapikey
+		Requires %[2]s to be set, eg:
+		$> export %[2]s=supersecretapikey
 		
 		Examples:
 		
+		Import all logs for deployment 7e529d8eca095cb3b21ad9bdc2adcaec58fce0b44666723ea3ee1733b01e322a
+		$> %[1]s deployment 7e529d8eca095cb3b21ad9bdc2adcaec58fce0b44666723ea3ee1733b01e322a
+		
 		List recent runs for did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
-		$> %s did did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
+		$> %[1]s did did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
 		
 		Download the latest run of did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
-		$> %s did --download 1 \
+		$> %[1]s did --download 1 \
 			did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
 		
 		Download logs 5m around 2025-09-24T06:30:25.517Z of did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
-		$> %s did --timestamp 2025-09-24T06:30:25.517Z \
+		$> %[1]s did --timestamp 2025-09-24T06:30:25.517Z \
 			did:key:z6Mkr2gsLuCNBCVopzGQhM8uBPyrLGsjUB33SbPYAFhKZ9Ar
 		
 		Show all errors from the last 2h
-		$> %s errors --duration 2h
+		$> %[1]s errors --duration 2h
 		
 		Show all errors from the last 24h, with stack traces, and save HTML output.
-		$> %s errors --stack-traces --output-html errors.html
+		$> %[1]s errors --stack-traces --output-html errors.html
 		
-	`, n, n, n, n, n)
+	`, n, EnvESAPIKey)
 }
 
 type DIDCmd struct {
-	DID              string        `arg:"-d,--did,positional,required" help:"User's DID"`
+	DID              string        `arg:"positional,required" help:"User's DID"`
 	MaxLines         int           `arg:"-m,--max-lines" help:"Max lines to import" default:"10000"`
 	Output           string        `arg:"-o,--output" help:"Output file (default - DID.jsonl)"`
-	Download         int           `arg:"-r,--download" help:"DMS run number to import (1 - latest)" default:"0"`
+	Download         int           `arg:"-d,--download" help:"DMS run number to import (1 - latest)" default:"0"`
 	Timestamp        string        `arg:"-t,--timestamp" help:"Download logs from a specific timestamp"`
 	AdjacentDuration time.Duration `arg:"-a,--adjacent-duration" help:"Time to download around --timestamp" default:"5m"`
 	// TODO ErrorsOnly
@@ -86,14 +98,27 @@ type ErrorsCmd struct {
 	// TODO GroupBy DID,error
 }
 
-// TODO type DeploymentCmd
-//  - scrape .msg == "deployment_bid" .did == $ORCHESTRATOR_ID
-//  - call DownloadTimestamp for each .from.did.uri
+type DeploymentCmd struct {
+	DeploymentID     string        `arg:"positional,required" help:"Deployment ID aka Orchestrator ID"`
+	MaxLines         int           `arg:"-m,--max-lines" help:"Max lines to import (per log file)" default:"10000"`
+	AdjacentDuration time.Duration `arg:"-a,--adjacent-duration" help:"Time to download around a bid_request" default:"5m"`
+}
 
-type Res struct {
+type ResponseRaw struct {
 	Hits struct {
 		Hits []struct {
 			Source any `json:"_source"`
+		} `json:"hits"`
+	} `json:"hits"`
+}
+
+type ResponseParsed struct {
+	Hits struct {
+		Hits []struct {
+			Source struct {
+				Timestamp string `json:"timestamp"`
+				DID       string `json:"did"`
+			} `json:"_source"`
 		} `json:"hits"`
 	} `json:"hits"`
 }
@@ -109,15 +134,29 @@ func main() {
 		p.WriteHelp(os.Stdout)
 		os.Exit(0)
 	}
-	apiKey := os.Getenv("DMS_ES_API_KEY")
+	apiKey := os.Getenv(EnvESAPIKey)
 	if apiKey == "" {
-		p.Fail("DMS_ES_API_KEY must be set")
+		p.Fail(EnvESAPIKey + " must be set")
+	}
+
+	// ES URL
+	url := "https://telemetry.nunet.io"
+	var transport http.RoundTripper
+	if v := os.Getenv(EnvESURL); v != "" {
+		url = v
+		// custom URL, disable cert checks
+		transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
 	}
 
 	// init ES client
 	cfg := elasticsearch.Config{
-		Addresses: []string{"https://telemetry.nunet.io"},
+		Addresses: []string{url},
 		APIKey:    apiKey,
+		Transport: transport,
 	}
 	es, err := elasticsearch.NewClient(cfg)
 	if err != nil {
@@ -139,7 +178,11 @@ func main() {
 		}
 	case args.Errors != nil:
 		if err := ListErrors(ctx, es, args); err != nil {
-			p.Fail(err.Error())
+			_ = p.FailSubcommand(err.Error(), "errors")
+		}
+	case args.Deployment != nil:
+		if err := DownloadDeployment(ctx, es, args); err != nil {
+			_ = p.FailSubcommand(err.Error(), "deployment")
 		}
 	}
 }
@@ -212,7 +255,16 @@ func DownloadRun(ctx context.Context, es *elasticsearch.Client, args Args) error
 }
 
 func DownloadTimestamp(ctx context.Context, es *elasticsearch.Client, args Args) error {
+	// validate
 	did := args.DID.DID
+	if did == "" {
+		return fmt.Errorf("DID is required")
+	}
+	if args.DID.Timestamp == "" {
+		return fmt.Errorf("timestamp is required")
+	}
+
+	// parse
 	timestamp, err := shared.ParseTimestamp(args.DID.Timestamp)
 	if err != nil {
 		return fmt.Errorf("invalid timestamp: %s", args.DID.Timestamp)
@@ -249,6 +301,7 @@ func DownloadTimestamp(ctx context.Context, es *elasticsearch.Client, args Args)
 		filename = args.DID.Output
 	}
 
+	fmt.Printf(`Querying 'did:"%s" timestamp gte %s timestamp lt %s...\n`, did, oldestTime, newestTime)
 	return download(ctx, es, query, filename)
 }
 
@@ -286,7 +339,7 @@ func ListErrors(ctx context.Context, es *elasticsearch.Client, args Args) error 
 	}
 
 	// parse log entries
-	var r Res
+	var r ResponseRaw
 	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
 		return fmt.Errorf("decoding response: %w", err)
 	}
@@ -325,6 +378,108 @@ func ListErrors(ctx context.Context, es *elasticsearch.Client, args Args) error 
 	}
 
 	return nil
+}
+
+func DownloadDeployment(ctx context.Context, es *elasticsearch.Client, args Args) error {
+	orchestratorID := args.Deployment.DeploymentID
+	var errDown error
+	downloaded := make(map[string]bool)
+
+	// query `from.inbox:"ORCHESTRATOR_ID" and msg:"bid_request"`
+	query := map[string]any{
+		"sort": []map[string]any{
+			{"timestamp": "asc"},
+		},
+		"query": map[string]any{
+			"bool": map[string]any{
+				"must": []map[string]any{
+					{"match": map[string]any{"msg": "bid_request"}},
+					{"match": map[string]any{"from.inbox": orchestratorID}},
+				},
+			},
+		},
+	}
+	fmt.Printf(`Querying: 'from.inbox:"%s" and msg:"bid_request"'...\n`, orchestratorID)
+	res, err := ESSearch(ctx, es, query)
+	if err != nil {
+		return fmt.Errorf("searching: %s", err)
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		return fmt.Errorf("response: %s", res.String())
+	}
+
+	// parse and download matches
+	var r ResponseParsed
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		return fmt.Errorf("decoding response: %w", err)
+	}
+	if len(r.Hits.Hits) == 0 {
+		return fmt.Errorf(`no results for 'from.inbox:"%s" and msg:"bid_request"'`, orchestratorID)
+	}
+	for _, rec := range r.Hits.Hits {
+		if downloaded[rec.Source.DID] {
+			continue
+		}
+		err := DownloadTimestamp(ctx, es, Args{
+			DID: &DIDCmd{
+				DID:              rec.Source.DID,
+				Timestamp:        rec.Source.Timestamp,
+				AdjacentDuration: args.Deployment.AdjacentDuration,
+				MaxLines:         args.Deployment.MaxLines,
+			},
+		})
+		errDown = errors.Join(errDown, err)
+		downloaded[rec.Source.DID] = true
+	}
+
+	// query 'ensembleID:"ORCHESTRATOR_ID"'
+	query = map[string]any{
+		"sort": []map[string]any{
+			{"timestamp": "asc"},
+		},
+		"query": map[string]any{
+			"bool": map[string]any{
+				"must": []map[string]any{
+					{"match": map[string]any{"ensembleID": orchestratorID}},
+				},
+			},
+		},
+	}
+	fmt.Printf(`Querying: 'ensembleID:"%s"'...\n`, orchestratorID)
+	res, err = ESSearch(ctx, es, query)
+	if err != nil {
+		return fmt.Errorf("searching: %s", err)
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		return fmt.Errorf("response: %s", res.String())
+	}
+
+	// parse and download matches
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		return fmt.Errorf("decoding response: %w", err)
+	}
+	if len(r.Hits.Hits) == 0 {
+		return fmt.Errorf(`no results for 'ensembleID:"%s"'`, orchestratorID)
+	}
+	for _, rec := range r.Hits.Hits {
+		if downloaded[rec.Source.DID] {
+			continue
+		}
+		err := DownloadTimestamp(ctx, es, Args{
+			DID: &DIDCmd{
+				DID:              rec.Source.DID,
+				Timestamp:        rec.Source.Timestamp,
+				AdjacentDuration: args.Deployment.AdjacentDuration,
+				MaxLines:         args.Deployment.MaxLines,
+			},
+		})
+		errDown = errors.Join(errDown, err)
+		downloaded[rec.Source.DID] = true
+	}
+
+	return errDown
 }
 
 // ELASTIC SEARCH
@@ -384,7 +539,7 @@ func download(ctx context.Context, es *elasticsearch.Client, query map[string]an
 	}
 
 	// parse log entries
-	var r Res
+	var r ResponseRaw
 	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
 		return fmt.Errorf("decoding response: %w", err)
 	}

@@ -13,11 +13,13 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	incus "github.com/lxc/incus/client"
 	"github.com/lxc/incus/shared/api"
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/gateway/provider"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-var log = logging.Logger("gateway")
+var log = logging.Logger("gateway/local/incus")
 
 // IncusProvider
 type IncusProvider struct {
@@ -67,6 +69,7 @@ func (p *IncusProvider) ListPlans(_ context.Context) ([]provider.Plan, error) {
 
 //nolint:unparam
 func runCommand(ctx context.Context, name string, args ...string) (string, error) {
+	log.Infof("runCommand : %s %s", name, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, name, args...)
 
 	var out, stderr bytes.Buffer
@@ -192,7 +195,8 @@ done:
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap new dms
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap anchor --context dms --root `+p.gatewayDID+`
   DMS_PASSPHRASE=pass /home/ubuntu/dms cap anchor --context dms --root `+orchestratorDID+`
-  GOLOG_LOG_LEVEL=info DMS_PASSPHRASE=pass /home/ubuntu/dms run --context dms > logfile.log 2>&1 &
+  /home/ubuntu/dms config set p2p.listen_address '["/ip4/0.0.0.0/tcp/9001", "/ip4/0.0.0.0/udp/9001/quic-v1"]'
+  GOLOG_LOG_LEVEL=debug,pubsub=error,observability=error DMS_PASSPHRASE=pass /home/ubuntu/dms run --context dms > logfile.log 2>&1 &
   sleep 7
   DMS_PASSPHRASE=pass /home/ubuntu/dms actor cmd --context dms /dms/node/onboarding/onboard --no-gpu --ram 3 GB --cpu 2 --disk 2GiB
 `)
@@ -200,8 +204,48 @@ done:
 		return nil, fmt.Errorf("failed to install dms and requirements: %w %s", err, res)
 	}
 
-	// sleep a bit until dms is up
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
+
+	// connect to gateway, orchestrator and bootstrap peers to give identify a head start before the deployment
+	gatewayHandle, err := actor.HandleFromDID(p.gatewayDID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse gateway DID handle: %w", err)
+	}
+	orchHandle, err := actor.HandleFromDID(orchestratorDID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse orchestrator DID handle: %w", err)
+	}
+
+	// Connect to gateway
+	res, err = runCommand(ctx, "incus", "exec", name, "--", "bash", "-c", `
+	  set -eux
+	  DMS_PASSPHRASE=pass /home/ubuntu/dms actor cmd --context dms /dms/node/peers/connect --address /p2p/`+gatewayHandle.Address.HostID+`
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute self with json output: %w %s", err, res)
+	}
+
+	// connect to orchestrator
+	res, err = runCommand(ctx, "incus", "exec", name, "--", "bash", "-c", `
+	  set -eux
+	  DMS_PASSPHRASE=pass /home/ubuntu/dms actor cmd --context dms /dms/node/peers/connect --address /p2p/`+orchHandle.Address.HostID+`
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute self with json output: %w %s", err, res)
+	}
+
+	// connect to bootstrap nodes
+	for _, addr := range config.DefaultConfig.BootstrapPeers {
+		res, err = runCommand(ctx, "incus", "exec", name, "--", "bash", "-c", `
+	  set -eux
+	  DMS_PASSPHRASE=pass /home/ubuntu/dms actor cmd --context dms /dms/node/peers/connect --address `+addr[31:])
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute self with json output: %w %s", err, res)
+		}
+	}
+
+	// give identify some time to finish obtaining observed addr
+	time.Sleep(60 * time.Second)
 
 	res, err = runCommand(ctx, "incus", "exec", name, "--", "bash", "-c", `
 	  set -eux
@@ -224,8 +268,6 @@ done:
 		return nil, fmt.Errorf("failed to get listen addr: %w %s", err, res)
 	}
 	server.ListenAddr = ips[0]
-
-	//
 
 	return server, nil
 }

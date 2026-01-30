@@ -37,7 +37,10 @@ func TestClient_DeploymentList(t *testing.T) {
 				Metadata: map[string]string{},
 			},
 			node.DeploymentListResponse{
-				Deployments: map[string]string{},
+				Deployments: []node.DeploymentInfo{},
+				Total:       1,
+				HasMore:     false,
+				NextOffset:  0,
 			},
 			nil,
 			false,

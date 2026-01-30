@@ -785,7 +785,14 @@ func (c *Client) deploymentList(t *testing.T, context, passphrase string) (map[s
 		return map[string]string{}, fmt.Errorf("unmarshal deployment list response: %w", err)
 	}
 
-	return resp.Deployments, nil
+	// Convert new response format ([]DeploymentInfo) to old format (map[string]string)
+	// for backward compatibility with existing tests
+	result := make(map[string]string)
+	for _, deployment := range resp.Deployments {
+		result[deployment.OrchestratorID] = deployment.Status
+	}
+
+	return result, nil
 }
 
 func (c *Client) deploymentLogs(context, passphrase, deploymentID, allocationName string) (node.DeploymentLogsResponse, error) {

@@ -37,7 +37,7 @@
                 "blockchain": "ETHEREUM"
             }
         ],
-        "fees_per_allocation": "{{amount}}",
+        "fee_per_allocation": "{{amount}}",
         "fee_per_deployment": "{{fee_per_deployment}}",
         "fee_per_time_unit": "{{fee_per_time_unit}}",
         "time_unit": "{{time_unit}}",

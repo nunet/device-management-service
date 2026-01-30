@@ -54,8 +54,14 @@ const (
 
 	LoggerConfigBehavior = "/dms/node/logger/config"
 
-	CapListBehavior   = "/dms/cap/list"
-	CapAnchorBehavior = "/dms/cap/anchor"
+	CapListBehavior            = "/dms/cap/list"
+	CapRootAnchorBehavior      = "/dms/cap/root/anchor"
+	ProvideCapAnchorBehavior   = "/dms/cap/provide/anchor"
+	RequireCapAnchorBehavior   = "/dms/cap/require/anchor"
+	RevokeCapAnchorBehavior    = "/dms/cap/revoke/anchor"
+	BroadcastRevokeCapBehavior = "/dms/cap/revoke/broadcast"
+
+	BroadcastRevocationTopic = "/nunet/revocation"
 
 	PublicHelloBehavior    = "/public/hello"
 	PublicStatusBehavior   = "/public/status"

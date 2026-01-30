@@ -204,8 +204,8 @@ func TestHandleContractCreateForwardAndStoreLocally(t *testing.T) {
 			Requestor: spNode.actor.Handle().DID,
 		},
 		PaymentDetails: contracts.PaymentDetails{
-			PaymentType:       contracts.BlockchainMethod,
-			FeesPerAllocation: "10",
+			PaymentType:      contracts.BlockchainMethod,
+			FeePerAllocation: "10",
 		},
 	}
 

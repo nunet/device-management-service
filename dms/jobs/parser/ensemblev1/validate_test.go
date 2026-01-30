@@ -324,9 +324,24 @@ func TestValidateContract(t *testing.T) {
 		errorMsg string
 	}{
 		{
-			name: "valid contract",
+			name: "valid contract pay per allocation",
 			contract: map[string]any{
 				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model":      "pay_per_allocation",
+					"fee_per_allocation": "10",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid contract pay per deployment",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model":      "pay_per_deployment",
+					"fee_per_deployment": "10",
+				},
 			},
 			wantErr: false,
 		},
@@ -357,6 +372,43 @@ func TestValidateContract(t *testing.T) {
 			},
 			wantErr:  true,
 			errorMsg: "invalid did format",
+		},
+		{
+			name: "missing payment detail",
+			contract: map[string]any{
+				"did": "did:example:1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing payment model",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"fee_per_allocation": "10",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing fee per allocation for pay per allocation",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model": "pay_per_allocation",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing fee per deployment for pay per deployment",
+			contract: map[string]any{
+				"did": "did:example:1",
+				"payment_details": map[string]any{
+					"payment_model": "pay_per_deployment",
+				},
+			},
+			wantErr: true,
 		},
 	}
 
@@ -2642,6 +2694,205 @@ func TestValidateSubnet(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			err := ValidateSubnet(nil, tt.data, "")
+			if tt.wantErr {
+				assert.Error(t, err, "expected error: %q", tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateVolume(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		data     any
+		wantErr  bool
+		errorMsg string
+	}{
+		{
+			name:     "invalid data for volume",
+			data:     string("invalid volume data"),
+			wantErr:  true,
+			errorMsg: "invalid volume configuration",
+		},
+		{
+			name:     "empty volume reference",
+			data:     []any{},
+			wantErr:  true,
+			errorMsg: "volume cannot be empty if specified",
+		},
+		{
+			name: "invalid volume type not a map",
+			data: []any{
+				12,
+			},
+			wantErr:  true,
+			errorMsg: "invalid volume entry",
+		},
+		{
+			name: "invalid volume type",
+			data: []any{
+				map[string]any{
+					"type": "invalidtype",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "unsupported volume type: invalidtype",
+		},
+		{
+			name: "invalid only volume type",
+			data: []any{
+				map[string]any{
+					"type": "local",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "local type volume must define a path",
+		},
+		{
+			name: "invalid glusterfs type not defining servers",
+			data: []any{
+				map[string]any{
+					"type": "glusterfs",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "glusterfs type volume must define one or more servers",
+		},
+		{
+			name: "invalid glusterfs type defining empty servers",
+			data: []any{
+				map[string]any{
+					"type":    "glusterfs",
+					"servers": []string{},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "glusterfs type volume must define at least one server",
+		},
+		{
+			name: "invalid glusterfs type defining one invalid server",
+			data: []any{
+				map[string]any{
+					"type":    "glusterfs",
+					"servers": []string{"server1", "", "server3"},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "glusterfs volume server at index 1 must be a non-empty string",
+		},
+		{
+			name: "invalid glusterfs spec missing mount_destination",
+			data: []any{
+				map[string]any{
+					"type":    "glusterfs",
+					"servers": []string{"server1", "server2", "server3"},
+				},
+			},
+			wantErr:  true,
+			errorMsg: "volume must define a mount_destination",
+		},
+		{
+			name: "invalid local spec not defining a src",
+			data: []any{
+				map[string]any{
+					"type":              "local",
+					"mount_destination": "/mnt/local",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "local type volume must define a path",
+		},
+		{
+			name: "invalid local spec with invalid relative path as src",
+			data: []any{
+				map[string]any{
+					"type":              "local",
+					"src":               "relative/path/volume1",
+					"mount_destination": "/mnt/local",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "local volume src must be an absolute path",
+		},
+		{
+			name: "invalid local spec with invalid characters for src",
+			data: []any{
+				map[string]any{
+					"type":              "local",
+					"src":               "abcd$%^&volume1",
+					"mount_destination": "/mnt/local",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "local volume src contains invalid characters",
+		},
+		{
+			name: "invalid - no type specified",
+			data: []any{
+				map[string]any{
+					"src":               "/data/volume1",
+					"mount_destination": "/mnt/local",
+				},
+			},
+			wantErr:  true,
+			errorMsg: "volume must have a type",
+		},
+		{
+			name: "valid local spec",
+			data: []any{
+				map[string]any{
+					"type":              "local",
+					"src":               "/data/volume1",
+					"mount_destination": "/mnt/local",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid local named volume spec",
+			data: []any{
+				map[string]any{
+					"type":              "local",
+					"src":               "the_named-volume_123",
+					"mount_destination": "/mnt/local",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid glusterfs spec",
+			data: []any{
+				map[string]any{
+					"type":              "glusterfs",
+					"servers":           []string{"server1", "server2", "server3"},
+					"mount_destination": "/mnt/glusterfs",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid glusterfs spec",
+			data: []any{
+				map[string]any{
+					"type":               "glusterfs",
+					"servers":            []string{"server1", "server2", "server3"},
+					"mount_destination":  "/mnt/glusterfs",
+					"client_private_key": "/path/to/private.key",
+					"client_pem":         "/path/to/client.pem",
+					"client_ca":          "/path/to/ca.cert",
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateVolume(nil, tt.data, "")
 			if tt.wantErr {
 				assert.Error(t, err, "expected error: %q", tt.errorMsg)
 			} else {

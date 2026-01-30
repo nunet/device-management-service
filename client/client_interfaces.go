@@ -257,8 +257,17 @@ type ActorCapBehaviorClient interface {
 	// CapList retrieves capability list
 	CapList(ctx context.Context, req node.CapListRequest, opts ...Option) (node.CapListResponse, error)
 
-	// CapAnchor updates capabilities
-	CapAnchor(ctx context.Context, req node.CapAnchorRequest, opts ...Option) (node.CapAnchorResponse, error)
+	// ProvideCapAnchor anchors token on provide
+	ProvideCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...Option) (node.CapAnchorResponse, error)
+
+	// RequireCapAnchor anchors token on require
+	RequireCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...Option) (node.CapAnchorResponse, error)
+
+	// RevokeCapAnchor anchors token on revoke anchor
+	RevokeCapAnchor(ctx context.Context, req node.CapTokenAnchorRequest, opts ...Option) (node.CapAnchorResponse, error)
+
+	// BroadcastCapRevoke broadcasts caps that should be revoked
+	BroadcastCapRevoke(ctx context.Context, req node.CapTokenAnchorRequest, opts ...Option) ([]node.CapAnchorResponse, error)
 }
 
 // ActorLoggerBehaviorClient provides methods for logger configuration

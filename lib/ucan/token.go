@@ -285,15 +285,6 @@ func (t *DMSToken) verify(trust did.TrustContext, now, depth uint64, revoke *Rev
 			return fmt.Errorf("verify: signature data: %w", err)
 		}
 
-		// if t.Type == EternlSigned {
-		// 	sigStruct := []interface{}{
-		// 		"Signature1",
-		// 		protected,
-		// 		[]byte{}, // external AAD empty
-		// 		payload,
-		// 	}
-		// }
-
 		if err := anchor.Verify(data, t.Signature); err != nil {
 			return fmt.Errorf("verify: signature: %w", err)
 		}
@@ -323,7 +314,7 @@ func (t *DMSToken) verify(trust did.TrustContext, now, depth uint64, revoke *Rev
 		}
 
 		if !t.Issuer.Equal(t.Chain.Subject()) {
-			return fmt.Errorf("verify: issuer/chain subject misnmatch: %w", ErrNotAuthorized)
+			return fmt.Errorf("verify: issuer/chain subject mismatch: %w", ErrNotAuthorized)
 		}
 
 		needCapability := slices.Clone(t.Capability)
@@ -446,6 +437,22 @@ func (t *DMSToken) Subsumes(ot *Token) bool {
 		t.Subject.Equal(ot.Subject()) &&
 		t.Audience.Equal(ot.Audience()) &&
 		t.Expire >= ot.Expire() {
+		// Recursively check if chains subsume each other
+		// If both have chains, the chains must subsume each other
+		// If only one has a chain, they don't subsume each other
+		hasTChain := t.Chain != nil
+		hasOtChain := ot.DMS != nil && ot.DMS.Chain != nil
+		if hasTChain != hasOtChain {
+			// One has a chain, the other doesn't - they don't subsume each other
+			return false
+		}
+		if hasTChain && hasOtChain {
+			// Both have chains - recursively check if t's chain subsumes ot's chain
+			if !t.Chain.Subsumes(ot.DMS.Chain) {
+				return false
+			}
+		}
+
 	loop:
 		for _, oc := range ot.Capability() {
 			for _, c := range t.Capability {

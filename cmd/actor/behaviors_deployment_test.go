@@ -74,11 +74,13 @@ func TestDeploymentListBehavior(t *testing.T) {
 		wantErr     bool
 	}{
 		{
-			name:        "no args",
-			args:        []string{},
-			opts:        client.NewMessageOptions(),
-			expectedReq: node.DeploymentListRequest{},
-			wantErr:     false,
+			name: "no args",
+			args: []string{},
+			opts: client.NewMessageOptions(),
+			expectedReq: node.DeploymentListRequest{
+				SortBy: "-created_at", // Default sort value
+			},
+			wantErr: false,
 		},
 		{
 			name: "valid filter",
@@ -88,6 +90,7 @@ func TestDeploymentListBehavior(t *testing.T) {
 				Metadata: map[string]string{
 					"namespace": "test_namespace",
 				},
+				SortBy: "-created_at", // Default sort value
 			},
 			wantErr: false,
 		},
@@ -100,6 +103,7 @@ func TestDeploymentListBehavior(t *testing.T) {
 					"namespace": "test_namespace",
 					"name":      "test_name",
 				},
+				SortBy: "-created_at", // Default sort value
 			},
 			wantErr: false,
 		},

@@ -438,6 +438,11 @@ func (r *RAM) SizeInGB() uint64 {
 	return ConvertBytesToGB(r.Size)
 }
 
+// SizeInGiB returns the size in gibibytes
+func (r *RAM) SizeInGiB() uint64 {
+	return ConvertBytesToGiB(r.Size)
+}
+
 // Disk represents the disk information
 type Disk struct {
 	// Size in bytes
@@ -500,6 +505,11 @@ func (d *Disk) SizeInGB() uint64 {
 	return ConvertBytesToGB(d.Size)
 }
 
+// SizeInGiB returns the size in gibibytes
+func (d *Disk) SizeInGiB() uint64 {
+	return ConvertBytesToGiB(d.Size)
+}
+
 // NetworkInfo represents the network information
 // TODO: not yet used, but can be used to capture the network information
 type NetworkInfo struct {
@@ -513,15 +523,23 @@ type NetworkInfo struct {
 // TODO use units and convert the base only?
 
 // ConvertBytesToGB converts bytes to gigabytes
-// TODO should be GiB?
 func ConvertBytesToGB(bytes uint64) uint64 {
 	return bytes / 1e9
 }
 
+// ConvertBytesToGiB converts bytes to gibibytes
+func ConvertBytesToGiB(bytes uint64) uint64 {
+	return bytes / 1073741824
+}
+
 // ConvertGBToBytes converts gigabytes to bytes
-// TODO should be GiB?
 func ConvertGBToBytes(gb uint64) uint64 {
 	return gb * 1e9
+}
+
+// ConvertGiBToBytes converts gibibytes to bytes
+func ConvertGiBToBytes(gib uint64) uint64 {
+	return gib * 1073741824
 }
 
 // ConvertMibToBytes converts mebibytes to bytes

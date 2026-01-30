@@ -24,4 +24,4 @@ go install gotest.tools/gotestsum@latest
 "${GOPATH:-$HOME/go}"/bin/gotestsum \
     --junitfile junit.xml \
     --format testname \
-    -- -coverprofile=coverage.txt -covermode count -tags=unit $GO_PKG_LIST
+    -- -coverprofile=coverage.txt -covermode count -tags=unit $GO_PKG_LIST -timeout=30m

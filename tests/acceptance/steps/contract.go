@@ -27,6 +27,8 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
+const dockerHelloYAML = "docker_hello.yaml"
+
 // Contract registers all step definitions for contract feature
 func Contract(ctx *godog.ScenarioContext) {
 	ctx.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
@@ -520,7 +522,7 @@ func deploysATaskOnWithTheirContract(ctx context.Context, spName, cpName string)
 	contract, err := tc.Contract()
 	assert.NoError(t, err)
 
-	ensembleName := "docker_hello.yaml"
+	ensembleName := dockerHelloYAML
 	ensemblePath := utils.FindTestdata(fmt.Sprintf("/ensembles/%s", ensembleName))
 	remotePath := filepath.Join("/tmp", ensembleName)
 
@@ -531,6 +533,12 @@ func deploysATaskOnWithTheirContract(ctx context.Context, spName, cpName string)
 	assert.NoError(t, err)
 
 	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".contracts.contract1.host = \"%s\"", contract.HostDID), remotePath})
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".contracts.contract1.payment_details.payment_model = \"%s\"", string(contracts.PayPerAllocation)), remotePath})
+	assert.NoError(t, err)
+
+	_, err = sp.RunCMD([]string{"yq", "-i", fmt.Sprintf(".contracts.contract1.payment_details.fee_per_allocation = \"%s\"", "10"), remotePath})
 	assert.NoError(t, err)
 
 	cpInfo, err := cpDmsCtx.PeerAddr()

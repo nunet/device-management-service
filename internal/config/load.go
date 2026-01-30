@@ -74,7 +74,6 @@ var DefaultConfig = Config{
 		FileDescriptors: 512,
 	},
 	Observability: Observability{
-		// TODO bind in observability
 		Logging: Logging{
 			Level: "INFO",
 			File:  fmt.Sprintf("%s/nunet/logs/nunet-dms-logs.jsonl", homeDir),

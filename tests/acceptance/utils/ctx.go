@@ -20,19 +20,20 @@ import (
 // We could use a map directly, but empty struct
 // has a better performance if it grows too large
 type (
-	nodesCtxKey          struct{}
-	nodeMapCtxKey        struct{}
-	ensembleIDCtxKey     struct{}
-	ensembleFileCtxKey   struct{}
-	manifestCtxKey       struct{}
-	allocRespCtxKey      struct{}
-	contractInfoKey      struct{}
-	deploymentsCtxKey    struct{}
-	connectionAttemptKey struct{}
-	tokenMapKey          struct{}
-	orgMapCtxKey         struct{}
-	extraContractsKey    struct{}
-	didsCtxKey           struct{}
+	nodesCtxKey                  struct{}
+	nodeMapCtxKey                struct{}
+	ensembleIDCtxKey             struct{}
+	ensembleFileCtxKey           struct{}
+	manifestCtxKey               struct{}
+	allocRespCtxKey              struct{}
+	contractInfoKey              struct{}
+	deploymentsCtxKey            struct{}
+	connectionAttemptKey         struct{}
+	tokenMapKey                  struct{}
+	orgMapCtxKey                 struct{}
+	extraContractsKey            struct{}
+	didsCtxKey                   struct{}
+	deploymentListResponseCtxKey struct{}
 )
 
 // TODO: Define TestCase struct
@@ -243,4 +244,18 @@ func (t *TestCtx) HelloResponse() ([]string, error) {
 		return nil, fmt.Errorf("no hello response dids available on context")
 	}
 	return dids, nil
+}
+
+func (t *TestCtx) WithDeploymentListResponse(response *DeploymentListResponse) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, deploymentListResponseCtxKey{}, response),
+	}
+}
+
+func (t *TestCtx) DeploymentListResponse() (*DeploymentListResponse, error) {
+	resp, ok := t.ctx.Value(deploymentListResponseCtxKey{}).(*DeploymentListResponse)
+	if !ok {
+		return nil, fmt.Errorf("no deployment list response available on context")
+	}
+	return resp, nil
 }

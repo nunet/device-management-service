@@ -45,10 +45,10 @@ func main() {
 
 	// validate presets
 	for _, preset := range args.Preset {
-		if _, ok := presets.Presets[preset]; !ok {
+		if _, ok := presets.Presets[preset]; ok {
 			continue
 		}
-		if _, ok := presets.PresetsArgs[preset]; !ok {
+		if _, ok := presets.PresetsArgs[preset]; ok {
 			continue
 		}
 		p.Fail(fmt.Sprintf("unknown preset: %s", preset))
@@ -74,11 +74,12 @@ func main() {
 		// collect
 		lines, did, err := shared.CollectLines(logFile, args.ArgsAdjacent, args.ArgsFilters, args.Flightrec)
 		if err != nil {
-			fmt.Printf("warn: collecting lines for %s: %v\n", logFile.Name, err)
+			fmt.Printf("warn: collecting lines for '%s': %v\n", logFile.NodeName, err)
 			continue
 		}
 		logs[i].DID = did
-		DIDs[did] = logFile.Name
+		DIDs[did] = logFile.NodeName
+		fmt.Printf("Processing %s (%s)\n", logFile.NodeName, did)
 		results = append(results, shared.ParseLines(lines)...)
 	}
 
@@ -97,7 +98,7 @@ func main() {
 	filtered := make([]*shared.LogLine, 0, len(results))
 	for _, l := range results {
 
-		// filters
+		// filters TODO ignore errs caused by node not being rendered (eg no capabilities)
 		if l.Error != "" {
 			filtered = append(filtered, l)
 			continue
@@ -174,16 +175,37 @@ func GenDiagram(args types.Args, lines []*shared.LogLine, name string, groupMsgs
 	}
 	lastMsg := ""
 	group := GroupInfo{}
-	ret := []string{
-		"# https://d2lang.com/tour/sequence-diagrams",
-		"shape: sequence_diagram",
-		"vars: { d2-config: { theme-id: 201 } }",
-	}
 
 	// declare nodes
 	didsSorted := slices.Collect(maps.Values(dids))
 	slices.Sort(didsSorted)
-	ret = append(ret, didsSorted...)
+	names := ""
+	for _, name := range didsSorted {
+		// reverse DID
+		did := ""
+		for k, v := range dids {
+			if v == name {
+				did = k
+				break
+			}
+		}
+		names += fmt.Sprintf("\t- **%s**\n\t\t- *%s*\n", name, did)
+	}
+	ret := []string{shared.Sprintf(`
+		# https://d2lang.com/tour/sequence-diagrams
+		shape: sequence_diagram
+		vars: { d2-config: { theme-id: 201 } }
+	
+		explanation: |md
+			#Nodes
+			
+		%s
+	
+		| {
+		  near: top-center
+		}
+	
+	`, names)}
 
 	// parse spans TODO move to main
 	proc := shared.SpansProc
@@ -201,11 +223,13 @@ func GenDiagram(args types.Args, lines []*shared.LogLine, name string, groupMsgs
 		if l.Error != "" {
 			// TODO class, break long lines
 			ret = append(ret, shared.Sprintf(`
-				%s -> %s: ERROR: %s  {
+				%s -> %s: ERROR: %s {
 					style.stroke: red
 					style.stroke-dash: 5
 					style.stroke-width: 5
-				}`, l.Node, l.Node, brakeLine(l.Error, 50)))
+				}`,
+				l.Node, l.Node, brakeLine(l.Error, 50)))
+
 			continue
 		}
 
@@ -259,7 +283,8 @@ func GenDiagram(args types.Args, lines []*shared.LogLine, name string, groupMsgs
 			msgTime = "flight " + l.FlightTime
 		}
 		ret = append(ret, fmt.Sprintf("%s%s -> %s%s: %s\\nline %s:%d\\n%s",
-			from, spanLeft, l.Node, spanRight, brakeLine(l.Behavior, 50), l.Node, l.Line, msgTime))
+			from, spanLeft, l.Node, spanRight, brakeLine(l.Behavior, 50),
+			l.Node, l.Line, msgTime))
 
 		// grouping state
 		lastMsg = from + "|" + l.Node

@@ -47,6 +47,8 @@ type EngineSpec struct {
 	User string `json:"user,omitempty" yaml:"user,omitempty"`
 	// RegistryAuth to authenticate with registries when pulling private images
 	RegistryAuth RegistryAuth `json:"registry_auth,omitempty" yaml:"registry_auth,omitempty"`
+	// RestartPolicy for the container
+	RestartPolicy string `json:"restart_policy,omitempty" yaml:"restart_policy,omitempty"`
 }
 
 // Validate checks if the engine spec is valid

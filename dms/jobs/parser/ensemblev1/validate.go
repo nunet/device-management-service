@@ -10,7 +10,9 @@ package ensemblev1
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,6 +53,7 @@ func NewEnsembleV1Validator() validate.Validator {
 			"V1.allocations.*.resources":   ValidateResources,
 			"V1.allocations.*.execution":   ValidateExecution,
 			"V1.allocations.*.healthcheck": ValidateHealthCheck,
+			"V1.allocations.*.volume":      ValidateVolume,
 			"V1.contracts.*":               ValidateContract,
 		},
 	)
@@ -652,6 +655,20 @@ func validateDockerExecution(execution map[string]any) error {
 		return fmt.Errorf("docker working directory cannot be empty if specified")
 	}
 
+	if restartPolicy, ok := execution["restart_policy"].(string); ok {
+		if restartPolicy == "" {
+			return fmt.Errorf("docker restart_policy cannot be empty if specified")
+		}
+
+		// validate restart policy is one of the allowed values
+		switch restartPolicy {
+		case "no", "on-failure", "always", "unless-stopped":
+			// valid policies
+		default:
+			return fmt.Errorf("invalid docker restart_policy: %s", restartPolicy)
+		}
+	}
+
 	return nil
 }
 
@@ -931,6 +948,11 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 	// Validate payment_details.payment_model if present
 	if paymentDetails, ok := contract["payment_details"].(map[string]any); ok {
 		if paymentModel, ok := paymentDetails["payment_model"].(string); ok {
+
+			if paymentModel == "" {
+				return fmt.Errorf("payment_details.payment_model cannot be empty")
+			}
+
 			validPaymentModels := []string{
 				string(contracts.PayPerAllocation),
 				string(contracts.PayPerDeployment),
@@ -943,8 +965,10 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				return fmt.Errorf("invalid payment_model %q: must be one of %v", paymentModel, validPaymentModels)
 			}
 
+			// Validate required fields based on payment model
+			switch paymentModel {
 			// Validate pay_per_time_utilization specific fields
-			if paymentModel == string(contracts.PayPerTimeUtilization) {
+			case string(contracts.PayPerTimeUtilization):
 				if feePerTimeUnit, ok := paymentDetails["fee_per_time_unit"].(string); !ok || feePerTimeUnit == "" {
 					return fmt.Errorf("fee_per_time_unit is required for pay_per_time_utilization payment model")
 				}
@@ -956,10 +980,9 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				if !slices.Contains(validTimeUnits, timeUnit) {
 					return fmt.Errorf("invalid time_unit %q: must be one of %v", timeUnit, validTimeUnits)
 				}
-			}
 
 			// Validate pay_per_resource_utilization specific fields
-			if paymentModel == string(contracts.PayPerResourceUtilization) {
+			case string(contracts.PayPerResourceUtilization):
 				requiredFields := map[string]string{
 					"fee_per_cpu_core_per_time_unit": "fee_per_cpu_core_per_time_unit",
 					"fee_per_ram_gb_per_time_unit":   "fee_per_ram_gb_per_time_unit",
@@ -980,24 +1003,56 @@ func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 				}
 
 				// fee_per_gpu_per_time_unit is optional
-			}
 
 			// Validate fixed_rental specific fields
-			if paymentModel == string(contracts.FixedRental) {
+			case string(contracts.FixedRental):
 				if err := validateFixedRental(paymentDetails); err != nil {
 					return err
 				}
-			}
-
 			// Validate periodic specific fields
-			if paymentModel == string(contracts.Periodic) {
+			case string(contracts.Periodic):
 				if err := validatePeriodic(paymentDetails); err != nil {
 					return err
 				}
+
+			case string(contracts.PayPerAllocation):
+				if err := validatePayPerAllocation(paymentDetails); err != nil {
+					return err
+				}
+
+			case string(contracts.PayPerDeployment):
+				if err := validatePayPerDeployment(paymentDetails); err != nil {
+					return err
+				}
+
+			default:
+				return fmt.Errorf("unsupported payment_model: %s", paymentModel)
 			}
+		} else {
+			return fmt.Errorf("payment_details.payment_model cannot be empty")
 		}
+	} else {
+		return fmt.Errorf("payment_details is required and must be an object")
 	}
 
+	return nil
+}
+
+// validatePayPerAllocation validates required fields for pay_per_allocation payment model
+func validatePayPerAllocation(paymentDetails map[string]any) error {
+	feesPerAllocation, ok := paymentDetails["fee_per_allocation"].(string)
+	if !ok || feesPerAllocation == "" {
+		return fmt.Errorf("fee_per_allocation is required for pay_per_allocation payment model and cannot be empty")
+	}
+	return nil
+}
+
+// validatePayPerDeployment validates required fields for pay_per_deployment payment model
+func validatePayPerDeployment(paymentDetails map[string]any) error {
+	feePerDeployment, ok := paymentDetails["fee_per_deployment"].(string)
+	if !ok || feePerDeployment == "" {
+		return fmt.Errorf("fee_per_deployment is required for pay_per_deployment payment model and cannot be empty")
+	}
 	return nil
 }
 
@@ -1035,8 +1090,6 @@ func validatePeriodic(paymentDetails map[string]any) error {
 		if count <= 0 || count != float64(int(count)) {
 			return fmt.Errorf("payment_period_count must be a positive integer")
 		}
-	} else if _, ok := paymentDetails["payment_period_count"]; ok {
-		return fmt.Errorf("payment_period_count must be an integer")
 	}
 
 	return nil
@@ -1068,9 +1121,79 @@ func validateFixedRental(paymentDetails map[string]any) error {
 		if count <= 0 || count != float64(int(count)) {
 			return fmt.Errorf("payment_period_count must be a positive integer")
 		}
-	} else if _, ok := paymentDetails["payment_period_count"]; ok {
-		return fmt.Errorf("payment_period_count must be an integer")
 	}
 
+	return nil
+}
+
+// ValidateVolume validates the allocation's volume config
+func ValidateVolume(_ *map[string]any, data any, _ tree.Path) error {
+	volumes, ok := data.([]any)
+	if !ok {
+		return fmt.Errorf("invalid volume configuration: %v", data)
+	}
+
+	if len(volumes) == 0 {
+		return fmt.Errorf("volume cannot be empty if specified")
+	}
+
+	for _, vol := range volumes {
+		volume, ok := vol.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid type: %T - expecting map[string]", vol)
+		}
+
+		// Check volume type
+		volType, ok := volume["type"]
+		if !ok || volType == "" {
+			return fmt.Errorf("volume must have a type")
+		}
+
+		// types for now are local or glusterfs
+		switch volType {
+		case "glusterfs":
+			servers, ok := volume["servers"].([]string)
+			if !ok {
+				return fmt.Errorf("glusterfs type volume must define one or more servers")
+			}
+			if len(servers) == 0 {
+				return fmt.Errorf("glusterfs type volume must define at least one server")
+			}
+			for i, server := range servers {
+				serverStr := server
+				if serverStr == "" {
+					return fmt.Errorf("glusterfs volume server at index %d must be a non-empty string", i)
+				}
+			}
+		case "local":
+			volumeSrc, ok := volume["src"].(string)
+			if !ok {
+				return fmt.Errorf("local type volume must define source destination as 'src'")
+			}
+
+			if strings.Contains(volumeSrc, "/") {
+				// validate as a path
+				if !filepath.IsAbs(volumeSrc) {
+					return fmt.Errorf("local type volume source must be an absolute path")
+				}
+			} else {
+				// validate as a named volume (alphanumeric, dashes, underscores and dot only)
+				// ignoring linter because only in the case of multiple named volumes will the regex run multiple times
+				matched, err := regexp.MatchString(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`, volumeSrc) //nolint:staticcheck
+				if err != nil {
+					return fmt.Errorf("error validating local volume src: %w", err)
+				}
+				if !matched {
+					return fmt.Errorf("local volume src contains invalid characters")
+				}
+			}
+		default:
+			return fmt.Errorf("unsupported volume type: %s", volType)
+		}
+
+		if _, ok := volume["mount_destination"]; !ok {
+			return fmt.Errorf("volume must define a mount destination")
+		}
+	}
 	return nil
 }

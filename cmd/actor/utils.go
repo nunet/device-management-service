@@ -12,6 +12,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/spf13/afero"
 
@@ -45,4 +48,42 @@ func ProcessEnsembleYaml(fs afero.Afero, env env.EnvironmentProvider, path strin
 	}
 
 	return cfg, nil
+}
+
+// parseDateString parses a date string supporting both relative formats (e.g., "7d", "12h") and absolute formats (RFC3339, common date formats)
+func parseDateString(dateStr string) (time.Time, error) {
+	dateStr = strings.TrimSpace(dateStr)
+	if dateStr == "" {
+		return time.Time{}, fmt.Errorf("empty date string")
+	}
+
+	// Try relative formats first
+	if strings.HasSuffix(dateStr, "d") {
+		// days is not a standard Go duration; handle explicitly
+		daysStr := strings.TrimSuffix(dateStr, "d")
+		if daysStr == "" {
+			return time.Time{}, fmt.Errorf("invalid date duration: %s", dateStr)
+		}
+		if nDays, err := strconv.Atoi(daysStr); err == nil && nDays > 0 {
+			return time.Now().AddDate(0, 0, -nDays), nil
+		}
+		return time.Time{}, fmt.Errorf("invalid date duration days: %s", dateStr)
+	}
+
+	// Try standard duration formats
+	if dur, err := time.ParseDuration(dateStr); err == nil {
+		return time.Now().Add(-dur), nil
+	}
+
+	// Try datetime formats
+	var parseErr error
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"} {
+		t, err := time.Parse(layout, dateStr)
+		if err == nil {
+			return t, nil
+		}
+		parseErr = err
+	}
+
+	return time.Time{}, fmt.Errorf("invalid date format: %w", parseErr)
 }
