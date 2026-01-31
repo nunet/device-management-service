@@ -70,6 +70,6 @@ Unit tests for the functionality are defined in files with `*_test.go` in their 
 
 List of issues related to the implementation of the `utils` package can be found below. These include proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
-- [utils Package Issues]() `TBD`
+- utils Package Issues - `TBD`
 
 ### References

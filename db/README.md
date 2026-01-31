@@ -76,10 +76,10 @@ Refer to the [README](https://gitlab.com/nunet/device-management-service/-/blob/
 
 The package provides functions to create query conditions for database operations:
 
-- `EQ`: Creates equality comparison (field = value)
-- `GT`: Creates greater-than comparison (field > value)
-- `GTE`: Creates greater-than-or-equal comparison (field >= value)
-- `LT`: Creates less-than comparison (field < value)
-- `LTE`: Creates less-than-or-equal comparison (field <= value)
-- `IN`: Creates IN comparison (field IN values)
-- `LIKE`: Creates LIKE comparison for pattern matching (field LIKE pattern)
+- `EQ`: Creates equality comparison (`field = value`)
+- `GT`: Creates greater-than comparison (`field > value`)
+- `GTE`: Creates greater-than-or-equal comparison (`field >= value`)
+- `LT`: Creates less-than comparison (`field < value`)
+- `LTE`: Creates less-than-or-equal comparison (`field <= value`)
+- `IN`: Creates IN comparison (`field IN values`)
+- `LIKE`: Creates LIKE comparison for pattern matching (`field LIKE pattern`)

@@ -347,7 +347,7 @@ stick with `make unit-docker` for consistent results.
 
 ### Local execution of acceptance tests
 
-The [acceptance tests README file](/tests/acceptance/README.md) describe the
+The [acceptance tests README file](./tests/acceptance/README.md) describe the
 prerequisites that needs to be installed in the system in order to run these
 tests.
 

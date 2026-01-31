@@ -64,13 +64,9 @@ The simple contract management behavior follows this sequential process:
 
 #### Architecture Diagrams
 
-<p align="center">
-  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/simple_contract_deployment.png?ref_type=heads&inline=true" width="100%" alt="Simple Contract Deployment Component Diagram">
-</p>
+![Simple Contract Deployment Component Diagram](./specs/simple_contract_deployment.png)
 
-<p align="center">
-  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/tokenomics/contracts/specs/simple_contract_sequence.png?ref_type=heads&inline=true" width="100%" alt="Simple Contract Deployment Sequence Diagram">
-</p>
+![Simple Contract Deployment Sequence Diagram](./specs/simple_contract_sequence.png)
 
 ### Complex Contract Management with Solution Enabler
 
@@ -128,13 +124,9 @@ The complex contract management follows this multi-party process:
 
 #### Architecture Diagrams
 
-<p align="center">
-  <img src="./specs/complex_contract_deployment.png" width="100%" alt="Complex Contract Deployment Diagram">
-</p>
+![Complex Contract Deployment Diagram](./specs/complex_contract_deployment.png)
 
-<p align="center">
-  <img src="./specs/complex_contract_sequence.png" width="100%" alt="Complex Contract Sequence Diagram">
-</p>
+![Complex Contract Sequence Diagram](./specs/complex_contract_sequence.png)
 
 ---
 
@@ -159,10 +151,7 @@ NuNet Platform
 
 Based on the detailed design from [GitLab Issue #371](https://gitlab.com/nunet/architecture/-/issues/371#note_2219820898):
 
-<p align="center">
-  <img src="./specs/contract_architecture_diagram.png" width="100%" alt="Conceptual Contract Architecture Diagram">
-</p>
-
+![Conceptual Contract Architecture Diagram](./specs/contract_architecture_diagram.png)
 
 ---
 

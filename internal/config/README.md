@@ -206,7 +206,7 @@ type Job struct {
 
 All issues that are related to the implementation of `internal` package can be found below. These include any proposals for modifications to the package or new functionality needed to cover the requirements of other packages.
 
-- [internal package implementation]() `TBD`
+- internal package implementation - `TBD`
 
 #### `proposed` Functionalities
 

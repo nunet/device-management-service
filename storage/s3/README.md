@@ -156,7 +156,7 @@ The various unit tests for the package functionality are defined in `s3_test.go`
 
 All issues that are related to the implementation of `storage` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
 
-- [storage package implementation]() `TBD`
+- storage package implementation - `TBD`
 
 
 ### References

@@ -184,6 +184,7 @@ type Capability struct {
 
 ##### `proposed` dms.Connectivity
 
+```
 type Connectivity struct {
 
     // Ports contains the ports that need to be open for the job to run
@@ -192,6 +193,7 @@ type Connectivity struct {
     // VPN specifies whether VPN is required
     VPN       bool  
 }
+```
 
 ##### `proposed` dms.PriceInformation
 
@@ -213,6 +215,7 @@ type PriceInformation struct {
 
 ##### `proposed` dms.TimeInformation
 
+```
 type TimeInformation struct {
 	// Units holds the units of time ex - hours, days, weeks
     Units      string 
@@ -223,6 +226,7 @@ type TimeInformation struct {
     // Preference holds the time preference as compared to price
 	Preference int    
 }
+```
 
 
 ### References
