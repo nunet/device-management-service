@@ -749,7 +749,7 @@ Remove a specific deployment by its orchestrator ID:
 nunet actor cmd --context user /dms/node/deployment/delete --orchestrator-id <deployment-id>
 ```
 
-These commands help you manage storage space and maintain a clean deployment history. The prune command is particularly useful for removing old deployments based on time criteria or removing all deployments with terminal statuses (Failed and Completed) while keeping active deployments (<=Running). The delete command allows you to remove specific deployments that are no longer needed.
+These commands help you manage storage space and maintain a clean deployment history. The prune command is particularly useful for removing old deployments based on time criteria or removing all deployments with terminal statuses (Failed and Completed) while keeping active deployments (Running). The delete command allows you to remove specific deployments that are no longer needed.
 
 ### Contracts
 

@@ -381,6 +381,7 @@ type DeviceResourceConfig struct {
 
 - `types.NewService`
 
+```
 // NewService defines the schema of the data to be sent to stats db when a new service gets registered in the platform
 type NewService struct {
 	ServiceID          string
@@ -388,6 +389,7 @@ type NewService struct {
 	ServiceDescription string
 	Timestamp          float32
 }
+```
 
 - `types.ServiceCall`
 
@@ -1230,7 +1232,7 @@ Test are defined in other packages where functionality is implemented.
 
 All issues that are related to the implementation of `types` package can be found below. These include any proposals for modifications to the package or new data structures needed to cover the requirements of other packages.
 
-- [types package implementation]() `TBD`
+- types package implementation - `TBD`
 
 ##### `proposed` Encryption interfaces
 
@@ -1327,6 +1329,7 @@ type NetworkConfig struct {
 
 - `types.Libp2pConfig`
 
+```
 // Libp2pConfig holds the libp2p configuration
 type Libp2pConfig struct {
 	DHTPrefix               string
@@ -1343,6 +1346,7 @@ type Libp2pConfig struct {
 	GracePeriodMs           int
 	GossipMaxMessageSize    int
 }
+```
 
 - `types.PrivateNetworkConfig`
 ```
