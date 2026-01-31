@@ -20,10 +20,12 @@ import (
 	"gitlab.com/nunet/device-management-service/dms"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/internal"
+	"gitlab.com/nunet/device-management-service/lib/did"
 )
 
 type RunOptions struct {
-	Context string
+	Context  string
+	PrismURL string
 }
 
 func newRunCmd(
@@ -44,6 +46,20 @@ By default, DMS listens on port 9999. For more information on configuration, see
 
 Or manually create a dms_config.json file and refer to the README for available settings.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// Configure PRISM resolver URL from flag or environment variable
+			prismURL := opts.PrismURL
+			if prismURL == "" {
+				prismURL = dmsCli.Env().Getenv("PRISM_RESOLVER_URL")
+			}
+			if prismURL != "" {
+				originalConfig := did.GetPRISMResolverConfig()
+				did.SetPRISMResolverConfig(did.PRISMResolverConfig{
+					ResolverURL:                 prismURL,
+					PreferredVerificationMethod: originalConfig.PreferredVerificationMethod,
+					HTTPClient:                  originalConfig.HTTPClient,
+				})
+			}
+
 			passphrase, err := dmsCli.Passphrase(opts.Context)
 			if err != nil {
 				return fmt.Errorf("get dms passphrase: %w", err)
@@ -92,5 +108,6 @@ Or manually create a dms_config.json file and refer to the README for available 
 	}
 
 	cmd.Flags().StringVarP(&opts.Context, "context", "c", node.DefaultContextName, "specify a capability context")
+	cmd.Flags().StringVar(&opts.PrismURL, "prism-url", "", "PRISM resolver URL (e.g., http://localhost:8080). Can also be set via PRISM_RESOLVER_URL environment variable.")
 	return cmd
 }

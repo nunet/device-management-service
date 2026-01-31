@@ -1,0 +1,319 @@
+# Docker Compose for NeoPRISM with Blockfrost and Cardano DB Sync
+# Configured for local Cardano testnet using cardano-node
+#
+# Prerequisites:
+#   1. Place testnet configuration files in ./cardano-config/ directory:
+#      - byron-genesis.json
+#      - shelley-genesis.json
+#      - alonzo-genesis.json
+#      - config.json
+#      - topology.json
+#   2. Or use the default testnet configuration (will download from network)
+
+services:
+  # PostgreSQL for Cardano DB Sync
+  db-sync:
+    image: postgres:17.2-alpine
+    container_name: db-sync-postgres
+    environment:
+      - POSTGRES_DB=${DBSYNC_DB:-cexplorer}
+      - POSTGRES_USER=${DBSYNC_USER:-postgres}
+      - POSTGRES_PASSWORD=${DBSYNC_PASSWORD:-postgres}
+      - POSTGRES_LOGGING=true
+    ports:
+      - ${DBSYNC_PORT:-5432}:5432
+    volumes:
+      - db-sync-data:/var/lib/postgresql/data
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DBSYNC_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: ${POSTGRES_ARGS:--c maintenance_work_mem=1GB -c max_parallel_maintenance_workers=4}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - neoprism-net
+
+  # Healthcheck service to verify db-sync schema is initialized
+  db-sync-healthcheck:
+    image: postgres:17.2-alpine
+    container_name: db-sync-healthcheck
+    entrypoint: []
+    command:
+      - sh
+      - -c
+      - |
+        while ! PGPASSWORD=${DBSYNC_PASSWORD:-postgres} psql -h db-sync -U ${DBSYNC_USER:-postgres} -d ${DBSYNC_DB:-cexplorer} -tc "SELECT 1 FROM information_schema.tables WHERE table_name = 'tx_metadata'" | grep -q 1; do
+          echo "Waiting for db-sync schema to be initialized..."
+          sleep 5
+        done
+        echo "db-sync schema is ready"
+        # Keep container running to serve as health indicator
+        tail -f /dev/null
+    depends_on:
+      db-sync:
+        condition: service_healthy
+      cardano-db-sync:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=${DBSYNC_PASSWORD:-postgres} psql -h db-sync -U ${DBSYNC_USER:-postgres} -d ${DBSYNC_DB:-cexplorer} -tc \"SELECT 1 FROM information_schema.tables WHERE table_name = 'tx_metadata'\" | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: "no"
+    networks:
+      - neoprism-net
+
+  # Cardano DB Sync - syncs blockchain data from cardano-node
+  cardano-db-sync:
+    image: ghcr.io/intersectmbo/cardano-db-sync:13.6.0.5
+    container_name: cardano-db-sync
+    command:
+      - --config
+      - /config/db-sync-config.yaml
+      - --socket-path
+      - /ipc/sock
+      - --force-indexes
+    environment:
+      - POSTGRES_HOST=db-sync
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${DBSYNC_DB:-cexplorer}
+      - POSTGRES_USER=${DBSYNC_USER:-postgres}
+      - POSTGRES_PASSWORD=${DBSYNC_PASSWORD:-postgres}
+    depends_on:
+      db-sync:
+        condition: service_healthy
+      # cardano-node dependency removed - using external node
+    volumes:
+      - db-sync-state:/var/lib/cexplorer
+      # Mount external cardano-testnet node socket
+      - ./testnet-env/socket/node1:/ipc:ro
+      # Mount genesis files and node config from testnet-env
+      - ./testnet-env:/configs/genesis:ro
+      # Mount DB Sync config
+      - ./db-sync-config.yaml:/config/db-sync-config.yaml:ro
+    restart: on-failure
+    # Healthcheck: verify db-sync process is running and has been running long enough
+    # Schema initialization happens automatically when db-sync starts
+    # The start_period gives enough time for schema creation (tx_metadata table, etc.)
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[c]ardano-db-sync' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s  # Give db-sync time to initialize schema and create tables
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - neoprism-net
+
+  # PostgreSQL for NeoPRISM (separate from DB Sync)
+  db-neoprism:
+    image: postgres:16
+    container_name: db-neoprism
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+    volumes:
+      - neoprism-db-data:/var/lib/postgresql/data
+    healthcheck:
+      interval: 2s
+      retries: 30
+      test:
+        - CMD
+        - pg_isready
+        - -U
+        - postgres
+      timeout: 5s
+    restart: always
+    networks:
+      - neoprism-net
+
+
+  # Cardano CLI - for wallet operations and transaction building
+  cardano-cli:
+    image: ghcr.io/intersectmbo/cardano-node:10.1.4
+    container_name: cardano-cli
+    volumes:
+      # Mount external cardano-testnet node socket
+      - ./testnet-env/socket/node1:/ipc:ro
+      # Mount testnet configuration files if available
+      - ./cardano-config:/config:rw
+      # Working directory for keys and transactions
+      - ./cardano-keys:/keys
+    entrypoint: []
+    command: ["tail", "-f", "/dev/null"]  # Keep container running
+    # cardano-node dependency removed - using external node
+    networks:
+      - neoprism-net
+
+  # Cardano Wallet - Connects to cardano-node for wallet management
+  # Required by NeoPRISM submitter to submit DID operations to blockchain
+  cardano-wallet:
+    image: cardanofoundation/cardano-wallet:${WALLET_TAG:-latest}
+    container_name: cardano-wallet
+    user: "0:0"  # Run as root to avoid permission issues with volumes
+    # cardano-node dependency removed - using external node
+    volumes:
+      - cardano_wallet_data:/wallet-db
+      # Mount external cardano-testnet node socket
+      - ./testnet-env/socket/node1:/ipc:rw
+      # Mount genesis files from testnet-env
+      - ./testnet-env:/configs/genesis:ro
+    ports:
+      - ${WALLET_PORT:-8091}:8091
+      - ${WALLET_UI_PORT:-8092}:8092
+    entrypoint: []
+    command:
+      - sh
+      - -c
+      - |
+        if [ -f /configs/genesis/byron-genesis.json ]; then
+          cardano-wallet serve \
+            --node-socket /ipc/sock \
+            --database /wallet-db \
+            --listen-address 0.0.0.0 \
+            --port 8091 \
+            --ui-port 8092 \
+            --testnet /configs/genesis/byron-genesis.json
+        else
+          cardano-wallet serve \
+            --node-socket /ipc/sock \
+            --database /wallet-db \
+            --listen-address 0.0.0.0 \
+            --port 8091 \
+            --ui-port 8092 \
+            --testnet-magic 42
+        fi
+    restart: on-failure
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://0.0.0.0:8091/v2/network/information
+    networks:
+      - neoprism-net
+    logging:
+      driver: "json-file"
+      options:
+        compress: "true"
+        max-file: "10"
+        max-size: "50m"
+
+  # NeoPRISM Standalone - combines indexer and submitter in one process
+  # Provides unified API for both DID resolution and submission
+  neoprism:
+    image: hyperledgeridentus/identus-neoprism:0.9.1
+    container_name: neoprism
+    command:
+      - standalone
+    depends_on:
+      db-neoprism:
+        condition: service_healthy
+      db-sync-healthcheck:
+        condition: service_healthy
+      # cardano-wallet dependency is optional - neoprism can start without it
+      # but wallet functionality will be limited until blocks are produced
+      # cardano-wallet:
+      #   condition: service_healthy
+    environment:
+      # Enable debug logging for DID resolution
+      - RUST_LOG=debug,identus_did_prism_indexer=trace,neoprism_node=trace,identus_did_prism::protocol::resolver=trace,node_storage=trace,actix_web=trace,actix_server=trace,actix_http=trace,oura=warn,tracing::span=warn
+      # NeoPRISM database connection
+      - NPRISM_DB_URL=postgres://postgres:postgres@db-neoprism:5432/postgres
+      # DB Sync connection for polling DID operations
+      # Note: DB Sync is only needed for indexing new operations, not for resolving existing ones
+      - NPRISM_CARDANO_DBSYNC_URL=postgres://postgres:postgres@db-sync:5432/cexplorer
+      - NPRISM_CARDANO_DBSYNC_POLL_INTERVAL=${DBSYNC_POLL_INTERVAL:-10}
+      # Cardano Wallet connection for submitting transactions
+      # Uses internal Docker network name when cardano-wallet is in same compose file
+      - NPRISM_CARDANO_WALLET_BASE_URL=${WALLET_BASE_URL:-http://cardano-wallet:8091}/v2
+      - NPRISM_CARDANO_WALLET_WALLET_ID=${WALLET_ID:-47bb4391b4e98ef2c385c56e7f85bf7d77445de2}
+      - NPRISM_CARDANO_WALLET_PASSPHRASE=${WALLET_PASSPHRASE:-buildb3tt3rNeoprism}
+      - NPRISM_CARDANO_WALLET_PAYMENT_ADDR=${PAYMENT_ADDRESS:-addr_test1qzq50mqgstzqk4wxrmxfwvaseswe3putt67k4f7v7l20jdcjpt37fa7h6tlx67arxecwa68jkemdr5333unkmyp04scsluu286}
+      # Network configuration for testnet (use 'custom' for local testnets)
+      - NPRISM_CARDANO_NETWORK=custom
+    healthcheck:
+      interval: 2s
+      retries: 30
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:8080/api/_system/health
+      timeout: 5s
+    ports:
+      - 8080:8080
+    restart: always
+    networks:
+      - neoprism-net
+
+  # Blockfrost Ryo - Blockfrost-compatible API using DB Sync
+  bf-ryo:
+    image: blockfrost/backend-ryo:v4.3.0
+    container_name: bf-ryo
+    depends_on:
+      db-sync:
+        condition: service_healthy
+    environment:
+      - BLOCKFROST_CONFIG_DBSYNC_DATABASE=${DBSYNC_DB:-cexplorer}
+      - BLOCKFROST_CONFIG_DBSYNC_HOST=db-sync
+      - BLOCKFROST_CONFIG_DBSYNC_PASSWORD=${DBSYNC_PASSWORD:-postgres}
+      - BLOCKFROST_CONFIG_DBSYNC_PORT=5432
+      - BLOCKFROST_CONFIG_DBSYNC_USER=${DBSYNC_USER:-postgres}
+      - BLOCKFROST_CONFIG_NETWORK=testnet
+      - BLOCKFROST_MITHRIL_ENABLED=false
+      - NODE_ENV=development
+    volumes:
+      - ./ryo-testnet.yaml:/app/config/development.yaml:ro
+    restart: always
+    networks:
+      - neoprism-net
+
+  # Caddy Reverse Proxy - routes requests to NeoPRISM or Blockfrost
+  caddy:
+    image: caddy:2.10.2
+    container_name: caddy-proxy
+    ports:
+      - 3000:3000
+    restart: always
+    volumes:
+      - ./Caddyfile-blockfrost:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - neoprism
+      - bf-ryo
+    networks:
+      - neoprism-net
+
+networks:
+  neoprism-net:
+    driver: bridge
+
+volumes:
+  db-sync-data:      # Cardano DB Sync database
+  db-sync-state:     # Cardano DB Sync state
+  neoprism-db-data:  # NeoPRISM database
+  cardano_wallet_data:  # Cardano wallet database
+  node-db:           # Cardano node database (main node for services)
+  node-ipc:          # Cardano node IPC socket (main node for services)
+  node1-db:          # Cardano node 1 database
+  node1-ipc:         # Cardano node 1 IPC socket
+  node2-db:          # Cardano node 2 database
+  node2-ipc:         # Cardano node 2 IPC socket
+  node3-db:          # Cardano node 3 database
+  node3-ipc:         # Cardano node 3 IPC socket
+

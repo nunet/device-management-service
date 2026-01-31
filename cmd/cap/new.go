@@ -28,8 +28,9 @@ import (
 )
 
 type NewCapOptions struct {
-	Force   bool
-	Context string
+	Force    bool
+	Context  string
+	PrismURL string
 }
 
 func newNewCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
@@ -40,11 +41,15 @@ func newNewCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
 		Short: "Create a new capability context",
 		Long: `Create a new persistent capability context
 
+If the specified key has a PRISM DID association (created via 'nunet key create-prism'),
+the capability context will use the PRISM DID. Otherwise, it will use a did:key identity.
+
 Example:
   nunet cap new user
+  nunet cap new myprism            # Uses PRISM DID if associated
   nunet cap new ledger             # ledger account 0
   nunet cap new ledger:3           # ledger account 3
-  nunet cap new ledger:finance     # ledger alias “finance”`,
+  nunet cap new ledger:finance     # ledger alias "finance"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Context = node.UserContextName
@@ -57,6 +62,7 @@ Example:
 	}
 
 	cmd.Flags().BoolVarP(&opts.Force, fnForce, "f", false, "force overwrite of existing context")
+	cmd.Flags().StringVar(&opts.PrismURL, "prism-url", "", "PRISM resolver URL (e.g., http://localhost:8080). If not specified, uses default resolver.")
 
 	return cmd
 }
@@ -157,12 +163,73 @@ func GenCaps(
 		rootDID = provider.DID()
 		opts.Context = node.GetContextKey(opts.Context)
 	default:
-		trustCtx, err = did.NewTrustContextWithPrivateKey(privKey)
+		// Check if this key has a PRISM DID association
+		prismDIDStr, err := node.GetPrismDID(fs, cfg.General.UserDir, opts.Context)
 		if err != nil {
-			return fmt.Errorf("unable to create trust context: %w", err)
+			return fmt.Errorf("unable to check for PRISM DID association: %w", err)
 		}
 
-		rootDID = did.FromPublicKey(privKey.GetPublic())
+		if prismDIDStr != "" {
+			// Use PRISM DID if available
+			prismDID, err := did.FromString(prismDIDStr)
+			if err != nil {
+				return fmt.Errorf("invalid PRISM DID for key %s: %w", opts.Context, err)
+			}
+
+			// Create PRISM provider
+			provider, err := did.ProviderFromPRISMPrivateKey(prismDID, privKey)
+			if err != nil {
+				return fmt.Errorf("unable to create PRISM provider: %w", err)
+			}
+
+			// Create trust context with PRISM provider
+			trustCtx = did.NewTrustContextWithProvider(provider)
+
+			// Configure PRISM resolver if URL is provided
+			originalConfig := did.GetPRISMResolverConfig()
+			if opts.PrismURL != "" {
+				did.SetPRISMResolverConfig(did.PRISMResolverConfig{
+					ResolverURL:                 opts.PrismURL,
+					PreferredVerificationMethod: originalConfig.PreferredVerificationMethod,
+					HTTPClient:                  originalConfig.HTTPClient,
+				})
+			}
+
+			// Try to resolve PRISM DID to get anchor for verification
+			// This is optional - if resolution fails, we'll continue without the anchor
+			// The anchor will be resolved on-demand when needed for verification
+			anchor, err := did.GetAnchorForDID(prismDID)
+
+			// Restore original config if we changed it
+			if opts.PrismURL != "" {
+				did.SetPRISMResolverConfig(originalConfig)
+			}
+
+			if err != nil {
+				fmt.Fprintf(streams.Out, "⚠️  Warning: Could not resolve PRISM DID anchor (will resolve on-demand): %v\n", err)
+				fmt.Fprintf(streams.Out, "   This is normal if the DID was just created or the resolver is unavailable.\n")
+			} else {
+				// Add PRISM anchor to trust context for faster verification
+				trustCtx.AddAnchor(anchor)
+			}
+
+			// Use PRISM DID as root
+			rootDID = prismDID
+
+			fmt.Fprintf(streams.Out, "✅ Using PRISM DID: %s\n", prismDIDStr)
+			if opts.PrismURL != "" {
+				fmt.Fprintf(streams.Out, "   Resolver URL: %s\n", opts.PrismURL)
+			}
+		} else {
+			// Fall back to did:key if no PRISM DID association
+			trustCtx, err = did.NewTrustContextWithPrivateKey(privKey)
+			if err != nil {
+				return fmt.Errorf("unable to create trust context: %w", err)
+			}
+
+			rootDID = did.FromPublicKey(privKey.GetPublic())
+			fmt.Fprintf(streams.Out, "Using did:key identity (no PRISM DID association found)\n")
+		}
 	}
 
 	capStoreDir := filepath.Join(cfg.General.UserDir, node.CapstoreDir)
