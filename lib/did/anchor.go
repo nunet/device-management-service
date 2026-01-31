@@ -14,10 +14,12 @@ var anchorMethods map[string]GetAnchorFunc
 
 func init() {
 	anchorMethods = map[string]GetAnchorFunc{
-		"key": makeKeyAnchor,
+		"key":   makeKeyAnchor,
+		"prism": makePrismAnchor,
 	}
 }
 
+// GetAnchorForDID resolves a DID to an Anchor using the appropriate method resolver
 func GetAnchorForDID(did DID) (Anchor, error) {
 	makeAnchor, ok := anchorMethods[did.Method()]
 	if !ok {
@@ -25,6 +27,12 @@ func GetAnchorForDID(did DID) (Anchor, error) {
 	}
 
 	return makeAnchor(did)
+}
+
+// RegisterAnchorMethod registers a new DID method resolver
+// This allows extending the system with additional DID methods at runtime
+func RegisterAnchorMethod(method string, resolver GetAnchorFunc) {
+	anchorMethods[method] = resolver
 }
 
 func makeKeyAnchor(did DID) (Anchor, error) {

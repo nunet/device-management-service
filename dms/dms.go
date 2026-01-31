@@ -247,6 +247,24 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	capStoreDir := filepath.Join(gcfg.UserDir, node.CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", contextName))
 
+	// Check if capability context exists and if it uses a PRISM DID
+	// If so, add PRISM provider to trust context before loading
+	if _, err := fs.Stat(capStoreFile); err == nil {
+		// File exists, check if it's a PRISM DID
+		prismDIDStr, err := node.GetPrismDID(fs, gcfg.UserDir, contextName)
+		if err == nil && prismDIDStr != "" {
+			// This context has a PRISM DID association
+			prismDID, err := did.FromString(prismDIDStr)
+			if err == nil {
+				// Create PRISM provider and add to trust context
+				prismProvider, err := did.ProviderFromPRISMPrivateKey(prismDID, privK)
+				if err == nil {
+					trustCtx.AddProvider(prismProvider)
+				}
+			}
+		}
+	}
+
 	capCtx, err := LoadOrCreateCapCtx(
 		fs, capStoreFile, trustCtx, contextName, pubKey)
 	if err != nil {
@@ -257,7 +275,6 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 
 	trustCtx.Start(time.Hour)
 	capCtx.Start(5 * time.Minute)
-
 	hostLocation := geolocation.Geolocation{
 		Continent: gcfg.HostContinent,
 		Country:   gcfg.HostCountry,

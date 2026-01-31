@@ -85,6 +85,19 @@ func CreateTrustContextFromKeyStore(
 		return nil, nil, fmt.Errorf("unable to create trust context: %w", err)
 	}
 
+	// Check if this key has a PRISM DID association
+	// If so, add PRISM provider to trust context
+	prismDIDStr, err := GetPrismDID(fs, keyStorePath, contextKey)
+	if err == nil && prismDIDStr != "" {
+		prismDID, err := did.FromString(prismDIDStr)
+		if err == nil {
+			prismProvider, err := did.ProviderFromPRISMPrivateKey(prismDID, priv)
+			if err == nil {
+				trustCtx.AddProvider(prismProvider)
+			}
+		}
+	}
+
 	return trustCtx, priv, nil
 }
 
