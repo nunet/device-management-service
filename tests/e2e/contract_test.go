@@ -1009,7 +1009,9 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
     did: "` + contractDID + `"
     host: "` + contractHost.dmsDID + `"
     payment_details:
-        payment_model: "` + string(contracts.PayPerAllocation) + `"`
+        payment_model: "` + string(contracts.PayPerTimeUtilization) + `"
+        time_unit: "` + timeUnit + `"
+        fee_per_time_unit: "` + feePerTimeUnit + `"`
 		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
 		suite.Require().NoError(err)
 
@@ -1500,11 +1502,16 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 		err = copyFile(srcFileEnsemble1, destinationFileEnsemble1)
 		suite.Require().NoError(err)
 		contractsContent := `contracts:
-  contract1:
-    did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"
-    payment_details:
-        payment_model: "` + string(contracts.PayPerResourceUtilization) + `"`
+    contract1:
+      did: "` + contractDID + `"
+      host: "` + contractHost.dmsDID + `"
+      payment_details:
+        payment_model: "` + string(contracts.PayPerResourceUtilization) + `"
+        fee_per_cpu_core_per_time_unit: "` + feePerCPUCorePerTimeUnit + `"
+        fee_per_ram_gb_per_time_unit: "` + feePerRAMGBPerTimeUnit + `"
+        fee_per_disk_gb_per_time_unit: "` + feePerDiskGBPerTimeUnit + `"
+        resource_time_unit: "` + resourceTimeUnit + `"`
+
 		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
 		suite.Require().NoError(err)
 
