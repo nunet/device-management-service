@@ -19,6 +19,8 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 )
 
+const testContractIDDeployment = "test-contract-1"
+
 func TestPayPerDeploymentProcessor_Validate(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPayPerDeploymentProcessor(store)
@@ -75,7 +77,7 @@ func TestPayPerDeploymentProcessor_CollectUsage(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPayPerDeploymentProcessor(store)
 
-	const contractDID = "test-contract-1"
+	contractDID := testContractIDDeployment
 	lastProcessedAt := time.Now().Add(-2 * time.Hour)
 
 	// Add some deployment events
@@ -84,7 +86,7 @@ func TestPayPerDeploymentProcessor_CollectUsage(t *testing.T) {
 
 	now := time.Now()
 
-	usageData, err := processor.CollectUsage(contractDID, lastProcessedAt, now)
+	usageData, err := processor.CollectUsage(contractDID, lastProcessedAt, now, "", "")
 	require.NoError(t, err)
 	require.NotNil(t, usageData)
 	require.Equal(t, contractDID, usageData.ContractDID)
@@ -100,7 +102,7 @@ func TestPayPerDeploymentProcessor_CalculatePayment(t *testing.T) {
 	processor := NewPayPerDeploymentProcessor(store)
 
 	contract := &contracts.Contract{
-		ContractDID: "test-contract-1",
+		ContractDID: testContractIDDeployment,
 		PaymentDetails: contracts.PaymentDetails{
 			PaymentModel:     contracts.PayPerDeployment,
 			FeePerDeployment: "25.0",

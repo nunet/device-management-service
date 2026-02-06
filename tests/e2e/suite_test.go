@@ -220,6 +220,10 @@ func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 
 // TestSuite defines a single end-to-end test suite, with a dedicated network.
 // TODO rename to TestCase?
+// CapabilitiesHandler is a function that sets up UCAN capabilities for contract chains
+// It receives the test suite and can customize capability grants/delegations
+type CapabilitiesHandler func(suite *TestSuite)
+
 type TestSuite struct {
 	suite.Suite
 	runner func(*TestSuite)
@@ -241,6 +245,10 @@ type TestSuite struct {
 	testDataDir string
 	rootTrace   *apm.Transaction
 	tracer      *apm.Tracer
+
+	// capabilitiesHandler is an optional function to customize UCAN capability setup
+	// If set, it will be used instead of the default mutual grant logic in setupTestNetwork
+	capabilitiesHandler CapabilitiesHandler
 }
 
 func (s *TestSuite) startNode(index int) {
@@ -570,38 +578,44 @@ func (s *TestSuite) setupTestNetwork() {
 	summ.Test.NodesReady = true
 	s.printSummary()
 
-	// grant mutual access to all nodes in the network.
-	for i, node := range s.nodes {
-		// set the root anchor
-		node.client.addRootAnchor(s.T(), node.dmsContext, node.userDID, node.password)
+	// Use custom capabilities handler if set, otherwise use default
+	if s.capabilitiesHandler != nil {
+		s.T().Logf("using custom capabilities handler")
+		s.capabilitiesHandler(s)
+	} else {
+		// Default: grant mutual access to all nodes in the network
+		for i, node := range s.nodes {
+			// set the root anchor
+			node.client.addRootAnchor(s.T(), node.dmsContext, node.userDID, node.password)
 
-		// grant access to all other nodes
-		for j, otherNode := range s.nodes {
-			if i == j {
-				continue
+			// grant access to all other nodes
+			for j, otherNode := range s.nodes {
+				if i == j {
+					continue
+				}
+
+				nodeGrantToken := node.client.grant(s.T(), node.dmsContext, otherNode.userDID, node.password)
+				node.client.anchor(s.T(), nodeGrantToken, node.dmsContext, "require", node.password)
+				otherNode.client.anchor(s.T(), nodeGrantToken, otherNode.userContext, "provide", otherNode.password)
+
+				otherNodeGrantToken := otherNode.client.grant(s.T(), otherNode.dmsContext, node.userDID, otherNode.password)
+				otherNode.client.anchor(s.T(), otherNodeGrantToken, otherNode.dmsContext, "require", otherNode.password)
+				node.client.anchor(s.T(), otherNodeGrantToken, node.userContext, "provide", node.password)
+
+				if s.grantTokens[node.index] == nil {
+					s.grantTokens[node.index] = make(map[int]string)
+				}
+				if s.grantTokens[otherNode.index] == nil {
+					s.grantTokens[otherNode.index] = make(map[int]string)
+				}
+				s.grantTokens[node.index][otherNode.index] = nodeGrantToken
+				s.grantTokens[otherNode.index][node.index] = otherNodeGrantToken
 			}
 
-			nodeGrantToken := node.client.grant(s.T(), node.dmsContext, otherNode.userDID, node.password)
-			node.client.anchor(s.T(), nodeGrantToken, node.dmsContext, "require", node.password)
-			otherNode.client.anchor(s.T(), nodeGrantToken, otherNode.userContext, "provide", otherNode.password)
-
-			otherNodeGrantToken := otherNode.client.grant(s.T(), otherNode.dmsContext, node.userDID, otherNode.password)
-			otherNode.client.anchor(s.T(), otherNodeGrantToken, otherNode.dmsContext, "require", otherNode.password)
-			node.client.anchor(s.T(), otherNodeGrantToken, node.userContext, "provide", node.password)
-
-			if s.grantTokens[node.index] == nil {
-				s.grantTokens[node.index] = make(map[int]string)
-			}
-			if s.grantTokens[otherNode.index] == nil {
-				s.grantTokens[otherNode.index] = make(map[int]string)
-			}
-			s.grantTokens[node.index][otherNode.index] = nodeGrantToken
-			s.grantTokens[otherNode.index][node.index] = otherNodeGrantToken
+			// delegate to dms
+			delegateToken := node.client.delegate(s.T(), node.userContext, node.dmsDID, node.password)
+			node.client.anchor(s.T(), delegateToken, node.dmsContext, "provide", node.password)
 		}
-
-		// delegate to dms
-		delegateToken := node.client.delegate(s.T(), node.userContext, node.dmsDID, node.password)
-		node.client.anchor(s.T(), delegateToken, node.dmsContext, "provide", node.password)
 	}
 
 	summ.Test.CapsReady = true

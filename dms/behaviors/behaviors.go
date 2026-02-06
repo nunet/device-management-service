@@ -107,14 +107,15 @@ const (
 	// to produce the usages.
 	ContractUsagesCalculateBehavior = TokenomicNamespace + "/contract/usages/calculate"
 	// registered by the contract actor
-	ContractTerminationBehavior     = TokenomicNamespace + "/contract/terminate"
-	ContractCompleteBehavior        = TokenomicNamespace + "/contract/complete"
-	ContractStatusBehavior          = TokenomicNamespace + "/contract/state"
-	ContractSettleBehavior          = TokenomicNamespace + "/contract/settle"
-	ContractValidationBehavior      = TokenomicNamespace + "/contract/validate"
-	ContractSignBehavior            = TokenomicNamespace + "/contract/sign"
-	ContractEventsBehavior          = TokenomicNamespace + "/contract/events"
-	ContractPaymentValidateBehavior = TokenomicNamespace + "/contract/payment/validate"
+	ContractTerminationBehavior       = TokenomicNamespace + "/contract/terminate"
+	ContractCompleteBehavior          = TokenomicNamespace + "/contract/complete"
+	ContractStatusBehavior            = TokenomicNamespace + "/contract/state"
+	ContractSettleBehavior            = TokenomicNamespace + "/contract/settle"
+	ContractValidationBehavior        = TokenomicNamespace + "/contract/validate"
+	ContractChainVerificationBehavior = TokenomicNamespace + "/contract/chain/verify"
+	ContractSignBehavior              = TokenomicNamespace + "/contract/sign"
+	ContractEventsBehavior            = TokenomicNamespace + "/contract/events"
+	ContractPaymentValidateBehavior   = TokenomicNamespace + "/contract/payment/validate"
 
 	// listened by payment validator for incoming payment verifications
 	ContractPaymentValidationRequestBehavior = TokenomicNamespace + "/contract/payment/validation/request"

@@ -689,7 +689,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.ContractListLocalTransactionsBehavior: {
 			fn: n.handleListLocalTransactions,
 		},
-
+		behaviors.ContractChainVerificationBehavior: {
+			fn: n.handleContractChainVerification,
+		},
 		behaviors.ContractConfirmLocalTransactionBehavior: {
 			fn: n.handleConfirmLocalTransaction,
 		},
@@ -1202,6 +1204,36 @@ func (n *Node) executeBillingForContract(contractDID did.DID) error {
 	return nil
 }
 
+// contractType determines the type of contract for billing purposes
+type contractType int
+
+const (
+	contractTypeP2P          contractType = iota // Normal P2P contract (not part of chain)
+	contractTypeHeadContract                     // Head Contract in a chain
+	contractTypeTailContract                     // Tail Contract in a chain
+)
+
+// detectContractTypeForBilling determines contract type using metadata field
+// This works in both checkAndGenerateInvoice and collectUsagesAndForwardToPaymentProviders
+// without needing providerDID context
+// Uses metadata field for fast O(1) detection
+func (n *Node) detectContractTypeForBilling(contract *contracts.Contract) contractType {
+	// Check metadata field (O(1) lookup)
+	if contract.Metadata != nil {
+		if role, ok := contract.Metadata[contracts.ContractChainRoleMetadataKey]; ok {
+			switch role {
+			case contracts.ContractChainRoleHead:
+				return contractTypeHeadContract
+			case contracts.ContractChainRoleTail:
+				return contractTypeTailContract
+			}
+		}
+	}
+
+	// Default: P2P contract (no metadata set means it's not part of a chain)
+	return contractTypeP2P
+}
+
 func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUsagesAndForwardToPaymentProvidersRequest) contracts.CollectUsagesAndForwardToPaymentProvidersReponse {
 	resp := contracts.CollectUsagesAndForwardToPaymentProvidersReponse{
 		Results: make([]contracts.ContractUsageResult, 0),
@@ -1241,6 +1273,19 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 
 	// Collect usage for each contract based on its payment model
 	for _, contract := range contractsToProcess {
+		// Skip contracts with billing disabled (Contract A)
+		if contract.DisableBilling {
+			result := contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        "billing is disabled for this contract",
+			}
+			resp.Results = append(resp.Results, result)
+			log.Debugw("skipping manual billing (disabled by contract flag)",
+				"contract_did", contract.ContractDID)
+			continue
+		}
+
 		// Get contract-specific last processed timestamp
 		lastProcessedAt, _ := n.usageStore.GetLastProcessedAt(contract.ContractDID)
 
@@ -1269,8 +1314,39 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 			continue
 		}
 
-		// Collect usage using processor
-		usageData, err := processor.CollectUsage(contract.ContractDID, lastProcessedAt, now)
+		// Detect contract type using metadata field (no providerDID needed)
+		contractType := n.detectContractTypeForBilling(contract)
+
+		var usageData *contracts.UsageData
+		switch contractType {
+		case contractTypeHeadContract:
+			// Head Contract: query events by head_contract_did
+			usageData, err = processor.CollectUsage(
+				contract.ContractDID,
+				lastProcessedAt,
+				now,
+				"",                   // providerDID (empty for Head Contract - aggregate all)
+				contract.ContractDID, // headContractDID (query events where head_contract_did = this DID)
+			)
+		case contractTypeTailContract, contractTypeP2P:
+			// Tail Contract or P2P: query events by contract_did
+			usageData, err = processor.CollectUsage(
+				contract.ContractDID,
+				lastProcessedAt,
+				now,
+				"", // providerDID (can be specified for per-provider billing)
+				"", // headContractDID (empty - query by contract_did)
+			)
+		default:
+			// Fallback: treat as P2P
+			usageData, err = processor.CollectUsage(
+				contract.ContractDID,
+				lastProcessedAt,
+				now,
+				"",
+				"",
+			)
+		}
 		if err != nil {
 			result := contracts.ContractUsageResult{
 				ContractDID:  contract.ContractDID,

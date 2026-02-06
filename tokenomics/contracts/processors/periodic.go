@@ -39,6 +39,8 @@ func (p *PeriodicProcessor) CollectUsage(
 	_ string,
 	_ time.Time,
 	_ time.Time,
+	_ string, // providerDID (not used for periodic)
+	_ string, // headContractDID (not used for periodic)
 ) (*contracts.UsageData, error) {
 	return nil, fmt.Errorf("periodic does not support manual billing")
 }
@@ -142,8 +144,20 @@ func (p *PeriodicProcessor) CheckAndGenerateInvoice(
 		return nil, ErrPeriodNotElapsed
 	}
 
+	// Detect contract type from metadata to determine query strategy
+	headContractDID := ""
+	if contract.Metadata != nil {
+		if role, ok := contract.Metadata[contracts.ContractChainRoleMetadataKey]; ok {
+			if role == contracts.ContractChainRoleHead {
+				// Head Contract: query by head_contract_did = contract's DID
+				headContractDID = contract.ContractDID
+			}
+			// For Tail Contract or P2P, headContractDID remains empty (query by contract_did)
+		}
+	}
+
 	// Query deployment start and stop events
-	startEvents, stopEvents, err := p.store.QueryDeploymentEvents(contract.ContractDID, periodStart, periodEnd)
+	startEvents, stopEvents, err := p.store.QueryDeploymentEvents(contract.ContractDID, periodStart, periodEnd, headContractDID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query deployment events: %w", err)
 	}
@@ -214,8 +228,20 @@ func (p *PeriodicProcessor) GenerateProRatedInvoice(
 	periodStart := lastInvoiceAt
 	periodEnd := now
 
+	// Detect contract type from metadata to determine query strategy
+	headContractDID := ""
+	if contract.Metadata != nil {
+		if role, ok := contract.Metadata[contracts.ContractChainRoleMetadataKey]; ok {
+			if role == contracts.ContractChainRoleHead {
+				// Head Contract: query by head_contract_did = contract's DID
+				headContractDID = contract.ContractDID
+			}
+			// For Tail Contract or P2P, headContractDID remains empty (query by contract_did)
+		}
+	}
+
 	// Query deployment start and stop events in the partial period
-	startEvents, stopEvents, err := p.store.QueryDeploymentEvents(contract.ContractDID, periodStart, periodEnd)
+	startEvents, stopEvents, err := p.store.QueryDeploymentEvents(contract.ContractDID, periodStart, periodEnd, headContractDID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query deployment events: %w", err)
 	}

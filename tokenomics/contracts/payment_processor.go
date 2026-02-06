@@ -38,10 +38,14 @@ type PaymentModelProcessor interface {
 	// This method is called when a user manually triggers invoice generation.
 	// Processors have full control over how they query and process events from the store.
 	// Returns UsageData containing model-specific usage information.
+	// providerDID is optional - if provided, filters events by provider for per-node billing.
+	// headContractDID is optional - if provided, queries events by Head Contract DID instead of Tail Contract DID
 	CollectUsage(
 		contractDID string,
 		lastProcessedAt time.Time,
 		now time.Time,
+		providerDID string, // Optional: if provided, filters events by provider
+		headContractDID string, // Optional: if provided, queries by Head Contract DID
 	) (*UsageData, error)
 
 	// CalculatePayment calculates payment items from usage data.

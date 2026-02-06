@@ -90,53 +90,144 @@ func (n *Node) location() jobtypes.Location {
 	}
 }
 
-func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig) error {
-	// handle payment verification logic in future
-	for _, v := range bidContracts {
-		hostDID, err := did.FromString(v.Host)
-		if err != nil {
-			return fmt.Errorf("failed to get contracts host did: %w", err)
-		}
-		pubKey, err := did.PublicKeyFromDID(hostDID)
-		if err != nil {
-			return fmt.Errorf("failed to get contracts host public key from did: %w", err)
-		}
-
-		pid, err := peer.IDFromPublicKey(pubKey)
-		if err != nil {
-			return fmt.Errorf("failed to get peer id: %w", err)
-		}
-
-		// get actor public key
-		contractActorDID, err := did.FromString(v.DID)
-		if err != nil {
-			return fmt.Errorf("failed to get contracts actor did: %w", err)
-		}
-		pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
-		if err != nil {
-			return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
-		}
-
-		destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, v.DID, pid.String())
-		if err != nil {
-			return fmt.Errorf("failed to get contracts host handle: %w", err)
-		}
-
-		req := contracts.ContractValidateRequest{ContractDID: v.DID}
-		reply, err := n.invokeBehaviour(destination, behaviors.ContractValidationBehavior, req, invokeMessageTimeout)
-		if err != nil {
-			return fmt.Errorf("failed to send message to contract host: %w", err)
-		}
-		var respEnvelope contracts.ContractValidateResponse
-		err = json.Unmarshal(reply.Message, &respEnvelope)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
-		}
-
-		if !respEnvelope.Valid {
-			return fmt.Errorf("contract is invalid")
+func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig, orchestratorDID did.DID) error {
+	for contractKey, contractConfig := range bidContracts {
+		// Chain verification mode (Contract A: Orchestrator ↔ Organization)
+		// Provider will verify Contract B (Organization ↔ Provider) via chain verification
+		if err := n.verifyContractChain(contractConfig, orchestratorDID, contractKey); err != nil {
+			log.Debugw("contract_chain_verification_failed",
+				"labels", string(observability.LabelDeployment),
+				"contract_key", contractKey,
+				"error", err,
+				"reason", "likely not a chain contract",
+			)
+			log.Debugw("performing p2p contract verification since contract chain verification failed",
+				"labels", string(observability.LabelDeployment),
+				"contract_key", contractKey,
+			)
+			// Traditional P2P verification (provider is directly in the contract)
+			if err := n.verifyP2PContract(contractConfig); err != nil {
+				return fmt.Errorf("contract verification failed for %s: %w", contractKey, err)
+			}
+		} else {
+			log.Debugw("contract_verification_success",
+				"labels", string(observability.LabelDeployment),
+				"contract_key", contractKey,
+				"contract_chain", true)
 		}
 	}
+	return nil
+}
+
+// verifyP2PContract performs traditional P2P contract verification
+func (n *Node) verifyP2PContract(contractConfig types.ContractConfig) error {
+	hostDID, err := did.FromString(contractConfig.Host)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host did: %w", err)
+	}
+
+	pubKey, err := did.PublicKeyFromDID(hostDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host public key from did: %w", err)
+	}
+
+	pid, err := peer.IDFromPublicKey(pubKey)
+	if err != nil {
+		return fmt.Errorf("failed to get peer id: %w", err)
+	}
+
+	contractActorDID, err := did.FromString(contractConfig.DID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts actor did: %w", err)
+	}
+
+	pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
+	}
+
+	destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, contractConfig.DID, pid.String())
+	if err != nil {
+		return fmt.Errorf("failed to get contracts host handle: %w", err)
+	}
+
+	req := contracts.ContractValidateRequest{ContractDID: contractConfig.DID}
+	reply, err := n.invokeBehaviour(destination, behaviors.ContractValidationBehavior, req, invokeMessageTimeout)
+	if err != nil {
+		return fmt.Errorf("failed to send message to contract host: %w", err)
+	}
+
+	var respEnvelope contracts.ContractValidateResponse
+	err = json.Unmarshal(reply.Message, &respEnvelope)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
+	}
+
+	if !respEnvelope.Valid {
+		return fmt.Errorf("contract is invalid")
+	}
+
+	return nil
+}
+
+// verifyContractChain performs contract chain verification
+// contractConfig contains Contract A (head contract: Orchestrator ↔ Organization)
+// The orchestrator specifies the head contract, and the provider finds Contract B
+// with the same organization specified in the head contract
+func (n *Node) verifyContractChain(contractConfig types.ContractConfig, orchestratorDID did.DID, contractKey string) error {
+	hostDID, err := did.FromString(contractConfig.Host)
+	if err != nil {
+		return fmt.Errorf("failed to parse host DID: %w", err)
+	}
+
+	// Get provider DID (self)
+	providerDID := n.actor.Handle().DID
+
+	pubKeyContractHost, err := did.PublicKeyFromDID(hostDID)
+	if err != nil {
+		return fmt.Errorf("failed to get contract actor public key: %w", err)
+	}
+
+	pid, err := peer.IDFromPublicKey(pubKeyContractHost)
+	if err != nil {
+		return fmt.Errorf("failed to get peer id: %w", err)
+	}
+
+	// For chain verification, we call the behavior on the ContractActor (not the node)
+	// The ContractActor will find Contract A (using contractConfig.DID) and Contract B (Org ↔ Provider)
+	destination, err := actor.HandleFromPeerID(pid.String())
+	if err != nil {
+		return fmt.Errorf("failed to construct contract actor handle: %w", err)
+	}
+
+	req := contracts.ContractChainVerificationRequest{
+		SolutionEnablerDID: hostDID.String(),
+		ContractDID:        contractConfig.DID, // Contract DID from config
+		OrchestratorDID:    orchestratorDID.String(),
+		ProviderDID:        providerDID.String(),
+	}
+
+	reply, err := n.invokeBehaviour(destination, behaviors.ContractChainVerificationBehavior, req, invokeMessageTimeout)
+	if err != nil {
+		return fmt.Errorf("failed to invoke chain verification: %w", err)
+	}
+
+	var resp contracts.ContractChainVerificationResponse
+	err = json.Unmarshal(reply.Message, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal chain verification response: %w", err)
+	}
+
+	if !resp.Valid {
+		return fmt.Errorf("contract chain verification failed: %s", resp.Error)
+	}
+
+	log.Infow("contract chain verification successful",
+		"labels", string(observability.LabelDeployment),
+		"contract_key", contractKey,
+		"organization_did", resp.OrganizationDID,
+		"orchestrator_contract", resp.OrchestratorContract.ContractDID,
+		"provider_contract", resp.ProviderContract.ContractDID)
 
 	return nil
 }
@@ -205,7 +296,9 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 	// to all nodes
 	if len(request.Request) > 0 {
 		if len(request.Request[0].V1.Contracts) > 0 {
-			err := n.verifyContract(request.Request[0].V1.Contracts)
+			// Extract orchestrator DID from message envelope
+			orchestratorDID := msg.From.DID
+			err := n.verifyContract(request.Request[0].V1.Contracts, orchestratorDID)
 			if err != nil {
 				log.Errorw(
 					"contract_verification_error",

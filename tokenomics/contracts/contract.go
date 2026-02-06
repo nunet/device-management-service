@@ -22,6 +22,7 @@ import (
 )
 
 type CreateContractRequest struct {
+	Metadata              map[string]string    `json:"metadata"`
 	SolutionEnablerDID    did.DID              `json:"solution_enabler_did"`
 	PaymentValidatorDID   did.DID              `json:"payment_validator_did"`
 	ResourceConfiguration types.Resources      `json:"resource_configuration"`
@@ -31,6 +32,7 @@ type CreateContractRequest struct {
 	ContractTerms         interface{}          `json:"contract_terms"`
 	ContractParticipants  ContractParticipants `json:"contract_participants"`
 	Duration              DurationDetails      `json:"duration"`
+	DisableBilling        bool                 `json:"disable_billing,omitempty"` // If true, disables all billing (automatic and manual)
 }
 
 type ContractPaymentStatusRequest struct {
@@ -284,6 +286,24 @@ type ContractValidateResponse struct {
 	Error         string `json:"error"`
 }
 
+// ContractChainVerificationRequest requests verification of a contract chain
+type ContractChainVerificationRequest struct {
+	SolutionEnablerDID string `json:"solution_enabler_did"` // Contract host DID
+	ContractDID        string `json:"contract_did"`         // Contract DID (Orch ↔ Org)
+	OrganizationDID    string `json:"organization_did"`     // Organization DID (from Contract A)
+	OrchestratorDID    string `json:"orchestrator_did"`     // Orchestrator DID
+	ProviderDID        string `json:"provider_did"`         // Provider DID
+}
+
+// ContractChainVerificationResponse contains the chain verification result
+type ContractChainVerificationResponse struct {
+	Valid                bool      `json:"valid"`
+	OrganizationDID      string    `json:"organization_did,omitempty"`
+	OrchestratorContract *Contract `json:"orchestrator_contract,omitempty"` // Contract A
+	ProviderContract     *Contract `json:"provider_contract,omitempty"`     // Contract B
+	Error                string    `json:"error,omitempty"`
+}
+
 type ContractSignRequest struct {
 	ContractDID string `json:"contract_did"`
 	Signature   []byte `json:"signature"`
@@ -340,6 +360,13 @@ type ContractStateTransition struct {
 	ToState   ContractState
 }
 
+// Contract chain role constants for metadata
+const (
+	ContractChainRoleMetadataKey = "contract_chain_role"
+	ContractChainRoleHead        = "head"
+	ContractChainRoleTail        = "tail"
+)
+
 // StateTransition represents a historical state change
 type StateTransition struct {
 	FromState   ContractState `json:"from_state"`
@@ -369,6 +396,8 @@ type Contract struct {
 	ContractTerms         interface{}          `json:"contract_terms"` // To store contract agreement terms
 	TerminationStarted    time.Time            `json:"termination_started"`
 	Transitions           []StateTransition    `json:"transitions"`
+	DisableBilling        bool                 `json:"disable_billing,omitempty"` // If true, disables all billing (automatic and manual)
+	Metadata              map[string]string    `json:"metadata,omitempty"`        // Contract metadata (e.g., contract_chain_role)
 }
 
 func (c *Contract) Sign(key did.Provider) ([]byte, error) {
@@ -436,6 +465,14 @@ func NewContract(contractDID string, req CreateContractRequest) *Contract {
 	// Set periodicity defaults if not provided
 	SetPeriodicityDefaults(&req.PaymentDetails)
 
+	// Copy metadata from request if provided
+	metadata := make(map[string]string)
+	if req.Metadata != nil {
+		for k, v := range req.Metadata {
+			metadata[k] = v
+		}
+	}
+
 	return &Contract{
 		ContractDID:           contractDID,
 		SolutionEnablerDID:    req.SolutionEnablerDID,
@@ -449,5 +486,7 @@ func NewContract(contractDID string, req CreateContractRequest) *Contract {
 		ContractTerms:         req.ContractTerms,
 		CurrentState:          ContractDraft,
 		Transitions:           []StateTransition{},
+		DisableBilling:        req.DisableBilling,
+		Metadata:              metadata,
 	}
 }

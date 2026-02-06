@@ -64,5 +64,6 @@
     "duration": {
         "start_date": "{{start_date}}",
         "end_date": "{{end_date}}"
-    }
+    },
+    "disable_billing": {{disable_billing}}{{metadata}}
 }

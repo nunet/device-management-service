@@ -276,9 +276,10 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 
 	for _, v := range o.contracts {
 		evt := events.DeploymentStart{
-			EventBase:      events.EventBase{Type: events.DeploymentStartEvent},
-			DeploymentID:   o.manifest.ID,
-			OrchestratorID: o.id,
+			EventBase:       events.EventBase{Type: events.DeploymentStartEvent},
+			DeploymentID:    o.manifest.ID,
+			OrchestratorID:  o.id,
+			HeadContractDID: v.DID, // treat contrat as if head of contract chain, won't be taken into consideration in billing if contract is p2p
 		}
 		o.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,

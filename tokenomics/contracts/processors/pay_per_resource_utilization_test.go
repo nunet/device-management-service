@@ -20,6 +20,8 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+const testContractID = "test-contract-1"
+
 func TestPayPerResourceUtilizationProcessor_Validate(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPayPerResourceUtilizationProcessor(store)
@@ -118,7 +120,7 @@ func TestPayPerResourceUtilizationProcessor_CollectUsage(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPayPerResourceUtilizationProcessor(store)
 
-	contractDID := "test-contract-1"
+	contractDID := testContractID
 	lastProcessedAt := time.Now().Add(-2 * time.Hour)
 
 	// Add allocation events with resources
@@ -132,7 +134,7 @@ func TestPayPerResourceUtilizationProcessor_CollectUsage(t *testing.T) {
 
 	now := time.Now()
 
-	usageData, err := processor.CollectUsage(contractDID, lastProcessedAt, now)
+	usageData, err := processor.CollectUsage(contractDID, lastProcessedAt, now, "", "")
 	require.NoError(t, err)
 	require.NotNil(t, usageData)
 	require.Equal(t, contractDID, usageData.ContractDID)
@@ -148,7 +150,7 @@ func TestPayPerResourceUtilizationProcessor_CalculatePayment(t *testing.T) {
 	processor := NewPayPerResourceUtilizationProcessor(store)
 
 	contract := &contracts.Contract{
-		ContractDID: "test-contract-1",
+		ContractDID: testContractID,
 		PaymentDetails: contracts.PaymentDetails{
 			PaymentModel:             contracts.PayPerResourceUtilization,
 			FeePerCPUCorePerTimeUnit: "0.1",

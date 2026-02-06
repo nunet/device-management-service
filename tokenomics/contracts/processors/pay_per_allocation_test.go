@@ -85,7 +85,7 @@ func TestPayPerAllocationProcessor_CollectUsage(t *testing.T) {
 
 	now := time.Now()
 
-	usageData, err := processor.CollectUsage(contractDID, lastProcessedAt, now)
+	usageData, err := processor.CollectUsage(contractDID, lastProcessedAt, now, "", "")
 	require.NoError(t, err)
 	require.NotNil(t, usageData)
 	require.Equal(t, contractDID, usageData.ContractDID)

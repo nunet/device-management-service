@@ -137,6 +137,18 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 	}
 
 	contractObj := contracts.NewContract(contractActor.ContractDID.URI, request)
+
+	// Determine if this is a Head Contract in a chain and set metadata
+	// Head Contract: Provider = Organization (not a compute provider)
+	// This can be detected from ContractParticipants structure or explicit flag
+	// For now, we'll use a helper function that can be enhanced based on actual use cases
+	if isHeadContractFromRequest(request) {
+		if contractObj.Metadata == nil {
+			contractObj.Metadata = make(map[string]string)
+		}
+		contractObj.Metadata[contracts.ContractChainRoleMetadataKey] = contracts.ContractChainRoleHead
+	}
+
 	if err := n.contractStore.Upsert(contractObj); err != nil {
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to save contract: %w", err)
 	}
@@ -1082,6 +1094,107 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
+func (n *Node) handleContractChainVerification(msg actor.Envelope) {
+	defer msg.Discard()
+
+	resp := contracts.ContractChainVerificationResponse{}
+
+	var req contracts.ContractChainVerificationRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		resp.Error = fmt.Sprintf("failed to unmarshal request: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Verify that the caller is the Provider mentioned in the request
+	// This ensures only the actual Provider can verify chains involving itself
+	providerDID, err := did.FromString(req.ProviderDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("invalid provider DID: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Security check: Only the Provider mentioned in the request can verify the chain
+	if msg.From.DID != providerDID {
+		resp.Error = fmt.Sprintf("caller DID (%s) does not match ProviderDID in request (%s)",
+			msg.From.DID.String(), req.ProviderDID)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	orchestratorDID, err := did.FromString(req.OrchestratorDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("invalid orchestrator DID: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Step 1: Verify Contract A (Orchestrator ↔ Organization)
+	// Use the provided ContractADID to get the contract
+	contractA, err := n.contractStore.GetContract(req.ContractDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("contract A not found: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Validate Contract A participants match the provided DIDs
+	provStr := contractA.ContractParticipants.Provider.String()
+	reqStr := contractA.ContractParticipants.Requestor.String()
+	orchStr := orchestratorDID.String()
+
+	// Check that Contract A is between Orchestrator and Organization
+	if reqStr != orchStr && provStr == req.ProviderDID {
+		resp.Error = "contract A participants do not match orchestrator and organization"
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Ensure Contract A is active
+	if contractA.CurrentState != contracts.ContractAccepted && contractA.CurrentState != contracts.ContractActive {
+		resp.Error = fmt.Sprintf("contract A is not in active state: %s", contractA.CurrentState)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Step 2: Find Contract B (Organization ↔ Provider)
+	// The orchestrator specifies Contract A (head contract) which includes the Organization DID.
+	// The provider finds Contract B by matching the Organization DID from Contract A.
+	// This handles the case where a provider has contracts with multiple organizations:
+	// the provider will find the correct Contract B based on which organization is specified
+	// in the head contract (Contract A).
+	//
+	// Example: If Provider has contracts with Org1 and Org2:
+	// - Orchestrator specifies Contract A with Org1 → Provider finds Contract B with Org1
+	// - Orchestrator specifies Contract A with Org2 → Provider finds Contract B with Org2
+	contractB, err := n.contractStore.FindContractByParticipants(contractA.ContractParticipants.Provider, providerDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("no active contract found between organization and provider: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Step 3: Validate both contracts are in acceptable state
+	validA := contractA.CurrentState == contracts.ContractAccepted || contractA.CurrentState == contracts.ContractActive
+	validB := contractB.CurrentState == contracts.ContractAccepted || contractB.CurrentState == contracts.ContractActive
+
+	if !validA || !validB {
+		resp.Error = fmt.Sprintf("contract chain invalid: Contract A state=%s, Contract B state=%s",
+			contractA.CurrentState, contractB.CurrentState)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Chain is valid
+	resp.Valid = true
+	resp.OrganizationDID = contractA.ContractParticipants.Provider.String()
+	resp.OrchestratorContract = contractA
+	resp.ProviderContract = contractB
+
+	n.sendReply(msg, resp)
+}
+
 // convertRequestToUsageData converts ContractUsageRequest to UsageData format
 func (n *Node) convertRequestToUsageData(req *contracts.ContractUsageRequest) (*contracts.UsageData, error) {
 	paymentModel := req.Contract.PaymentDetails.PaymentModel
@@ -1152,6 +1265,13 @@ func (n *Node) convertRequestToUsageData(req *contracts.ContractUsageRequest) (*
 	default:
 		return nil, fmt.Errorf("unsupported payment model: %s", paymentModel)
 	}
+}
+
+// isHeadContractFromRequest determines if a contract is a Head Contract in a chain
+// This can be enhanced based on actual contract creation context
+// For now, returns false (contracts without metadata are treated as P2P)
+func isHeadContractFromRequest(request contracts.CreateContractRequest) bool {
+	return request.Metadata[contracts.ContractChainRoleMetadataKey] == contracts.ContractChainRoleHead
 }
 
 // true if a is bigger than b

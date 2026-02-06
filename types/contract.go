@@ -10,8 +10,10 @@ package types
 
 // ContractConfig represents a contract between parties
 type ContractConfig struct {
-	DID  string `json:"did"` // DID of the contract
-	Host string `json:"host"`
+	DID       string `json:"did"`                 // Contract DID (required)
+	Host      string `json:"host"`                // Contract host DID (required)
+	Provider  string `json:"provider,omitempty"`  // Provider DID (optional, for chain detection)
+	Requestor string `json:"requestor,omitempty"` // Requestor DID (optional, for chain detection)
 }
 
 type PaymentAddressInfo struct {

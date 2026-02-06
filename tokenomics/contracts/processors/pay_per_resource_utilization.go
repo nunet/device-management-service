@@ -40,9 +40,12 @@ func (p *PayPerResourceUtilizationProcessor) CollectUsage(
 	contractDID string,
 	lastProcessedAt time.Time,
 	now time.Time,
+	_ string, // providerDID - unused in this processor
+	headContractDID string, // New parameter
 ) (*contracts.UsageData, error) {
 	// Use store's abstract query methods
-	startEvents, endEvents, err := p.store.QueryAllocationEvents(contractDID, lastProcessedAt, now)
+	// If headContractDID is provided, query by Head Contract DID; otherwise query by contractDID
+	startEvents, endEvents, err := p.store.QueryAllocationEvents(contractDID, lastProcessedAt, now, headContractDID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query allocation events: %w", err)
 	}
@@ -224,7 +227,16 @@ func (p *PayPerResourceUtilizationProcessor) CheckAndGenerateInvoice(
 	}
 
 	// Period has elapsed, collect usage
-	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now)
+	// Detect contract type from metadata to determine query strategy
+	headContractDID := ""
+	if contract.Metadata != nil {
+		if role, ok := contract.Metadata[contracts.ContractChainRoleMetadataKey]; ok {
+			if role == contracts.ContractChainRoleHead {
+				headContractDID = contract.ContractDID
+			}
+		}
+	}
+	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now, "", headContractDID)
 }
 
 // buildAllocationWindowsWithResources builds windows with resources from events
