@@ -35,6 +35,8 @@ func (p *FixedRentalProcessor) CollectUsage(
 	_ string,
 	_ time.Time,
 	_ time.Time,
+	_ string, // providerDID (not used for fixed_rental)
+	_ string, // headContractDID (not used for fixed_rental)
 ) (*contracts.UsageData, error) {
 	return nil, fmt.Errorf("fixed_rental does not support manual billing")
 }

@@ -90,7 +90,7 @@ func TestPeriodicProcessor_CollectUsage(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPeriodicProcessor(store)
 
-	usageData, err := processor.CollectUsage("test-contract-1", time.Now(), time.Now())
+	usageData, err := processor.CollectUsage("test-contract-1", time.Now(), time.Now(), "", "")
 	require.Error(t, err)
 	require.Nil(t, usageData)
 	require.Contains(t, err.Error(), "does not support manual billing")

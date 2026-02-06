@@ -17,6 +17,7 @@ import (
 	"github.com/ostafen/clover/v2"
 	"github.com/ostafen/clover/v2/document"
 	"github.com/ostafen/clover/v2/query"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 )
 
@@ -162,4 +163,90 @@ func (s *Store) GetAllContracts() ([]*contracts.Contract, error) {
 	}
 
 	return allContracts, nil
+}
+
+// FindContractByParticipants finds a contract where both participants match
+// Returns the contract if exactly one active contract exists between the two parties
+func (s *Store) FindContractByParticipants(participant1, participant2 did.DID) (*contracts.Contract, error) {
+	q := query.NewQuery(contractsCollection)
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve contracts: %w", err)
+	}
+
+	participant1Str := participant1.String()
+	participant2Str := participant2.String()
+
+	var matches []*contracts.Contract
+	for _, doc := range docs {
+		var contract contracts.Contract
+		data := doc.Get("contract_data")
+		contractData, ok := data.([]byte)
+		if !ok {
+			continue
+		}
+		if err := json.Unmarshal(contractData, &contract); err != nil {
+			continue
+		}
+
+		provStr := contract.ContractParticipants.Provider.String()
+		reqStr := contract.ContractParticipants.Requestor.String()
+
+		// Check if both participants match (order-independent)
+		matchesParticipant1 := (provStr == participant1Str || reqStr == participant1Str)
+		matchesParticipant2 := (provStr == participant2Str || reqStr == participant2Str)
+
+		if matchesParticipant1 && matchesParticipant2 {
+			// Only include active contracts (ACCEPTED or ACTIVE state)
+			if contract.CurrentState == contracts.ContractAccepted || contract.CurrentState == contracts.ContractActive {
+				matches = append(matches, &contract)
+			}
+		}
+	}
+
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no active contract found between participants")
+	}
+
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("multiple active contracts found between participants (violates single contract rule)")
+	}
+
+	return matches[0], nil
+}
+
+// FindContractsByParticipant finds contracts where the given DID is a participant
+func (s *Store) FindContractsByParticipant(participant did.DID) ([]*contracts.Contract, error) {
+	q := query.NewQuery(contractsCollection)
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve contracts: %w", err)
+	}
+
+	participantStr := participant.String()
+	var matches []*contracts.Contract
+
+	for _, doc := range docs {
+		var contract contracts.Contract
+		data := doc.Get("contract_data")
+		contractData, ok := data.([]byte)
+		if !ok {
+			continue
+		}
+		if err := json.Unmarshal(contractData, &contract); err != nil {
+			continue
+		}
+
+		provStr := contract.ContractParticipants.Provider.String()
+		reqStr := contract.ContractParticipants.Requestor.String()
+
+		if provStr == participantStr || reqStr == participantStr {
+			// Only include active contracts
+			if contract.CurrentState == contracts.ContractAccepted || contract.CurrentState == contracts.ContractActive {
+				matches = append(matches, &contract)
+			}
+		}
+	}
+
+	return matches, nil
 }

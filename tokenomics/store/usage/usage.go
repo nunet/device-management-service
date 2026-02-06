@@ -27,10 +27,12 @@ const (
 )
 
 type Usage struct {
-	ContractDID string           `json:"contract_did"`
-	EventType   events.EventType `json:"event_type,omitempty"` // For indexing - extracted from JSON if not provided
-	Data        []byte           `json:"data"`                 // Raw JSON bytes
-	Timestamp   time.Time        `json:"timestamp,omitempty"`  // Event timestamp
+	ContractDID     string           `json:"contract_did"`                // Tail Contract DID (existing)
+	HeadContractDID string           `json:"head_contract_did,omitempty"` // Head Contract DID (new)
+	ProviderDID     string           `json:"provider_did,omitempty"`      // Provider DID for per-node billing
+	EventType       events.EventType `json:"event_type,omitempty"`        // For indexing - extracted from JSON if not provided
+	Data            []byte           `json:"data"`                        // Raw JSON bytes
+	Timestamp       time.Time        `json:"timestamp,omitempty"`         // Event timestamp
 }
 
 type Store struct {
@@ -39,10 +41,11 @@ type Store struct {
 
 // EventFilters defines filters for querying events
 type EventFilters struct {
-	ContractDID string
-	EventTypes  []events.EventType
-	StartTime   time.Time
-	EndTime     time.Time
+	ContractDID     string // Tail Contract DID
+	HeadContractDID string // Head Contract DID (new)
+	EventTypes      []events.EventType
+	StartTime       time.Time
+	EndTime         time.Time
 }
 
 func New(db *clover.DB) (*Store, error) {
@@ -62,6 +65,8 @@ func (s *Store) AddUsageEvent(u Usage) error {
 
 	doc := document.NewDocument()
 	doc.Set("contract_did", u.ContractDID)
+	doc.Set("head_contract_did", u.HeadContractDID) // Store Head Contract DID (empty for non-chain contracts)
+	doc.Set("provider_did", u.ProviderDID)          // Store provider DID for filtering
 	doc.Set("created_at", time.Now().UnixNano())
 	doc.Set("usage_data", u.Data)
 
@@ -101,6 +106,9 @@ func (s *Store) GetEventsByContract(contractDID string) ([]*Usage, error) {
 		if cdid, ok := doc.Get("contract_did").(string); ok {
 			u.ContractDID = cdid
 		}
+		if hcDid, ok := doc.Get("head_contract_did").(string); ok {
+			u.HeadContractDID = hcDid
+		}
 		if data, ok := doc.Get("usage_data").([]byte); ok {
 			u.Data = data
 		}
@@ -128,6 +136,9 @@ func (s *Store) GetAllEvents() ([]*Usage, error) {
 		data := doc.Get("usage_data")
 		currentUsage.Data = data.([]byte)
 		currentUsage.ContractDID = doc.Get("contract_did").(string)
+		if hcDid, ok := doc.Get("head_contract_did").(string); ok {
+			currentUsage.HeadContractDID = hcDid
+		}
 		if eventTypeStr, ok := doc.Get("event_type").(string); ok {
 			currentUsage.EventType = events.EventType(eventTypeStr)
 		}
@@ -154,6 +165,9 @@ func (s *Store) GetEventsByDateRange(start, end time.Time) ([]*Usage, error) {
 		if contractDID, ok := doc.Get("contract_did").(string); ok {
 			u.ContractDID = contractDID
 		}
+		if hcDid, ok := doc.Get("head_contract_did").(string); ok {
+			u.HeadContractDID = hcDid
+		}
 		if data, ok := doc.Get("usage_data").([]byte); ok {
 			u.Data = data
 		}
@@ -177,6 +191,16 @@ func (s *Store) QueryEvents(filters EventFilters) ([]*Usage, error) {
 
 	if filters.ContractDID != "" {
 		combinedCondition = query.Field("contract_did").Eq(filters.ContractDID)
+		hasCondition = true
+	}
+
+	if filters.HeadContractDID != "" {
+		headContractCondition := query.Field("head_contract_did").Eq(filters.HeadContractDID)
+		if !hasCondition {
+			combinedCondition = headContractCondition
+		} else {
+			combinedCondition = combinedCondition.And(headContractCondition)
+		}
 		hasCondition = true
 	}
 
@@ -229,6 +253,9 @@ func (s *Store) QueryEvents(filters EventFilters) ([]*Usage, error) {
 		if cdid, ok := doc.Get("contract_did").(string); ok {
 			u.ContractDID = cdid
 		}
+		if hcDid, ok := doc.Get("head_contract_did").(string); ok {
+			u.HeadContractDID = hcDid
+		}
 		if data, ok := doc.Get("usage_data").([]byte); ok {
 			u.Data = data
 		}
@@ -245,32 +272,152 @@ func (s *Store) QueryEvents(filters EventFilters) ([]*Usage, error) {
 	return usages, nil
 }
 
+// QueryEventsByProvider queries events filtered by contract and provider
+func (s *Store) QueryEventsByProvider(contractDID, providerDID string, filters EventFilters) ([]*Usage, error) {
+	filters.ContractDID = contractDID
+
+	q := query.NewQuery(contractsUsageCollection)
+
+	// Build conditions
+	var conditions []query.Criteria
+	conditions = append(conditions, query.Field("contract_did").Eq(contractDID))
+	if providerDID != "" {
+		conditions = append(conditions, query.Field("provider_did").Eq(providerDID))
+	}
+
+	// Apply other filters
+	if len(filters.EventTypes) > 0 {
+		typeStrs := make([]interface{}, len(filters.EventTypes))
+		for i, et := range filters.EventTypes {
+			typeStrs[i] = string(et)
+		}
+		conditions = append(conditions, query.Field("event_type").In(typeStrs...))
+	}
+
+	if !filters.StartTime.IsZero() {
+		conditions = append(conditions, query.Field("created_at").GtEq(filters.StartTime.UnixNano()))
+	}
+
+	if !filters.EndTime.IsZero() {
+		conditions = append(conditions, query.Field("created_at").LtEq(filters.EndTime.UnixNano()))
+	}
+
+	// Combine all conditions
+	var combinedCondition query.Criteria
+	for i, cond := range conditions {
+		if i == 0 {
+			combinedCondition = cond
+		} else {
+			combinedCondition = combinedCondition.And(cond)
+		}
+	}
+
+	q = q.Where(combinedCondition)
+
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events: %w", err)
+	}
+
+	usages := make([]*Usage, 0, len(docs))
+	for _, doc := range docs {
+		var u Usage
+		if cdid, ok := doc.Get("contract_did").(string); ok {
+			u.ContractDID = cdid
+		}
+		if hcDid, ok := doc.Get("head_contract_did").(string); ok {
+			u.HeadContractDID = hcDid
+		}
+		if pdid, ok := doc.Get("provider_did").(string); ok {
+			u.ProviderDID = pdid
+		}
+		if data, ok := doc.Get("usage_data").([]byte); ok {
+			u.Data = data
+		}
+		if eventTypeStr, ok := doc.Get("event_type").(string); ok {
+			u.EventType = events.EventType(eventTypeStr)
+		}
+		// Extract timestamp from created_at
+		if timestampNano, ok := doc.Get("created_at").(int64); ok {
+			u.Timestamp = time.Unix(0, timestampNano)
+		}
+		usages = append(usages, &u)
+	}
+
+	return usages, nil
+}
+
+// GetEventsByHeadContract retrieves events for Head Contract (head contract in chain)
+func (s *Store) GetEventsByHeadContract(headContractDID string) ([]*Usage, error) {
+	q := query.NewQuery(contractsUsageCollection).
+		Where(query.Field("head_contract_did").Eq(headContractDID))
+
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve usages for head contract %s: %w", headContractDID, err)
+	}
+
+	usages := make([]*Usage, 0, len(docs))
+	for _, doc := range docs {
+		var u Usage
+		if cdid, ok := doc.Get("contract_did").(string); ok {
+			u.ContractDID = cdid
+		}
+		if hcDid, ok := doc.Get("head_contract_did").(string); ok {
+			u.HeadContractDID = hcDid
+		}
+		if data, ok := doc.Get("usage_data").([]byte); ok {
+			u.Data = data
+		}
+		if eventTypeStr, ok := doc.Get("event_type").(string); ok {
+			u.EventType = events.EventType(eventTypeStr)
+		}
+		usages = append(usages, &u)
+	}
+
+	return usages, nil
+}
+
 // QueryAllocationEvents queries allocation start/end events with smart time bounds.
 // This helper eliminates duplication across calculation methods.
 // It looks back 1 year to catch allocations that started before query period but are still running.
+// If headContractDID is provided, queries by Head Contract DID; otherwise queries by contractDID.
 func (s *Store) QueryAllocationEvents(
 	contractDID string,
 	queryStart, queryEnd time.Time,
+	headContractDID string, // Optional: if provided, queries by Head Contract DID
 ) ([]*Usage, []*Usage, error) {
 	// Look back 1 year to catch allocations that started before query period
 	queryStartBound := queryStart.AddDate(-1, 0, 0)
 
-	startEvents, err := s.QueryEvents(EventFilters{
-		ContractDID: contractDID,
-		EventTypes:  []events.EventType{events.StartAllocationEvent},
-		StartTime:   queryStartBound,
-		EndTime:     queryEnd,
-	})
+	filters := EventFilters{
+		EventTypes: []events.EventType{events.StartAllocationEvent},
+		StartTime:  queryStartBound,
+		EndTime:    queryEnd,
+	}
+	if headContractDID != "" {
+		filters.HeadContractDID = headContractDID
+	} else {
+		filters.ContractDID = contractDID
+	}
+
+	startEvents, err := s.QueryEvents(filters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query start events: %w", err)
 	}
 
-	endEvents, err := s.QueryEvents(EventFilters{
-		ContractDID: contractDID,
-		EventTypes:  []events.EventType{events.CompleteAllocationEvent, events.StopAllocationEvent},
-		StartTime:   queryStartBound,
-		EndTime:     queryEnd,
-	})
+	endFilters := EventFilters{
+		EventTypes: []events.EventType{events.CompleteAllocationEvent, events.StopAllocationEvent},
+		StartTime:  queryStartBound,
+		EndTime:    queryEnd,
+	}
+	if headContractDID != "" {
+		endFilters.HeadContractDID = headContractDID
+	} else {
+		endFilters.ContractDID = contractDID
+	}
+
+	endEvents, err := s.QueryEvents(endFilters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query end events: %w", err)
 	}
@@ -281,28 +428,42 @@ func (s *Store) QueryAllocationEvents(
 // QueryDeploymentEvents queries deployment start/stop events with smart time bounds.
 // This helper eliminates duplication for deployment-based calculations.
 // It looks back 1 year to catch deployments that started before query period but are still running.
+// If headContractDID is provided, queries by Head Contract DID; otherwise queries by contractDID.
 func (s *Store) QueryDeploymentEvents(
 	contractDID string,
 	queryStart, queryEnd time.Time,
+	headContractDID string, // Optional: if provided, queries by Head Contract DID
 ) ([]*Usage, []*Usage, error) {
 	queryStartBound := queryStart.AddDate(-1, 0, 0)
 
-	startEvents, err := s.QueryEvents(EventFilters{
-		ContractDID: contractDID,
-		EventTypes:  []events.EventType{events.DeploymentStartEvent},
-		StartTime:   queryStartBound,
-		EndTime:     queryEnd,
-	})
+	filters := EventFilters{
+		EventTypes: []events.EventType{events.DeploymentStartEvent},
+		StartTime:  queryStartBound,
+		EndTime:    queryEnd,
+	}
+	if headContractDID != "" {
+		filters.HeadContractDID = headContractDID
+	} else {
+		filters.ContractDID = contractDID
+	}
+
+	startEvents, err := s.QueryEvents(filters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query deployment start events: %w", err)
 	}
 
-	stopEvents, err := s.QueryEvents(EventFilters{
-		ContractDID: contractDID,
-		EventTypes:  []events.EventType{events.DeploymentStopEvent},
-		StartTime:   queryStartBound,
-		EndTime:     queryEnd,
-	})
+	stopFilters := EventFilters{
+		EventTypes: []events.EventType{events.DeploymentStopEvent},
+		StartTime:  queryStartBound,
+		EndTime:    queryEnd,
+	}
+	if headContractDID != "" {
+		stopFilters.HeadContractDID = headContractDID
+	} else {
+		stopFilters.ContractDID = contractDID
+	}
+
+	stopEvents, err := s.QueryEvents(stopFilters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query deployment stop events: %w", err)
 	}

@@ -235,4 +235,32 @@ func TestE2E(t *testing.T) {
 		}
 		suite.Run(t, deploymentWithContractsEnforcedProvidersTests)
 	})
+
+	t.Run("DeploymentWithContractChainTest", func(t *testing.T) {
+		t.Parallel()
+		deploymentWithContractChainTests := &TestSuite{
+			numNodes:            6,
+			Name:                "deployment_with_contract_chain_tests",
+			restPortIndex:       ports[28],
+			p2pPortIndex:        ports[29],
+			runner:              DeployWithContractChainTest,
+			capabilitiesHandler: setupContractChainCapabilities,
+		}
+		suite.Run(t, deploymentWithContractChainTests)
+	})
+
+	// Disabled because too flaky since 'Provisioning' status is too quick to catch
+	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
+	// test case
+	// t.Run("DeploymentRestorationFromProvisioningTaskAllocation", func(t *testing.T) {
+	// 	t.Parallel()
+	// 	provisioningTask := &TestSuite{
+	// 		numNodes:      3,
+	// 		Name:          "deployment_restoration_from_provisioning_task",
+	// 		restPortIndex: ports[18],
+	// 		p2pPortIndex:  ports[19],
+	// 		runner:        DeploymentRestorationFromProvisioningTaskAllocation,
+	// 	}
+	// 	suite.Run(t, provisioningTask)
+	// })
 }

@@ -9,10 +9,12 @@
 package processors
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/utils/convert"
 )
@@ -37,10 +39,43 @@ func (p *PayPerAllocationProcessor) CollectUsage(
 	contractDID string,
 	lastProcessedAt time.Time,
 	now time.Time,
+	_ string, // providerDID - unused in this processor
+	headContractDID string, // New parameter
 ) (*contracts.UsageData, error) {
-	usageCount, err := p.store.CountAllocationsByContractDID(contractDID, lastProcessedAt, now)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count allocations: %w", err)
+	var usageCount int
+	var err error
+
+	// If headContractDID is provided, query by Head Contract DID
+	// Otherwise, query by Tail Contract DID (backward compatible)
+	if headContractDID != "" {
+		filters := usage.EventFilters{
+			HeadContractDID: headContractDID,
+			EventTypes:      []events.EventType{events.StartAllocationEvent},
+			StartTime:       lastProcessedAt,
+			EndTime:         now,
+		}
+		usageEvents, err := p.store.QueryEvents(filters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query events by head contract: %w", err)
+		}
+		// Count unique allocations from events
+		allocationSet := make(map[string]bool)
+		for _, evt := range usageEvents {
+			var evtData events.StartAllocation
+			if err := json.Unmarshal(evt.Data, &evtData); err != nil {
+				continue
+			}
+			if evtData.AllocationID != "" {
+				allocationSet[evtData.AllocationID] = true
+			}
+		}
+		usageCount = len(allocationSet)
+	} else {
+		// Existing logic: query by Tail Contract DID
+		usageCount, err = p.store.CountAllocationsByContractDID(contractDID, lastProcessedAt, now)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count allocations: %w", err)
+		}
 	}
 
 	return &contracts.UsageData{
@@ -135,5 +170,16 @@ func (p *PayPerAllocationProcessor) CheckAndGenerateInvoice(
 	}
 
 	// Period has elapsed, collect usage
-	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now)
+	// Detect contract type from metadata to determine query strategy
+	headContractDID := ""
+	if contract.Metadata != nil {
+		if role, ok := contract.Metadata[contracts.ContractChainRoleMetadataKey]; ok {
+			if role == contracts.ContractChainRoleHead {
+				// Head Contract: query by head_contract_did = contract's DID
+				headContractDID = contract.ContractDID
+			}
+			// For Tail Contract or P2P, headContractDID remains empty (query by contract_did)
+		}
+	}
+	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now, "", headContractDID)
 }

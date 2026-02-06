@@ -81,9 +81,10 @@ func (o *BasicOrchestrator) Shutdown() error {
 
 		for _, v := range o.contracts {
 			evt := events.DeploymentStop{
-				EventBase:      events.EventBase{Type: events.DeploymentStopEvent},
-				DeploymentID:   o.manifest.ID,
-				OrchestratorID: o.id,
+				EventBase:       events.EventBase{Type: events.DeploymentStopEvent},
+				DeploymentID:    o.manifest.ID,
+				OrchestratorID:  o.id,
+				HeadContractDID: v.DID, // treat contrat as if head of contract chain, won't be taken into consideration in billing if contract is p2p
 			}
 			o.contractEventHandler.Push(eventhandler.Event{
 				ContractHostDID: v.Host,

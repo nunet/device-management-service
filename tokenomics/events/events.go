@@ -30,6 +30,7 @@ type AllocationBase struct {
 	AllocationID       string `json:"allocation_id"`
 	DeploymentID       string `json:"deployment_id"`
 	ComputeProviderDID string `json:"compute_provider_did"`
+	HeadContractDID    string `json:"head_contract_did,omitempty"` // Head Contract DID for chain contracts
 }
 
 type CreateAllocation struct {
@@ -55,13 +56,15 @@ type CompleteAllocation struct {
 }
 
 type DeploymentStart struct {
-	EventBase             // Embedded - contains Type field
-	DeploymentID   string `json:"deployment_id"`
-	OrchestratorID string `json:"orchestrator_id"`
+	EventBase              // Embedded - contains Type field
+	DeploymentID    string `json:"deployment_id"`
+	OrchestratorID  string `json:"orchestrator_id"`
+	HeadContractDID string `json:"head_contract_did,omitempty"` // Head Contract DID for chain contracts
 }
 
 type DeploymentStop struct {
-	EventBase             // Embedded - contains Type field
-	DeploymentID   string `json:"deployment_id"`
-	OrchestratorID string `json:"orchestrator_id"`
+	EventBase              // Embedded - contains Type field
+	DeploymentID    string `json:"deployment_id"`
+	OrchestratorID  string `json:"orchestrator_id"`
+	HeadContractDID string `json:"head_contract_did,omitempty"` // Head Contract DID for chain contracts
 }

@@ -203,11 +203,27 @@ func (n *Node) createAllocation(
 		return nil, fmt.Errorf("allocate: %w", err)
 	}
 
+	// Find Head Contract DID from ensemble contracts
+	computeProviderDID := n.actor.Handle().DID.URI
+	var headContractDID string
+	for _, contractConfig := range contracts {
+		// Head Contract has Provider field set to Organization DID
+		if contractConfig.Provider != "" && contractConfig.Provider != computeProviderDID {
+			headContractDID = contractConfig.DID
+			break
+		}
+	}
+
 	for _, v := range contracts {
 		evt := events.CreateAllocation{
-			EventBase:      events.EventBase{Type: events.CreateAllocationEvent},
-			Resources:      job.Resources,
-			AllocationBase: events.AllocationBase{AllocationID: allocationID, DeploymentID: deploymentID, ComputeProviderDID: n.actor.Handle().DID.URI},
+			EventBase: events.EventBase{Type: events.CreateAllocationEvent},
+			Resources: job.Resources,
+			AllocationBase: events.AllocationBase{
+				AllocationID:       allocationID,
+				DeploymentID:       deploymentID,
+				ComputeProviderDID: computeProviderDID,
+				HeadContractDID:    headContractDID, // Include Head Contract DID from ensemble
+			},
 		}
 		n.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,

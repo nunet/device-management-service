@@ -214,6 +214,22 @@ func (a *Allocation) GetPortMapping() map[int]int {
 	return ports
 }
 
+// findHeadContractDID finds the Head Contract DID from ensemble contracts
+// Head Contract is identified by having Organization as Provider (not compute provider)
+func (a *Allocation) findHeadContractDID() string {
+	computeProviderDID := a.computeProviderDID
+
+	for _, contractConfig := range a.Contracts {
+		// Head Contract has Provider field set to Organization DID
+		// If Provider exists and is not the compute provider, it's Head Contract
+		if contractConfig.Provider != "" && contractConfig.Provider != computeProviderDID {
+			return contractConfig.DID
+		}
+	}
+
+	return "" // No Head Contract found (P2P contract scenario)
+}
+
 // Run creates the executor based on the execution engine configuration.
 func (a *Allocation) Run(
 	ctx context.Context, subnetIP string,
@@ -296,11 +312,19 @@ func (a *Allocation) Run(
 	a.startedAt = time.Now()
 	a.status = AllocationRunning
 
+	// Find Head Contract DID from ensemble contracts
+	headContractDID := a.findHeadContractDID()
+
 	for _, v := range a.Contracts {
 		evt := events.StartAllocation{
-			EventBase:      events.EventBase{Type: events.StartAllocationEvent},
-			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
-			Resources:      a.Job.Resources,
+			EventBase: events.EventBase{Type: events.StartAllocationEvent},
+			AllocationBase: events.AllocationBase{
+				AllocationID:       a.ID,
+				DeploymentID:       a.deploymentID,
+				ComputeProviderDID: a.computeProviderDID,
+				HeadContractDID:    headContractDID, // Include Head Contract DID from ensemble
+			},
+			Resources: a.Job.Resources,
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -438,10 +462,18 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		log.Errorf("error releasing self: %s", err)
 	}
 
+	// Find Head Contract DID from ensemble contracts
+	headContractDID := a.findHeadContractDID()
+
 	for _, v := range a.Contracts {
 		evt := events.CompleteAllocation{
-			EventBase:      events.EventBase{Type: events.CompleteAllocationEvent},
-			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
+			EventBase: events.EventBase{Type: events.CompleteAllocationEvent},
+			AllocationBase: events.AllocationBase{
+				AllocationID:       a.ID,
+				DeploymentID:       a.deploymentID,
+				ComputeProviderDID: a.computeProviderDID,
+				HeadContractDID:    headContractDID, // Include Head Contract DID from ensemble
+			},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -502,10 +534,18 @@ func (a *Allocation) Cleanup() error {
 // it won't return errors right away but try to clean up
 // all the other steps
 func (a *Allocation) Terminate(ctx context.Context) error {
+	// Find Head Contract DID from ensemble contracts
+	headContractDID := a.findHeadContractDID()
+
 	for _, v := range a.Contracts {
 		evt := events.StopAllocation{
-			EventBase:      events.EventBase{Type: events.StopAllocationEvent},
-			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
+			EventBase: events.EventBase{Type: events.StopAllocationEvent},
+			AllocationBase: events.AllocationBase{
+				AllocationID:       a.ID,
+				DeploymentID:       a.deploymentID,
+				ComputeProviderDID: a.computeProviderDID,
+				HeadContractDID:    headContractDID, // Include Head Contract DID from ensemble
+			},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
