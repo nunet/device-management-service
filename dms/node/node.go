@@ -25,6 +25,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
 	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -879,6 +881,32 @@ func (n *Node) geolocate() {
 		"country", location.Country,
 		"city", location.City,
 	)
+
+	// periodic emitMetric
+	emitMetric := func() {
+		if m := observability.NodeLocation; m != nil {
+			m.Record(n.ctx, 1, metric.WithAttributes(
+				observability.AttrDID,
+				attribute.String("continent", location.Continent),
+				attribute.String("country", location.Country),
+				attribute.String("city", location.City),
+				attribute.Bool("onboarded", n.onboarding.IsOnboarded()),
+			))
+		}
+	}
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				emitMetric()
+			case <-n.ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 // Start node

@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -278,6 +280,14 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		"orchestratorID", request.ID,
 	)
 
+	// metric
+	if m := observability.BidReceived; m != nil {
+		m.Add(n.ctx, 1, metric.WithAttributes(
+			observability.AttrDID,
+			attribute.String("orchestratorID", request.ID),
+		))
+	}
+
 	if n.dmsConfig.Job.RequireContractsForDeployment {
 		// contracts are global at ensemble level so they apply to all nodes
 		if len(request.Request) > 0 {
@@ -524,4 +534,12 @@ loop:
 
 	n.sendReply(msg, bid)
 	n.storeBid(request.ID, request.Nonce, toAnswer)
+
+	// metric
+	if m := observability.BidAccepted; m != nil {
+		m.Add(n.ctx, 1, metric.WithAttributes(
+			observability.AttrDID,
+			attribute.String("orchestratorID", request.ID),
+		))
+	}
 }

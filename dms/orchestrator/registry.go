@@ -24,7 +24,7 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
-// Registry is an interface which acts as a source for orchestrators
+// Registry is an interface which acts as a source of orchestrators.
 type Registry interface {
 	// NewOrchestrator creates a new orchestrator
 	NewOrchestrator(

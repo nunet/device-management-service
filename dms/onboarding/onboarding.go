@@ -17,6 +17,7 @@ import (
 	"gitlab.com/nunet/device-management-service/db/repositories"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var (
@@ -314,6 +315,19 @@ func (o *Onboarding) Onboard(ctx context.Context, config types.OnboardingConfig)
 		"gpuCountAssigned", len(config.OnboardedResources.GPUs),
 	)
 
+	if m := observability.NodeOnboarded; m != nil {
+		m.Add(ctx, 1, metric.WithAttributes(
+			observability.AttrDID))
+		observability.NodeOnboardedCPU.Record(ctx, float64(config.OnboardedResources.CPU.Cores), metric.WithAttributes(
+			observability.AttrDID))
+		observability.NodeOnboardedRAM.Record(ctx, int64(config.OnboardedResources.RAM.SizeInGB()), metric.WithAttributes(
+			observability.AttrDID))
+		observability.NodeOnboardedDisk.Record(ctx, int64(config.OnboardedResources.Disk.Size/(1024.0*1024.0)), metric.WithAttributes(
+			observability.AttrDID))
+		observability.NodeOnboardedGPU.Record(ctx, int64(len(config.OnboardedResources.GPUs)), metric.WithAttributes(
+			observability.AttrDID))
+	}
+
 	config.IsOnboarded = true
 	if _, err := o.ConfigRepo.Save(ctx, config); err != nil {
 		return types.OnboardingConfig{}, fmt.Errorf("could not save onboarding config: %w", err)
@@ -344,6 +358,20 @@ func (o *Onboarding) Offboard(ctx context.Context) error {
 	// clear the onboarded resources
 	if err := o.ResourceManager.UpdateOnboardedResources(ctx, types.Resources{}); err != nil {
 		return fmt.Errorf("could not clear onboarded resources: %w", err)
+	}
+
+	if m := observability.NodeOnboarded; m != nil {
+		m.Add(ctx, -1, metric.WithAttributes(
+			observability.AttrDID,
+		))
+		observability.NodeOnboardedCPU.Record(ctx, 0, metric.WithAttributes(
+			observability.AttrDID))
+		observability.NodeOnboardedRAM.Record(ctx, 0, metric.WithAttributes(
+			observability.AttrDID))
+		observability.NodeOnboardedDisk.Record(ctx, 0, metric.WithAttributes(
+			observability.AttrDID))
+		observability.NodeOnboardedGPU.Record(ctx, 0, metric.WithAttributes(
+			observability.AttrDID))
 	}
 
 	log.Infow("machine_offboarded_successfully",

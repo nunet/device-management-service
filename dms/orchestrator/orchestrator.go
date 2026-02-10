@@ -19,6 +19,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/spf13/afero"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -210,6 +212,15 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 			close(ch)
 		}
 		o.statusSubscribers = make(map[chan jtypes.DeploymentStatus]struct{})
+	}
+
+	// metrics
+	if m := observability.DeploymentStatus; m != nil {
+		m.Add(o.ctx, 1, metric.WithAttributes(
+			observability.AttrDID,
+			attribute.String("orchestratorID", o.id),
+			attribute.String("status", status.String()),
+		))
 	}
 }
 
@@ -554,17 +565,63 @@ deploy:
 		log.Infof("deployment successful")
 		o.setStatus(jtypes.DeploymentStatusRunning)
 
+		var allocated types.Resources
 		for idx, a := range o.Manifest().Allocations {
+			res := o.Config().V1.Allocations[a.ID].Resources
 			o.allocs[a.ID] = jtypes.AllocationInfo{
 				AllocationID:   a.ID,
 				HeartbeatSeq:   0,
 				Status:         a.Status,
 				HasHealthCheck: len(a.Healthcheck.Exec) != 0 && a.Healthcheck.Type != "",
-				ResourceLimit:  o.Config().V1.Allocations[a.ID].Resources,
+				ResourceLimit:  res,
 				DNSName:        a.DNSName,
 				IP:             o.SubnetManifest().IndexRoutingTable[idx],
 				ResourceUsage:  jtypes.AllocationResourceUsage{},
 				Timestamp:      time.Now().Unix(),
+			}
+
+			_ = allocated.RAM.Add(res.RAM)
+			_ = allocated.Disk.Add(res.Disk)
+			_ = allocated.CPU.Add(res.CPU)
+			_ = allocated.GPUs.Add(res.GPUs)
+		}
+
+		// metric
+		if m := observability.DeploymentSuccess; m != nil {
+			m.Add(o.ctx, 1, metric.WithAttributes(
+				observability.AttrDID,
+				// attribute.Int("allocations", len(o.Manifest().Allocations)),
+			))
+
+			if m := observability.DeploySuccessAllocations; m != nil {
+				m.Record(o.ctx, int64(len(o.Manifest().Allocations)), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessCPUCoresAssigned; m != nil {
+				m.Record(o.ctx, float64(allocated.CPU.Cores), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessRAMGBAssigned; m != nil {
+				m.Record(o.ctx, int64(allocated.RAM.SizeInGB()), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessDiskMBAssigned; m != nil {
+				m.Record(o.ctx, float64(allocated.Disk.Size/(1024.0*1024.0)), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessGPUCountAssigned; m != nil {
+				m.Record(o.ctx, int64(len(allocated.GPUs)), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
 			}
 		}
 

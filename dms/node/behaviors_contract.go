@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,8 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -945,6 +948,17 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		return
 	}
 
+	// metric
+	if m := observability.TxPaidAmount; m != nil {
+		amount, err := strconv.ParseFloat(tx.Amount, 64)
+		if err == nil {
+			m.Add(n.ctx, amount, metric.WithAttributes(
+				observability.AttrDID,
+				attribute.String("ContractDID", tx.ContractDID),
+			))
+		}
+	}
+
 	log.Infof("successfully forwarded paid transaction %s to compute provider", req.UniqueID)
 	n.sendReply(msg, contracts.ContractConfirmLocalTransactionResponse{})
 }
@@ -1029,6 +1043,17 @@ func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 	if err != nil {
 		handleErr(fmt.Errorf("failed to insert transaction into the store: %w", err))
 		return
+	}
+
+	// metric
+	if m := observability.TxCreatedAmount; m != nil {
+		amount, err := strconv.ParseFloat(req.Amount, 64)
+		if err == nil {
+			m.Add(n.ctx, amount, metric.WithAttributes(
+				observability.AttrDID,
+				attribute.String("ContractDID", req.ContractDID),
+			))
+		}
 	}
 
 	resp := contracts.TransactionForServiceProviderResponse{}

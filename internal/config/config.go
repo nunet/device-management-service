@@ -89,6 +89,7 @@ type Observability struct {
 	// Preferred structured layout TODO bind in observability
 	Logging Logging `mapstructure:"logging" json:"logging"`
 	Elastic Elastic `mapstructure:"elastic" json:"elastic"`
+	OTel    OTel    `mapstructure:"otel"    json:"otel"`
 
 	// Deprecated: use Logging.Level instead
 	LogLevel string `mapstructure:"log_level"             json:"-"`
@@ -145,4 +146,13 @@ type APM struct {
 	APIKey      string `mapstructure:"api_key"      json:"api_key"`
 	// SecretToken is a legacy API key used for local ELK deployments.
 	SecretToken string `mapstructure:"secret_token"      json:"secret_token"`
+}
+
+type OTel struct {
+	// Enabled controls whether OTel metrics are exported
+	Enabled bool `mapstructure:"enabled" json:"enabled"`
+	// Endpoint is the OTel Collector gRPC endpoint (e.g., "localhost:4317")
+	Endpoint string `mapstructure:"endpoint" json:"endpoint"`
+	// Insecure disables TLS for the gRPC connection
+	Insecure bool `mapstructure:"insecure" json:"insecure"`
 }

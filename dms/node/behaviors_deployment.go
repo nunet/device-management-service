@@ -908,7 +908,7 @@ func (n *Node) handleDeploymentDelete(msg actor.Envelope) {
 
 	log.Infow("deployment_deleted",
 		"labels", []string{string(observability.LabelDeployment)},
-		"orchestrator_id", request.OrchestratorID)
+		"orchestratorID", request.OrchestratorID)
 
 	n.sendReply(msg, DeploymentDeleteResponse{OK: true})
 }

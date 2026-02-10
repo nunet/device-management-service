@@ -151,6 +151,12 @@ func createConfig(userDir string, restPort uint32, p2pListenAddrs []string, boot
 					MaxAgeDays: 28,
 				},
 			},
+			// local Otel
+			// OTel: config.OTel{
+			// 	Enabled:  true,
+			// 	Endpoint: "localhost:4317",
+			// 	Insecure: true,
+			// },
 		},
 		Profiler: config.Profiler{
 			Enabled: false,
