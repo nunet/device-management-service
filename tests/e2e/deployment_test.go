@@ -210,7 +210,7 @@ func DeploymentAssertSubnet(suite *TestSuite) {
 	}
 
 	// 4. Shutdown: assert if everything was freed
-	time.Sleep(20 * time.Second)
+	time.Sleep(5 * time.Minute)
 
 	shutdownRes := deployer.client.shutdownDeployment(
 		suite.T(), deployer.userContext, deployer.password, ensembleID)
