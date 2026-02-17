@@ -125,6 +125,10 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 		"--cap", "/dms/tokenomics/contract/propose",
 		"--cap", "/dms/tokenomics/contract/state",
 		"--cap", "/dms/tokenomics/contract/chain/verify",
+		"--cap", "/dms/tokenomics/contract/transaction",
+		"--cap", "/dms/tokenomics/contract/transactions",
+		"--cap", "/dms/tokenomics/contract/payment/validation/request",
+		"--cap", "/dms/tokenomics/contract/info",
 		"--cap", "/dms/volume/create",
 		"--cap", "/public",
 		"--cap", "/dms/deployment",
@@ -153,6 +157,10 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 		"--cap", "/dms/tokenomics/contract/propose",
 		"--cap", "/dms/tokenomics/contract/state",
 		"--cap", "/dms/tokenomics/contract/chain/verify",
+		"--cap", "/dms/tokenomics/contract/transaction",
+		"--cap", "/dms/tokenomics/contract/transactions",
+		"--cap", "/dms/tokenomics/contract/payment/validation/request",
+		"--cap", "/dms/tokenomics/contract/info",
 		"--cap", "/dms/volume/create",
 		"--cap", "/public",
 		"--cap", "/dms/deployment",
@@ -272,6 +280,21 @@ func (c *Client) createContract(t *testing.T, contractFilePath, context, passphr
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/create", "--contract-file", contractFilePath, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	return buf.String(), err
+}
+
+func (c *Client) createContractRemote(t *testing.T, contractFilePath, context, passphrase, remoteDID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/create", "--contract-file", contractFilePath, "--timeout", "5s", "--dest", remoteDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer

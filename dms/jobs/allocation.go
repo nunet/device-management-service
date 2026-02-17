@@ -121,12 +121,20 @@ type Allocation struct {
 
 	Contracts            map[string]types.ContractConfig
 	contractEventHandler *eventhandler.EventHandler
+	contractStore        TailContractGetter
 
 	createdAt time.Time
 	startedAt time.Time
 
 	// Liveness reporting state
 	liveness allocationLiveness
+}
+
+// TailContractFinder is an interface for finding tail contracts associated with a head contract.
+// This interface is used to avoid import cycles between jobs and store packages.
+// It returns ContractConfig directly to avoid referencing contracts.Contract.
+type TailContractGetter interface {
+	FindTailContract(headContractConfig types.ContractConfig, computeProviderDID string) (*types.ContractConfig, error)
 }
 
 // NewAllocation creates a new allocation given the actor.
@@ -142,6 +150,7 @@ func NewAllocation(
 	executor types.Executor,
 	selfRelease func() error,
 	contractEventHandler *eventhandler.EventHandler,
+	contractStore TailContractGetter,
 	deploymentID string,
 ) (*Allocation, error) {
 	if network == nil {
@@ -183,6 +192,7 @@ func NewAllocation(
 		}{},
 		createdAt:            time.Now(),
 		contractEventHandler: contractEventHandler,
+		contractStore:        contractStore,
 		computeProviderDID:   actor.Parent().DID.URI,
 		deploymentID:         deploymentID,
 	}
@@ -214,20 +224,19 @@ func (a *Allocation) GetPortMapping() map[int]int {
 	return ports
 }
 
-// findHeadContractDID finds the Head Contract DID from ensemble contracts
-// Head Contract is identified by having Organization as Provider (not compute provider)
-func (a *Allocation) findHeadContractDID() string {
-	computeProviderDID := a.computeProviderDID
-
-	for _, contractConfig := range a.Contracts {
-		// Head Contract has Provider field set to Organization DID
-		// If Provider exists and is not the compute provider, it's Head Contract
-		if contractConfig.Provider != "" && contractConfig.Provider != computeProviderDID {
-			return contractConfig.DID
-		}
+// findTailContractsForHeadContract finds Tail Contracts associated with a Head Contract
+// using the Head Contract config from the ensemble
+func (a *Allocation) findTailContractForHeadContract(headContractConfig types.ContractConfig) (*types.ContractConfig, error) {
+	if a.contractStore == nil {
+		return nil, fmt.Errorf("contract store is not available")
 	}
 
-	return "" // No Head Contract found (P2P contract scenario)
+	tailContract, err := a.contractStore.FindTailContract(headContractConfig, a.computeProviderDID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tail contracts for head contract %s: %w", headContractConfig.DID, err)
+	}
+
+	return tailContract, nil
 }
 
 // Run creates the executor based on the execution engine configuration.
@@ -312,17 +321,46 @@ func (a *Allocation) Run(
 	a.startedAt = time.Now()
 	a.status = AllocationRunning
 
-	// Find Head Contract DID from ensemble contracts
-	headContractDID := a.findHeadContractDID()
+	var headContractConfig types.ContractConfig
+	// Find Head Contract config from ensemble contracts
+	for _, contractConfig := range a.Contracts {
+		headContractConfig = contractConfig
+		break
+	}
+	headContractDID := headContractConfig.DID
 
-	for _, v := range a.Contracts {
+	// Find Tail Contracts associated with Head Contract
+	var contractsToNotify []types.ContractConfig
+	if headContractDID != "" {
+		// Contract chain scenario: use Tail Contracts
+		tailContract, err := a.findTailContractForHeadContract(headContractConfig)
+		if err != nil {
+			log.Warnw("failed to find tail contracts, falling back to ensemble contracts",
+				"head_contract_did", headContractDID,
+				"error", err)
+			// Convert map to slice for fallback
+			for _, v := range a.Contracts {
+				contractsToNotify = append(contractsToNotify, v)
+			}
+		} else {
+			contractsToNotify = []types.ContractConfig{*tailContract}
+		}
+	} else {
+		// P2P scenario: use contracts from ensemble
+		for _, v := range a.Contracts {
+			contractsToNotify = append(contractsToNotify, v)
+		}
+	}
+
+	// Send events to Tail Contracts (or P2P contracts)
+	for _, v := range contractsToNotify {
 		evt := events.StartAllocation{
 			EventBase: events.EventBase{Type: events.StartAllocationEvent},
 			AllocationBase: events.AllocationBase{
 				AllocationID:       a.ID,
 				DeploymentID:       a.deploymentID,
 				ComputeProviderDID: a.computeProviderDID,
-				HeadContractDID:    headContractDID, // Include Head Contract DID from ensemble
+				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
 			},
 			Resources: a.Job.Resources,
 		}
@@ -462,17 +500,52 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		log.Errorf("error releasing self: %s", err)
 	}
 
-	// Find Head Contract DID from ensemble contracts
-	headContractDID := a.findHeadContractDID()
+	if len(a.Contracts) == 0 {
+		log.Errorf("no contracts  (handleTranscience)",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID)
+		return
+	}
 
-	for _, v := range a.Contracts {
+	var headContractConfig types.ContractConfig
+	for _, contractConfig := range a.Contracts {
+		headContractConfig = contractConfig
+		break
+	}
+	headContractDID := headContractConfig.DID
+
+	// Find Tail Contracts associated with Head Contract
+	var contractsToNotify []types.ContractConfig
+	if headContractDID != "" {
+		// Contract chain scenario: use Tail Contracts
+		tailContract, err := a.findTailContractForHeadContract(headContractConfig)
+		if err != nil {
+			log.Warnw("failed to find tail contracts, falling back to ensemble contracts",
+				"head_contract_did", headContractDID,
+				"error", err)
+			// Convert map to slice for fallback
+			for _, v := range a.Contracts {
+				contractsToNotify = append(contractsToNotify, v)
+			}
+		} else {
+			contractsToNotify = []types.ContractConfig{*tailContract}
+		}
+	} else {
+		// P2P scenario: use contracts from ensemble
+		for _, v := range a.Contracts {
+			contractsToNotify = append(contractsToNotify, v)
+		}
+	}
+
+	// Send events to Tail Contracts (or P2P contracts)
+	for _, v := range contractsToNotify {
 		evt := events.CompleteAllocation{
 			EventBase: events.EventBase{Type: events.CompleteAllocationEvent},
 			AllocationBase: events.AllocationBase{
 				AllocationID:       a.ID,
 				DeploymentID:       a.deploymentID,
 				ComputeProviderDID: a.computeProviderDID,
-				HeadContractDID:    headContractDID, // Include Head Contract DID from ensemble
+				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
 			},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
@@ -534,17 +607,45 @@ func (a *Allocation) Cleanup() error {
 // it won't return errors right away but try to clean up
 // all the other steps
 func (a *Allocation) Terminate(ctx context.Context) error {
-	// Find Head Contract DID from ensemble contracts
-	headContractDID := a.findHeadContractDID()
+	var headContractConfig types.ContractConfig
+	for _, contractConfig := range a.Contracts {
+		headContractConfig = contractConfig
+		break
+	}
+	headContractDID := headContractConfig.DID
 
-	for _, v := range a.Contracts {
+	// Find Tail Contracts associated with Head Contract
+	var contractsToNotify []types.ContractConfig
+	if headContractDID != "" {
+		// Contract chain scenario: use Tail Contracts
+		tailContract, err := a.findTailContractForHeadContract(headContractConfig)
+		if err != nil {
+			log.Warnw("failed to find tail contracts, falling back to ensemble contracts",
+				"head_contract_did", headContractDID,
+				"error", err)
+			// Convert map to slice for fallback
+			for _, v := range a.Contracts {
+				contractsToNotify = append(contractsToNotify, v)
+			}
+		} else {
+			contractsToNotify = []types.ContractConfig{*tailContract}
+		}
+	} else {
+		// P2P scenario: use contracts from ensemble
+		for _, v := range a.Contracts {
+			contractsToNotify = append(contractsToNotify, v)
+		}
+	}
+
+	// Send events to Tail Contracts (or P2P contracts)
+	for _, v := range contractsToNotify {
 		evt := events.StopAllocation{
 			EventBase: events.EventBase{Type: events.StopAllocationEvent},
 			AllocationBase: events.AllocationBase{
 				AllocationID:       a.ID,
 				DeploymentID:       a.deploymentID,
 				ComputeProviderDID: a.computeProviderDID,
-				HeadContractDID:    headContractDID, // Include Head Contract DID from ensemble
+				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
 			},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{

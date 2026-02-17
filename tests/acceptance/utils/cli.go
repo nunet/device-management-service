@@ -204,6 +204,32 @@ func (c *Context) Manifest(ensembleID string) (*jobtypes.EnsembleManifest, error
 	return &resp.Manifest, nil
 }
 
+func (c *Context) DeploymentInfo(ensembleID string, includeUsage, includeLogs bool, allocationNames []string) (*dmsnode.DeploymentInfoResponse, error) {
+	cmd := fmt.Sprintf("nunet actor cmd -c %s /dms/node/deployment/info --id %s", c.Name, ensembleID)
+	if includeUsage {
+		cmd += " --usage"
+	}
+	if includeLogs {
+		cmd += " --logs"
+	}
+	if len(allocationNames) > 0 {
+		cmd += " --allocations " + strings.Join(allocationNames, " ")
+	}
+
+	out, err := c.instance.RunDMSCmd(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call deployment info behavior: %s", out)
+	}
+	var resp dmsnode.DeploymentInfoResponse
+	if err = json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cmd output: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("failed to get deployment info: %s", resp.Error)
+	}
+	return &resp, nil
+}
+
 func (c *Context) AllocationList() ([]jobs.AllocationInfo, error) {
 	out, err := c.instance.RunDMSCmd(fmt.Sprintf("nunet -c %s get allocations", c.Name))
 	if err != nil {

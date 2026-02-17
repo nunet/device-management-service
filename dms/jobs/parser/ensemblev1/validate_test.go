@@ -324,23 +324,27 @@ func TestValidateContract(t *testing.T) {
 		errorMsg string
 	}{
 		{
-			name: "valid contract pay per allocation",
+			name: "valid contract with did and host",
+			contract: map[string]any{
+				"did":  "did:example:1",
+				"host": "did:host:1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid contract with only did",
+			contract: map[string]any{
+				"did": "did:example:1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid contract with payment_details (ignored)",
 			contract: map[string]any{
 				"did": "did:example:1",
 				"payment_details": map[string]any{
 					"payment_model":      "pay_per_allocation",
 					"fee_per_allocation": "10",
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid contract pay per deployment",
-			contract: map[string]any{
-				"did": "did:example:1",
-				"payment_details": map[string]any{
-					"payment_model":      "pay_per_deployment",
-					"fee_per_deployment": "10",
 				},
 			},
 			wantErr: false,
@@ -374,41 +378,13 @@ func TestValidateContract(t *testing.T) {
 			errorMsg: "invalid did format",
 		},
 		{
-			name: "missing payment detail",
+			name: "invalid host format",
 			contract: map[string]any{
-				"did": "did:example:1",
+				"did":  "did:example:1",
+				"host": "invalid-host",
 			},
-			wantErr: true,
-		},
-		{
-			name: "missing payment model",
-			contract: map[string]any{
-				"did": "did:example:1",
-				"payment_details": map[string]any{
-					"fee_per_allocation": "10",
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing fee per allocation for pay per allocation",
-			contract: map[string]any{
-				"did": "did:example:1",
-				"payment_details": map[string]any{
-					"payment_model": "pay_per_allocation",
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing fee per deployment for pay per deployment",
-			contract: map[string]any{
-				"did": "did:example:1",
-				"payment_details": map[string]any{
-					"payment_model": "pay_per_deployment",
-				},
-			},
-			wantErr: true,
+			wantErr:  true,
+			errorMsg: "invalid host did format",
 		},
 	}
 

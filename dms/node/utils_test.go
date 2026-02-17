@@ -223,6 +223,7 @@ func newMockAllocator(t *testing.T, substrate *network.Substrate) (*allocator, n
 		mockFs,
 		workDir,
 		hostID,
+		nil, // contractStore - nil for tests
 	)
 
 	return alloc, p2pNet, priv
@@ -317,6 +318,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		mockFs,
 		dcfg.WorkDir,
 		vNet.GetHostID().String(),
+		nil, // contractStore - nil for tests
 	)
 	nActor, nActorCap, nRootTrust, nRootDID := newActor(t, priv, vNet)
 
@@ -491,6 +493,7 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 		mockFs,
 		dcfg.WorkDir,
 		vNet.GetHostID().String(),
+		nil, // contractStore - nil for tests
 	)
 	nActor, nActorCap, nRootTrust, nRootDID := newActor(t, priv, vNet)
 

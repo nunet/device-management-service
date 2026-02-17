@@ -89,6 +89,7 @@ func TestNewAllocation(t *testing.T) {
 				tt.executor,
 				func() error { return nil },
 				eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
+				nil, // contractStore - nil for tests
 				"",
 			)
 
@@ -546,6 +547,7 @@ func createTestAllocation(t *testing.T, vol ...types.VolumeConfig) (*Allocation,
 		mockExecutor,
 		func() error { return nil },
 		eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
+		nil, // contractStore - nil for tests
 		"",
 	)
 	if err != nil {

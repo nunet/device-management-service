@@ -19,6 +19,7 @@ import (
 	"github.com/ostafen/clover/v2/query"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -249,4 +250,81 @@ func (s *Store) FindContractsByParticipant(participant did.DID) ([]*contracts.Co
 	}
 
 	return matches, nil
+}
+
+// FindTailContractConfig finds Tail Contracts and returns them as ContractConfig.
+// This method wraps FindTailContract to return ContractConfig format for use in jobs package.
+// Note: This method name matches the TailContractFinder interface from jobs package.
+func (s *Store) FindTailContract(
+	headContractConfig types.ContractConfig,
+	computeProviderDID string,
+) (*types.ContractConfig, error) {
+	tailContracts, err := s.findTailContracts(headContractConfig, computeProviderDID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(tailContracts) == 0 {
+		return nil, fmt.Errorf("no tail contracts found")
+	}
+
+	if len(tailContracts) > 1 {
+		return nil, fmt.Errorf("multiple tail contracts found")
+	}
+
+	return &types.ContractConfig{
+		DID:      tailContracts[0].ContractDID,
+		Host:     tailContracts[0].SolutionEnablerDID.String(),
+		Provider: tailContracts[0].ContractParticipants.Provider.String(),
+	}, nil
+}
+
+// findTailContracts is the internal method that returns []*contracts.Contract.
+// This is used by FindTailContract to avoid naming conflicts.
+func (s *Store) findTailContracts(
+	headContractConfig types.ContractConfig,
+	computeProviderDID string,
+) ([]*contracts.Contract, error) {
+	if headContractConfig.Provider == "" {
+		return nil, fmt.Errorf("head contract config is missing provider DID")
+	}
+
+	organizationDID, err := did.FromString(headContractConfig.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("invalid organization DID in head contract config: %w", err)
+	}
+
+	computeProviderDIDObj, err := did.FromString(computeProviderDID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid compute provider DID: %w", err)
+	}
+
+	// Get all contracts
+	allContracts, err := s.GetAllContracts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all contracts: %w", err)
+	}
+
+	var tailContracts []*contracts.Contract
+	for _, contract := range allContracts {
+		// Skip the head contract itself (if it exists locally)
+		if contract.ContractDID == headContractConfig.DID {
+			continue
+		}
+
+		// Check if this is a Tail Contract:
+		// 1. Requestor matches Organization (from Head Contract config's Provider)
+		// 2. Provider is the compute provider (this node)
+		// 3. Contract is active
+		requestorMatchesOrg := contract.ContractParticipants.Requestor.Equal(organizationDID)
+		providerIsComputeProvider := contract.ContractParticipants.Provider.Equal(computeProviderDIDObj)
+		isActive := contract.CurrentState == contracts.ContractAccepted ||
+			contract.CurrentState == contracts.ContractActive
+
+		if requestorMatchesOrg && providerIsComputeProvider && isActive {
+			tailContracts = append(tailContracts, contract)
+		}
+	}
+
+	return tailContracts, nil
 }

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
@@ -107,14 +108,22 @@ func (p *PayPerDeploymentProcessor) CalculatePayment(
 
 	totalAmount := feePerDeployment * float64(usageCount)
 
+	// Generate unique UUID for this payment item
+	uniqueID := uuid.NewString()
+
 	items := []*contracts.PaymentItem{
 		{
-			UniqueID:     "", // Will be set by payment processor
-			DeploymentID: "", // Not per-deployment item, but deployment-based model
+			UniqueID:     uniqueID, // Generated UUID
+			DeploymentID: "",       // Not per-deployment item, but deployment-based model
 			Amount:       formatAmount(totalAmount),
 			Usages:       usageCount,
 			Metadata: map[string]interface{}{
-				"deployment_count": usageCount,
+				"deployment_count":     usageCount,
+				"fee_per_deployment":   feePerDeployment,
+				"total_amount":         totalAmount,
+				"payment_model":        contracts.PayPerDeployment,
+				"payment_period":       pd.PaymentPeriod,
+				"payment_period_count": pd.PaymentPeriodCount,
 			},
 		},
 	}
@@ -129,6 +138,16 @@ func (p *PayPerDeploymentProcessor) Validate(paymentDetails contracts.PaymentDet
 	}
 	if _, err := convert.StringToFloat64(paymentDetails.FeePerDeployment, "fee_per_deployment"); err != nil {
 		return err
+	}
+	// Validate payment_period if provided (optional for this model)
+	if paymentDetails.PaymentPeriod != "" {
+		if _, err := convert.ParsePaymentPeriod(paymentDetails.PaymentPeriod); err != nil {
+			return err
+		}
+	}
+	// Validate payment_period_count if provided (optional for this model)
+	if paymentDetails.PaymentPeriodCount < 0 {
+		return fmt.Errorf("payment_period_count must be a positive integer, got: %d", paymentDetails.PaymentPeriodCount)
 	}
 	return nil
 }

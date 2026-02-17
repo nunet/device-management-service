@@ -33,6 +33,7 @@ type Transaction struct {
 	Amount              string                     `json:"amount"`
 	Status              string                     `json:"status"`
 	TxHash              string                     `json:"tx_hash"`
+	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
 }
 
 type Store struct {

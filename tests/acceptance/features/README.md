@@ -17,6 +17,7 @@ This document outlines the defined features and scenarios used for acceptance te
 |--------------|-------------|----------------------|-------------|--------------------|-------------|----------|
 | [Allocation Running on Subnet](#feature-allocation-running-on-subnet) ([.feature](./subnet.feature)) | As a Service Provider I want to launch services on peers And the services can communicate with each other | Service and Resource Providers | Feature or Testnet | Implemented | In progress | Main subnet test implemented; working now on the redeployment case. |
 | [Capabilities Management](#feature-capabilities-management) ([.feature](./capabilities_management.feature)) | Grant, revoke, and delegate behavior-level capabilities across users. | Resource Providers and Facilitators | Feature or Testnet | Implemented | Not started |  |
+| [Capabilities Revocation Broadcast](#feature-capabilities-revocation-broadcast) ([.feature](./capabilities_revoke_broadcast.feature)) | Broadcast revocation tokens to all nodes in the network |  |  |  |  |  |
 | [Cardano](#feature-cardano) ([.feature](./cardano.feature)) | Launch Cardano nodes. | Tokenomics Enablers | Testnet | Implemented | Not started |  |
 | [Contract Management Simple](#feature-contract-management-simple) ([.feature](./contract.feature)) | As a Service Provider I want to create contracts with Compute Providers So that I can guarantee exclusive access to specific resources and ensure secure, isolated deployments # SP -> Service Provider # CP -> Compute Provider # CH -> Contract Host | Service and Resource Providers, Facilitators | Testnet | Implemented | Implemented | Payment flow manually tested. |
 | [Deployment](#feature-deployment) ([.feature](./deployment.feature)) | As a Service Provider I want to deploy my computation on other nodes So that I don't have to use my machine | Service Providers | Feature or Testnet | Implemented | Implemented |  |
@@ -31,6 +32,7 @@ This document outlines the defined features and scenarios used for acceptance te
 | [NuNet Documentation AI Agent](#feature-nunet-documentation-ai-agent) ([.feature](./nunet_documentation_ai_agent.feature)) | Usage of AI agent in public and private modes. | End Users | Testnet - Requires infrastructure as DDNS, Proxy, CA, GlusterFS. | In progress | Not started |  |
 | [Observability system integration and behavior](#feature-observability-system-integration-and-behavior) ([.feature](./observability.feature)) | The system must provide structured logging, event emission, tracing, and dynamic configuration capabilities through the observability package. | Service and Resource Providers, Facilitators | Testnet | Implemented | Not started |  |
 | [Organization Management](#feature-organization-management) ([.feature](./organization_management.feature)) | Join, create, and manage private and public organizations. | Facilitators | Feature | Implemented | Not started |  |
+| [P2P connectivity through Network Address Translation (NAT)](#feature-p2p-connectivity-through-network-address-translation-(nat)) ([.feature](./nat.feature)) | As a distributed system I want to test how nodes behind different NATs communicate So that I can verify NAT traversal and relay behavior |  |  |  |  |  |
 | [Posemesh](#feature-posemesh) ([.feature](./posemesh.feature)) | Launch Posemesh nodes. | Service Providers | Testnet - Requires infrastructure as DDNS, Proxy, CA. | In progress | Not started |  |
 | [Resource Management](#feature-resource-management) ([.feature](./resource_management.feature)) | As a Computer Provider I want to manage the computational resources of my machine (onboard/offboard) And ensure deployments running on my machine stay within declared limits And ensure resources are correctly freed once the deployment finishes | Resource Providers | Feature or Testnet | Implemented | Not started |  |
 | [Service Deployment](#feature-service-deployment) ([.feature](./service_deployment.feature)) | As a Service Provider I want to launch a service on a peer So that I can send a request to it | Service Providers | Feature or Testnet | Implemented | In progress | Main scenario implemented in subnet feature file. |
@@ -66,6 +68,16 @@ This document outlines the defined features and scenarios used for acceptance te
 - Prevent unauthorized users from invoking behaviors
 - Retrieve a list of available capabilities
 - Revoke a previously granted capability
+
+---
+
+### Feature: Capabilities Revocation Broadcast
+
+*Broadcast revocation tokens to all nodes in the network*
+
+**Scenarios:**
+- 
+- Revoke a previously granted capability and broadcast revocation
 
 ---
 
@@ -141,7 +153,18 @@ This document outlines the defined features and scenarios used for acceptance te
 *View, manage, and interact with active or failed deployments.*
 
 **Scenarios:**
-- List all deployments
+- 
+- Get complete deployment information (all options)
+- Get comprehensive deployment information
+- Get deployment information for non-running deployment
+- Get deployment information with log paths
+- Get deployment information with logs for specific allocations
+- Get deployment information with resource usage
+- List active deployments
+- List deployments with pagination and status filter
+- Maintain history after restart of service
+- Maintain history after restart of task
+- Prune deployment
 - Restart a failed deployment
 - Shutdown/stop a running deployment
 - View a deployment’s current status
@@ -233,6 +256,15 @@ _(Scenarios to be defined)_
 - Join NuNet’s public network
 - Join a private organization/network
 - View organizations the peer is part of
+
+---
+
+### Feature: P2P connectivity through Network Address Translation (NAT)
+
+*As a distributed system I want to test how nodes behind different NATs communicate So that I can verify NAT traversal and relay behavior*
+
+**Scenarios:**
+- Two nodes behind different NATs connect via relay
 
 ---
 

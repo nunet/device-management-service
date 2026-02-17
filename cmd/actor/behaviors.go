@@ -1168,6 +1168,40 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/manifest --id <deployment_id>`,
 	},
 
+	// /dms/node/deployment/info
+	behaviors.DeploymentInfoBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &node.DeploymentInfoRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentInfoRequest)
+			cmd.Flags().StringVarP(&p.ID, "id", "i", "", "deployment ID (required)")
+			cmd.Flags().BoolVar(&p.IncludeUsage, "usage", false, "include resource usage statistics")
+			cmd.Flags().BoolVar(&p.IncludeLogs, "logs", false, "include log file paths for allocations")
+			cmd.Flags().StringSliceVar(&p.AllocationNames, "allocations", nil, "specific allocation names to include logs for (empty = all)")
+			_ = cmd.MarkFlagRequired("id")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*node.DeploymentInfoRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return dmsClient.DeploymentInfo(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Get comprehensive deployment information",
+		Long: `Invokes the /dms/node/deployment/info behavior on an actor
+
+This behavior retrieves comprehensive information about a deployment including status,
+manifest, allocation details, optional resource usage, and optional log file paths.
+Logs are returned as file paths (not content) for optimal performance.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/info --id <deployment_id>
+  nunet actor cmd --context user /dms/node/deployment/info --id <deployment_id> --usage
+  nunet actor cmd --context user /dms/node/deployment/info --id <deployment_id> --logs
+  nunet actor cmd --context user /dms/node/deployment/info --id <deployment_id> --usage --logs
+  nunet actor cmd --context user /dms/node/deployment/info --id <deployment_id> --logs --allocations alloc1 alloc2`,
+	},
+
 	// /dms/node/deployment/shutdown
 	behaviors.DeploymentShutdownBehavior: {
 		Action:  bInvoke,

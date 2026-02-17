@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
@@ -159,6 +160,7 @@ type TransactionForServiceProviderRequest struct {
 	Amount              string                     `json:"amount"`
 	Status              string                     `json:"status,omitempty"`  // optional status, defaults to "unpaid" if empty
 	TxHash              string                     `json:"tx_hash,omitempty"` // optional transaction hash
+	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
 }
 
 type TransactionForServiceProviderResponse struct {
@@ -249,6 +251,11 @@ type CreateContractResponse struct {
 	ContractDID     string                `json:"contract_did"`
 	PubKey          string                `json:"pub_key"`
 	Error           string                `json:"error"`
+}
+
+type ProposeContractRequest struct {
+	Contract          Contract     `json:"contract"`
+	CreatorOfContract actor.Handle `json:"creator_of_contract"`
 }
 
 type ProposeContractResponse struct {
@@ -438,6 +445,69 @@ type PenaltyClause struct {
 type Signature struct {
 	DID        did.DID `json:"did"`       // The DID of the signer
 	Signatures []byte  `json:"signature"` // The actual signature bytes
+}
+
+// Validate validates the CreateContractRequest and returns an error if any required fields are missing or invalid
+func (req *CreateContractRequest) Validate() error {
+	// Validate SolutionEnablerDID
+	if req.SolutionEnablerDID.Empty() {
+		return fmt.Errorf("solution_enabler_did is required")
+	}
+
+	// Validate PaymentValidatorDID
+	if req.PaymentValidatorDID.Empty() {
+		return fmt.Errorf("payment_validator_did is required")
+	}
+
+	// Validate ContractParticipants
+	if req.ContractParticipants.Provider.Empty() {
+		return fmt.Errorf("contract_participants.provider is required")
+	}
+	if req.ContractParticipants.Requestor.Empty() {
+		return fmt.Errorf("contract_participants.requestor is required")
+	}
+
+	// Validate PaymentDetails
+	if req.PaymentDetails.PaymentModel == "" {
+		return fmt.Errorf("payment_details.payment_model is required")
+	}
+
+	// Validate Duration
+	if req.Duration.StartDate.IsZero() {
+		return fmt.Errorf("duration.start_date is required")
+	}
+	if req.Duration.EndDate.IsZero() {
+		return fmt.Errorf("duration.end_date is required")
+	}
+	if !req.Duration.EndDate.After(req.Duration.StartDate) {
+		return fmt.Errorf("duration.end_date must be after duration.start_date")
+	}
+
+	// Validate payment_period and payment_period_count for models that require them
+	if req.PaymentDetails.PaymentModel == FixedRental || req.PaymentDetails.PaymentModel == Periodic {
+		// Validate payment_period is required and valid
+		if req.PaymentDetails.PaymentPeriod == "" {
+			return fmt.Errorf("payment_details.payment_period is required for payment model %s", req.PaymentDetails.PaymentModel)
+		}
+		// Validate payment_period is one of the valid values
+		validPeriods := map[string]bool{
+			PaymentPeriodMinute: true,
+			PaymentPeriodHour:   true,
+			PaymentPeriodDay:    true,
+			PaymentPeriodWeek:   true,
+			PaymentPeriodMonth:  true,
+		}
+		if !validPeriods[req.PaymentDetails.PaymentPeriod] {
+			return fmt.Errorf("payment_details.payment_period must be one of: minute, hour, day, week, month, got: %s", req.PaymentDetails.PaymentPeriod)
+		}
+
+		// Validate payment_period_count is positive
+		if req.PaymentDetails.PaymentPeriodCount <= 0 {
+			return fmt.Errorf("payment_details.payment_period_count must be a positive integer for payment model %s, got: %d", req.PaymentDetails.PaymentModel, req.PaymentDetails.PaymentPeriodCount)
+		}
+	}
+
+	return nil
 }
 
 func GenerateContractID(req CreateContractRequest) (string, error) {

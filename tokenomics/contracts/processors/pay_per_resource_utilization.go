@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
@@ -114,13 +115,12 @@ func (p *PayPerResourceUtilizationProcessor) CalculatePayment(
 	}
 
 	items := make([]*contracts.PaymentItem, 0)
+	const bytesInGB = 1024 * 1024 * 1024
 	for _, deployment := range resourceUtil.Deployments {
 		var deploymentTotalCost float64
 
 		// Process each allocation in the deployment
-		for _, allocation := range deployment.Allocations {
-			const bytesInGB = 1024 * 1024 * 1024
-
+		for key, allocation := range deployment.Allocations {
 			// Convert duration to time unit
 			timeInUnit, err := convert.DurationToUnit(allocation.Duration, pd.ResourceTimeUnit)
 			if err != nil {
@@ -140,18 +140,69 @@ func (p *PayPerResourceUtilizationProcessor) CalculatePayment(
 				gpuCost = float64(len(allocation.Resources.GPUs)) * feePerGPU * timeInUnit
 			}
 
+			allocation.CPUCost = formatAmount(cpuCost)
+			allocation.RAMCost = formatAmount(ramCost)
+			allocation.DiskCost = formatAmount(diskCost)
+			allocation.GPUCost = formatAmount(gpuCost)
+			allocation.TotalCost = formatAmount(cpuCost + ramCost + diskCost + gpuCost)
+
+			deployment.Allocations[key] = allocation
 			allocationCost := cpuCost + ramCost + diskCost + gpuCost
 			deploymentTotalCost += allocationCost
 		}
 
+		// Generate unique UUID for this payment item
+		uniqueID := uuid.NewString()
+
+		// Build enriched metadata
+		metadata := map[string]interface{}{
+			"total_utilization_sec": deployment.TotalUtilizationSec,
+			"allocation_count":      len(deployment.Allocations),
+		}
+
+		// Add allocation details with resources
+		allocations := make([]map[string]interface{}, 0, len(deployment.Allocations))
+		for _, alloc := range deployment.Allocations {
+			allocData := map[string]interface{}{
+				"allocation_id": alloc.AllocationID,
+				"duration_sec":  alloc.Duration.Seconds(),
+				"start_time":    alloc.StartTime.Format(time.RFC3339),
+				"resources": map[string]interface{}{
+					"cpu_cores": alloc.Resources.CPU.Cores,
+					"ram_gb":    float64(alloc.Resources.RAM.Size) / float64(bytesInGB),
+					"disk_gb":   float64(alloc.Resources.Disk.Size) / float64(bytesInGB),
+					"gpu_count": len(alloc.Resources.GPUs),
+				},
+			}
+			if !alloc.EndTime.IsZero() {
+				allocData["end_time"] = alloc.EndTime.Format(time.RFC3339)
+			}
+			// Add costs if available
+			if alloc.CPUCost != "" {
+				allocData["cpu_cost"] = alloc.CPUCost
+			}
+			if alloc.RAMCost != "" {
+				allocData["ram_cost"] = alloc.RAMCost
+			}
+			if alloc.DiskCost != "" {
+				allocData["disk_cost"] = alloc.DiskCost
+			}
+			if alloc.GPUCost != "" {
+				allocData["gpu_cost"] = alloc.GPUCost
+			}
+			if alloc.TotalCost != "" {
+				allocData["total_cost"] = alloc.TotalCost
+			}
+			allocations = append(allocations, allocData)
+		}
+		metadata["allocations"] = allocations
+
 		items = append(items, &contracts.PaymentItem{
-			UniqueID:     "", // Will be set by payment processor
+			UniqueID:     uniqueID, // Generated UUID
 			DeploymentID: deployment.DeploymentID,
 			Amount:       formatAmount(deploymentTotalCost),
 			Usages:       1,
-			Metadata: map[string]interface{}{
-				"total_utilization_sec": deployment.TotalUtilizationSec,
-			},
+			Metadata:     metadata,
 		})
 	}
 
@@ -186,6 +237,16 @@ func (p *PayPerResourceUtilizationProcessor) Validate(paymentDetails contracts.P
 		if _, err := convert.StringToFloat64(paymentDetails.FeePerGPUPerTimeUnit, "fee_per_gpu_per_time_unit"); err != nil {
 			return err
 		}
+	}
+	// Validate payment_period if provided (optional for this model)
+	if paymentDetails.PaymentPeriod != "" {
+		if _, err := convert.ParsePaymentPeriod(paymentDetails.PaymentPeriod); err != nil {
+			return err
+		}
+	}
+	// Validate payment_period_count if provided (optional for this model)
+	if paymentDetails.PaymentPeriodCount < 0 {
+		return fmt.Errorf("payment_period_count must be a positive integer, got: %d", paymentDetails.PaymentPeriodCount)
 	}
 	return nil
 }

@@ -353,7 +353,8 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 		node.network,
 		mockExec, // Use mock executor
 		func() error { return node.allocator.Release(ctx, allocationID) },
-		nil,
+		nil, // contractEventHandler
+		nil, // contractStore
 		"",
 	)
 	require.NoError(t, err)
@@ -483,7 +484,8 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 		node.network,
 		mockExec, // Use mock executor
 		func() error { return node.allocator.Release(ctx, allocationID) },
-		nil,
+		nil, // contractEventHandler
+		nil, // contractStore
 		"",
 	)
 	require.NoError(t, err)
@@ -565,7 +567,8 @@ func TestAllocationLivenessDisabled(t *testing.T) {
 		node.network,
 		mockExec, // Use mock executor
 		func() error { return nil },
-		nil,
+		nil, // contractEventHandler
+		nil, // contractStore
 		"",
 	)
 	require.NoError(t, err)
@@ -638,7 +641,8 @@ func TestTaskAllocationDoesNotSendPeriodicHeartbeats(t *testing.T) {
 		node.network,
 		mockExec, // Use mock executor
 		func() error { return nil },
-		nil,
+		nil, // contractEventHandler
+		nil, // contractStore
 		"",
 	)
 	require.NoError(t, err)
@@ -737,7 +741,8 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 		node.network,
 		mockExec,
 		func() error { return node.allocator.Release(ctx, allocationID) },
-		nil,
+		nil, // contractEventHandler
+		nil, // contractStore
 		"",
 	)
 	require.NoError(t, err)
@@ -865,7 +870,8 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 		node.network,
 		mockExec,
 		func() error { return node.allocator.Release(ctx, allocationID) },
-		nil,
+		nil, // contractEventHandler
+		nil, // contractStore
 		"",
 	)
 	require.NoError(t, err)

@@ -29,9 +29,10 @@ func TestFixedRentalProcessor_Validate(t *testing.T) {
 		{
 			name: "valid payment details",
 			paymentDetails: contracts.PaymentDetails{
-				PaymentModel:      contracts.FixedRental,
-				FixedRentalAmount: "100.0",
-				PaymentPeriod:     contracts.PaymentPeriodDay,
+				PaymentModel:       contracts.FixedRental,
+				FixedRentalAmount:  "100.0",
+				PaymentPeriod:      contracts.PaymentPeriodDay,
+				PaymentPeriodCount: 1,
 			},
 			wantErr: false,
 		},

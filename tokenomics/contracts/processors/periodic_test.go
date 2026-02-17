@@ -32,10 +32,11 @@ func TestPeriodicProcessor_Validate(t *testing.T) {
 		{
 			name: "valid payment details",
 			paymentDetails: contracts.PaymentDetails{
-				PaymentModel:   contracts.Periodic,
-				FeePerTimeUnit: "0.1",
-				TimeUnit:       "hour",
-				PaymentPeriod:  contracts.PaymentPeriodDay,
+				PaymentModel:       contracts.Periodic,
+				FeePerTimeUnit:     "0.1",
+				TimeUnit:           "hour",
+				PaymentPeriod:      contracts.PaymentPeriodDay,
+				PaymentPeriodCount: 1,
 			},
 			wantErr: false,
 		},

@@ -24,6 +24,11 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 )
 
+const (
+	curveEd25519   = "Ed25519"
+	curveSecp256k1 = "secp256k1"
+)
+
 // PRISMResolverConfig holds configuration for PRISM DID resolution
 type PRISMResolverConfig struct {
 	// ResolverURL is the base URL of the PRISM DID resolver
@@ -249,9 +254,9 @@ func extractPublicKeyFromVerificationMethod(vm *VerificationMethod) (crypto.PubK
 
 	// Convert JWK to crypto.PubKey based on curve
 	switch jwk.Crv {
-	case "Ed25519": //nolint:goconst
+	case curveEd25519:
 		return extractEd25519Key(jwk)
-	case "secp256k1": //nolint:goconst
+	case curveSecp256k1:
 		return extractSecp256k1Key(jwk)
 	case "X25519":
 		// X25519 is for key agreement, not signing
@@ -378,7 +383,7 @@ func ImportPRISMPrivateKeyFromJWK(jwkData []byte, _ DID) (crypto.PrivKey, error)
 	}
 
 	switch jwk.Crv {
-	case "Ed25519":
+	case curveEd25519:
 		return importEd25519PrivateKeyFromJWK(jwk)
 	case "secp256k1":
 		return importSecp256k1PrivateKeyFromJWK(jwk)
